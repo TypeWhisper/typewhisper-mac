@@ -5,6 +5,7 @@ import Combine
 /// Floating non-activating panel that shows dictation status near the text cursor.
 class DictationOverlayPanel: NSPanel {
     private var stateObservation: AnyCancellable?
+    private var sizeObservation: AnyCancellable?
 
     init() {
         super.init(
@@ -28,7 +29,9 @@ class DictationOverlayPanel: NSPanel {
     }
 
     func startObserving() {
-        stateObservation = DictationViewModel.shared.$state
+        let vm = DictationViewModel.shared
+
+        stateObservation = vm.$state
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 switch state {
@@ -37,6 +40,18 @@ class DictationOverlayPanel: NSPanel {
                 case .idle:
                     self?.dismiss()
                 }
+            }
+
+        // Resize panel when partial text appears/disappears
+        sizeObservation = vm.$partialText
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] text in
+                guard let self, self.isVisible else { return }
+                let hasText = !text.isEmpty && vm.state == .recording
+                let newWidth: CGFloat = hasText ? 320 : 240
+                let newHeight: CGFloat = hasText ? 140 : 52
+                let origin = self.frame.origin
+                self.setFrame(NSRect(x: origin.x, y: origin.y, width: newWidth, height: newHeight), display: true, animate: true)
             }
     }
 

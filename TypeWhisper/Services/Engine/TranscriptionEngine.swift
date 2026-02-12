@@ -15,6 +15,27 @@ protocol TranscriptionEngine {
         language: String?,
         task: TranscriptionTask
     ) async throws -> TranscriptionResult
+
+    /// Streaming transcription with progress callback.
+    /// - Parameter onProgress: Called with partial text; return `true` to continue, `false` to stop early.
+    func transcribe(
+        audioSamples: [Float],
+        language: String?,
+        task: TranscriptionTask,
+        onProgress: @escaping (String) -> Bool
+    ) async throws -> TranscriptionResult
+}
+
+extension TranscriptionEngine {
+    // Default: ignore callback, delegate to batch transcribe (for engines that don't support streaming)
+    func transcribe(
+        audioSamples: [Float],
+        language: String?,
+        task: TranscriptionTask,
+        onProgress: @escaping (String) -> Bool
+    ) async throws -> TranscriptionResult {
+        try await transcribe(audioSamples: audioSamples, language: language, task: task)
+    }
 }
 
 enum TranscriptionEngineError: LocalizedError {

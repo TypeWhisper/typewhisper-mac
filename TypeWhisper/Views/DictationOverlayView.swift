@@ -4,22 +4,49 @@ import SwiftUI
 struct DictationOverlayView: View {
     @ObservedObject private var viewModel = DictationViewModel.shared
 
+    private var hasPartialText: Bool {
+        !viewModel.partialText.isEmpty && viewModel.state == .recording
+    }
+
     var body: some View {
-        HStack(spacing: 8) {
-            statusIcon
-            statusText
-            if case .recording = viewModel.state {
-                audioLevelBar
-                durationText
+        VStack(spacing: 0) {
+            // Status pill
+            HStack(spacing: 8) {
+                statusIcon
+                statusText
+                if case .recording = viewModel.state {
+                    audioLevelBar
+                    durationText
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+
+            // Partial transcription text
+            if hasPartialText {
+                ScrollViewReader { proxy in
+                    ScrollView(.vertical, showsIndicators: false) {
+                        Text(viewModel.partialText)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 14)
+                            .padding(.bottom, 8)
+                            .id("partialTextBottom")
+                    }
+                    .frame(maxHeight: 80)
+                    .onChange(of: viewModel.partialText) {
+                        proxy.scrollTo("partialTextBottom", anchor: .bottom)
+                    }
+                }
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(.ultraThinMaterial, in: Capsule())
-        .overlay(Capsule().strokeBorder(.quaternary, lineWidth: 0.5))
+        .frame(width: hasPartialText ? 320 : 240)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: hasPartialText ? 16 : 26))
+        .overlay(RoundedRectangle(cornerRadius: hasPartialText ? 16 : 26).strokeBorder(.quaternary, lineWidth: 0.5))
         .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
         .animation(.easeInOut(duration: 0.2), value: viewModel.state)
-        .frame(width: 240, height: 52)
+        .animation(.easeInOut(duration: 0.2), value: hasPartialText)
     }
 
     @ViewBuilder

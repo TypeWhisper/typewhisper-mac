@@ -81,6 +81,12 @@ struct DictationSettingsView: View {
             }
 
             Section(String(localized: "Behavior")) {
+                Toggle(String(localized: "Whisper Mode"), isOn: $dictation.whisperModeEnabled)
+
+                Text(String(localized: "Boosts microphone gain for quiet speech. Useful when you can't speak loudly."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 Text(String(localized: "Transcribed text is automatically pasted into the active application using the clipboard. The previous clipboard content is restored after pasting."))
                     .font(.caption)
                     .foregroundStyle(.secondary)

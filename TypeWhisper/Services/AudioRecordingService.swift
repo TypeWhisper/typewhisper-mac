@@ -25,10 +25,21 @@ final class AudioRecordingService: ObservableObject {
 
     @Published private(set) var isRecording = false
     @Published private(set) var audioLevel: Float = 0
+    @Published private(set) var isSilent: Bool = false
+    @Published private(set) var silenceDuration: TimeInterval = 0
+    @Published var didAutoStop: Bool = false
+
+    /// RMS threshold below which audio is considered silence
+    var silenceThreshold: Float = 0.01
+    /// Duration of continuous silence before auto-stop triggers
+    var silenceAutoStopDuration: TimeInterval = 2.0
+    /// Gain multiplier applied to audio samples (1.0 = normal, 4.0 = whisper mode)
+    var gainMultiplier: Float = 1.0
 
     private var audioEngine: AVAudioEngine?
     private var sampleBuffer: [Float] = []
     private let bufferLock = NSLock()
+    private var silenceStart: Date?
 
     private static let targetSampleRate: Double = 16000
 
@@ -42,6 +53,14 @@ final class AudioRecordingService: ObservableObject {
                 continuation.resume(returning: granted)
             }
         }
+    }
+
+    /// Thread-safe snapshot of the current recording buffer for streaming transcription.
+    func getCurrentBuffer() -> [Float] {
+        bufferLock.lock()
+        let copy = sampleBuffer
+        bufferLock.unlock()
+        return copy
     }
 
     func startRecording() throws {
@@ -76,6 +95,11 @@ final class AudioRecordingService: ObservableObject {
         sampleBuffer.removeAll()
         bufferLock.unlock()
 
+        silenceStart = nil
+        isSilent = false
+        silenceDuration = 0
+        didAutoStop = false
+
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
             self?.processAudioBuffer(buffer, converter: converter, targetFormat: targetFormat)
         }
@@ -97,6 +121,9 @@ final class AudioRecordingService: ObservableObject {
         audioEngine = nil
         isRecording = false
         audioLevel = 0
+        isSilent = false
+        silenceDuration = 0
+        silenceStart = nil
 
         bufferLock.lock()
         let samples = sampleBuffer
@@ -137,18 +164,44 @@ final class AudioRecordingService: ObservableObject {
         guard error == nil, convertedBuffer.frameLength > 0 else { return }
 
         guard let channelData = convertedBuffer.floatChannelData?[0] else { return }
-        let samples = Array(UnsafeBufferPointer(start: channelData, count: Int(convertedBuffer.frameLength)))
+        var samples = Array(UnsafeBufferPointer(start: channelData, count: Int(convertedBuffer.frameLength)))
+
+        // Apply gain boost (whisper mode)
+        if gainMultiplier != 1.0 {
+            for i in samples.indices {
+                samples[i] = max(-1.0, min(1.0, samples[i] * gainMultiplier))
+            }
+        }
 
         // Calculate RMS audio level
         let rms = sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(samples.count))
         let normalizedLevel = min(1.0, rms * 5) // Scale up for visibility
+        let silent = rms < silenceThreshold
 
         bufferLock.lock()
         sampleBuffer.append(contentsOf: samples)
         bufferLock.unlock()
 
+        let now = Date()
+        let capturedSilenceStart = silenceStart
+
         Task { @MainActor [weak self] in
-            self?.audioLevel = normalizedLevel
+            guard let self else { return }
+            self.audioLevel = normalizedLevel
+
+            if silent {
+                if self.silenceStart == nil {
+                    self.silenceStart = now
+                }
+                if let start = self.silenceStart ?? capturedSilenceStart {
+                    self.silenceDuration = now.timeIntervalSince(start)
+                }
+                self.isSilent = true
+            } else {
+                self.silenceStart = nil
+                self.silenceDuration = 0
+                self.isSilent = false
+            }
         }
     }
 }

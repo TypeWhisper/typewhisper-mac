@@ -24,6 +24,11 @@ final class DictationViewModel: ObservableObject {
     @Published var audioLevel: Float = 0
     @Published var recordingDuration: TimeInterval = 0
     @Published var hotkeyMode: HotkeyService.HotkeyMode?
+    @Published var partialText: String = ""
+    @Published var isStreaming: Bool = false
+    @Published var whisperModeEnabled: Bool {
+        didSet { UserDefaults.standard.set(whisperModeEnabled, forKey: "whisperModeEnabled") }
+    }
 
     private let audioRecordingService: AudioRecordingService
     private let textInsertionService: TextInsertionService
@@ -34,6 +39,8 @@ final class DictationViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var recordingTimer: Timer?
     private var recordingStartTime: Date?
+    private var streamingTask: Task<Void, Never>?
+    private var silenceCancellable: AnyCancellable?
 
     init(
         audioRecordingService: AudioRecordingService,
@@ -47,6 +54,7 @@ final class DictationViewModel: ObservableObject {
         self.hotkeyService = hotkeyService
         self.modelManager = modelManager
         self.settingsViewModel = settingsViewModel
+        self.whisperModeEnabled = UserDefaults.standard.bool(forKey: "whisperModeEnabled")
 
         setupBindings()
     }
@@ -92,11 +100,17 @@ final class DictationViewModel: ObservableObject {
             return
         }
 
+        // Apply gain boost for whisper mode
+        audioRecordingService.gainMultiplier = whisperModeEnabled ? 4.0 : 1.0
+
         do {
             try audioRecordingService.startRecording()
             state = .recording
+            partialText = ""
             recordingStartTime = Date()
             startRecordingTimer()
+            startStreamingIfSupported()
+            startSilenceDetection()
         } catch {
             showError(error.localizedDescription)
             hotkeyService.cancelDictation()
@@ -106,11 +120,14 @@ final class DictationViewModel: ObservableObject {
     private func stopDictation() {
         guard state == .recording else { return }
 
+        stopStreaming()
+        stopSilenceDetection()
         stopRecordingTimer()
         let samples = audioRecordingService.stopRecording()
 
         guard !samples.isEmpty else {
             state = .idle
+            partialText = ""
             return
         }
 
@@ -118,6 +135,7 @@ final class DictationViewModel: ObservableObject {
         guard audioDuration >= 0.3 else {
             // Too short to transcribe meaningfully
             state = .idle
+            partialText = ""
             return
         }
 
@@ -134,9 +152,11 @@ final class DictationViewModel: ObservableObject {
                 let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !text.isEmpty else {
                     state = .idle
+                    partialText = ""
                     return
                 }
 
+                partialText = ""
                 state = .inserting
                 try await textInsertionService.insertText(text)
                 state = .idle
@@ -164,6 +184,78 @@ final class DictationViewModel: ObservableObject {
                 state = .idle
             }
         }
+    }
+
+    // MARK: - Streaming
+
+    private func startStreamingIfSupported() {
+        guard let engine = modelManager.activeEngine, engine.supportsStreaming else { return }
+
+        isStreaming = true
+        streamingTask = Task { [weak self] in
+            guard let self else { return }
+            // Initial delay before first streaming attempt
+            try? await Task.sleep(for: .seconds(1.5))
+
+            while !Task.isCancelled, self.state == .recording {
+                let buffer = self.audioRecordingService.getCurrentBuffer()
+                let bufferDuration = Double(buffer.count) / 16000.0
+
+                if bufferDuration > 0.5 {
+                    do {
+                        let result = try await self.modelManager.transcribe(
+                            audioSamples: buffer,
+                            language: self.settingsViewModel.selectedLanguage,
+                            task: self.settingsViewModel.selectedTask,
+                            onProgress: { [weak self] text in
+                                guard let self, self.state == .recording else { return false }
+                                DispatchQueue.main.async {
+                                    self.partialText = text
+                                }
+                                return true
+                            }
+                        )
+                        let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !text.isEmpty {
+                            self.partialText = text
+                        }
+                    } catch {
+                        // Streaming errors are non-fatal; final transcription will still run
+                    }
+                }
+
+                try? await Task.sleep(for: .seconds(1.5))
+            }
+        }
+    }
+
+    private func stopStreaming() {
+        streamingTask?.cancel()
+        streamingTask = nil
+        isStreaming = false
+    }
+
+    // MARK: - Silence Detection
+
+    private func startSilenceDetection() {
+        // Only auto-stop in toggle mode, not push-to-talk
+        guard hotkeyMode == .toggle else { return }
+
+        silenceCancellable = audioRecordingService.$silenceDuration
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] duration in
+                guard let self, self.state == .recording else { return }
+                if duration >= self.audioRecordingService.silenceAutoStopDuration {
+                    self.audioRecordingService.didAutoStop = true
+                    self.stopDictation()
+                    self.hotkeyService.cancelDictation()
+                }
+            }
+    }
+
+    private func stopSilenceDetection() {
+        silenceCancellable?.cancel()
+        silenceCancellable = nil
     }
 
     private func startRecordingTimer() {

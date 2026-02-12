@@ -115,4 +115,21 @@ final class ModelManagerService: ObservableObject {
             task: task
         )
     }
+
+    func transcribe(
+        audioSamples: [Float],
+        language: String?,
+        task: TranscriptionTask,
+        onProgress: @escaping (String) -> Bool
+    ) async throws -> TranscriptionResult {
+        guard let engine = activeEngine else {
+            throw TranscriptionEngineError.modelNotLoaded
+        }
+        return try await engine.transcribe(
+            audioSamples: audioSamples,
+            language: language,
+            task: task,
+            onProgress: onProgress
+        )
+    }
 }

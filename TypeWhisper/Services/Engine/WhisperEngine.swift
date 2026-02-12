@@ -102,4 +102,55 @@ final class WhisperEngine: TranscriptionEngine {
             engineUsed: .whisper
         )
     }
+
+    func transcribe(
+        audioSamples: [Float],
+        language: String?,
+        task: TranscriptionTask,
+        onProgress: @escaping (String) -> Bool
+    ) async throws -> TranscriptionResult {
+        guard let whisperKit else {
+            throw TranscriptionEngineError.modelNotLoaded
+        }
+
+        let whisperTask: DecodingTask = task == .translate ? .translate : .transcribe
+
+        let options = DecodingOptions(
+            verbose: false,
+            task: whisperTask,
+            language: language,
+            temperature: 0.0,
+            temperatureFallbackCount: 3,
+            usePrefillPrompt: true,
+            usePrefillCache: true,
+            skipSpecialTokens: true,
+            withoutTimestamps: false,
+            chunkingStrategy: .vad
+        )
+
+        let startTime = CFAbsoluteTimeGetCurrent()
+
+        let results = try await whisperKit.transcribe(
+            audioArray: audioSamples,
+            decodeOptions: options,
+            callback: { progress in
+                let shouldContinue = onProgress(progress.text)
+                return shouldContinue ? nil : false
+            }
+        )
+
+        let processingTime = CFAbsoluteTimeGetCurrent() - startTime
+        let audioDuration = Double(audioSamples.count) / 16000.0
+
+        let fullText = results.map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        let detectedLanguage = results.first?.language
+
+        return TranscriptionResult(
+            text: fullText,
+            detectedLanguage: detectedLanguage,
+            duration: audioDuration,
+            processingTime: processingTime,
+            engineUsed: .whisper
+        )
+    }
 }
