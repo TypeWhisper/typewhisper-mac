@@ -3,6 +3,7 @@ import SwiftUI
 struct MenuBarView: View {
     @ObservedObject private var modelManager = ModelManagerViewModel.shared
     @ObservedObject private var dictation = DictationViewModel.shared
+    @ObservedObject private var apiServer = APIServerViewModel.shared
 
     var body: some View {
         if let modelName = modelManager.activeModelName, modelManager.isModelReady {
@@ -40,6 +41,13 @@ struct MenuBarView: View {
             Label(
                 String(localized: "Accessibility access needed"),
                 systemImage: "lock.shield"
+            )
+        }
+
+        if apiServer.isRunning {
+            Label(
+                String(localized: "API: Port \(apiServer.port)"),
+                systemImage: "network"
             )
         }
 

@@ -33,6 +33,13 @@
 		AA00000000000000000033 /* DictationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000033 /* DictationViewModel.swift */; };
 		AA00000000000000000034 /* DictationOverlayPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000034 /* DictationOverlayPanel.swift */; };
 		AA00000000000000000035 /* DictationOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000035 /* DictationOverlayView.swift */; };
+		AA00000000000000000040 /* HTTPResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000040 /* HTTPResponse.swift */; };
+		AA00000000000000000041 /* HTTPRequestParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000041 /* HTTPRequestParser.swift */; };
+		AA00000000000000000042 /* APIRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000042 /* APIRouter.swift */; };
+		AA00000000000000000043 /* HTTPServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000043 /* HTTPServer.swift */; };
+		AA00000000000000000044 /* APIHandlers.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000044 /* APIHandlers.swift */; };
+		AA00000000000000000045 /* APIServerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000045 /* APIServerViewModel.swift */; };
+		AA00000000000000000046 /* APISettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000046 /* APISettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -61,6 +68,13 @@
 		BB00000000000000000033 /* DictationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000034 /* DictationOverlayPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationOverlayPanel.swift; sourceTree = "<group>"; };
 		BB00000000000000000035 /* DictationOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationOverlayView.swift; sourceTree = "<group>"; };
+		BB00000000000000000040 /* HTTPResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPResponse.swift; sourceTree = "<group>"; };
+		BB00000000000000000041 /* HTTPRequestParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPRequestParser.swift; sourceTree = "<group>"; };
+		BB00000000000000000042 /* APIRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIRouter.swift; sourceTree = "<group>"; };
+		BB00000000000000000043 /* HTTPServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPServer.swift; sourceTree = "<group>"; };
+		BB00000000000000000044 /* APIHandlers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIHandlers.swift; sourceTree = "<group>"; };
+		BB00000000000000000045 /* APIServerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIServerViewModel.swift; sourceTree = "<group>"; };
+		BB00000000000000000046 /* APISettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APISettingsView.swift; sourceTree = "<group>"; };
 		DD00000000000000000099 /* TypeWhisper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "TypeWhisper.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -122,6 +136,7 @@
 			isa = PBXGroup;
 			children = (
 				CC00000000000000000006 /* Engine */,
+				CC00000000000000000010 /* HTTPServer */,
 				BB00000000000000000009 /* ModelManagerService.swift */,
 				BB00000000000000000010 /* AudioFileService.swift */,
 				BB00000000000000000030 /* AudioRecordingService.swift */,
@@ -129,6 +144,18 @@
 				BB00000000000000000032 /* TextInsertionService.swift */,
 			);
 			path = Services;
+			sourceTree = "<group>";
+		};
+		CC00000000000000000010 /* HTTPServer */ = {
+			isa = PBXGroup;
+			children = (
+				BB00000000000000000040 /* HTTPResponse.swift */,
+				BB00000000000000000041 /* HTTPRequestParser.swift */,
+				BB00000000000000000042 /* APIRouter.swift */,
+				BB00000000000000000043 /* HTTPServer.swift */,
+				BB00000000000000000044 /* APIHandlers.swift */,
+			);
+			path = HTTPServer;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000006 /* Engine */ = {
@@ -148,6 +175,7 @@
 				BB00000000000000000012 /* FileTranscriptionViewModel.swift */,
 				BB00000000000000000013 /* SettingsViewModel.swift */,
 				BB00000000000000000033 /* DictationViewModel.swift */,
+				BB00000000000000000045 /* APIServerViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -161,6 +189,7 @@
 				BB00000000000000000017 /* SettingsView.swift */,
 				BB00000000000000000034 /* DictationOverlayPanel.swift */,
 				BB00000000000000000035 /* DictationOverlayView.swift */,
+				BB00000000000000000046 /* APISettingsView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -284,6 +313,13 @@
 				AA00000000000000000033 /* DictationViewModel.swift in Sources */,
 				AA00000000000000000034 /* DictationOverlayPanel.swift in Sources */,
 				AA00000000000000000035 /* DictationOverlayView.swift in Sources */,
+				AA00000000000000000040 /* HTTPResponse.swift in Sources */,
+				AA00000000000000000041 /* HTTPRequestParser.swift in Sources */,
+				AA00000000000000000042 /* APIRouter.swift in Sources */,
+				AA00000000000000000043 /* HTTPServer.swift in Sources */,
+				AA00000000000000000044 /* APIHandlers.swift in Sources */,
+				AA00000000000000000045 /* APIServerViewModel.swift in Sources */,
+				AA00000000000000000046 /* APISettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

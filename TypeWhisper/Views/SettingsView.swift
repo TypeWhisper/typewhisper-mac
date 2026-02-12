@@ -16,6 +16,9 @@ struct SettingsView: View {
             Tab(String(localized: "File Transcription"), systemImage: "doc.text") {
                 FileTranscriptionView()
             }
+            Tab(String(localized: "API Server"), systemImage: "network") {
+                APISettingsView()
+            }
         }
         .frame(minWidth: 550, minHeight: 400)
     }

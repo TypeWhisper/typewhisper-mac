@@ -12,6 +12,10 @@ final class ServiceContainer: ObservableObject {
     let hotkeyService: HotkeyService
     let textInsertionService: TextInsertionService
 
+    // HTTP API
+    let httpServer: HTTPServer
+    let apiServerViewModel: APIServerViewModel
+
     // ViewModels
     let modelManagerViewModel: ModelManagerViewModel
     let fileTranscriptionViewModel: FileTranscriptionViewModel
@@ -25,6 +29,13 @@ final class ServiceContainer: ObservableObject {
         audioRecordingService = AudioRecordingService()
         hotkeyService = HotkeyService()
         textInsertionService = TextInsertionService()
+
+        // HTTP API
+        let router = APIRouter()
+        let handlers = APIHandlers(modelManager: modelManagerService, audioFileService: audioFileService)
+        handlers.register(on: router)
+        httpServer = HTTPServer(router: router)
+        apiServerViewModel = APIServerViewModel(httpServer: httpServer)
 
         // ViewModels
         modelManagerViewModel = ModelManagerViewModel(modelManager: modelManagerService)
@@ -46,10 +57,16 @@ final class ServiceContainer: ObservableObject {
         FileTranscriptionViewModel._shared = fileTranscriptionViewModel
         SettingsViewModel._shared = settingsViewModel
         DictationViewModel._shared = dictationViewModel
+        APIServerViewModel._shared = apiServerViewModel
     }
 
     func initialize() async {
         hotkeyService.setup()
+
+        if apiServerViewModel.isEnabled {
+            apiServerViewModel.startServer()
+        }
+
         await modelManagerService.loadSelectedModel()
     }
 }
