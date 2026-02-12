@@ -182,6 +182,12 @@ private struct ProfileEditorSheet: View {
                         }
                     }
 
+                    if viewModel.editorEngineOverride != nil {
+                        Text(String(localized: "Using a different engine per profile requires both models to be loaded, which increases memory usage."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
                     // Whisper mode override
                     Picker(String(localized: "Whisper Mode"), selection: $viewModel.editorWhisperModeOverride) {
                         Text(String(localized: "Global Setting")).tag(nil as Bool?)

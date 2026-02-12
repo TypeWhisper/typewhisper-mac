@@ -157,6 +157,11 @@ final class DictationViewModel: ObservableObject {
         return settingsViewModel.selectedTask
     }
 
+    private var effectiveEngineOverride: EngineType? {
+        guard let raw = matchedProfile?.engineOverride else { return nil }
+        return EngineType(rawValue: raw)
+    }
+
     private func stopDictation() {
         guard state == .recording else { return }
 
@@ -187,6 +192,7 @@ final class DictationViewModel: ObservableObject {
         let activeApp = textInsertionService.captureActiveApp()
         let language = effectiveLanguage
         let task = effectiveTask
+        let engineOverride = effectiveEngineOverride
 
         state = .processing
 
@@ -195,7 +201,8 @@ final class DictationViewModel: ObservableObject {
                 let result = try await modelManager.transcribe(
                     audioSamples: samples,
                     language: language,
-                    task: task
+                    task: task,
+                    engineOverride: engineOverride
                 )
 
                 let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -275,12 +282,14 @@ final class DictationViewModel: ObservableObject {
     private var confirmedStreamingText = ""
 
     private func startStreamingIfSupported() {
-        guard let engine = modelManager.activeEngine, engine.supportsStreaming else { return }
+        let resolvedEngine = modelManager.resolveEngine(override: effectiveEngineOverride)
+        guard let engine = resolvedEngine, engine.supportsStreaming else { return }
 
         isStreaming = true
         confirmedStreamingText = ""
         let streamLanguage = effectiveLanguage
         let streamTask = effectiveTask
+        let streamEngineOverride = effectiveEngineOverride
         streamingTask = Task { [weak self] in
             guard let self else { return }
             // Initial delay before first streaming attempt
@@ -297,6 +306,7 @@ final class DictationViewModel: ObservableObject {
                             audioSamples: buffer,
                             language: streamLanguage,
                             task: streamTask,
+                            engineOverride: streamEngineOverride,
                             onProgress: { [weak self] text in
                                 guard let self, self.state == .recording else { return false }
                                 let stable = Self.stabilizeText(confirmed: confirmed, new: text)

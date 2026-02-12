@@ -114,12 +114,21 @@ final class ModelManagerService: ObservableObject {
         modelStatuses[model.id] ?? .notDownloaded
     }
 
+    func resolveEngine(override: EngineType?) -> (any TranscriptionEngine)? {
+        if let override {
+            let e = engine(for: override)
+            return e.isModelLoaded ? e : activeEngine
+        }
+        return activeEngine
+    }
+
     func transcribe(
         audioSamples: [Float],
         language: String?,
-        task: TranscriptionTask
+        task: TranscriptionTask,
+        engineOverride: EngineType? = nil
     ) async throws -> TranscriptionResult {
-        guard let engine = activeEngine else {
+        guard let engine = resolveEngine(override: engineOverride) else {
             throw TranscriptionEngineError.modelNotLoaded
         }
         return try await engine.transcribe(
@@ -133,9 +142,10 @@ final class ModelManagerService: ObservableObject {
         audioSamples: [Float],
         language: String?,
         task: TranscriptionTask,
+        engineOverride: EngineType? = nil,
         onProgress: @escaping (String) -> Bool
     ) async throws -> TranscriptionResult {
-        guard let engine = activeEngine else {
+        guard let engine = resolveEngine(override: engineOverride) else {
             throw TranscriptionEngineError.modelNotLoaded
         }
         return try await engine.transcribe(
