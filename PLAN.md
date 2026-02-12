@@ -37,6 +37,12 @@ typewhisper/
 │   │   │   ├── TranscriptionEngine.swift # Protocol
 │   │   │   ├── WhisperEngine.swift       # WhisperKit wrapper
 │   │   │   └── ParakeetEngine.swift      # FluidAudio wrapper
+│   │   ├── HTTPServer/
+│   │   │   ├── HTTPResponse.swift        # HTTP response value type
+│   │   │   ├── HTTPRequestParser.swift   # HTTP/1.1 + multipart parser
+│   │   │   ├── APIRouter.swift           # Method+path router
+│   │   │   ├── HTTPServer.swift          # NWListener on localhost
+│   │   │   └── APIHandlers.swift         # Endpoint implementations
 │   │   ├── ModelManagerService.swift     # Download, cache, lifecycle
 │   │   ├── AudioFileService.swift        # Audio file to PCM conversion
 │   │   ├── AudioRecordingService.swift   # Mic capture via AVAudioEngine
@@ -46,12 +52,14 @@ typewhisper/
 │   │   ├── FileTranscriptionViewModel.swift
 │   │   ├── ModelManagerViewModel.swift
 │   │   ├── SettingsViewModel.swift
-│   │   └── DictationViewModel.swift      # Dictation state machine
+│   │   ├── DictationViewModel.swift      # Dictation state machine
+│   │   └── APIServerViewModel.swift      # HTTP API toggle + port
 │   ├── Views/
 │   │   ├── MenuBarView.swift             # Menu bar popover
 │   │   ├── FileTranscriptionView.swift   # Drag & drop UI
 │   │   ├── ModelManagerView.swift        # Model download/management
 │   │   ├── SettingsView.swift
+│   │   ├── APISettingsView.swift         # API server settings tab
 │   │   ├── DictationOverlayPanel.swift   # Floating NSPanel
 │   │   └── DictationOverlayView.swift    # Overlay pill UI
 │   └── Resources/
@@ -92,13 +100,16 @@ typewhisper/
 3. ✅ Silence detection (auto-stop after 2s in toggle mode, engine-agnostic)
 4. ✅ Whisper mode (gain boost 4x, Settings toggle, persisted in UserDefaults)
 
-### Phase 4: XPC Integration
+### Phase 4: Local HTTP API ✅
 
-1. Create XPC Service target
-2. Implement `TypeWhisperLocalXPCProtocol`
-3. XPC Listener + Delegate
-4. TypeWhisper-side `LocalTranscriptionProvider`
-5. TypeWhisper Settings: "Local (via TypeWhisper Local)" as provider option
+1. ✅ HTTPResponse value type with JSON/error factories, CORS headers
+2. ✅ HTTPRequestParser with HTTP/1.1 parsing + multipart form-data support (100 MB limit)
+3. ✅ APIRouter with method+path dispatch, OPTIONS/CORS, 404 fallback
+4. ✅ HTTPServer using NWListener on 127.0.0.1 (localhost only)
+5. ✅ APIHandlers: POST /v1/transcribe, GET /v1/status, GET /v1/models
+6. ✅ APIServerViewModel with toggle + port (persisted in UserDefaults)
+7. ✅ APISettingsView: Settings tab with toggle, port config, status, curl examples
+8. ✅ Menu bar API status indicator, network.server entitlement
 
 ### Phase 5: Polish + Release
 
