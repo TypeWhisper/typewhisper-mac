@@ -1,0 +1,33 @@
+# Xcode
+build/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# SPM
+.build/
+.swiftpm/
+Package.resolved
+
+# macOS
+.DS_Store
+*.swp
+*~.nib
+xcuserdata/
+
+# Xcode Scheme
+*.xcscheme
+
+# CocoaPods (if used)
+Pods/
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/
+fastlane/test_output/
