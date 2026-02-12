@@ -29,6 +29,7 @@ final class DictationViewModel: ObservableObject {
     @Published var whisperModeEnabled: Bool {
         didSet { UserDefaults.standard.set(whisperModeEnabled, forKey: "whisperModeEnabled") }
     }
+    @Published var activeProfileName: String?
 
     enum OverlayPosition: String, CaseIterable {
         case top
@@ -45,6 +46,8 @@ final class DictationViewModel: ObservableObject {
     private let modelManager: ModelManagerService
     private let settingsViewModel: SettingsViewModel
     private let historyService: HistoryService
+    private let profileService: ProfileService
+    private var matchedProfile: Profile?
 
     private var cancellables = Set<AnyCancellable>()
     private var recordingTimer: Timer?
@@ -58,7 +61,8 @@ final class DictationViewModel: ObservableObject {
         hotkeyService: HotkeyService,
         modelManager: ModelManagerService,
         settingsViewModel: SettingsViewModel,
-        historyService: HistoryService
+        historyService: HistoryService,
+        profileService: ProfileService
     ) {
         self.audioRecordingService = audioRecordingService
         self.textInsertionService = textInsertionService
@@ -66,6 +70,7 @@ final class DictationViewModel: ObservableObject {
         self.modelManager = modelManager
         self.settingsViewModel = settingsViewModel
         self.historyService = historyService
+        self.profileService = profileService
         self.whisperModeEnabled = UserDefaults.standard.bool(forKey: "whisperModeEnabled")
         self.overlayPosition = UserDefaults.standard.string(forKey: "overlayPosition")
             .flatMap { OverlayPosition(rawValue: $0) } ?? .top
@@ -114,8 +119,14 @@ final class DictationViewModel: ObservableObject {
             return
         }
 
-        // Apply gain boost for whisper mode
-        audioRecordingService.gainMultiplier = whisperModeEnabled ? 4.0 : 1.0
+        // Match profile based on active app
+        let activeApp = textInsertionService.captureActiveApp()
+        matchedProfile = profileService.matchProfile(bundleIdentifier: activeApp.bundleId)
+        activeProfileName = matchedProfile?.name
+
+        // Apply gain boost: profile override ?? global setting
+        let effectiveWhisperMode = matchedProfile?.whisperModeOverride ?? whisperModeEnabled
+        audioRecordingService.gainMultiplier = effectiveWhisperMode ? 4.0 : 1.0
 
         do {
             try audioRecordingService.startRecording()
@@ -131,6 +142,21 @@ final class DictationViewModel: ObservableObject {
         }
     }
 
+    private var effectiveLanguage: String? {
+        if let profileLang = matchedProfile?.outputLanguage {
+            return profileLang
+        }
+        return settingsViewModel.selectedLanguage
+    }
+
+    private var effectiveTask: TranscriptionTask {
+        if let profileTask = matchedProfile?.selectedTask,
+           let task = TranscriptionTask(rawValue: profileTask) {
+            return task
+        }
+        return settingsViewModel.selectedTask
+    }
+
     private func stopDictation() {
         guard state == .recording else { return }
 
@@ -142,6 +168,8 @@ final class DictationViewModel: ObservableObject {
         guard !samples.isEmpty else {
             state = .idle
             partialText = ""
+            matchedProfile = nil
+            activeProfileName = nil
             return
         }
 
@@ -150,11 +178,15 @@ final class DictationViewModel: ObservableObject {
             // Too short to transcribe meaningfully
             state = .idle
             partialText = ""
+            matchedProfile = nil
+            activeProfileName = nil
             return
         }
 
-        // Capture active app BEFORE we start processing (the frontmost app is the target)
+        // Use the active app captured at recording start (via profile matching)
         let activeApp = textInsertionService.captureActiveApp()
+        let language = effectiveLanguage
+        let task = effectiveTask
 
         state = .processing
 
@@ -162,14 +194,16 @@ final class DictationViewModel: ObservableObject {
             do {
                 let result = try await modelManager.transcribe(
                     audioSamples: samples,
-                    language: settingsViewModel.selectedLanguage,
-                    task: settingsViewModel.selectedTask
+                    language: language,
+                    task: task
                 )
 
                 let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !text.isEmpty else {
                     state = .idle
                     partialText = ""
+                    matchedProfile = nil
+                    activeProfileName = nil
                     return
                 }
 
@@ -183,13 +217,17 @@ final class DictationViewModel: ObservableObject {
                     appName: activeApp.name,
                     appBundleIdentifier: activeApp.bundleId,
                     durationSeconds: audioDuration,
-                    language: settingsViewModel.selectedLanguage,
+                    language: language,
                     engineUsed: result.engineUsed.rawValue
                 )
 
                 state = .idle
+                matchedProfile = nil
+                activeProfileName = nil
             } catch {
                 showError(error.localizedDescription)
+                matchedProfile = nil
+                activeProfileName = nil
             }
         }
     }
@@ -241,6 +279,8 @@ final class DictationViewModel: ObservableObject {
 
         isStreaming = true
         confirmedStreamingText = ""
+        let streamLanguage = effectiveLanguage
+        let streamTask = effectiveTask
         streamingTask = Task { [weak self] in
             guard let self else { return }
             // Initial delay before first streaming attempt
@@ -255,8 +295,8 @@ final class DictationViewModel: ObservableObject {
                         let confirmed = self.confirmedStreamingText
                         let result = try await self.modelManager.transcribe(
                             audioSamples: buffer,
-                            language: self.settingsViewModel.selectedLanguage,
-                            task: self.settingsViewModel.selectedTask,
+                            language: streamLanguage,
+                            task: streamTask,
                             onProgress: { [weak self] text in
                                 guard let self, self.state == .recording else { return false }
                                 let stable = Self.stabilizeText(confirmed: confirmed, new: text)

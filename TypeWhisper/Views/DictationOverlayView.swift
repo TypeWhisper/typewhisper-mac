@@ -18,6 +18,14 @@ struct DictationOverlayView: View {
             HStack(spacing: 8) {
                 statusIcon
                 statusText
+                if let profileName = viewModel.activeProfileName, viewModel.state == .recording {
+                    Text(profileName)
+                        .font(.system(size: 9, weight: .bold))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(.blue.opacity(0.2), in: Capsule())
+                        .foregroundStyle(.blue)
+                }
                 if case .recording = viewModel.state {
                     audioLevelBar
                     durationText

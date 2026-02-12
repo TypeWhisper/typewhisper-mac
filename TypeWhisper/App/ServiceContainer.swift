@@ -13,6 +13,7 @@ final class ServiceContainer: ObservableObject {
     let textInsertionService: TextInsertionService
     let historyService: HistoryService
     let textDiffService: TextDiffService
+    let profileService: ProfileService
 
     // HTTP API
     let httpServer: HTTPServer
@@ -24,6 +25,7 @@ final class ServiceContainer: ObservableObject {
     let settingsViewModel: SettingsViewModel
     let dictationViewModel: DictationViewModel
     let historyViewModel: HistoryViewModel
+    let profilesViewModel: ProfilesViewModel
 
     private init() {
         // Services
@@ -34,6 +36,7 @@ final class ServiceContainer: ObservableObject {
         textInsertionService = TextInsertionService()
         historyService = HistoryService()
         textDiffService = TextDiffService()
+        profileService = ProfileService()
 
         // HTTP API
         let router = APIRouter()
@@ -55,11 +58,16 @@ final class ServiceContainer: ObservableObject {
             hotkeyService: hotkeyService,
             modelManager: modelManagerService,
             settingsViewModel: settingsViewModel,
-            historyService: historyService
+            historyService: historyService,
+            profileService: profileService
         )
         historyViewModel = HistoryViewModel(
             historyService: historyService,
             textDiffService: textDiffService
+        )
+        profilesViewModel = ProfilesViewModel(
+            profileService: profileService,
+            settingsViewModel: settingsViewModel
         )
 
         // Set shared references
@@ -69,6 +77,7 @@ final class ServiceContainer: ObservableObject {
         DictationViewModel._shared = dictationViewModel
         APIServerViewModel._shared = apiServerViewModel
         HistoryViewModel._shared = historyViewModel
+        ProfilesViewModel._shared = profilesViewModel
     }
 
     func initialize() async {

@@ -22,6 +22,9 @@ struct SettingsView: View {
             Tab(String(localized: "History"), systemImage: "clock.arrow.circlepath") {
                 HistoryView()
             }
+            Tab(String(localized: "Profiles"), systemImage: "person.crop.rectangle.stack") {
+                ProfilesSettingsView()
+            }
             Tab(String(localized: "API Server"), systemImage: "network") {
                 APISettingsView()
             }

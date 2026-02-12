@@ -48,6 +48,10 @@
 		AA00000000000000000062 /* TextDiffService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000062 /* TextDiffService.swift */; };
 		AA00000000000000000063 /* HistoryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000063 /* HistoryViewModel.swift */; };
 		AA00000000000000000064 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000064 /* HistoryView.swift */; };
+		AA00000000000000000065 /* Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000065 /* Profile.swift */; };
+		AA00000000000000000066 /* ProfileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000066 /* ProfileService.swift */; };
+		AA00000000000000000067 /* ProfilesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000067 /* ProfilesViewModel.swift */; };
+		AA00000000000000000068 /* ProfilesSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000068 /* ProfilesSettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -91,6 +95,10 @@
 		BB00000000000000000062 /* TextDiffService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextDiffService.swift; sourceTree = "<group>"; };
 		BB00000000000000000063 /* HistoryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000064 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
+		BB00000000000000000065 /* Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Profile.swift; sourceTree = "<group>"; };
+		BB00000000000000000066 /* ProfileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileService.swift; sourceTree = "<group>"; };
+		BB00000000000000000067 /* ProfilesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilesViewModel.swift; sourceTree = "<group>"; };
+		BB00000000000000000068 /* ProfilesSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilesSettingsView.swift; sourceTree = "<group>"; };
 		DD00000000000000000099 /* TypeWhisper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TypeWhisper.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -145,6 +153,7 @@
 				BB00000000000000000004 /* ModelInfo.swift */,
 				BB00000000000000000005 /* TranscriptionResult.swift */,
 				BB00000000000000000060 /* TranscriptionRecord.swift */,
+				BB00000000000000000065 /* Profile.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -162,6 +171,7 @@
 				BB00000000000000000050 /* SubtitleExporter.swift */,
 				BB00000000000000000061 /* HistoryService.swift */,
 				BB00000000000000000062 /* TextDiffService.swift */,
+				BB00000000000000000066 /* ProfileService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -185,6 +195,7 @@
 				BB00000000000000000033 /* DictationViewModel.swift */,
 				BB00000000000000000045 /* APIServerViewModel.swift */,
 				BB00000000000000000063 /* HistoryViewModel.swift */,
+				BB00000000000000000067 /* ProfilesViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -201,6 +212,7 @@
 				BB00000000000000000046 /* APISettingsView.swift */,
 				BB00000000000000000051 /* GeneralSettingsView.swift */,
 				BB00000000000000000064 /* HistoryView.swift */,
+				BB00000000000000000068 /* ProfilesSettingsView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -352,6 +364,10 @@
 				AA00000000000000000062 /* TextDiffService.swift in Sources */,
 				AA00000000000000000063 /* HistoryViewModel.swift in Sources */,
 				AA00000000000000000064 /* HistoryView.swift in Sources */,
+				AA00000000000000000065 /* Profile.swift in Sources */,
+				AA00000000000000000066 /* ProfileService.swift in Sources */,
+				AA00000000000000000067 /* ProfilesViewModel.swift in Sources */,
+				AA00000000000000000068 /* ProfilesSettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

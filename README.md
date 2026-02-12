@@ -1,5 +1,9 @@
 # TypeWhisper
 
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![macOS](https://img.shields.io/badge/macOS-15.0%2B-black.svg)](https://www.apple.com/macos/)
+[![Swift](https://img.shields.io/badge/Swift-5-orange.svg)](https://swift.org)
+
 Local speech-to-text for macOS. Transcribe audio using on-device AI models — no cloud, no subscriptions, fully private.
 
 ## Features
