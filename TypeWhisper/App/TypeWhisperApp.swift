@@ -1,11 +1,11 @@
 import SwiftUI
 
 @main
-struct TypeWhisperLocalApp: App {
+struct TypeWhisperApp: App {
     @StateObject private var serviceContainer = ServiceContainer.shared
 
     var body: some Scene {
-        MenuBarExtra("TypeWhisper Local", systemImage: "waveform") {
+        MenuBarExtra("TypeWhisper", systemImage: "waveform") {
             MenuBarView()
         }
         .menuBarExtraStyle(.window)

@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import AppKit
 import UniformTypeIdentifiers
 
 @MainActor
@@ -31,7 +32,7 @@ final class FileTranscriptionViewModel: ObservableObject {
     private let audioFileService: AudioFileService
 
     static let allowedContentTypes: [UTType] = [
-        .wav, .mp3, .mpeg4Audio, .flac, .aiff,
+        .wav, .mp3, .mpeg4Audio, .aiff, .audio,
         .mpeg4Movie, .quickTimeMovie, .avi, .movie
     ]
 

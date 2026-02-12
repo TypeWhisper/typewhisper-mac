@@ -8,7 +8,7 @@ struct MenuBarView: View {
             HStack {
                 Image(systemName: "waveform")
                     .foregroundStyle(.secondary)
-                Text("TypeWhisper Local")
+                Text("TypeWhisper")
                     .font(.headline)
                 Spacer()
             }

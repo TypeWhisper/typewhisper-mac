@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		AA00000000000000000001 /* TypeWhisperLocalApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000001 /* TypeWhisperLocalApp.swift */; };
+		AA00000000000000000001 /* TypeWhisperApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000001 /* TypeWhisperApp.swift */; };
 		AA00000000000000000002 /* ServiceContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000002 /* ServiceContainer.swift */; };
 		AA00000000000000000003 /* EngineType.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000003 /* EngineType.swift */; };
 		AA00000000000000000004 /* ModelInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000004 /* ModelInfo.swift */; };
@@ -29,7 +29,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		BB00000000000000000001 /* TypeWhisperLocalApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypeWhisperLocalApp.swift; sourceTree = "<group>"; };
+		BB00000000000000000001 /* TypeWhisperApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypeWhisperApp.swift; sourceTree = "<group>"; };
 		BB00000000000000000002 /* ServiceContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceContainer.swift; sourceTree = "<group>"; };
 		BB00000000000000000003 /* EngineType.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EngineType.swift; sourceTree = "<group>"; };
 		BB00000000000000000004 /* ModelInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelInfo.swift; sourceTree = "<group>"; };
@@ -47,8 +47,8 @@
 		BB00000000000000000016 /* FileTranscriptionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTranscriptionView.swift; sourceTree = "<group>"; };
 		BB00000000000000000017 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000018 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		BB00000000000000000019 /* TypeWhisperLocal.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TypeWhisperLocal.entitlements; sourceTree = "<group>"; };
-		DD00000000000000000099 /* TypeWhisperLocal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "TypeWhisperLocal.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB00000000000000000019 /* TypeWhisper.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TypeWhisper.entitlements; sourceTree = "<group>"; };
+		DD00000000000000000099 /* TypeWhisper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "TypeWhisper.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -67,12 +67,12 @@
 		CC00000000000000000001 /* Root */ = {
 			isa = PBXGroup;
 			children = (
-				CC00000000000000000002 /* TypeWhisperLocal */,
+				CC00000000000000000002 /* TypeWhisper */,
 				CC00000000000000000090 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		CC00000000000000000002 /* TypeWhisperLocal */ = {
+		CC00000000000000000002 /* TypeWhisper */ = {
 			isa = PBXGroup;
 			children = (
 				CC00000000000000000003 /* App */,
@@ -82,13 +82,13 @@
 				CC00000000000000000008 /* Views */,
 				CC00000000000000000009 /* Resources */,
 			);
-			path = TypeWhisperLocal;
+			path = TypeWhisper;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000003 /* App */ = {
 			isa = PBXGroup;
 			children = (
-				BB00000000000000000001 /* TypeWhisperLocalApp.swift */,
+				BB00000000000000000001 /* TypeWhisperApp.swift */,
 				BB00000000000000000002 /* ServiceContainer.swift */,
 			);
 			path = App;
@@ -149,7 +149,7 @@
 			isa = PBXGroup;
 			children = (
 				BB00000000000000000018 /* Info.plist */,
-				BB00000000000000000019 /* TypeWhisperLocal.entitlements */,
+				BB00000000000000000019 /* TypeWhisper.entitlements */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -157,7 +157,7 @@
 		CC00000000000000000090 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				DD00000000000000000099 /* TypeWhisperLocal.app */,
+				DD00000000000000000099 /* TypeWhisper.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -165,9 +165,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		DD00000000000000000001 /* TypeWhisperLocal */ = {
+		DD00000000000000000001 /* TypeWhisper */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = FF00000000000000000030 /* Build configuration list for PBXNativeTarget "TypeWhisperLocal" */;
+			buildConfigurationList = FF00000000000000000030 /* Build configuration list for PBXNativeTarget "TypeWhisper" */;
 			buildPhases = (
 				FF00000000000000000002 /* Sources */,
 				FF00000000000000000001 /* Frameworks */,
@@ -177,13 +177,13 @@
 			);
 			dependencies = (
 			);
-			name = TypeWhisperLocal;
+			name = TypeWhisper;
 			packageProductDependencies = (
 				PP00000000000000000001 /* WhisperKit */,
 				PP00000000000000000002 /* FluidAudio */,
 			);
-			productName = TypeWhisperLocal;
-			productReference = DD00000000000000000099 /* TypeWhisperLocal.app */;
+			productName = TypeWhisper;
+			productReference = DD00000000000000000099 /* TypeWhisper.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -201,7 +201,7 @@
 					};
 				};
 			};
-			buildConfigurationList = FF00000000000000000020 /* Build configuration list for PBXProject "TypeWhisperLocal" */;
+			buildConfigurationList = FF00000000000000000020 /* Build configuration list for PBXProject "TypeWhisper" */;
 			compatibilityVersion = "Xcode 15.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -219,7 +219,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				DD00000000000000000001 /* TypeWhisperLocal */,
+				DD00000000000000000001 /* TypeWhisper */,
 			);
 		};
 /* End PBXProject section */
@@ -239,7 +239,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AA00000000000000000001 /* TypeWhisperLocalApp.swift in Sources */,
+				AA00000000000000000001 /* TypeWhisperApp.swift in Sources */,
 				AA00000000000000000002 /* ServiceContainer.swift in Sources */,
 				AA00000000000000000003 /* EngineType.swift in Sources */,
 				AA00000000000000000004 /* ModelInfo.swift in Sources */,
@@ -314,7 +314,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -371,7 +371,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
@@ -383,14 +383,14 @@
 		XX00000000000000000003 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = TypeWhisperLocal/Resources/TypeWhisperLocal.entitlements;
+				CODE_SIGN_ENTITLEMENTS = TypeWhisper/Resources/TypeWhisper.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = TypeWhisperLocal/Resources/Info.plist;
+				INFOPLIST_FILE = TypeWhisper/Resources/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_LSUIElement = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -399,7 +399,7 @@
 				);
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.localspeech;
-				PRODUCT_NAME = "TypeWhisper Local";
+				PRODUCT_NAME = TypeWhisper;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = targeted;
 				SWIFT_VERSION = 5.0;
@@ -409,14 +409,14 @@
 		XX00000000000000000004 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = TypeWhisperLocal/Resources/TypeWhisperLocal.entitlements;
+				CODE_SIGN_ENTITLEMENTS = TypeWhisper/Resources/TypeWhisper.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = TypeWhisperLocal/Resources/Info.plist;
+				INFOPLIST_FILE = TypeWhisper/Resources/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_LSUIElement = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -425,7 +425,7 @@
 				);
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.localspeech;
-				PRODUCT_NAME = "TypeWhisper Local";
+				PRODUCT_NAME = TypeWhisper;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = targeted;
 				SWIFT_VERSION = 5.0;
@@ -435,7 +435,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		FF00000000000000000020 /* Build configuration list for PBXProject "TypeWhisperLocal" */ = {
+		FF00000000000000000020 /* Build configuration list for PBXProject "TypeWhisper" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				XX00000000000000000001 /* Debug */,
@@ -444,7 +444,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		FF00000000000000000030 /* Build configuration list for PBXNativeTarget "TypeWhisperLocal" */ = {
+		FF00000000000000000030 /* Build configuration list for PBXNativeTarget "TypeWhisper" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				XX00000000000000000003 /* Debug */,
