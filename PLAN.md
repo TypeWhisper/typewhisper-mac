@@ -111,14 +111,25 @@ typewhisper/
 7. ✅ APISettingsView: Settings tab with toggle, port config, status, curl examples
 8. ✅ Menu bar API status indicator, network.server entitlement
 
-### Phase 5: Polish + Release
+### Phase 5: Polish + Release ✅
 
-1. Auto-start option (Login Item)
-2. Model recommendation based on hardware
-3. SRT/VTT export for file transcription
-4. Batch processing of multiple files
-5. Localization (DE + EN)
-6. README, GitHub repo
+1. ✅ Auto-start option (Login Item)
+2. ✅ Model recommendation based on hardware
+3. ✅ SRT/VTT export for file transcription
+4. ✅ Batch processing of multiple files
+5. ✅ Localization (DE + EN)
+6. ✅ README, GitHub repo
+
+### Phase 6: History ✅
+
+1. ✅ TranscriptionRecord SwiftData model (rawText, finalText, appName, duration, language, engine)
+2. ✅ HistoryService with CRUD, full-text search, auto-purge (90 days), schema-reset on migration failure
+3. ✅ TextDiffService for word-level correction detection (Collection.difference)
+4. ✅ HistoryViewModel with Combine bindings, inline editing, correction banner
+5. ✅ HistoryView with HSplitView (search + list | detail + correction banner)
+6. ✅ App context capture (captureActiveApp before paste)
+7. ✅ DictationViewModel integration (auto-save after text insertion)
+8. ✅ History tab in Settings with DE/EN localization
 
 ## References
 
