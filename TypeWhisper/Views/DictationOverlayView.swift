@@ -53,7 +53,8 @@ struct DictationOverlayView: View {
                 }
             }
         }
-        .frame(width: hasPartialText ? 320 : 240)
+        .frame(minWidth: hasPartialText ? 320 : 240)
+        .fixedSize(horizontal: true, vertical: false)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: hasPartialText ? 16 : 26))
         .overlay(RoundedRectangle(cornerRadius: hasPartialText ? 16 : 26).strokeBorder(.quaternary, lineWidth: 0.5))
         .shadow(color: .black.opacity(0.15), radius: 8, y: 4)
