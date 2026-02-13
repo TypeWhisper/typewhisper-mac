@@ -51,12 +51,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    @objc private func windowDidBecomeKey(_ notification: Notification) {
+    @MainActor @objc private func windowDidBecomeKey(_ notification: Notification) {
         guard let window = notification.object as? NSWindow,
-              window.identifier?.rawValue.contains("settings") == true
-                || window.title.contains("Settings")
-                || window.title.contains("Einstellungen")
+              window.identifier?.rawValue.localizedCaseInsensitiveContains("settings") == true
         else { return }
+        NSApp.activate(ignoringOtherApps: true)
         window.level = .floating
+        window.orderFrontRegardless()
     }
 }

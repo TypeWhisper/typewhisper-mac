@@ -29,6 +29,12 @@ final class DictationViewModel: ObservableObject {
     @Published var whisperModeEnabled: Bool {
         didSet { UserDefaults.standard.set(whisperModeEnabled, forKey: "whisperModeEnabled") }
     }
+    @Published var audioDuckingEnabled: Bool {
+        didSet { UserDefaults.standard.set(audioDuckingEnabled, forKey: "audioDuckingEnabled") }
+    }
+    @Published var audioDuckingLevel: Double {
+        didSet { UserDefaults.standard.set(audioDuckingLevel, forKey: "audioDuckingLevel") }
+    }
     @Published var activeProfileName: String?
 
     enum OverlayPosition: String, CaseIterable {
@@ -48,6 +54,7 @@ final class DictationViewModel: ObservableObject {
     private let historyService: HistoryService
     private let profileService: ProfileService
     private let translationService: TranslationService
+    private let audioDuckingService: AudioDuckingService
     private var matchedProfile: Profile?
 
     private var cancellables = Set<AnyCancellable>()
@@ -64,7 +71,8 @@ final class DictationViewModel: ObservableObject {
         settingsViewModel: SettingsViewModel,
         historyService: HistoryService,
         profileService: ProfileService,
-        translationService: TranslationService
+        translationService: TranslationService,
+        audioDuckingService: AudioDuckingService
     ) {
         self.audioRecordingService = audioRecordingService
         self.textInsertionService = textInsertionService
@@ -74,7 +82,10 @@ final class DictationViewModel: ObservableObject {
         self.historyService = historyService
         self.profileService = profileService
         self.translationService = translationService
+        self.audioDuckingService = audioDuckingService
         self.whisperModeEnabled = UserDefaults.standard.bool(forKey: "whisperModeEnabled")
+        self.audioDuckingEnabled = UserDefaults.standard.bool(forKey: "audioDuckingEnabled")
+        self.audioDuckingLevel = UserDefaults.standard.object(forKey: "audioDuckingLevel") as? Double ?? 0.2
         self.overlayPosition = UserDefaults.standard.string(forKey: "overlayPosition")
             .flatMap { OverlayPosition(rawValue: $0) } ?? .top
 
@@ -143,6 +154,9 @@ final class DictationViewModel: ObservableObject {
 
         do {
             try audioRecordingService.startRecording()
+            if audioDuckingEnabled {
+                audioDuckingService.duckAudio(to: Float(audioDuckingLevel))
+            }
             state = .recording
             partialText = ""
             recordingStartTime = Date()
@@ -150,6 +164,7 @@ final class DictationViewModel: ObservableObject {
             startStreamingIfSupported()
             startSilenceDetection()
         } catch {
+            audioDuckingService.restoreAudio()
             showError(error.localizedDescription)
             hotkeyService.cancelDictation()
         }
@@ -188,6 +203,7 @@ final class DictationViewModel: ObservableObject {
     private func stopDictation() {
         guard state == .recording else { return }
 
+        audioDuckingService.restoreAudio()
         stopStreaming()
         stopSilenceDetection()
         stopRecordingTimer()

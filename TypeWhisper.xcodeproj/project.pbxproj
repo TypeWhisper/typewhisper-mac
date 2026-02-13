@@ -57,6 +57,7 @@
 		AA00000000000000000071 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000004 /* Sparkle */; };
 		AA00000000000000000072 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000072 /* Assets.xcassets */; };
 		AA00000000000000000073 /* TranslationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000073 /* TranslationService.swift */; };
+		AA00000000000000000074 /* AudioDuckingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000074 /* AudioDuckingService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -108,6 +109,7 @@
 		BB00000000000000000070 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
 		BB00000000000000000072 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		BB00000000000000000073 /* TranslationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationService.swift; sourceTree = "<group>"; };
+		BB00000000000000000074 /* AudioDuckingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioDuckingService.swift; sourceTree = "<group>"; };
 		DD00000000000000000099 /* TypeWhisper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TypeWhisper.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -184,6 +186,7 @@
 				BB00000000000000000062 /* TextDiffService.swift */,
 				BB00000000000000000066 /* ProfileService.swift */,
 				BB00000000000000000073 /* TranslationService.swift */,
+				BB00000000000000000074 /* AudioDuckingService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -388,6 +391,7 @@
 				AA00000000000000000069 /* SpeechAnalyzerEngine.swift in Sources */,
 				AA00000000000000000070 /* UpdateChecker.swift in Sources */,
 				AA00000000000000000073 /* TranslationService.swift in Sources */,
+				AA00000000000000000074 /* AudioDuckingService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

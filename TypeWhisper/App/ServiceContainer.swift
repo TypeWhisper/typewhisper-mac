@@ -15,6 +15,7 @@ final class ServiceContainer: ObservableObject {
     let textDiffService: TextDiffService
     let profileService: ProfileService
     let translationService: TranslationService
+    let audioDuckingService: AudioDuckingService
 
     // HTTP API
     let httpServer: HTTPServer
@@ -39,6 +40,7 @@ final class ServiceContainer: ObservableObject {
         textDiffService = TextDiffService()
         profileService = ProfileService()
         translationService = TranslationService()
+        audioDuckingService = AudioDuckingService()
 
         // HTTP API
         let router = APIRouter()
@@ -62,7 +64,8 @@ final class ServiceContainer: ObservableObject {
             settingsViewModel: settingsViewModel,
             historyService: historyService,
             profileService: profileService,
-            translationService: translationService
+            translationService: translationService,
+            audioDuckingService: audioDuckingService
         )
         historyViewModel = HistoryViewModel(
             historyService: historyService,

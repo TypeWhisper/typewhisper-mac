@@ -92,17 +92,6 @@ struct DictationSettingsView: View {
                 }
             }
 
-            Section(String(localized: "Overlay")) {
-                Picker(String(localized: "Position"), selection: $dictation.overlayPosition) {
-                    Text(String(localized: "Top")).tag(DictationViewModel.OverlayPosition.top)
-                    Text(String(localized: "Bottom")).tag(DictationViewModel.OverlayPosition.bottom)
-                }
-
-                Text(String(localized: "The overlay appears centered at the top or bottom of the active screen."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
             Section(String(localized: "Behavior")) {
                 Toggle(String(localized: "Whisper Mode"), isOn: $dictation.whisperModeEnabled)
 
@@ -114,6 +103,7 @@ struct DictationSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
         }
         .formStyle(.grouped)
         .padding()
