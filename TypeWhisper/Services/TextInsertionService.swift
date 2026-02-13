@@ -9,6 +9,11 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhis
 @MainActor
 final class TextInsertionService {
 
+    enum InsertionResult {
+        case pasted
+        case copiedToClipboard
+    }
+
     enum TextInsertionError: LocalizedError {
         case accessibilityNotGranted
         case pasteFailed(String)
@@ -159,12 +164,13 @@ final class TextInsertionService {
         return trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") || trimmed.hasPrefix("file://")
     }
 
-    func insertText(_ text: String) async throws {
+    func insertText(_ text: String) async throws -> InsertionResult {
         guard isAccessibilityGranted else {
             throw TextInsertionError.accessibilityNotGranted
         }
 
         let pasteboard = NSPasteboard.general
+        let isTextInput = isFocusedElementTextInput()
 
         // Save current clipboard contents
         let savedItems = pasteboard.pasteboardItems?.compactMap { item -> (String, Data)? in
@@ -177,17 +183,50 @@ final class TextInsertionService {
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
 
-        // Simulate Cmd+V
-        simulatePaste()
+        if isTextInput {
+            // Simulate Cmd+V
+            simulatePaste()
 
-        // Wait for paste to complete, then restore clipboard
-        try await Task.sleep(for: .milliseconds(200))
+            // Wait for paste to complete, then restore clipboard
+            try await Task.sleep(for: .milliseconds(200))
 
-        pasteboard.clearContents()
-        for (typeRaw, data) in savedItems {
-            let type = NSPasteboard.PasteboardType(typeRaw)
-            pasteboard.setData(data, forType: type)
+            pasteboard.clearContents()
+            for (typeRaw, data) in savedItems {
+                let type = NSPasteboard.PasteboardType(typeRaw)
+                pasteboard.setData(data, forType: type)
+            }
+            return .pasted
+        } else {
+            // No text field focused — leave text in clipboard for manual paste
+            return .copiedToClipboard
         }
+    }
+
+    private func isFocusedElementTextInput() -> Bool {
+        let systemWide = AXUIElementCreateSystemWide()
+
+        var focusedElement: AnyObject?
+        let result = AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focusedElement)
+        guard result == .success, let element = focusedElement else {
+            return false
+        }
+
+        let axElement = element as! AXUIElement
+
+        // Check role
+        var roleValue: AnyObject?
+        let roleResult = AXUIElementCopyAttributeValue(axElement, kAXRoleAttribute as CFString, &roleValue)
+        if roleResult == .success, let role = roleValue as? String {
+            let textInputRoles: Set<String> = ["AXTextField", "AXTextArea", "AXComboBox", "AXSearchField", "AXWebArea"]
+            if textInputRoles.contains(role) {
+                return true
+            }
+        }
+
+        // Fallback: check if element supports text selection (indicates text input)
+        var selectedRange: AnyObject?
+        let rangeResult = AXUIElementCopyAttributeValue(axElement, kAXSelectedTextRangeAttribute as CFString, &selectedRange)
+        return rangeResult == .success
     }
 
     func focusedElementPosition() -> CGPoint? {

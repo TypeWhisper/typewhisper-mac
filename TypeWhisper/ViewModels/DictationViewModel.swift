@@ -17,6 +17,7 @@ final class DictationViewModel: ObservableObject {
         case recording
         case processing
         case inserting
+        case copiedToClipboard
         case error(String)
     }
 
@@ -282,8 +283,7 @@ final class DictationViewModel: ObservableObject {
                 text = dictionaryService.applyCorrections(to: text)
 
                 partialText = ""
-                state = .inserting
-                try await textInsertionService.insertText(text)
+                let insertionResult = try await textInsertionService.insertText(text)
 
                 historyService.addRecord(
                     rawText: result.text,
@@ -296,6 +296,14 @@ final class DictationViewModel: ObservableObject {
                     engineUsed: result.engineUsed.rawValue
                 )
 
+                switch insertionResult {
+                case .pasted:
+                    state = .inserting
+                case .copiedToClipboard:
+                    state = .copiedToClipboard
+                }
+
+                try? await Task.sleep(for: .seconds(1.5))
                 state = .idle
                 matchedProfile = nil
                 activeProfileName = nil

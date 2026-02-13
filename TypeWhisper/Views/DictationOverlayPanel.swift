@@ -38,7 +38,7 @@ class DictationOverlayPanel: NSPanel {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 switch state {
-                case .recording, .processing, .inserting, .error:
+                case .recording, .processing, .inserting, .copiedToClipboard, .error:
                     self?.show()
                 case .idle:
                     self?.dismiss()

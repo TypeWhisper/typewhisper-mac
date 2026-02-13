@@ -86,6 +86,11 @@ struct DictationOverlayView: View {
                 .foregroundStyle(.green)
                 .font(.system(size: 14))
 
+        case .copiedToClipboard:
+            Image(systemName: "doc.on.clipboard")
+                .foregroundStyle(.orange)
+                .font(.system(size: 14))
+
         case .error:
             Image(systemName: "xmark.circle.fill")
                 .foregroundStyle(.red)
@@ -120,6 +125,11 @@ struct DictationOverlayView: View {
             Text(String(localized: "Done"))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.green)
+
+        case .copiedToClipboard:
+            Text(String(localized: "Copied to clipboard"))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.orange)
 
         case .error(let message):
             Text(message)

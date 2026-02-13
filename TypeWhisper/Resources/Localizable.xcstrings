@@ -607,6 +607,16 @@
         }
       }
     },
+    "Copied to clipboard" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In Zwischenablage kopiert"
+          }
+        }
+      }
+    },
     "Done" : {
       "localizations" : {
         "de" : {
