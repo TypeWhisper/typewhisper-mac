@@ -67,6 +67,11 @@ struct MenuBarView: View {
         }
         .disabled(!modelManager.isModelReady)
 
+        Button(String(localized: "Check for Updates...")) {
+            UpdateChecker.shared?.checkForUpdates()
+        }
+        .disabled(UpdateChecker.shared?.canCheckForUpdates() != true)
+
         Divider()
 
         Button(String(localized: "Quit")) {

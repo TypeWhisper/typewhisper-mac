@@ -16,6 +16,22 @@ struct GeneralSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Section(String(localized: "Updates")) {
+                HStack {
+                    let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+                    let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+                    Text("Version \(version) (\(build))")
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+
+                    Button(String(localized: "Check for Updates...")) {
+                        UpdateChecker.shared?.checkForUpdates()
+                    }
+                    .disabled(UpdateChecker.shared?.canCheckForUpdates() != true)
+                }
+            }
         }
         .formStyle(.grouped)
         .padding()

@@ -11,6 +11,7 @@ env:
 
 permissions:
   contents: write
+  pages: write
 
 jobs:
   build:
@@ -160,6 +161,29 @@ jobs:
           fi
           rm -f /tmp/AuthKey.p8 /tmp/cert.p12
 
+      - name: Sign ZIP with Sparkle EdDSA
+        env:
+          SPARKLE_EDDSA_KEY: ${{ secrets.SPARKLE_EDDSA_KEY }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          ZIP_PATH="build/Build/Products/Release/TypeWhisper-${TAG}.zip"
+
+          # Download Sparkle CLI tools
+          SPARKLE_VERSION="2.8.1"
+          curl -L "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz" -o /tmp/sparkle.tar.xz
+          mkdir -p /tmp/sparkle
+          tar -xf /tmp/sparkle.tar.xz -C /tmp/sparkle
+
+          # Sign the ZIP
+          SIGNATURE=$(/tmp/sparkle/bin/sign_update "$ZIP_PATH" --ed-key-file <(echo "$SPARKLE_EDDSA_KEY"))
+          echo "SPARKLE_SIGNATURE<<EOF" >> $GITHUB_ENV
+          echo "$SIGNATURE" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+          # Get file size
+          ZIP_SIZE=$(stat -f%z "$ZIP_PATH")
+          echo "ZIP_SIZE=$ZIP_SIZE" >> $GITHUB_ENV
+
       - name: Create GitHub Release
         run: |
           TAG="${{ github.ref_name }}"
@@ -175,3 +199,62 @@ jobs:
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate and Deploy Appcast
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          DOWNLOAD_URL="https://github.com/TypeWhisper/typewhisper-mac/releases/download/${TAG}/TypeWhisper-${TAG}.zip"
+          PUB_DATE=$(date -u +"%a, %d %b %Y %H:%M:%S %z")
+
+          # Parse edSignature and length from sign_update output
+          # Format: sparkle:edSignature="..." length="..."
+          ED_SIGNATURE=$(echo "$SPARKLE_SIGNATURE" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')
+          ED_LENGTH=$(echo "$SPARKLE_SIGNATURE" | sed -n 's/.*length="\([^"]*\)".*/\1/p')
+
+          # If parsing fails, fall back to ZIP_SIZE
+          if [ -z "$ED_LENGTH" ]; then
+            ED_LENGTH="$ZIP_SIZE"
+          fi
+
+          cat > /tmp/appcast.xml <<APPCAST_EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+            <channel>
+              <title>TypeWhisper Updates</title>
+              <language>en</language>
+              <item>
+                <title>Version ${VERSION}</title>
+                <pubDate>${PUB_DATE}</pubDate>
+                <sparkle:version>${VERSION}</sparkle:version>
+                <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
+                <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+                <enclosure url="${DOWNLOAD_URL}" sparkle:edSignature="${ED_SIGNATURE}" length="${ED_LENGTH}" type="application/octet-stream"/>
+              </item>
+            </channel>
+          </rss>
+          APPCAST_EOF
+
+          # Deploy to gh-pages branch
+          cd "$GITHUB_WORKSPACE"
+          git fetch origin gh-pages || true
+
+          if git rev-parse --verify origin/gh-pages >/dev/null 2>&1; then
+            git worktree add -B gh-pages /tmp/gh-pages origin/gh-pages
+          else
+            git worktree add --detach /tmp/gh-pages
+            cd /tmp/gh-pages
+            git checkout --orphan gh-pages
+            git rm -rf . 2>/dev/null || true
+            cd "$GITHUB_WORKSPACE"
+          fi
+
+          cp /tmp/appcast.xml /tmp/gh-pages/appcast.xml
+          cd /tmp/gh-pages
+          git add appcast.xml
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "Update appcast for ${TAG}" || echo "No changes to commit"
+          git push origin gh-pages

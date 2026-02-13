@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+@preconcurrency import Sparkle
 
 @main
 struct TypeWhisperApp: App {
@@ -29,8 +30,14 @@ struct TypeWhisperApp: App {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var overlayPanel: DictationOverlayPanel?
+    private lazy var updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+
+    var updateChecker: UpdateChecker {
+        .sparkle(updaterController.updater)
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        UpdateChecker.shared = updateChecker
         let panel = DictationOverlayPanel()
         panel.startObserving()
         overlayPanel = panel

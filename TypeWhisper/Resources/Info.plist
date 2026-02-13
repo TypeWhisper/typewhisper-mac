@@ -23,5 +23,9 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>SUFeedURL</key>
+	<string>https://typewhisper.github.io/typewhisper-mac/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>OdAMiN136Ckglxnq4FeLagPjcrZiASYGaeUWBkK6tuc=</string>
 </dict>
 </plist>

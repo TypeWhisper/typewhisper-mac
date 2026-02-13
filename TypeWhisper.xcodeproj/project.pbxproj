@@ -53,6 +53,8 @@
 		AA00000000000000000067 /* ProfilesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000067 /* ProfilesViewModel.swift */; };
 		AA00000000000000000068 /* ProfilesSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000068 /* ProfilesSettingsView.swift */; };
 		AA00000000000000000069 /* SpeechAnalyzerEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000069 /* SpeechAnalyzerEngine.swift */; };
+		AA00000000000000000070 /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000070 /* UpdateChecker.swift */; };
+		AA00000000000000000071 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000004 /* Sparkle */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -101,6 +103,7 @@
 		BB00000000000000000067 /* ProfilesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilesViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000068 /* ProfilesSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilesSettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000069 /* SpeechAnalyzerEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechAnalyzerEngine.swift; sourceTree = "<group>"; };
+		BB00000000000000000070 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
 		DD00000000000000000099 /* TypeWhisper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TypeWhisper.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -112,6 +115,7 @@
 				AA00000000000000000020 /* WhisperKit in Frameworks */,
 				AA00000000000000000021 /* FluidAudio in Frameworks */,
 				AA00000000000000000022 /* KeyboardShortcuts in Frameworks */,
+				AA00000000000000000071 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -144,6 +148,7 @@
 			children = (
 				BB00000000000000000001 /* TypeWhisperApp.swift */,
 				BB00000000000000000002 /* ServiceContainer.swift */,
+				BB00000000000000000070 /* UpdateChecker.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -270,6 +275,7 @@
 				PP00000000000000000001 /* WhisperKit */,
 				PP00000000000000000002 /* FluidAudio */,
 				PP00000000000000000003 /* KeyboardShortcuts */,
+				PP00000000000000000004 /* Sparkle */,
 			);
 			productName = TypeWhisper;
 			productReference = DD00000000000000000099 /* TypeWhisper.app */;
@@ -304,6 +310,7 @@
 				RR00000000000000000001 /* XCRemoteSwiftPackageReference "WhisperKit" */,
 				RR00000000000000000002 /* XCRemoteSwiftPackageReference "FluidAudio" */,
 				RR00000000000000000003 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */,
+				RR00000000000000000004 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			productRefGroup = CC00000000000000000090 /* Products */;
 			projectDirPath = "";
@@ -372,6 +379,7 @@
 				AA00000000000000000067 /* ProfilesViewModel.swift in Sources */,
 				AA00000000000000000068 /* ProfilesSettingsView.swift in Sources */,
 				AA00000000000000000069 /* SpeechAnalyzerEngine.swift in Sources */,
+				AA00000000000000000070 /* UpdateChecker.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -608,6 +616,14 @@
 				minimumVersion = 2.0.0;
 			};
 		};
+		RR00000000000000000004 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -625,6 +641,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = RR00000000000000000003 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */;
 			productName = KeyboardShortcuts;
+		};
+		PP00000000000000000004 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = RR00000000000000000004 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
