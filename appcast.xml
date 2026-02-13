@@ -5,11 +5,11 @@
     <language>en</language>
     <item>
       <title>Version 0.1.1</title>
-      <pubDate>Fri, 13 Feb 2026 10:07:35 +0000</pubDate>
+      <pubDate>Fri, 13 Feb 2026 10:18:30 +0000</pubDate>
       <sparkle:version>0.1.1</sparkle:version>
       <sparkle:shortVersionString>0.1.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
-      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v0.1.1/TypeWhisper-v0.1.1.zip" sparkle:edSignature="doMNjRcG3ox4z8VY7XEV/9vELtZux8P7VGyRiggZWKMPu6eHeHYijERNG+8hPCxX42nJUmwD6xeoCN6r884mCw==" length="4051498" type="application/octet-stream"/>
+      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v0.1.1/TypeWhisper-v0.1.1.zip" sparkle:edSignature="sov1iRscNxaBJGQoz9BbR9Ro1QFyX8u20Z7NVEvqLoRLmCYi+SlMxsP3uB4XiTDlJ61P7Y2JhyKZsXXKQ8uOBA==" length="4051527" type="application/octet-stream"/>
     </item>
   </channel>
 </rss>
