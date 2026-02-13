@@ -330,7 +330,9 @@ final class DictationViewModel: ObservableObject {
     func requestMicPermission() {
         Task {
             _ = await audioRecordingService.requestMicrophonePermission()
-            objectWillChange.send()
+            DispatchQueue.main.async { [weak self] in
+                self?.objectWillChange.send()
+            }
             pollPermissionStatus()
         }
     }
@@ -349,7 +351,9 @@ final class DictationViewModel: ObservableObject {
             for _ in 0..<30 {
                 try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled else { return }
-                objectWillChange.send()
+                DispatchQueue.main.async { [weak self] in
+                    self?.objectWillChange.send()
+                }
                 if !needsMicPermission, !needsAccessibilityPermission { return }
             }
         }

@@ -2,6 +2,7 @@ import Foundation
 @preconcurrency import AVFoundation
 import AppKit
 import Combine
+import os
 
 /// Captures microphone audio via AVAudioEngine and converts to 16kHz mono Float32 samples.
 final class AudioRecordingService: ObservableObject, @unchecked Sendable {
@@ -40,6 +41,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private var sampleBuffer: [Float] = []
     private let bufferLock = NSLock()
     private var silenceStart: Date?
+    private let processingQueue = DispatchQueue(label: "com.typewhisper.audio-processing", qos: .userInteractive)
 
     static let targetSampleRate: Double = 16000
 
@@ -148,6 +150,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         converter: AVAudioConverter,
         targetFormat: AVAudioFormat
     ) {
+        // Convert sample rate on the render thread (AVAudioConverter requires thread consistency)
         let frameCount = AVAudioFrameCount(
             Double(buffer.frameLength) * Self.targetSampleRate / buffer.format.sampleRate
         )
@@ -159,22 +162,31 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         ) else { return }
 
         var error: NSError?
-        var hasData = false
+        let hasData = OSAllocatedUnfairLock(initialState: false)
 
         converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
-            if hasData {
+            if hasData.withLock({ $0 }) {
                 outStatus.pointee = .noDataNow
                 return nil
             }
-            hasData = true
+            hasData.withLock { $0 = true }
             outStatus.pointee = .haveData
             return buffer
         }
 
         guard error == nil, convertedBuffer.frameLength > 0 else { return }
-
         guard let channelData = convertedBuffer.floatChannelData?[0] else { return }
-        var samples = Array(UnsafeBufferPointer(start: channelData, count: Int(convertedBuffer.frameLength)))
+
+        // Quick copy of converted samples, then dispatch heavy work off the render thread
+        let samples = Array(UnsafeBufferPointer(start: channelData, count: Int(convertedBuffer.frameLength)))
+
+        processingQueue.async { [weak self] in
+            self?.processConvertedSamples(samples)
+        }
+    }
+
+    private func processConvertedSamples(_ rawSamples: [Float]) {
+        var samples = rawSamples
 
         // Apply gain boost (whisper mode)
         if gainMultiplier != 1.0 {

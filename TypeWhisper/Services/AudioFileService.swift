@@ -34,22 +34,13 @@ final class AudioFileService: Sendable {
             throw AudioFileError.unsupportedFormat
         }
 
-        return try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                do {
-                    let samples = try self.extractSamples(from: url)
-                    continuation.resume(returning: samples)
-                } catch {
-                    continuation.resume(throwing: error)
-                }
-            }
-        }
+        return try await extractSamples(from: url)
     }
 
-    private func extractSamples(from url: URL) throws -> [Float] {
+    private func extractSamples(from url: URL) async throws -> [Float] {
         let asset = AVURLAsset(url: url)
 
-        guard let audioTrack = asset.tracks(withMediaType: .audio).first else {
+        guard let audioTrack = try await asset.loadTracks(withMediaType: .audio).first else {
             throw AudioFileError.conversionFailed("No audio track found")
         }
 
@@ -84,7 +75,7 @@ final class AudioFileService: Sendable {
             let sampleCount = length / MemoryLayout<Float>.size
 
             var data = Data(count: length)
-            data.withUnsafeMutableBytes { rawBuffer in
+            _ = data.withUnsafeMutableBytes { rawBuffer in
                 CMBlockBufferCopyDataBytes(blockBuffer, atOffset: 0, dataLength: length, destination: rawBuffer.baseAddress!)
             }
 

@@ -36,7 +36,7 @@ private struct SettingsMainTabs: TabContent {
         }
         Tab(String(localized: "Dictation"), systemImage: "mic.fill", value: SettingsTab.dictation) {
             DictationSettingsView()
-                .onAppear {
+                .task {
                     if !UserDefaults.standard.bool(forKey: "hotkeyCustomized") {
                         UserDefaults.standard.set(true, forKey: "hotkeyCustomized")
                         HomeViewModel.shared.refresh()
@@ -48,7 +48,7 @@ private struct SettingsMainTabs: TabContent {
         }
         Tab(String(localized: "History"), systemImage: "clock.arrow.circlepath", value: SettingsTab.history) {
             HistoryView()
-                .onAppear {
+                .task {
                     if !UserDefaults.standard.bool(forKey: "historyTabVisited") {
                         UserDefaults.standard.set(true, forKey: "historyTabVisited")
                         HomeViewModel.shared.refresh()

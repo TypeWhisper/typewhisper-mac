@@ -124,7 +124,7 @@ final class SpeechAnalyzerEngine: TranscriptionEngine, @unchecked Sendable {
         let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
         let analyzer = SpeechAnalyzer(modules: [transcriber])
 
-        let buffer = try await Self.prepareBuffer(audioSamples, for: [transcriber])
+        let buffer = await Self.prepareBuffer(audioSamples, for: [transcriber])
 
         let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream()
         continuation.yield(AnalyzerInput(buffer: buffer))
@@ -181,7 +181,7 @@ final class SpeechAnalyzerEngine: TranscriptionEngine, @unchecked Sendable {
         )
         let analyzer = SpeechAnalyzer(modules: [transcriber])
 
-        let buffer = try await Self.prepareBuffer(audioSamples, for: [transcriber])
+        let buffer = await Self.prepareBuffer(audioSamples, for: [transcriber])
 
         let (stream, continuation) = AsyncStream<AnalyzerInput>.makeStream()
         continuation.yield(AnalyzerInput(buffer: buffer))
