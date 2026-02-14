@@ -55,6 +55,8 @@ struct MenuBarView: View {
         Divider()
 
         Button {
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate()
             openWindow(id: "settings")
         } label: {
             Label(String(localized: "Settings..."), systemImage: "gear")
@@ -62,6 +64,8 @@ struct MenuBarView: View {
         .keyboardShortcut(",")
 
         Button {
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate()
             openWindow(id: "settings")
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 FileTranscriptionViewModel.shared.showFilePickerFromMenu = true

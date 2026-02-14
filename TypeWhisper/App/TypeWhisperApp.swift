@@ -72,7 +72,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
               isSettingsWindow(window)
         else { return }
         NSApp.setActivationPolicy(.regular)
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         window.level = .floating
         window.orderFrontRegardless()
     }
