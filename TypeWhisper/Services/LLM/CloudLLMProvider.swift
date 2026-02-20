@@ -7,6 +7,7 @@ final class CloudLLMProvider: LLMProvider, @unchecked Sendable {
     let baseURL: String
     let model: String
     private let keychainId: String
+    private let chatEndpoint: String
 
     var isAvailable: Bool {
         let apiKey = KeychainService.load(service: keychainId)
@@ -15,6 +16,7 @@ final class CloudLLMProvider: LLMProvider, @unchecked Sendable {
 
     init(config: CloudProviderConfig, model: String? = nil) {
         self.baseURL = config.baseURL
+        self.chatEndpoint = config.chatEndpoint
         self.model = model ?? config.defaultModel
         self.keychainId = config.keychainId
     }
@@ -24,7 +26,7 @@ final class CloudLLMProvider: LLMProvider, @unchecked Sendable {
             throw LLMError.noApiKey
         }
 
-        let endpoint = "\(baseURL)/v1/chat/completions"
+        let endpoint = "\(baseURL)\(chatEndpoint)"
         guard let url = URL(string: endpoint) else {
             throw LLMError.providerError("Invalid URL: \(endpoint)")
         }

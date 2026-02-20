@@ -465,6 +465,16 @@
         }
       }
     },
+    "API Key Saved" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API-Schluessel gespeichert"
+          }
+        }
+      }
+    },
     "API key configured" : {
       "localizations" : {
         "de" : {
@@ -940,7 +950,18 @@
         }
       }
     },
+    "Configure cloud providers for transcription and AI prompts. An API key is required for each provider." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cloud-Anbieter fuer Transkription und KI-Prompts konfigurieren. Fuer jeden Anbieter wird ein API-Schluessel benoetigt."
+          }
+        }
+      }
+    },
     "Configure cloud transcription providers. An API key is required for each provider." : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -2737,6 +2758,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Prompts"
+          }
+        }
+      }
+    },
+    "Prompts Only" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur Prompts"
           }
         }
       }

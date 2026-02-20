@@ -61,12 +61,16 @@ struct ModelManagerView: View {
                         }
 
                     case .cloudProvider:
-                        Text(String(localized: "Configure cloud transcription providers. An API key is required for each provider."))
+                        Text(String(localized: "Configure cloud providers for transcription and AI prompts. An API key is required for each provider."))
                             .font(.callout)
                             .foregroundStyle(.secondary)
 
                         ForEach(EngineType.cloudCases) { provider in
                             CloudProviderSection(provider: provider, viewModel: viewModel)
+                        }
+
+                        ForEach(LLMProviderType.llmOnlyCases) { provider in
+                            LLMProviderSection(providerType: provider)
                         }
 
                         Text(String(localized: "API keys are stored securely in the Keychain"))
@@ -224,6 +228,94 @@ struct ModelRow: View {
             return String(format: "%.1f MB/s", mbps)
         } else {
             return String(format: "%.0f KB/s", bytesPerSecond / 1024)
+        }
+    }
+}
+
+struct LLMProviderSection: View {
+    let providerType: LLMProviderType
+
+    @State private var apiKeyInput = ""
+    @State private var showApiKey = false
+    @State private var isConfigured = false
+
+    private var keychainId: String? { providerType.cloudConfig?.keychainId }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(providerType.displayName)
+                    .font(.body.weight(.medium))
+
+                Text(String(localized: "Prompts Only"))
+                    .font(.caption2.weight(.semibold))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(.purple.opacity(0.15), in: Capsule())
+                    .foregroundStyle(.purple)
+
+                Spacer()
+
+                if isConfigured {
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                        Text(String(localized: "API Key Saved"))
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                    }
+                }
+            }
+
+            HStack(spacing: 8) {
+                if showApiKey {
+                    TextField("API Key", text: $apiKeyInput)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(.body, design: .monospaced))
+                } else {
+                    SecureField("API Key", text: $apiKeyInput)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                Button {
+                    showApiKey.toggle()
+                } label: {
+                    Image(systemName: showApiKey ? "eye.slash" : "eye")
+                }
+                .buttonStyle(.borderless)
+
+                if isConfigured {
+                    Button(String(localized: "Remove")) {
+                        apiKeyInput = ""
+                        if let id = keychainId {
+                            try? KeychainService.delete(service: id)
+                        }
+                        isConfigured = false
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .foregroundStyle(.red)
+                } else {
+                    Button(String(localized: "Save")) {
+                        guard let id = keychainId else { return }
+                        let trimmed = apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !trimmed.isEmpty else { return }
+                        try? KeychainService.save(key: trimmed, service: id)
+                        isConfigured = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 8).fill(.quaternary))
+        .onAppear {
+            if let id = keychainId, let existingKey = KeychainService.load(service: id) {
+                apiKeyInput = existingKey
+                isConfigured = !existingKey.isEmpty
+            }
         }
     }
 }
