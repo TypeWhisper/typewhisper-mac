@@ -4,17 +4,25 @@ final class APIHandlers: @unchecked Sendable {
     private let modelManager: ModelManagerService
     private let audioFileService: AudioFileService
     private let translationService: TranslationService
+    private let historyService: HistoryService
+    private let profileService: ProfileService
 
-    init(modelManager: ModelManagerService, audioFileService: AudioFileService, translationService: TranslationService) {
+    init(modelManager: ModelManagerService, audioFileService: AudioFileService, translationService: TranslationService, historyService: HistoryService, profileService: ProfileService) {
         self.modelManager = modelManager
         self.audioFileService = audioFileService
         self.translationService = translationService
+        self.historyService = historyService
+        self.profileService = profileService
     }
 
     func register(on router: APIRouter) {
         router.register("POST", "/v1/transcribe", handler: handleTranscribe)
         router.register("GET", "/v1/status", handler: handleStatus)
         router.register("GET", "/v1/models", handler: handleModels)
+        router.register("GET", "/v1/history", handler: handleGetHistory)
+        router.register("DELETE", "/v1/history", handler: handleDeleteHistory)
+        router.register("GET", "/v1/profiles", handler: handleGetProfiles)
+        router.register("PUT", "/v1/profiles/toggle", handler: handleToggleProfile)
     }
 
     // MARK: - POST /v1/transcribe
@@ -186,6 +194,156 @@ final class APIHandlers: @unchecked Sendable {
 
         struct ModelsResponse: Encodable { let models: [ModelEntry] }
         return .json(ModelsResponse(models: models))
+    }
+
+    // MARK: - GET /v1/history
+
+    private func handleGetHistory(_ request: HTTPRequest) async -> HTTPResponse {
+        let query = request.queryParams["q"]
+        let limit = min(Int(request.queryParams["limit"] ?? "") ?? 50, 200)
+        let offset = max(Int(request.queryParams["offset"] ?? "") ?? 0, 0)
+
+        let historyService = self.historyService
+        return await MainActor.run {
+            let allRecords: [TranscriptionRecord]
+            if let query, !query.isEmpty {
+                allRecords = historyService.searchRecords(query: query)
+            } else {
+                allRecords = historyService.records
+            }
+
+            let total = allRecords.count
+            let sliceEnd = min(offset + limit, total)
+            let sliceStart = min(offset, total)
+            let page = Array(allRecords[sliceStart..<sliceEnd])
+
+            struct HistoryEntry: Encodable {
+                let id: String
+                let text: String
+                let raw_text: String
+                let timestamp: Date
+                let app_name: String?
+                let app_bundle_id: String?
+                let app_url: String?
+                let duration: Double
+                let language: String?
+                let engine: String
+                let model: String?
+                let words_count: Int
+            }
+
+            struct HistoryResponse: Encodable {
+                let entries: [HistoryEntry]
+                let total: Int
+                let limit: Int
+                let offset: Int
+            }
+
+            let entries = page.map { record in
+                HistoryEntry(
+                    id: record.id.uuidString,
+                    text: record.finalText,
+                    raw_text: record.rawText,
+                    timestamp: record.timestamp,
+                    app_name: record.appName,
+                    app_bundle_id: record.appBundleIdentifier,
+                    app_url: record.appURL,
+                    duration: record.durationSeconds,
+                    language: record.language,
+                    engine: record.engineUsed,
+                    model: record.modelUsed,
+                    words_count: record.wordsCount
+                )
+            }
+
+            return .json(HistoryResponse(entries: entries, total: total, limit: limit, offset: offset))
+        }
+    }
+
+    // MARK: - DELETE /v1/history
+
+    private func handleDeleteHistory(_ request: HTTPRequest) async -> HTTPResponse {
+        guard let idString = request.queryParams["id"],
+              let uuid = UUID(uuidString: idString) else {
+            return .error(status: 400, message: "Missing or invalid 'id' query parameter")
+        }
+
+        let historyService = self.historyService
+        return await MainActor.run {
+            guard let record = historyService.records.first(where: { $0.id == uuid }) else {
+                return .error(status: 404, message: "History entry not found")
+            }
+
+            historyService.deleteRecord(record)
+            return .json(["deleted": true])
+        }
+    }
+
+    // MARK: - GET /v1/profiles
+
+    private func handleGetProfiles(_ request: HTTPRequest) async -> HTTPResponse {
+        let profileService = self.profileService
+        return await MainActor.run {
+            struct ProfileEntry: Encodable {
+                let id: String
+                let name: String
+                let is_enabled: Bool
+                let priority: Int
+                let bundle_identifiers: [String]
+                let url_patterns: [String]
+                let input_language: String?
+                let translation_target_language: String?
+            }
+
+            struct ProfilesResponse: Encodable {
+                let profiles: [ProfileEntry]
+            }
+
+            let entries = profileService.profiles.map { profile in
+                ProfileEntry(
+                    id: profile.id.uuidString,
+                    name: profile.name,
+                    is_enabled: profile.isEnabled,
+                    priority: profile.priority,
+                    bundle_identifiers: profile.bundleIdentifiers,
+                    url_patterns: profile.urlPatterns,
+                    input_language: profile.inputLanguage,
+                    translation_target_language: profile.translationTargetLanguage
+                )
+            }
+
+            return .json(ProfilesResponse(profiles: entries))
+        }
+    }
+
+    // MARK: - PUT /v1/profiles/toggle
+
+    private func handleToggleProfile(_ request: HTTPRequest) async -> HTTPResponse {
+        guard let idString = request.queryParams["id"],
+              let uuid = UUID(uuidString: idString) else {
+            return .error(status: 400, message: "Missing or invalid 'id' query parameter")
+        }
+
+        let profileService = self.profileService
+        return await MainActor.run {
+            guard let profile = profileService.profiles.first(where: { $0.id == uuid }) else {
+                return .error(status: 404, message: "Profile not found")
+            }
+
+            profileService.toggleProfile(profile)
+
+            struct ToggleResponse: Encodable {
+                let id: String
+                let name: String
+                let is_enabled: Bool
+            }
+
+            return .json(ToggleResponse(
+                id: profile.id.uuidString,
+                name: profile.name,
+                is_enabled: profile.isEnabled
+            ))
+        }
     }
 
     // MARK: - Helpers

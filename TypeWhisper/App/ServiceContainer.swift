@@ -64,7 +64,7 @@ final class ServiceContainer: ObservableObject {
 
         // HTTP API
         let router = APIRouter()
-        let handlers = APIHandlers(modelManager: modelManagerService, audioFileService: audioFileService, translationService: translationService)
+        let handlers = APIHandlers(modelManager: modelManagerService, audioFileService: audioFileService, translationService: translationService, historyService: historyService, profileService: profileService)
         handlers.register(on: router)
         httpServer = HTTPServer(router: router)
         apiServerViewModel = APIServerViewModel(httpServer: httpServer)

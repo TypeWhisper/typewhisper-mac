@@ -5,8 +5,14 @@ struct HTTPResponse {
     let contentType: String
     let body: Data
 
+    private static let jsonEncoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }()
+
     static func json(_ value: Encodable, status: Int = 200) -> HTTPResponse {
-        let data = (try? JSONEncoder().encode(AnyEncodable(value))) ?? Data()
+        let data = (try? jsonEncoder.encode(AnyEncodable(value))) ?? Data()
         return HTTPResponse(status: status, contentType: "application/json", body: data)
     }
 
@@ -46,7 +52,7 @@ struct HTTPResponse {
         header += "Content-Type: \(contentType)\r\n"
         header += "Content-Length: \(body.count)\r\n"
         header += "Access-Control-Allow-Origin: *\r\n"
-        header += "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+        header += "Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n"
         header += "Access-Control-Allow-Headers: Content-Type\r\n"
         header += "Connection: close\r\n"
         header += "\r\n"
