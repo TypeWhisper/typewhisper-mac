@@ -6,13 +6,15 @@ final class APIHandlers: @unchecked Sendable {
     private let translationService: TranslationService
     private let historyService: HistoryService
     private let profileService: ProfileService
+    private let dictationViewModel: DictationViewModel
 
-    init(modelManager: ModelManagerService, audioFileService: AudioFileService, translationService: TranslationService, historyService: HistoryService, profileService: ProfileService) {
+    init(modelManager: ModelManagerService, audioFileService: AudioFileService, translationService: TranslationService, historyService: HistoryService, profileService: ProfileService, dictationViewModel: DictationViewModel) {
         self.modelManager = modelManager
         self.audioFileService = audioFileService
         self.translationService = translationService
         self.historyService = historyService
         self.profileService = profileService
+        self.dictationViewModel = dictationViewModel
     }
 
     func register(on router: APIRouter) {
@@ -23,6 +25,9 @@ final class APIHandlers: @unchecked Sendable {
         router.register("DELETE", "/v1/history", handler: handleDeleteHistory)
         router.register("GET", "/v1/profiles", handler: handleGetProfiles)
         router.register("PUT", "/v1/profiles/toggle", handler: handleToggleProfile)
+        router.register("POST", "/v1/dictation/start", handler: handleStartDictation)
+        router.register("POST", "/v1/dictation/stop", handler: handleStopDictation)
+        router.register("GET", "/v1/dictation/status", handler: handleDictationStatus)
     }
 
     // MARK: - POST /v1/transcribe
@@ -343,6 +348,46 @@ final class APIHandlers: @unchecked Sendable {
                 name: profile.name,
                 is_enabled: profile.isEnabled
             ))
+        }
+    }
+
+    // MARK: - POST /v1/dictation/start
+
+    private func handleStartDictation(_ request: HTTPRequest) async -> HTTPResponse {
+        let dictationViewModel = self.dictationViewModel
+        return await MainActor.run {
+            guard !dictationViewModel.isRecording else {
+                return .error(status: 409, message: "Already recording")
+            }
+            dictationViewModel.apiStartRecording()
+
+            struct StartResponse: Encodable { let status: String }
+            return .json(StartResponse(status: "recording"))
+        }
+    }
+
+    // MARK: - POST /v1/dictation/stop
+
+    private func handleStopDictation(_ request: HTTPRequest) async -> HTTPResponse {
+        let dictationViewModel = self.dictationViewModel
+        return await MainActor.run {
+            guard dictationViewModel.isRecording else {
+                return .error(status: 409, message: "Not recording")
+            }
+            dictationViewModel.apiStopRecording()
+
+            struct StopResponse: Encodable { let status: String }
+            return .json(StopResponse(status: "stopped"))
+        }
+    }
+
+    // MARK: - GET /v1/dictation/status
+
+    private func handleDictationStatus(_ request: HTTPRequest) async -> HTTPResponse {
+        let dictationViewModel = self.dictationViewModel
+        return await MainActor.run {
+            struct DictationStatusResponse: Encodable { let is_recording: Bool }
+            return .json(DictationStatusResponse(is_recording: dictationViewModel.isRecording))
         }
     }
 

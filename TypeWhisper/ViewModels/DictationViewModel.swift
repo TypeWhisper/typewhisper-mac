@@ -230,6 +230,20 @@ final class DictationViewModel: ObservableObject {
         !textInsertionService.isAccessibilityGranted
     }
 
+    // MARK: - HTTP API
+
+    var isRecording: Bool {
+        state == .recording || state == .paused
+    }
+
+    func apiStartRecording() {
+        startRecording()
+    }
+
+    func apiStopRecording() {
+        stopDictation()
+    }
+
     private func setupBindings() {
         hotkeyService.onDictationStart = { [weak self] in
             self?.startRecording()
