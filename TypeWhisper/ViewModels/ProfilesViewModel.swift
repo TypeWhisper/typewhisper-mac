@@ -42,8 +42,6 @@ final class ProfilesViewModel: ObservableObject {
     @Published var editorCloudModelOverride: String?
     @Published var editorPromptActionId: String?
     @Published var editorAutoSubmitEnabled: Bool?
-    @Published var editorSendAppContext: Bool?
-    @Published var editorSendSurroundingText: Bool?
     @Published var editorPriority: Int = 0
 
     // App picker
@@ -93,8 +91,6 @@ final class ProfilesViewModel: ObservableObject {
             cloudModelOverride: editorCloudModelOverride,
             promptActionId: editorPromptActionId,
             autoSubmitEnabled: editorAutoSubmitEnabled,
-            sendAppContext: editorSendAppContext,
-            sendSurroundingText: editorSendSurroundingText,
             priority: editorPriority
         )
     }
@@ -112,8 +108,6 @@ final class ProfilesViewModel: ObservableObject {
             profile.cloudModelOverride = editorCloudModelOverride
             profile.promptActionId = editorPromptActionId
             profile.autoSubmitEnabled = editorAutoSubmitEnabled
-            profile.sendAppContext = editorSendAppContext
-            profile.sendSurroundingText = editorSendSurroundingText
             profile.priority = editorPriority
             profileService.updateProfile(profile)
         } else {
@@ -145,8 +139,6 @@ final class ProfilesViewModel: ObservableObject {
         editorCloudModelOverride = nil
         editorPromptActionId = nil
         editorAutoSubmitEnabled = nil
-        editorSendAppContext = nil
-        editorSendSurroundingText = nil
         editorPriority = 0
         urlPatternInput = ""
         domainSuggestions = []
@@ -175,8 +167,6 @@ final class ProfilesViewModel: ObservableObject {
         }
         editorPromptActionId = profile.promptActionId
         editorAutoSubmitEnabled = profile.autoSubmitEnabled
-        editorSendAppContext = profile.sendAppContext
-        editorSendSurroundingText = profile.sendSurroundingText
         editorPriority = profile.priority
         urlPatternInput = ""
         domainSuggestions = []

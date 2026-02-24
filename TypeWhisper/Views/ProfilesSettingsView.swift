@@ -318,24 +318,6 @@ private struct ProfileEditorSheet: View {
                     }
                 }
 
-                Section(String(localized: "Context")) {
-                    Picker(String(localized: "App Context"), selection: $viewModel.editorSendAppContext) {
-                        Text(String(localized: "Off")).tag(nil as Bool?)
-                        Divider()
-                        Text(String(localized: "On")).tag(true as Bool?)
-                    }
-
-                    Picker(String(localized: "Surrounding Text"), selection: $viewModel.editorSendSurroundingText) {
-                        Text(String(localized: "Off")).tag(nil as Bool?)
-                        Divider()
-                        Text(String(localized: "On")).tag(true as Bool?)
-                    }
-
-                    Text(String(localized: "When enabled, context information is sent to the LLM along with your dictation. Requires a prompt to be assigned."))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
                 Section(String(localized: "Priority")) {
                     Stepper(value: $viewModel.editorPriority, in: 0...100) {
                         HStack {

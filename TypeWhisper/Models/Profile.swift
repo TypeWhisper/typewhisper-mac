@@ -17,8 +17,6 @@ final class Profile {
     var cloudModelOverride: String?
     var promptActionId: String?
     var autoSubmitEnabled: Bool?
-    var sendAppContext: Bool?
-    var sendSurroundingText: Bool?
     var createdAt: Date
     var updatedAt: Date
 
@@ -37,8 +35,6 @@ final class Profile {
         cloudModelOverride: String? = nil,
         promptActionId: String? = nil,
         autoSubmitEnabled: Bool? = nil,
-        sendAppContext: Bool? = nil,
-        sendSurroundingText: Bool? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -56,8 +52,6 @@ final class Profile {
         self.cloudModelOverride = cloudModelOverride
         self.promptActionId = promptActionId
         self.autoSubmitEnabled = autoSubmitEnabled
-        self.sendAppContext = sendAppContext
-        self.sendSurroundingText = sendSurroundingText
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }

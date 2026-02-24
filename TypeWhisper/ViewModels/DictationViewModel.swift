@@ -425,14 +425,6 @@ final class DictationViewModel: ObservableObject {
         return nil
     }
 
-    private var effectiveSendAppContext: Bool {
-        matchedProfile?.sendAppContext ?? false
-    }
-
-    private var effectiveSendSurroundingText: Bool {
-        matchedProfile?.sendSurroundingText ?? false
-    }
-
     private func stopDictation() {
         guard state == .recording || state == .paused else { return }
 
@@ -516,16 +508,11 @@ final class DictationViewModel: ObservableObject {
                     let modelOverride = promptAction.cloudModel
                     let prompt = promptAction.prompt
 
-                    let dictationContext: DictationContext?
-                    if self.effectiveSendAppContext || self.effectiveSendSurroundingText {
-                        dictationContext = DictationContext(
-                            appName: self.effectiveSendAppContext ? activeApp.name : nil,
-                            url: self.effectiveSendAppContext ? activeApp.url : nil,
-                            surroundingText: self.effectiveSendSurroundingText ? self.capturedSurroundingText : nil
-                        )
-                    } else {
-                        dictationContext = nil
-                    }
+                    let dictationContext = DictationContext(
+                        appName: activeApp.name,
+                        url: activeApp.url,
+                        surroundingText: self.capturedSurroundingText
+                    )
 
                     llmHandler = { text in
                         try await pps.process(
