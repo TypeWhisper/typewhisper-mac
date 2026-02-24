@@ -17,8 +17,19 @@ final class Profile {
     var cloudModelOverride: String?
     var promptActionId: String?
     var autoSubmitEnabled: Bool?
+    var hotkeyData: Data?
     var createdAt: Date
     var updatedAt: Date
+
+    var hotkey: UnifiedHotkey? {
+        get {
+            guard let data = hotkeyData else { return nil }
+            return try? JSONDecoder().decode(UnifiedHotkey.self, from: data)
+        }
+        set {
+            hotkeyData = newValue.flatMap { try? JSONEncoder().encode($0) }
+        }
+    }
 
     init(
         id: UUID = UUID(),
@@ -35,6 +46,7 @@ final class Profile {
         cloudModelOverride: String? = nil,
         promptActionId: String? = nil,
         autoSubmitEnabled: Bool? = nil,
+        hotkeyData: Data? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -52,6 +64,7 @@ final class Profile {
         self.cloudModelOverride = cloudModelOverride
         self.promptActionId = promptActionId
         self.autoSubmitEnabled = autoSubmitEnabled
+        self.hotkeyData = hotkeyData
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }

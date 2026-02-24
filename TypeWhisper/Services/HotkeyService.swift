@@ -45,10 +45,12 @@ final class HotkeyService: ObservableObject {
     var onDictationStart: (() -> Void)?
     var onDictationStop: (() -> Void)?
     var onPromptPaletteToggle: (() -> Void)?
+    var onProfileDictationStart: ((UUID) -> Void)?
 
     private var keyDownTime: Date?
     private var isActive = false
     private var activeSlotType: HotkeySlotType?
+    private(set) var activeProfileId: UUID?
 
     private static let toggleThreshold: TimeInterval = 1.0
 
@@ -67,6 +69,18 @@ final class HotkeyService: ObservableObject {
         .toggle: SlotState(),
         .promptPalette: SlotState(),
     ]
+
+    // MARK: - Per-Profile Hotkey State
+
+    private struct ProfileHotkeyState {
+        let profileId: UUID
+        var hotkey: UnifiedHotkey
+        var fnWasDown = false
+        var modifierWasDown = false
+        var keyWasDown = false
+    }
+
+    private var profileSlots: [UUID: ProfileHotkeyState] = [:]
 
     private var globalMonitor: Any?
     private var localMonitor: Any?
@@ -116,8 +130,34 @@ final class HotkeyService: ObservableObject {
     func cancelDictation() {
         isActive = false
         activeSlotType = nil
+        activeProfileId = nil
         currentMode = nil
         keyDownTime = nil
+    }
+
+    // MARK: - Profile Hotkeys
+
+    func registerProfileHotkeys(_ entries: [(id: UUID, hotkey: UnifiedHotkey)]) {
+        profileSlots.removeAll()
+        for entry in entries {
+            profileSlots[entry.id] = ProfileHotkeyState(profileId: entry.id, hotkey: entry.hotkey)
+        }
+        tearDownMonitor()
+        setupMonitor()
+    }
+
+    func isHotkeyAssignedToProfile(_ hotkey: UnifiedHotkey, excludingProfileId: UUID?) -> UUID? {
+        for (id, state) in profileSlots where id != excludingProfileId {
+            if state.hotkey == hotkey { return id }
+        }
+        return nil
+    }
+
+    func isHotkeyAssignedToGlobalSlot(_ hotkey: UnifiedHotkey) -> HotkeySlotType? {
+        for slotType in HotkeySlotType.allCases {
+            if slots[slotType]?.hotkey == hotkey { return slotType }
+        }
+        return nil
     }
 
     // MARK: - Migration
@@ -231,77 +271,100 @@ final class HotkeyService: ObservableObject {
     }
 
     private func handleEvent(_ event: NSEvent) {
+        // Global slots
         for slotType in HotkeySlotType.allCases {
-            guard let hotkey = slots[slotType]?.hotkey else { continue }
-            handleEventForSlot(event, slotType: slotType, hotkey: hotkey)
+            guard var state = slots[slotType], let hotkey = state.hotkey else { continue }
+            let (keyDown, keyUp) = detectKeyEvent(
+                event, hotkey: hotkey,
+                fnWasDown: state.fnWasDown,
+                modifierWasDown: state.modifierWasDown,
+                keyWasDown: state.keyWasDown
+            )
+            if keyDown {
+                if hotkey.isFn { state.fnWasDown = true }
+                if hotkey.isModifierOnly { state.modifierWasDown = true }
+                if !hotkey.isFn && !hotkey.isModifierOnly { state.keyWasDown = true }
+                slots[slotType] = state
+                handleKeyDown(slotType: slotType)
+            } else if keyUp {
+                if hotkey.isFn { state.fnWasDown = false }
+                if hotkey.isModifierOnly { state.modifierWasDown = false }
+                if !hotkey.isFn && !hotkey.isModifierOnly { state.keyWasDown = false }
+                slots[slotType] = state
+                handleKeyUp(slotType: slotType)
+            }
+        }
+
+        // Profile slots
+        let profileIds = Array(profileSlots.keys)
+        for profileId in profileIds {
+            guard var state = profileSlots[profileId] else { continue }
+            let (keyDown, keyUp) = detectKeyEvent(
+                event, hotkey: state.hotkey,
+                fnWasDown: state.fnWasDown,
+                modifierWasDown: state.modifierWasDown,
+                keyWasDown: state.keyWasDown
+            )
+            if keyDown {
+                if state.hotkey.isFn { state.fnWasDown = true }
+                if state.hotkey.isModifierOnly { state.modifierWasDown = true }
+                if !state.hotkey.isFn && !state.hotkey.isModifierOnly { state.keyWasDown = true }
+                profileSlots[profileId] = state
+                handleProfileKeyDown(profileId: profileId)
+            } else if keyUp {
+                if state.hotkey.isFn { state.fnWasDown = false }
+                if state.hotkey.isModifierOnly { state.modifierWasDown = false }
+                if !state.hotkey.isFn && !state.hotkey.isModifierOnly { state.keyWasDown = false }
+                profileSlots[profileId] = state
+                handleProfileKeyUp(profileId: profileId)
+            }
         }
     }
 
-    private func handleEventForSlot(_ event: NSEvent, slotType: HotkeySlotType, hotkey: UnifiedHotkey) {
+    /// Generic key event detection: returns (isKeyDown, isKeyUp) for a given hotkey configuration.
+    private func detectKeyEvent(
+        _ event: NSEvent,
+        hotkey: UnifiedHotkey,
+        fnWasDown: Bool,
+        modifierWasDown: Bool,
+        keyWasDown: Bool
+    ) -> (keyDown: Bool, keyUp: Bool) {
         if hotkey.isFn {
-            guard event.type == .flagsChanged else { return }
+            guard event.type == .flagsChanged else { return (false, false) }
             let fnDown = event.modifierFlags.contains(.function)
-
-            if fnDown, !(slots[slotType]?.fnWasDown ?? false) {
-                slots[slotType]?.fnWasDown = true
-                handleKeyDown(slotType: slotType)
-            } else if !fnDown, slots[slotType]?.fnWasDown ?? false {
-                slots[slotType]?.fnWasDown = false
-                handleKeyUp(slotType: slotType)
-            }
+            if fnDown, !fnWasDown { return (true, false) }
+            if !fnDown, fnWasDown { return (false, true) }
         } else if hotkey.isModifierOnly {
-            guard event.type == .flagsChanged, event.keyCode == hotkey.keyCode else { return }
-
-            let modifierFlag = Self.modifierFlagForKeyCode(hotkey.keyCode)
-            guard let flag = modifierFlag else { return }
+            guard event.type == .flagsChanged, event.keyCode == hotkey.keyCode else { return (false, false) }
+            let flag = Self.modifierFlagForKeyCode(hotkey.keyCode)
+            guard let flag else { return (false, false) }
             let isDown = event.modifierFlags.contains(flag)
-
-            if isDown, !(slots[slotType]?.modifierWasDown ?? false) {
-                slots[slotType]?.modifierWasDown = true
-                handleKeyDown(slotType: slotType)
-            } else if !isDown, slots[slotType]?.modifierWasDown ?? false {
-                slots[slotType]?.modifierWasDown = false
-                handleKeyUp(slotType: slotType)
-            }
+            if isDown, !modifierWasDown { return (true, false) }
+            if !isDown, modifierWasDown { return (false, true) }
         } else if hotkey.hasModifiers {
             let requiredFlags = NSEvent.ModifierFlags(rawValue: hotkey.modifierFlags)
             let relevantMask: NSEvent.ModifierFlags = [.command, .option, .control, .shift]
             let currentRelevant = event.modifierFlags.intersection(relevantMask)
 
-            if event.type == .keyDown, event.keyCode == hotkey.keyCode {
-                guard !(slots[slotType]?.keyWasDown ?? false) else { return }
-                if currentRelevant == requiredFlags {
-                    slots[slotType]?.keyWasDown = true
-                    handleKeyDown(slotType: slotType)
-                }
-            } else if event.type == .keyUp, event.keyCode == hotkey.keyCode {
-                if slots[slotType]?.keyWasDown ?? false {
-                    slots[slotType]?.keyWasDown = false
-                    handleKeyUp(slotType: slotType)
-                }
-            } else if event.type == .flagsChanged, slots[slotType]?.keyWasDown ?? false {
-                if !currentRelevant.contains(requiredFlags) {
-                    slots[slotType]?.keyWasDown = false
-                    handleKeyUp(slotType: slotType)
-                }
+            if event.type == .keyDown, event.keyCode == hotkey.keyCode, !keyWasDown {
+                if currentRelevant == requiredFlags { return (true, false) }
+            } else if event.type == .keyUp, event.keyCode == hotkey.keyCode, keyWasDown {
+                return (false, true)
+            } else if event.type == .flagsChanged, keyWasDown, !currentRelevant.contains(requiredFlags) {
+                return (false, true)
             }
         } else {
-            guard event.keyCode == hotkey.keyCode else { return }
+            guard event.keyCode == hotkey.keyCode else { return (false, false) }
             let ignoredModifiers: NSEvent.ModifierFlags = [.command, .option, .control]
-            if !event.modifierFlags.intersection(ignoredModifiers).isEmpty { return }
+            if !event.modifierFlags.intersection(ignoredModifiers).isEmpty { return (false, false) }
 
-            if event.type == .keyDown {
-                guard !(slots[slotType]?.keyWasDown ?? false) else { return }
-                slots[slotType]?.keyWasDown = true
-                handleKeyDown(slotType: slotType)
-            } else if event.type == .keyUp {
-                slots[slotType]?.keyWasDown = false
-                handleKeyUp(slotType: slotType)
-            }
+            if event.type == .keyDown, !keyWasDown { return (true, false) }
+            if event.type == .keyUp { return (false, true) }
         }
+        return (false, false)
     }
 
-    // MARK: - Key Down / Up
+    // MARK: - Key Down / Up (Global Slots)
 
     private func handleKeyDown(slotType: HotkeySlotType) {
         if slotType == .promptPalette {
@@ -313,11 +376,13 @@ final class HotkeyService: ObservableObject {
             // Any hotkey stops active recording
             isActive = false
             activeSlotType = nil
+            activeProfileId = nil
             currentMode = nil
             keyDownTime = nil
             onDictationStop?()
         } else {
             activeSlotType = slotType
+            activeProfileId = nil
             keyDownTime = Date()
             isActive = true
             currentMode = slotType == .toggle ? .toggle : .pushToTalk
@@ -326,7 +391,7 @@ final class HotkeyService: ObservableObject {
     }
 
     private func handleKeyUp(slotType: HotkeySlotType) {
-        guard isActive, slotType == activeSlotType else { return }
+        guard isActive, slotType == activeSlotType, activeProfileId == nil else { return }
 
         switch slotType {
         case .hybrid:
@@ -350,6 +415,44 @@ final class HotkeyService: ObservableObject {
             break
         case .promptPalette:
             break // handled on keyDown only
+        }
+    }
+
+    // MARK: - Key Down / Up (Profile Slots)
+
+    private func handleProfileKeyDown(profileId: UUID) {
+        if isActive {
+            // Any hotkey stops active recording
+            isActive = false
+            activeSlotType = nil
+            activeProfileId = nil
+            currentMode = nil
+            keyDownTime = nil
+            onDictationStop?()
+        } else {
+            activeProfileId = profileId
+            activeSlotType = nil
+            keyDownTime = Date()
+            isActive = true
+            currentMode = .pushToTalk // hybrid behavior
+            onProfileDictationStart?(profileId)
+        }
+    }
+
+    private func handleProfileKeyUp(profileId: UUID) {
+        guard isActive, activeProfileId == profileId else { return }
+
+        // Hybrid behavior: short press = toggle, long press = PTT
+        guard let downTime = keyDownTime else { return }
+        if Date().timeIntervalSince(downTime) < Self.toggleThreshold {
+            currentMode = .toggle
+        } else {
+            isActive = false
+            activeSlotType = nil
+            activeProfileId = nil
+            currentMode = nil
+            keyDownTime = nil
+            onDictationStop?()
         }
     }
 

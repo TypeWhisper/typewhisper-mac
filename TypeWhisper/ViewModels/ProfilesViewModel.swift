@@ -42,6 +42,8 @@ final class ProfilesViewModel: ObservableObject {
     @Published var editorCloudModelOverride: String?
     @Published var editorPromptActionId: String?
     @Published var editorAutoSubmitEnabled: Bool?
+    @Published var editorHotkey: UnifiedHotkey?
+    @Published var editorHotkeyLabel: String = ""
     @Published var editorPriority: Int = 0
 
     // App picker
@@ -91,6 +93,7 @@ final class ProfilesViewModel: ObservableObject {
             cloudModelOverride: editorCloudModelOverride,
             promptActionId: editorPromptActionId,
             autoSubmitEnabled: editorAutoSubmitEnabled,
+            hotkeyData: editorHotkey.flatMap { try? JSONEncoder().encode($0) },
             priority: editorPriority
         )
     }
@@ -108,6 +111,7 @@ final class ProfilesViewModel: ObservableObject {
             profile.cloudModelOverride = editorCloudModelOverride
             profile.promptActionId = editorPromptActionId
             profile.autoSubmitEnabled = editorAutoSubmitEnabled
+            profile.hotkey = editorHotkey
             profile.priority = editorPriority
             profileService.updateProfile(profile)
         } else {
@@ -139,6 +143,8 @@ final class ProfilesViewModel: ObservableObject {
         editorCloudModelOverride = nil
         editorPromptActionId = nil
         editorAutoSubmitEnabled = nil
+        editorHotkey = nil
+        editorHotkeyLabel = ""
         editorPriority = 0
         urlPatternInput = ""
         domainSuggestions = []
@@ -167,6 +173,8 @@ final class ProfilesViewModel: ObservableObject {
         }
         editorPromptActionId = profile.promptActionId
         editorAutoSubmitEnabled = profile.autoSubmitEnabled
+        editorHotkey = profile.hotkey
+        editorHotkeyLabel = profile.hotkey.map { HotkeyService.displayName(for: $0) } ?? ""
         editorPriority = profile.priority
         urlPatternInput = ""
         domainSuggestions = []
@@ -273,6 +281,9 @@ final class ProfilesViewModel: ObservableObject {
 
     func profileSubtitle(_ profile: Profile) -> String {
         var parts: [String] = []
+        if let hotkey = profile.hotkey {
+            parts.append("⌨ " + HotkeyService.displayName(for: hotkey))
+        }
         let appNames = profile.bundleIdentifiers.prefix(3).map { appName(for: $0) }
         if !appNames.isEmpty {
             parts.append(appNames.joined(separator: ", "))

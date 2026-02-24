@@ -19,6 +19,12 @@ struct TypeWhisperApp: App {
         }
         .windowResizability(.contentMinSize)
         .defaultSize(width: 750, height: 600)
+
+        Window(String(localized: "History"), id: "history") {
+            HistoryView()
+        }
+        .windowResizability(.contentMinSize)
+        .defaultSize(width: 700, height: 500)
     }
 
     init() {
@@ -54,6 +60,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         translationHostWindow = TranslationHostWindow(
             translationService: ServiceContainer.shared.translationService
         )
+        ServiceContainer.shared.translationService.setInteractiveHostMode = { [weak self] enabled in
+            self?.translationHostWindow?.setInteractiveMode(enabled)
+            if enabled {
+                NSApp.setActivationPolicy(.regular)
+                NSApp.activate(ignoringOtherApps: true)
+            } else if self?.hasVisibleManagedWindow != true {
+                NSApp.setActivationPolicy(.accessory)
+            }
+        }
 
         // Prompt palette hotkey - opens standalone prompt palette panel
         ServiceContainer.shared.hotkeyService.onPromptPaletteToggle = {
@@ -75,25 +90,33 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    @MainActor private func isSettingsWindow(_ window: NSWindow) -> Bool {
-        window.identifier?.rawValue.localizedCaseInsensitiveContains("settings") == true
+    @MainActor private func isManagedWindow(_ window: NSWindow) -> Bool {
+        guard let id = window.identifier?.rawValue else { return false }
+        return id.localizedCaseInsensitiveContains("settings")
+            || id.localizedCaseInsensitiveContains("history")
+    }
+
+    @MainActor private var hasVisibleManagedWindow: Bool {
+        NSApp.windows.contains { isManagedWindow($0) && $0.isVisible }
     }
 
     @MainActor @objc private func windowDidBecomeKey(_ notification: Notification) {
         guard let window = notification.object as? NSWindow,
-              isSettingsWindow(window)
+              isManagedWindow(window)
         else { return }
         NSApp.setActivationPolicy(.regular)
         NSApp.activate()
-        window.level = .floating
-        window.orderFrontRegardless()
     }
 
     @MainActor @objc private func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow,
-              isSettingsWindow(window)
+              isManagedWindow(window)
         else { return }
-        window.level = .normal
-        NSApp.setActivationPolicy(.accessory)
+        // Only go back to accessory if no other managed window is still visible
+        DispatchQueue.main.async {
+            if !self.hasVisibleManagedWindow {
+                NSApp.setActivationPolicy(.accessory)
+            }
+        }
     }
 }

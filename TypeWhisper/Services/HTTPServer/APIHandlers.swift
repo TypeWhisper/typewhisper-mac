@@ -1,4 +1,7 @@
 import Foundation
+import os
+
+private let apiLogger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhisper-mac", category: "APIHandlers")
 
 final class APIHandlers: @unchecked Sendable {
     private let modelManager: ModelManagerService
@@ -106,8 +109,31 @@ final class APIHandlers: @unchecked Sendable {
 
             var finalText = result.text
             if let targetCode = targetLanguage {
-                let target = Locale.Language(identifier: targetCode)
-                finalText = try await translationService.translate(text: finalText, to: target)
+                if let targetNormalized = TranslationService.normalizedLanguageIdentifier(from: targetCode) {
+                    if targetCode.caseInsensitiveCompare(targetNormalized) != .orderedSame {
+                        apiLogger.info("API translation target normalized \(targetCode, privacy: .public) -> \(targetNormalized, privacy: .public)")
+                    }
+                    let target = Locale.Language(identifier: targetNormalized)
+                    let sourceRaw = result.detectedLanguage
+                    let sourceNormalized = TranslationService.normalizedLanguageIdentifier(from: sourceRaw)
+                    if let sourceRaw {
+                        if let sourceNormalized {
+                            if sourceRaw.caseInsensitiveCompare(sourceNormalized) != .orderedSame {
+                                apiLogger.info("API translation source normalized \(sourceRaw, privacy: .public) -> \(sourceNormalized, privacy: .public)")
+                            }
+                        } else {
+                            apiLogger.warning("API translation source language \(sourceRaw, privacy: .public) invalid, using auto source")
+                        }
+                    }
+                    let sourceLanguage = sourceNormalized.map { Locale.Language(identifier: $0) }
+                    finalText = try await translationService.translate(
+                        text: finalText,
+                        to: target,
+                        source: sourceLanguage
+                    )
+                } else {
+                    apiLogger.error("API translation target language invalid: \(targetCode, privacy: .public)")
+                }
             }
 
             struct TranscribeResponse: Encodable {

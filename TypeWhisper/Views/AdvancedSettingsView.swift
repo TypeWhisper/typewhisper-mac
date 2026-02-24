@@ -7,8 +7,24 @@ struct AdvancedSettingsView: View {
     @State private var cliSymlinkTarget = ""
     #endif
 
+    @AppStorage(UserDefaultsKeys.historyRetentionDays) private var historyRetentionDays: Int = 0
+
     var body: some View {
         Form {
+            // MARK: - History
+            Section(String(localized: "History")) {
+                Picker(String(localized: "Auto-delete after"), selection: $historyRetentionDays) {
+                    Text(String(localized: "Unlimited")).tag(0)
+                    Text(String(localized: "30 days")).tag(30)
+                    Text(String(localized: "60 days")).tag(60)
+                    Text(String(localized: "90 days")).tag(90)
+                    Text(String(localized: "180 days")).tag(180)
+                }
+                Text(String(localized: "Older entries are automatically removed at app launch."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             // MARK: - API Server
             Section(String(localized: "API Server")) {
                 Toggle(String(localized: "Enable API Server"), isOn: $viewModel.isEnabled)

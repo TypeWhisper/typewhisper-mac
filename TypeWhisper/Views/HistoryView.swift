@@ -5,7 +5,7 @@ struct HistoryView: View {
 
     var body: some View {
         HSplitView {
-            // MARK: - Left Panel: Search + List
+            // MARK: - Left Panel: Search + Filters + List
             VStack(spacing: 0) {
                 // Search
                 HStack {
@@ -26,6 +26,39 @@ struct HistoryView: View {
                 .padding(8)
                 .background(.bar)
 
+                // Filter pickers
+                HStack(spacing: 6) {
+                    Picker(selection: Binding(
+                        get: { viewModel.selectedAppFilter ?? "" },
+                        set: { viewModel.selectedAppFilter = $0.isEmpty ? nil : $0 }
+                    )) {
+                        Text(String(localized: "All Apps")).tag("")
+                        if !viewModel.availableApps.isEmpty {
+                            Divider()
+                            ForEach(viewModel.availableApps) { app in
+                                Text(app.name).tag(app.bundleId)
+                            }
+                        }
+                    } label: {
+                        EmptyView()
+                    }
+                    .fixedSize()
+
+                    Picker(selection: $viewModel.selectedTimeRange) {
+                        ForEach(HistoryTimeRange.allCases) { range in
+                            Text(range.displayName).tag(range)
+                        }
+                    } label: {
+                        EmptyView()
+                    }
+                    .fixedSize()
+
+                    Spacer()
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(.bar)
+
                 Divider()
 
                 // List
@@ -33,64 +66,42 @@ struct HistoryView: View {
                     ContentUnavailableView {
                         Label(String(localized: "No Entries"), systemImage: "clock")
                     } description: {
-                        if viewModel.searchQuery.isEmpty {
-                            Text(String(localized: "Dictated text will appear here."))
+                        if viewModel.hasActiveFilters || !viewModel.searchQuery.isEmpty {
+                            Text(String(localized: "No results for the active filters."))
                         } else {
-                            Text(String(localized: "No results for this search."))
+                            Text(String(localized: "Dictated text will appear here."))
+                        }
+                    } actions: {
+                        if viewModel.hasActiveFilters || !viewModel.searchQuery.isEmpty {
+                            Button(String(localized: "Clear Filters")) {
+                                viewModel.clearAllFilters()
+                            }
                         }
                     }
                     .frame(maxHeight: .infinity)
                 } else {
-                    List(viewModel.filteredRecords, id: \.id, selection: $viewModel.selectedRecordIDs) { record in
-                        RecordRow(record: record)
-                            .tag(record.id)
-                            .contextMenu {
-                                if viewModel.selectedRecordIDs.count > 1 && viewModel.selectedRecordIDs.contains(record.id) {
-                                    let count = viewModel.selectedRecordIDs.count
-                                    Button(String(localized: "Copy")) {
-                                        let texts = viewModel.selectedRecords.map(\.finalText)
-                                        viewModel.copyToClipboard(texts.joined(separator: "\n\n"))
-                                    }
-
-                                    Menu(String(localized: "Export \(count) entries as...")) {
-                                        Button("Markdown (.md)") {
-                                            viewModel.exportSelectedRecords(format: .markdown)
-                                        }
-                                        Button("Plain Text (.txt)") {
-                                            viewModel.exportSelectedRecords(format: .plainText)
-                                        }
-                                        Button("JSON (.json)") {
-                                            viewModel.exportSelectedRecords(format: .json)
-                                        }
-                                    }
-
-                                    Divider()
-                                    Button(String(localized: "Delete \(count) entries"), role: .destructive) {
-                                        viewModel.deleteSelectedRecords()
-                                    }
-                                } else {
-                                    Button(String(localized: "Copy")) {
-                                        viewModel.copyToClipboard(record.finalText)
-                                    }
-
-                                    Menu(String(localized: "Export as...")) {
-                                        Button("Markdown (.md)") {
-                                            viewModel.exportRecord(record, format: .markdown)
-                                        }
-                                        Button("Plain Text (.txt)") {
-                                            viewModel.exportRecord(record, format: .plainText)
-                                        }
-                                        Button("JSON (.json)") {
-                                            viewModel.exportRecord(record, format: .json)
-                                        }
-                                    }
-
-                                    Divider()
-                                    Button(String(localized: "Delete"), role: .destructive) {
-                                        viewModel.deleteRecord(record)
+                    List(selection: $viewModel.selectedRecordIDs) {
+                        ForEach(viewModel.groupedSections) { section in
+                            Section {
+                                if !viewModel.collapsedGroups.contains(section.group) {
+                                    ForEach(section.records, id: \.id) { record in
+                                        RecordRow(record: record)
+                                            .tag(record.id)
+                                            .contextMenu {
+                                                recordContextMenu(for: record)
+                                            }
                                     }
                                 }
+                            } header: {
+                                SectionHeader(
+                                    group: section.group,
+                                    count: section.records.count,
+                                    isCollapsed: viewModel.collapsedGroups.contains(section.group)
+                                ) {
+                                    viewModel.toggleSection(section.group)
+                                }
                             }
+                        }
                     }
                     .listStyle(.sidebar)
                 }
@@ -99,15 +110,42 @@ struct HistoryView: View {
 
                 // Footer stats
                 HStack {
-                    Text("\(viewModel.totalRecords) \(String(localized: "entries"))")
+                    if viewModel.hasActiveFilters || !viewModel.searchQuery.isEmpty {
+                        Text("\(viewModel.visibleRecordCount) \(String(localized: "entries")) (\(viewModel.totalRecords) \(String(localized: "total")))")
+                    } else {
+                        Text("\(viewModel.totalRecords) \(String(localized: "entries"))")
+                    }
                     Spacer()
-                    Text("\(viewModel.totalWords) \(String(localized: "words"))")
+                    if !viewModel.filteredRecords.isEmpty {
+                        Button(String(localized: "Delete All Visible"), role: .destructive) {
+                            viewModel.showDeleteAllVisibleConfirmation = true
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                    }
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(.bar)
+                .confirmationDialog(
+                    String(localized: "Delete Entries"),
+                    isPresented: $viewModel.showDeleteAllVisibleConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button(String(localized: "Delete"), role: .destructive) {
+                        viewModel.deleteAllVisible()
+                    }
+                    Button(String(localized: "Cancel"), role: .cancel) {}
+                } message: {
+                    if viewModel.hasActiveFilters || !viewModel.searchQuery.isEmpty {
+                        Text("Delete \(viewModel.visibleRecordCount) entries matching current filters?")
+                    } else {
+                        Text("Delete all \(viewModel.visibleRecordCount) entries? This cannot be undone.")
+                    }
+                }
             }
             .frame(minWidth: 260, idealWidth: 300, maxWidth: 320)
 
@@ -131,6 +169,80 @@ struct HistoryView: View {
             }
         }
         .frame(minWidth: 600, minHeight: 400)
+    }
+
+    @ViewBuilder
+    private func recordContextMenu(for record: TranscriptionRecord) -> some View {
+        if viewModel.selectedRecordIDs.count > 1 && viewModel.selectedRecordIDs.contains(record.id) {
+            let count = viewModel.selectedRecordIDs.count
+            Button(String(localized: "Copy")) {
+                let texts = viewModel.selectedRecords.map(\.finalText)
+                viewModel.copyToClipboard(texts.joined(separator: "\n\n"))
+            }
+
+            Menu(String(localized: "Export \(count) entries as...")) {
+                Button("Markdown (.md)") {
+                    viewModel.exportSelectedRecords(format: .markdown)
+                }
+                Button("Plain Text (.txt)") {
+                    viewModel.exportSelectedRecords(format: .plainText)
+                }
+                Button("JSON (.json)") {
+                    viewModel.exportSelectedRecords(format: .json)
+                }
+            }
+
+            Divider()
+            Button(String(localized: "Delete \(count) entries"), role: .destructive) {
+                viewModel.deleteSelectedRecords()
+            }
+        } else {
+            Button(String(localized: "Copy")) {
+                viewModel.copyToClipboard(record.finalText)
+            }
+
+            Menu(String(localized: "Export as...")) {
+                Button("Markdown (.md)") {
+                    viewModel.exportRecord(record, format: .markdown)
+                }
+                Button("Plain Text (.txt)") {
+                    viewModel.exportRecord(record, format: .plainText)
+                }
+                Button("JSON (.json)") {
+                    viewModel.exportRecord(record, format: .json)
+                }
+            }
+
+            Divider()
+            Button(String(localized: "Delete"), role: .destructive) {
+                viewModel.deleteRecord(record)
+            }
+        }
+    }
+}
+
+// MARK: - Section Header
+
+private struct SectionHeader: View {
+    let group: HistoryDateGroup
+    let count: Int
+    let isCollapsed: Bool
+    let onToggle: () -> Void
+
+    var body: some View {
+        Button(action: onToggle) {
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.right")
+                    .font(.caption2)
+                    .rotationEffect(.degrees(isCollapsed ? 0 : 90))
+                    .animation(.easeInOut(duration: 0.15), value: isCollapsed)
+                Text(group.displayName)
+                Text("(\(count))")
+                    .foregroundStyle(.tertiary)
+                Spacer()
+            }
+        }
+        .buttonStyle(.plain)
     }
 }
 

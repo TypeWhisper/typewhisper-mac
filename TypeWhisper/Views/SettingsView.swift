@@ -229,37 +229,52 @@ struct HotkeyRecorderView: View {
     @State private var isRecording = false
     @State private var pendingModifiers: NSEvent.ModifierFlags = []
     @State private var eventMonitor: Any?
+    private static var activeRecorder: UUID?
+    @State private var id = UUID()
 
     var body: some View {
         HStack {
             Text(title)
             Spacer()
-            Button {
-                startRecording()
-            } label: {
-                if isRecording {
+            if isRecording {
+                Button {
+                    cancelRecording()
+                } label: {
                     Text(pendingModifierString.isEmpty
                         ? String(localized: "Press a key…")
                         : pendingModifierString)
                         .foregroundStyle(.orange)
-                } else if label.isEmpty {
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            } else if label.isEmpty {
+                Button {
+                    startRecording()
+                } label: {
                     Text(String(localized: "Record Shortcut"))
-                } else {
-                    HStack(spacing: 4) {
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            } else {
+                HStack(spacing: 4) {
+                    Button {
+                        startRecording()
+                    } label: {
                         Text(label)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
+                    }
+                    .buttonStyle(.plain)
+                    Button {
+                        onClear()
+                    } label: {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.secondary)
-                            .onTapGesture {
-                                onClear()
-                            }
                     }
+                    .buttonStyle(.plain)
                 }
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
         }
     }
 
@@ -273,23 +288,24 @@ struct HotkeyRecorderView: View {
     }
 
     private func startRecording() {
+        if let activeId = Self.activeRecorder, activeId != id {
+            return
+        }
+        Self.activeRecorder = id
         isRecording = true
         pendingModifiers = []
         ServiceContainer.shared.hotkeyService.suspendMonitoring()
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
             if event.type == .flagsChanged {
-                // Fn key
                 if event.modifierFlags.contains(.function) {
                     finishRecording(UnifiedHotkey(keyCode: 0, modifierFlags: 0, isFn: true))
                     return nil
                 }
 
-                // Track modifier state
                 let relevantMask: NSEvent.ModifierFlags = [.command, .option, .control, .shift]
                 let current = event.modifierFlags.intersection(relevantMask)
 
                 if current.isEmpty, !pendingModifiers.isEmpty {
-                    // All modifiers released - record as modifier-only key
                     if HotkeyService.modifierKeyCodes.contains(event.keyCode) {
                         finishRecording(UnifiedHotkey(keyCode: event.keyCode, modifierFlags: 0, isFn: false))
                         return nil
@@ -300,7 +316,6 @@ struct HotkeyRecorderView: View {
             }
 
             if event.type == .keyDown {
-                // Escape without modifiers cancels recording
                 if event.keyCode == 0x35, pendingModifiers.isEmpty {
                     cancelRecording()
                     return nil
@@ -318,6 +333,9 @@ struct HotkeyRecorderView: View {
     }
 
     private func finishRecording(_ hotkey: UnifiedHotkey) {
+        if Self.activeRecorder == id {
+            Self.activeRecorder = nil
+        }
         isRecording = false
         pendingModifiers = []
         if let monitor = eventMonitor {
@@ -329,6 +347,9 @@ struct HotkeyRecorderView: View {
     }
 
     private func cancelRecording() {
+        if Self.activeRecorder == id {
+            Self.activeRecorder = nil
+        }
         isRecording = false
         pendingModifiers = []
         if let monitor = eventMonitor {

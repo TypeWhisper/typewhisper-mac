@@ -124,6 +124,45 @@ private struct ProfileEditorSheet: View {
                     TextField(String(localized: "Profile name"), text: $viewModel.editorName)
                 }
 
+                Section(String(localized: "Hotkey")) {
+                    HotkeyRecorderView(
+                        label: viewModel.editorHotkeyLabel,
+                        title: String(localized: "Profile shortcut"),
+                        onRecord: { hotkey in
+                            // Check profile-vs-profile conflict
+                            if let conflictId = ServiceContainer.shared.hotkeyService.isHotkeyAssignedToProfile(
+                                hotkey, excludingProfileId: viewModel.editingProfile?.id
+                            ) {
+                                // Auto-clear the other profile's hotkey
+                                if let conflictProfile = viewModel.profiles.first(where: { $0.id == conflictId }) {
+                                    conflictProfile.hotkey = nil
+                                }
+                            }
+                            viewModel.editorHotkey = hotkey
+                            viewModel.editorHotkeyLabel = HotkeyService.displayName(for: hotkey)
+                        },
+                        onClear: {
+                            viewModel.editorHotkey = nil
+                            viewModel.editorHotkeyLabel = ""
+                        }
+                    )
+
+                    // Warn if conflicts with global slot
+                    if let hotkey = viewModel.editorHotkey,
+                       let globalSlot = ServiceContainer.shared.hotkeyService.isHotkeyAssignedToGlobalSlot(hotkey) {
+                        Label(
+                            String(localized: "This hotkey is also assigned to the \(globalSlot.rawValue) slot."),
+                            systemImage: "exclamationmark.triangle"
+                        )
+                        .foregroundStyle(.orange)
+                        .font(.caption)
+                    }
+
+                    Text(String(localized: "Assign a hotkey to always use this profile, regardless of the active app."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section(String(localized: "Apps")) {
                     if viewModel.editorBundleIdentifiers.isEmpty {
                         Text(String(localized: "No apps assigned"))
@@ -355,7 +394,7 @@ private struct ProfileEditorSheet: View {
             }
             .padding()
         }
-        .frame(width: 480, height: 680)
+        .frame(width: 480, height: 720)
         .sheet(isPresented: $viewModel.showingAppPicker) {
             AppPickerSheet(viewModel: viewModel)
         }

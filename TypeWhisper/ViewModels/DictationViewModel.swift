@@ -94,6 +94,7 @@ final class DictationViewModel: ObservableObject {
         case waveform
         case clock
         case battery
+        case profile
         case none
     }
 
@@ -131,6 +132,7 @@ final class DictationViewModel: ObservableObject {
     private let promptProcessingService: PromptProcessingService
     private let postProcessingPipeline: PostProcessingPipeline
     private var matchedProfile: Profile?
+    private var forcedProfileId: UUID?
     private var capturedActiveApp: (name: String?, bundleId: String?, url: String?)?
     private var capturedSurroundingText: TextInsertionService.SurroundingTextContext?
 
@@ -254,6 +256,20 @@ final class DictationViewModel: ObservableObject {
             self?.stopDictation()
         }
 
+        hotkeyService.onProfileDictationStart = { [weak self] profileId in
+            self?.startRecording(forcedProfileId: profileId)
+        }
+
+        // Sync profile hotkeys whenever profiles change
+        // dropFirst: avoid early monitor setup during ServiceContainer.init() before app is ready
+        profileService.$profiles
+            .dropFirst()
+            .sink { [weak self] profiles in
+                guard let self else { return }
+                self.syncProfileHotkeys(profiles)
+            }
+            .store(in: &cancellables)
+
         audioRecordingService.$audioLevel
             .dropFirst()
             .sink { [weak self] level in
@@ -282,7 +298,7 @@ final class DictationViewModel: ObservableObject {
             .store(in: &cancellables)
     }
 
-    private func startRecording() {
+    private func startRecording(forcedProfileId: UUID? = nil) {
         // Dismiss prompt palette if active
         promptPaletteController.hide()
 
@@ -302,12 +318,21 @@ final class DictationViewModel: ObservableObject {
         insertingResetTask?.cancel()
         insertingResetTask = nil
 
-        // Match profile based on active app — store for reuse in stopDictation
+        self.forcedProfileId = forcedProfileId
+
+        // Match profile: forced profile or app-based matching
         let activeApp = textInsertionService.captureActiveApp()
         capturedActiveApp = activeApp
         capturedSurroundingText = textInsertionService.getSurroundingText()
-        matchedProfile = profileService.matchProfile(bundleIdentifier: activeApp.bundleId, url: nil)
-        activeProfileName = matchedProfile?.name
+
+        if let forcedProfileId,
+           let forcedProfile = profileService.profiles.first(where: { $0.id == forcedProfileId && $0.isEnabled }) {
+            matchedProfile = forcedProfile
+            activeProfileName = forcedProfile.name
+        } else {
+            matchedProfile = profileService.matchProfile(bundleIdentifier: activeApp.bundleId, url: nil)
+            activeProfileName = matchedProfile?.name
+        }
 
         // Apply gain boost: profile override ?? global setting
         let effectiveWhisperMode = matchedProfile?.whisperModeOverride ?? whisperModeEnabled
@@ -315,7 +340,8 @@ final class DictationViewModel: ObservableObject {
 
         // Resolve browser URL asynchronously to avoid blocking the main thread.
         // If a more specific URL profile matches, update the active profile on the fly.
-        if let bundleId = activeApp.bundleId {
+        // Skip URL resolution when a forced profile is set (profile hotkey overrides app matching).
+        if forcedProfileId == nil, let bundleId = activeApp.bundleId {
             urlResolutionTask = Task { [weak self] in
                 guard let self else { return }
                 logger.info("URL resolution: starting for bundleId=\(bundleId)")
@@ -524,9 +550,28 @@ final class DictationViewModel: ObservableObject {
                     }
                 } else if let targetCode = translationTarget {
                     let ts = self.translationService
+                    let sourceRaw = result.detectedLanguage ?? language
+                    let sourceNormalized = TranslationService.normalizedLanguageIdentifier(from: sourceRaw)
+                    if let sourceRaw {
+                        if let sourceNormalized {
+                            if sourceRaw.caseInsensitiveCompare(sourceNormalized) != .orderedSame {
+                                logger.info("Translation source normalized \(sourceRaw, privacy: .public) -> \(sourceNormalized, privacy: .public)")
+                            }
+                        } else {
+                            logger.warning("Translation source language \(sourceRaw, privacy: .public) invalid, using auto source")
+                        }
+                    }
+                    let sourceLanguage = sourceNormalized.map { Locale.Language(identifier: $0) }
                     llmHandler = { text in
-                        let target = Locale.Language(identifier: targetCode)
-                        return try await ts.translate(text: text, to: target)
+                        guard let targetNormalized = TranslationService.normalizedLanguageIdentifier(from: targetCode) else {
+                            logger.error("Translation target language invalid: \(targetCode, privacy: .public)")
+                            return text
+                        }
+                        if targetCode.caseInsensitiveCompare(targetNormalized) != .orderedSame {
+                            logger.info("Translation target normalized \(targetCode, privacy: .public) -> \(targetNormalized, privacy: .public)")
+                        }
+                        let target = Locale.Language(identifier: targetNormalized)
+                        return try await ts.translate(text: text, to: target, source: sourceLanguage)
                     }
                 } else {
                     llmHandler = nil
@@ -635,6 +680,7 @@ final class DictationViewModel: ObservableObject {
                 soundService.play(.error, enabled: soundFeedbackEnabled)
                 showError(error.localizedDescription)
                 matchedProfile = nil
+                forcedProfileId = nil
                 capturedActiveApp = nil
                 activeProfileName = nil
             }
@@ -706,6 +752,22 @@ final class DictationViewModel: ObservableObject {
         }
     }
 
+    /// Register profile hotkeys after app is fully initialized.
+    /// Called from ServiceContainer.initialize() to avoid early monitor setup.
+    func registerInitialProfileHotkeys() {
+        syncProfileHotkeys(profileService.profiles)
+    }
+
+    private func syncProfileHotkeys(_ profiles: [Profile]) {
+        let entries = profiles
+            .filter { $0.isEnabled }
+            .compactMap { profile -> (id: UUID, hotkey: UnifiedHotkey)? in
+                guard let hotkey = profile.hotkey else { return nil }
+                return (id: profile.id, hotkey: hotkey)
+            }
+        hotkeyService.registerProfileHotkeys(entries)
+    }
+
     private func resetDictationState() {
         errorResetTask?.cancel()
         insertingResetTask?.cancel()
@@ -715,6 +777,7 @@ final class DictationViewModel: ObservableObject {
         state = .idle
         partialText = ""
         matchedProfile = nil
+        forcedProfileId = nil
         capturedActiveApp = nil
         capturedSurroundingText = nil
         activeProfileName = nil

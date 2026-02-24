@@ -2,6 +2,73 @@ import Foundation
 import Combine
 import AppKit
 
+// MARK: - Supporting Types
+
+enum HistoryDateGroup: Int, CaseIterable, Identifiable {
+    case today, yesterday, thisWeek, lastMonth, older
+
+    var id: Int { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .today: String(localized: "Today")
+        case .yesterday: String(localized: "Yesterday")
+        case .thisWeek: String(localized: "This Week")
+        case .lastMonth: String(localized: "Last Month")
+        case .older: String(localized: "Older")
+        }
+    }
+
+    static func group(for date: Date) -> HistoryDateGroup {
+        let cal = Calendar.current
+        if cal.isDateInToday(date) { return .today }
+        if cal.isDateInYesterday(date) { return .yesterday }
+        if let weekInterval = cal.dateInterval(of: .weekOfYear, for: Date()),
+           date >= weekInterval.start { return .thisWeek }
+        if let monthInterval = cal.dateInterval(of: .month, for: Date()),
+           date >= monthInterval.start { return .lastMonth }
+        return .older
+    }
+}
+
+struct HistorySection: Identifiable {
+    let group: HistoryDateGroup
+    let records: [TranscriptionRecord]
+    var id: Int { group.id }
+}
+
+enum HistoryTimeRange: Int, CaseIterable, Identifiable {
+    case sevenDays, thirtyDays, ninetyDays, all
+
+    var id: Int { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .sevenDays: String(localized: "Last 7 Days")
+        case .thirtyDays: String(localized: "Last 30 Days")
+        case .ninetyDays: String(localized: "Last 90 Days")
+        case .all: String(localized: "All Time")
+        }
+    }
+
+    var cutoffDate: Date? {
+        switch self {
+        case .sevenDays: Calendar.current.date(byAdding: .day, value: -7, to: Date())
+        case .thirtyDays: Calendar.current.date(byAdding: .day, value: -30, to: Date())
+        case .ninetyDays: Calendar.current.date(byAdding: .day, value: -90, to: Date())
+        case .all: nil
+        }
+    }
+}
+
+struct AppEntry: Identifiable, Hashable {
+    let bundleId: String
+    let name: String
+    var id: String { bundleId }
+}
+
+// MARK: - ViewModel
+
 @MainActor
 final class HistoryViewModel: ObservableObject {
     nonisolated(unsafe) static var _shared: HistoryViewModel?
@@ -19,6 +86,12 @@ final class HistoryViewModel: ObservableObject {
     @Published var editedText: String = ""
     @Published var correctionSuggestions: [CorrectionSuggestion] = []
     @Published var showCorrectionBanner: Bool = false
+
+    // Filter state
+    @Published var selectedAppFilter: String? = nil
+    @Published var selectedTimeRange: HistoryTimeRange = .all
+    @Published var collapsedGroups: Set<HistoryDateGroup> = []
+    @Published var showDeleteAllVisibleConfirmation: Bool = false
 
     private let historyService: HistoryService
     private let textDiffService: TextDiffService
@@ -46,13 +119,79 @@ final class HistoryViewModel: ObservableObject {
     }
 
     var filteredRecords: [TranscriptionRecord] {
-        guard !searchQuery.isEmpty else { return records }
-        return historyService.searchRecords(query: searchQuery)
+        var result = records
+
+        // Time range filter
+        if let cutoff = selectedTimeRange.cutoffDate {
+            result = result.filter { $0.timestamp >= cutoff }
+        }
+
+        // App filter
+        if let appFilter = selectedAppFilter {
+            result = result.filter { $0.appBundleIdentifier == appFilter }
+        }
+
+        // Search query
+        if !searchQuery.isEmpty {
+            let lowered = searchQuery.lowercased()
+            result = result.filter {
+                $0.finalText.lowercased().contains(lowered)
+                || ($0.appName?.lowercased().contains(lowered) ?? false)
+                || ($0.appDomain?.lowercased().contains(lowered) ?? false)
+            }
+        }
+
+        return result
+    }
+
+    var groupedSections: [HistorySection] {
+        let filtered = filteredRecords
+        var buckets: [HistoryDateGroup: [TranscriptionRecord]] = [:]
+        for record in filtered {
+            let group = HistoryDateGroup.group(for: record.timestamp)
+            buckets[group, default: []].append(record)
+        }
+        return HistoryDateGroup.allCases.compactMap { group in
+            guard let records = buckets[group], !records.isEmpty else { return nil }
+            return HistorySection(group: group, records: records)
+        }
+    }
+
+    var availableApps: [AppEntry] {
+        var counts: [String: (name: String, count: Int)] = [:]
+        for record in records {
+            guard let bundleId = record.appBundleIdentifier,
+                  let name = record.appName else { continue }
+            counts[bundleId, default: (name: name, count: 0)].count += 1
+        }
+        return counts.sorted { $0.value.count > $1.value.count }
+            .map { AppEntry(bundleId: $0.key, name: $0.value.name) }
+    }
+
+    var hasActiveFilters: Bool {
+        selectedAppFilter != nil || selectedTimeRange != .all
     }
 
     var totalRecords: Int { historyService.totalRecords }
     var totalWords: Int { historyService.totalWords }
     var totalDuration: Double { historyService.totalDuration }
+
+    var visibleRecordCount: Int { filteredRecords.count }
+    var visibleWordCount: Int { filteredRecords.reduce(0) { $0 + $1.wordsCount } }
+
+    func toggleSection(_ group: HistoryDateGroup) {
+        if collapsedGroups.contains(group) {
+            collapsedGroups.remove(group)
+        } else {
+            collapsedGroups.insert(group)
+        }
+    }
+
+    func clearAllFilters() {
+        selectedAppFilter = nil
+        selectedTimeRange = .all
+        searchQuery = ""
+    }
 
     func selectRecord(_ record: TranscriptionRecord?) {
         cancelEditing()
@@ -113,9 +252,14 @@ final class HistoryViewModel: ObservableObject {
         let toDelete = selectedRecords
         selectedRecordIDs = []
         cancelEditing()
-        for record in toDelete {
-            historyService.deleteRecord(record)
-        }
+        historyService.deleteRecords(toDelete)
+    }
+
+    func deleteAllVisible() {
+        let toDelete = filteredRecords
+        selectedRecordIDs = []
+        cancelEditing()
+        historyService.deleteRecords(toDelete)
     }
 
     func clearAll() {

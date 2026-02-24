@@ -49,6 +49,9 @@ enum UserDefaultsKeys {
     // MARK: - Prompt Palette
     static let promptDisplayDuration = "promptDisplayDuration"
 
+    // MARK: - History
+    static let historyRetentionDays = "historyRetentionDays"
+
     // MARK: - Notch Indicator
     static let notchIndicatorVisibility = "notchIndicatorVisibility"
     static let notchIndicatorLeftContent = "notchIndicatorLeftContent"

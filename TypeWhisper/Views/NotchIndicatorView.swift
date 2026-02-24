@@ -244,6 +244,17 @@ struct NotchIndicatorView: View {
             }
         case .battery:
             batteryView
+        case .profile:
+            if let name = viewModel.activeProfileName {
+                Text(name)
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(.white.opacity(0.2), in: Capsule())
+            } else {
+                Color.clear
+            }
         case .none:
             Color.clear
         }

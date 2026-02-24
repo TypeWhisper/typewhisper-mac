@@ -305,6 +305,7 @@ struct GeneralSettingsView: View {
         Text(String(localized: "Waveform")).tag(DictationViewModel.NotchIndicatorContent.waveform)
         Text(String(localized: "Clock")).tag(DictationViewModel.NotchIndicatorContent.clock)
         Text(String(localized: "Battery")).tag(DictationViewModel.NotchIndicatorContent.battery)
+        Text(String(localized: "Profile")).tag(DictationViewModel.NotchIndicatorContent.profile)
         Text(String(localized: "None")).tag(DictationViewModel.NotchIndicatorContent.none)
     }
 
