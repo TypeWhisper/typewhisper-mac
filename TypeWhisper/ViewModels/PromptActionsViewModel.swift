@@ -14,6 +14,9 @@ class PromptActionsViewModel: ObservableObject {
     @Published var promptActions: [PromptAction] = []
     @Published var error: String?
 
+    // Preset library
+    @Published var showingPresetLibrary = false
+
     // Editor state
     @Published var isEditing = false
     @Published var isCreatingNew = false
@@ -125,8 +128,12 @@ class PromptActionsViewModel: ObservableObject {
         promptActionService.toggleAction(action)
     }
 
-    func loadPresets() {
-        promptActionService.seedPresetsIfNeeded()
+    func isPresetAdded(_ preset: PromptAction) -> Bool {
+        promptActionService.isPresetAdded(preset)
+    }
+
+    func addPreset(_ preset: PromptAction) {
+        promptActionService.addPreset(preset)
     }
 
     func clearError() {

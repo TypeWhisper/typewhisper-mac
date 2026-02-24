@@ -31,6 +31,13 @@ struct PromptActionsSettingsView: View {
                     Spacer()
 
                     Button {
+                        viewModel.showingPresetLibrary = true
+                    } label: {
+                        Image(systemName: "sparkles")
+                    }
+                    .help(String(localized: "Preset Library"))
+
+                    Button {
                         viewModel.startCreating()
                     } label: {
                         Image(systemName: "plus")
@@ -55,6 +62,9 @@ struct PromptActionsSettingsView: View {
         .padding(.horizontal, 8)
         .sheet(isPresented: $viewModel.isEditing) {
             PromptActionEditorSheet(viewModel: viewModel)
+        }
+        .sheet(isPresented: $viewModel.showingPresetLibrary) {
+            PresetLibrarySheet(viewModel: viewModel)
         }
         .alert(String(localized: "Error"), isPresented: Binding(
             get: { viewModel.error != nil },
@@ -112,8 +122,10 @@ struct PromptActionsSettingsView: View {
                     .frame(maxWidth: 320)
 
                 HStack(spacing: 12) {
-                    Button(String(localized: "Load Presets")) {
-                        viewModel.loadPresets()
+                    Button {
+                        viewModel.showingPresetLibrary = true
+                    } label: {
+                        Label(String(localized: "Preset Library"), systemImage: "sparkles")
                     }
                     .buttonStyle(.borderedProminent)
 
@@ -443,5 +455,98 @@ private struct PromptActionEditorSheet: View {
         .onAppear {
             focusedField = .name
         }
+    }
+}
+
+// MARK: - Preset Library Sheet
+
+private struct PresetLibrarySheet: View {
+    @ObservedObject var viewModel: PromptActionsViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(String(localized: "Preset Library"))
+                    .font(.headline)
+                Spacer()
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                        .font(.title3)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding()
+            .background(Color(NSColor.windowBackgroundColor))
+
+            Divider()
+
+            ScrollView {
+                LazyVStack(spacing: 8) {
+                    ForEach(PromptAction.presets, id: \.name) { preset in
+                        PresetLibraryRow(preset: preset, viewModel: viewModel)
+                    }
+                }
+                .padding()
+            }
+        }
+        .frame(minWidth: 400, idealWidth: 440, minHeight: 340, idealHeight: 400)
+    }
+}
+
+private struct PresetLibraryRow: View {
+    let preset: PromptAction
+    @ObservedObject var viewModel: PromptActionsViewModel
+    @State private var justAdded = false
+
+    private var isAdded: Bool {
+        viewModel.isPresetAdded(preset)
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: preset.icon)
+                .font(.system(size: 16))
+                .foregroundColor(.accentColor)
+                .frame(width: 28, height: 28)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(preset.name)
+                    .font(.callout)
+                    .fontWeight(.medium)
+                Text(preset.prompt)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            if isAdded || justAdded {
+                Label(String(localized: "Added"), systemImage: "checkmark")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Button(String(localized: "Add")) {
+                    viewModel.addPreset(preset)
+                    justAdded = true
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(NSColor.controlBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+        )
     }
 }

@@ -57,25 +57,6 @@ class PromptActionService: ObservableObject {
         }
     }
 
-    func seedPresetsIfNeeded() {
-        guard let context = modelContext else { return }
-
-        let existingNames = Set(promptActions.map(\.name))
-        let newPresets = PromptAction.presets.filter { !existingNames.contains($0.name) }
-        guard !newPresets.isEmpty else { return }
-
-        for preset in newPresets {
-            context.insert(preset)
-        }
-
-        do {
-            try context.save()
-            loadActions()
-        } catch {
-            logger.error("Failed to seed presets: \(error.localizedDescription)")
-        }
-    }
-
     func addAction(name: String, prompt: String, icon: String = "sparkles", providerType: String? = nil, cloudModel: String? = nil, targetActionPluginId: String? = nil) {
         guard let context = modelContext else { return }
 
@@ -142,6 +123,32 @@ class PromptActionService: ObservableObject {
             loadActions()
         } catch {
             logger.error("Failed to toggle prompt action: \(error.localizedDescription)")
+        }
+    }
+
+    func isPresetAdded(_ preset: PromptAction) -> Bool {
+        promptActions.contains { $0.name == preset.name }
+    }
+
+    func addPreset(_ preset: PromptAction) {
+        guard let context = modelContext else { return }
+
+        let maxOrder = promptActions.map(\.sortOrder).max() ?? -1
+        let action = PromptAction(
+            name: preset.name,
+            prompt: preset.prompt,
+            icon: preset.icon,
+            isPreset: true,
+            sortOrder: maxOrder + 1
+        )
+
+        context.insert(action)
+
+        do {
+            try context.save()
+            loadActions()
+        } catch {
+            logger.error("Failed to add preset: \(error.localizedDescription)")
         }
     }
 

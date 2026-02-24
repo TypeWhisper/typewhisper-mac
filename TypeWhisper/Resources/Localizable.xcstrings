@@ -474,6 +474,16 @@
         }
       }
     },
+    "Added" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hinzugefügt"
+          }
+        }
+      }
+    },
     "Adjust so the red line sits above the background noise level. Sound below the line counts as silence." : {
       "localizations" : {
         "de" : {
@@ -2206,6 +2216,7 @@
       }
     },
     "Load Presets" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -3006,6 +3017,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Vorlage"
+          }
+        }
+      }
+    },
+    "Preset Library" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorlagen-Bibliothek"
           }
         }
       }
