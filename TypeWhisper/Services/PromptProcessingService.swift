@@ -4,6 +4,12 @@ import os.log
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "PromptProcessingService")
 
+struct DictationContext {
+    let appName: String?
+    let url: String?
+    let surroundingText: TextInsertionService.SurroundingTextContext?
+}
+
 @MainActor
 class PromptProcessingService: ObservableObject {
     @Published var selectedProviderId: String {
@@ -104,15 +110,19 @@ class PromptProcessingService: ObservableObject {
         }
     }
 
-    func process(prompt: String, text: String, providerOverride: String? = nil, cloudModelOverride: String? = nil) async throws -> String {
+    func process(prompt: String, text: String, providerOverride: String? = nil, cloudModelOverride: String? = nil, context: DictationContext? = nil) async throws -> String {
         let effectiveId = providerOverride ?? selectedProviderId
+        var effectivePrompt = prompt
+        if let context, let contextBlock = buildContextBlock(context) {
+            effectivePrompt = prompt + contextBlock
+        }
 
         if effectiveId == Self.appleIntelligenceId {
             guard let provider = appleIntelligenceProvider, provider.isAvailable else {
                 throw LLMError.notAvailable
             }
             logger.info("Processing prompt with Apple Intelligence")
-            let result = try await provider.process(systemPrompt: prompt, userText: text)
+            let result = try await provider.process(systemPrompt: effectivePrompt, userText: text)
             logger.info("Prompt processing complete, result length: \(result.count)")
             return result
         }
@@ -128,11 +138,36 @@ class PromptProcessingService: ObservableObject {
         let model = cloudModelOverride ?? selectedCloudModel
         logger.info("Processing prompt with plugin \(effectiveId)")
         let result = try await plugin.process(
-            systemPrompt: prompt,
+            systemPrompt: effectivePrompt,
             userText: text,
             model: model.isEmpty ? nil : model
         )
         logger.info("Prompt processing complete, result length: \(result.count)")
         return result
+    }
+
+    private func buildContextBlock(_ context: DictationContext) -> String? {
+        var sections: [String] = []
+
+        if let appName = context.appName {
+            sections.append("Application: \(appName)")
+        }
+        if let url = context.url {
+            sections.append("URL: \(url)")
+        }
+        if let surrounding = context.surroundingText {
+            if !surrounding.textBefore.isEmpty {
+                sections.append("Text before cursor:\n\"\(surrounding.textBefore)\"")
+            }
+            if let selected = surrounding.selectedText, !selected.isEmpty {
+                sections.append("Selected text:\n\"\(selected)\"")
+            }
+            if !surrounding.textAfter.isEmpty {
+                sections.append("Text after cursor:\n\"\(surrounding.textAfter)\"")
+            }
+        }
+
+        guard !sections.isEmpty else { return nil }
+        return "\n\n---\nContext:\n\(sections.joined(separator: "\n\n"))\n---"
     }
 }
