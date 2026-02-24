@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HistoryView: View {
     @ObservedObject private var viewModel = HistoryViewModel.shared
+    @State private var showClearAllConfirmation = false
 
     var body: some View {
         HSplitView {
@@ -105,7 +106,7 @@ struct HistoryView: View {
                     Spacer()
                     if viewModel.totalRecords > 0 {
                         Button(String(localized: "Clear All"), role: .destructive) {
-                            viewModel.clearAll()
+                            showClearAllConfirmation = true
                         }
                         .buttonStyle(.plain)
                         .font(.caption)
@@ -139,6 +140,16 @@ struct HistoryView: View {
             }
         }
         .frame(minWidth: 600, minHeight: 400)
+        .confirmationDialog(
+            String(localized: "Are you sure you want to delete all history?"),
+            isPresented: $showClearAllConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "Delete All"), role: .destructive) {
+                viewModel.clearAll()
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        }
     }
 }
 
