@@ -221,8 +221,73 @@ enum InsertionResult {
         let element: AXUIElement
     }
 
+    struct SurroundingTextContext: @unchecked Sendable {
+        let textBefore: String
+        let selectedText: String?
+        let textAfter: String
+    }
+
     func getSelectedText() -> String? {
         getTextSelection()?.text
+    }
+
+    func getSurroundingText(limit: Int = 500) -> SurroundingTextContext? {
+        guard isAccessibilityGranted else { return nil }
+
+        let systemWide = AXUIElementCreateSystemWide()
+        var focusedElement: AnyObject?
+        guard AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focusedElement) == .success else {
+            return nil
+        }
+
+        let element = focusedElement as! AXUIElement
+
+        // Get full text value
+        var textValue: AnyObject?
+        guard AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &textValue) == .success,
+              let fullText = textValue as? String, !fullText.isEmpty else {
+            return nil
+        }
+
+        // Get selected text range (cursor position)
+        var rangeValue: AnyObject?
+        guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeValue) == .success else {
+            return nil
+        }
+
+        var cfRange = CFRange(location: 0, length: 0)
+        guard AXValueGetValue(rangeValue as! AXValue, .cfRange, &cfRange) else {
+            return nil
+        }
+
+        let cursorLocation = cfRange.location
+        let selectionLength = cfRange.length
+
+        // Extract text before cursor (max limit chars)
+        let beforeStart = max(0, cursorLocation - limit)
+        let beforeRange = fullText.index(fullText.startIndex, offsetBy: min(beforeStart, fullText.count))
+            ..< fullText.index(fullText.startIndex, offsetBy: min(cursorLocation, fullText.count))
+        let textBefore = String(fullText[beforeRange])
+
+        // Extract selected text (if any)
+        let selectedText: String?
+        if selectionLength > 0 {
+            let selEnd = min(cursorLocation + selectionLength, fullText.count)
+            let selRange = fullText.index(fullText.startIndex, offsetBy: min(cursorLocation, fullText.count))
+                ..< fullText.index(fullText.startIndex, offsetBy: selEnd)
+            selectedText = String(fullText[selRange])
+        } else {
+            selectedText = nil
+        }
+
+        // Extract text after cursor/selection (max limit chars)
+        let afterStart = cursorLocation + selectionLength
+        let afterEnd = min(afterStart + limit, fullText.count)
+        let afterRange = fullText.index(fullText.startIndex, offsetBy: min(afterStart, fullText.count))
+            ..< fullText.index(fullText.startIndex, offsetBy: afterEnd)
+        let textAfter = String(fullText[afterRange])
+
+        return SurroundingTextContext(textBefore: textBefore, selectedText: selectedText, textAfter: textAfter)
     }
 
     /// Returns the selected text and the AXUIElement, so the selection can be replaced later.
