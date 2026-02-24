@@ -102,6 +102,14 @@ struct HistoryView: View {
                     Text("\(viewModel.totalRecords) \(String(localized: "entries"))")
                     Spacer()
                     Text("\(viewModel.totalWords) \(String(localized: "words"))")
+                    Spacer()
+                    if viewModel.totalRecords > 0 {
+                        Button(String(localized: "Clear All"), role: .destructive) {
+                            viewModel.clearAll()
+                        }
+                        .buttonStyle(.plain)
+                        .font(.caption)
+                    }
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
