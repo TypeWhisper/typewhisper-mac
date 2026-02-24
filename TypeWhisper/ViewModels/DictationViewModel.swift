@@ -132,6 +132,7 @@ final class DictationViewModel: ObservableObject {
     private let postProcessingPipeline: PostProcessingPipeline
     private var matchedProfile: Profile?
     private var capturedActiveApp: (name: String?, bundleId: String?, url: String?)?
+    private var capturedSurroundingText: TextInsertionService.SurroundingTextContext?
 
     private var cancellables = Set<AnyCancellable>()
     private var recordingTimer: Timer?
@@ -304,6 +305,7 @@ final class DictationViewModel: ObservableObject {
         // Match profile based on active app — store for reuse in stopDictation
         let activeApp = textInsertionService.captureActiveApp()
         capturedActiveApp = activeApp
+        capturedSurroundingText = textInsertionService.getSurroundingText()
         matchedProfile = profileService.matchProfile(bundleIdentifier: activeApp.bundleId, url: nil)
         activeProfileName = matchedProfile?.name
 
@@ -423,6 +425,14 @@ final class DictationViewModel: ObservableObject {
         return nil
     }
 
+    private var effectiveSendAppContext: Bool {
+        matchedProfile?.sendAppContext ?? false
+    }
+
+    private var effectiveSendSurroundingText: Bool {
+        matchedProfile?.sendSurroundingText ?? false
+    }
+
     private func stopDictation() {
         guard state == .recording || state == .paused else { return }
 
@@ -505,11 +515,24 @@ final class DictationViewModel: ObservableObject {
                     let providerOverride = promptAction.providerType
                     let modelOverride = promptAction.cloudModel
                     let prompt = promptAction.prompt
+
+                    let dictationContext: DictationContext?
+                    if self.effectiveSendAppContext || self.effectiveSendSurroundingText {
+                        dictationContext = DictationContext(
+                            appName: self.effectiveSendAppContext ? activeApp.name : nil,
+                            url: self.effectiveSendAppContext ? activeApp.url : nil,
+                            surroundingText: self.effectiveSendSurroundingText ? self.capturedSurroundingText : nil
+                        )
+                    } else {
+                        dictationContext = nil
+                    }
+
                     llmHandler = { text in
                         try await pps.process(
                             prompt: prompt, text: text,
                             providerOverride: providerOverride,
-                            cloudModelOverride: modelOverride
+                            cloudModelOverride: modelOverride,
+                            context: dictationContext
                         )
                     }
                 } else if let targetCode = translationTarget {
@@ -706,6 +729,7 @@ final class DictationViewModel: ObservableObject {
         partialText = ""
         matchedProfile = nil
         capturedActiveApp = nil
+        capturedSurroundingText = nil
         activeProfileName = nil
         actionFeedbackMessage = nil
         actionFeedbackIcon = nil
