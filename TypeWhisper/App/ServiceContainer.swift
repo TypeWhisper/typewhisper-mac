@@ -16,7 +16,6 @@ final class ServiceContainer: ObservableObject {
     let profileService: ProfileService
     let translationService: TranslationService
     let audioDuckingService: AudioDuckingService
-    let mediaPlaybackService: MediaPlaybackService
     let dictionaryService: DictionaryService
     let snippetService: SnippetService
     let soundService: SoundService
@@ -53,7 +52,6 @@ final class ServiceContainer: ObservableObject {
         profileService = ProfileService()
         translationService = TranslationService()
         audioDuckingService = AudioDuckingService()
-        mediaPlaybackService = MediaPlaybackService()
         dictionaryService = DictionaryService()
         snippetService = SnippetService()
         soundService = SoundService()
@@ -79,7 +77,6 @@ final class ServiceContainer: ObservableObject {
             profileService: profileService,
             translationService: translationService,
             audioDuckingService: audioDuckingService,
-            mediaPlaybackService: mediaPlaybackService,
             dictionaryService: dictionaryService,
             snippetService: snippetService,
             soundService: soundService,

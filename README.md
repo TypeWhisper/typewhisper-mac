@@ -31,6 +31,10 @@ Speech-to-text and AI text processing for macOS. Transcribe audio using on-devic
 </p>
 
 <p align="center">
+  <img src=".github/screenshots/general.png" width="340" alt="General Settings">
+</p>
+
+<p align="center">
   <img src=".github/screenshots/history.png" width="700" alt="Transcription History">
 </p>
 
@@ -56,27 +60,28 @@ Speech-to-text and AI text processing for macOS. Transcribe audio using on-devic
 
 - **System-wide** - Push-to-talk, toggle, or hybrid mode via global hotkey, auto-pastes into any app
 - **Modifier-key hotkeys** - Use a single modifier key (Command, Shift, Option, Control) as your hotkey
+- **Silence-pause mode** - Continuous dictation that automatically pauses when silence is detected
+- **Global default prompt** - Set a default LLM prompt that is applied to all transcriptions automatically
 - **Whisper mode** - Boosted microphone gain for quiet speech
-- **Media pause** - Automatically pauses media playback during recording
 - **Sound feedback** - Audio cues for recording start, transcription success, and errors
 - **Microphone selection** - Choose a specific input device with live preview
 
 ### AI Processing
 
-- **Custom prompts** - Process transcriptions (or any text) with LLM prompts. 8 presets included (Translate, Formal, Summarize, Fix Grammar, Email, List, Shorter, Explain). Standalone Prompt Palette via global hotkey for text processing without dictation
+- **Custom prompts** - Process transcriptions (or any text) with LLM prompts. 8 presets included (Translate, Formal, Summarize, Fix Grammar, Email, List, Shorter, Explain). Standalone Prompt Palette via global hotkey - a floating panel for AI text processing independent of dictation
 - **LLM providers** - Apple Intelligence (macOS 26+), Groq, OpenAI, and Gemini with per-prompt provider and model override
 - **Translation** - Translate transcriptions on-device using Apple Translate
 
 ### Personalization
 
-- **Profiles** - Per-app and per-website overrides for language, task, engine, whisper mode, and prompt. Match by app (bundle ID) and/or domain with subdomain support
+- **Profiles** - Per-app and per-website overrides for language, task, engine, whisper mode, prompt, hotkey, and auto-submit. Match by app (bundle ID) and/or domain with subdomain support
 - **Dictionary** - Terms improve cloud recognition accuracy. Corrections fix common transcription mistakes automatically. Auto-learns from manual corrections. Includes importable term packs
 - **Snippets** - Text shortcuts with trigger/replacement. Supports placeholders like `{{DATE}}`, `{{TIME}}`, and `{{CLIPBOARD}}`
-- **History** - Searchable transcription history with inline editing, correction detection, and app context tracking
+- **History** - Searchable transcription history with inline editing, correction detection, app context tracking, timeline grouping, filters, bulk delete, multi-select export, auto-retention, and a standalone window accessible from the tray menu
 
 ### Integration & Extensibility
 
-- **Plugin system** - Extend TypeWhisper with custom LLM providers, transcription engines, and post-processors. Groq, OpenAI, and Gemini ship as bundled plugins. See [Plugins/README.md](Plugins/README.md)
+- **Plugin system** - Extend TypeWhisper with custom LLM providers, transcription engines, post-processors, and action plugins. Groq, OpenAI, Gemini, Linear, and Webhook ship as bundled plugins. Linear plugin enables voice-to-issue creation. See [Plugins/README.md](Plugins/README.md)
 - **HTTP API** - Local REST API for integration with external tools and scripts
 - **CLI tool** - Shell-friendly transcription via the command line
 
@@ -115,7 +120,7 @@ Speech-to-text and AI text processing for macOS. Transcribe audio using on-devic
    open TypeWhisper.xcodeproj
    ```
 
-3. Select the TypeWhisper scheme and build (Cmd+B). Swift Package dependencies (WhisperKit, FluidAudio, KeyboardShortcuts) resolve automatically.
+3. Select the TypeWhisper scheme and build (Cmd+B). Swift Package dependencies (WhisperKit, FluidAudio, Sparkle, TypeWhisperPluginSDK) resolve automatically.
 
 4. Run the app. It appears as a menu bar icon - open Settings to download a model.
 
@@ -181,6 +186,39 @@ curl http://localhost:8978/v1/models
 }
 ```
 
+### History
+
+```bash
+# Search history
+curl "http://localhost:8978/v1/history?q=meeting&limit=10&offset=0"
+
+# Delete entry
+curl -X DELETE "http://localhost:8978/v1/history?id=<uuid>"
+```
+
+### Profiles
+
+```bash
+# List all profiles
+curl http://localhost:8978/v1/profiles
+
+# Toggle a profile on/off
+curl -X PUT "http://localhost:8978/v1/profiles/toggle?id=<uuid>"
+```
+
+### Dictation Control
+
+```bash
+# Start dictation
+curl -X POST http://localhost:8978/v1/dictation/start
+
+# Stop dictation
+curl -X POST http://localhost:8978/v1/dictation/stop
+
+# Check dictation status
+curl http://localhost:8978/v1/dictation/status
+```
+
 ## CLI Tool
 
 TypeWhisper includes a command-line tool for shell-friendly transcription. It connects to the running API server.
@@ -232,7 +270,7 @@ Profiles let you configure transcription settings per application or website. Fo
 - **github.com** - English language (matches in any browser)
 - **docs.google.com** - German language, translate to English
 
-Create profiles in Settings > Profiles. Assign apps and/or URL patterns, set language/task/engine overrides, assign a custom prompt for automatic post-processing, and adjust priority. URL patterns support subdomain matching - e.g. `google.com` also matches `docs.google.com`. The domain autocomplete suggests domains from your transcription history.
+Create profiles in Settings > Profiles. Assign apps and/or URL patterns, set language/task/engine overrides, assign a custom prompt for automatic post-processing, configure a per-profile hotkey, enable auto-submit (automatically sends text in chat apps), and adjust priority. URL patterns support subdomain matching - e.g. `google.com` also matches `docs.google.com`. The domain autocomplete suggests domains from your transcription history.
 
 When you start dictating, TypeWhisper matches the active app and browser URL against your profiles with the following priority:
 1. **App + URL match** - highest specificity (e.g. Chrome + github.com)
@@ -245,9 +283,9 @@ Multiple engines can be loaded simultaneously for instant switching between prof
 
 ## Plugins
 
-TypeWhisper supports plugins for adding custom LLM providers, transcription engines, and post-processors. Plugins are macOS `.bundle` files placed in `~/Library/Application Support/TypeWhisper/Plugins/`.
+TypeWhisper supports plugins for adding custom LLM providers, transcription engines, post-processors, and action plugins. Plugins are macOS `.bundle` files placed in `~/Library/Application Support/TypeWhisper/Plugins/`.
 
-The built-in cloud providers (Groq, OpenAI, Gemini) are implemented as bundled plugins and serve as reference implementations.
+The built-in cloud providers (Groq, OpenAI, Gemini, Linear, Webhook) are implemented as bundled plugins and serve as reference implementations.
 
 See [Plugins/README.md](Plugins/README.md) for the full plugin development guide, including the event bus, host services API, and manifest format.
 
@@ -256,7 +294,7 @@ See [Plugins/README.md](Plugins/README.md) for the full plugin development guide
 ```
 TypeWhisper/
 ├── typewhisper-cli/           # Command-line tool (status, models, transcribe)
-├── Plugins/                # Bundled plugins (Groq, OpenAI, Gemini, Webhook)
+├── Plugins/                # Bundled plugins (Groq, OpenAI, Gemini, Linear, Webhook)
 ├── TypeWhisperPluginSDK/   # Plugin SDK (Swift package)
 ├── App/                    # App entry point, dependency injection
 ├── Models/                 # Data models (ModelInfo, TranscriptionResult, EngineType, Profile, etc.)
@@ -277,8 +315,10 @@ TypeWhisper/
 │   ├── SnippetService      # Text snippets with placeholders
 │   ├── PromptActionService # Custom prompt management (SwiftData)
 │   ├── PromptProcessingService # LLM orchestration for prompt execution
+│   ├── PluginManager       # Plugin discovery, loading, and lifecycle
+│   ├── PostProcessingPipeline # Priority-based text processing chain
+│   ├── EventBus            # Typed publish/subscribe event system
 │   ├── TranslationService  # On-device translation via Apple Translate
-│   ├── MediaPlaybackService # Pause/resume media during recording
 │   └── SoundService        # Audio feedback for recording events
 ├── ViewModels/             # MVVM view models with Combine
 ├── Views/                  # SwiftUI views

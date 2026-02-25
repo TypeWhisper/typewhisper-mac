@@ -62,6 +62,10 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
 
     func startPreview() {
         guard !isPreviewActive else { return }
+        guard AVAudioApplication.shared.recordPermission == .granted else {
+            logger.warning("Microphone permission not granted, cannot start preview")
+            return
+        }
 
         let engine = AVAudioEngine()
 
@@ -95,6 +99,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         } catch {
             logger.error("Failed to start preview engine: \(error.localizedDescription)")
             inputNode.removeTap(onBus: 0)
+            engine.stop()
         }
     }
 

@@ -18,7 +18,7 @@ jobs:
     runs-on: macos-15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
@@ -190,12 +190,77 @@ jobs:
           ASSET_DMG="build/Build/Products/Release/TypeWhisper-${TAG}.dmg"
           ASSET_ZIP="build/Build/Products/Release/TypeWhisper-${TAG}.zip"
 
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists. Uploading assets..."
+          # Check if a draft release already exists (manual feature release notes)
+          EXISTING_DRAFT=$(gh release view "$TAG" --json isDraft --jq '.isDraft' 2>/dev/null || echo "")
+
+          if [ "$EXISTING_DRAFT" = "true" ]; then
+            echo "Draft release found for $TAG. Uploading assets and publishing..."
+            gh release upload "$TAG" "$ASSET_DMG" "$ASSET_ZIP" --clobber
+            gh release edit "$TAG" --draft=false
+          elif [ "$EXISTING_DRAFT" = "false" ]; then
+            echo "Published release found for $TAG. Uploading assets..."
             gh release upload "$TAG" "$ASSET_DMG" "$ASSET_ZIP" --clobber
           else
-            echo "Creating release $TAG..."
-            gh release create "$TAG" "$ASSET_DMG" "$ASSET_ZIP" --generate-notes
+            echo "No existing release. Generating notes from commits..."
+
+            # Find previous tag
+            PREV_TAG=$(git tag --sort=-v:refname | sed -n '2p')
+
+            if [ -n "$PREV_TAG" ]; then
+              RANGE="${PREV_TAG}..${TAG}"
+            else
+              RANGE="$TAG"
+            fi
+
+            # Parse commits into categories
+            FEATURES=""
+            FIXES=""
+            OTHER=""
+
+            while IFS= read -r line; do
+              # Skip empty lines
+              [ -z "$line" ] && continue
+
+              # Extract message (remove short hash prefix)
+              MSG=$(echo "$line" | sed 's/^[a-f0-9]* //')
+
+              # Filter out noise
+              echo "$MSG" | grep -qiE '^(Merge |chore: bump|chore\(release\)|docs: update README)' && continue
+
+              # Categorize by conventional commit prefix
+              if echo "$MSG" | grep -qE '^feat(\(.*\))?:'; then
+                ENTRY=$(echo "$MSG" | sed 's/^feat\(([^)]*)\)\{0,1\}: //')
+                FEATURES="${FEATURES}- ${ENTRY}\n"
+              elif echo "$MSG" | grep -qE '^fix(\(.*\))?:'; then
+                ENTRY=$(echo "$MSG" | sed 's/^fix\(([^)]*)\)\{0,1\}: //')
+                FIXES="${FIXES}- ${ENTRY}\n"
+              else
+                # Strip any other conventional prefix for cleaner display
+                ENTRY=$(echo "$MSG" | sed 's/^[a-z]*\(([^)]*)\)\{0,1\}: //')
+                OTHER="${OTHER}- ${ENTRY}\n"
+              fi
+            done <<< "$(git log --oneline --no-merges "$RANGE")"
+
+            # Build release notes
+            NOTES=""
+            if [ -n "$FEATURES" ]; then
+              NOTES="${NOTES}## New Features\n${FEATURES}\n"
+            fi
+            if [ -n "$FIXES" ]; then
+              NOTES="${NOTES}## Bug Fixes\n${FIXES}\n"
+            fi
+            if [ -n "$OTHER" ]; then
+              NOTES="${NOTES}## Other Changes\n${OTHER}\n"
+            fi
+
+            # Fallback if no categorized commits
+            if [ -z "$NOTES" ]; then
+              NOTES="Maintenance release ${TAG}"
+            fi
+
+            gh release create "$TAG" "$ASSET_DMG" "$ASSET_ZIP" \
+              --title "$TAG" \
+              --notes "$(printf '%b' "$NOTES")"
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

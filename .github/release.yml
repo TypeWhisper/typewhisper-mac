@@ -1,0 +1,20 @@
+changelog:
+  exclude:
+    labels:
+      - duplicate
+      - invalid
+      - wontfix
+      - question
+    authors:
+      - dependabot
+      - dependabot[bot]
+  categories:
+    - title: "New Features"
+      labels:
+        - enhancement
+    - title: "Bug Fixes"
+      labels:
+        - bug
+    - title: "Other Changes"
+      labels:
+        - "*"

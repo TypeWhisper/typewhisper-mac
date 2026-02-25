@@ -7,7 +7,6 @@ enum UserDefaultsKeys {
     static let whisperModeEnabled = "whisperModeEnabled"
     static let audioDuckingEnabled = "audioDuckingEnabled"
     static let audioDuckingLevel = "audioDuckingLevel"
-    static let mediaPauseEnabled = "mediaPauseEnabled"
     static let soundFeedbackEnabled = "soundFeedbackEnabled"
     static let silencePauseEnabled = "silencePauseEnabled"
     static let silenceAutoStopDuration = "silenceAutoStopDuration"

@@ -199,6 +199,7 @@ struct GeneralSettingsView: View {
                         audioDevice.startPreview()
                     }
                 }
+                .disabled(!audioDevice.isPreviewActive && dictation.needsMicPermission)
 
                 if let name = audioDevice.disconnectedDeviceName {
                     Label(
@@ -260,14 +261,6 @@ struct GeneralSettingsView: View {
             }
 
             #if !APPSTORE
-            Section(String(localized: "Media Playback")) {
-                Toggle(String(localized: "Pause media playback during recording"), isOn: $dictation.mediaPauseEnabled)
-
-                Text(String(localized: "Automatically pauses music and videos while recording."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
             Section(String(localized: "Updates")) {
                 HStack {
                     let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"

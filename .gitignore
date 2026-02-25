@@ -38,3 +38,6 @@ fastlane/test_output/
 .claude/
 .agents/
 .skills/
+
+# Git worktrees
+.worktrees/

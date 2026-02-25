@@ -44,9 +44,6 @@ final class DictationViewModel: ObservableObject {
     @Published var audioDuckingLevel: Double {
         didSet { UserDefaults.standard.set(audioDuckingLevel, forKey: UserDefaultsKeys.audioDuckingLevel) }
     }
-    @Published var mediaPauseEnabled: Bool {
-        didSet { UserDefaults.standard.set(mediaPauseEnabled, forKey: UserDefaultsKeys.mediaPauseEnabled) }
-    }
     @Published var soundFeedbackEnabled: Bool {
         didSet { UserDefaults.standard.set(soundFeedbackEnabled, forKey: UserDefaultsKeys.soundFeedbackEnabled) }
     }
@@ -123,7 +120,6 @@ final class DictationViewModel: ObservableObject {
     private let profileService: ProfileService
     private let translationService: TranslationService
     private let audioDuckingService: AudioDuckingService
-    private let mediaPlaybackService: MediaPlaybackService
     private let dictionaryService: DictionaryService
     private let snippetService: SnippetService
     private let soundService: SoundService
@@ -156,7 +152,6 @@ final class DictationViewModel: ObservableObject {
         profileService: ProfileService,
         translationService: TranslationService,
         audioDuckingService: AudioDuckingService,
-        mediaPlaybackService: MediaPlaybackService,
         dictionaryService: DictionaryService,
         snippetService: SnippetService,
         soundService: SoundService,
@@ -173,7 +168,6 @@ final class DictationViewModel: ObservableObject {
         self.profileService = profileService
         self.translationService = translationService
         self.audioDuckingService = audioDuckingService
-        self.mediaPlaybackService = mediaPlaybackService
         self.dictionaryService = dictionaryService
         self.snippetService = snippetService
         self.soundService = soundService
@@ -187,7 +181,6 @@ final class DictationViewModel: ObservableObject {
         self.whisperModeEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.whisperModeEnabled)
         self.audioDuckingEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.audioDuckingEnabled)
         self.audioDuckingLevel = UserDefaults.standard.object(forKey: UserDefaultsKeys.audioDuckingLevel) as? Double ?? 0.2
-        self.mediaPauseEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.mediaPauseEnabled)
         self.soundFeedbackEnabled = UserDefaults.standard.object(forKey: UserDefaultsKeys.soundFeedbackEnabled) as? Bool ?? true
         self.silencePauseEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.silencePauseEnabled)
         let storedDuration = UserDefaults.standard.object(forKey: UserDefaultsKeys.silenceAutoStopDuration) as? Double ?? 4.0
@@ -381,9 +374,6 @@ final class DictationViewModel: ObservableObject {
             if audioDuckingEnabled {
                 audioDuckingService.duckAudio(to: Float(audioDuckingLevel))
             }
-            if mediaPauseEnabled {
-                mediaPlaybackService.pausePlayback()
-            }
             state = .recording
             soundService.play(.recordingStarted, enabled: soundFeedbackEnabled)
             partialText = ""
@@ -397,7 +387,6 @@ final class DictationViewModel: ObservableObject {
             )))
         } catch {
             audioDuckingService.restoreAudio()
-            mediaPlaybackService.resumePlayback()
             soundService.play(.error, enabled: soundFeedbackEnabled)
             showError(error.localizedDescription)
             hotkeyService.cancelDictation()
@@ -458,7 +447,6 @@ final class DictationViewModel: ObservableObject {
         let wasPaused = (state == .paused)
         let trailingSilence = audioRecordingService.silenceDuration
         audioDuckingService.restoreAudio()
-        mediaPlaybackService.resumePlayback()
         stopStreaming()
         stopSilenceDetection()
         stopRecordingTimer()
