@@ -58,9 +58,9 @@ final class PostProcessingPipeline {
                 default: name = plugins[step.id].processorName
                 }
                 logger.error("Post-processor '\(name)' failed: \(error.localizedDescription)")
-                // Only re-throw for LLM step
                 if step.id == -1 {
-                    throw error
+                    if error is CancellationError { throw error }
+                    logger.warning("LLM processing failed, using raw text: \(error.localizedDescription)")
                 }
             }
         }
