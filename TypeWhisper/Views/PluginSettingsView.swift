@@ -343,13 +343,25 @@ private struct AvailablePluginRow: View {
             if let state = installState {
                 switch state {
                 case .downloading(let progress):
-                    ProgressView(value: progress)
-                        .frame(width: 60)
+                    HStack(spacing: 6) {
+                        ProgressView(value: progress)
+                            .frame(width: 80)
+                        Text("\(Int(progress * 100))%")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                            .frame(width: 32, alignment: .trailing)
+                    }
                 case .extracting:
-                    ProgressView()
-                        .controlSize(.small)
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text(String(localized: "Installing..."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 case .error(let message):
-                    VStack(alignment: .trailing, spacing: 2) {
+                    HStack(spacing: 6) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(.red)
                         Text(message)

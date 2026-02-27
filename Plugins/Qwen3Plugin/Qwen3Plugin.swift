@@ -63,9 +63,10 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendabl
     }
 
     var transcriptionModels: [PluginModelInfo] {
-        Self.availableModels.map {
-            PluginModelInfo(id: $0.id, displayName: $0.displayName)
-        }
+        guard let loadedModelId else { return [] }
+        return Self.availableModels
+            .filter { $0.id == loadedModelId }
+            .map { PluginModelInfo(id: $0.id, displayName: $0.displayName) }
     }
 
     var selectedModelId: String? { _selectedModelId }
