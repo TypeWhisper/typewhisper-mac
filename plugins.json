@@ -33,8 +33,8 @@
       "author": "TypeWhisper",
       "description": "Send transcribed or processed text to any webhook URL via HTTP POST.",
       "category": "post-processor",
-      "size": 0,
-      "downloadURL": "",
+      "size": 199829,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-webhook-v1.0.0/WebhookPlugin.zip",
       "iconSystemName": "arrow.up.forward.app"
     }
   ]
