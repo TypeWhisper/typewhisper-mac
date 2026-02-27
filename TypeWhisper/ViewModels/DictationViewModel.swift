@@ -51,6 +51,7 @@ final class DictationViewModel: ObservableObject {
     @Published var activeProfileName: String?
     @Published var actionFeedbackMessage: String?
     @Published var actionFeedbackIcon: String?
+    @Published var activeAppIcon: NSImage?
     private var actionDisplayDuration: TimeInterval = 3.5
     enum OverlayPosition: String, CaseIterable {
         case top
@@ -269,6 +270,12 @@ final class DictationViewModel: ObservableObject {
         // Match profile: forced profile or app-based matching
         let activeApp = textInsertionService.captureActiveApp()
         capturedActiveApp = activeApp
+        if let bundleId = activeApp.bundleId,
+           let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) {
+            activeAppIcon = NSWorkspace.shared.icon(forFile: appURL.path)
+        } else {
+            activeAppIcon = nil
+        }
 
         if let forcedProfileId,
            let forcedProfile = profileService.profiles.first(where: { $0.id == forcedProfileId && $0.isEnabled }) {
@@ -529,6 +536,7 @@ final class DictationViewModel: ObservableObject {
                 matchedProfile = nil
                 forcedProfileId = nil
                 capturedActiveApp = nil
+                activeAppIcon = nil
                 activeProfileName = nil
             }
         }
@@ -615,6 +623,7 @@ final class DictationViewModel: ObservableObject {
         matchedProfile = nil
         forcedProfileId = nil
         capturedActiveApp = nil
+        activeAppIcon = nil
         activeProfileName = nil
         actionFeedbackMessage = nil
         actionFeedbackIcon = nil
