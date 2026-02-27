@@ -168,15 +168,7 @@ final class DictationViewModel: ObservableObject {
     }
 
     var canDictate: Bool {
-        if modelManager.activeEngine?.isModelLoaded == true {
-            return true
-        }
-        // Cloud models don't use activeEngine - check if plugin is configured
-        if let selectedId = modelManager.selectedModelId, CloudProvider.isCloudModel(selectedId) {
-            let (providerId, _) = CloudProvider.parse(selectedId)
-            return PluginManager.shared.transcriptionEngine(for: providerId)?.isConfigured ?? false
-        }
-        return false
+        modelManager.isModelReady
     }
 
     var needsMicPermission: Bool {
@@ -898,16 +890,10 @@ final class DictationViewModel: ObservableObject {
     private var confirmedStreamingText = ""
 
     private func startStreamingIfSupported() {
-        // Plugin engines don't support streaming
-        if let overrideId = effectiveEngineOverrideId, modelManager.isPluginEngine(overrideId) {
-            return
-        }
-        // Cloud main engine selected (no override) - no local streaming preview
-        if effectiveEngineOverrideId == nil, modelManager.isCloudEngineSelected {
-            return
-        }
-        let resolvedEngine = modelManager.resolveEngine(override: effectiveEngineOverrideId, cloudModelOverride: effectiveCloudModelOverride)
-        guard let engine = resolvedEngine, engine.supportsStreaming else { return }
+        let providerId = effectiveEngineOverrideId ?? modelManager.selectedProviderId
+        guard let providerId,
+              let plugin = PluginManager.shared.transcriptionEngine(for: providerId),
+              plugin.supportsStreaming else { return }
 
         isStreaming = true
         confirmedStreamingText = ""

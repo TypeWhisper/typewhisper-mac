@@ -30,7 +30,6 @@ final class ServiceContainer: ObservableObject {
     let apiServerViewModel: APIServerViewModel
 
     // ViewModels
-    let modelManagerViewModel: ModelManagerViewModel
     let fileTranscriptionViewModel: FileTranscriptionViewModel
     let settingsViewModel: SettingsViewModel
     let dictationViewModel: DictationViewModel
@@ -63,7 +62,6 @@ final class ServiceContainer: ObservableObject {
         pluginRegistryService = PluginRegistryService()
 
         // ViewModels (created before HTTP API so DictationViewModel is available)
-        modelManagerViewModel = ModelManagerViewModel(modelManager: modelManagerService)
         fileTranscriptionViewModel = FileTranscriptionViewModel(
             modelManager: modelManagerService,
             audioFileService: audioFileService
@@ -112,7 +110,6 @@ final class ServiceContainer: ObservableObject {
         )
 
         // Set shared references
-        ModelManagerViewModel._shared = modelManagerViewModel
         FileTranscriptionViewModel._shared = fileTranscriptionViewModel
         SettingsViewModel._shared = settingsViewModel
         DictationViewModel._shared = dictationViewModel
@@ -128,8 +125,6 @@ final class ServiceContainer: ObservableObject {
         EventBus.shared = EventBus()
         PluginManager.shared = pluginManager
         PluginRegistryService.shared = pluginRegistryService
-
-        modelManagerViewModel.observePluginManager()
     }
 
     func initialize() async {
@@ -142,23 +137,13 @@ final class ServiceContainer: ObservableObject {
             apiServerViewModel.startServer()
         }
 
-        // Register SpeechAnalyzer model provider on macOS 26+
-        if #available(macOS 26, *) {
-            await SpeechAnalyzerModelProvider.populateCache()
-            ModelInfo._speechAnalyzerModelProvider = { SpeechAnalyzerModelProvider.availableModels() }
-            // Refresh model list now that provider is available
-            modelManagerViewModel.models = ModelInfo.models(for: modelManagerViewModel.selectedEngine)
-        }
-
-        await modelManagerService.loadAllSavedModels()
-
         pluginManager.setProfileNamesProvider { [weak self] in
             self?.profileService.profiles.map(\.name) ?? []
         }
         pluginManager.scanAndLoadPlugins()
 
-        // Re-restore cloud model selection now that plugins are loaded
-        modelManagerService.restoreCloudModelSelection()
+        // Re-restore provider selection now that plugins are loaded
+        modelManagerService.restoreProviderSelection()
 
         // Validate LLM provider selection against loaded plugins
         promptProcessingService.validateSelectionAfterPluginLoad()

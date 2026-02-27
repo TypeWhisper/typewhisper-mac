@@ -36,7 +36,7 @@ final class APIHandlers: @unchecked Sendable {
     // MARK: - POST /v1/transcribe
 
     private func handleTranscribe(_ request: HTTPRequest) async -> HTTPResponse {
-        let isReady = await modelManager.isEngineLoaded
+        let isReady = await modelManager.isModelReady
         guard isReady else {
             return .error(status: 503, message: "No model loaded. Load a model in TypeWhisper first.")
         }
@@ -163,34 +163,31 @@ final class APIHandlers: @unchecked Sendable {
     // MARK: - GET /v1/status
 
     private func handleStatus(_ request: HTTPRequest) async -> HTTPResponse {
-        let engine = await modelManager.selectedEngine
-        let modelId = await modelManager.selectedModelId
-        let isReady = await modelManager.isEngineLoaded
+        let providerId = await modelManager.selectedProviderId
+        let isReady = await modelManager.isModelReady
+        let supportsStreaming = await modelManager.supportsStreaming
+        let supportsTranslation = await modelManager.supportsTranslation
 
         struct StatusResponse: Encodable {
             let status: String
-            let engine: String
-            let model: String?
+            let engine: String?
             let supports_streaming: Bool
             let supports_translation: Bool
         }
 
         let response = StatusResponse(
             status: isReady ? "ready" : "no_model",
-            engine: engine.rawValue,
-            model: modelId,
-            supports_streaming: engine.supportsStreaming,
-            supports_translation: engine.supportsTranslation
+            engine: providerId,
+            supports_streaming: supportsStreaming,
+            supports_translation: supportsTranslation
         )
         return .json(response)
     }
 
     // MARK: - GET /v1/models
 
+    @MainActor
     private func handleModels(_ request: HTTPRequest) async -> HTTPResponse {
-        let statuses = await modelManager.modelStatuses
-        let selectedId = await modelManager.selectedModelId
-
         struct ModelEntry: Encodable {
             let id: String
             let engine: String
@@ -201,26 +198,22 @@ final class APIHandlers: @unchecked Sendable {
             let selected: Bool
         }
 
-        let models = ModelInfo.allModels.map { model in
-            let status = statuses[model.id] ?? .notDownloaded
-            let statusStr: String
-            switch status {
-            case .notDownloaded: statusStr = "not_downloaded"
-            case .downloading: statusStr = "downloading"
-            case .loading(_): statusStr = "loading"
-            case .ready: statusStr = "ready"
-            case .error: statusStr = "error"
-            }
+        let selectedProviderId = modelManager.selectedProviderId
+        var models: [ModelEntry] = []
 
-            return ModelEntry(
-                id: model.id,
-                engine: model.engineType.rawValue,
-                name: model.displayName,
-                size_description: model.sizeDescription,
-                language_count: model.languageCount,
-                status: statusStr,
-                selected: model.id == selectedId
-            )
+        for engine in PluginManager.shared.transcriptionEngines {
+            let isSelected = engine.providerId == selectedProviderId
+            for model in engine.transcriptionModels {
+                models.append(ModelEntry(
+                    id: model.id,
+                    engine: engine.providerId,
+                    name: model.displayName,
+                    size_description: model.sizeDescription,
+                    language_count: model.languageCount,
+                    status: engine.isConfigured ? "ready" : "not_configured",
+                    selected: isSelected && engine.selectedModelId == model.id
+                ))
+            }
         }
 
         struct ModelsResponse: Encodable { let models: [ModelEntry] }

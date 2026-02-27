@@ -1,0 +1,511 @@
+import Foundation
+import SwiftUI
+import WhisperKit
+import TypeWhisperPluginSDK
+
+// MARK: - Plugin Entry Point
+
+@objc(WhisperKitPlugin)
+final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.whisperkit"
+    static let pluginName = "WhisperKit"
+
+    fileprivate var host: HostServices?
+    fileprivate var whisperKit: WhisperKit?
+    fileprivate var loadedModelId: String?
+    fileprivate var _selectedModelId: String?
+    fileprivate var modelState: WhisperModelState = .notLoaded
+    fileprivate var downloadProgress: Double = 0
+
+    required override init() {
+        super.init()
+    }
+
+    func activate(host: HostServices) {
+        self.host = host
+        _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
+        Task { await restoreLoadedModel() }
+    }
+
+    func deactivate() {
+        whisperKit = nil
+        loadedModelId = nil
+        modelState = .notLoaded
+        host = nil
+    }
+
+    // MARK: - TranscriptionEnginePlugin
+
+    var providerId: String { "whisper" }
+    var providerDisplayName: String { "WhisperKit" }
+
+    var isConfigured: Bool {
+        whisperKit != nil && loadedModelId != nil
+    }
+
+    var transcriptionModels: [PluginModelInfo] {
+        guard let loadedModelId else { return [] }
+        return Self.availableModels
+            .filter { $0.id == loadedModelId }
+            .map { PluginModelInfo(id: $0.id, displayName: $0.displayName, sizeDescription: $0.sizeDescription, languageCount: 99) }
+    }
+
+    var selectedModelId: String? { _selectedModelId }
+
+    func selectModel(_ modelId: String) {
+        _selectedModelId = modelId
+        host?.setUserDefault(modelId, forKey: "selectedModel")
+    }
+
+    var supportsTranslation: Bool { true }
+    var supportsStreaming: Bool { true }
+
+    var supportedLanguages: [String] {
+        [
+            "af", "am", "ar", "as", "az", "ba", "be", "bg", "bn", "bo",
+            "br", "bs", "ca", "cs", "cy", "da", "de", "el", "en", "es",
+            "et", "eu", "fa", "fi", "fo", "fr", "gl", "gu", "ha", "haw",
+            "he", "hi", "hr", "ht", "hu", "hy", "id", "is", "it", "ja",
+            "jw", "ka", "kk", "km", "kn", "ko", "la", "lb", "ln", "lo",
+            "lt", "lv", "mg", "mi", "mk", "ml", "mn", "mr", "ms", "mt",
+            "my", "ne", "nl", "nn", "no", "oc", "pa", "pl", "ps", "pt",
+            "ro", "ru", "sa", "sd", "si", "sk", "sl", "sn", "so", "sq",
+            "sr", "su", "sv", "sw", "ta", "te", "tg", "th", "tk", "tl",
+            "tr", "tt", "uk", "ur", "uz", "vi", "vo", "yi", "yo", "yue",
+            "zh",
+        ]
+    }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        guard let whisperKit else {
+            throw PluginTranscriptionError.notConfigured
+        }
+
+        let options = DecodingOptions(
+            verbose: false,
+            task: translate ? .translate : .transcribe,
+            language: language,
+            temperature: 0.0,
+            temperatureFallbackCount: 3,
+            usePrefillPrompt: true,
+            usePrefillCache: true,
+            skipSpecialTokens: true,
+            withoutTimestamps: false,
+            chunkingStrategy: .vad
+        )
+
+        let results = try await whisperKit.transcribe(
+            audioArray: audio.samples,
+            decodeOptions: options
+        )
+
+        let text = results.map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        let detectedLanguage = results.first?.language
+
+        return PluginTranscriptionResult(text: text, detectedLanguage: detectedLanguage)
+    }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        guard let whisperKit else {
+            throw PluginTranscriptionError.notConfigured
+        }
+
+        let options = DecodingOptions(
+            verbose: false,
+            task: translate ? .translate : .transcribe,
+            language: language,
+            temperature: 0.0,
+            temperatureFallbackCount: 3,
+            usePrefillPrompt: true,
+            usePrefillCache: true,
+            skipSpecialTokens: true,
+            withoutTimestamps: false,
+            chunkingStrategy: .vad
+        )
+
+        let results = try await whisperKit.transcribe(
+            audioArray: audio.samples,
+            decodeOptions: options,
+            callback: { progress in
+                let shouldContinue = onProgress(progress.text)
+                return shouldContinue ? nil : false
+            }
+        )
+
+        let text = results.map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        let detectedLanguage = results.first?.language
+
+        return PluginTranscriptionResult(text: text, detectedLanguage: detectedLanguage)
+    }
+
+    // MARK: - Model Management
+
+    fileprivate var downloadBase: URL {
+        host?.pluginDataDirectory.appendingPathComponent("models")
+            ?? FileManager.default.temporaryDirectory
+    }
+
+    fileprivate func loadModel(_ modelDef: WhisperModelDef) async {
+        modelState = .downloading
+        downloadProgress = 0.05
+
+        do {
+            // Migrate old models if they exist
+            migrateOldModels(for: modelDef)
+
+            // Download
+            var lastProgress = 0.0
+            let modelFolder = try await WhisperKit.download(
+                variant: modelDef.id,
+                downloadBase: downloadBase
+            ) { progress in
+                let fraction = progress.fractionCompleted
+                let mapped = 0.05 + fraction * 0.75
+                guard mapped - lastProgress >= 0.01 else { return }
+                lastProgress = mapped
+                self.downloadProgress = mapped
+            }
+
+            // Load
+            modelState = .loading(phase: "loading")
+            downloadProgress = 0.80
+
+            let config = WhisperKitConfig(
+                downloadBase: downloadBase,
+                modelFolder: modelFolder.path,
+                verbose: false,
+                logLevel: .error,
+                prewarm: false,
+                load: false,
+                download: false
+            )
+
+            let kit = try await WhisperKit(config)
+
+            kit.modelStateCallback = { [weak self] _, newState in
+                switch newState {
+                case .loading:
+                    self?.modelState = .loading(phase: "loading")
+                case .prewarming:
+                    self?.modelState = .loading(phase: "prewarming")
+                default:
+                    break
+                }
+            }
+
+            try await kit.loadModels()
+            downloadProgress = 0.90
+            try await kit.prewarmModels()
+
+            whisperKit = kit
+            loadedModelId = modelDef.id
+            _selectedModelId = modelDef.id
+            downloadProgress = 1.0
+            modelState = .ready(modelDef.id)
+
+            host?.setUserDefault(modelDef.id, forKey: "selectedModel")
+            host?.setUserDefault(modelDef.id, forKey: "loadedModel")
+            host?.notifyCapabilitiesChanged()
+        } catch {
+            modelState = .error(error.localizedDescription)
+            downloadProgress = 0
+        }
+    }
+
+    fileprivate func unloadModel() {
+        whisperKit = nil
+        loadedModelId = nil
+        modelState = .notLoaded
+        downloadProgress = 0
+        host?.setUserDefault(nil, forKey: "loadedModel")
+        host?.notifyCapabilitiesChanged()
+    }
+
+    fileprivate func deleteModelFiles(_ modelDef: WhisperModelDef) {
+        let modelPath = downloadBase
+            .appendingPathComponent("argmaxinc")
+            .appendingPathComponent("whisperkit-coreml")
+            .appendingPathComponent(modelDef.id)
+        try? FileManager.default.removeItem(at: modelPath)
+    }
+
+    fileprivate func restoreLoadedModel() async {
+        guard let savedId = host?.userDefault(forKey: "loadedModel") as? String,
+              let modelDef = Self.availableModels.first(where: { $0.id == savedId }) else {
+            return
+        }
+        await loadModel(modelDef)
+    }
+
+    fileprivate func isModelDownloaded(_ modelDef: WhisperModelDef) -> Bool {
+        let modelPath = downloadBase
+            .appendingPathComponent("argmaxinc")
+            .appendingPathComponent("whisperkit-coreml")
+            .appendingPathComponent(modelDef.id)
+        return FileManager.default.fileExists(atPath: modelPath.path)
+    }
+
+    /// Migrate models from old location (TypeWhisper/models/) to plugin data directory
+    private func migrateOldModels(for modelDef: WhisperModelDef) {
+        let fm = FileManager.default
+        let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+
+        // Check both production and dev paths
+        for dirName in ["TypeWhisper", "TypeWhisper-Dev"] {
+            let oldPath = appSupport
+                .appendingPathComponent(dirName)
+                .appendingPathComponent("models")
+                .appendingPathComponent("argmaxinc")
+                .appendingPathComponent("whisperkit-coreml")
+                .appendingPathComponent(modelDef.id)
+
+            guard fm.fileExists(atPath: oldPath.path) else { continue }
+
+            let newPath = downloadBase
+                .appendingPathComponent("argmaxinc")
+                .appendingPathComponent("whisperkit-coreml")
+                .appendingPathComponent(modelDef.id)
+
+            guard !fm.fileExists(atPath: newPath.path) else { continue }
+
+            try? fm.createDirectory(at: newPath.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? fm.moveItem(at: oldPath, to: newPath)
+        }
+    }
+
+    // MARK: - Settings View
+
+    var settingsView: AnyView? {
+        AnyView(WhisperKitSettingsView(plugin: self))
+    }
+
+    // MARK: - Model Definitions
+
+    static let availableModels: [WhisperModelDef] = [
+        WhisperModelDef(
+            id: "openai_whisper-tiny",
+            displayName: "Tiny",
+            sizeDescription: "~39 MB",
+            ramRequirement: "4 GB+"
+        ),
+        WhisperModelDef(
+            id: "openai_whisper-base",
+            displayName: "Base",
+            sizeDescription: "~74 MB",
+            ramRequirement: "4 GB+"
+        ),
+        WhisperModelDef(
+            id: "openai_whisper-small",
+            displayName: "Small",
+            sizeDescription: "~244 MB",
+            ramRequirement: "8 GB+"
+        ),
+        WhisperModelDef(
+            id: "openai_whisper-medium",
+            displayName: "Medium",
+            sizeDescription: "~1.5 GB",
+            ramRequirement: "8 GB+"
+        ),
+        WhisperModelDef(
+            id: "openai_whisper-large-v3",
+            displayName: "Large v3",
+            sizeDescription: "~1.5 GB",
+            ramRequirement: "16 GB+"
+        ),
+        WhisperModelDef(
+            id: "openai_whisper-large-v3_turbo",
+            displayName: "Large v3 Turbo",
+            sizeDescription: "~800 MB",
+            ramRequirement: "8 GB+"
+        ),
+        WhisperModelDef(
+            id: "distil-whisper_distil-large-v3",
+            displayName: "Distil Large v3",
+            sizeDescription: "~594 MB",
+            ramRequirement: "8 GB+"
+        ),
+    ]
+}
+
+// MARK: - Model Types
+
+struct WhisperModelDef: Identifiable {
+    let id: String
+    let displayName: String
+    let sizeDescription: String
+    let ramRequirement: String
+
+    var isRecommended: Bool {
+        let ram = ProcessInfo.processInfo.physicalMemory
+        let gb = ram / (1024 * 1024 * 1024)
+
+        switch displayName {
+        case "Tiny", "Base":
+            return gb < 8
+        case "Small", "Medium", "Large v3 Turbo":
+            return gb >= 8 && gb <= 16
+        case "Large v3":
+            return gb > 16
+        default:
+            return false
+        }
+    }
+}
+
+enum WhisperModelState: Equatable {
+    case notLoaded
+    case downloading
+    case loading(phase: String)
+    case ready(String)
+    case error(String)
+
+    static func == (lhs: WhisperModelState, rhs: WhisperModelState) -> Bool {
+        switch (lhs, rhs) {
+        case (.notLoaded, .notLoaded): true
+        case (.downloading, .downloading): true
+        case let (.loading(a), .loading(b)): a == b
+        case let (.ready(a), .ready(b)): a == b
+        case let (.error(a), .error(b)): a == b
+        default: false
+        }
+    }
+}
+
+// MARK: - Settings View
+
+private struct WhisperKitSettingsView: View {
+    let plugin: WhisperKitPlugin
+    @State private var modelState: WhisperModelState = .notLoaded
+    @State private var downloadProgress: Double = 0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("WhisperKit")
+                .font(.headline)
+
+            Text("Local speech-to-text using OpenAI Whisper via CoreML. 99+ languages, streaming, translation to English.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Models")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+
+                ForEach(WhisperKitPlugin.availableModels) { modelDef in
+                    modelRow(modelDef)
+                }
+            }
+
+            if case .error(let message) = modelState {
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+        }
+        .padding()
+        .onAppear {
+            modelState = plugin.modelState
+            downloadProgress = plugin.downloadProgress
+        }
+    }
+
+    @ViewBuilder
+    private func modelRow(_ modelDef: WhisperModelDef) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(modelDef.displayName)
+                        .font(.body)
+                    if modelDef.isRecommended {
+                        Text("Recommended")
+                            .font(.caption2.weight(.semibold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.blue.opacity(0.15), in: Capsule())
+                            .foregroundStyle(.blue)
+                    }
+                }
+                Text("\(modelDef.sizeDescription) - RAM: \(modelDef.ramRequirement)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            modelStatusView(modelDef)
+        }
+        .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private func modelStatusView(_ modelDef: WhisperModelDef) -> some View {
+        if case .ready(let loadedId) = modelState, loadedId == modelDef.id {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Button("Unload") {
+                    plugin.unloadModel()
+                    plugin.deleteModelFiles(modelDef)
+                    modelState = plugin.modelState
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+        } else if case .downloading = modelState, plugin._selectedModelId == modelDef.id {
+            HStack(spacing: 8) {
+                ProgressView(value: downloadProgress)
+                    .frame(width: 80)
+                Text("\(Int(downloadProgress * 100))%")
+                    .font(.caption)
+                    .monospacedDigit()
+            }
+        } else if case .loading(let phase) = modelState, plugin._selectedModelId == modelDef.id {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(phaseText(phase))
+                    .font(.caption)
+            }
+        } else {
+            Button("Download & Load") {
+                Task {
+                    await plugin.loadModel(modelDef)
+                    modelState = plugin.modelState
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .disabled(modelState == .downloading || modelState == .loading(phase: "loading"))
+        }
+    }
+
+    private func phaseText(_ phase: String) -> String {
+        switch phase {
+        case "prewarming":
+            "Optimizing for Neural Engine..."
+        case "loading":
+            "Loading model..."
+        default:
+            "Loading..."
+        }
+    }
+}

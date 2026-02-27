@@ -183,12 +183,14 @@ final class PluginManager: ObservableObject {
         if enabled {
             activatePlugin(loadedPlugins[index])
         } else {
-            // If the deactivated plugin's model was selected, fall back to first ready model
+            // If the deactivated plugin was selected as default engine, fall back to first available
             if let engine = loadedPlugins[index].instance as? TranscriptionEnginePlugin {
-                let selectedId = UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedModelId)
-                if let selectedId, selectedId.hasPrefix("\(engine.providerId):") {
-                    let fallbackId = ModelManagerViewModel.shared.readyModels.first?.id
-                    ModelManagerViewModel.shared.selectDefaultModel(fallbackId ?? "")
+                let selectedProvider = UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine)
+                if selectedProvider == engine.providerId {
+                    let fallback = transcriptionEngines.first(where: { $0.providerId != engine.providerId && $0.isConfigured })
+                    if let fallback {
+                        ServiceContainer.shared.modelManagerService.selectProvider(fallback.providerId)
+                    }
                 }
             }
             loadedPlugins[index].instance.deactivate()

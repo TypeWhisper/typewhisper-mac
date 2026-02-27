@@ -19,13 +19,17 @@ public extension TypeWhisperPlugin {
 
 // MARK: - LLM Provider Plugin
 
-public struct PluginModelInfo: Sendable {
+public final class PluginModelInfo: @unchecked Sendable {
     public let id: String
     public let displayName: String
+    public let sizeDescription: String
+    public let languageCount: Int
 
-    public init(id: String, displayName: String) {
+    public init(id: String, displayName: String, sizeDescription: String = "", languageCount: Int = 0) {
         self.id = id
         self.displayName = displayName
+        self.sizeDescription = sizeDescription
+        self.languageCount = languageCount
     }
 }
 
@@ -91,6 +95,20 @@ public protocol TranscriptionEnginePlugin: TypeWhisperPlugin {
     func selectModel(_ modelId: String)
     var supportsTranslation: Bool { get }
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult
+
+    var supportsStreaming: Bool { get }
+    var supportedLanguages: [String] { get }
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?,
+                    onProgress: @Sendable @escaping (String) -> Bool) async throws -> PluginTranscriptionResult
+}
+
+public extension TranscriptionEnginePlugin {
+    var supportsStreaming: Bool { false }
+    var supportedLanguages: [String] { [] }
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?,
+                    onProgress: @Sendable @escaping (String) -> Bool) async throws -> PluginTranscriptionResult {
+        try await transcribe(audio: audio, language: language, translate: translate, prompt: prompt)
+    }
 }
 
 // MARK: - Action Plugin

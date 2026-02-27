@@ -1,12 +1,14 @@
 import SwiftUI
+import TypeWhisperPluginSDK
 
 struct SetupWizardView: View {
     @ObservedObject private var dictation = DictationViewModel.shared
-    @ObservedObject private var modelManager = ModelManagerViewModel.shared
+    @ObservedObject private var pluginManager = PluginManager.shared
+    @ObservedObject private var registryService = PluginRegistryService.shared
     @ObservedObject private var audioDevice = ServiceContainer.shared.audioDeviceService
     @State private var currentStep = 0
 
-    private let totalSteps = 4
+    private let totalSteps = 3
 
     var body: some View {
         VStack(spacing: 0) {
@@ -52,9 +54,8 @@ struct SetupWizardView: View {
         ScrollView {
             switch currentStep {
             case 0: permissionsStep
-            case 1: engineModelStep
-            case 2: cloudProviderStep
-            case 3: hotkeyStep
+            case 1: engineStep
+            case 2: hotkeyStep
             default: EmptyView()
             }
         }
@@ -173,84 +174,57 @@ struct SetupWizardView: View {
         .background(RoundedRectangle(cornerRadius: 8).fill(.quaternary))
     }
 
-    // MARK: - Step 2: Engine & Model
+    // MARK: - Step 2: Engines
 
-    private var engineModelStep: some View {
+    private var engineStep: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(String(localized: "Select an engine and download a model to get started."))
+            Text(String(localized: "Choose a transcription engine. Each engine needs to download a model before it can be used. Open settings to configure."))
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
-            // Engine picker
-            VStack(alignment: .leading, spacing: 8) {
-                Text(String(localized: "Engine"))
-                    .font(.headline)
+            let engines = pluginManager.transcriptionEngines
+            if engines.isEmpty {
+                VStack(spacing: 12) {
+                    if registryService.fetchState == .loading || registryService.fetchState == .idle {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text(String(localized: "Installing plugins..."))
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Text(String(localized: "No transcription engines available."))
+                            .foregroundStyle(.secondary)
 
-                Picker(String(localized: "Engine"), selection: Binding(
-                    get: { modelManager.selectedEngine },
-                    set: { modelManager.selectEngine($0) }
-                )) {
-                    ForEach(EngineType.availableCases) { engine in
-                        Text(engine.displayName).tag(engine)
+                        Button(String(localized: "Open Integrations")) {
+                            // Navigate away from wizard to integrations
+                            HomeViewModel.shared.completeSetupWizard()
+                        }
+                        .buttonStyle(.bordered)
                     }
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 20)
+            } else {
+                ForEach(engines, id: \.providerId) { engine in
+                    SetupEngineRow(engine: engine)
+                }
 
-                engineDescription
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            // Model list — recommended first
-            VStack(alignment: .leading, spacing: 8) {
-                Text(String(localized: "Models"))
-                    .font(.headline)
-
-                let sorted = modelManager.models.sorted { $0.isRecommended && !$1.isRecommended }
-                ForEach(sorted) { model in
-                    ModelRow(model: model, status: modelManager.status(for: model)) {
-                        modelManager.downloadModel(model)
-                    } onDelete: {
-                        modelManager.deleteModel(model)
-                    }
+                if !hasAnyEngineReady {
+                    Text(String(localized: "Open an engine's settings to download a model."))
+                        .font(.caption)
+                        .foregroundStyle(.orange)
                 }
             }
         }
-    }
-
-    private var engineDescription: Text {
-        switch modelManager.selectedEngine {
-        case .speechAnalyzer:
-            Text(String(localized: "Apple Speech — on-device, no download required. Recommended for most users."))
-        case .parakeet:
-            Text(String(localized: "Parakeet — extremely fast on Apple Silicon, 25 European languages."))
-        case .whisper:
-            Text(String(localized: "WhisperKit — 99+ languages, supports streaming and translation to English."))
-        @unknown default:
-            Text(String(localized: "Cloud — requires an API key. Fast transcription via cloud API."))
+        .task {
+            if registryService.fetchState == .idle {
+                await registryService.fetchRegistry()
+            }
         }
     }
 
-    // MARK: - Step 3: Cloud Provider (Optional)
-
-    private var cloudProviderStep: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(String(localized: "Optionally configure a cloud provider for faster transcription via API."))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-
-            Text(String(localized: "Cloud transcription providers can be added through plugins."))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-
-            Text(String(localized: "You can configure cloud providers later in Settings > Integrations."))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    // MARK: - Step 4: Hotkey
+    // MARK: - Step 3: Hotkey
 
     private var hotkeyStep: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -327,7 +301,6 @@ struct SetupWizardView: View {
                     withAnimation { currentStep += 1 }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(currentStep == 1 && !hasAnyModelReady)
             } else {
                 Button(String(localized: "Finish")) {
                     HomeViewModel.shared.completeSetupWizard()
@@ -340,12 +313,88 @@ struct SetupWizardView: View {
 
     // MARK: - Helpers
 
-    private var hasAnyModelReady: Bool {
-        ModelInfo.allModels.contains { model in
-            if case .ready = modelManager.status(for: model) {
-                return true
+    private var hasAnyEngineReady: Bool {
+        pluginManager.transcriptionEngines.contains { $0.isConfigured }
+    }
+}
+
+// MARK: - Engine Row
+
+private struct SetupEngineRow: View {
+    let engine: any TranscriptionEnginePlugin
+    @State private var showSettings = false
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(engine.providerDisplayName)
+                    .font(.body.weight(.medium))
+
+                if engine.isConfigured, let modelId = engine.selectedModelId,
+                   let model = engine.transcriptionModels.first(where: { $0.id == modelId }) {
+                    Text(model.displayName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
-            return false
+
+            Spacer()
+
+            if engine.isConfigured {
+                HStack(spacing: 4) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    Text(String(localized: "Ready"))
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                }
+            } else {
+                Text(String(localized: "Not configured"))
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+
+            // Find the loaded plugin to access settingsView
+            if let loaded = PluginManager.shared.loadedPlugins.first(where: {
+                ($0.instance as? any TranscriptionEnginePlugin)?.providerId == engine.providerId
+            }), loaded.instance.settingsView != nil {
+                Button {
+                    showSettings = true
+                } label: {
+                    Image(systemName: "gear")
+                }
+                .buttonStyle(.borderless)
+            }
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 8).fill(.quaternary))
+        .sheet(isPresented: $showSettings) {
+            if let loaded = PluginManager.shared.loadedPlugins.first(where: {
+                ($0.instance as? any TranscriptionEnginePlugin)?.providerId == engine.providerId
+            }), let view = loaded.instance.settingsView {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack {
+                        Text(loaded.manifest.name)
+                            .font(.headline)
+                        Spacer()
+                        Button {
+                            showSettings = false
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                                .font(.title2)
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                    .padding()
+
+                    Divider()
+
+                    view
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
+                .frame(minWidth: 500, minHeight: 400)
+            }
         }
     }
 }

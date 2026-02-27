@@ -13,7 +13,7 @@ private final class MenuBarState: ObservableObject {
 
     init() {
         let dictation = DictationViewModel.shared
-        let modelManager = ModelManagerViewModel.shared
+        let modelManager = ServiceContainer.shared.modelManagerService
 
         // Set initial values immediately
         self.isModelReady = modelManager.isModelReady
@@ -50,7 +50,7 @@ private final class MenuBarState: ObservableObject {
     }
 
     private func update(state: DictationViewModel.State) {
-        let modelManager = ModelManagerViewModel.shared
+        let modelManager = ServiceContainer.shared.modelManagerService
         switch state {
         case .recording:
             statusText = String(localized: "Recording...")

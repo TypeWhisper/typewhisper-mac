@@ -58,11 +58,11 @@ final class FileTranscriptionViewModel: ObservableObject {
     }
 
     var canTranscribe: Bool {
-        !files.isEmpty && modelManager.activeEngine?.isModelLoaded == true && batchState != .processing
+        !files.isEmpty && modelManager.isModelReady && batchState != .processing
     }
 
     var supportsTranslation: Bool {
-        modelManager.selectedEngine.supportsTranslation
+        modelManager.supportsTranslation
     }
 
     var hasResults: Bool {

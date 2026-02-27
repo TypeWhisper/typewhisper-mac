@@ -293,39 +293,22 @@ private struct ProfileEditorSheet: View {
                     Picker(String(localized: "Engine"), selection: $viewModel.editorEngineOverride) {
                         Text(String(localized: "Global Setting")).tag(nil as String?)
                         Divider()
-                        ForEach(EngineType.availableCases) { engine in
-                            Text(engine.displayName).tag(engine.rawValue as String?)
-                        }
-
-                        let configuredPlugins = ModelManagerViewModel.shared.configuredPluginEngines
-                        if !configuredPlugins.isEmpty {
-                            Divider()
-                            ForEach(configuredPlugins, id: \.providerId) { plugin in
-                                Text(plugin.providerDisplayName).tag(plugin.providerId as String?)
-                            }
+                        ForEach(PluginManager.shared.transcriptionEngines, id: \.providerId) { engine in
+                            Text(engine.providerDisplayName).tag(engine.providerId as String?)
                         }
                     }
 
-                    if let override = viewModel.editorEngineOverride {
-                        if EngineType(rawValue: override) != nil {
-                            Text(String(localized: "Using a different engine per profile requires both models to be loaded, which increases memory usage."))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else if let plugin = PluginManager.shared.transcriptionEngine(for: override) {
-                            let models = plugin.transcriptionModels
-                            if models.count > 1 {
-                                Picker(String(localized: "Model"), selection: $viewModel.editorCloudModelOverride) {
-                                    Text(String(localized: "Default")).tag(nil as String?)
-                                    Divider()
-                                    ForEach(models, id: \.id) { model in
-                                        Text(model.displayName).tag(model.id as String?)
-                                    }
+                    if let override = viewModel.editorEngineOverride,
+                       let plugin = PluginManager.shared.transcriptionEngine(for: override) {
+                        let models = plugin.transcriptionModels
+                        if models.count > 1 {
+                            Picker(String(localized: "Model"), selection: $viewModel.editorCloudModelOverride) {
+                                Text(String(localized: "Default")).tag(nil as String?)
+                                Divider()
+                                ForEach(models, id: \.id) { model in
+                                    Text(model.displayName).tag(model.id as String?)
                                 }
                             }
-
-                            Text(String(localized: "Cloud transcription requires an internet connection."))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
                         }
                     }
 

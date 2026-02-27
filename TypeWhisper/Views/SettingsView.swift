@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum SettingsTab: Hashable {
-    case home, general, models, recording
+    case home, general, recording
     case fileTranscription, history, dictionary, snippets, profiles, prompts, integrations, advanced
 }
 
@@ -37,9 +37,6 @@ private struct SettingsMainTabs: TabContent {
         }
         Tab(String(localized: "General"), systemImage: "gear", value: SettingsTab.general) {
             GeneralSettingsView()
-        }
-        Tab(String(localized: "Models"), systemImage: "cpu", value: SettingsTab.models) {
-            ModelManagerView()
         }
         Tab(String(localized: "Recording"), systemImage: "mic.fill", value: SettingsTab.recording) {
             RecordingSettingsView()
@@ -82,6 +79,8 @@ private struct SettingsExtraTabs: TabContent {
 struct RecordingSettingsView: View {
     @ObservedObject private var dictation = DictationViewModel.shared
     @ObservedObject private var audioDevice = ServiceContainer.shared.audioDeviceService
+    @ObservedObject private var pluginManager = PluginManager.shared
+    @State private var selectedProvider: String?
 
     private var needsPermissions: Bool {
         dictation.needsMicPermission || dictation.needsAccessibilityPermission
@@ -91,6 +90,33 @@ struct RecordingSettingsView: View {
         Form {
             if needsPermissions {
                 PermissionsBanner(dictation: dictation)
+            }
+
+            Section(String(localized: "Engine")) {
+                let engines = pluginManager.transcriptionEngines
+                if engines.isEmpty {
+                    Text(String(localized: "No transcription engines installed. Install engines via Integrations."))
+                        .foregroundStyle(.secondary)
+                } else {
+                    Picker(String(localized: "Default Engine"), selection: $selectedProvider) {
+                        Text(String(localized: "None")).tag(nil as String?)
+                        Divider()
+                        ForEach(engines, id: \.providerId) { engine in
+                            HStack {
+                                Text(engine.providerDisplayName)
+                                if !engine.isConfigured {
+                                    Text("(\(String(localized: "not ready")))")
+                                        .foregroundStyle(.secondary)
+                                }
+                            }.tag(engine.providerId as String?)
+                        }
+                    }
+                    .onChange(of: selectedProvider) { _, newValue in
+                        if let newValue {
+                            ServiceContainer.shared.modelManagerService.selectProvider(newValue)
+                        }
+                    }
+                }
             }
 
             Section(String(localized: "Hotkeys")) {
@@ -310,6 +336,9 @@ struct RecordingSettingsView: View {
         .formStyle(.grouped)
         .padding()
         .frame(minWidth: 500, minHeight: 300)
+        .onAppear {
+            selectedProvider = ServiceContainer.shared.modelManagerService.selectedProviderId
+        }
     }
 
     @ViewBuilder

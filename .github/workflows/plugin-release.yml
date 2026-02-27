@@ -35,6 +35,9 @@ jobs:
             groq) TARGET="GroqPlugin" ;;
             openai) TARGET="OpenAIPlugin" ;;
             gemini) TARGET="GeminiPlugin" ;;
+            whisperkit) TARGET="WhisperKitPlugin" ;;
+            parakeet) TARGET="ParakeetPlugin" ;;
+            speechanalyzer) TARGET="SpeechAnalyzerPlugin" ;;
             *) echo "Unknown plugin: $PLUGIN_NAME" && exit 1 ;;
           esac
           echo "TARGET=$TARGET" >> $GITHUB_ENV

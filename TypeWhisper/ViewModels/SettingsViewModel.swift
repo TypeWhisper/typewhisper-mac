@@ -45,8 +45,7 @@ final class SettingsViewModel: ObservableObject {
 
     var availableLanguages: [(code: String, name: String)] {
         var codes = Set<String>()
-        for engineType in EngineType.allCases {
-            let engine = modelManager.engine(for: engineType)
+        for engine in PluginManager.shared.transcriptionEngines {
             for code in engine.supportedLanguages {
                 codes.insert(code)
             }
@@ -58,6 +57,6 @@ final class SettingsViewModel: ObservableObject {
     }
 
     var supportsTranslation: Bool {
-        modelManager.selectedEngine.supportsTranslation
+        modelManager.supportsTranslation
     }
 }

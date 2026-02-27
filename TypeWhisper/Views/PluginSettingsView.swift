@@ -79,6 +79,7 @@ struct PluginSettingsView: View {
                             plugin: plugin,
                             installInfo: registryService.installInfo(for: plugin.id),
                             installState: registryService.installStates[plugin.id],
+                            registryPlugin: registryService.registry.first(where: { $0.id == plugin.id }),
                             onUpdate: {
                                 if let registryPlugin = registryService.registry.first(where: { $0.id == plugin.id }) {
                                     Task { await registryService.downloadAndInstall(registryPlugin) }
@@ -206,9 +207,14 @@ private struct InstalledPluginRow: View {
     let plugin: LoadedPlugin
     let installInfo: PluginInstallInfo
     let installState: PluginRegistryService.InstallState?
+    let registryPlugin: RegistryPlugin?
     let onUpdate: () -> Void
     let onUninstall: () -> Void
     @State private var showSettings = false
+
+    private var isCloud: Bool {
+        registryPlugin?.requiresAPIKey == true
+    }
 
     var body: some View {
         HStack {
@@ -229,6 +235,16 @@ private struct InstalledPluginRow: View {
                             .padding(.vertical, 1)
                             .background(.blue.opacity(0.15))
                             .foregroundStyle(.blue)
+                            .clipShape(Capsule())
+                    }
+                    if isCloud {
+                        Text("Cloud")
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(.cyan.opacity(0.15))
+                            .foregroundStyle(.cyan)
                             .clipShape(Capsule())
                     }
                     if plugin.isBundled {
@@ -366,13 +382,13 @@ private struct AvailablePluginRow: View {
                     Text(plugin.name)
                         .font(.headline)
                     if plugin.requiresAPIKey == true {
-                        Text(String(localized: "API Key"))
+                        Text("Cloud")
                             .font(.caption2)
                             .fontWeight(.medium)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
-                            .background(.orange.opacity(0.15))
-                            .foregroundStyle(.orange)
+                            .background(.cyan.opacity(0.15))
+                            .foregroundStyle(.cyan)
                             .clipShape(Capsule())
                     }
                 }

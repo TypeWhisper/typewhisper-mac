@@ -12,7 +12,7 @@ struct GeneralSettingsView: View {
     @State private var showRestartAlert = false
     @State private var showMenuBarIconHiddenAlert = false
     @AppStorage(UserDefaultsKeys.showMenuBarIcon) private var showMenuBarIcon = true
-    @ObservedObject private var modelManager = ModelManagerViewModel.shared
+    @ObservedObject private var pluginManager = PluginManager.shared
     @ObservedObject private var settings = SettingsViewModel.shared
 
     var body: some View {
@@ -47,34 +47,26 @@ struct GeneralSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section(String(localized: "Default Model")) {
-                if modelManager.readyModels.isEmpty && modelManager.configuredPluginEngines.isEmpty {
-                    Text(String(localized: "No models available. Download or configure a model in the Models tab."))
+            Section(String(localized: "Default Engine")) {
+                let engines = pluginManager.transcriptionEngines
+                if engines.isEmpty {
+                    Text(String(localized: "No transcription engines installed. Install engines via Integrations."))
                         .foregroundStyle(.secondary)
                 } else {
-                    Picker(String(localized: "Model"), selection: Binding(
-                        get: { modelManager.selectedModelId },
-                        set: { if let id = $0 { modelManager.selectDefaultModel(id) } }
+                    let modelManager = ServiceContainer.shared.modelManagerService
+                    Picker(String(localized: "Engine"), selection: Binding(
+                        get: { modelManager.selectedProviderId },
+                        set: { if let id = $0 { modelManager.selectProvider(id) } }
                     )) {
-                        ForEach(modelManager.readyModels) { model in
-                            Text("\(model.displayName) (\(model.engineType.displayName))")
-                                .tag(model.id as String?)
-                        }
-
-                        if !modelManager.configuredPluginEngines.isEmpty && !modelManager.readyModels.isEmpty {
-                            Divider()
-                        }
-
-                        ForEach(modelManager.configuredPluginEngines, id: \.providerId) { engine in
-                            ForEach(engine.transcriptionModels, id: \.id) { model in
-                                Text("\(model.displayName) (\(engine.providerDisplayName))")
-                                    .tag(CloudProvider.fullId(provider: engine.providerId, model: model.id) as String?)
-                            }
+                        Text(String(localized: "None")).tag(nil as String?)
+                        Divider()
+                        ForEach(engines, id: \.providerId) { engine in
+                            Text(engine.providerDisplayName).tag(engine.providerId as String?)
                         }
                     }
                 }
 
-                Text(String(localized: "The model used for transcription unless overridden by a profile."))
+                Text(String(localized: "The engine used for transcription unless overridden by a profile."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

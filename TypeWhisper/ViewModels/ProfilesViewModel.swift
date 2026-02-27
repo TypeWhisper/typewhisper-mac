@@ -294,8 +294,9 @@ final class ProfilesViewModel: ObservableObject {
             let name = Locale.current.localizedString(forLanguageCode: lang) ?? lang
             parts.append("→ " + name)
         }
-        if let engine = profile.engineOverride, let type = EngineType(rawValue: engine) {
-            parts.append(type.displayName)
+        if let engine = profile.engineOverride {
+            let displayName = PluginManager.shared.transcriptionEngine(for: engine)?.providerDisplayName ?? engine
+            parts.append(displayName)
         }
         return parts.joined(separator: " · ")
     }
