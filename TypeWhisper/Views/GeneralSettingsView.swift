@@ -13,6 +13,7 @@ struct GeneralSettingsView: View {
     @State private var showMenuBarIconHiddenAlert = false
     @AppStorage(UserDefaultsKeys.showMenuBarIcon) private var showMenuBarIcon = true
     @ObservedObject private var pluginManager = PluginManager.shared
+    @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
     @ObservedObject private var settings = SettingsViewModel.shared
 
     var body: some View {
@@ -53,7 +54,6 @@ struct GeneralSettingsView: View {
                     Text(String(localized: "No transcription engines installed. Install engines via Integrations."))
                         .foregroundStyle(.secondary)
                 } else {
-                    let modelManager = ServiceContainer.shared.modelManagerService
                     Picker(String(localized: "Engine"), selection: Binding(
                         get: { modelManager.selectedProviderId },
                         set: { if let id = $0 { modelManager.selectProvider(id) } }
@@ -62,6 +62,21 @@ struct GeneralSettingsView: View {
                         Divider()
                         ForEach(engines, id: \.providerId) { engine in
                             Text(engine.providerDisplayName).tag(engine.providerId as String?)
+                        }
+                    }
+
+                    if let providerId = modelManager.selectedProviderId,
+                       let engine = pluginManager.transcriptionEngine(for: providerId) {
+                        let models = engine.transcriptionModels
+                        if models.count > 1 {
+                            Picker(String(localized: "Model"), selection: Binding(
+                                get: { engine.selectedModelId },
+                                set: { if let id = $0 { modelManager.selectModel(providerId, modelId: id) } }
+                            )) {
+                                ForEach(models, id: \.id) { model in
+                                    Text(model.displayName).tag(model.id as String?)
+                                }
+                            }
                         }
                     }
                 }
