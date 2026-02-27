@@ -9,7 +9,7 @@
       "author": "TypeWhisper",
       "description": "Local speech-to-text powered by MLX on Apple Silicon. 30 languages, no API key required.",
       "descriptions": {
-        "de": "Lokale Spracherkennung mit MLX auf Apple Silicon. 30 Sprachen, kein API-Key nötig."
+        "de": "Lokale Spracherkennung mit MLX auf Apple Silicon. 30 Sprachen, kein API-Key n\u00f6tig."
       },
       "category": "transcription",
       "size": 28776164,
@@ -55,7 +55,7 @@
       "author": "TypeWhisper",
       "description": "Cloud transcription and LLM via Groq API. Fast inference, requires API key.",
       "descriptions": {
-        "de": "Cloud-Transkription und LLM über die Groq-API. Schnelle Inferenz, erfordert API-Key."
+        "de": "Cloud-Transkription und LLM \u00fcber die Groq-API. Schnelle Inferenz, erfordert API-Key."
       },
       "category": "transcription",
       "size": 107181,
@@ -71,7 +71,7 @@
       "author": "TypeWhisper",
       "description": "Cloud transcription and LLM via OpenAI API. Whisper and GPT models, requires API key.",
       "descriptions": {
-        "de": "Cloud-Transkription und LLM über die OpenAI-API. Whisper- und GPT-Modelle, erfordert API-Key."
+        "de": "Cloud-Transkription und LLM \u00fcber die OpenAI-API. Whisper- und GPT-Modelle, erfordert API-Key."
       },
       "category": "transcription",
       "size": 108605,
@@ -82,16 +82,16 @@
     {
       "id": "com.typewhisper.gemini",
       "name": "Gemini",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "minHostVersion": "0.9.0",
       "author": "TypeWhisper",
       "description": "LLM provider via Google Gemini API. Requires API key.",
       "descriptions": {
-        "de": "LLM-Anbieter über die Google Gemini API. Erfordert API-Key."
+        "de": "LLM-Anbieter \u00fcber die Google Gemini API. Erfordert API-Key."
       },
       "category": "llm",
-      "size": 102521,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gemini-v1.0.0/GeminiPlugin.zip",
+      "size": 107287,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gemini-v1.0.1/GeminiPlugin.zip",
       "iconSystemName": "sparkles",
       "requiresAPIKey": true
     },
@@ -103,7 +103,7 @@
       "author": "TypeWhisper",
       "description": "Local speech-to-text powered by WhisperKit. 7 model sizes, 99 languages, streaming support.",
       "descriptions": {
-        "de": "Lokale Spracherkennung mit WhisperKit. 7 Modellgrössen, 99 Sprachen, Streaming-Unterstützung."
+        "de": "Lokale Spracherkennung mit WhisperKit. 7 Modellgr\u00f6ssen, 99 Sprachen, Streaming-Unterst\u00fctzung."
       },
       "category": "transcription",
       "size": 2973052,
@@ -118,7 +118,7 @@
       "author": "TypeWhisper",
       "description": "Local speech-to-text powered by NVIDIA Parakeet TDT. Fast and accurate, 25 languages.",
       "descriptions": {
-        "de": "Lokale Spracherkennung mit NVIDIA Parakeet TDT. Schnell und präzise, 25 Sprachen."
+        "de": "Lokale Spracherkennung mit NVIDIA Parakeet TDT. Schnell und pr\u00e4zise, 25 Sprachen."
       },
       "category": "transcription",
       "size": 4031883,
@@ -133,7 +133,7 @@
       "author": "TypeWhisper",
       "description": "On-device speech recognition using Apple's Speech framework. Requires macOS 26+, streaming support.",
       "descriptions": {
-        "de": "Gerätebasierte Spracherkennung mit Apples Speech-Framework. Erfordert macOS 26+, Streaming-Unterstützung."
+        "de": "Ger\u00e4tebasierte Spracherkennung mit Apples Speech-Framework. Erfordert macOS 26+, Streaming-Unterst\u00fctzung."
       },
       "category": "transcription",
       "size": 170067,
