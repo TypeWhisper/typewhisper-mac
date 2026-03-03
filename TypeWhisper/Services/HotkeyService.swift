@@ -46,6 +46,7 @@ final class HotkeyService: ObservableObject {
     var onDictationStop: (() -> Void)?
     var onPromptPaletteToggle: (() -> Void)?
     var onProfileDictationStart: ((UUID) -> Void)?
+    var onCancelPressed: (() -> Void)?
 
     private var keyDownTime: Date?
     private var isActive = false
@@ -208,6 +209,12 @@ final class HotkeyService: ObservableObject {
     }
 
     private func handleEvent(_ event: NSEvent) {
+        // Escape key cancels active recording/transcription
+        if event.type == .keyDown && event.keyCode == 0x35 {
+            onCancelPressed?()
+            return
+        }
+
         // Global slots
         for slotType in HotkeySlotType.allCases {
             guard var state = slots[slotType], let hotkey = state.hotkey else { continue }

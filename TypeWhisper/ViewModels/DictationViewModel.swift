@@ -238,6 +238,10 @@ final class DictationViewModel: ObservableObject {
             self?.startRecording(forcedProfileId: profileId)
         }
 
+        hotkeyService.onCancelPressed = { [weak self] in
+            self?.cancelCurrentOperation()
+        }
+
         // Sync profile hotkeys whenever profiles change
         // dropFirst: avoid early monitor setup during ServiceContainer.init() before app is ready
         profileService.$profiles
@@ -274,6 +278,24 @@ final class DictationViewModel: ObservableObject {
                 self.showError(String(localized: "Microphone disconnected. Falling back to system default."))
             }
             .store(in: &cancellables)
+    }
+
+    private func cancelCurrentOperation() {
+        switch state {
+        case .recording:
+            audioDuckingService.restoreAudio()
+            streamingHandler.stop()
+            stopRecordingTimer()
+            _ = audioRecordingService.stopRecording()
+            hotkeyService.cancelDictation()
+            showNotchFeedback(message: String(localized: "Cancelled"), icon: "xmark.circle", duration: 1.5)
+        case .processing:
+            transcriptionTask?.cancel()
+            transcriptionTask = nil
+            showNotchFeedback(message: String(localized: "Cancelled"), icon: "xmark.circle", duration: 1.5)
+        default:
+            break
+        }
     }
 
     private func startRecording(forcedProfileId: UUID? = nil) {
