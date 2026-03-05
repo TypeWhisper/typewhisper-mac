@@ -1,8 +1,9 @@
 {
     "id": "com.typewhisper.groq",
     "name": "Groq",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "minHostVersion": "0.9.0",
+    "minOSVersion": "15.0",
     "author": "TypeWhisper",
     "principalClass": "GroqPlugin"
 }

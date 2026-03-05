@@ -1,8 +1,9 @@
 {
     "id": "com.typewhisper.parakeet",
     "name": "Parakeet",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "minHostVersion": "0.12.0",
+    "minOSVersion": "15.0",
     "author": "TypeWhisper",
     "principalClass": "ParakeetPlugin"
 }

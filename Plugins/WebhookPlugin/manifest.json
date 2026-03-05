@@ -1,8 +1,9 @@
 {
     "id": "com.typewhisper.webhook",
     "name": "Webhook Notifications",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "minHostVersion": "0.9.0",
+    "minOSVersion": "15.0",
     "author": "TypeWhisper",
     "principalClass": "WebhookPlugin"
 }

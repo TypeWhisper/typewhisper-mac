@@ -12,6 +12,7 @@ struct PluginManifest: Codable {
     let name: String
     let version: String
     let minHostVersion: String?
+    let minOSVersion: String?
     let author: String?
     let principalClass: String
 }
@@ -123,6 +124,19 @@ final class PluginManager: ObservableObject {
               let manifest = try? JSONDecoder().decode(PluginManifest.self, from: data) else {
             logger.error("Failed to read manifest from \(url.lastPathComponent)")
             return
+        }
+
+        if let minOS = manifest.minOSVersion {
+            let parts = minOS.split(separator: ".").compactMap { Int($0) }
+            let required = OperatingSystemVersion(
+                majorVersion: parts.count > 0 ? parts[0] : 0,
+                minorVersion: parts.count > 1 ? parts[1] : 0,
+                patchVersion: parts.count > 2 ? parts[2] : 0
+            )
+            if !ProcessInfo.processInfo.isOperatingSystemAtLeast(required) {
+                logger.info("Plugin \(manifest.name) requires macOS \(minOS), skipping")
+                return
+            }
         }
 
         guard !loadedPlugins.contains(where: { $0.manifest.id == manifest.id }) else {

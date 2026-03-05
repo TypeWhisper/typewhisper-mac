@@ -1,8 +1,9 @@
 {
     "id": "com.typewhisper.whisperkit",
     "name": "WhisperKit",
-    "version": "1.0.6",
+    "version": "1.0.7",
     "minHostVersion": "0.12.0",
+    "minOSVersion": "15.0",
     "author": "TypeWhisper",
     "principalClass": "WhisperKitPlugin"
 }

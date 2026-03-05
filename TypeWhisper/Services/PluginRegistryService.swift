@@ -10,6 +10,7 @@ struct RegistryPlugin: Codable, Identifiable {
     let name: String
     let version: String
     let minHostVersion: String
+    let minOSVersion: String?
     let author: String
     let description: String
     let category: String
@@ -26,6 +27,17 @@ struct RegistryPlugin: Codable, Identifiable {
             return localized
         }
         return description
+    }
+
+    var isCompatibleWithCurrentOS: Bool {
+        guard let minOS = minOSVersion else { return true }
+        let parts = minOS.split(separator: ".").compactMap { Int($0) }
+        let required = OperatingSystemVersion(
+            majorVersion: parts.count > 0 ? parts[0] : 0,
+            minorVersion: parts.count > 1 ? parts[1] : 0,
+            patchVersion: parts.count > 2 ? parts[2] : 0
+        )
+        return ProcessInfo.processInfo.isOperatingSystemAtLeast(required)
     }
 }
 
@@ -103,6 +115,7 @@ final class PluginRegistryService: ObservableObject {
             let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0"
             registry = response.plugins.filter {
                 Self.compareVersions($0.minHostVersion, appVersion) != .orderedDescending
+                    && $0.isCompatibleWithCurrentOS
             }
             lastFetchDate = Date()
             fetchState = .loaded
