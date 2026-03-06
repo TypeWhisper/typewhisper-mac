@@ -82,7 +82,7 @@
     {
       "id": "com.typewhisper.gemini",
       "name": "Gemini",
-      "version": "1.0.4",
+      "version": "1.0.5",
       "minHostVersion": "0.9.0",
       "author": "TypeWhisper",
       "description": "LLM provider via Google Gemini API. Requires API key.",
@@ -90,8 +90,8 @@
         "de": "LLM-Anbieter \u00fcber die Google Gemini API. Erfordert API-Key."
       },
       "category": "llm",
-      "size": 107283,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gemini-v1.0.4/GeminiPlugin.zip",
+      "size": 107305,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gemini-v1.0.5/GeminiPlugin.zip",
       "iconSystemName": "sparkles",
       "requiresAPIKey": true
     },
