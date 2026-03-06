@@ -50,7 +50,7 @@
     {
       "id": "com.typewhisper.groq",
       "name": "Groq",
-      "version": "1.0.6",
+      "version": "1.0.7",
       "minHostVersion": "0.9.0",
       "author": "TypeWhisper",
       "description": "Cloud transcription and LLM via Groq API. Fast inference, requires API key.",
@@ -58,8 +58,8 @@
         "de": "Cloud-Transkription und LLM \u00fcber die Groq-API. Schnelle Inferenz, erfordert API-Key."
       },
       "category": "transcription",
-      "size": 111122,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-groq-v1.0.6/GroqPlugin.zip",
+      "size": 111124,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-groq-v1.0.7/GroqPlugin.zip",
       "iconSystemName": "bolt.fill",
       "requiresAPIKey": true
     },
