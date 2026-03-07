@@ -6,6 +6,7 @@ struct AdvancedSettingsView: View {
     @State private var cliInstalled = false
     @State private var cliSymlinkTarget = ""
     #endif
+    @State private var raycastInstalled = false
 
     @AppStorage(UserDefaultsKeys.historyRetentionDays) private var historyRetentionDays: Int = 0
 
@@ -104,13 +105,57 @@ struct AdvancedSettingsView: View {
                     #endif
                 }
             }
+
+            // MARK: - Integrations
+            Section(String(localized: "Integrations")) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "command.square")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(String(localized: "Raycast Extension"))
+                            .font(.headline)
+
+                        if raycastInstalled {
+                            Text(String(localized: "Start dictation, search history and switch profiles directly from Raycast."))
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text(String(localized: "TypeWhisper works with Raycast. Start dictation and more directly from your launcher."))
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        if raycastInstalled {
+                            Button(String(localized: "Open in Raycast")) {
+                                NSWorkspace.shared.open(URL(string: "raycast://extensions/SeoFood/typewhisper")!)
+                            }
+                        } else {
+                            Button(String(localized: "Learn More")) {
+                                NSWorkspace.shared.open(URL(string: "https://www.raycast.com/SeoFood/typewhisper")!)
+                            }
+                        }
+
+                        Text(String(localized: "Requires the API server to be running."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
         }
         .formStyle(.grouped)
         .padding()
         .frame(minWidth: 500, minHeight: 300)
-        #if !APPSTORE
-        .onAppear { checkCLIInstallation() }
-        #endif
+        .onAppear {
+            raycastInstalled = NSWorkspace.shared.urlForApplication(
+                withBundleIdentifier: "com.raycast.macos"
+            ) != nil
+            #if !APPSTORE
+            checkCLIInstallation()
+            #endif
+        }
     }
 
     // MARK: - Examples
