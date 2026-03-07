@@ -1789,7 +1789,7 @@
 					"@executable_path/../Frameworks",
 				);
 				INFOPLIST_KEY_CFBundleDisplayName = "TypeWhisper Dev";
-				MARKETING_VERSION = 0.12.5;
+				MARKETING_VERSION = 0.12.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.dev;
 				PRODUCT_NAME = TypeWhisper;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -1819,7 +1819,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.12.5;
+				MARKETING_VERSION = 0.12.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac;
 				PRODUCT_NAME = TypeWhisper;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -1835,7 +1835,7 @@
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 2D8ALY3LCL;
 				ENABLE_HARDENED_RUNTIME = YES;
-				MARKETING_VERSION = 0.12.5;
+				MARKETING_VERSION = 0.12.6;
 				PRODUCT_NAME = "typewhisper-cli";
 				SWIFT_VERSION = 6.0;
 			};
@@ -1848,7 +1848,7 @@
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 2D8ALY3LCL;
 				ENABLE_HARDENED_RUNTIME = YES;
-				MARKETING_VERSION = 0.12.5;
+				MARKETING_VERSION = 0.12.6;
 				PRODUCT_NAME = "typewhisper-cli";
 				SWIFT_VERSION = 6.0;
 			};
@@ -2000,7 +2000,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.12.5;
+				MARKETING_VERSION = 0.12.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.typewhisper-mac;
 				PRODUCT_NAME = TypeWhisper;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -2031,7 +2031,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.12.5;
+				MARKETING_VERSION = 0.12.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.typewhisper-mac;
 				PRODUCT_NAME = TypeWhisper;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -2047,7 +2047,7 @@
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 2D8ALY3LCL;
 				ENABLE_HARDENED_RUNTIME = YES;
-				MARKETING_VERSION = 0.12.5;
+				MARKETING_VERSION = 0.12.6;
 				PRODUCT_NAME = "typewhisper-cli";
 				SWIFT_VERSION = 6.0;
 			};
@@ -2061,7 +2061,7 @@
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 2D8ALY3LCL;
 				ENABLE_HARDENED_RUNTIME = YES;
-				MARKETING_VERSION = 0.12.5;
+				MARKETING_VERSION = 0.12.6;
 				PRODUCT_NAME = "typewhisper-cli";
 				SWIFT_VERSION = 6.0;
 			};
@@ -3010,7 +3010,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 0.12.5;
+				MARKETING_VERSION = 0.12.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.dev.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -3038,7 +3038,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 0.12.5;
+				MARKETING_VERSION = 0.12.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -3066,7 +3066,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 0.12.5;
+				MARKETING_VERSION = 0.12.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.typewhisper-mac.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -3095,7 +3095,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 0.12.5;
+				MARKETING_VERSION = 0.12.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.typewhisper-mac.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
