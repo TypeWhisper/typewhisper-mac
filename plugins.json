@@ -4,7 +4,7 @@
     {
       "id": "com.typewhisper.qwen3",
       "name": "Qwen3 ASR",
-      "version": "1.0.12",
+      "version": "1.0.13",
       "minHostVersion": "0.11",
       "author": "TypeWhisper",
       "description": "Local speech-to-text powered by MLX on Apple Silicon. 30 languages, no API key required.",
@@ -12,8 +12,8 @@
         "de": "Lokale Spracherkennung mit MLX auf Apple Silicon. 30 Sprachen, kein API-Key n\u00f6tig."
       },
       "category": "transcription",
-      "size": 28782985,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-qwen3-v1.0.12/Qwen3Plugin.zip",
+      "size": 28721512,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-qwen3-v1.0.13/Qwen3Plugin.zip",
       "iconSystemName": "cpu"
     },
     {
