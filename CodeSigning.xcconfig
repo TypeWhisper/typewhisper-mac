@@ -1,0 +1,10 @@
+// TypeWhisper Code Signing Configuration
+//
+// To use your own signing identity, create CodeSigning.local.xcconfig:
+//   echo 'DEVELOPMENT_TEAM = YOUR_TEAM_ID' > CodeSigning.local.xcconfig
+//
+// Find your Team ID: Xcode > Settings > Accounts > select team
+
+DEVELOPMENT_TEAM =
+
+#include? "CodeSigning.local.xcconfig"

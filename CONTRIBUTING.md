@@ -9,6 +9,15 @@ Thanks for your interest in contributing!
 3. SPM dependencies resolve automatically on first build
 4. Build and run (Cmd+R) - the app appears as a menu bar icon
 
+## Code Signing (Optional)
+
+The project builds without any signing setup using ad-hoc signing.
+
+To use your own signing identity:
+```
+echo 'DEVELOPMENT_TEAM = YOUR_TEAM_ID' > CodeSigning.local.xcconfig
+```
+
 ## Development Setup
 
 - **macOS 15.0+** required

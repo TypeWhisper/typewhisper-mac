@@ -39,5 +39,8 @@ fastlane/test_output/
 .agents/
 .skills/
 
+# Code signing config (developer-specific)
+CodeSigning.local.xcconfig
+
 # Git worktrees
 .worktrees/
