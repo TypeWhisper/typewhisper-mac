@@ -5,6 +5,4 @@
 //
 // Find your Team ID: Xcode > Settings > Accounts > select team
 
-DEVELOPMENT_TEAM =
-
 #include? "CodeSigning.local.xcconfig"
