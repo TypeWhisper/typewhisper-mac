@@ -19,7 +19,7 @@
     {
       "id": "com.typewhisper.linear",
       "name": "Linear",
-      "version": "1.0.6",
+      "version": "1.0.7",
       "minHostVersion": "0.9.0",
       "author": "TypeWhisper",
       "description": "Create Linear issues from transcribed or processed text. Requires a Linear API key.",
@@ -27,8 +27,8 @@
         "de": "Linear-Issues aus transkribiertem oder verarbeitetem Text erstellen. Erfordert einen Linear-API-Key."
       },
       "category": "action",
-      "size": 226473,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-linear-v1.0.6/LinearPlugin.zip",
+      "size": 227206,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-linear-v1.0.7/LinearPlugin.zip",
       "iconSystemName": "list.bullet.rectangle",
       "requiresAPIKey": true
     },
