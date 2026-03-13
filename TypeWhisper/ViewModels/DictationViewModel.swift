@@ -406,7 +406,7 @@ final class DictationViewModel: ObservableObject {
                 language: effectiveLanguage,
                 task: effectiveTask,
                 cloudModelOverride: effectiveCloudModelOverride,
-                stateCheck: { [weak self] in self?.state ?? .idle }
+                stateCheck: { @MainActor [weak self] in self?.state ?? .idle }
             )
             EventBus.shared.emit(.recordingStarted(RecordingStartedPayload(
                 appName: capturedActiveApp?.name,

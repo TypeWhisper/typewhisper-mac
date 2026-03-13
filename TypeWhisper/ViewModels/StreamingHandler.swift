@@ -32,7 +32,7 @@ final class StreamingHandler {
         language: String?,
         task: TranscriptionTask,
         cloudModelOverride: String?,
-        stateCheck: @escaping () -> DictationViewModel.State
+        stateCheck: @MainActor @escaping () -> DictationViewModel.State
     ) {
         let providerId = engineOverrideId ?? selectedProviderId
         guard let providerId,
@@ -64,8 +64,8 @@ final class StreamingHandler {
                             onProgress: { [weak self] text in
                                 guard let self, !Task.isCancelled else { return false }
                                 let stable = Self.stabilizeText(confirmed: confirmed, new: text)
-                                DispatchQueue.main.async {
-                                    self.onPartialTextUpdate?(stable)
+                                Task { @MainActor [weak self] in
+                                    self?.onPartialTextUpdate?(stable)
                                 }
                                 return true
                             }
