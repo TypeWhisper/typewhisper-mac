@@ -70,26 +70,50 @@ struct PromptActionsSettingsView: View {
 
     private var providerSection: some View {
         GroupBox(String(localized: "Default LLM Provider")) {
-            VStack(alignment: .leading, spacing: 8) {
-                Picker(String(localized: "Provider"), selection: $processingService.selectedProviderId) {
-                    ForEach(processingService.availableProviders, id: \.id) { provider in
-                        Text(provider.displayName).tag(provider.id)
+            let providers = processingService.availableProviders
+            if providers.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "puzzlepiece.extension")
+                        .font(.system(size: 24))
+                        .foregroundStyle(.secondary)
+                    Text(String(localized: "Install an LLM provider plugin (e.g. Groq, OpenAI) from the Integrations tab to use prompts."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    Picker(String(localized: "Provider"), selection: $processingService.selectedProviderId) {
+                        ForEach(providers, id: \.id) { provider in
+                            Text(provider.displayName).tag(provider.id)
+                        }
+                    }
+                    .onChange(of: processingService.selectedProviderId) { _, newId in
+                        // Reset cloud model when switching providers
+                        let models = processingService.modelsForProvider(newId)
+                        processingService.selectedCloudModel = models.first?.id ?? ""
+                    }
+
+                    ProviderStatusView(
+                        providerId: processingService.selectedProviderId,
+                        processingService: processingService,
+                        cloudModel: $processingService.selectedCloudModel
+                    )
+
+                    if PluginManager.shared.llmProviders.isEmpty {
+                        Label(
+                            String(localized: "Install additional LLM providers from the Integrations tab."),
+                            systemImage: "info.circle"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     }
                 }
-                .onChange(of: processingService.selectedProviderId) { _, newId in
-                    // Reset cloud model when switching providers
-                    let models = processingService.modelsForProvider(newId)
-                    processingService.selectedCloudModel = models.first?.id ?? ""
-                }
-
-                ProviderStatusView(
-                    providerId: processingService.selectedProviderId,
-                    processingService: processingService,
-                    cloudModel: $processingService.selectedCloudModel
-                )
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 4)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 4)
         }
     }
 
@@ -348,39 +372,53 @@ private struct PromptActionEditorSheet: View {
                     }
 
                     GroupBox(String(localized: "LLM Provider")) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            let providers = viewModel.promptProcessingService.availableProviders
-                            Picker(String(localized: "Provider"), selection: $viewModel.editProviderId) {
-                                Text(String(localized: "Default")).tag(nil as String?)
-                                ForEach(providers, id: \.id) { provider in
-                                    Text(provider.displayName).tag(provider.id as String?)
-                                }
+                        let providers = viewModel.promptProcessingService.availableProviders
+                        if providers.isEmpty {
+                            VStack(spacing: 8) {
+                                Image(systemName: "puzzlepiece.extension")
+                                    .font(.system(size: 20))
+                                    .foregroundStyle(.secondary)
+                                Text(String(localized: "Install an LLM provider plugin (e.g. Groq, OpenAI) from the Integrations tab to use prompts."))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
                             }
-                            .onChange(of: viewModel.editProviderId) { _, newId in
-                                if let newId {
-                                    let models = viewModel.promptProcessingService.modelsForProvider(newId)
-                                    viewModel.editCloudModel = models.first?.id ?? ""
-                                } else {
-                                    viewModel.editCloudModel = ""
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                        } else {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Picker(String(localized: "Provider"), selection: $viewModel.editProviderId) {
+                                    Text(String(localized: "Default")).tag(nil as String?)
+                                    ForEach(providers, id: \.id) { provider in
+                                        Text(provider.displayName).tag(provider.id as String?)
+                                    }
                                 }
-                            }
+                                .onChange(of: viewModel.editProviderId) { _, newId in
+                                    if let newId {
+                                        let models = viewModel.promptProcessingService.modelsForProvider(newId)
+                                        viewModel.editCloudModel = models.first?.id ?? ""
+                                    } else {
+                                        viewModel.editCloudModel = ""
+                                    }
+                                }
 
-                            Text(String(localized: "Override the default provider for this prompt. Leave on \"Default\" to use the global setting."))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                Text(String(localized: "Override the default provider for this prompt. Leave on \"Default\" to use the global setting."))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
 
-                            if let selectedId = viewModel.editProviderId {
-                                let models = viewModel.promptProcessingService.modelsForProvider(selectedId)
-                                if !models.isEmpty {
-                                    Picker(String(localized: "Model"), selection: $viewModel.editCloudModel) {
-                                        ForEach(models, id: \.id) { model in
-                                            Text(model.displayName).tag(model.id)
+                                if let selectedId = viewModel.editProviderId {
+                                    let models = viewModel.promptProcessingService.modelsForProvider(selectedId)
+                                    if !models.isEmpty {
+                                        Picker(String(localized: "Model"), selection: $viewModel.editCloudModel) {
+                                            ForEach(models, id: \.id) { model in
+                                                Text(model.displayName).tag(model.id)
+                                            }
                                         }
                                     }
                                 }
                             }
+                            .padding(.vertical, 4)
                         }
-                        .padding(.vertical, 4)
                     }
 
                     let actionPlugins = PluginManager.shared.actionPlugins

@@ -288,6 +288,13 @@ struct SetupWizardView: View {
                         )
                     }
                 }
+
+                if PluginManager.shared.llmProviders.isEmpty {
+                    Divider()
+                    Text(String(localized: "To use AI prompts, install an LLM provider (e.g. Groq, OpenAI) from the Integrations tab after setup."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .task {
