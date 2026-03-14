@@ -1,16 +1,6 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "Auto-close delay" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Auto-Schliessung"
-          }
-        }
-      }
-    },
     "Auto-open on recording" : {
       "localizations" : {
         "de" : {
@@ -27,76 +17,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Schriftgrösse"
-          }
-        }
-      }
-    },
-    "How long the window stays open after recording stops." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wie lange das Fenster nach Aufnahmestopp geöffnet bleibt."
-          }
-        }
-      }
-    },
-    "Live Transcript" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Live-Transkript"
-          }
-        }
-      }
-    },
-    "Minimum silence duration to start a new paragraph." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Minimale Stille-Dauer für einen neuen Absatz."
-          }
-        }
-      }
-    },
-    "No results" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keine Ergebnisse"
-          }
-        }
-      }
-    },
-    "Pause threshold" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pausenschwelle"
-          }
-        }
-      }
-    },
-    "Scroll to bottom" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nach unten scrollen"
-          }
-        }
-      }
-    },
-    "Search..." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Suchen..."
           }
         }
       }
