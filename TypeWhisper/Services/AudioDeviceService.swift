@@ -39,6 +39,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     private var previewEngine: AVAudioEngine?
     private let deviceChangeSubject = PassthroughSubject<Void, Never>()
     private var cancellables = Set<AnyCancellable>()
+    private var disconnectVerificationTask: Task<Void, Never>?
 
     init() {
         selectedDeviceUID = UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedInputDeviceUID)
@@ -65,6 +66,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     }
 
     deinit {
+        disconnectVerificationTask?.cancel()
         removeDeviceListener()
         stopPreview()
     }
@@ -306,18 +308,37 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         let newDevices = listInputDevices()
         inputDevices = newDevices
 
-        // Check if selected device was disconnected
         if let uid = selectedDeviceUID,
            !newDevices.contains(where: { $0.uid == uid }) {
-            let disconnectedName = oldDevices.first(where: { $0.uid == uid })?.name
-            logger.info("Selected device disconnected: \(disconnectedName ?? uid)")
+            // Device UID not in current list - could be transient (Continuity/Bluetooth
+            // reconfiguration) or genuine disconnect. Schedule a delayed re-check.
+            let deviceName = oldDevices.first(where: { $0.uid == uid })?.name
+            logger.info("Selected device missing from list, scheduling re-verification: \(deviceName ?? uid)")
 
-            if isPreviewActive {
-                stopPreview()
+            disconnectVerificationTask?.cancel()
+            disconnectVerificationTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(1.5))
+                guard !Task.isCancelled else { return }
+                guard let self else { return }
+
+                guard let currentUID = self.selectedDeviceUID, currentUID == uid else { return }
+
+                let refreshedDevices = self.listInputDevices()
+                if refreshedDevices.contains(where: { $0.uid == uid }) {
+                    logger.info("Device reappeared after reconfiguration: \(deviceName ?? uid)")
+                    self.inputDevices = refreshedDevices
+                } else {
+                    logger.info("Selected device confirmed disconnected: \(deviceName ?? uid)")
+                    self.inputDevices = refreshedDevices
+                    if self.isPreviewActive { self.stopPreview() }
+                    self.selectedDeviceUID = nil
+                    self.disconnectedDeviceName = deviceName
+                }
             }
-
-            selectedDeviceUID = nil
-            disconnectedDeviceName = disconnectedName
+        } else {
+            // Selected device still present - cancel any pending disconnect verification
+            disconnectVerificationTask?.cancel()
+            disconnectVerificationTask = nil
         }
     }
 }

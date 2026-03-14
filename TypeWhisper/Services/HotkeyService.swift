@@ -127,6 +127,12 @@ final class HotkeyService: ObservableObject {
         return nil
     }
 
+    /// Resets keyDownTime to now, so hybrid toggle/PTT threshold counts from
+    /// when recording actually started (not from key press). Call after slow device init.
+    func resetKeyDownTime() {
+        keyDownTime = Date()
+    }
+
     func cancelDictation() {
         isActive = false
         activeSlotType = nil

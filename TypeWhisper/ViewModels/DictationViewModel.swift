@@ -290,9 +290,17 @@ final class DictationViewModel: ObservableObject {
             .compactMap { $0 }
             .sink { [weak self] _ in
                 guard let self, self.state == .recording else { return }
-                self.stopDictation()
+                self.audioDuckingService.restoreAudio()
+                self.streamingHandler.stop()
+                self.stopRecordingTimer()
+                _ = self.audioRecordingService.stopRecording()
                 self.hotkeyService.cancelDictation()
-                self.showError(String(localized: "Microphone disconnected. Falling back to system default."))
+                self.showNotchFeedback(
+                    message: String(localized: "Microphone disconnected"),
+                    icon: "mic.slash",
+                    duration: 3.0,
+                    isError: true
+                )
             }
             .store(in: &cancellables)
     }
@@ -401,6 +409,10 @@ final class DictationViewModel: ObservableObject {
                 audioDuckingService.duckAudio(to: Float(audioDuckingLevel))
             }
             state = .recording
+            // Reset hotkey timer so hybrid threshold counts from recording start,
+            // not from key press. Slow device init (e.g. iPhone Continuity ~2-3s)
+            // would otherwise make the hold appear as "long press" → PTT stop.
+            hotkeyService.resetKeyDownTime()
             soundService.play(.recordingStarted, enabled: soundFeedbackEnabled)
             partialText = ""
             recordingStartTime = Date()
