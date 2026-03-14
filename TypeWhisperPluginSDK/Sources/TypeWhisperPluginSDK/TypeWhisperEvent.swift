@@ -17,6 +17,7 @@ public enum TypeWhisperEvent: Sendable {
     case transcriptionFailed(TranscriptionFailedPayload)
     case textInserted(TextInsertedPayload)
     case actionCompleted(ActionCompletedPayload)
+    case partialTranscriptionUpdate(PartialTranscriptionPayload)
 }
 
 // MARK: - Payloads
@@ -129,5 +130,19 @@ public struct ActionCompletedPayload: Sendable, Codable {
         self.url = url
         self.appName = appName
         self.bundleIdentifier = bundleIdentifier
+    }
+}
+
+public struct PartialTranscriptionPayload: Sendable, Codable {
+    public let timestamp: Date
+    public let text: String
+    public let isFinal: Bool
+    public let elapsedSeconds: Double
+
+    public init(timestamp: Date = Date(), text: String, isFinal: Bool = false, elapsedSeconds: Double = 0) {
+        self.timestamp = timestamp
+        self.text = text
+        self.isFinal = isFinal
+        self.elapsedSeconds = elapsedSeconds
     }
 }

@@ -1,0 +1,9 @@
+{
+    "id": "com.typewhisper.livetranscript",
+    "name": "Live Transcript",
+    "version": "1.0.0",
+    "minHostVersion": "0.12.0",
+    "minOSVersion": "14.0",
+    "author": "TypeWhisper",
+    "principalClass": "LiveTranscriptPlugin"
+}
