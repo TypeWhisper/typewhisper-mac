@@ -168,13 +168,15 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         // Flush pending audio processing before grabbing the buffer
         processingQueue.sync { }
 
-        isRecording = false
-        audioLevel = 0
-
         bufferLock.lock()
         let samples = sampleBuffer
         sampleBuffer.removeAll()
         bufferLock.unlock()
+
+        DispatchQueue.main.async { [weak self] in
+            self?.isRecording = false
+            self?.audioLevel = 0
+        }
 
         return samples
     }
