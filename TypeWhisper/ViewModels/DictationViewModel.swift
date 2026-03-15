@@ -184,6 +184,11 @@ final class DictationViewModel: ObservableObject {
             guard let self else { return }
             if self.partialText != text {
                 self.partialText = text
+                let elapsed = self.recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
+                EventBus.shared.emit(.partialTranscriptionUpdate(PartialTranscriptionPayload(
+                    text: text,
+                    elapsedSeconds: elapsed
+                )))
             }
         }
         streamingHandler.onStreamingStateChange = { [weak self] streaming in
@@ -483,6 +488,15 @@ final class DictationViewModel: ObservableObject {
         audioDuckingService.restoreAudio()
         streamingHandler.stop()
         stopRecordingTimer()
+
+        if !partialText.isEmpty {
+            let elapsed = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
+            EventBus.shared.emit(.partialTranscriptionUpdate(PartialTranscriptionPayload(
+                text: partialText,
+                isFinal: true,
+                elapsedSeconds: elapsed
+            )))
+        }
         var samples = audioRecordingService.stopRecording()
 
         // Add silence padding so Whisper can properly finish decoding the last tokens

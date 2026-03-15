@@ -44,6 +44,7 @@ jobs:
             assemblyai) TARGET="AssemblyAIPlugin" ;;
             obsidian) TARGET="ObsidianPlugin" ;;
             script) TARGET="ScriptPlugin" ;;
+            livetranscript) TARGET="LiveTranscriptPlugin" ;;
             *) echo "Unknown plugin: $PLUGIN_NAME" && exit 1 ;;
           esac
           # Set deployment target (SpeechAnalyzer requires macOS 26+)

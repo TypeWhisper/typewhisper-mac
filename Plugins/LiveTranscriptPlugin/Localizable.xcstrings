@@ -1,0 +1,36 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Auto-open on recording" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Automatisch bei Aufnahme öffnen"
+          }
+        }
+      }
+    },
+    "Font size" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schriftgrösse"
+          }
+        }
+      }
+    },
+    "Show the transcript window automatically when recording starts." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transkript-Fenster automatisch bei Aufnahmestart anzeigen."
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}
