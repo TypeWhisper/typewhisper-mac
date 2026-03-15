@@ -4,21 +4,25 @@ struct HistoryView: View {
     @ObservedObject private var viewModel = HistoryViewModel.shared
 
     private var hasSelection: Bool {
-        !viewModel.selectedRecordIDs.isEmpty
+        viewModel.hasVisibleSelection
     }
 
     var body: some View {
         HStack(spacing: 0) {
-            // MARK: - Left: List Panel
             listPanel
                 .frame(minWidth: 280)
 
-            // MARK: - Right: Detail Panel (only when selected)
-            if hasSelection {
-                Divider()
-                detailPanel
-                    .frame(minWidth: 300, idealWidth: 340)
-            }
+            Divider()
+                .opacity(hasSelection ? 1 : 0)
+                .frame(width: hasSelection ? 1 : 0)
+
+            detailPanelContainer
+                .frame(
+                    minWidth: hasSelection ? 300 : 0,
+                    idealWidth: hasSelection ? 340 : 0,
+                    maxWidth: hasSelection ? .infinity : 0
+                )
+                .clipped()
         }
         .frame(minHeight: 400)
     }
@@ -170,6 +174,15 @@ struct HistoryView: View {
     }
 
     // MARK: - Detail Panel
+
+    @ViewBuilder
+    private var detailPanelContainer: some View {
+        if hasSelection {
+            detailPanel
+        } else {
+            Color.clear
+        }
+    }
 
     @ViewBuilder
     private var detailPanel: some View {

@@ -101,15 +101,19 @@ final class HistoryViewModel: ObservableObject {
         setupBindings()
     }
 
+    var hasVisibleSelection: Bool {
+        !visibleSelectedRecordIDs.isEmpty
+    }
+
     var selectedRecord: TranscriptionRecord? {
-        guard selectedRecordIDs.count == 1, let firstID = selectedRecordIDs.first else {
+        guard visibleSelectedRecordIDs.count == 1, let firstID = visibleSelectedRecordIDs.first else {
             return nil
         }
         return records.first { $0.id == firstID }
     }
 
     var selectedRecords: [TranscriptionRecord] {
-        let ids = selectedRecordIDs
+        let ids = visibleSelectedRecordIDs
         return records.filter { ids.contains($0.id) }
     }
 
@@ -132,6 +136,11 @@ final class HistoryViewModel: ObservableObject {
         if collapsedGroups.contains(group) {
             collapsedGroups.remove(group)
         } else {
+            if let section = groupedSections.first(where: { $0.group == group }) {
+                syncSelection(
+                    withVisibleRecordIDs: visibleRecordIDs.subtracting(section.records.map(\.id))
+                )
+            }
             collapsedGroups.insert(group)
         }
     }
@@ -258,10 +267,22 @@ final class HistoryViewModel: ObservableObject {
             .sink { [weak self] records, query, appFilter, timeRange in
                 guard let self else { return }
                 let filtered = Self.applyFilters(records: records, query: query, appFilter: appFilter, timeRange: timeRange)
+                let sections = Self.computeSections(filtered)
+                let visibleRecordIDs = Self.visibleRecordIDs(sections: sections, collapsedGroups: self.collapsedGroups)
+                self.syncSelection(withVisibleRecordIDs: visibleRecordIDs)
                 self.filteredRecords = filtered
-                self.groupedSections = Self.computeSections(filtered)
+                self.groupedSections = sections
                 self.visibleRecordCount = filtered.count
                 self.visibleWordCount = filtered.reduce(0) { $0 + $1.wordsCount }
+            }
+            .store(in: &cancellables)
+
+        $collapsedGroups
+            .dropFirst()
+            .sink { [weak self] collapsedGroups in
+                guard let self else { return }
+                let visibleRecordIDs = Self.visibleRecordIDs(sections: self.groupedSections, collapsedGroups: collapsedGroups)
+                self.syncSelection(withVisibleRecordIDs: visibleRecordIDs)
             }
             .store(in: &cancellables)
 
@@ -325,6 +346,18 @@ final class HistoryViewModel: ObservableObject {
         }
     }
 
+    private static func visibleRecordIDs(
+        sections: [HistorySection],
+        collapsedGroups: Set<HistoryDateGroup>
+    ) -> Set<UUID> {
+        Set(
+            sections
+                .filter { !collapsedGroups.contains($0.group) }
+                .flatMap(\.records)
+                .map(\.id)
+        )
+    }
+
     private static func computeAvailableApps(_ records: [TranscriptionRecord]) -> [AppEntry] {
         var counts: [String: (name: String, count: Int)] = [:]
         for record in records {
@@ -334,5 +367,30 @@ final class HistoryViewModel: ObservableObject {
         }
         return counts.sorted { $0.value.count > $1.value.count }
             .map { AppEntry(bundleId: $0.key, name: $0.value.name) }
+    }
+
+    private var visibleSelectedRecordIDs: Set<UUID> {
+        selectedRecordIDs.intersection(visibleRecordIDs)
+    }
+
+    private var visibleRecordIDs: Set<UUID> {
+        Self.visibleRecordIDs(sections: groupedSections, collapsedGroups: collapsedGroups)
+    }
+
+    private func syncSelection<S: Sequence>(withVisibleRecordIDs visibleRecordIDs: S) where S.Element == UUID {
+        let visibleIDSet = Set(visibleRecordIDs)
+        let previousSelectedRecordID = selectedRecordIDs.count == 1 ? selectedRecordIDs.first : nil
+        let normalizedSelection = selectedRecordIDs.intersection(visibleIDSet)
+        let normalizedSelectedRecordID = normalizedSelection.count == 1 ? normalizedSelection.first : nil
+
+        guard normalizedSelection != selectedRecordIDs else {
+            return
+        }
+
+        selectedRecordIDs = normalizedSelection
+
+        if isEditing && normalizedSelectedRecordID != previousSelectedRecordID {
+            cancelEditing()
+        }
     }
 }
