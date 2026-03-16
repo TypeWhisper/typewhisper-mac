@@ -7,11 +7,25 @@ struct UnifiedHotkey: Equatable, Sendable, Codable {
     let modifierFlags: UInt
     let isFn: Bool
 
-    var isModifierOnly: Bool {
-        !isFn && modifierFlags == 0 && HotkeyService.modifierKeyCodes.contains(keyCode)
+    /// Sentinel keyCode for modifier-only combos (e.g. CMD+OPT).
+    /// 0x00 is the "A" key, so we use 0xFFFF which is not a real keyCode.
+    static let modifierComboKeyCode: UInt16 = 0xFFFF
+
+    enum Kind {
+        case fn
+        case modifierOnly
+        case modifierCombo
+        case keyWithModifiers
+        case bareKey
     }
 
-    var hasModifiers: Bool { modifierFlags != 0 }
+    var kind: Kind {
+        if isFn { return .fn }
+        if modifierFlags == 0 && HotkeyService.modifierKeyCodes.contains(keyCode) { return .modifierOnly }
+        if keyCode == Self.modifierComboKeyCode && modifierFlags != 0 { return .modifierCombo }
+        if modifierFlags != 0 { return .keyWithModifiers }
+        return .bareKey
+    }
 }
 
 enum HotkeySlotType: String, CaseIterable, Sendable {
@@ -254,14 +268,13 @@ final class HotkeyService: ObservableObject {
             modifierWasDown: state.modifierWasDown,
             keyWasDown: state.keyWasDown
         )
-        if keyDown {
-            if hotkey.isFn { state.fnWasDown = true }
-            if hotkey.isModifierOnly { state.modifierWasDown = true }
-            if !hotkey.isFn && !hotkey.isModifierOnly { state.keyWasDown = true }
-        } else if keyUp {
-            if hotkey.isFn { state.fnWasDown = false }
-            if hotkey.isModifierOnly { state.modifierWasDown = false }
-            if !hotkey.isFn && !hotkey.isModifierOnly { state.keyWasDown = false }
+        let value = keyDown ? true : keyUp ? false : nil
+        if let value {
+            switch hotkey.kind {
+            case .fn: state.fnWasDown = value
+            case .modifierOnly, .modifierCombo: state.modifierWasDown = value
+            case .keyWithModifiers, .bareKey: state.keyWasDown = value
+            }
         }
         return (keyDown, keyUp)
     }
@@ -274,21 +287,33 @@ final class HotkeyService: ObservableObject {
         modifierWasDown: Bool,
         keyWasDown: Bool
     ) -> (keyDown: Bool, keyUp: Bool) {
-        if hotkey.isFn {
+        switch hotkey.kind {
+        case .fn:
             guard event.type == .flagsChanged else { return (false, false) }
             let fnDown = event.modifierFlags.contains(.function)
             if fnDown, !fnWasDown { return (true, false) }
             if !fnDown, fnWasDown { return (false, true) }
-        } else if hotkey.isModifierOnly {
+
+        case .modifierOnly:
             guard event.type == .flagsChanged, event.keyCode == hotkey.keyCode else { return (false, false) }
             let flag = Self.modifierFlagForKeyCode(hotkey.keyCode)
             guard let flag else { return (false, false) }
             let isDown = event.modifierFlags.contains(flag)
             if isDown, !modifierWasDown { return (true, false) }
             if !isDown, modifierWasDown { return (false, true) }
-        } else if hotkey.hasModifiers {
+
+        case .modifierCombo:
+            guard event.type == .flagsChanged else { return (false, false) }
             let requiredFlags = NSEvent.ModifierFlags(rawValue: hotkey.modifierFlags)
-            let relevantMask: NSEvent.ModifierFlags = [.command, .option, .control, .shift]
+            let relevantMask: NSEvent.ModifierFlags = [.command, .option, .control, .shift, .function]
+            let current = event.modifierFlags.intersection(relevantMask)
+            let allDown = current.contains(requiredFlags)
+            if allDown, !modifierWasDown { return (true, false) }
+            if !allDown, modifierWasDown { return (false, true) }
+
+        case .keyWithModifiers:
+            let requiredFlags = NSEvent.ModifierFlags(rawValue: hotkey.modifierFlags)
+            let relevantMask: NSEvent.ModifierFlags = [.command, .option, .control, .shift, .function]
             let currentRelevant = event.modifierFlags.intersection(relevantMask)
 
             if event.type == .keyDown, event.keyCode == hotkey.keyCode, !keyWasDown {
@@ -298,7 +323,8 @@ final class HotkeyService: ObservableObject {
             } else if event.type == .flagsChanged, keyWasDown, !currentRelevant.contains(requiredFlags) {
                 return (false, true)
             }
-        } else {
+
+        case .bareKey:
             guard event.keyCode == hotkey.keyCode else { return (false, false) }
             let ignoredModifiers: NSEvent.ModifierFlags = [.command, .option, .control]
             if !event.modifierFlags.intersection(ignoredModifiers).isEmpty { return (false, false) }
@@ -409,12 +435,15 @@ final class HotkeyService: ObservableObject {
         var parts: [String] = []
 
         let flags = NSEvent.ModifierFlags(rawValue: hotkey.modifierFlags)
+        if flags.contains(.function) { parts.append("Fn") }
         if flags.contains(.control) { parts.append("⌃") }
         if flags.contains(.option) { parts.append("⌥") }
         if flags.contains(.shift) { parts.append("⇧") }
         if flags.contains(.command) { parts.append("⌘") }
 
-        parts.append(keyName(for: hotkey.keyCode))
+        if hotkey.kind != .modifierCombo {
+            parts.append(keyName(for: hotkey.keyCode))
+        }
 
         return parts.joined()
     }

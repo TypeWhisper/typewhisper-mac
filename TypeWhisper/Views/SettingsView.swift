@@ -463,6 +463,7 @@ struct HotkeyRecorderView: View {
 
     @State private var isRecording = false
     @State private var pendingModifiers: NSEvent.ModifierFlags = []
+    @State private var peakModifiers: NSEvent.ModifierFlags = []
     @State private var eventMonitor: Any?
     @State private var modifierReleaseTimer: DispatchWorkItem?
     private static var activeRecorder: UUID?
@@ -523,6 +524,7 @@ struct HotkeyRecorderView: View {
 
     private var pendingModifierString: String {
         var parts: [String] = []
+        if pendingModifiers.contains(.function) { parts.append("Fn") }
         if pendingModifiers.contains(.control) { parts.append("⌃") }
         if pendingModifiers.contains(.option) { parts.append("⌥") }
         if pendingModifiers.contains(.shift) { parts.append("⇧") }
@@ -537,19 +539,45 @@ struct HotkeyRecorderView: View {
         Self.activeRecorder = id
         isRecording = true
         pendingModifiers = []
+        peakModifiers = []
         ServiceContainer.shared.hotkeyService.suspendMonitoring()
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
             if event.type == .flagsChanged {
-                if event.modifierFlags.contains(.function) {
-                    finishRecording(UnifiedHotkey(keyCode: 0, modifierFlags: 0, isFn: true))
-                    return nil
-                }
-
-                let relevantMask: NSEvent.ModifierFlags = [.command, .option, .control, .shift]
+                let relevantMask: NSEvent.ModifierFlags = [.command, .option, .control, .shift, .function]
                 let current = event.modifierFlags.intersection(relevantMask)
 
+                // Track peak modifier set (most modifiers held simultaneously)
+                if current.isSuperset(of: peakModifiers) {
+                    peakModifiers = current
+                }
+
                 if current.isEmpty, !pendingModifiers.isEmpty {
-                    if HotkeyService.modifierKeyCodes.contains(event.keyCode) {
+                    let modifierList: [NSEvent.ModifierFlags] = [.command, .option, .control, .shift, .function]
+                    let peakCount = modifierList.filter { peakModifiers.contains($0) }.count
+
+                    if peakCount > 1 {
+                        // Multi-modifier combo (e.g. CMD+OPT, Fn+CMD)
+                        let comboFlags = peakModifiers
+                        let work = DispatchWorkItem { [self] in
+                            finishRecording(UnifiedHotkey(keyCode: UnifiedHotkey.modifierComboKeyCode, modifierFlags: comboFlags.rawValue, isFn: false))
+                        }
+                        modifierReleaseTimer = work
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
+                        pendingModifiers = []
+                        peakModifiers = []
+                        return nil
+                    } else if peakModifiers.contains(.function) {
+                        // Fn alone
+                        let work = DispatchWorkItem { [self] in
+                            finishRecording(UnifiedHotkey(keyCode: 0, modifierFlags: 0, isFn: true))
+                        }
+                        modifierReleaseTimer = work
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
+                        pendingModifiers = []
+                        peakModifiers = []
+                        return nil
+                    } else if HotkeyService.modifierKeyCodes.contains(event.keyCode) {
+                        // Single modifier key (CMD, OPT, etc.)
                         let keyCode = event.keyCode
                         let work = DispatchWorkItem { [self] in
                             finishRecording(UnifiedHotkey(keyCode: keyCode, modifierFlags: 0, isFn: false))
@@ -557,6 +585,7 @@ struct HotkeyRecorderView: View {
                         modifierReleaseTimer = work
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
                         pendingModifiers = []
+                        peakModifiers = []
                         return nil
                     }
                 }
@@ -573,7 +602,7 @@ struct HotkeyRecorderView: View {
                     return nil
                 }
 
-                let relevantMask: NSEvent.ModifierFlags = [.command, .option, .control, .shift]
+                let relevantMask: NSEvent.ModifierFlags = [.command, .option, .control, .shift, .function]
                 let modifiers = event.modifierFlags.intersection(relevantMask).rawValue
 
                 finishRecording(UnifiedHotkey(keyCode: event.keyCode, modifierFlags: modifiers, isFn: false))
@@ -592,6 +621,7 @@ struct HotkeyRecorderView: View {
         }
         isRecording = false
         pendingModifiers = []
+        peakModifiers = []
         if let monitor = eventMonitor {
             NSEvent.removeMonitor(monitor)
             eventMonitor = nil
@@ -608,6 +638,7 @@ struct HotkeyRecorderView: View {
         }
         isRecording = false
         pendingModifiers = []
+        peakModifiers = []
         if let monitor = eventMonitor {
             NSEvent.removeMonitor(monitor)
             eventMonitor = nil
