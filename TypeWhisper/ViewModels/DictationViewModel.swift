@@ -706,17 +706,22 @@ final class DictationViewModel: ObservableObject {
     // MARK: - Shared Helpers
 
     /// Builds an LLM handler for the post-processing pipeline.
-    /// Priority: prompt action > translation > nil.
+    /// Priority: inline commands > prompt action > translation > nil.
     private func buildLLMHandler(
         translationTarget: String?,
         detectedLanguage: String?,
         configuredLanguage: String?
     ) -> ((String) async throws -> String)? {
-        if let promptAction = effectivePromptAction {
+        // Inline commands compose with profile prompt; otherwise use prompt action directly
+        let inlineEnabled = matchedProfile?.inlineCommandsEnabled == true
+        if inlineEnabled || effectivePromptAction != nil {
             let pps = promptProcessingService
-            let providerOverride = promptAction.providerType
-            let modelOverride = promptAction.cloudModel
-            let prompt = promptAction.prompt
+            let promptAction = effectivePromptAction
+            let prompt = inlineEnabled
+                ? Self.buildInlineCommandSystemPrompt(baseContext: promptAction?.prompt)
+                : promptAction!.prompt
+            let providerOverride = promptAction?.providerType
+            let modelOverride = promptAction?.cloudModel
             return { text in
                 try await pps.process(
                     prompt: prompt, text: text,
@@ -757,6 +762,19 @@ final class DictationViewModel: ObservableObject {
         #endif
 
         return nil
+    }
+
+    /// Builds the system prompt for inline command detection.
+    nonisolated static func buildInlineCommandSystemPrompt(baseContext: String?) -> String {
+        var prompt = """
+        The user dictated text that may contain a spoken transformation instruction (e.g., "write this as an email", "summarize this", "mach daraus Stichpunkte"). \
+        If found, remove the instruction and apply the transformation. If not found, return the text unchanged. \
+        Return ONLY the final text - no explanations, prefixes, or quotes. The instruction can be in any language and anywhere in the text.
+        """
+        if let baseContext, !baseContext.isEmpty {
+            prompt += "\nAlso apply this style context: \(baseContext)"
+        }
+        return prompt
     }
 
     /// Executes an action plugin and handles its result (feedback, clipboard URL, events).
