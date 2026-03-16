@@ -16,6 +16,7 @@ final class Profile {
     var cloudModelOverride: String?
     var promptActionId: String?
     var hotkeyData: Data?
+    var inlineCommandsEnabled: Bool
     var createdAt: Date
     var updatedAt: Date
 
@@ -43,6 +44,7 @@ final class Profile {
         cloudModelOverride: String? = nil,
         promptActionId: String? = nil,
         hotkeyData: Data? = nil,
+        inlineCommandsEnabled: Bool = false,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -59,6 +61,7 @@ final class Profile {
         self.cloudModelOverride = cloudModelOverride
         self.promptActionId = promptActionId
         self.hotkeyData = hotkeyData
+        self.inlineCommandsEnabled = inlineCommandsEnabled
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }

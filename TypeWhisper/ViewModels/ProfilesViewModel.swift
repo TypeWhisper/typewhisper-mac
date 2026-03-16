@@ -40,6 +40,7 @@ final class ProfilesViewModel: ObservableObject {
     @Published var editorEngineOverride: String?
     @Published var editorCloudModelOverride: String?
     @Published var editorPromptActionId: String?
+    @Published var editorInlineCommandsEnabled = false
     @Published var editorHotkey: UnifiedHotkey?
     @Published var editorHotkeyLabel: String = ""
     @Published var editorPriority: Int = 0
@@ -90,6 +91,7 @@ final class ProfilesViewModel: ObservableObject {
             cloudModelOverride: editorCloudModelOverride,
             promptActionId: editorPromptActionId,
             hotkeyData: editorHotkey.flatMap { try? JSONEncoder().encode($0) },
+            inlineCommandsEnabled: editorInlineCommandsEnabled,
             priority: editorPriority
         )
     }
@@ -105,6 +107,7 @@ final class ProfilesViewModel: ObservableObject {
             profile.engineOverride = editorEngineOverride
             profile.cloudModelOverride = editorCloudModelOverride
             profile.promptActionId = editorPromptActionId
+            profile.inlineCommandsEnabled = editorInlineCommandsEnabled
             profile.hotkey = editorHotkey
             profile.priority = editorPriority
             profileService.updateProfile(profile)
@@ -135,6 +138,7 @@ final class ProfilesViewModel: ObservableObject {
         editorEngineOverride = nil
         editorCloudModelOverride = nil
         editorPromptActionId = nil
+        editorInlineCommandsEnabled = false
         editorHotkey = nil
         editorHotkeyLabel = ""
         editorPriority = 0
@@ -163,6 +167,7 @@ final class ProfilesViewModel: ObservableObject {
             editorCloudModelOverride = profile.cloudModelOverride
         }
         editorPromptActionId = profile.promptActionId
+        editorInlineCommandsEnabled = profile.inlineCommandsEnabled
         editorHotkey = profile.hotkey
         editorHotkeyLabel = profile.hotkey.map { HotkeyService.displayName(for: $0) } ?? ""
         editorPriority = profile.priority
@@ -297,6 +302,9 @@ final class ProfilesViewModel: ObservableObject {
         if let engine = profile.engineOverride {
             let displayName = PluginManager.shared.transcriptionEngine(for: engine)?.providerDisplayName ?? engine
             parts.append(displayName)
+        }
+        if profile.inlineCommandsEnabled {
+            parts.append(String(localized: "Inline Commands"))
         }
         return parts.joined(separator: " · ")
     }
