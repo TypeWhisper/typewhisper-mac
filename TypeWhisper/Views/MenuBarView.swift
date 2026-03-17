@@ -83,26 +83,23 @@ struct MenuBarView: View {
         Divider()
 
         Button {
-            NSApp.setActivationPolicy(.regular)
-            NSApp.activate()
             openWindow(id: "settings")
+            activateAppWindow("settings")
         } label: {
             Label(String(localized: "Settings..."), systemImage: "gear")
         }
         .keyboardShortcut(",")
 
         Button {
-            NSApp.setActivationPolicy(.regular)
-            NSApp.activate()
             openWindow(id: "history")
+            activateAppWindow("history")
         } label: {
             Label(String(localized: "History"), systemImage: "clock.arrow.circlepath")
         }
 
         Button {
-            NSApp.setActivationPolicy(.regular)
-            NSApp.activate()
             openWindow(id: "settings")
+            activateAppWindow("settings")
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 FileTranscriptionViewModel.shared.showFilePickerFromMenu = true
             }
@@ -124,5 +121,17 @@ struct MenuBarView: View {
             NSApplication.shared.terminate(nil)
         }
         .keyboardShortcut("q")
+    }
+
+    private func activateAppWindow(_ id: String) {
+        NSApp.setActivationPolicy(.regular)
+        DispatchQueue.main.async {
+            if let window = NSApp.windows.first(where: {
+                $0.identifier?.rawValue.localizedCaseInsensitiveContains(id) == true
+            }) {
+                window.makeKeyAndOrderFront(nil)
+            }
+            NSApp.activate()
+        }
     }
 }

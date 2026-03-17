@@ -236,7 +236,7 @@ final class DictationViewModel: ObservableObject {
     }
 
     func apiStartRecording() {
-        startRecording()
+        Task { await startRecording() }
     }
 
     func apiStopRecording() {
@@ -251,7 +251,7 @@ final class DictationViewModel: ObservableObject {
 
     private func setupBindings() {
         hotkeyService.onDictationStart = { [weak self] in
-            self?.startRecording()
+            Task { @MainActor in await self?.startRecording() }
         }
 
         hotkeyService.onDictationStop = { [weak self] in
@@ -259,7 +259,7 @@ final class DictationViewModel: ObservableObject {
         }
 
         hotkeyService.onProfileDictationStart = { [weak self] profileId in
-            self?.startRecording(forcedProfileId: profileId)
+            Task { @MainActor in await self?.startRecording(forcedProfileId: profileId) }
         }
 
         hotkeyService.onCancelPressed = { [weak self] in
@@ -329,7 +329,7 @@ final class DictationViewModel: ObservableObject {
         }
     }
 
-    private func startRecording(forcedProfileId: UUID? = nil) {
+    private func startRecording(forcedProfileId: UUID? = nil) async {
         // Dismiss prompt palette if active
         promptPaletteHandler.hide()
 
@@ -414,7 +414,7 @@ final class DictationViewModel: ObservableObject {
 
         do {
             audioRecordingService.selectedDeviceID = audioDeviceService.selectedDeviceID
-            try audioRecordingService.startRecording()
+            try await audioRecordingService.startRecording()
             if audioDuckingEnabled {
                 audioDuckingService.duckAudio(to: Float(audioDuckingLevel))
             }

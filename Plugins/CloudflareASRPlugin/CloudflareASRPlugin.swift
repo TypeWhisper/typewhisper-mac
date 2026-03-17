@@ -181,17 +181,59 @@ final class CloudflareASRPlugin: NSObject, TranscriptionEnginePlugin, @unchecked
 
         do {
             let response = try JSONDecoder().decode(APIResponse.self, from: data)
+            let (lang, text) = parseASROutput(response.text)
+            let detectedLang = lang.isEmpty ? response.language : lang
             let segments = (response.segments ?? []).map {
-                PluginTranscriptionSegment(text: $0.text, start: $0.start, end: $0.end)
+                let (_, segText) = parseASROutput($0.text)
+                return PluginTranscriptionSegment(text: segText, start: $0.start, end: $0.end)
             }
-            return PluginTranscriptionResult(text: response.text, detectedLanguage: response.language, segments: segments)
+            return PluginTranscriptionResult(text: text, detectedLanguage: detectedLang, segments: segments)
         } catch {
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let text = json["text"] as? String {
-                return PluginTranscriptionResult(text: text, detectedLanguage: json["language"] as? String)
+               let rawText = json["text"] as? String {
+                let (lang, text) = parseASROutput(rawText)
+                let detectedLang = lang.isEmpty ? json["language"] as? String : lang
+                return PluginTranscriptionResult(text: text, detectedLanguage: detectedLang)
             }
             throw PluginTranscriptionError.apiError("Failed to parse response: \(error.localizedDescription)")
         }
+    }
+
+    /// Parse Qwen3-ASR raw output `"language <LANG><asr_text><TEXT>"` into (language, text).
+    /// Mirrors the reference `parse_asr_output` from the qwen_asr Python package.
+    private static func parseASROutput(_ raw: String) -> (language: String, text: String) {
+        let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.isEmpty { return ("", "") }
+
+        let asrTag = "<asr_text>"
+        guard let tagRange = s.range(of: asrTag) else {
+            return ("", s)
+        }
+
+        let metaPart = String(s[s.startIndex..<tagRange.lowerBound])
+        let textPart = String(s[tagRange.upperBound...])
+            .replacingOccurrences(of: #"language\s+\w+<asr_text>"#, with: "", options: .regularExpression)
+            .replacingOccurrences(of: "</asr_text>", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if metaPart.lowercased().contains("language none") {
+            return ("", textPart)
+        }
+
+        let langPrefix = "language "
+        var lang = ""
+        for line in metaPart.components(separatedBy: .newlines) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.lowercased().hasPrefix(langPrefix) {
+                let val = String(trimmed.dropFirst(langPrefix.count)).trimmingCharacters(in: .whitespaces)
+                if !val.isEmpty {
+                    lang = val.prefix(1).uppercased() + val.dropFirst().lowercased()
+                    break
+                }
+            }
+        }
+
+        return (lang, textPart)
     }
 
     // MARK: - Settings View
