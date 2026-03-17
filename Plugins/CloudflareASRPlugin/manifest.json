@@ -1,0 +1,12 @@
+{
+    "id": "com.typewhisper.cloudflare-asr",
+    "name": "Cloudflare ASR",
+    "version": "1.0.0",
+    "minHostVersion": "0.9.0",
+    "minOSVersion": "14.0",
+    "author": "yunluyl",
+    "description": "OpenAI-compatible transcription through a Cloudflare tunnel with service token authentication. Credentials stored in macOS Keychain.",
+    "category": "transcription",
+    "iconSystemName": "shield.lefthalf.filled",
+    "principalClass": "CloudflareASRPlugin"
+}
