@@ -251,6 +251,22 @@
       "size": 152363,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-livetranscript-v1.0.1/LiveTranscriptPlugin.zip",
       "iconSystemName": "text.bubble"
+    },
+    {
+      "id": "com.typewhisper.granite",
+      "name": "Granite Speech",
+      "version": "1.0.0",
+      "minHostVersion": "0.13.0",
+      "author": "TypeWhisper",
+      "description": "Local speech-to-text and translation by IBM, powered by MLX on Apple Silicon. 6 languages with bidirectional translation.",
+      "descriptions": {
+        "de": "Lokale Spracherkennung und Uebersetzung von IBM mit MLX auf Apple Silicon. 6 Sprachen mit bidirektionaler Uebersetzung."
+      },
+      "category": "transcription",
+      "size": 17547769,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-granite-v1.0.0/GranitePlugin.zip",
+      "minOSVersion": "14.0",
+      "iconSystemName": "cpu"
     }
   ]
 }
