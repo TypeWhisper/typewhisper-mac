@@ -5,6 +5,13 @@ import AppKit
 import Combine
 import os
 
+private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhisper-mac", category: "AudioRecordingService")
+
+private struct Weak<T: AnyObject>: @unchecked Sendable {
+    weak var value: T?
+    init(_ value: T) { self.value = value }
+}
+
 /// Captures microphone audio via AVAudioEngine and converts to 16kHz mono Float32 samples.
 final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
@@ -38,6 +45,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private var _selectedDeviceID: AudioDeviceID?
 
     private var audioEngine: AVAudioEngine?
+    private var configChangeObserver: NSObjectProtocol?
     private var sampleBuffer: [Float] = []
     private var _peakRawAudioLevel: Float = 0
     private let bufferLock = NSLock()
@@ -98,69 +106,90 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         return Double(sampleBuffer.count) / Self.targetSampleRate
     }
 
-    func startRecording() throws {
+    func startRecording() async throws {
         guard hasMicrophonePermission else {
             throw AudioRecordingError.microphonePermissionDenied
         }
 
-        let engine = AVAudioEngine()
+        let deviceID = selectedDeviceID
 
-        // Set the input device before reading the format
-        if let deviceID = selectedDeviceID,
-           let audioUnit = engine.inputNode.audioUnit {
-            var id = deviceID
-            AudioUnitSetProperty(
-                audioUnit,
-                kAudioOutputUnitProperty_CurrentDevice,
-                kAudioUnitScope_Global, 0,
-                &id,
-                UInt32(MemoryLayout<AudioDeviceID>.size)
-            )
+        bufferLock.withLock {
+            sampleBuffer.removeAll()
+            _peakRawAudioLevel = 0
         }
 
-        let inputNode = engine.inputNode
-        let inputFormat = inputNode.outputFormat(forBus: 0)
+        // Run AVAudioEngine setup off the main thread to avoid deadlocking
+        // with AVAudioNode's internal dispatch_sync in outputFormat(forBus:).
+        let weak_self = Weak(self)
+        let engine: AVAudioEngine = try await Task.detached(priority: .userInitiated) {
+            let engine = AVAudioEngine()
 
-        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
-            throw AudioRecordingError.engineStartFailed("No audio input available")
-        }
+            if let deviceID, let audioUnit = engine.inputNode.audioUnit {
+                var id = deviceID
+                AudioUnitSetProperty(
+                    audioUnit,
+                    kAudioOutputUnitProperty_CurrentDevice,
+                    kAudioUnitScope_Global, 0,
+                    &id,
+                    UInt32(MemoryLayout<AudioDeviceID>.size)
+                )
+            }
 
-        // Target format: 16kHz mono Float32
-        guard let targetFormat = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: Self.targetSampleRate,
-            channels: 1,
-            interleaved: false
-        ) else {
-            throw AudioRecordingError.engineStartFailed("Cannot create target audio format")
-        }
+            let inputNode = engine.inputNode
+            let inputFormat = inputNode.outputFormat(forBus: 0)
 
-        let converter = AVAudioConverter(from: inputFormat, to: targetFormat)
-        guard let converter else {
-            throw AudioRecordingError.engineStartFailed("Cannot create audio converter")
-        }
+            guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+                throw AudioRecordingError.engineStartFailed("No audio input available")
+            }
 
-        bufferLock.lock()
-        sampleBuffer.removeAll()
-        _peakRawAudioLevel = 0
-        bufferLock.unlock()
+            guard let targetFormat = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: AudioRecordingService.targetSampleRate,
+                channels: 1,
+                interleaved: false
+            ) else {
+                throw AudioRecordingError.engineStartFailed("Cannot create target audio format")
+            }
 
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
-            self?.processAudioBuffer(buffer, converter: converter, targetFormat: targetFormat)
-        }
+            let converter = AVAudioConverter(from: inputFormat, to: targetFormat)
+            guard let converter else {
+                throw AudioRecordingError.engineStartFailed("Cannot create audio converter")
+            }
 
-        do {
-            try engine.start()
-        } catch {
-            inputNode.removeTap(onBus: 0)
-            throw AudioRecordingError.engineStartFailed(error.localizedDescription)
-        }
+            inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { buffer, _ in
+                weak_self.value?.processAudioBuffer(buffer, converter: converter, targetFormat: targetFormat)
+            }
+
+            do {
+                try engine.start()
+            } catch {
+                inputNode.removeTap(onBus: 0)
+                throw AudioRecordingError.engineStartFailed(error.localizedDescription)
+            }
+
+            return engine
+        }.value
 
         audioEngine = engine
         isRecording = true
+
+        let weakSelf = Weak(self)
+        configChangeObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: nil
+        ) { _ in
+            Task.detached(priority: .userInitiated) {
+                await weakSelf.value?.handleConfigurationChange()
+            }
+        }
     }
 
     func stopRecording() -> [Float] {
+        if let observer = configChangeObserver {
+            NotificationCenter.default.removeObserver(observer)
+            configChangeObserver = nil
+        }
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop()
         audioEngine = nil
@@ -179,6 +208,63 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
 
         return samples
+    }
+
+    /// Re-setup the audio engine after a system configuration change (e.g. notification sound).
+    /// Preserves already-buffered samples so no audio is lost.
+    @MainActor
+    private func handleConfigurationChange() {
+        guard isRecording, let engine = audioEngine else { return }
+        logger.warning("Audio engine configuration changed during recording, restarting engine")
+
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+
+        let deviceID = selectedDeviceID
+        let weakSelf = Weak(self)
+
+        Task.detached(priority: .userInitiated) {
+            if let deviceID, let audioUnit = engine.inputNode.audioUnit {
+                var id = deviceID
+                AudioUnitSetProperty(
+                    audioUnit,
+                    kAudioOutputUnitProperty_CurrentDevice,
+                    kAudioUnitScope_Global, 0,
+                    &id,
+                    UInt32(MemoryLayout<AudioDeviceID>.size)
+                )
+            }
+
+            let inputNode = engine.inputNode
+            let inputFormat = inputNode.outputFormat(forBus: 0)
+
+            guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+                logger.error("Cannot restart engine: no audio input available")
+                return
+            }
+
+            guard let targetFormat = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: AudioRecordingService.targetSampleRate,
+                channels: 1,
+                interleaved: false
+            ), let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
+                logger.error("Cannot restart engine: failed to create format/converter")
+                return
+            }
+
+            inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { buffer, _ in
+                weakSelf.value?.processAudioBuffer(buffer, converter: converter, targetFormat: targetFormat)
+            }
+
+            do {
+                try engine.start()
+                logger.info("Audio engine restarted successfully")
+            } catch {
+                inputNode.removeTap(onBus: 0)
+                logger.error("Failed to restart audio engine: \(error.localizedDescription)")
+            }
+        }
     }
 
     private func processAudioBuffer(
