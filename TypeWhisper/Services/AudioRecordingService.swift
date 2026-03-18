@@ -5,6 +5,8 @@ import AppKit
 import Combine
 import os
 
+private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhisper-mac", category: "AudioRecordingService")
+
 /// Captures microphone audio via AVAudioEngine and converts to 16kHz mono Float32 samples.
 final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
@@ -38,6 +40,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private var _selectedDeviceID: AudioDeviceID?
 
     private var audioEngine: AVAudioEngine?
+    private var configChangeObserver: NSObjectProtocol?
     private var sampleBuffer: [Float] = []
     private var _peakRawAudioLevel: Float = 0
     private let bufferLock = NSLock()
@@ -158,9 +161,22 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
         audioEngine = engine
         isRecording = true
+
+        // Restart engine when macOS changes audio config (e.g. notification sounds)
+        configChangeObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: nil
+        ) { [weak self] _ in
+            self?.handleConfigurationChange()
+        }
     }
 
     func stopRecording() -> [Float] {
+        if let observer = configChangeObserver {
+            NotificationCenter.default.removeObserver(observer)
+            configChangeObserver = nil
+        }
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop()
         audioEngine = nil
@@ -179,6 +195,58 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
 
         return samples
+    }
+
+    /// Re-setup the audio engine after a system configuration change (e.g. notification sound).
+    /// Preserves already-buffered samples so no audio is lost.
+    private func handleConfigurationChange() {
+        guard isRecording, let engine = audioEngine else { return }
+        logger.warning("Audio engine configuration changed during recording, restarting engine")
+
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+
+        let deviceID = selectedDeviceID
+        if let deviceID, let audioUnit = engine.inputNode.audioUnit {
+            var id = deviceID
+            AudioUnitSetProperty(
+                audioUnit,
+                kAudioOutputUnitProperty_CurrentDevice,
+                kAudioUnitScope_Global, 0,
+                &id,
+                UInt32(MemoryLayout<AudioDeviceID>.size)
+            )
+        }
+
+        let inputNode = engine.inputNode
+        let inputFormat = inputNode.outputFormat(forBus: 0)
+
+        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
+            logger.error("Cannot restart engine: no audio input available")
+            return
+        }
+
+        guard let targetFormat = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: Self.targetSampleRate,
+            channels: 1,
+            interleaved: false
+        ), let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
+            logger.error("Cannot restart engine: failed to create format/converter")
+            return
+        }
+
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
+            self?.processAudioBuffer(buffer, converter: converter, targetFormat: targetFormat)
+        }
+
+        do {
+            try engine.start()
+            logger.info("Audio engine restarted successfully")
+        } catch {
+            inputNode.removeTap(onBus: 0)
+            logger.error("Failed to restart audio engine: \(error.localizedDescription)")
+        }
     }
 
     private func processAudioBuffer(
