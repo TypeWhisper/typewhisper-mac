@@ -281,6 +281,22 @@
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cloudflare-asr-v1.0.0/CloudflareASRPlugin.zip",
       "minOSVersion": "14.0",
       "iconSystemName": "shield.lefthalf.filled"
+    },
+    {
+      "id": "com.typewhisper.memory.openai-vector",
+      "name": "OpenAI Vector Memory",
+      "version": "1.0.0",
+      "minHostVersion": "0.14.0",
+      "author": "TypeWhisper",
+      "description": "Store and search memories using the OpenAI Vector Store API with semantic embeddings.",
+      "descriptions": {
+        "de": "Speichert und durchsucht Erinnerungen ueber die OpenAI Vector Store API mit semantischen Embeddings."
+      },
+      "category": "memory",
+      "size": 198014,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-vector-memory-v1.0.0/OpenAIVectorMemoryPlugin.zip",
+      "minOSVersion": "14.0",
+      "iconSystemName": "brain"
     }
   ]
 }
