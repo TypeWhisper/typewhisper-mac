@@ -183,7 +183,14 @@
       }
     },
     "%lld storage plugin(s) active" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Speicher-Plugin(s) aktiv"
+          }
+        }
+      }
     },
     "%lld/%lld" : {
       "comment" : "A caption displaying the number of files that have been successfully transcribed out of the total number of files.",
@@ -715,7 +722,14 @@
       }
     },
     "Automatically extracts facts, preferences and patterns from your transcriptions using an LLM. Memories are injected into prompt context." : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Extrahiert automatisch Fakten, Präferenzen und Muster aus deinen Transkriptionen per LLM. Erinnerungen werden als Kontext in Prompts eingefügt."
+          }
+        }
+      }
     },
     "Automatically unloads local models from memory after inactivity. It reloads when needed. Does not affect cloud engines." : {
       "localizations" : {
@@ -953,7 +967,14 @@
       }
     },
     "Clear All Memories" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Erinnerungen löschen"
+          }
+        }
+      }
     },
     "Clear Filters" : {
       "localizations" : {
@@ -1478,7 +1499,14 @@
       }
     },
     "Enable Memory" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Memory aktivieren"
+          }
+        }
+      }
     },
     "Enable translation" : {
       "localizations" : {
@@ -1607,13 +1635,34 @@
       }
     },
     "Extraction Model" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Extraktions-Modell"
+          }
+        }
+      }
     },
     "Extraction Prompt" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Extraktions-Prompt"
+          }
+        }
+      }
     },
     "Extraction Provider" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Extraktions-Anbieter"
+          }
+        }
+      }
     },
     "Failed to load plugins." : {
       "comment" : "A message displayed when an error occurs while loading the list of available plugins.",
@@ -2150,7 +2199,14 @@
       }
     },
     "Memory" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Memory"
+          }
+        }
+      }
     },
     "Menu bar icon hidden" : {
       "localizations" : {
@@ -2212,7 +2268,14 @@
       }
     },
     "Min. text length" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Min. Textlänge"
+          }
+        }
+      }
     },
     "Model" : {
       "localizations" : {
@@ -2397,7 +2460,14 @@
       }
     },
     "No memory storage plugins active. Enable one in Integrations." : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Memory-Speicher-Plugins aktiv. Aktiviere eins unter Integrationen."
+          }
+        }
+      }
     },
     "No model loaded" : {
       "localizations" : {
@@ -3231,7 +3301,14 @@
       }
     },
     "Reset to Default" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf Standard zurücksetzen"
+          }
+        }
+      }
     },
     "Restart Now" : {
       "localizations" : {
@@ -3384,7 +3461,14 @@
       }
     },
     "Select an extraction provider to start collecting memories." : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wähle einen Extraktions-Anbieter, um Erinnerungen zu sammeln."
+          }
+        }
+      }
     },
     "Select text in any app, press the shortcut, and choose a prompt to process the text." : {
       "localizations" : {
@@ -3978,7 +4062,14 @@
       }
     },
     "Transcriptions shorter than this are skipped for memory extraction." : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transkriptionen kürzer als dieser Wert werden für die Memory-Extraktion übersprungen."
+          }
+        }
+      }
     },
     "Translate to English" : {
       "localizations" : {
@@ -4256,7 +4347,14 @@
       }
     },
     "When enabled, transcriptions from this profile are stored as memories and used as context for prompts." : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wenn aktiviert, werden Transkriptionen dieses Profils als Erinnerungen gespeichert und als Kontext für Prompts verwendet."
+          }
+        }
+      }
     },
     "When hidden, the app is accessible via the Dock icon." : {
       "localizations" : {
