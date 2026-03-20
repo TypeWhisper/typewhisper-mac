@@ -2981,6 +2981,40 @@
         }
       }
     },
+    "preset.createTable" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tabelle erstellen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create Table"
+          }
+        }
+      }
+    },
+    "preset.draftEmail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "E-Mail entwerfen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Draft Email"
+          }
+        }
+      }
+    },
     "preset.formatAsList" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2994,6 +3028,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Format as List"
+          }
+        }
+      }
+    },
+    "preset.jsonData" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "JSON-Daten"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "JSON Data"
+          }
+        }
+      }
+    },
+    "preset.meetingNotes" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Besprechungsnotizen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Meeting Notes"
           }
         }
       }
