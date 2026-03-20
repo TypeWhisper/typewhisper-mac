@@ -8,6 +8,9 @@ enum UserDefaultsKeys {
     static let audioDuckingLevel = "audioDuckingLevel"
     static let soundFeedbackEnabled = "soundFeedbackEnabled"
     static let indicatorStyle = "indicatorStyle"
+    static let textInsertionMode = "textInsertionMode"
+    static let typingDelayMinMs = "typingDelayMinMs"
+    static let typingDelayMaxMs = "typingDelayMaxMs"
 
     // MARK: - Hotkey (JSON-encoded UnifiedHotkey per slot)
     static let hybridHotkey = "hybridHotkey"

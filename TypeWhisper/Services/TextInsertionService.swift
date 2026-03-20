@@ -6,22 +6,57 @@ import os.log
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "TextInsertionService")
 
+enum TextInsertionMode: String, CaseIterable, Identifiable {
+    case simulatedTyping
+    case directInsert
+    case clipboardPaste
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .simulatedTyping:
+            String(localized: "Simulated typing")
+        case .directInsert:
+            String(localized: "Direct text insertion")
+        case .clipboardPaste:
+            String(localized: "Clipboard paste")
+        }
+    }
+
+    var helpText: String {
+        switch self {
+        case .simulatedTyping:
+            String(localized: "Types characters into the focused text area without using the clipboard.")
+        case .directInsert:
+            String(localized: "Writes directly to the focused text element using accessibility APIs.")
+        case .clipboardPaste:
+            String(localized: "Copies text to the clipboard and pastes it with Command-V.")
+        }
+    }
+}
+
 /// Inserts transcribed text into the active application via clipboard + simulated Cmd+V.
 @MainActor
 final class TextInsertionService {
 
 enum InsertionResult {
+        case typed
+        case directInserted
         case pasted
     }
 
     enum TextInsertionError: LocalizedError {
         case accessibilityNotGranted
+        case noFocusedTextField
         case pasteFailed(String)
 
         var errorDescription: String? {
             switch self {
             case .accessibilityNotGranted:
                 "Accessibility permission not granted. Please enable it in System Settings → Privacy & Security → Accessibility."
+            case .noFocusedTextField:
+                "No focused text field found for text insertion."
             case .pasteFailed(let detail):
                 "Failed to paste text: \(detail)"
             }
@@ -286,14 +321,28 @@ enum InsertionResult {
             throw TextInsertionError.accessibilityNotGranted
         }
 
-        let pasteboard = NSPasteboard.general
-        // Set transcribed text on clipboard and simulate Cmd+V.
-        // Text stays on clipboard as fallback if no text field is focused.
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
-        simulatePaste()
-
-        return .pasted
+        switch configuredInsertionMode {
+        case .simulatedTyping:
+            guard hasFocusedTextField() else {
+                throw TextInsertionError.noFocusedTextField
+            }
+            try await simulateTyping(text)
+            return .typed
+        case .directInsert:
+            guard let element = getFocusedTextElement() else {
+                throw TextInsertionError.noFocusedTextField
+            }
+            guard insertTextAt(element: element, text: text) else {
+                throw TextInsertionError.pasteFailed("Accessibility insertion failed")
+            }
+            return .directInserted
+        case .clipboardPaste:
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(text, forType: .string)
+            simulatePaste()
+            return .pasted
+        }
     }
 
     func focusedElementPosition() -> CGPoint? {
@@ -466,4 +515,53 @@ enum InsertionResult {
         simulatePaste()
     }
 
+    private var configuredInsertionMode: TextInsertionMode {
+        let rawValue = UserDefaults.standard.string(forKey: UserDefaultsKeys.textInsertionMode)
+        return rawValue.flatMap(TextInsertionMode.init(rawValue:)) ?? .simulatedTyping
+    }
+
+    private var typingDelayRangeMs: ClosedRange<Int> {
+        let defaults = UserDefaults.standard
+        let storedMin = defaults.object(forKey: UserDefaultsKeys.typingDelayMinMs) as? Int ?? 1
+        let storedMax = defaults.object(forKey: UserDefaultsKeys.typingDelayMaxMs) as? Int ?? 5
+        let lower = max(1, min(storedMin, storedMax))
+        let upper = min(100, max(storedMin, storedMax))
+        return lower...upper
+    }
+
+    private func simulateTyping(_ text: String) async throws {
+        let clusters = text.composedCharacterSequences
+        for (index, cluster) in clusters.enumerated() {
+            postUnicodeKeystroke(cluster)
+            if index < clusters.count - 1 {
+                let delayMs = Int.random(in: typingDelayRangeMs)
+                try await Task.sleep(for: .milliseconds(delayMs))
+            }
+        }
+    }
+
+    private func postUnicodeKeystroke(_ string: String) {
+        let utf16 = Array(string.utf16)
+        guard !utf16.isEmpty else { return }
+
+        let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true)
+        keyDown?.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: utf16)
+        keyDown?.post(tap: .cgSessionEventTap)
+
+        let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: false)
+        keyUp?.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: utf16)
+        keyUp?.post(tap: .cgSessionEventTap)
+    }
+}
+
+private extension String {
+    var composedCharacterSequences: [String] {
+        var sequences: [String] = []
+        enumerateSubstrings(in: startIndex..<endIndex, options: .byComposedCharacterSequences) { substring, _, _, _ in
+            if let substring {
+                sequences.append(substring)
+            }
+        }
+        return sequences
+    }
 }

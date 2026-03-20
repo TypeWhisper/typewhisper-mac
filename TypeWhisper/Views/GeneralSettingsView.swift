@@ -12,6 +12,9 @@ struct GeneralSettingsView: View {
     @State private var showRestartAlert = false
     @State private var showMenuBarIconHiddenAlert = false
     @AppStorage(UserDefaultsKeys.showMenuBarIcon) private var showMenuBarIcon = true
+    @AppStorage(UserDefaultsKeys.textInsertionMode) private var textInsertionMode = TextInsertionMode.simulatedTyping.rawValue
+    @AppStorage(UserDefaultsKeys.typingDelayMinMs) private var typingDelayMinMs = 1
+    @AppStorage(UserDefaultsKeys.typingDelayMaxMs) private var typingDelayMaxMs = 5
     @ObservedObject private var pluginManager = PluginManager.shared
     @ObservedObject private var settings = SettingsViewModel.shared
     @ObservedObject private var dictation = DictationViewModel.shared
@@ -90,6 +93,52 @@ struct GeneralSettingsView: View {
                 Text(String(localized: "When hidden, the app is accessible via the Dock icon."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            Section(String(localized: "Text Insertion")) {
+                Picker(String(localized: "Insertion method"), selection: $textInsertionMode) {
+                    ForEach(TextInsertionMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode.rawValue)
+                    }
+                }
+
+                Text(selectedTextInsertionMode.helpText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if selectedTextInsertionMode == .simulatedTyping {
+                    Stepper(value: $typingDelayMinMs, in: 1...100) {
+                        HStack {
+                            Text(String(localized: "Typing delay minimum"))
+                            Spacer()
+                            Text("\(typingDelayMinMs) ms")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .onChange(of: typingDelayMinMs) { _, newValue in
+                        if newValue > typingDelayMaxMs {
+                            typingDelayMaxMs = newValue
+                        }
+                    }
+
+                    Stepper(value: $typingDelayMaxMs, in: 1...100) {
+                        HStack {
+                            Text(String(localized: "Typing delay maximum"))
+                            Spacer()
+                            Text("\(typingDelayMaxMs) ms")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .onChange(of: typingDelayMaxMs) { _, newValue in
+                        if newValue < typingDelayMinMs {
+                            typingDelayMinMs = newValue
+                        }
+                    }
+
+                    Text(String(localized: "A small random delay is applied between keystrokes to make typing more reliable in text areas."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section(String(localized: "Indicator")) {
@@ -206,5 +255,9 @@ struct GeneralSettingsView: View {
             // Revert toggle on failure
             launchAtLogin = SMAppService.mainApp.status == .enabled
         }
+    }
+
+    private var selectedTextInsertionMode: TextInsertionMode {
+        TextInsertionMode(rawValue: textInsertionMode) ?? .simulatedTyping
     }
 }
