@@ -30,6 +30,7 @@ struct TypeWhisperApp: App {
 
         Window(String(localized: "History"), id: "history") {
             HistoryView()
+                .background(WindowBridge(windowID: "history"))
         }
         .windowResizability(.contentMinSize)
         .defaultSize(width: 900, height: 500)
@@ -38,7 +39,7 @@ struct TypeWhisperApp: App {
     private var settingsScene: some Scene {
         Window(String(localized: "Settings"), id: "settings") {
             SettingsView()
-                .background(SettingsWindowBridge())
+                .background(WindowBridge(windowID: "settings"))
         }
         .windowResizability(.contentMinSize)
         .defaultSize(width: 1050, height: 600)
@@ -56,20 +57,47 @@ struct TypeWhisperApp: App {
 
 // MARK: - Settings Window Bridge
 
-/// Captures the `openWindow` environment action from the SwiftUI scene context
-/// and stores it statically so AppDelegate can open the settings window from Dock clicks.
-private struct SettingsWindowBridge: View {
+/// Captures the `openWindow` action and tags the hosting NSWindow with a stable identifier.
+private struct WindowBridge: View {
     @Environment(\.openWindow) private var openWindow
+    let windowID: String
 
     var body: some View {
-        Color.clear
-            .frame(width: 0, height: 0)
-            .onAppear {
+        WindowAccessor { window in
+            guard let window else { return }
+            window.identifier = NSUserInterfaceItemIdentifier(windowID)
+            if windowID == "settings" {
                 SettingsWindowOpener.shared.openWindow = openWindow
             }
-            .onReceive(NotificationCenter.default.publisher(for: .openSettingsFromDock)) { _ in
-                openWindow(id: "settings")
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openSettingsFromDock)) { _ in
+            guard windowID == "settings" else { return }
+            openWindow(id: "settings")
+            DispatchQueue.main.async {
+                if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "settings" }) {
+                    window.makeKeyAndOrderFront(nil)
+                }
+                NSApp.activate(ignoringOtherApps: true)
             }
+        }
+    }
+}
+
+private struct WindowAccessor: NSViewRepresentable {
+    let onResolve: (NSWindow?) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            onResolve(view.window)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            onResolve(nsView.window)
+        }
     }
 }
 
@@ -81,7 +109,7 @@ final class SettingsWindowOpener {
 
     func openSettings() {
         NSApp.setActivationPolicy(.regular)
-        NSApp.activate()
+        NSApp.activate(ignoringOtherApps: true)
         openWindow?(id: "settings")
     }
 }
@@ -189,13 +217,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor private func openSettingsWindow() {
         NSApp.setActivationPolicy(.regular)
-        NSApp.activate()
+        NSApp.activate(ignoringOtherApps: true)
 
         // Try existing window first (SwiftUI keeps it after close)
         if let window = NSApp.windows.first(where: {
-            $0.identifier?.rawValue.localizedCaseInsensitiveContains("settings") == true
+            $0.identifier?.rawValue == "settings"
         }) {
             window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
             return
         }
 
@@ -211,8 +240,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor private func isManagedWindow(_ window: NSWindow) -> Bool {
         guard let id = window.identifier?.rawValue else { return false }
-        return id.localizedCaseInsensitiveContains("settings")
-            || id.localizedCaseInsensitiveContains("history")
+        return id == "settings" || id == "history"
     }
 
     @MainActor private var hasVisibleManagedWindow: Bool {
@@ -229,7 +257,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
               window.isVisible
         else { return }
         NSApp.setActivationPolicy(.regular)
-        NSApp.activate()
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     @MainActor @objc private func windowWillClose(_ notification: Notification) {

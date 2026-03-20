@@ -127,11 +127,11 @@ struct MenuBarView: View {
         NSApp.setActivationPolicy(.regular)
         DispatchQueue.main.async {
             if let window = NSApp.windows.first(where: {
-                $0.identifier?.rawValue.localizedCaseInsensitiveContains(id) == true
+                $0.identifier?.rawValue == id
             }) {
                 window.makeKeyAndOrderFront(nil)
             }
-            NSApp.activate()
+            NSApp.activate(ignoringOtherApps: true)
         }
     }
 }
