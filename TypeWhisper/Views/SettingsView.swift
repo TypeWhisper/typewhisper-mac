@@ -332,6 +332,14 @@ struct RecordingSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section(String(localized: "Voice Commands")) {
+                Toggle(String(localized: "Enable voice commands"), isOn: $dictation.voiceCommandsEnabled)
+
+                Text(String(localized: "Recognize commands like 'new paragraph' or 'period' during dictation."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section(String(localized: "Audio Ducking")) {
                 Toggle(String(localized: "Reduce system volume during recording"), isOn: $dictation.audioDuckingEnabled)
 

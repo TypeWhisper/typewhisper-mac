@@ -12,6 +12,7 @@ final class StreamingHandler {
     private let modelManager: ModelManagerService
     private let audioRecordingService: AudioRecordingService
     private let dictionaryService: DictionaryService
+    private let voiceCommandService: VoiceCommandService
 
     var onPartialTextUpdate: ((String) -> Void)?
     var onStreamingStateChange: ((Bool) -> Void)?
@@ -19,11 +20,13 @@ final class StreamingHandler {
     init(
         modelManager: ModelManagerService,
         audioRecordingService: AudioRecordingService,
-        dictionaryService: DictionaryService
+        dictionaryService: DictionaryService,
+        voiceCommandService: VoiceCommandService
     ) {
         self.modelManager = modelManager
         self.audioRecordingService = audioRecordingService
         self.dictionaryService = dictionaryService
+        self.voiceCommandService = voiceCommandService
     }
 
     func start(
@@ -54,6 +57,8 @@ final class StreamingHandler {
                 if bufferDuration > 0.5 {
                     do {
                         let confirmed = self.confirmedStreamingText
+                        let vcService = self.voiceCommandService
+                        let vcEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.voiceCommandsEnabled)
                         let result = try await self.modelManager.transcribe(
                             audioSamples: buffer,
                             language: language,
@@ -64,8 +69,9 @@ final class StreamingHandler {
                             onProgress: { [weak self] text in
                                 guard let self, !Task.isCancelled else { return false }
                                 let stable = Self.stabilizeText(confirmed: confirmed, new: text)
+                                let display = vcEnabled ? vcService.process(text: stable).text : stable
                                 Task { @MainActor [weak self] in
-                                    self?.onPartialTextUpdate?(stable)
+                                    self?.onPartialTextUpdate?(display)
                                 }
                                 return true
                             }
@@ -73,7 +79,8 @@ final class StreamingHandler {
                         let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
                         if !text.isEmpty {
                             let stable = Self.stabilizeText(confirmed: confirmed, new: text)
-                            self.onPartialTextUpdate?(stable)
+                            let display = vcEnabled ? vcService.process(text: stable).text : stable
+                            self.onPartialTextUpdate?(display)
                             self.confirmedStreamingText = stable
                         }
                     } catch {

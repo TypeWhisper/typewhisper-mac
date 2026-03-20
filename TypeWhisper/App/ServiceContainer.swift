@@ -80,6 +80,10 @@ final class ServiceContainer: ObservableObject {
             audioFileService: audioFileService
         )
         settingsViewModel = SettingsViewModel(modelManager: modelManagerService)
+
+        let voiceCommandService = VoiceCommandService()
+        let voiceCommandHandler = VoiceCommandHandler(voiceCommandService: voiceCommandService)
+
         dictationViewModel = DictationViewModel(
             audioRecordingService: audioRecordingService,
             textInsertionService: textInsertionService,
@@ -95,7 +99,8 @@ final class ServiceContainer: ObservableObject {
             soundService: soundService,
             audioDeviceService: audioDeviceService,
             promptActionService: promptActionService,
-            promptProcessingService: promptProcessingService
+            promptProcessingService: promptProcessingService,
+            voiceCommandHandler: voiceCommandHandler
         )
 
 
