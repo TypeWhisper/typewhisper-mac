@@ -51,6 +51,7 @@ final class ProfileService: ObservableObject {
         cloudModelOverride: String? = nil,
         promptActionId: String? = nil,
         memoryEnabled: Bool = false,
+        outputFormat: String? = nil,
         hotkeyData: Data? = nil,
         priority: Int = 0
     ) {
@@ -66,6 +67,7 @@ final class ProfileService: ObservableObject {
             cloudModelOverride: cloudModelOverride,
             promptActionId: promptActionId,
             memoryEnabled: memoryEnabled,
+            outputFormat: outputFormat,
             hotkeyData: hotkeyData
         )
         modelContext.insert(profile)

@@ -125,7 +125,8 @@ final class DictationViewModel: ObservableObject {
         soundService: SoundService,
         audioDeviceService: AudioDeviceService,
         promptActionService: PromptActionService,
-        promptProcessingService: PromptProcessingService
+        promptProcessingService: PromptProcessingService,
+        appFormatterService: AppFormatterService
     ) {
         self.audioRecordingService = audioRecordingService
         self.textInsertionService = textInsertionService
@@ -144,7 +145,8 @@ final class DictationViewModel: ObservableObject {
         self.promptProcessingService = promptProcessingService
         self.postProcessingPipeline = PostProcessingPipeline(
             snippetService: snippetService,
-            dictionaryService: dictionaryService
+            dictionaryService: dictionaryService,
+            appFormatterService: appFormatterService
         )
         self.streamingHandler = StreamingHandler(
             modelManager: modelManager,
@@ -590,7 +592,8 @@ final class DictationViewModel: ObservableObject {
                     selectedText: self.capturedSelectedText
                 )
                 text = try await postProcessingPipeline.process(
-                    text: text, context: ppContext, llmHandler: llmHandler
+                    text: text, context: ppContext, llmHandler: llmHandler,
+                    outputFormat: self.matchedProfile?.outputFormat
                 )
 
                 partialText = ""

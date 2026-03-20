@@ -64,6 +64,9 @@ enum UserDefaultsKeys {
     static let memoryMinTextLength = "memoryMinTextLength"
     static let memoryExtractionPrompt = "memoryExtractionPrompt"
 
+    // MARK: - Formatting
+    static let appFormattingEnabled = "appFormattingEnabled"
+
     // MARK: - Plugin Registry
     static let pluginRegistryLastFetch = "pluginRegistryLastFetch"
 }

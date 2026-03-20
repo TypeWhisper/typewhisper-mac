@@ -26,6 +26,7 @@ final class ServiceContainer: ObservableObject {
     let pluginRegistryService: PluginRegistryService
     let widgetDataService: WidgetDataService
     let memoryService: MemoryService
+    let appFormatterService: AppFormatterService
 
     // HTTP API
     let httpServer: HTTPServer
@@ -72,6 +73,7 @@ final class ServiceContainer: ObservableObject {
         pluginRegistryService = PluginRegistryService()
         widgetDataService = WidgetDataService(historyService: historyService)
         memoryService = MemoryService(promptProcessingService: promptProcessingService)
+        appFormatterService = AppFormatterService()
         promptProcessingService.memoryService = memoryService
 
         // ViewModels (created before HTTP API so DictationViewModel is available)
@@ -95,7 +97,8 @@ final class ServiceContainer: ObservableObject {
             soundService: soundService,
             audioDeviceService: audioDeviceService,
             promptActionService: promptActionService,
-            promptProcessingService: promptProcessingService
+            promptProcessingService: promptProcessingService,
+            appFormatterService: appFormatterService
         )
 
 

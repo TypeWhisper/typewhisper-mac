@@ -351,6 +351,20 @@ private struct ProfileEditorSheet: View {
                     Text(String(localized: "When enabled, transcriptions from this profile are stored as memories and used as context for prompts."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
+
+                    // Output format
+                    Picker(String(localized: "Output Format"), selection: $viewModel.editorOutputFormat) {
+                        Text(String(localized: "None")).tag(nil as String?)
+                        Divider()
+                        Text(String(localized: "Auto-detect")).tag("auto" as String?)
+                        Text(String(localized: "Markdown")).tag("markdown" as String?)
+                        Text(String(localized: "HTML")).tag("html" as String?)
+                        Text(String(localized: "Plain Text")).tag("plaintext" as String?)
+                        Text(String(localized: "Code")).tag("code" as String?)
+                    }
+                    Text(String(localized: "Format transcribed text for the target app. Auto-detect chooses the format based on the app's bundle ID. Requires app-aware formatting to be enabled in Recording settings."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section(String(localized: "Priority")) {
