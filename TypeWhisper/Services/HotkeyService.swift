@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import Combine
+import Carbon
 
 struct UnifiedHotkey: Equatable, Sendable, Codable {
     let keyCode: UInt16
@@ -99,6 +100,20 @@ final class HotkeyService: ObservableObject {
 
     private var globalMonitor: Any?
     private var localMonitor: Any?
+    private var carbonEventHandler: EventHandlerRef?
+    private var registeredGlobalHotkeys: [UInt32: RegisteredHotkey] = [:]
+    private var nextHotkeyId: UInt32 = 1
+
+    private enum RegisteredHotkeyTarget {
+        case globalSlot(HotkeySlotType)
+        case profile(UUID)
+    }
+
+    private struct RegisteredHotkey {
+        let target: RegisteredHotkeyTarget
+        let hotkey: UnifiedHotkey
+        let ref: EventHotKeyRef
+    }
 
     // Modifier keyCodes that generate flagsChanged instead of keyDown/keyUp
     nonisolated static let modifierKeyCodes: Set<UInt16> = [
@@ -114,21 +129,19 @@ final class HotkeyService: ObservableObject {
 
     func setup() {
         loadHotkeys()
-        setupMonitor()
+        rebuildHotkeyInfrastructure()
     }
 
     func updateHotkey(_ hotkey: UnifiedHotkey, for slotType: HotkeySlotType) {
         slots[slotType] = SlotState(hotkey: hotkey)
         UserDefaults.standard.set(try? JSONEncoder().encode(hotkey), forKey: slotType.defaultsKey)
-        tearDownMonitor()
-        setupMonitor()
+        rebuildHotkeyInfrastructure()
     }
 
     func clearHotkey(for slotType: HotkeySlotType) {
         slots[slotType] = SlotState()
         UserDefaults.standard.removeObject(forKey: slotType.defaultsKey)
-        tearDownMonitor()
-        setupMonitor()
+        rebuildHotkeyInfrastructure()
     }
 
     /// Returns which slot already has this hotkey assigned, excluding a given slot.
@@ -162,8 +175,7 @@ final class HotkeyService: ObservableObject {
         for entry in entries {
             profileSlots[entry.id] = ProfileHotkeyState(profileId: entry.id, hotkey: entry.hotkey)
         }
-        tearDownMonitor()
-        setupMonitor()
+        rebuildHotkeyInfrastructure()
     }
 
     func isHotkeyAssignedToProfile(_ hotkey: UnifiedHotkey, excludingProfileId: UUID?) -> UUID? {
@@ -220,12 +232,21 @@ final class HotkeyService: ObservableObject {
         }
     }
 
+    private func rebuildHotkeyInfrastructure() {
+        tearDownMonitor()
+        unregisterCarbonHotkeys()
+        installCarbonEventHandlerIfNeeded()
+        registerCarbonHotkeys()
+        setupMonitor()
+    }
+
     func suspendMonitoring() {
         tearDownMonitor()
+        unregisterCarbonHotkeys()
     }
 
     func resumeMonitoring() {
-        setupMonitor()
+        rebuildHotkeyInfrastructure()
     }
 
     private func handleEvent(_ event: NSEvent) {
@@ -238,6 +259,7 @@ final class HotkeyService: ObservableObject {
         // Global slots
         for slotType in HotkeySlotType.allCases {
             guard var state = slots[slotType], let hotkey = state.hotkey else { continue }
+            guard hotkey.kind != .keyWithModifiers else { continue }
             let (keyDown, keyUp) = processKeyEvent(event, hotkey: hotkey, state: &state)
             slots[slotType] = state
             if keyDown { handleKeyDown(slotType: slotType) }
@@ -247,6 +269,7 @@ final class HotkeyService: ObservableObject {
         // Profile slots
         for profileId in Array(profileSlots.keys) {
             guard var pState = profileSlots[profileId] else { continue }
+            guard pState.hotkey.kind != .keyWithModifiers else { continue }
             var state = SlotState(hotkey: pState.hotkey, fnWasDown: pState.fnWasDown,
                                   modifierWasDown: pState.modifierWasDown, keyWasDown: pState.keyWasDown)
             let (keyDown, keyUp) = processKeyEvent(event, hotkey: pState.hotkey, state: &state)
@@ -490,5 +513,118 @@ final class HotkeyService: ObservableObject {
         case 0x3B, 0x3E: return .control
         default: return nil
         }
+    }
+
+    // MARK: - Carbon Global Hotkeys
+
+    private func installCarbonEventHandlerIfNeeded() {
+        guard carbonEventHandler == nil else { return }
+
+        let eventTypes = [
+            EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed)),
+            EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyReleased))
+        ]
+
+        let callback: EventHandlerUPP = { _, eventRef, userData in
+            guard let userData, let eventRef else { return noErr }
+            let service = Unmanaged<HotkeyService>.fromOpaque(userData).takeUnretainedValue()
+            return service.handleCarbonHotkeyEvent(eventRef)
+        }
+
+        InstallEventHandler(
+            GetEventDispatcherTarget(),
+            callback,
+            eventTypes.count,
+            eventTypes,
+            UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque()),
+            &carbonEventHandler
+        )
+    }
+
+    private func unregisterCarbonHotkeys() {
+        for registration in registeredGlobalHotkeys.values {
+            UnregisterEventHotKey(registration.ref)
+        }
+        registeredGlobalHotkeys.removeAll()
+    }
+
+    private func registerCarbonHotkeys() {
+        for slotType in HotkeySlotType.allCases {
+            guard let hotkey = slots[slotType]?.hotkey, hotkey.kind == .keyWithModifiers else { continue }
+            registerCarbonHotkey(hotkey, target: .globalSlot(slotType))
+        }
+
+        for (profileId, state) in profileSlots where state.hotkey.kind == .keyWithModifiers {
+            registerCarbonHotkey(state.hotkey, target: .profile(profileId))
+        }
+    }
+
+    private func registerCarbonHotkey(_ hotkey: UnifiedHotkey, target: RegisteredHotkeyTarget) {
+        var hotkeyRef: EventHotKeyRef?
+        var hotkeyID = EventHotKeyID(signature: fourCharCode("TWHK"), id: nextHotkeyId)
+
+        let status = RegisterEventHotKey(
+            UInt32(hotkey.keyCode),
+            carbonModifierFlags(for: hotkey),
+            hotkeyID,
+            GetEventDispatcherTarget(),
+            0,
+            &hotkeyRef
+        )
+
+        guard status == noErr, let hotkeyRef else { return }
+
+        registeredGlobalHotkeys[nextHotkeyId] = RegisteredHotkey(target: target, hotkey: hotkey, ref: hotkeyRef)
+        nextHotkeyId += 1
+    }
+
+    private func carbonModifierFlags(for hotkey: UnifiedHotkey) -> UInt32 {
+        let flags = NSEvent.ModifierFlags(rawValue: hotkey.modifierFlags)
+        var carbonFlags: UInt32 = 0
+        if flags.contains(.command) { carbonFlags |= UInt32(cmdKey) }
+        if flags.contains(.option) { carbonFlags |= UInt32(optionKey) }
+        if flags.contains(.control) { carbonFlags |= UInt32(controlKey) }
+        if flags.contains(.shift) { carbonFlags |= UInt32(shiftKey) }
+        return carbonFlags
+    }
+
+    private func handleCarbonHotkeyEvent(_ eventRef: EventRef) -> OSStatus {
+        var hotkeyID = EventHotKeyID()
+        let status = GetEventParameter(
+            eventRef,
+            EventParamName(kEventParamDirectObject),
+            EventParamType(typeEventHotKeyID),
+            nil,
+            MemoryLayout<EventHotKeyID>.size,
+            nil,
+            &hotkeyID
+        )
+
+        guard status == noErr, let registration = registeredGlobalHotkeys[hotkeyID.id] else {
+            return noErr
+        }
+
+        let kind = GetEventKind(eventRef)
+        if kind == UInt32(kEventHotKeyPressed) {
+            switch registration.target {
+            case .globalSlot(let slotType):
+                handleKeyDown(slotType: slotType)
+            case .profile(let profileId):
+                handleProfileKeyDown(profileId: profileId)
+            }
+        } else if kind == UInt32(kEventHotKeyReleased) {
+            switch registration.target {
+            case .globalSlot(let slotType):
+                handleKeyUp(slotType: slotType)
+            case .profile(let profileId):
+                handleProfileKeyUp(profileId: profileId)
+            }
+        }
+
+        return noErr
+    }
+
+    private func fourCharCode(_ string: String) -> OSType {
+        string.utf8.reduce(0) { ($0 << 8) + OSType($1) }
     }
 }
