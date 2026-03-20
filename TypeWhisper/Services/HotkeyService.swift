@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import Carbon.HIToolbox
 import Combine
 
 struct UnifiedHotkey: Equatable, Sendable, Codable {
@@ -449,25 +450,16 @@ final class HotkeyService: ObservableObject {
     }
 
     nonisolated static func keyName(for keyCode: UInt16) -> String {
-        let knownKeys: [UInt16: String] = [
-            0x00: "A", 0x01: "S", 0x02: "D", 0x03: "F", 0x04: "H",
-            0x05: "G", 0x06: "Z", 0x07: "X", 0x08: "C", 0x09: "V",
-            0x0A: "§", 0x0B: "B", 0x0C: "Q", 0x0D: "W", 0x0E: "E",
-            0x0F: "R", 0x10: "Y", 0x11: "T", 0x12: "1", 0x13: "2",
-            0x14: "3", 0x15: "4", 0x16: "6", 0x17: "5", 0x18: "=",
-            0x19: "9", 0x1A: "7", 0x1B: "-", 0x1C: "8", 0x1D: "0",
-            0x1E: "]", 0x1F: "O", 0x20: "U", 0x21: "[", 0x22: "I",
-            0x23: "P", 0x24: "⏎", 0x25: "L", 0x26: "J", 0x27: "'",
-            0x28: "K", 0x29: ";", 0x2A: "\\", 0x2B: ",", 0x2C: "/",
-            0x2D: "N", 0x2E: "M", 0x2F: ".", 0x30: "⇥", 0x31: "␣",
-            0x32: "`", 0x33: "⌫", 0x35: "⎋", 0x7A: "F1", 0x78: "F2",
-            0x63: "F3", 0x76: "F4", 0x60: "F5", 0x61: "F6", 0x62: "F7",
-            0x64: "F8", 0x65: "F9", 0x6D: "F10", 0x67: "F11", 0x6F: "F12",
+        // Special keys that don't produce meaningful characters via UCKeyTranslate
+        let specialKeys: [UInt16: String] = [
+            0x24: "⏎", 0x30: "⇥", 0x31: "␣", 0x33: "⌫", 0x35: "⎋",
+            0x7A: "F1", 0x78: "F2", 0x63: "F3", 0x76: "F4",
+            0x60: "F5", 0x61: "F6", 0x62: "F7", 0x64: "F8",
+            0x65: "F9", 0x6D: "F10", 0x67: "F11", 0x6F: "F12",
             0x69: "F13", 0x6B: "F14", 0x71: "F15",
             0x7E: "↑", 0x7D: "↓", 0x7B: "←", 0x7C: "→",
         ]
-
-        if let name = knownKeys[keyCode] { return name }
+        if let name = specialKeys[keyCode] { return name }
 
         let modifierNames: [UInt16: String] = [
             0x37: "Left Command", 0x36: "Right Command",
@@ -477,7 +469,62 @@ final class HotkeyService: ObservableObject {
         ]
         if let name = modifierNames[keyCode] { return name }
 
+        // Use the current keyboard layout to resolve the character for this keyCode
+        if let character = characterForKeyCode(keyCode) {
+            return character.uppercased()
+        }
+
+        // QWERTY fallback for when layout resolution fails
+        let qwertyFallback: [UInt16: String] = [
+            0x00: "A", 0x01: "S", 0x02: "D", 0x03: "F", 0x04: "H",
+            0x05: "G", 0x06: "Z", 0x07: "X", 0x08: "C", 0x09: "V",
+            0x0A: "§", 0x0B: "B", 0x0C: "Q", 0x0D: "W", 0x0E: "E",
+            0x0F: "R", 0x10: "Y", 0x11: "T", 0x12: "1", 0x13: "2",
+            0x14: "3", 0x15: "4", 0x16: "6", 0x17: "5", 0x18: "=",
+            0x19: "9", 0x1A: "7", 0x1B: "-", 0x1C: "8", 0x1D: "0",
+            0x1E: "]", 0x1F: "O", 0x20: "U", 0x21: "[", 0x22: "I",
+            0x23: "P", 0x25: "L", 0x26: "J", 0x27: "'",
+            0x28: "K", 0x29: ";", 0x2A: "\\", 0x2B: ",", 0x2C: "/",
+            0x2D: "N", 0x2E: "M", 0x2F: ".", 0x32: "`",
+        ]
+        if let name = qwertyFallback[keyCode] { return name }
+
         return "Key \(keyCode)"
+    }
+
+    /// Resolves the character for a keyCode using the current keyboard input source.
+    private nonisolated static func characterForKeyCode(_ keyCode: UInt16) -> String? {
+        let source = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
+        guard let layoutDataRef = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else {
+            return nil
+        }
+        let layoutData = unsafeBitCast(layoutDataRef, to: CFData.self)
+        let keyLayoutPtr = unsafeBitCast(CFDataGetBytePtr(layoutData), to: UnsafePointer<UCKeyboardLayout>.self)
+
+        var deadKeyState: UInt32 = 0
+        var chars = [UniChar](repeating: 0, count: 4)
+        var length = 0
+
+        let status = UCKeyTranslate(
+            keyLayoutPtr,
+            keyCode,
+            UInt16(kUCKeyActionDown),
+            0, // no modifiers
+            UInt32(LMGetKbdType()),
+            UInt32(kUCKeyTranslateNoDeadKeysMask),
+            &deadKeyState,
+            chars.count,
+            &length,
+            &chars
+        )
+
+        guard status == noErr, length > 0 else { return nil }
+        let result = String(utf16CodeUnits: chars, count: length)
+        // Filter out control characters (e.g. from non-printable keys)
+        if result.unicodeScalars.allSatisfy({ CharacterSet.controlCharacters.contains($0) }) {
+            return nil
+        }
+        return result
     }
 
     // MARK: - Helpers
