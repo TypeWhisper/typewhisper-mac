@@ -43,6 +43,9 @@ final class DictationViewModel: ObservableObject {
     @Published var soundFeedbackEnabled: Bool {
         didSet { UserDefaults.standard.set(soundFeedbackEnabled, forKey: UserDefaultsKeys.soundFeedbackEnabled) }
     }
+    @Published var voiceCommandsEnabled: Bool {
+        didSet { UserDefaults.standard.set(voiceCommandsEnabled, forKey: UserDefaultsKeys.voiceCommandsEnabled) }
+    }
     @Published var hotkeyLabelsVersion = 0
     var hybridHotkeyLabel: String { Self.loadHotkeyLabel(for: .hybrid) }
     var pttHotkeyLabel: String { Self.loadHotkeyLabel(for: .pushToTalk) }
@@ -105,6 +108,7 @@ final class DictationViewModel: ObservableObject {
     private let streamingHandler: StreamingHandler
     private let promptPaletteHandler: PromptPaletteHandler
     private let settingsHandler: DictationSettingsHandler
+    private let voiceCommandHandler: VoiceCommandHandler
     private var transcriptionTask: Task<Void, Never>?
     private var errorResetTask: Task<Void, Never>?
     private var insertingResetTask: Task<Void, Never>?
@@ -125,7 +129,8 @@ final class DictationViewModel: ObservableObject {
         soundService: SoundService,
         audioDeviceService: AudioDeviceService,
         promptActionService: PromptActionService,
-        promptProcessingService: PromptProcessingService
+        promptProcessingService: PromptProcessingService,
+        voiceCommandHandler: VoiceCommandHandler
     ) {
         self.audioRecordingService = audioRecordingService
         self.textInsertionService = textInsertionService
@@ -142,6 +147,7 @@ final class DictationViewModel: ObservableObject {
         self.audioDeviceService = audioDeviceService
         self.promptActionService = promptActionService
         self.promptProcessingService = promptProcessingService
+        self.voiceCommandHandler = voiceCommandHandler
         self.postProcessingPipeline = PostProcessingPipeline(
             snippetService: snippetService,
             dictionaryService: dictionaryService
@@ -149,7 +155,8 @@ final class DictationViewModel: ObservableObject {
         self.streamingHandler = StreamingHandler(
             modelManager: modelManager,
             audioRecordingService: audioRecordingService,
-            dictionaryService: dictionaryService
+            dictionaryService: dictionaryService,
+            voiceCommandService: voiceCommandHandler.voiceCommandService
         )
         self.promptPaletteHandler = PromptPaletteHandler(
             textInsertionService: textInsertionService,
@@ -166,6 +173,7 @@ final class DictationViewModel: ObservableObject {
         self.audioDuckingEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.audioDuckingEnabled)
         self.audioDuckingLevel = UserDefaults.standard.object(forKey: UserDefaultsKeys.audioDuckingLevel) as? Double ?? 0.2
         self.soundFeedbackEnabled = UserDefaults.standard.object(forKey: UserDefaultsKeys.soundFeedbackEnabled) as? Bool ?? true
+        self.voiceCommandsEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.voiceCommandsEnabled)
         self.indicatorStyle = UserDefaults.standard.string(forKey: UserDefaultsKeys.indicatorStyle)
             .flatMap { IndicatorStyle(rawValue: $0) } ?? .notch
         self.notchIndicatorVisibility = UserDefaults.standard.string(forKey: UserDefaultsKeys.notchIndicatorVisibility)
@@ -214,6 +222,10 @@ final class DictationViewModel: ObservableObject {
         }
         settingsHandler.onHotkeyLabelsChanged = { [weak self] in
             self?.hotkeyLabelsVersion += 1
+        }
+
+        voiceCommandHandler.onStopRequested = { [weak self] in
+            self?.stopDictation()
         }
     }
 
@@ -567,6 +579,10 @@ final class DictationViewModel: ObservableObject {
                 guard !Task.isCancelled else { return }
 
                 var text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                // Apply voice commands (punctuation, paragraph, delete) before post-processing
+                text = self.voiceCommandHandler.processFinalText(text)
+
                 guard !text.isEmpty else {
                     resetDictationState()
                     return

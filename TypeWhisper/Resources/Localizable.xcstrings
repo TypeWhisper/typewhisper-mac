@@ -4536,6 +4536,36 @@
     },
     "Your words appear as text instantly." : {
 
+    },
+    "Voice Commands" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sprachbefehle"
+          }
+        }
+      }
+    },
+    "Enable voice commands" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sprachbefehle aktivieren"
+          }
+        }
+      }
+    },
+    "Recognize commands like 'new paragraph' or 'period' during dictation." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Befehle wie 'neuer Absatz' oder 'Punkt' waehrend der Diktierung erkennen."
+          }
+        }
+      }
     }
   },
   "version" : "1.1"
