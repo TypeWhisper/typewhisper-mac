@@ -66,4 +66,9 @@ enum UserDefaultsKeys {
 
     // MARK: - Plugin Registry
     static let pluginRegistryLastFetch = "pluginRegistryLastFetch"
+
+    // MARK: - Recorder
+    static let recorderMicEnabled = "recorderMicEnabled"
+    static let recorderSystemAudioEnabled = "recorderSystemAudioEnabled"
+    static let recorderOutputFormat = "recorderOutputFormat"
 }

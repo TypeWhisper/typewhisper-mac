@@ -202,6 +202,9 @@
 		AA00000000000000000244 /* OpenAIVectorMemoryPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000232 /* OpenAIVectorMemoryPlugin.swift */; };
 		AA00000000000000000245 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000233 /* manifest.json */; };
 		AA00000000000000000246 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000033 /* TypeWhisperPluginSDK */; };
+		AA00000000000000000250 /* AudioRecorderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000238 /* AudioRecorderService.swift */; };
+		AA00000000000000000251 /* AudioRecorderViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000239 /* AudioRecorderViewModel.swift */; };
+		AA00000000000000000252 /* AudioRecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000240 /* AudioRecorderView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -397,6 +400,9 @@
 		BB00000000000000000232 /* OpenAIVectorMemoryPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIVectorMemoryPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000233 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000234 /* OpenAIVectorMemoryPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OpenAIVectorMemoryPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB00000000000000000238 /* AudioRecorderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderService.swift; sourceTree = "<group>"; };
+		BB00000000000000000239 /* AudioRecorderViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderViewModel.swift; sourceTree = "<group>"; };
+		BB00000000000000000240 /* AudioRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -836,6 +842,7 @@
 				BB00000000000000000126 /* PostProcessingPipeline.swift */,
 				BB00000000000000000180 /* WidgetDataService.swift */,
 				BB00000000000000000228 /* MemoryService.swift */,
+				BB00000000000000000238 /* AudioRecorderService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -867,6 +874,7 @@
 				BB00000000000000000172 /* StreamingHandler.swift */,
 				BB00000000000000000173 /* PromptPaletteHandler.swift */,
 				BB00000000000000000174 /* DictationSettingsHandler.swift */,
+				BB00000000000000000239 /* AudioRecorderViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -897,6 +905,7 @@
 				BB00000000000000000122 /* NotchShape.swift */,
 				BB00000000000000000127 /* PluginSettingsView.swift */,
 				BB00000000000000000207 /* IndicatorPreviewView.swift */,
+				BB00000000000000000240 /* AudioRecorderView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -2080,6 +2089,9 @@
 				AA00000000000000000189 /* WidgetData.swift in Sources */,
 				AA00000000000000000197 /* WidgetDataService.swift in Sources */,
 				AA00000000000000000240 /* MemoryService.swift in Sources */,
+				AA00000000000000000250 /* AudioRecorderService.swift in Sources */,
+				AA00000000000000000251 /* AudioRecorderViewModel.swift in Sources */,
+				AA00000000000000000252 /* AudioRecorderView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

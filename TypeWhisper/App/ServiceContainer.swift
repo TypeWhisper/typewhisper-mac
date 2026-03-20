@@ -26,6 +26,7 @@ final class ServiceContainer: ObservableObject {
     let pluginRegistryService: PluginRegistryService
     let widgetDataService: WidgetDataService
     let memoryService: MemoryService
+    let audioRecorderService: AudioRecorderService
 
     // HTTP API
     let httpServer: HTTPServer
@@ -41,6 +42,7 @@ final class ServiceContainer: ObservableObject {
     let snippetsViewModel: SnippetsViewModel
     let homeViewModel: HomeViewModel
     let promptActionsViewModel: PromptActionsViewModel
+    let audioRecorderViewModel: AudioRecorderViewModel
 
     private init() {
         // Services
@@ -72,6 +74,7 @@ final class ServiceContainer: ObservableObject {
         pluginRegistryService = PluginRegistryService()
         widgetDataService = WidgetDataService(historyService: historyService)
         memoryService = MemoryService(promptProcessingService: promptProcessingService)
+        audioRecorderService = AudioRecorderService()
         promptProcessingService.memoryService = memoryService
 
         // ViewModels (created before HTTP API so DictationViewModel is available)
@@ -122,6 +125,7 @@ final class ServiceContainer: ObservableObject {
             promptActionService: promptActionService,
             promptProcessingService: promptProcessingService
         )
+        audioRecorderViewModel = AudioRecorderViewModel(recorderService: audioRecorderService)
 
         // Set shared references
         FileTranscriptionViewModel._shared = fileTranscriptionViewModel
@@ -134,6 +138,7 @@ final class ServiceContainer: ObservableObject {
         SnippetsViewModel._shared = snippetsViewModel
         HomeViewModel._shared = homeViewModel
         PromptActionsViewModel._shared = promptActionsViewModel
+        AudioRecorderViewModel._shared = audioRecorderViewModel
 
         // Plugin system
         EventBus.shared = EventBus()

@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum SettingsTab: Hashable {
-    case home, general, recording
+    case home, general, recording, recorder
     case fileTranscription, history, dictionary, snippets, profiles, prompts, integrations, advanced
 }
 
@@ -32,6 +32,9 @@ struct SettingsView: View {
                     FileTranscriptionView()
                         .tabItem { Label(String(localized: "File Transcription"), systemImage: "doc.text") }
                         .tag(SettingsTab.fileTranscription)
+                    AudioRecorderView(viewModel: AudioRecorderViewModel.shared)
+                        .tabItem { Label(String(localized: "settings.tab.recorder"), systemImage: "waveform.circle") }
+                        .tag(SettingsTab.recorder)
                     HistoryView()
                         .tabItem { Label(String(localized: "History"), systemImage: "clock.arrow.circlepath") }
                         .tag(SettingsTab.history)
@@ -91,6 +94,9 @@ private struct SettingsMainTabs: TabContent {
         }
         Tab(String(localized: "File Transcription"), systemImage: "doc.text", value: SettingsTab.fileTranscription) {
             FileTranscriptionView()
+        }
+        Tab(String(localized: "settings.tab.recorder"), systemImage: "waveform.circle", value: SettingsTab.recorder) {
+            AudioRecorderView(viewModel: AudioRecorderViewModel.shared)
         }
         Tab(String(localized: "History"), systemImage: "clock.arrow.circlepath", value: SettingsTab.history) {
             HistoryView()
