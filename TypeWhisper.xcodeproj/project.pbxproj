@@ -204,7 +204,6 @@
 		AA00000000000000000246 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000033 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000253 /* WatchFolderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000241 /* WatchFolderService.swift */; };
 		AA00000000000000000254 /* WatchFolderViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000242 /* WatchFolderViewModel.swift */; };
-		AA00000000000000000255 /* WatchFolderSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000243 /* WatchFolderSettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -402,7 +401,6 @@
 		BB00000000000000000234 /* OpenAIVectorMemoryPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OpenAIVectorMemoryPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000241 /* WatchFolderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchFolderService.swift; sourceTree = "<group>"; };
 		BB00000000000000000242 /* WatchFolderViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchFolderViewModel.swift; sourceTree = "<group>"; };
-		BB00000000000000000243 /* WatchFolderSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchFolderSettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -905,7 +903,6 @@
 				BB00000000000000000122 /* NotchShape.swift */,
 				BB00000000000000000127 /* PluginSettingsView.swift */,
 				BB00000000000000000207 /* IndicatorPreviewView.swift */,
-				BB00000000000000000243 /* WatchFolderSettingsView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -2091,7 +2088,6 @@
 				AA00000000000000000240 /* MemoryService.swift in Sources */,
 				AA00000000000000000253 /* WatchFolderService.swift in Sources */,
 				AA00000000000000000254 /* WatchFolderViewModel.swift in Sources */,
-				AA00000000000000000255 /* WatchFolderSettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

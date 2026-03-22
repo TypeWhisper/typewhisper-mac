@@ -2,7 +2,7 @@ import SwiftUI
 
 enum SettingsTab: Hashable {
     case home, general, recording
-    case fileTranscription, watchFolder, history, dictionary, snippets, profiles, prompts, integrations, advanced
+    case fileTranscription, history, dictionary, snippets, profiles, prompts, integrations, advanced
 }
 
 struct SettingsView: View {
@@ -33,9 +33,6 @@ struct SettingsView: View {
                         FileTranscriptionView()
                             .tabItem { Label(String(localized: "File Transcription"), systemImage: "doc.text") }
                             .tag(SettingsTab.fileTranscription)
-                        WatchFolderSettingsView(viewModel: WatchFolderViewModel.shared)
-                            .tabItem { Label(String(localized: "settings.tab.watchFolder"), systemImage: "folder.badge.gearshape") }
-                            .tag(SettingsTab.watchFolder)
                         HistoryView()
                             .tabItem { Label(String(localized: "History"), systemImage: "clock.arrow.circlepath") }
                             .tag(SettingsTab.history)
@@ -98,9 +95,6 @@ private struct SettingsMainTabs: TabContent {
         }
         Tab(String(localized: "File Transcription"), systemImage: "doc.text", value: SettingsTab.fileTranscription) {
             FileTranscriptionView()
-        }
-        Tab(String(localized: "settings.tab.watchFolder"), systemImage: "folder.badge.gearshape", value: SettingsTab.watchFolder) {
-            WatchFolderSettingsView(viewModel: WatchFolderViewModel.shared)
         }
         Tab(String(localized: "History"), systemImage: "clock.arrow.circlepath", value: SettingsTab.history) {
             HistoryView()

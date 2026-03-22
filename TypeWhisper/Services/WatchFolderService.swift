@@ -48,7 +48,7 @@ final class WatchFolderService: ObservableObject {
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fileDescriptor,
             eventMask: .write,
-            queue: DispatchQueue.global()
+            queue: DispatchQueue.main
         )
 
         source.setEventHandler { [weak self] in
@@ -120,7 +120,7 @@ final class WatchFolderService: ObservableObject {
 
         let outputFormat = UserDefaults.standard.string(forKey: UserDefaultsKeys.watchFolderOutputFormat) ?? "md"
         let deleteSource = UserDefaults.standard.bool(forKey: UserDefaultsKeys.watchFolderDeleteSource)
-        let language = UserDefaults.standard.string(forKey: UserDefaultsKeys.watchFolderLanguage)
+        let overrides = WatchFolderViewModel.shared.transcriptionOverrides
 
         // Resolve output folder from bookmark, or use watch folder
         let outputFolder: URL
@@ -147,7 +147,7 @@ final class WatchFolderService: ObservableObject {
                     url: file,
                     outputFolder: outputFolder,
                     format: outputFormat,
-                    language: language,
+                    overrides: overrides,
                     deleteSource: deleteSource
                 )
             }
@@ -159,7 +159,7 @@ final class WatchFolderService: ObservableObject {
         url: URL,
         outputFolder: URL,
         format: String,
-        language: String?,
+        overrides: WatchFolderViewModel.TranscriptionOverrides,
         deleteSource: Bool
     ) async {
         let fileName = url.lastPathComponent
@@ -169,8 +169,10 @@ final class WatchFolderService: ObservableObject {
             let samples = try await audioFileService.loadAudioSamples(from: url)
             let result = try await modelManagerService.transcribe(
                 audioSamples: samples,
-                language: language,
-                task: .transcribe
+                language: overrides.language,
+                task: .transcribe,
+                engineOverrideId: overrides.engineId,
+                cloudModelOverride: overrides.modelId
             )
 
             let outputName = url.deletingPathExtension().lastPathComponent
@@ -184,7 +186,13 @@ final class WatchFolderService: ObservableObject {
             dateFormatter.dateStyle = .medium
             dateFormatter.timeStyle = .medium
             let dateString = dateFormatter.string(from: Date())
-            let engineName = modelManagerService.activeEngineName ?? "Unknown"
+            let engineName: String
+            if let overrideId = overrides.engineId,
+               let engine = PluginManager.shared.transcriptionEngine(for: overrideId) {
+                engineName = engine.providerDisplayName
+            } else {
+                engineName = modelManagerService.activeEngineName ?? "Unknown"
+            }
 
             if format == "md" {
                 content = """

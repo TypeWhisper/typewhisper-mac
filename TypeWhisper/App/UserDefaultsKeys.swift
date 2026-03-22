@@ -74,4 +74,6 @@ enum UserDefaultsKeys {
     static let watchFolderDeleteSource = "watchFolderDeleteSource"
     static let watchFolderAutoStart = "watchFolderAutoStart"
     static let watchFolderLanguage = "watchFolderLanguage"
+    static let watchFolderEngine = "watchFolderEngine"
+    static let watchFolderModel = "watchFolderModel"
 }
