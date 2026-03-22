@@ -68,8 +68,22 @@ class PromptActionService: ObservableObject {
         let newPresets = availablePresets
         guard !newPresets.isEmpty else { return }
 
-        for preset in newPresets {
-            context.insert(preset)
+        let isInitialSeed = promptActions.isEmpty
+        let nextSortOrder = (promptActions.map(\.sortOrder).max() ?? -1) + 1
+
+        for (offset, preset) in newPresets.enumerated() {
+            if isInitialSeed {
+                context.insert(preset)
+            } else {
+                let newAction = PromptAction(
+                    name: preset.name,
+                    prompt: preset.prompt,
+                    icon: preset.icon,
+                    isPreset: true,
+                    sortOrder: nextSortOrder + offset
+                )
+                context.insert(newAction)
+            }
         }
 
         do {
