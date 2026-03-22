@@ -2,7 +2,7 @@ import SwiftUI
 
 enum SettingsTab: Hashable {
     case home, general, recording
-    case fileTranscription, history, dictionary, snippets, profiles, prompts, integrations, advanced
+    case fileTranscription, watchFolder, history, dictionary, snippets, profiles, prompts, integrations, advanced
 }
 
 struct SettingsView: View {
@@ -20,39 +20,46 @@ struct SettingsView: View {
                 .tabViewStyle(.sidebarAdaptable)
             } else {
                 TabView(selection: $selectedTab) {
-                    HomeSettingsView()
-                        .tabItem { Label(String(localized: "Home"), systemImage: "house") }
-                        .tag(SettingsTab.home)
-                    GeneralSettingsView()
-                        .tabItem { Label(String(localized: "General"), systemImage: "gear") }
-                        .tag(SettingsTab.general)
-                    RecordingSettingsView()
-                        .tabItem { Label(String(localized: "Recording"), systemImage: "mic.fill") }
-                        .tag(SettingsTab.recording)
-                    FileTranscriptionView()
-                        .tabItem { Label(String(localized: "File Transcription"), systemImage: "doc.text") }
-                        .tag(SettingsTab.fileTranscription)
-                    HistoryView()
-                        .tabItem { Label(String(localized: "History"), systemImage: "clock.arrow.circlepath") }
-                        .tag(SettingsTab.history)
-                    DictionarySettingsView()
-                        .tabItem { Label(String(localized: "Dictionary"), systemImage: "book.closed") }
-                        .tag(SettingsTab.dictionary)
-                    SnippetsSettingsView()
-                        .tabItem { Label(String(localized: "Snippets"), systemImage: "text.badge.plus") }
-                        .tag(SettingsTab.snippets)
-                    ProfilesSettingsView()
-                        .tabItem { Label(String(localized: "Profiles"), systemImage: "person.crop.rectangle.stack") }
-                        .tag(SettingsTab.profiles)
-                    PromptActionsSettingsView()
-                        .tabItem { Label(String(localized: "Prompts"), systemImage: "sparkles") }
-                        .tag(SettingsTab.prompts)
-                    PluginSettingsView()
-                        .tabItem { Label(String(localized: "Integrations"), systemImage: "puzzlepiece.extension") }
-                        .tag(SettingsTab.integrations)
-                    AdvancedSettingsView()
-                        .tabItem { Label(String(localized: "Advanced"), systemImage: "gearshape.2") }
-                        .tag(SettingsTab.advanced)
+                    Group {
+                        HomeSettingsView()
+                            .tabItem { Label(String(localized: "Home"), systemImage: "house") }
+                            .tag(SettingsTab.home)
+                        GeneralSettingsView()
+                            .tabItem { Label(String(localized: "General"), systemImage: "gear") }
+                            .tag(SettingsTab.general)
+                        RecordingSettingsView()
+                            .tabItem { Label(String(localized: "Recording"), systemImage: "mic.fill") }
+                            .tag(SettingsTab.recording)
+                        FileTranscriptionView()
+                            .tabItem { Label(String(localized: "File Transcription"), systemImage: "doc.text") }
+                            .tag(SettingsTab.fileTranscription)
+                        WatchFolderSettingsView(viewModel: WatchFolderViewModel.shared)
+                            .tabItem { Label(String(localized: "settings.tab.watchFolder"), systemImage: "folder.badge.gearshape") }
+                            .tag(SettingsTab.watchFolder)
+                        HistoryView()
+                            .tabItem { Label(String(localized: "History"), systemImage: "clock.arrow.circlepath") }
+                            .tag(SettingsTab.history)
+                    }
+                    Group {
+                        DictionarySettingsView()
+                            .tabItem { Label(String(localized: "Dictionary"), systemImage: "book.closed") }
+                            .tag(SettingsTab.dictionary)
+                        SnippetsSettingsView()
+                            .tabItem { Label(String(localized: "Snippets"), systemImage: "text.badge.plus") }
+                            .tag(SettingsTab.snippets)
+                        ProfilesSettingsView()
+                            .tabItem { Label(String(localized: "Profiles"), systemImage: "person.crop.rectangle.stack") }
+                            .tag(SettingsTab.profiles)
+                        PromptActionsSettingsView()
+                            .tabItem { Label(String(localized: "Prompts"), systemImage: "sparkles") }
+                            .tag(SettingsTab.prompts)
+                        PluginSettingsView()
+                            .tabItem { Label(String(localized: "Integrations"), systemImage: "puzzlepiece.extension") }
+                            .tag(SettingsTab.integrations)
+                        AdvancedSettingsView()
+                            .tabItem { Label(String(localized: "Advanced"), systemImage: "gearshape.2") }
+                            .tag(SettingsTab.advanced)
+                    }
                 }
             }
         }
@@ -91,6 +98,9 @@ private struct SettingsMainTabs: TabContent {
         }
         Tab(String(localized: "File Transcription"), systemImage: "doc.text", value: SettingsTab.fileTranscription) {
             FileTranscriptionView()
+        }
+        Tab(String(localized: "settings.tab.watchFolder"), systemImage: "folder.badge.gearshape", value: SettingsTab.watchFolder) {
+            WatchFolderSettingsView(viewModel: WatchFolderViewModel.shared)
         }
         Tab(String(localized: "History"), systemImage: "clock.arrow.circlepath", value: SettingsTab.history) {
             HistoryView()

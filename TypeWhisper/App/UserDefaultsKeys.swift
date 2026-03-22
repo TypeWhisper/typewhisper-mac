@@ -66,4 +66,12 @@ enum UserDefaultsKeys {
 
     // MARK: - Plugin Registry
     static let pluginRegistryLastFetch = "pluginRegistryLastFetch"
+
+    // MARK: - Watch Folder
+    static let watchFolderBookmark = "watchFolderBookmark"
+    static let watchFolderOutputBookmark = "watchFolderOutputBookmark"
+    static let watchFolderOutputFormat = "watchFolderOutputFormat"
+    static let watchFolderDeleteSource = "watchFolderDeleteSource"
+    static let watchFolderAutoStart = "watchFolderAutoStart"
+    static let watchFolderLanguage = "watchFolderLanguage"
 }

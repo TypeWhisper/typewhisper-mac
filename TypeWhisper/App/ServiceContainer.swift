@@ -26,6 +26,7 @@ final class ServiceContainer: ObservableObject {
     let pluginRegistryService: PluginRegistryService
     let widgetDataService: WidgetDataService
     let memoryService: MemoryService
+    let watchFolderService: WatchFolderService
 
     // HTTP API
     let httpServer: HTTPServer
@@ -41,6 +42,7 @@ final class ServiceContainer: ObservableObject {
     let snippetsViewModel: SnippetsViewModel
     let homeViewModel: HomeViewModel
     let promptActionsViewModel: PromptActionsViewModel
+    let watchFolderViewModel: WatchFolderViewModel
 
     private init() {
         // Services
@@ -73,6 +75,7 @@ final class ServiceContainer: ObservableObject {
         widgetDataService = WidgetDataService(historyService: historyService)
         memoryService = MemoryService(promptProcessingService: promptProcessingService)
         promptProcessingService.memoryService = memoryService
+        watchFolderService = WatchFolderService(audioFileService: audioFileService, modelManagerService: modelManagerService)
 
         // ViewModels (created before HTTP API so DictationViewModel is available)
         fileTranscriptionViewModel = FileTranscriptionViewModel(
@@ -122,6 +125,7 @@ final class ServiceContainer: ObservableObject {
             promptActionService: promptActionService,
             promptProcessingService: promptProcessingService
         )
+        watchFolderViewModel = WatchFolderViewModel(watchFolderService: watchFolderService)
 
         // Set shared references
         FileTranscriptionViewModel._shared = fileTranscriptionViewModel
@@ -134,6 +138,7 @@ final class ServiceContainer: ObservableObject {
         SnippetsViewModel._shared = snippetsViewModel
         HomeViewModel._shared = homeViewModel
         PromptActionsViewModel._shared = promptActionsViewModel
+        WatchFolderViewModel._shared = watchFolderViewModel
 
         // Plugin system
         EventBus.shared = EventBus()
@@ -169,6 +174,15 @@ final class ServiceContainer: ObservableObject {
 
         // Start memory service
         memoryService.startListening()
+
+        // Auto-start watch folder if configured
+        if UserDefaults.standard.bool(forKey: UserDefaultsKeys.watchFolderAutoStart),
+           let bookmark = UserDefaults.standard.data(forKey: UserDefaultsKeys.watchFolderBookmark) {
+            var isStale = false
+            if let url = try? URL(resolvingBookmarkData: bookmark, options: .withSecurityScope, bookmarkDataIsStale: &isStale) {
+                watchFolderService.startWatching(folderURL: url)
+            }
+        }
 
         // Migrate stale cloudModelOverride in profiles
         for profile in profileService.profiles {
