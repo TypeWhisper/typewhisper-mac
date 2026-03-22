@@ -73,4 +73,14 @@ enum UserDefaultsKeys {
     static let recorderOutputFormat = "recorderOutputFormat"
     static let recorderTranscriptionEnabled = "recorderTranscriptionEnabled"
     static let showRecorderTab = "showRecorderTab"
+
+    // MARK: - Watch Folder
+    static let watchFolderBookmark = "watchFolderBookmark"
+    static let watchFolderOutputBookmark = "watchFolderOutputBookmark"
+    static let watchFolderOutputFormat = "watchFolderOutputFormat"
+    static let watchFolderDeleteSource = "watchFolderDeleteSource"
+    static let watchFolderAutoStart = "watchFolderAutoStart"
+    static let watchFolderLanguage = "watchFolderLanguage"
+    static let watchFolderEngine = "watchFolderEngine"
+    static let watchFolderModel = "watchFolderModel"
 }

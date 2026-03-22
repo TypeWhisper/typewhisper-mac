@@ -1,6 +1,8 @@
 import Foundation
 import AppKit
+import Carbon.HIToolbox
 import Combine
+import os
 
 struct UnifiedHotkey: Equatable, Sendable, Codable {
     let keyCode: UInt16
@@ -99,6 +101,10 @@ final class HotkeyService: ObservableObject {
 
     private var globalMonitor: Any?
     private var localMonitor: Any?
+    private var eventTap: CFMachPort?
+    private var runLoopSource: CFRunLoopSource?
+
+    private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "HotkeyService")
 
     // Modifier keyCodes that generate flagsChanged instead of keyDown/keyUp
     nonisolated static let modifierKeyCodes: Set<UInt16> = [
@@ -195,6 +201,14 @@ final class HotkeyService: ObservableObject {
     private func setupMonitor() {
         tearDownMonitor()
 
+        // Try CGEventTap first - it can suppress hotkey events from reaching other apps
+        if setupEventTap() {
+            logger.info("Using CGEventTap for hotkey monitoring (events will be suppressed)")
+            return
+        }
+
+        // Fallback: NSEvent monitors (no event suppression)
+        logger.info("CGEventTap unavailable, falling back to NSEvent monitors (hotkey events will pass through)")
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged, .keyDown, .keyUp]) { [weak self] event in
             Task { @MainActor [weak self] in
                 self?.handleEvent(event)
@@ -218,6 +232,14 @@ final class HotkeyService: ObservableObject {
             NSEvent.removeMonitor(monitor)
             localMonitor = nil
         }
+        if let tap = eventTap {
+            CGEvent.tapEnable(tap: tap, enable: false)
+            eventTap = nil
+        }
+        if let source = runLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+            runLoopSource = nil
+        }
     }
 
     func suspendMonitoring() {
@@ -227,6 +249,116 @@ final class HotkeyService: ObservableObject {
     func resumeMonitoring() {
         setupMonitor()
     }
+
+    // MARK: - CGEventTap (suppresses hotkey events)
+
+    /// Creates a CGEventTap to intercept and suppress hotkey events before they reach other apps.
+    /// Requires Accessibility permission. Returns true if the tap was successfully created.
+    private func setupEventTap() -> Bool {
+        let eventMask: CGEventMask = (1 << CGEventType.keyDown.rawValue)
+            | (1 << CGEventType.keyUp.rawValue)
+            | (1 << CGEventType.flagsChanged.rawValue)
+
+        let selfPtr = Unmanaged.passUnretained(self).toOpaque()
+
+        // @convention(c) callback - must not capture context. Uses userInfo to access HotkeyService.
+        // Runs on the main thread (tap is added to main run loop), so MainActor.assumeIsolated is safe.
+        let callback: CGEventTapCallBack = { _, type, event, userInfo in
+            if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+                if let userInfo {
+                    MainActor.assumeIsolated {
+                        let service = Unmanaged<HotkeyService>.fromOpaque(userInfo).takeUnretainedValue()
+                        if let tap = service.eventTap {
+                            CGEvent.tapEnable(tap: tap, enable: true)
+                        }
+                        service.logger.warning("CGEventTap was disabled by system, re-enabling")
+                    }
+                }
+                return Unmanaged.passUnretained(event)
+            }
+
+            guard let userInfo else {
+                return Unmanaged.passUnretained(event)
+            }
+
+            let shouldSuppress: Bool = MainActor.assumeIsolated {
+                guard let nsEvent = NSEvent(cgEvent: event) else { return false }
+                let service = Unmanaged<HotkeyService>.fromOpaque(userInfo).takeUnretainedValue()
+                return service.handleEventTapEvent(nsEvent)
+            }
+
+            return shouldSuppress ? nil : Unmanaged.passUnretained(event)
+        }
+
+        guard let tap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: eventMask,
+            callback: callback,
+            userInfo: selfPtr
+        ) else {
+            return false
+        }
+
+        eventTap = tap
+        let source = CFMachPortCreateRunLoopSource(nil, tap, 0)
+        runLoopSource = source
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+        CGEvent.tapEnable(tap: tap, enable: true)
+        return true
+    }
+
+    /// Processes event for CGEventTap: matches hotkeys synchronously, dispatches handling asynchronously.
+    /// Returns true if the event should be suppressed (consumed by TypeWhisper).
+    private func handleEventTapEvent(_ event: NSEvent) -> Bool {
+        // Escape key cancels active recording but should not be suppressed
+        if event.type == .keyDown && event.keyCode == 0x35 {
+            Task { @MainActor [weak self] in
+                self?.onCancelPressed?()
+            }
+            return false
+        }
+
+        var shouldSuppress = false
+
+        // Global slots
+        for slotType in HotkeySlotType.allCases {
+            guard var state = slots[slotType], let hotkey = state.hotkey else { continue }
+            let (keyDown, keyUp) = processKeyEvent(event, hotkey: hotkey, state: &state)
+            slots[slotType] = state
+            if keyDown {
+                shouldSuppress = true
+                Task { @MainActor [weak self] in self?.handleKeyDown(slotType: slotType) }
+            } else if keyUp {
+                shouldSuppress = true
+                Task { @MainActor [weak self] in self?.handleKeyUp(slotType: slotType) }
+            }
+        }
+
+        // Profile slots
+        for profileId in Array(profileSlots.keys) {
+            guard var pState = profileSlots[profileId] else { continue }
+            var state = SlotState(hotkey: pState.hotkey, fnWasDown: pState.fnWasDown,
+                                  modifierWasDown: pState.modifierWasDown, keyWasDown: pState.keyWasDown)
+            let (keyDown, keyUp) = processKeyEvent(event, hotkey: pState.hotkey, state: &state)
+            pState.fnWasDown = state.fnWasDown
+            pState.modifierWasDown = state.modifierWasDown
+            pState.keyWasDown = state.keyWasDown
+            profileSlots[profileId] = pState
+            if keyDown {
+                shouldSuppress = true
+                Task { @MainActor [weak self] in self?.handleProfileKeyDown(profileId: profileId) }
+            } else if keyUp {
+                shouldSuppress = true
+                Task { @MainActor [weak self] in self?.handleProfileKeyUp(profileId: profileId) }
+            }
+        }
+
+        return shouldSuppress
+    }
+
+    // MARK: - NSEvent Fallback
 
     private func handleEvent(_ event: NSEvent) {
         // Escape key cancels active recording/transcription
@@ -449,25 +581,16 @@ final class HotkeyService: ObservableObject {
     }
 
     nonisolated static func keyName(for keyCode: UInt16) -> String {
-        let knownKeys: [UInt16: String] = [
-            0x00: "A", 0x01: "S", 0x02: "D", 0x03: "F", 0x04: "H",
-            0x05: "G", 0x06: "Z", 0x07: "X", 0x08: "C", 0x09: "V",
-            0x0A: "§", 0x0B: "B", 0x0C: "Q", 0x0D: "W", 0x0E: "E",
-            0x0F: "R", 0x10: "Y", 0x11: "T", 0x12: "1", 0x13: "2",
-            0x14: "3", 0x15: "4", 0x16: "6", 0x17: "5", 0x18: "=",
-            0x19: "9", 0x1A: "7", 0x1B: "-", 0x1C: "8", 0x1D: "0",
-            0x1E: "]", 0x1F: "O", 0x20: "U", 0x21: "[", 0x22: "I",
-            0x23: "P", 0x24: "⏎", 0x25: "L", 0x26: "J", 0x27: "'",
-            0x28: "K", 0x29: ";", 0x2A: "\\", 0x2B: ",", 0x2C: "/",
-            0x2D: "N", 0x2E: "M", 0x2F: ".", 0x30: "⇥", 0x31: "␣",
-            0x32: "`", 0x33: "⌫", 0x35: "⎋", 0x7A: "F1", 0x78: "F2",
-            0x63: "F3", 0x76: "F4", 0x60: "F5", 0x61: "F6", 0x62: "F7",
-            0x64: "F8", 0x65: "F9", 0x6D: "F10", 0x67: "F11", 0x6F: "F12",
+        // Special keys that don't produce meaningful characters via UCKeyTranslate
+        let specialKeys: [UInt16: String] = [
+            0x24: "⏎", 0x30: "⇥", 0x31: "␣", 0x33: "⌫", 0x35: "⎋",
+            0x7A: "F1", 0x78: "F2", 0x63: "F3", 0x76: "F4",
+            0x60: "F5", 0x61: "F6", 0x62: "F7", 0x64: "F8",
+            0x65: "F9", 0x6D: "F10", 0x67: "F11", 0x6F: "F12",
             0x69: "F13", 0x6B: "F14", 0x71: "F15",
             0x7E: "↑", 0x7D: "↓", 0x7B: "←", 0x7C: "→",
         ]
-
-        if let name = knownKeys[keyCode] { return name }
+        if let name = specialKeys[keyCode] { return name }
 
         let modifierNames: [UInt16: String] = [
             0x37: "Left Command", 0x36: "Right Command",
@@ -477,7 +600,62 @@ final class HotkeyService: ObservableObject {
         ]
         if let name = modifierNames[keyCode] { return name }
 
+        // Use the current keyboard layout to resolve the character for this keyCode
+        if let character = characterForKeyCode(keyCode) {
+            return character.uppercased()
+        }
+
+        // QWERTY fallback for when layout resolution fails
+        let qwertyFallback: [UInt16: String] = [
+            0x00: "A", 0x01: "S", 0x02: "D", 0x03: "F", 0x04: "H",
+            0x05: "G", 0x06: "Z", 0x07: "X", 0x08: "C", 0x09: "V",
+            0x0A: "§", 0x0B: "B", 0x0C: "Q", 0x0D: "W", 0x0E: "E",
+            0x0F: "R", 0x10: "Y", 0x11: "T", 0x12: "1", 0x13: "2",
+            0x14: "3", 0x15: "4", 0x16: "6", 0x17: "5", 0x18: "=",
+            0x19: "9", 0x1A: "7", 0x1B: "-", 0x1C: "8", 0x1D: "0",
+            0x1E: "]", 0x1F: "O", 0x20: "U", 0x21: "[", 0x22: "I",
+            0x23: "P", 0x25: "L", 0x26: "J", 0x27: "'",
+            0x28: "K", 0x29: ";", 0x2A: "\\", 0x2B: ",", 0x2C: "/",
+            0x2D: "N", 0x2E: "M", 0x2F: ".", 0x32: "`",
+        ]
+        if let name = qwertyFallback[keyCode] { return name }
+
         return "Key \(keyCode)"
+    }
+
+    /// Resolves the character for a keyCode using the current keyboard input source.
+    private nonisolated static func characterForKeyCode(_ keyCode: UInt16) -> String? {
+        let source = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
+        guard let layoutDataRef = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else {
+            return nil
+        }
+        let layoutData = unsafeBitCast(layoutDataRef, to: CFData.self)
+        let keyLayoutPtr = unsafeBitCast(CFDataGetBytePtr(layoutData), to: UnsafePointer<UCKeyboardLayout>.self)
+
+        var deadKeyState: UInt32 = 0
+        var chars = [UniChar](repeating: 0, count: 4)
+        var length = 0
+
+        let status = UCKeyTranslate(
+            keyLayoutPtr,
+            keyCode,
+            UInt16(kUCKeyActionDown),
+            0, // no modifiers
+            UInt32(LMGetKbdType()),
+            UInt32(kUCKeyTranslateNoDeadKeysMask),
+            &deadKeyState,
+            chars.count,
+            &length,
+            &chars
+        )
+
+        guard status == noErr, length > 0 else { return nil }
+        let result = String(utf16CodeUnits: chars, count: length)
+        // Filter out control characters (e.g. from non-printable keys)
+        if result.unicodeScalars.allSatisfy({ CharacterSet.controlCharacters.contains($0) }) {
+            return nil
+        }
+        return result
     }
 
     // MARK: - Helpers

@@ -205,6 +205,8 @@
 		AA00000000000000000250 /* AudioRecorderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000238 /* AudioRecorderService.swift */; };
 		AA00000000000000000251 /* AudioRecorderViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000239 /* AudioRecorderViewModel.swift */; };
 		AA00000000000000000252 /* AudioRecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000240 /* AudioRecorderView.swift */; };
+		AA00000000000000000253 /* WatchFolderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000241 /* WatchFolderService.swift */; };
+		AA00000000000000000254 /* WatchFolderViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000242 /* WatchFolderViewModel.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -403,6 +405,8 @@
 		BB00000000000000000238 /* AudioRecorderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderService.swift; sourceTree = "<group>"; };
 		BB00000000000000000239 /* AudioRecorderViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000240 /* AudioRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderView.swift; sourceTree = "<group>"; };
+		BB00000000000000000241 /* WatchFolderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchFolderService.swift; sourceTree = "<group>"; };
+		BB00000000000000000242 /* WatchFolderViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchFolderViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -843,6 +847,7 @@
 				BB00000000000000000180 /* WidgetDataService.swift */,
 				BB00000000000000000228 /* MemoryService.swift */,
 				BB00000000000000000238 /* AudioRecorderService.swift */,
+				BB00000000000000000241 /* WatchFolderService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -875,6 +880,7 @@
 				BB00000000000000000173 /* PromptPaletteHandler.swift */,
 				BB00000000000000000174 /* DictationSettingsHandler.swift */,
 				BB00000000000000000239 /* AudioRecorderViewModel.swift */,
+				BB00000000000000000242 /* WatchFolderViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -2092,6 +2098,8 @@
 				AA00000000000000000250 /* AudioRecorderService.swift in Sources */,
 				AA00000000000000000251 /* AudioRecorderViewModel.swift in Sources */,
 				AA00000000000000000252 /* AudioRecorderView.swift in Sources */,
+				AA00000000000000000253 /* WatchFolderService.swift in Sources */,
+				AA00000000000000000254 /* WatchFolderViewModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

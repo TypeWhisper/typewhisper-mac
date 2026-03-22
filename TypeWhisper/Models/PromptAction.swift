@@ -87,6 +87,34 @@ final class PromptAction {
                 isPreset: true,
                 sortOrder: 4
             ),
+            PromptAction(
+                name: String(localized: "preset.createTable"),
+                prompt: "Convert the following text into a well-formatted Markdown table. Extract key information and organize it into appropriate columns. Respond in the same language as the input text. Only return the table, nothing else.",
+                icon: "tablecells",
+                isPreset: true,
+                sortOrder: 5
+            ),
+            PromptAction(
+                name: String(localized: "preset.draftEmail"),
+                prompt: "Draft a complete, professional email from the following notes. Include an appropriate subject line, greeting, body paragraphs, and closing. Respond in the same language as the input text. Only return the email.",
+                icon: "envelope.badge",
+                isPreset: true,
+                sortOrder: 6
+            ),
+            PromptAction(
+                name: String(localized: "preset.jsonData"),
+                prompt: "Extract structured data from the following text and format it as valid, well-indented JSON. Use descriptive keys and appropriate data types. Only return the JSON, nothing else.",
+                icon: "curlybraces",
+                isPreset: true,
+                sortOrder: 7
+            ),
+            PromptAction(
+                name: String(localized: "preset.meetingNotes"),
+                prompt: "Structure the following text as professional meeting notes. Include sections for: Attendees (if mentioned), Key Discussion Points, Decisions Made, and Action Items with owners. Use Markdown formatting. Respond in the same language as the input text.",
+                icon: "doc.text.magnifyingglass",
+                isPreset: true,
+                sortOrder: 8
+            ),
         ]
     }
 }

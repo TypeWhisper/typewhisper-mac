@@ -21,44 +21,48 @@ struct SettingsView: View {
                 .tabViewStyle(.sidebarAdaptable)
             } else {
                 TabView(selection: $selectedTab) {
-                    HomeSettingsView()
-                        .tabItem { Label(String(localized: "Home"), systemImage: "house") }
-                        .tag(SettingsTab.home)
-                    GeneralSettingsView()
-                        .tabItem { Label(String(localized: "General"), systemImage: "gear") }
-                        .tag(SettingsTab.general)
-                    RecordingSettingsView()
-                        .tabItem { Label(String(localized: "Recording"), systemImage: "mic.fill") }
-                        .tag(SettingsTab.recording)
-                    FileTranscriptionView()
-                        .tabItem { Label(String(localized: "File Transcription"), systemImage: "doc.text") }
-                        .tag(SettingsTab.fileTranscription)
-                    if showRecorderTab {
-                        AudioRecorderView(viewModel: AudioRecorderViewModel.shared)
-                            .tabItem { Label(String(localized: "settings.tab.recorder"), systemImage: "waveform.circle") }
-                            .tag(SettingsTab.recorder)
+                    Group {
+                        HomeSettingsView()
+                            .tabItem { Label(String(localized: "Home"), systemImage: "house") }
+                            .tag(SettingsTab.home)
+                        GeneralSettingsView()
+                            .tabItem { Label(String(localized: "General"), systemImage: "gear") }
+                            .tag(SettingsTab.general)
+                        RecordingSettingsView()
+                            .tabItem { Label(String(localized: "Recording"), systemImage: "mic.fill") }
+                            .tag(SettingsTab.recording)
+                        FileTranscriptionView()
+                            .tabItem { Label(String(localized: "File Transcription"), systemImage: "doc.text") }
+                            .tag(SettingsTab.fileTranscription)
+                        HistoryView()
+                            .tabItem { Label(String(localized: "History"), systemImage: "clock.arrow.circlepath") }
+                            .tag(SettingsTab.history)
                     }
-                    HistoryView()
-                        .tabItem { Label(String(localized: "History"), systemImage: "clock.arrow.circlepath") }
-                        .tag(SettingsTab.history)
-                    DictionarySettingsView()
-                        .tabItem { Label(String(localized: "Dictionary"), systemImage: "book.closed") }
-                        .tag(SettingsTab.dictionary)
-                    SnippetsSettingsView()
-                        .tabItem { Label(String(localized: "Snippets"), systemImage: "text.badge.plus") }
-                        .tag(SettingsTab.snippets)
-                    ProfilesSettingsView()
-                        .tabItem { Label(String(localized: "Profiles"), systemImage: "person.crop.rectangle.stack") }
-                        .tag(SettingsTab.profiles)
-                    PromptActionsSettingsView()
-                        .tabItem { Label(String(localized: "Prompts"), systemImage: "sparkles") }
-                        .tag(SettingsTab.prompts)
-                    PluginSettingsView()
-                        .tabItem { Label(String(localized: "Integrations"), systemImage: "puzzlepiece.extension") }
-                        .tag(SettingsTab.integrations)
-                    AdvancedSettingsView()
-                        .tabItem { Label(String(localized: "Advanced"), systemImage: "gearshape.2") }
-                        .tag(SettingsTab.advanced)
+                    Group {
+                        if showRecorderTab {
+                            AudioRecorderView(viewModel: AudioRecorderViewModel.shared)
+                                .tabItem { Label(String(localized: "settings.tab.recorder"), systemImage: "waveform.circle") }
+                                .tag(SettingsTab.recorder)
+                        }
+                        DictionarySettingsView()
+                            .tabItem { Label(String(localized: "Dictionary"), systemImage: "book.closed") }
+                            .tag(SettingsTab.dictionary)
+                        SnippetsSettingsView()
+                            .tabItem { Label(String(localized: "Snippets"), systemImage: "text.badge.plus") }
+                            .tag(SettingsTab.snippets)
+                        ProfilesSettingsView()
+                            .tabItem { Label(String(localized: "Profiles"), systemImage: "person.crop.rectangle.stack") }
+                            .tag(SettingsTab.profiles)
+                        PromptActionsSettingsView()
+                            .tabItem { Label(String(localized: "Prompts"), systemImage: "sparkles") }
+                            .tag(SettingsTab.prompts)
+                        PluginSettingsView()
+                            .tabItem { Label(String(localized: "Integrations"), systemImage: "puzzlepiece.extension") }
+                            .tag(SettingsTab.integrations)
+                        AdvancedSettingsView()
+                            .tabItem { Label(String(localized: "Advanced"), systemImage: "gearshape.2") }
+                            .tag(SettingsTab.advanced)
+                    }
                 }
             }
         }
@@ -476,7 +480,8 @@ struct HotkeyRecorderView: View {
     @State private var isRecording = false
     @State private var pendingModifiers: NSEvent.ModifierFlags = []
     @State private var peakModifiers: NSEvent.ModifierFlags = []
-    @State private var eventMonitor: Any?
+    @State private var localMonitor: Any?
+    @State private var globalMonitor: Any?
     @State private var modifierReleaseTimer: DispatchWorkItem?
     private static var activeRecorder: UUID?
     @State private var id = UUID()
@@ -553,76 +558,94 @@ struct HotkeyRecorderView: View {
         pendingModifiers = []
         peakModifiers = []
         ServiceContainer.shared.hotkeyService.suspendMonitoring()
-        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
-            if event.type == .flagsChanged {
-                let relevantMask: NSEvent.ModifierFlags = [.command, .option, .control, .shift, .function]
-                let current = event.modifierFlags.intersection(relevantMask)
 
-                // Track peak modifier set (most modifiers held simultaneously)
-                if current.isSuperset(of: peakModifiers) {
-                    peakModifiers = current
-                }
-
-                if current.isEmpty, !pendingModifiers.isEmpty {
-                    let modifierList: [NSEvent.ModifierFlags] = [.command, .option, .control, .shift, .function]
-                    let peakCount = modifierList.filter { peakModifiers.contains($0) }.count
-
-                    if peakCount > 1 {
-                        // Multi-modifier combo (e.g. CMD+OPT, Fn+CMD)
-                        let comboFlags = peakModifiers
-                        let work = DispatchWorkItem { [self] in
-                            finishRecording(UnifiedHotkey(keyCode: UnifiedHotkey.modifierComboKeyCode, modifierFlags: comboFlags.rawValue, isFn: false))
-                        }
-                        modifierReleaseTimer = work
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
-                        pendingModifiers = []
-                        peakModifiers = []
-                        return nil
-                    } else if peakModifiers.contains(.function) {
-                        // Fn alone
-                        let work = DispatchWorkItem { [self] in
-                            finishRecording(UnifiedHotkey(keyCode: 0, modifierFlags: 0, isFn: true))
-                        }
-                        modifierReleaseTimer = work
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
-                        pendingModifiers = []
-                        peakModifiers = []
-                        return nil
-                    } else if HotkeyService.modifierKeyCodes.contains(event.keyCode) {
-                        // Single modifier key (CMD, OPT, etc.)
-                        let keyCode = event.keyCode
-                        let work = DispatchWorkItem { [self] in
-                            finishRecording(UnifiedHotkey(keyCode: keyCode, modifierFlags: 0, isFn: false))
-                        }
-                        modifierReleaseTimer = work
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
-                        pendingModifiers = []
-                        peakModifiers = []
-                        return nil
-                    }
-                }
-
-                pendingModifiers = current
-            }
-
-            if event.type == .keyDown {
-                modifierReleaseTimer?.cancel()
-                modifierReleaseTimer = nil
-
-                if event.keyCode == 0x35, pendingModifiers.isEmpty {
-                    cancelRecording()
-                    return nil
-                }
-
-                let relevantMask: NSEvent.ModifierFlags = [.command, .option, .control, .shift, .function]
-                let modifiers = event.modifierFlags.intersection(relevantMask).rawValue
-
-                finishRecording(UnifiedHotkey(keyCode: event.keyCode, modifierFlags: modifiers, isFn: false))
-                return nil
-            }
-
-            return event
+        // Local monitor - can swallow events (return nil)
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
+            let handled = handleRecorderEvent(event)
+            return handled ? nil : event
         }
+
+        // Global monitor - captures events intercepted by macOS (e.g. Ctrl+Space for input switching)
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
+            handleRecorderEvent(event)
+        }
+    }
+
+    /// Shared event processing for both local and global monitors.
+    /// Returns true if the event was handled (consumed).
+    @discardableResult
+    private func handleRecorderEvent(_ event: NSEvent) -> Bool {
+        guard isRecording else { return false }
+
+        if event.type == .flagsChanged {
+            let relevantMask: NSEvent.ModifierFlags = [.command, .option, .control, .shift, .function]
+            let current = event.modifierFlags.intersection(relevantMask)
+
+            // Track peak modifier set (most modifiers held simultaneously)
+            if current.isSuperset(of: peakModifiers) {
+                peakModifiers = current
+            }
+
+            if current.isEmpty, !pendingModifiers.isEmpty {
+                let modifierList: [NSEvent.ModifierFlags] = [.command, .option, .control, .shift, .function]
+                let peakCount = modifierList.filter { peakModifiers.contains($0) }.count
+
+                if peakCount > 1 {
+                    // Multi-modifier combo (e.g. CMD+OPT, Fn+CMD)
+                    let comboFlags = peakModifiers
+                    let work = DispatchWorkItem { [self] in
+                        finishRecording(UnifiedHotkey(keyCode: UnifiedHotkey.modifierComboKeyCode, modifierFlags: comboFlags.rawValue, isFn: false))
+                    }
+                    modifierReleaseTimer = work
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
+                    pendingModifiers = []
+                    peakModifiers = []
+                    return true
+                } else if peakModifiers.contains(.function) {
+                    // Fn alone
+                    let work = DispatchWorkItem { [self] in
+                        finishRecording(UnifiedHotkey(keyCode: 0, modifierFlags: 0, isFn: true))
+                    }
+                    modifierReleaseTimer = work
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
+                    pendingModifiers = []
+                    peakModifiers = []
+                    return true
+                } else if HotkeyService.modifierKeyCodes.contains(event.keyCode) {
+                    // Single modifier key (CMD, OPT, etc.)
+                    let keyCode = event.keyCode
+                    let work = DispatchWorkItem { [self] in
+                        finishRecording(UnifiedHotkey(keyCode: keyCode, modifierFlags: 0, isFn: false))
+                    }
+                    modifierReleaseTimer = work
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
+                    pendingModifiers = []
+                    peakModifiers = []
+                    return true
+                }
+            }
+
+            pendingModifiers = current
+            return true
+        }
+
+        if event.type == .keyDown {
+            modifierReleaseTimer?.cancel()
+            modifierReleaseTimer = nil
+
+            if event.keyCode == 0x35, pendingModifiers.isEmpty {
+                cancelRecording()
+                return true
+            }
+
+            let relevantMask: NSEvent.ModifierFlags = [.command, .option, .control, .shift, .function]
+            let modifiers = event.modifierFlags.intersection(relevantMask).rawValue
+
+            finishRecording(UnifiedHotkey(keyCode: event.keyCode, modifierFlags: modifiers, isFn: false))
+            return true
+        }
+
+        return false
     }
 
     private func finishRecording(_ hotkey: UnifiedHotkey) {
@@ -634,10 +657,7 @@ struct HotkeyRecorderView: View {
         isRecording = false
         pendingModifiers = []
         peakModifiers = []
-        if let monitor = eventMonitor {
-            NSEvent.removeMonitor(monitor)
-            eventMonitor = nil
-        }
+        removeMonitors()
         ServiceContainer.shared.hotkeyService.resumeMonitoring()
         onRecord(hotkey)
     }
@@ -651,10 +671,18 @@ struct HotkeyRecorderView: View {
         isRecording = false
         pendingModifiers = []
         peakModifiers = []
-        if let monitor = eventMonitor {
-            NSEvent.removeMonitor(monitor)
-            eventMonitor = nil
-        }
+        removeMonitors()
         ServiceContainer.shared.hotkeyService.resumeMonitoring()
+    }
+
+    private func removeMonitors() {
+        if let monitor = localMonitor {
+            NSEvent.removeMonitor(monitor)
+            localMonitor = nil
+        }
+        if let monitor = globalMonitor {
+            NSEvent.removeMonitor(monitor)
+            globalMonitor = nil
+        }
     }
 }
