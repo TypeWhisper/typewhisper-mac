@@ -2,6 +2,7 @@ import Foundation
 import AppKit
 import Carbon.HIToolbox
 import Combine
+import os
 
 struct UnifiedHotkey: Equatable, Sendable, Codable {
     let keyCode: UInt16
@@ -100,6 +101,10 @@ final class HotkeyService: ObservableObject {
 
     private var globalMonitor: Any?
     private var localMonitor: Any?
+    private var eventTap: CFMachPort?
+    private var runLoopSource: CFRunLoopSource?
+
+    private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "HotkeyService")
 
     // Modifier keyCodes that generate flagsChanged instead of keyDown/keyUp
     nonisolated static let modifierKeyCodes: Set<UInt16> = [
@@ -196,6 +201,14 @@ final class HotkeyService: ObservableObject {
     private func setupMonitor() {
         tearDownMonitor()
 
+        // Try CGEventTap first - it can suppress hotkey events from reaching other apps
+        if setupEventTap() {
+            logger.info("Using CGEventTap for hotkey monitoring (events will be suppressed)")
+            return
+        }
+
+        // Fallback: NSEvent monitors (no event suppression)
+        logger.info("CGEventTap unavailable, falling back to NSEvent monitors (hotkey events will pass through)")
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged, .keyDown, .keyUp]) { [weak self] event in
             Task { @MainActor [weak self] in
                 self?.handleEvent(event)
@@ -219,6 +232,14 @@ final class HotkeyService: ObservableObject {
             NSEvent.removeMonitor(monitor)
             localMonitor = nil
         }
+        if let tap = eventTap {
+            CGEvent.tapEnable(tap: tap, enable: false)
+            eventTap = nil
+        }
+        if let source = runLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+            runLoopSource = nil
+        }
     }
 
     func suspendMonitoring() {
@@ -228,6 +249,116 @@ final class HotkeyService: ObservableObject {
     func resumeMonitoring() {
         setupMonitor()
     }
+
+    // MARK: - CGEventTap (suppresses hotkey events)
+
+    /// Creates a CGEventTap to intercept and suppress hotkey events before they reach other apps.
+    /// Requires Accessibility permission. Returns true if the tap was successfully created.
+    private func setupEventTap() -> Bool {
+        let eventMask: CGEventMask = (1 << CGEventType.keyDown.rawValue)
+            | (1 << CGEventType.keyUp.rawValue)
+            | (1 << CGEventType.flagsChanged.rawValue)
+
+        let selfPtr = Unmanaged.passUnretained(self).toOpaque()
+
+        // @convention(c) callback - must not capture context. Uses userInfo to access HotkeyService.
+        // Runs on the main thread (tap is added to main run loop), so MainActor.assumeIsolated is safe.
+        let callback: CGEventTapCallBack = { _, type, event, userInfo in
+            if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+                if let userInfo {
+                    MainActor.assumeIsolated {
+                        let service = Unmanaged<HotkeyService>.fromOpaque(userInfo).takeUnretainedValue()
+                        if let tap = service.eventTap {
+                            CGEvent.tapEnable(tap: tap, enable: true)
+                        }
+                        service.logger.warning("CGEventTap was disabled by system, re-enabling")
+                    }
+                }
+                return Unmanaged.passUnretained(event)
+            }
+
+            guard let userInfo else {
+                return Unmanaged.passUnretained(event)
+            }
+
+            let shouldSuppress: Bool = MainActor.assumeIsolated {
+                guard let nsEvent = NSEvent(cgEvent: event) else { return false }
+                let service = Unmanaged<HotkeyService>.fromOpaque(userInfo).takeUnretainedValue()
+                return service.handleEventTapEvent(nsEvent)
+            }
+
+            return shouldSuppress ? nil : Unmanaged.passUnretained(event)
+        }
+
+        guard let tap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: eventMask,
+            callback: callback,
+            userInfo: selfPtr
+        ) else {
+            return false
+        }
+
+        eventTap = tap
+        let source = CFMachPortCreateRunLoopSource(nil, tap, 0)
+        runLoopSource = source
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+        CGEvent.tapEnable(tap: tap, enable: true)
+        return true
+    }
+
+    /// Processes event for CGEventTap: matches hotkeys synchronously, dispatches handling asynchronously.
+    /// Returns true if the event should be suppressed (consumed by TypeWhisper).
+    private func handleEventTapEvent(_ event: NSEvent) -> Bool {
+        // Escape key cancels active recording but should not be suppressed
+        if event.type == .keyDown && event.keyCode == 0x35 {
+            Task { @MainActor [weak self] in
+                self?.onCancelPressed?()
+            }
+            return false
+        }
+
+        var shouldSuppress = false
+
+        // Global slots
+        for slotType in HotkeySlotType.allCases {
+            guard var state = slots[slotType], let hotkey = state.hotkey else { continue }
+            let (keyDown, keyUp) = processKeyEvent(event, hotkey: hotkey, state: &state)
+            slots[slotType] = state
+            if keyDown {
+                shouldSuppress = true
+                Task { @MainActor [weak self] in self?.handleKeyDown(slotType: slotType) }
+            } else if keyUp {
+                shouldSuppress = true
+                Task { @MainActor [weak self] in self?.handleKeyUp(slotType: slotType) }
+            }
+        }
+
+        // Profile slots
+        for profileId in Array(profileSlots.keys) {
+            guard var pState = profileSlots[profileId] else { continue }
+            var state = SlotState(hotkey: pState.hotkey, fnWasDown: pState.fnWasDown,
+                                  modifierWasDown: pState.modifierWasDown, keyWasDown: pState.keyWasDown)
+            let (keyDown, keyUp) = processKeyEvent(event, hotkey: pState.hotkey, state: &state)
+            pState.fnWasDown = state.fnWasDown
+            pState.modifierWasDown = state.modifierWasDown
+            pState.keyWasDown = state.keyWasDown
+            profileSlots[profileId] = pState
+            if keyDown {
+                shouldSuppress = true
+                Task { @MainActor [weak self] in self?.handleProfileKeyDown(profileId: profileId) }
+            } else if keyUp {
+                shouldSuppress = true
+                Task { @MainActor [weak self] in self?.handleProfileKeyUp(profileId: profileId) }
+            }
+        }
+
+        return shouldSuppress
+    }
+
+    // MARK: - NSEvent Fallback
 
     private func handleEvent(_ event: NSEvent) {
         // Escape key cancels active recording/transcription
