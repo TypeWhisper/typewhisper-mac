@@ -18,7 +18,17 @@ final class AudioRecorderViewModel: ObservableObject {
     }
 
     enum RecorderState {
-        case idle, recording
+        case idle, recording, finalizing
+    }
+
+    private struct FinalTranscriptionRequest {
+        let outputURL: URL
+        let buffer: [Float]
+        let language: String?
+        let task: TranscriptionTask
+        let providerId: String?
+        let modelId: String?
+        let prompt: String?
     }
 
     struct RecordingItem: Identifiable {
@@ -116,6 +126,7 @@ final class AudioRecorderViewModel: ObservableObject {
     }
 
     func startRecording() {
+        guard state == .idle else { return }
         errorMessage = nil
         partialText = ""
         confirmedStreamingText = ""
@@ -142,23 +153,41 @@ final class AudioRecorderViewModel: ObservableObject {
 
     func stopRecording() {
         let wasTranscribing = streamingTask != nil
+        let recordingDuration = duration
         stopStreamingTranscription()
 
         Task {
             let url = await recorderService.stopRecording()
-            state = .idle
 
-            EventBus.shared.emit(.recordingStopped(RecordingStoppedPayload(durationSeconds: duration)))
+            let finalTranscriptionRequest: FinalTranscriptionRequest?
+            if wasTranscribing, let url {
+                finalTranscriptionRequest = FinalTranscriptionRequest(
+                    outputURL: url,
+                    buffer: recorderService.getCurrentBuffer(),
+                    language: selectedLanguage,
+                    task: selectedTask,
+                    providerId: modelManager.selectedProviderId,
+                    modelId: modelManager.selectedModelId,
+                    prompt: dictionaryService.getTermsForPrompt()
+                )
+                state = .finalizing
+            } else {
+                finalTranscriptionRequest = nil
+                state = .idle
+                isTranscribing = false
+            }
 
-            if let url, wasTranscribing {
-                // Run final transcription on the full buffer
-                await runFinalTranscription(outputURL: url)
+            EventBus.shared.emit(.recordingStopped(RecordingStoppedPayload(durationSeconds: recordingDuration)))
+
+            if let request = finalTranscriptionRequest {
+                await runFinalTranscription(request)
+                state = .idle
             }
 
             // Emit final transcript to LiveTranscriptPlugin
             if !partialText.isEmpty {
                 EventBus.shared.emit(.partialTranscriptionUpdate(PartialTranscriptionPayload(
-                    text: partialText, isFinal: true, elapsedSeconds: duration
+                    text: partialText, isFinal: true, elapsedSeconds: recordingDuration
                 )))
             }
 
@@ -326,51 +355,51 @@ final class AudioRecorderViewModel: ObservableObject {
         streamingTask = nil
     }
 
-    private func runFinalTranscription(outputURL: URL) async {
+    private func runFinalTranscription(_ request: FinalTranscriptionRequest) async {
         isTranscribing = true
         defer { isTranscribing = false }
 
-        let buffer = recorderService.getCurrentBuffer()
+        let buffer = request.buffer
         guard buffer.count > 8000 else { // At least 0.5s of audio
             // Use streaming result as final if buffer too short
             if !partialText.isEmpty {
-                saveTranscript(partialText, for: outputURL)
+                saveTranscript(partialText, for: request.outputURL)
             }
             return
         }
 
         // Fall back to transcribe if engine doesn't support translation
         let effectiveTask: TranscriptionTask
-        if selectedTask == .translate,
-           let providerId = modelManager.selectedProviderId,
+        if request.task == .translate,
+           let providerId = request.providerId,
            let plugin = PluginManager.shared.transcriptionEngine(for: providerId),
            !plugin.supportsTranslation {
             effectiveTask = .transcribe
         } else {
-            effectiveTask = selectedTask
+            effectiveTask = request.task
         }
 
         do {
             let result = try await modelManager.transcribe(
                 audioSamples: buffer,
-                language: selectedLanguage,
+                language: request.language,
                 task: effectiveTask,
-                engineOverrideId: nil,
-                cloudModelOverride: nil,
-                prompt: dictionaryService.getTermsForPrompt()
+                engineOverrideId: request.providerId,
+                cloudModelOverride: request.modelId,
+                prompt: request.prompt
             )
             let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
             if !text.isEmpty {
                 partialText = text
-                saveTranscript(text, for: outputURL)
+                saveTranscript(text, for: request.outputURL)
             } else if !partialText.isEmpty {
-                saveTranscript(partialText, for: outputURL)
+                saveTranscript(partialText, for: request.outputURL)
             }
         } catch {
             logger.error("Final transcription failed: \(error.localizedDescription)")
             // Fall back to streaming result
             if !partialText.isEmpty {
-                saveTranscript(partialText, for: outputURL)
+                saveTranscript(partialText, for: request.outputURL)
             }
         }
     }

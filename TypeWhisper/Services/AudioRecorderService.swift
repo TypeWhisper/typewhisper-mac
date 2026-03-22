@@ -10,6 +10,42 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhis
 /// Uses AVAudioEngine for mic and ScreenCaptureKit for system audio.
 final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
+    private struct TranscriptionBufferState {
+        var micSamples: [Float] = []
+        var systemSamples: [Float] = []
+
+        mutating func reset() {
+            micSamples.removeAll(keepingCapacity: false)
+            systemSamples.removeAll(keepingCapacity: false)
+        }
+
+        func mixedBuffer(micEnabled: Bool, systemAudioEnabled: Bool) -> [Float] {
+            switch (micEnabled, systemAudioEnabled) {
+            case (true, false):
+                return micSamples
+            case (false, true):
+                return systemSamples
+            case (true, true):
+                return Self.mix(micSamples: micSamples, systemSamples: systemSamples)
+            case (false, false):
+                return []
+            }
+        }
+
+        static func mix(micSamples: [Float], systemSamples: [Float]) -> [Float] {
+            let sampleCount = max(micSamples.count, systemSamples.count)
+            guard sampleCount > 0 else { return [] }
+
+            var mixed = [Float](repeating: 0, count: sampleCount)
+            for index in 0..<sampleCount {
+                let micSample = index < micSamples.count ? micSamples[index] : 0
+                let systemSample = index < systemSamples.count ? systemSamples[index] : 0
+                mixed[index] = max(-1, min(1, (micSample + systemSample) * 0.5))
+            }
+            return mixed
+        }
+    }
+
     enum RecorderError: LocalizedError {
         case microphonePermissionDenied
         case noSourceEnabled
@@ -59,7 +95,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     private var systemAudioEnabled = false
 
     // 16kHz mono buffer for streaming transcription
-    private let transcriptionBufferLock = OSAllocatedUnfairLock<[Float]>(initialState: [])
+    private let transcriptionBufferLock = OSAllocatedUnfairLock<TranscriptionBufferState>(initialState: TranscriptionBufferState())
     private static let transcriptionSampleRate: Double = 16000
 
     static let recordingsDirectoryName = "TypeWhisper Recordings"
@@ -73,12 +109,19 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
     /// Thread-safe snapshot of the current 16kHz mono buffer for streaming transcription.
     func getCurrentBuffer() -> [Float] {
-        transcriptionBufferLock.withLock { $0 }
+        let micEnabled = self.micEnabled
+        let systemAudioEnabled = self.systemAudioEnabled
+        return transcriptionBufferLock.withLock { state in
+            state.mixedBuffer(micEnabled: micEnabled, systemAudioEnabled: systemAudioEnabled)
+        }
     }
 
     /// Returns at most the last `maxDuration` seconds of 16kHz audio.
     func getRecentBuffer(maxDuration: TimeInterval) -> [Float] {
-        transcriptionBufferLock.withLock { buffer in
+        let micEnabled = self.micEnabled
+        let systemAudioEnabled = self.systemAudioEnabled
+        return transcriptionBufferLock.withLock { state in
+            let buffer = state.mixedBuffer(micEnabled: micEnabled, systemAudioEnabled: systemAudioEnabled)
             let maxSamples = Int(maxDuration * Self.transcriptionSampleRate)
             if buffer.count <= maxSamples { return buffer }
             return Array(buffer.suffix(maxSamples))
@@ -87,8 +130,11 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
     /// Total duration of transcription buffer in seconds.
     var totalBufferDuration: TimeInterval {
-        transcriptionBufferLock.withLock { buffer in
-            Double(buffer.count) / Self.transcriptionSampleRate
+        let micEnabled = self.micEnabled
+        let systemAudioEnabled = self.systemAudioEnabled
+        return transcriptionBufferLock.withLock { state in
+            let buffer = state.mixedBuffer(micEnabled: micEnabled, systemAudioEnabled: systemAudioEnabled)
+            return Double(buffer.count) / Self.transcriptionSampleRate
         }
     }
 
@@ -102,7 +148,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         self.outputFormat = format
 
         // Clear transcription buffer
-        transcriptionBufferLock.withLock { $0.removeAll() }
+        transcriptionBufferLock.withLock { $0.reset() }
 
         // Create recordings directory
         let dir = recordingsDirectory
@@ -119,22 +165,27 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         let tempDir = FileManager.default.temporaryDirectory
         let sessionId = UUID().uuidString
 
-        // Start mic recording
-        if micEnabled {
-            guard AVAudioApplication.shared.recordPermission == .granted else {
-                throw RecorderError.microphonePermissionDenied
+        do {
+            // Start mic recording
+            if micEnabled {
+                guard AVAudioApplication.shared.recordPermission == .granted else {
+                    throw RecorderError.microphonePermissionDenied
+                }
+
+                let micURL = tempDir.appendingPathComponent("mic-\(sessionId).wav")
+                self.micTempURL = micURL
+                try startMicRecording(outputURL: micURL)
             }
 
-            let micURL = tempDir.appendingPathComponent("mic-\(sessionId).wav")
-            self.micTempURL = micURL
-            try startMicRecording(outputURL: micURL)
-        }
-
-        // Start system audio recording
-        if systemAudioEnabled {
-            let sysURL = tempDir.appendingPathComponent("sys-\(sessionId).wav")
-            self.systemTempURL = sysURL
-            try await startSystemAudioRecording(outputURL: sysURL)
+            // Start system audio recording
+            if systemAudioEnabled {
+                let sysURL = tempDir.appendingPathComponent("sys-\(sessionId).wav")
+                self.systemTempURL = sysURL
+                try await startSystemAudioRecording(outputURL: sysURL)
+            }
+        } catch {
+            await rollbackFailedStart()
+            throw error
         }
 
         // Start duration timer
@@ -181,10 +232,10 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             streamOutput = nil
         }
 
-        let finalURL = finalOutputURL
+        var completedURL = finalOutputURL
 
         // Mix or copy to final output
-        if let finalURL {
+        if let finalURL = completedURL {
             do {
                 if micEnabled && systemAudioEnabled,
                    let micURL = micTempURL, let sysURL = systemTempURL {
@@ -196,6 +247,8 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
                 }
             } catch {
                 logger.error("Failed to finalize recording: \(error.localizedDescription)")
+                cleanupTempFile(finalURL)
+                completedURL = nil
             }
         }
 
@@ -204,6 +257,8 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         cleanupTempFile(systemTempURL)
         micTempURL = nil
         systemTempURL = nil
+        finalOutputURL = nil
+        startTime = nil
 
         DispatchQueue.main.async {
             self.isRecording = false
@@ -212,7 +267,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             self.systemLevel = 0
         }
 
-        return finalURL
+        return completedURL
     }
 
     // MARK: - Microphone Recording
@@ -340,7 +395,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
                 if convError == nil, convertedBuffer.frameLength > 0,
                    let data = convertedBuffer.floatChannelData?[0] {
                     let samples = Array(UnsafeBufferPointer(start: data, count: Int(convertedBuffer.frameLength)))
-                    self.transcriptionBufferLock.withLock { $0.append(contentsOf: samples) }
+                    self.appendMicTranscriptionSamples(samples)
                 }
             }
         }
@@ -396,7 +451,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             levelSetter.setLevel(level)
         }
         output.transcriptionBufferCallback = { [weak self] samples in
-            self?.transcriptionBufferLock.withLock { $0.append(contentsOf: samples) }
+            self?.appendSystemTranscriptionSamples(samples)
         }
 
         streamOutput = output
@@ -594,6 +649,48 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     private func cleanupTempFile(_ url: URL?) {
         guard let url else { return }
         try? FileManager.default.removeItem(at: url)
+    }
+
+    private func appendMicTranscriptionSamples(_ samples: [Float]) {
+        guard !samples.isEmpty else { return }
+        transcriptionBufferLock.withLock { $0.micSamples.append(contentsOf: samples) }
+    }
+
+    private func appendSystemTranscriptionSamples(_ samples: [Float]) {
+        guard !samples.isEmpty else { return }
+        transcriptionBufferLock.withLock { $0.systemSamples.append(contentsOf: samples) }
+    }
+
+    private func rollbackFailedStart() async {
+        durationTimer?.invalidate()
+        durationTimer = nil
+        startTime = nil
+
+        if let stream = scStream {
+            try? await stream.stopCapture()
+        }
+        scStream = nil
+        streamOutput = nil
+        sysFileLock.withLock { $0 = nil }
+
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        audioEngine?.stop()
+        audioEngine = nil
+        micFileLock.withLock { $0 = nil }
+
+        cleanupTempFile(micTempURL)
+        cleanupTempFile(systemTempURL)
+        micTempURL = nil
+        systemTempURL = nil
+        finalOutputURL = nil
+        transcriptionBufferLock.withLock { $0.reset() }
+
+        DispatchQueue.main.async {
+            self.isRecording = false
+            self.duration = 0
+            self.micLevel = 0
+            self.systemLevel = 0
+        }
     }
 }
 
