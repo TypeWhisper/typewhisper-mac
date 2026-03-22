@@ -2207,6 +2207,36 @@
     "LLM:" : {
 
     },
+    "All presets imported" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Vorlagen importiert"
+          }
+        }
+      }
+    },
+    "Import All" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle importieren"
+          }
+        }
+      }
+    },
+    "Import Preset" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorlage importieren"
+          }
+        }
+      }
+    },
     "Load Presets" : {
       "localizations" : {
         "de" : {

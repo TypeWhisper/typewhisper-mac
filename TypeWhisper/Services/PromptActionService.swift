@@ -57,11 +57,15 @@ class PromptActionService: ObservableObject {
         }
     }
 
+    var availablePresets: [PromptAction] {
+        let existingNames = Set(promptActions.map(\.name))
+        return PromptAction.presets.filter { !existingNames.contains($0.name) }
+    }
+
     func seedPresetsIfNeeded() {
         guard let context = modelContext else { return }
 
-        let existingNames = Set(promptActions.map(\.name))
-        let newPresets = PromptAction.presets.filter { !existingNames.contains($0.name) }
+        let newPresets = availablePresets
         guard !newPresets.isEmpty else { return }
 
         for preset in newPresets {
@@ -73,6 +77,28 @@ class PromptActionService: ObservableObject {
             loadActions()
         } catch {
             logger.error("Failed to seed presets: \(error.localizedDescription)")
+        }
+    }
+
+    func addPreset(_ preset: PromptAction) {
+        guard let context = modelContext else { return }
+
+        let maxOrder = promptActions.map(\.sortOrder).max() ?? -1
+        let newAction = PromptAction(
+            name: preset.name,
+            prompt: preset.prompt,
+            icon: preset.icon,
+            isPreset: true,
+            sortOrder: maxOrder + 1
+        )
+
+        context.insert(newAction)
+
+        do {
+            try context.save()
+            loadActions()
+        } catch {
+            logger.error("Failed to add preset: \(error.localizedDescription)")
         }
     }
 
