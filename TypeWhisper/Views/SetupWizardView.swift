@@ -72,6 +72,7 @@ struct SetupWizardView: View {
                         .frame(width: 8, height: 8)
                 }
             }
+            .accessibilityHidden(true)
         }
         .padding()
     }
@@ -165,6 +166,7 @@ struct SetupWizardView: View {
                 .font(.title2)
                 .foregroundStyle(.blue)
                 .frame(width: 36, height: 36)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)

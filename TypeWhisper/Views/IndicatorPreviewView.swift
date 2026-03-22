@@ -23,6 +23,7 @@ struct IndicatorPreviewView: View {
         .animation(.easeInOut(duration: 0.2), value: dictation.indicatorStyle)
         .animation(.easeInOut(duration: 0.2), value: dictation.notchIndicatorLeftContent)
         .animation(.easeInOut(duration: 0.2), value: dictation.notchIndicatorRightContent)
+        .accessibilityHidden(true)
     }
 
     // MARK: - Notch Preview
@@ -216,5 +217,8 @@ struct IndicatorStylePicker: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityValue(isSelected ? String(localized: "Selected") : "")
     }
 }

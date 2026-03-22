@@ -76,6 +76,7 @@ private struct ProfileRow: View {
             .toggleStyle(.switch)
             .controlSize(.small)
             .labelsHidden()
+            .accessibilityLabel(String(localized: "Enable \(profile.name)"))
 
             Button {
                 viewModel.prepareEditProfile(profile)
@@ -83,6 +84,7 @@ private struct ProfileRow: View {
                 Image(systemName: "pencil")
             }
             .buttonStyle(.borderless)
+            .accessibilityLabel(String(localized: "Edit \(profile.name)"))
 
             Button(role: .destructive) {
                 viewModel.deleteProfile(profile)
@@ -90,6 +92,7 @@ private struct ProfileRow: View {
                 Image(systemName: "trash")
             }
             .buttonStyle(.borderless)
+            .accessibilityLabel(String(localized: "Delete \(profile.name)"))
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())

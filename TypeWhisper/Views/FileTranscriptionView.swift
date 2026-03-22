@@ -230,6 +230,7 @@ struct FileTranscriptionView: View {
             Image(systemName: "arrow.down.doc")
                 .font(.largeTitle)
                 .foregroundStyle(isDragTargeted ? .blue : .secondary)
+                .accessibilityHidden(true)
 
             Text(String(localized: "Drop audio or video files here"))
                 .font(.headline)
@@ -311,6 +312,7 @@ struct FileTranscriptionView: View {
                             .font(.caption)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(String(localized: "Remove \(item.fileName)"))
                 }
             }
             .padding(10)
@@ -341,18 +343,23 @@ struct FileTranscriptionView: View {
         case .pending:
             Image(systemName: "circle")
                 .foregroundStyle(.secondary)
+                .accessibilityLabel(String(localized: "Pending"))
         case .loading:
             ProgressView()
                 .controlSize(.small)
+                .accessibilityLabel(String(localized: "Loading"))
         case .transcribing:
             ProgressView()
                 .controlSize(.small)
+                .accessibilityLabel(String(localized: "Transcribing"))
         case .done:
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(.green)
+                .accessibilityLabel(String(localized: "Done"))
         case .error:
             Image(systemName: "exclamationmark.circle.fill")
                 .foregroundStyle(.red)
+                .accessibilityLabel(String(localized: "Error"))
         }
     }
 
@@ -366,6 +373,7 @@ struct FileTranscriptionView: View {
             }
             .buttonStyle(.plain)
             .help(String(localized: "Copy"))
+            .accessibilityLabel(String(localized: "Copy"))
 
             if let result = item.result, !result.segments.isEmpty {
                 Menu {
@@ -444,6 +452,7 @@ struct FileTranscriptionView: View {
             .buttonStyle(.plain)
             .disabled(viewModel.batchState == .processing)
             .help(String(localized: "Clear All"))
+            .accessibilityLabel(String(localized: "Clear All"))
         }
     }
 

@@ -175,6 +175,7 @@ private struct TermPackCardView: View {
                 ))
                 .toggleStyle(.switch)
                 .labelsHidden()
+                .accessibilityLabel(String(localized: "Enable \(pack.name)"))
 
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
@@ -187,6 +188,8 @@ private struct TermPackCardView: View {
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(String(localized: "Show terms for \(pack.name)"))
+                .accessibilityValue(isExpanded ? String(localized: "Expanded") : String(localized: "Collapsed"))
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
@@ -277,6 +280,7 @@ private struct DictionaryCardView: View {
             ))
             .toggleStyle(.switch)
             .labelsHidden()
+            .accessibilityLabel(String(localized: "Enable \(entry.original)"))
             .onTapGesture {}
         }
         .padding(.horizontal, 10)
@@ -296,6 +300,7 @@ private struct DictionaryCardView: View {
         .onTapGesture {
             viewModel.startEditing(entry)
         }
+        .accessibilityElement(children: .combine)
         .contextMenu {
             Button(String(localized: "Edit")) {
                 viewModel.startEditing(entry)

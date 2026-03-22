@@ -25,6 +25,7 @@ struct AudioWaveformView: View {
             }
         }
         .frame(height: maxHeight)
+        .accessibilityHidden(true)
         .onChange(of: isSetup) { _, newValue in
             if newValue {
                 startBounce()

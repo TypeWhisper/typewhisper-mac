@@ -38,6 +38,7 @@ struct PromptActionsSettingsView: View {
                         Image(systemName: "plus")
                     }
                     .help(String(localized: "Add new prompt"))
+                    .accessibilityLabel(String(localized: "Add new prompt"))
                 }
                 .padding(.horizontal, 4)
                 .padding(.bottom, 8)
@@ -240,6 +241,7 @@ private struct PromptActionCardView: View {
                 .font(.system(size: 16))
                 .foregroundColor(.accentColor)
                 .frame(width: 28, height: 28)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
@@ -282,6 +284,7 @@ private struct PromptActionCardView: View {
             ))
             .toggleStyle(.switch)
             .labelsHidden()
+            .accessibilityLabel(String(localized: "Enable \(action.name)"))
             .onTapGesture {}
         }
         .padding(.horizontal, 10)
@@ -394,6 +397,8 @@ private struct PromptActionEditorSheet: View {
                                         )
                                 }
                                 .buttonStyle(.plain)
+                                .accessibilityLabel(icon)
+                                .accessibilityValue(viewModel.editIcon == icon ? String(localized: "Selected") : "")
                             }
                         }
                         .padding(.vertical, 8)

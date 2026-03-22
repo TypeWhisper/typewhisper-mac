@@ -346,6 +346,12 @@ struct RecordingSettingsView: View {
                 Text(String(localized: "Plays a sound when recording starts and when transcription completes."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                Toggle(String(localized: "Spoken feedback"), isOn: $dictation.spokenFeedbackEnabled)
+
+                Text(String(localized: "Reads back the transcribed text via speech synthesis after each dictation."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section(String(localized: "Audio Ducking")) {
@@ -508,6 +514,7 @@ struct HotkeyRecorderView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .accessibilityLabel(String(localized: "Recording shortcut - press a key or Escape to cancel"))
             } else if label.isEmpty {
                 Button {
                     startRecording()
@@ -516,6 +523,7 @@ struct HotkeyRecorderView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .accessibilityLabel(String(localized: "Record shortcut for \(title)"))
             } else {
                 HStack(spacing: 4) {
                     Button {
@@ -527,6 +535,7 @@ struct HotkeyRecorderView: View {
                             .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(String(localized: "Current shortcut: \(label). Click to change."))
                     Button {
                         onClear()
                     } label: {
@@ -534,6 +543,7 @@ struct HotkeyRecorderView: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(String(localized: "Clear shortcut"))
                 }
             }
         }
