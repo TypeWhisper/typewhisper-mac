@@ -129,14 +129,12 @@ final class FileTranscriptionViewModel: ObservableObject {
 
             files[index].state = .transcribing
 
-            let overrides = WatchFolderViewModel.shared.transcriptionOverrides
-
             let result = try await modelManager.transcribe(
                 audioSamples: samples,
-                language: overrides.language ?? selectedLanguage,
+                language: selectedLanguage,
                 task: selectedTask,
-                engineOverrideId: overrides.engineId,
-                cloudModelOverride: overrides.modelId
+                engineOverrideId: nil,
+                cloudModelOverride: nil
             )
 
             files[index].result = result

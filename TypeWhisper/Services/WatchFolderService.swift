@@ -20,8 +20,9 @@ final class WatchFolderService: ObservableObject {
     private var dispatchSource: (any DispatchSourceFileSystemObject)?
     private var fileDescriptor: Int32 = -1
     private var processingTask: Task<Void, Never>?
-    private var processedFileNames: Set<String> = []
+    private var processedFileFingerprints: Set<String> = []
     private var debounceTask: Task<Void, Never>?
+    private var needsRescanAfterProcessing = false
 
     private let audioFileService: AudioFileService
     private let modelManagerService: ModelManagerService
@@ -30,7 +31,7 @@ final class WatchFolderService: ObservableObject {
     init(audioFileService: AudioFileService, modelManagerService: ModelManagerService) {
         self.audioFileService = audioFileService
         self.modelManagerService = modelManagerService
-        loadProcessedFileNames()
+        loadProcessedFileFingerprints()
         loadProcessedFiles()
     }
 
@@ -66,6 +67,7 @@ final class WatchFolderService: ObservableObject {
         dispatchSource = source
         source.resume()
         isWatching = true
+        needsRescanAfterProcessing = false
         logger.info("Started watching folder: \(folderURL.path)")
 
         // Initial scan
@@ -79,13 +81,14 @@ final class WatchFolderService: ObservableObject {
         processingTask = nil
         debounceTask?.cancel()
         debounceTask = nil
+        needsRescanAfterProcessing = false
         isWatching = false
     }
 
     func clearHistory() {
         processedFiles.removeAll()
-        processedFileNames.removeAll()
-        saveProcessedFileNames()
+        processedFileFingerprints.removeAll()
+        saveProcessedFileFingerprints()
         saveProcessedFiles()
     }
 
@@ -101,7 +104,10 @@ final class WatchFolderService: ObservableObject {
     }
 
     private func scanFolder(_ folderURL: URL) {
-        guard processingTask == nil || processingTask?.isCancelled == true else { return }
+        guard processingTask == nil || processingTask?.isCancelled == true else {
+            needsRescanAfterProcessing = true
+            return
+        }
 
         let fm = FileManager.default
         guard let contents = try? fm.contentsOfDirectory(
@@ -110,11 +116,15 @@ final class WatchFolderService: ObservableObject {
             options: [.skipsHiddenFiles]
         ) else { return }
 
-        let audioFiles = contents.filter { url in
+        let audioFiles = contents.compactMap { url -> (url: URL, fingerprint: String)? in
             let ext = url.pathExtension.lowercased()
-            return AudioFileService.supportedExtensions.contains(ext)
-                && !processedFileNames.contains(url.lastPathComponent)
-        }.sorted { $0.lastPathComponent < $1.lastPathComponent }
+            guard AudioFileService.supportedExtensions.contains(ext),
+                  let fingerprint = fileFingerprint(for: url),
+                  !processedFileFingerprints.contains(fingerprint) else {
+                return nil
+            }
+            return (url, fingerprint)
+        }.sorted { $0.url.lastPathComponent < $1.url.lastPathComponent }
 
         guard !audioFiles.isEmpty else { return }
 
@@ -144,19 +154,27 @@ final class WatchFolderService: ObservableObject {
             for file in audioFiles {
                 guard !Task.isCancelled else { break }
                 await self?.transcribeFile(
-                    url: file,
+                    url: file.url,
+                    fingerprint: file.fingerprint,
                     outputFolder: outputFolder,
                     format: outputFormat,
                     overrides: overrides,
                     deleteSource: deleteSource
                 )
             }
-            self?.processingTask = nil
+
+            guard let self else { return }
+            self.processingTask = nil
+
+            guard self.needsRescanAfterProcessing else { return }
+            self.needsRescanAfterProcessing = false
+            self.scanFolder(folderURL)
         }
     }
 
     private func transcribeFile(
         url: URL,
+        fingerprint: String,
         outputFolder: URL,
         format: String,
         overrides: WatchFolderViewModel.TranscriptionOverrides,
@@ -221,8 +239,8 @@ final class WatchFolderService: ObservableObject {
                 errorMessage: nil
             )
             processedFiles.insert(item, at: 0)
-            processedFileNames.insert(fileName)
-            saveProcessedFileNames()
+            processedFileFingerprints.insert(fingerprint)
+            saveProcessedFileFingerprints()
             saveProcessedFiles()
             logger.info("Transcribed: \(fileName)")
 
@@ -236,8 +254,6 @@ final class WatchFolderService: ObservableObject {
                 errorMessage: error.localizedDescription
             )
             processedFiles.insert(item, at: 0)
-            processedFileNames.insert(fileName)
-            saveProcessedFileNames()
             saveProcessedFiles()
             logger.error("Failed to transcribe \(fileName): \(error.localizedDescription)")
         }
@@ -247,7 +263,7 @@ final class WatchFolderService: ObservableObject {
 
     // MARK: - Persistence
 
-    private var processedNamesURL: URL {
+    private var processedFingerprintsURL: URL {
         AppConstants.appSupportDirectory.appendingPathComponent("watch-folder-processed.json")
     }
 
@@ -255,20 +271,20 @@ final class WatchFolderService: ObservableObject {
         AppConstants.appSupportDirectory.appendingPathComponent("watch-folder-history.json")
     }
 
-    private func loadProcessedFileNames() {
-        guard let data = try? Data(contentsOf: processedNamesURL),
-              let names = try? JSONDecoder().decode(Set<String>.self, from: data) else { return }
-        processedFileNames = names
+    private func loadProcessedFileFingerprints() {
+        guard let data = try? Data(contentsOf: processedFingerprintsURL),
+              let fingerprints = try? JSONDecoder().decode(Set<String>.self, from: data) else { return }
+        processedFileFingerprints = fingerprints
     }
 
-    private func saveProcessedFileNames() {
+    private func saveProcessedFileFingerprints() {
         let fm = FileManager.default
         let dir = AppConstants.appSupportDirectory
         if !fm.fileExists(atPath: dir.path) {
             try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
         }
-        guard let data = try? JSONEncoder().encode(processedFileNames) else { return }
-        try? data.write(to: processedNamesURL, options: .atomic)
+        guard let data = try? JSONEncoder().encode(processedFileFingerprints) else { return }
+        try? data.write(to: processedFingerprintsURL, options: .atomic)
     }
 
     private func loadProcessedFiles() {
@@ -284,5 +300,15 @@ final class WatchFolderService: ObservableObject {
         }
         guard let data = try? JSONEncoder().encode(processedFiles) else { return }
         try? data.write(to: processedHistoryURL, options: .atomic)
+    }
+
+    private func fileFingerprint(for url: URL) -> String? {
+        let resourceKeys: Set<URLResourceKey> = [.fileSizeKey, .contentModificationDateKey]
+        let values = try? url.resourceValues(forKeys: resourceKeys)
+
+        let fileSize = values?.fileSize ?? 0
+        let modifiedAt = values?.contentModificationDate?.timeIntervalSince1970 ?? 0
+
+        return "\(url.path)|\(fileSize)|\(modifiedAt)"
     }
 }
