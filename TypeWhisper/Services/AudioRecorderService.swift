@@ -58,11 +58,38 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     private var micEnabled = false
     private var systemAudioEnabled = false
 
+    // 16kHz mono buffer for streaming transcription
+    private let transcriptionBufferLock = OSAllocatedUnfairLock<[Float]>(initialState: [])
+    private static let transcriptionSampleRate: Double = 16000
+
     static let recordingsDirectoryName = "TypeWhisper Recordings"
 
     var recordingsDirectory: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent(Self.recordingsDirectoryName)
+    }
+
+    // MARK: - Transcription Buffer Access
+
+    /// Thread-safe snapshot of the current 16kHz mono buffer for streaming transcription.
+    func getCurrentBuffer() -> [Float] {
+        transcriptionBufferLock.withLock { $0 }
+    }
+
+    /// Returns at most the last `maxDuration` seconds of 16kHz audio.
+    func getRecentBuffer(maxDuration: TimeInterval) -> [Float] {
+        transcriptionBufferLock.withLock { buffer in
+            let maxSamples = Int(maxDuration * Self.transcriptionSampleRate)
+            if buffer.count <= maxSamples { return buffer }
+            return Array(buffer.suffix(maxSamples))
+        }
+    }
+
+    /// Total duration of transcription buffer in seconds.
+    var totalBufferDuration: TimeInterval {
+        transcriptionBufferLock.withLock { buffer in
+            Double(buffer.count) / Self.transcriptionSampleRate
+        }
     }
 
     func startRecording(micEnabled: Bool, systemAudioEnabled: Bool, format: OutputFormat) async throws -> URL {
@@ -73,6 +100,9 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         self.micEnabled = micEnabled
         self.systemAudioEnabled = systemAudioEnabled
         self.outputFormat = format
+
+        // Clear transcription buffer
+        transcriptionBufferLock.withLock { $0.removeAll() }
 
         // Create recordings directory
         let dir = recordingsDirectory
@@ -224,6 +254,17 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             converter = nil
         }
 
+        // 16kHz converter for transcription buffer
+        guard let transcriptionFormat = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: Self.transcriptionSampleRate,
+            channels: 1,
+            interleaved: false
+        ) else {
+            throw RecorderError.engineStartFailed("Cannot create transcription format")
+        }
+        let transcriptionConverter = AVAudioConverter(from: monoFormat, to: transcriptionFormat)
+
         micFileLock.withLock { $0 = audioFile }
 
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
@@ -271,6 +312,35 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
                     try file.write(from: writeBuffer)
                 } catch {
                     logger.error("Failed to write mic audio: \(error.localizedDescription)")
+                }
+            }
+
+            // Convert to 16kHz mono for transcription buffer
+            if let transcriptionConverter {
+                let targetFrameCount = AVAudioFrameCount(
+                    Double(writeBuffer.frameLength) * Self.transcriptionSampleRate / monoFormat.sampleRate
+                )
+                guard targetFrameCount > 0,
+                      let convertedBuffer = AVAudioPCMBuffer(pcmFormat: transcriptionFormat, frameCapacity: targetFrameCount) else { return }
+                var convError: NSError?
+                let convConsumed = OSAllocatedUnfairLock(initialState: false)
+                transcriptionConverter.convert(to: convertedBuffer, error: &convError) { _, outStatus in
+                    let wasConsumed = convConsumed.withLock { flag in
+                        let prev = flag
+                        flag = true
+                        return prev
+                    }
+                    if wasConsumed {
+                        outStatus.pointee = .noDataNow
+                        return nil
+                    }
+                    outStatus.pointee = .haveData
+                    return writeBuffer
+                }
+                if convError == nil, convertedBuffer.frameLength > 0,
+                   let data = convertedBuffer.floatChannelData?[0] {
+                    let samples = Array(UnsafeBufferPointer(start: data, count: Int(convertedBuffer.frameLength)))
+                    self.transcriptionBufferLock.withLock { $0.append(contentsOf: samples) }
                 }
             }
         }
@@ -324,6 +394,9 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         let levelSetter = SystemLevelSetter(service: self)
         output.levelCallback = { level in
             levelSetter.setLevel(level)
+        }
+        output.transcriptionBufferCallback = { [weak self] samples in
+            self?.transcriptionBufferLock.withLock { $0.append(contentsOf: samples) }
         }
 
         streamOutput = output
@@ -546,6 +619,7 @@ private final class SystemAudioStreamOutput: NSObject, SCStreamOutput, SCStreamD
     var audioFile: AVAudioFile?
     var fileLock: OSAllocatedUnfairLock<AVAudioFile?>?
     var levelCallback: ((Float) -> Void)?
+    var transcriptionBufferCallback: (([Float]) -> Void)?
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .audio else { return }
@@ -616,6 +690,39 @@ private final class SystemAudioStreamOutput: NSObject, SCStreamOutput, SCStreamD
                 try file.write(from: pcmBuffer)
             } catch {
                 logger.error("Failed to write system audio: \(error.localizedDescription)")
+            }
+        }
+
+        // Downsample to 16kHz mono for transcription buffer
+        if let callback = transcriptionBufferCallback {
+            let sampleRate = asbd.pointee.mSampleRate
+            let decimationFactor = Int(sampleRate / 16000)
+            guard decimationFactor > 0 else { return }
+
+            if isFloat && bytesPerSample == 4 {
+                let floatPtr = UnsafeRawPointer(dataPointer).bindMemory(to: Float.self, capacity: sampleCount * channelCount)
+                var mono16k: [Float] = []
+                mono16k.reserveCapacity(sampleCount / decimationFactor)
+                for i in stride(from: 0, to: sampleCount, by: decimationFactor) {
+                    var sample: Float = 0
+                    for ch in 0..<channelCount {
+                        sample += floatPtr[i * channelCount + ch]
+                    }
+                    mono16k.append(sample / Float(channelCount))
+                }
+                callback(mono16k)
+            } else if bytesPerSample == 2 {
+                let int16Ptr = UnsafeRawPointer(dataPointer).bindMemory(to: Int16.self, capacity: sampleCount * channelCount)
+                var mono16k: [Float] = []
+                mono16k.reserveCapacity(sampleCount / decimationFactor)
+                for i in stride(from: 0, to: sampleCount, by: decimationFactor) {
+                    var sample: Float = 0
+                    for ch in 0..<channelCount {
+                        sample += Float(int16Ptr[i * channelCount + ch]) / Float(Int16.max)
+                    }
+                    mono16k.append(sample / Float(channelCount))
+                }
+                callback(mono16k)
             }
         }
     }

@@ -125,7 +125,7 @@ final class ServiceContainer: ObservableObject {
             promptActionService: promptActionService,
             promptProcessingService: promptProcessingService
         )
-        audioRecorderViewModel = AudioRecorderViewModel(recorderService: audioRecorderService)
+        audioRecorderViewModel = AudioRecorderViewModel(recorderService: audioRecorderService, modelManager: modelManagerService, dictionaryService: dictionaryService)
 
         // Set shared references
         FileTranscriptionViewModel._shared = fileTranscriptionViewModel

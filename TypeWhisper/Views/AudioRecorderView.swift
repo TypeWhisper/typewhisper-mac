@@ -2,6 +2,9 @@ import SwiftUI
 
 struct AudioRecorderView: View {
     @ObservedObject var viewModel: AudioRecorderViewModel
+    @ObservedObject private var pluginManager = PluginManager.shared
+    @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
+    @State private var selectedProvider: String?
 
     var body: some View {
         Form {
@@ -66,6 +69,18 @@ struct AudioRecorderView: View {
                 }
             }
 
+            // Transcribing indicator after stop
+            if viewModel.isTranscribing && viewModel.state == .idle {
+                Section {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text(String(localized: "recorder.transcribing"))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
             // Audio Sources
             Section(String(localized: "recorder.sources")) {
                 Toggle(String(localized: "recorder.mic"), isOn: $viewModel.micEnabled)
@@ -88,6 +103,93 @@ struct AudioRecorderView: View {
                     Text("M4A").tag(AudioRecorderService.OutputFormat.m4a)
                 }
                 .disabled(viewModel.state == .recording)
+            }
+
+            // Transcription Settings
+            Section(String(localized: "recorder.transcription")) {
+                Toggle(String(localized: "recorder.liveTranscription"), isOn: $viewModel.transcriptionEnabled)
+                    .disabled(viewModel.state == .recording)
+
+                if viewModel.transcriptionEnabled {
+                    // Engine picker
+                    let engines = pluginManager.transcriptionEngines
+                    Picker(String(localized: "Engine"), selection: $selectedProvider) {
+                        Text(String(localized: "None")).tag(nil as String?)
+                        Divider()
+                        ForEach(engines, id: \.providerId) { engine in
+                            HStack {
+                                Text(engine.providerDisplayName)
+                                if !engine.isConfigured {
+                                    Text("(\(String(localized: "not ready")))")
+                                        .foregroundStyle(.secondary)
+                                }
+                            }.tag(engine.providerId as String?)
+                        }
+                    }
+                    .onChange(of: selectedProvider) { _, newValue in
+                        if let newValue {
+                            modelManager.selectProvider(newValue)
+                        }
+                    }
+                    .disabled(viewModel.state == .recording)
+
+                    // Model picker
+                    if let providerId = selectedProvider,
+                       let engine = pluginManager.transcriptionEngine(for: providerId) {
+                        let models = engine.transcriptionModels
+                        if models.count > 1 {
+                            Picker(String(localized: "Model"), selection: Binding(
+                                get: { engine.selectedModelId },
+                                set: { if let id = $0 { modelManager.selectModel(providerId, modelId: id) } }
+                            )) {
+                                ForEach(models, id: \.id) { model in
+                                    Text(model.displayName).tag(model.id as String?)
+                                }
+                            }
+                            .disabled(viewModel.state == .recording)
+                        }
+                    }
+
+                    // Language picker
+                    Picker(String(localized: "recorder.language"), selection: $viewModel.selectedLanguage) {
+                        Text(String(localized: "Auto-detect")).tag(nil as String?)
+                        Divider()
+                        ForEach(SettingsViewModel.shared.availableLanguages, id: \.code) { lang in
+                            Text(lang.name).tag(lang.code as String?)
+                        }
+                    }
+                    .disabled(viewModel.state == .recording)
+
+                    // Task picker (transcribe/translate)
+                    if viewModel.supportsTranslation {
+                        Picker(String(localized: "Task"), selection: $viewModel.selectedTask) {
+                            ForEach(TranscriptionTask.allCases) { task in
+                                Text(task.displayName).tag(task)
+                            }
+                        }
+                        .disabled(viewModel.state == .recording)
+                    }
+
+                    // LiveTranscriptPlugin status
+                    if isLiveTranscriptPluginActive {
+                        Label(
+                            String(localized: "recorder.liveTranscriptActive"),
+                            systemImage: "text.quote"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                    } else {
+                        Label(
+                            String(localized: "recorder.liveTranscriptHint"),
+                            systemImage: "info.circle"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .onAppear {
+                selectedProvider = modelManager.selectedProviderId
             }
 
             // Recordings list
@@ -122,6 +224,10 @@ struct AudioRecorderView: View {
         .formStyle(.grouped)
         .padding()
         .frame(minWidth: 500, minHeight: 400)
+    }
+
+    private var isLiveTranscriptPluginActive: Bool {
+        pluginManager.loadedPlugins.contains { $0.manifest.id == "com.typewhisper.livetranscript" && $0.isEnabled }
     }
 }
 
@@ -177,53 +283,96 @@ private struct LevelMeterRow: View {
 private struct RecordingRow: View {
     let item: AudioRecorderViewModel.RecordingItem
     @ObservedObject var viewModel: AudioRecorderViewModel
+    @State private var showTranscript = false
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.fileName)
-                    .font(.body)
-                    .lineLimit(1)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.fileName)
+                        .font(.body)
+                        .lineLimit(1)
 
-                HStack(spacing: 12) {
-                    Label(formattedDate(item.date), systemImage: "calendar")
-                    Label(viewModel.formattedDuration(item.duration), systemImage: "clock")
-                    Label(viewModel.formattedFileSize(item.fileSize), systemImage: "doc")
+                    HStack(spacing: 12) {
+                        Label(formattedDate(item.date), systemImage: "calendar")
+                        Label(viewModel.formattedDuration(item.duration), systemImage: "clock")
+                        Label(viewModel.formattedFileSize(item.fileSize), systemImage: "doc")
+                        if item.transcript != nil {
+                            Label(String(localized: "recorder.hasTranscript"), systemImage: "text.quote")
+                        }
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+
+                Spacer()
+
+                HStack(spacing: 4) {
+                    if item.transcript != nil {
+                        Button {
+                            showTranscript.toggle()
+                        } label: {
+                            Image(systemName: showTranscript ? "text.quote" : "text.quote")
+                                .foregroundStyle(showTranscript ? .accent : .secondary)
+                        }
+                        .buttonStyle(.borderless)
+                        .help(String(localized: "recorder.showTranscript"))
+                    }
+
+                    Button {
+                        viewModel.transcribeRecording(item)
+                    } label: {
+                        Image(systemName: "text.viewfinder")
+                    }
+                    .buttonStyle(.borderless)
+                    .help(String(localized: "recorder.transcribe"))
+
+                    Button {
+                        viewModel.revealInFinder(item)
+                    } label: {
+                        Image(systemName: "folder")
+                    }
+                    .buttonStyle(.borderless)
+                    .help(String(localized: "recorder.revealInFinder"))
+
+                    Button(role: .destructive) {
+                        viewModel.deleteRecording(item)
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.borderless)
+                    .help(String(localized: "recorder.delete"))
+                }
             }
 
-            Spacer()
+            // Expandable transcript
+            if showTranscript, let transcript = item.transcript {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(transcript)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
 
-            HStack(spacing: 4) {
-                Button {
-                    viewModel.transcribeRecording(item)
-                } label: {
-                    Image(systemName: "text.viewfinder")
+                    Button {
+                        viewModel.copyTranscript(transcript)
+                    } label: {
+                        Label(String(localized: "recorder.copyTranscript"), systemImage: "doc.on.doc")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.borderless)
                 }
-                .buttonStyle(.borderless)
-                .help(String(localized: "recorder.transcribe"))
-
-                Button {
-                    viewModel.revealInFinder(item)
-                } label: {
-                    Image(systemName: "folder")
-                }
-                .buttonStyle(.borderless)
-                .help(String(localized: "recorder.revealInFinder"))
-
-                Button(role: .destructive) {
-                    viewModel.deleteRecording(item)
-                } label: {
-                    Image(systemName: "trash")
-                }
-                .buttonStyle(.borderless)
-                .help(String(localized: "recorder.delete"))
+                .padding(.top, 4)
+                .padding(.leading, 4)
             }
         }
         .padding(.vertical, 4)
         .contextMenu {
+            if let transcript = item.transcript {
+                Button(String(localized: "recorder.copyTranscript")) {
+                    viewModel.copyTranscript(transcript)
+                }
+                Divider()
+            }
             Button(String(localized: "recorder.transcribe")) {
                 viewModel.transcribeRecording(item)
             }

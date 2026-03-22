@@ -10,12 +10,13 @@ struct SettingsView: View {
     @ObservedObject private var fileTranscription = FileTranscriptionViewModel.shared
     @ObservedObject private var registryService = PluginRegistryService.shared
     @ObservedObject private var homeViewModel = HomeViewModel.shared
+    @AppStorage(UserDefaultsKeys.showRecorderTab) private var showRecorderTab = false
 
     var body: some View {
         Group {
             if #available(macOS 15, *) {
                 TabView(selection: $selectedTab) {
-                    SettingsMainTabs(pluginUpdatesBadge: registryService.availableUpdatesCount)
+                    SettingsMainTabs(pluginUpdatesBadge: registryService.availableUpdatesCount, showRecorderTab: showRecorderTab)
                 }
                 .tabViewStyle(.sidebarAdaptable)
             } else {
@@ -32,9 +33,11 @@ struct SettingsView: View {
                     FileTranscriptionView()
                         .tabItem { Label(String(localized: "File Transcription"), systemImage: "doc.text") }
                         .tag(SettingsTab.fileTranscription)
-                    AudioRecorderView(viewModel: AudioRecorderViewModel.shared)
-                        .tabItem { Label(String(localized: "settings.tab.recorder"), systemImage: "waveform.circle") }
-                        .tag(SettingsTab.recorder)
+                    if showRecorderTab {
+                        AudioRecorderView(viewModel: AudioRecorderViewModel.shared)
+                            .tabItem { Label(String(localized: "settings.tab.recorder"), systemImage: "waveform.circle") }
+                            .tag(SettingsTab.recorder)
+                    }
                     HistoryView()
                         .tabItem { Label(String(localized: "History"), systemImage: "clock.arrow.circlepath") }
                         .tag(SettingsTab.history)
@@ -82,6 +85,7 @@ struct SettingsView: View {
 @available(macOS 15, *)
 private struct SettingsMainTabs: TabContent {
     var pluginUpdatesBadge: Int
+    var showRecorderTab: Bool
     var body: some TabContent<SettingsTab> {
         Tab(String(localized: "Home"), systemImage: "house", value: SettingsTab.home) {
             HomeSettingsView()
@@ -95,8 +99,10 @@ private struct SettingsMainTabs: TabContent {
         Tab(String(localized: "File Transcription"), systemImage: "doc.text", value: SettingsTab.fileTranscription) {
             FileTranscriptionView()
         }
-        Tab(String(localized: "settings.tab.recorder"), systemImage: "waveform.circle", value: SettingsTab.recorder) {
-            AudioRecorderView(viewModel: AudioRecorderViewModel.shared)
+        if showRecorderTab {
+            Tab(String(localized: "settings.tab.recorder"), systemImage: "waveform.circle", value: SettingsTab.recorder) {
+                AudioRecorderView(viewModel: AudioRecorderViewModel.shared)
+            }
         }
         Tab(String(localized: "History"), systemImage: "clock.arrow.circlepath", value: SettingsTab.history) {
             HistoryView()

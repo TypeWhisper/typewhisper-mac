@@ -1,6 +1,11 @@
 import Foundation
 import Combine
 import AppKit
+import AVFoundation
+import os
+import TypeWhisperPluginSDK
+
+private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhisper-mac", category: "AudioRecorderViewModel")
 
 @MainActor
 final class AudioRecorderViewModel: ObservableObject {
@@ -22,6 +27,7 @@ final class AudioRecorderViewModel: ObservableObject {
         let date: Date
         let duration: TimeInterval
         let fileSize: Int64
+        let transcript: String?
         var fileName: String { url.lastPathComponent }
     }
 
@@ -38,15 +44,33 @@ final class AudioRecorderViewModel: ObservableObject {
     @Published var outputFormat: AudioRecorderService.OutputFormat {
         didSet { UserDefaults.standard.set(outputFormat.rawValue, forKey: UserDefaultsKeys.recorderOutputFormat) }
     }
+    @Published var transcriptionEnabled: Bool {
+        didSet { UserDefaults.standard.set(transcriptionEnabled, forKey: UserDefaultsKeys.recorderTranscriptionEnabled) }
+    }
+    @Published var selectedLanguage: String? = nil
+    @Published var selectedTask: TranscriptionTask = .transcribe
     @Published var recordings: [RecordingItem] = []
     @Published var errorMessage: String?
+    @Published var partialText: String = ""
+    @Published var isTranscribing: Bool = false
+
+    var activeEngineName: String? { modelManager.activeEngineName }
+    var activeModelName: String? { modelManager.activeModelName }
+    var isModelReady: Bool { modelManager.isModelReady }
+    var supportsTranslation: Bool { modelManager.supportsTranslation }
 
     private let recorderService: AudioRecorderService
+    private let modelManager: ModelManagerService
+    private let dictionaryService: DictionaryService
     private var cancellables = Set<AnyCancellable>()
     private var currentOutputURL: URL?
+    private var streamingTask: Task<Void, Never>?
+    private var confirmedStreamingText = ""
 
-    init(recorderService: AudioRecorderService) {
+    init(recorderService: AudioRecorderService, modelManager: ModelManagerService, dictionaryService: DictionaryService) {
         self.recorderService = recorderService
+        self.modelManager = modelManager
+        self.dictionaryService = dictionaryService
 
         // Load saved preferences with defaults
         let defaults = UserDefaults.standard
@@ -62,6 +86,12 @@ final class AudioRecorderViewModel: ObservableObject {
             self.outputFormat = format
         } else {
             self.outputFormat = .wav
+        }
+
+        if defaults.object(forKey: UserDefaultsKeys.recorderTranscriptionEnabled) == nil {
+            self.transcriptionEnabled = true
+        } else {
+            self.transcriptionEnabled = defaults.bool(forKey: UserDefaultsKeys.recorderTranscriptionEnabled)
         }
 
         setupBindings()
@@ -87,6 +117,8 @@ final class AudioRecorderViewModel: ObservableObject {
 
     func startRecording() {
         errorMessage = nil
+        partialText = ""
+        confirmedStreamingText = ""
         Task {
             do {
                 let url = try await recorderService.startRecording(
@@ -96,6 +128,12 @@ final class AudioRecorderViewModel: ObservableObject {
                 )
                 currentOutputURL = url
                 state = .recording
+
+                EventBus.shared.emit(.recordingStarted(RecordingStartedPayload()))
+
+                if transcriptionEnabled {
+                    startStreamingTranscription()
+                }
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -103,9 +141,27 @@ final class AudioRecorderViewModel: ObservableObject {
     }
 
     func stopRecording() {
+        let wasTranscribing = streamingTask != nil
+        stopStreamingTranscription()
+
         Task {
             let url = await recorderService.stopRecording()
             state = .idle
+
+            EventBus.shared.emit(.recordingStopped(RecordingStoppedPayload(durationSeconds: duration)))
+
+            if let url, wasTranscribing {
+                // Run final transcription on the full buffer
+                await runFinalTranscription(outputURL: url)
+            }
+
+            // Emit final transcript to LiveTranscriptPlugin
+            if !partialText.isEmpty {
+                EventBus.shared.emit(.partialTranscriptionUpdate(PartialTranscriptionPayload(
+                    text: partialText, isFinal: true, elapsedSeconds: duration
+                )))
+            }
+
             if url != nil {
                 loadRecordings()
             }
@@ -115,6 +171,9 @@ final class AudioRecorderViewModel: ObservableObject {
     func deleteRecording(_ item: RecordingItem) {
         do {
             try FileManager.default.removeItem(at: item.url)
+            // Also delete sidecar transcript
+            let txtURL = item.url.deletingPathExtension().appendingPathExtension("txt")
+            try? FileManager.default.removeItem(at: txtURL)
             recordings.removeAll { $0.id == item.id }
         } catch {
             errorMessage = error.localizedDescription
@@ -134,6 +193,11 @@ final class AudioRecorderViewModel: ObservableObject {
         if FileManager.default.fileExists(atPath: dir.path) {
             NSWorkspace.shared.open(dir)
         }
+    }
+
+    func copyTranscript(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     func loadRecordings() {
@@ -158,7 +222,8 @@ final class AudioRecorderViewModel: ObservableObject {
                     let date = (attrs[.creationDate] as? Date) ?? Date.distantPast
                     let size = (attrs[.size] as? Int64) ?? 0
                     let duration = audioDuration(for: url)
-                    return RecordingItem(url: url, date: date, duration: duration, fileSize: size)
+                    let transcript = loadTranscript(for: url)
+                    return RecordingItem(url: url, date: date, duration: duration, fileSize: size, transcript: transcript)
                 }
                 .sorted { $0.date > $1.date }
 
@@ -189,6 +254,144 @@ final class AudioRecorderViewModel: ObservableObject {
         formatter.countStyle = .file
         return formatter.string(fromByteCount: bytes)
     }
-}
 
-import AVFoundation
+    // MARK: - Streaming Transcription
+
+    private func startStreamingTranscription() {
+        guard let providerId = modelManager.selectedProviderId,
+              let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
+            logger.info("No transcription engine available, skipping live transcription")
+            return
+        }
+
+        isTranscribing = true
+        let pollInterval: Double = plugin.supportsStreaming ? 1.5 : 3.0
+        let streamPrompt = dictionaryService.getTermsForPrompt()
+        let language = selectedLanguage
+        // Fall back to transcribe if engine doesn't support translation
+        let task = (selectedTask == .translate && !plugin.supportsTranslation) ? .transcribe : selectedTask
+
+        streamingTask = Task { [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(for: .seconds(pollInterval))
+
+            while !Task.isCancelled, self.state == .recording {
+                let buffer = self.recorderService.getRecentBuffer(maxDuration: 3600)
+                let bufferDuration = Double(buffer.count) / 16000.0
+
+                if bufferDuration > 0.5 {
+                    do {
+                        let confirmed = self.confirmedStreamingText
+                        let result = try await self.modelManager.transcribe(
+                            audioSamples: buffer,
+                            language: language,
+                            task: task,
+                            engineOverrideId: nil,
+                            cloudModelOverride: nil,
+                            prompt: streamPrompt,
+                            onProgress: { [weak self] text in
+                                guard let self, !Task.isCancelled else { return false }
+                                let stable = StreamingHandler.stabilizeText(confirmed: confirmed, new: text)
+                                Task { @MainActor [weak self] in
+                                    guard let self else { return }
+                                    self.partialText = stable
+                                    EventBus.shared.emit(.partialTranscriptionUpdate(PartialTranscriptionPayload(
+                                        text: stable, elapsedSeconds: self.duration
+                                    )))
+                                }
+                                return true
+                            }
+                        )
+                        let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !text.isEmpty {
+                            let stable = StreamingHandler.stabilizeText(confirmed: confirmed, new: text)
+                            self.partialText = stable
+                            self.confirmedStreamingText = stable
+                            EventBus.shared.emit(.partialTranscriptionUpdate(PartialTranscriptionPayload(
+                                text: stable, elapsedSeconds: self.duration
+                            )))
+                        }
+                    } catch {
+                        logger.warning("Streaming transcription error: \(error.localizedDescription)")
+                    }
+                }
+
+                try? await Task.sleep(for: .seconds(pollInterval))
+            }
+        }
+    }
+
+    private func stopStreamingTranscription() {
+        streamingTask?.cancel()
+        streamingTask = nil
+    }
+
+    private func runFinalTranscription(outputURL: URL) async {
+        isTranscribing = true
+        defer { isTranscribing = false }
+
+        let buffer = recorderService.getCurrentBuffer()
+        guard buffer.count > 8000 else { // At least 0.5s of audio
+            // Use streaming result as final if buffer too short
+            if !partialText.isEmpty {
+                saveTranscript(partialText, for: outputURL)
+            }
+            return
+        }
+
+        // Fall back to transcribe if engine doesn't support translation
+        let effectiveTask: TranscriptionTask
+        if selectedTask == .translate,
+           let providerId = modelManager.selectedProviderId,
+           let plugin = PluginManager.shared.transcriptionEngine(for: providerId),
+           !plugin.supportsTranslation {
+            effectiveTask = .transcribe
+        } else {
+            effectiveTask = selectedTask
+        }
+
+        do {
+            let result = try await modelManager.transcribe(
+                audioSamples: buffer,
+                language: selectedLanguage,
+                task: effectiveTask,
+                engineOverrideId: nil,
+                cloudModelOverride: nil,
+                prompt: dictionaryService.getTermsForPrompt()
+            )
+            let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty {
+                partialText = text
+                saveTranscript(text, for: outputURL)
+            } else if !partialText.isEmpty {
+                saveTranscript(partialText, for: outputURL)
+            }
+        } catch {
+            logger.error("Final transcription failed: \(error.localizedDescription)")
+            // Fall back to streaming result
+            if !partialText.isEmpty {
+                saveTranscript(partialText, for: outputURL)
+            }
+        }
+    }
+
+    // MARK: - Transcript Sidecar
+
+    private func transcriptURL(for audioURL: URL) -> URL {
+        audioURL.deletingPathExtension().appendingPathExtension("txt")
+    }
+
+    private func saveTranscript(_ text: String, for audioURL: URL) {
+        let txtURL = transcriptURL(for: audioURL)
+        do {
+            try text.write(to: txtURL, atomically: true, encoding: .utf8)
+        } catch {
+            logger.error("Failed to save transcript: \(error.localizedDescription)")
+        }
+    }
+
+    private func loadTranscript(for audioURL: URL) -> String? {
+        let txtURL = transcriptURL(for: audioURL)
+        return try? String(contentsOf: txtURL, encoding: .utf8)
+    }
+}
