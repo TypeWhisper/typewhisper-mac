@@ -15,7 +15,8 @@ struct AboutSettingsView: View {
 
                     let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
                     let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
-                    Text("Version \(version) (\(build))")
+                    let channelSuffix = AppConstants.releaseChannel.displayName.map { " - \($0)" } ?? ""
+                    Text("Version \(version) (\(build))\(channelSuffix)")
                         .foregroundStyle(.secondary)
 
                     Text(String(localized: "Fast, private speech-to-text for your Mac. Transcribe with local or cloud engines, process text with AI prompts, and insert directly into any app."))

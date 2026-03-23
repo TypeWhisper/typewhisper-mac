@@ -136,11 +136,24 @@ jobs:
 
       - name: Build App
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          VERSION="${VERSION%%-*}"
+          RAW_VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${RAW_VERSION%%-*}"
           BUILD_NUMBER=$(git rev-list --count HEAD)
           echo "Building version: $VERSION (build $BUILD_NUMBER)"
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
+          echo "DISPLAY_VERSION=$RAW_VERSION" >> $GITHUB_ENV
+
+          RELEASE_CHANNEL="stable"
+          IS_PRERELEASE="false"
+          if [[ "$RAW_VERSION" == *"-daily"* ]]; then
+            RELEASE_CHANNEL="daily"
+            IS_PRERELEASE="true"
+          elif [[ "$RAW_VERSION" == *-* ]]; then
+            RELEASE_CHANNEL="release-candidate"
+            IS_PRERELEASE="true"
+          fi
+          echo "RELEASE_CHANNEL=$RELEASE_CHANNEL" >> $GITHUB_ENV
+          echo "IS_PRERELEASE=$IS_PRERELEASE" >> $GITHUB_ENV
 
           set -o pipefail
           xcodebuild -project $PROJECT \
@@ -161,12 +174,7 @@ jobs:
       - name: Configure Release Channel
         run: |
           APP_INFO_PLIST="build/Build/Products/Release/TypeWhisper.app/Contents/Info.plist"
-
-          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
-            /usr/libexec/PlistBuddy -c "Set :TypeWhisperReleaseChannel prerelease" "$APP_INFO_PLIST"
-          else
-            /usr/libexec/PlistBuddy -c "Set :TypeWhisperReleaseChannel stable" "$APP_INFO_PLIST"
-          fi
+          /usr/libexec/PlistBuddy -c "Set :TypeWhisperReleaseChannel ${RELEASE_CHANNEL}" "$APP_INFO_PLIST"
 
       - name: Sign App (Developer ID)
         env:
@@ -293,11 +301,6 @@ jobs:
           TAG="${{ github.ref_name }}"
           ASSET_DMG="build/Build/Products/Release/TypeWhisper-${TAG}.dmg"
           ASSET_ZIP="build/Build/Products/Release/TypeWhisper-${TAG}.zip"
-          IS_PRERELEASE=false
-
-          if [[ "$TAG" == *-* ]]; then
-            IS_PRERELEASE=true
-          fi
 
           # Check if a draft release already exists (manual feature release notes)
           EXISTING_DRAFT=$(gh release view "$TAG" --json isDraft --jq '.isDraft' 2>/dev/null || echo "")
@@ -388,13 +391,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Generate and Deploy Stable Appcast
-        if: "!contains(github.ref_name, '-')"
+      - name: Generate and Deploy Sparkle Appcast
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ github.ref_name }}"
-          VERSION="${TAG#v}"
           DOWNLOAD_URL="https://github.com/TypeWhisper/typewhisper-mac/releases/download/${TAG}/TypeWhisper-${TAG}.zip"
           PUB_DATE=$(date -u +"%a, %d %b %Y %H:%M:%S %z")
 
@@ -407,24 +408,6 @@ jobs:
           if [ -z "$ED_LENGTH" ]; then
             ED_LENGTH="$ZIP_SIZE"
           fi
-
-          cat > /tmp/appcast.xml <<APPCAST_EOF
-          <?xml version="1.0" encoding="utf-8"?>
-          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
-            <channel>
-              <title>TypeWhisper Updates</title>
-              <language>en</language>
-              <item>
-                <title>Version ${VERSION}</title>
-                <pubDate>${PUB_DATE}</pubDate>
-                <sparkle:version>${BUILD_NUMBER}</sparkle:version>
-                <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
-                <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
-                <enclosure url="${DOWNLOAD_URL}" sparkle:edSignature="${ED_SIGNATURE}" length="${ED_LENGTH}" type="application/octet-stream"/>
-              </item>
-            </channel>
-          </rss>
-          APPCAST_EOF
 
           # Deploy to gh-pages branch
           cd "$GITHUB_WORKSPACE"
@@ -440,53 +423,23 @@ jobs:
             cd "$GITHUB_WORKSPACE"
           fi
 
-          cp /tmp/appcast.xml /tmp/gh-pages/appcast.xml
+          python3 scripts/update_appcast.py \
+            --appcast /tmp/gh-pages/appcast.xml \
+            --channel "$RELEASE_CHANNEL" \
+            --title "Version ${DISPLAY_VERSION}" \
+            --version "$DISPLAY_VERSION" \
+            --build-version "$BUILD_NUMBER" \
+            --pub-date "$PUB_DATE" \
+            --url "$DOWNLOAD_URL" \
+            --signature "$ED_SIGNATURE" \
+            --length "$ED_LENGTH" \
+            --minimum-system-version "15.0"
+
           cd /tmp/gh-pages
           git add appcast.xml
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git commit -m "Update appcast for ${TAG}" || echo "No changes to commit"
-          git push origin gh-pages
-
-      - name: Generate and Deploy Prerelease Appcast
-        if: contains(github.ref_name, '-')
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG="${{ github.ref_name }}"
-          PUB_DATE=$(date -u +"%a, %d %b %Y %H:%M:%S %z")
-
-          cat > /tmp/prerelease-appcast.xml <<APPCAST_EOF
-          <?xml version="1.0" encoding="utf-8"?>
-          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
-            <channel>
-              <title>TypeWhisper Prerelease Updates</title>
-              <language>en</language>
-              <description>Prerelease builds are distributed via GitHub prereleases and installed manually.</description>
-              <lastBuildDate>${PUB_DATE}</lastBuildDate>
-            </channel>
-          </rss>
-          APPCAST_EOF
-
-          cd "$GITHUB_WORKSPACE"
-          git fetch origin gh-pages || true
-
-          if git rev-parse --verify origin/gh-pages >/dev/null 2>&1; then
-            git worktree add -B gh-pages /tmp/gh-pages origin/gh-pages
-          else
-            git worktree add --detach /tmp/gh-pages
-            cd /tmp/gh-pages
-            git checkout --orphan gh-pages
-            git rm -rf . 2>/dev/null || true
-            cd "$GITHUB_WORKSPACE"
-          fi
-
-          cp /tmp/prerelease-appcast.xml /tmp/gh-pages/prerelease-appcast.xml
-          cd /tmp/gh-pages
-          git add prerelease-appcast.xml
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git commit -m "Update prerelease appcast for ${TAG}" || echo "No changes to commit"
           git push origin gh-pages
 
   trigger-website:

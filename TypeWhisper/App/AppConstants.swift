@@ -3,7 +3,30 @@ import Foundation
 enum AppConstants {
     enum ReleaseChannel: String {
         case stable
-        case prerelease
+        case releaseCandidate = "release-candidate"
+        case daily
+
+        var sparkleChannels: Set<String> {
+            switch self {
+            case .stable:
+                return []
+            case .releaseCandidate:
+                return ["release-candidate"]
+            case .daily:
+                return ["release-candidate", "daily"]
+            }
+        }
+
+        var displayName: String? {
+            switch self {
+            case .stable:
+                return nil
+            case .releaseCandidate:
+                return "Release Candidate"
+            case .daily:
+                return "Daily"
+            }
+        }
     }
 
     nonisolated(unsafe) static var testAppSupportDirectoryOverride: URL?
@@ -40,7 +63,6 @@ enum AppConstants {
 
     static let appVersion: String = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
     static let buildVersion: String = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0"
-    static let prereleaseAppcastURLString = "https://typewhisper.github.io/typewhisper-mac/prerelease-appcast.xml"
     static let releaseChannel: ReleaseChannel = {
         guard let rawValue = Bundle.main.infoDictionary?["TypeWhisperReleaseChannel"] as? String,
               let channel = ReleaseChannel(rawValue: rawValue) else {

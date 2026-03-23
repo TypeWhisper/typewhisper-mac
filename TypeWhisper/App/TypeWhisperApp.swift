@@ -295,11 +295,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     }
 
     #if !APPSTORE
-    nonisolated func feedURLString(for updater: SPUUpdater) -> String? {
-        guard AppConstants.releaseChannel == .prerelease else {
-            return nil
-        }
-        return AppConstants.prereleaseAppcastURLString
+    nonisolated func allowedChannels(for updater: SPUUpdater) -> Set<String> {
+        AppConstants.releaseChannel.sparkleChannels
     }
     #endif
 }

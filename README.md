@@ -78,7 +78,7 @@ See [docs/1.0-readiness.md](docs/1.0-readiness.md), [docs/support-matrix.md](doc
 ### General
 
 - **Home dashboard** - Usage statistics, activity chart, and onboarding tutorial
-- **Auto-update** - Built-in updates via Sparkle for stable direct-download releases
+- **Auto-update** - Built-in updates via Sparkle with stable, release-candidate, and daily channels
 - **Universal binary** - Runs natively on Apple Silicon and Intel Macs
 - **Widgets** - Desktop widgets for usage stats, last transcription, activity chart, and transcription history
 - **Multilingual UI** - English and German
@@ -96,7 +96,7 @@ brew install --cask typewhisper/tap/typewhisper
 
 Download the latest DMG from [GitHub Releases](https://github.com/TypeWhisper/typewhisper-mac/releases/latest).
 
-Release candidates such as `1.0.0-rc1` are distributed as GitHub prereleases for manual download only. They do not update the stable Sparkle appcast or Homebrew, and installed RC builds stay off the stable auto-update feed.
+Stable direct-download releases use the default Sparkle channel. Release candidates such as `1.0.0-rc1` and daily builds are published as GitHub prereleases, update the shared Sparkle appcast on their own channels, and are excluded from Homebrew.
 
 ## Quick Start
 
