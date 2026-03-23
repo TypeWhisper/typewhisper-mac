@@ -1,4 +1,4 @@
-import AVFoundation
+import Foundation
 import AppKit
 
 enum SpeechFeedbackEvent {
@@ -26,14 +26,14 @@ enum SpeechFeedbackEvent {
 
 @MainActor
 class SpeechFeedbackService {
-    private let synthesizer = AVSpeechSynthesizer()
+    private var sayProcess: Process?
 
     @Published var spokenFeedbackEnabled: Bool {
         didSet { UserDefaults.standard.set(spokenFeedbackEnabled, forKey: UserDefaultsKeys.spokenFeedbackEnabled) }
     }
 
     var isSpeaking: Bool {
-        synthesizer.isSpeaking
+        sayProcess?.isRunning ?? false
     }
 
     init() {
@@ -43,32 +43,41 @@ class SpeechFeedbackService {
     func announceEvent(_ event: SpeechFeedbackEvent) {
         guard spokenFeedbackEnabled else { return }
         guard !NSWorkspace.shared.isVoiceOverEnabled else { return }
-        if case .transcriptionComplete(let text, let language) = event {
-            speak(text, language: language)
+        if case .transcriptionComplete(let text, _) = event {
+            speak(text)
         } else {
-            speak(event.message, language: nil)
+            speak(event.message)
         }
     }
 
     func readBack(text: String, language: String?) {
-        if synthesizer.isSpeaking {
-            synthesizer.stopSpeaking(at: .immediate)
+        if isSpeaking {
+            stopSpeaking()
             return
         }
-        speak(text, language: language)
+        speak(text)
     }
 
     func stopSpeaking() {
-        synthesizer.stopSpeaking(at: .immediate)
+        sayProcess?.terminate()
+        sayProcess = nil
     }
 
-    private func speak(_ text: String, language: String?) {
-        synthesizer.stopSpeaking(at: .immediate)
-        let utterance = AVSpeechUtterance(string: text)
-        if let language {
-            utterance.voice = AVSpeechSynthesisVoice(language: language)
+    private func speak(_ text: String) {
+        stopSpeaking()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/say")
+        process.arguments = [text]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        process.terminationHandler = { [weak self] _ in
+            DispatchQueue.main.async { self?.sayProcess = nil }
         }
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 1.1
-        synthesizer.speak(utterance)
+        do {
+            try process.run()
+            sayProcess = process
+        } catch {
+            sayProcess = nil
+        }
     }
 }
