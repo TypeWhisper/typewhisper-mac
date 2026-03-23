@@ -19,31 +19,69 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             systemSamples.removeAll(keepingCapacity: false)
         }
 
-        func mixedBuffer(micEnabled: Bool, systemAudioEnabled: Bool) -> [Float] {
+        func mixedBuffer(
+            micEnabled: Bool,
+            systemAudioEnabled: Bool,
+            micDuckingMode: MicDuckingMode
+        ) -> [Float] {
             switch (micEnabled, systemAudioEnabled) {
             case (true, false):
                 return micSamples
             case (false, true):
                 return systemSamples
             case (true, true):
-                return Self.mix(micSamples: micSamples, systemSamples: systemSamples)
+                return Self.mix(
+                    micSamples: micSamples,
+                    systemSamples: systemSamples,
+                    micDuckingMode: micDuckingMode
+                )
             case (false, false):
                 return []
             }
         }
 
-        static func mix(micSamples: [Float], systemSamples: [Float]) -> [Float] {
+        static func mix(
+            micSamples: [Float],
+            systemSamples: [Float],
+            micDuckingMode: MicDuckingMode
+        ) -> [Float] {
             let sampleCount = max(micSamples.count, systemSamples.count)
             guard sampleCount > 0 else { return [] }
+
+            let duckingProfile = AudioRecorderService.buildMicDuckingProfile(
+                frameCount: sampleCount,
+                sampleRate: AudioRecorderService.transcriptionSampleRate,
+                mode: micDuckingMode
+            ) { index in
+                index < systemSamples.count ? systemSamples[index] : 0
+            }
 
             var mixed = [Float](repeating: 0, count: sampleCount)
             for index in 0..<sampleCount {
                 let micSample = index < micSamples.count ? micSamples[index] : 0
                 let systemSample = index < systemSamples.count ? systemSamples[index] : 0
-                mixed[index] = max(-1, min(1, (micSample + systemSample) * 0.5))
+                let micGain = duckingProfile?.gains[index] ?? 1
+                mixed[index] = max(-1, min(1, (systemSample + (micSample * micGain)) * 0.5))
             }
             return mixed
         }
+    }
+
+    private struct MicDuckingProfile {
+        let gains: [Float]
+        let minimumGain: Float
+        let averageGain: Float
+    }
+
+    private struct MicDuckingParameters {
+        let minimumMicGain: Float
+        let lowThreshold: Float
+        let highThreshold: Float
+        let holdTime: Double
+        let envelopeAttackTime: Double
+        let envelopeReleaseTime: Double
+        let gainAttackTime: Double
+        let gainReleaseTime: Double
     }
 
     enum RecorderError: LocalizedError {
@@ -74,6 +112,23 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         var fileExtension: String { rawValue }
     }
 
+    enum MicDuckingMode: String, CaseIterable, Sendable {
+        case aggressive
+        case medium
+        case off
+
+        var displayName: String {
+            switch self {
+            case .aggressive:
+                return String(localized: "Aggressiv")
+            case .medium:
+                return String(localized: "Mittel")
+            case .off:
+                return String(localized: "Aus")
+            }
+        }
+    }
+
     @Published private(set) var isRecording = false
     @Published private(set) var duration: TimeInterval = 0
     @Published private(set) var micLevel: Float = 0
@@ -93,6 +148,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     private var outputFormat: OutputFormat = .wav
     private var micEnabled = false
     private var systemAudioEnabled = false
+    var micDuckingMode: MicDuckingMode = .aggressive
 
     // 16kHz mono buffer for streaming transcription
     private let transcriptionBufferLock = OSAllocatedUnfairLock<TranscriptionBufferState>(initialState: TranscriptionBufferState())
@@ -111,8 +167,13 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     func getCurrentBuffer() -> [Float] {
         let micEnabled = self.micEnabled
         let systemAudioEnabled = self.systemAudioEnabled
+        let micDuckingMode = self.micDuckingMode
         return transcriptionBufferLock.withLock { state in
-            state.mixedBuffer(micEnabled: micEnabled, systemAudioEnabled: systemAudioEnabled)
+            state.mixedBuffer(
+                micEnabled: micEnabled,
+                systemAudioEnabled: systemAudioEnabled,
+                micDuckingMode: micDuckingMode
+            )
         }
     }
 
@@ -120,8 +181,13 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     func getRecentBuffer(maxDuration: TimeInterval) -> [Float] {
         let micEnabled = self.micEnabled
         let systemAudioEnabled = self.systemAudioEnabled
+        let micDuckingMode = self.micDuckingMode
         return transcriptionBufferLock.withLock { state in
-            let buffer = state.mixedBuffer(micEnabled: micEnabled, systemAudioEnabled: systemAudioEnabled)
+            let buffer = state.mixedBuffer(
+                micEnabled: micEnabled,
+                systemAudioEnabled: systemAudioEnabled,
+                micDuckingMode: micDuckingMode
+            )
             let maxSamples = Int(maxDuration * Self.transcriptionSampleRate)
             if buffer.count <= maxSamples { return buffer }
             return Array(buffer.suffix(maxSamples))
@@ -132,8 +198,13 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     var totalBufferDuration: TimeInterval {
         let micEnabled = self.micEnabled
         let systemAudioEnabled = self.systemAudioEnabled
+        let micDuckingMode = self.micDuckingMode
         return transcriptionBufferLock.withLock { state in
-            let buffer = state.mixedBuffer(micEnabled: micEnabled, systemAudioEnabled: systemAudioEnabled)
+            let buffer = state.mixedBuffer(
+                micEnabled: micEnabled,
+                systemAudioEnabled: systemAudioEnabled,
+                micDuckingMode: micDuckingMode
+            )
             return Double(buffer.count) / Self.transcriptionSampleRate
         }
     }
@@ -492,6 +563,25 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         let micBuffer = try readAndConvert(file: micFile, to: mixFormat, totalFrames: totalFrames)
         let sysBuffer = try readAndConvert(file: sysFile, to: mixFormat, totalFrames: totalFrames)
 
+        let systemLeft = sysBuffer.floatChannelData?[0]
+        let systemRight = sysBuffer.format.channelCount > 1 ? sysBuffer.floatChannelData?[1] : nil
+        let micDuckingProfile: MicDuckingProfile?
+        if let systemLeft {
+            micDuckingProfile = Self.buildMicDuckingProfile(
+                frameCount: Int(totalFrames),
+                sampleRate: targetSampleRate,
+                mode: micDuckingMode
+            ) { index in
+                monoSample(left: systemLeft, right: systemRight, index: index)
+            }
+        } else {
+            micDuckingProfile = nil
+        }
+
+        if let micDuckingProfile {
+            logger.info("Applied mic ducking with minimum gain \(micDuckingProfile.minimumGain) and average gain \(micDuckingProfile.averageGain)")
+        }
+
         // Mix buffers
         guard let mixedBuffer = AVAudioPCMBuffer(pcmFormat: mixFormat, frameCapacity: totalFrames) else { return }
         mixedBuffer.frameLength = totalFrames
@@ -504,7 +594,8 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             for i in 0..<Int(totalFrames) {
                 let micSample = i < Int(micBuffer.frameLength) ? micData[i] : 0
                 let sysSample = i < Int(sysBuffer.frameLength) ? sysData[i] : 0
-                mixedData[i] = micSample + sysSample
+                let micGain = micDuckingProfile?.gains[i] ?? 1
+                mixedData[i] = (micSample * micGain) + sysSample
             }
         }
 
@@ -649,6 +740,117 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     private func cleanupTempFile(_ url: URL?) {
         guard let url else { return }
         try? FileManager.default.removeItem(at: url)
+    }
+
+    // Aggressively duck the mic while system audio is active to avoid replaying the same content twice.
+    private static func buildMicDuckingProfile(
+        frameCount: Int,
+        sampleRate: Double,
+        mode: MicDuckingMode,
+        referenceSample: (Int) -> Float
+    ) -> MicDuckingProfile? {
+        guard frameCount > 0,
+              let parameters = micDuckingParameters(for: mode) else {
+            return nil
+        }
+
+        let holdSamples = max(1, Int(sampleRate * parameters.holdTime))
+        let envelopeAttack = smoothingCoefficient(timeConstant: parameters.envelopeAttackTime, sampleRate: sampleRate)
+        let envelopeRelease = smoothingCoefficient(timeConstant: parameters.envelopeReleaseTime, sampleRate: sampleRate)
+        let gainAttack = smoothingCoefficient(timeConstant: parameters.gainAttackTime, sampleRate: sampleRate)
+        let gainRelease = smoothingCoefficient(timeConstant: parameters.gainReleaseTime, sampleRate: sampleRate)
+
+        var gains = [Float](repeating: 1, count: frameCount)
+        var systemEnvelope: Float = 0
+        var currentMicGain: Float = 1
+        var remainingHold = 0
+        var minimumGain: Float = 1
+        var gainSum: Float = 0
+        var duckingEngaged = false
+
+        for index in 0..<frameCount {
+            let sampleMagnitude = abs(referenceSample(index))
+            let envelopeCoefficient = sampleMagnitude > systemEnvelope ? envelopeAttack : envelopeRelease
+            systemEnvelope = sampleMagnitude + envelopeCoefficient * (systemEnvelope - sampleMagnitude)
+
+            let targetMicGain: Float
+            if systemEnvelope >= parameters.highThreshold {
+                targetMicGain = parameters.minimumMicGain
+                remainingHold = holdSamples
+                duckingEngaged = true
+            } else if systemEnvelope <= parameters.lowThreshold {
+                if remainingHold > 0 {
+                    remainingHold -= 1
+                    targetMicGain = parameters.minimumMicGain
+                    duckingEngaged = true
+                } else {
+                    targetMicGain = 1
+                }
+            } else {
+                let progress = (systemEnvelope - parameters.lowThreshold) / (parameters.highThreshold - parameters.lowThreshold)
+                targetMicGain = 1 - progress * (1 - parameters.minimumMicGain)
+                duckingEngaged = true
+            }
+
+            let gainCoefficient = targetMicGain < currentMicGain ? gainAttack : gainRelease
+            currentMicGain = targetMicGain + gainCoefficient * (currentMicGain - targetMicGain)
+
+            gains[index] = currentMicGain
+            minimumGain = min(minimumGain, currentMicGain)
+            gainSum += currentMicGain
+        }
+
+        guard duckingEngaged, minimumGain < 0.99 else { return nil }
+
+        return MicDuckingProfile(
+            gains: gains,
+            minimumGain: minimumGain,
+            averageGain: gainSum / Float(frameCount)
+        )
+    }
+
+    private static func micDuckingParameters(for mode: MicDuckingMode) -> MicDuckingParameters? {
+        switch mode {
+        case .aggressive:
+            return MicDuckingParameters(
+                minimumMicGain: 0.18,
+                lowThreshold: 0.006,
+                highThreshold: 0.025,
+                holdTime: 0.12,
+                envelopeAttackTime: 0.008,
+                envelopeReleaseTime: 0.06,
+                gainAttackTime: 0.02,
+                gainReleaseTime: 0.28
+            )
+        case .medium:
+            return MicDuckingParameters(
+                minimumMicGain: 0.42,
+                lowThreshold: 0.01,
+                highThreshold: 0.04,
+                holdTime: 0.08,
+                envelopeAttackTime: 0.012,
+                envelopeReleaseTime: 0.08,
+                gainAttackTime: 0.035,
+                gainReleaseTime: 0.2
+            )
+        case .off:
+            return nil
+        }
+    }
+
+    private static func smoothingCoefficient(timeConstant: Double, sampleRate: Double) -> Float {
+        guard timeConstant > 0, sampleRate > 0 else { return 0 }
+        return Float(exp(-1.0 / (timeConstant * sampleRate)))
+    }
+
+    private func monoSample(
+        left: UnsafePointer<Float>,
+        right: UnsafePointer<Float>?,
+        index: Int
+    ) -> Float {
+        let leftSample = left[index]
+        guard let right else { return leftSample }
+        return (leftSample + right[index]) * 0.5
     }
 
     private func appendMicTranscriptionSamples(_ samples: [Float]) {

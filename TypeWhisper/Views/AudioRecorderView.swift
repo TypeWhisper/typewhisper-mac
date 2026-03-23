@@ -107,6 +107,17 @@ struct AudioRecorderView: View {
                     Text("M4A").tag(AudioRecorderService.OutputFormat.m4a)
                 }
                 .disabled(isEditingLocked)
+
+                Picker(String(localized: "Echo Handling"), selection: $viewModel.micDuckingMode) {
+                    ForEach(AudioRecorderService.MicDuckingMode.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .disabled(isEditingLocked || !viewModel.micEnabled || !viewModel.systemAudioEnabled)
+
+                Text(String(localized: "Affects only TypeWhisper recordings and transcriptions, not your live meeting microphone."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             // Transcription Settings
