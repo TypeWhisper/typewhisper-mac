@@ -140,6 +140,7 @@ final class DictationViewModel: ObservableObject {
         promptActionService: PromptActionService,
         promptProcessingService: PromptProcessingService,
         voiceCommandHandler: VoiceCommandHandler,
+        appFormatterService: AppFormatterService,
         speechFeedbackService: SpeechFeedbackService,
         accessibilityAnnouncementService: AccessibilityAnnouncementService,
         errorLogService: ErrorLogService
@@ -165,7 +166,8 @@ final class DictationViewModel: ObservableObject {
         self.errorLogService = errorLogService
         self.postProcessingPipeline = PostProcessingPipeline(
             snippetService: snippetService,
-            dictionaryService: dictionaryService
+            dictionaryService: dictionaryService,
+            appFormatterService: appFormatterService
         )
         self.streamingHandler = StreamingHandler(
             modelManager: modelManager,
@@ -628,7 +630,8 @@ final class DictationViewModel: ObservableObject {
                     selectedText: self.capturedSelectedText
                 )
                 text = try await postProcessingPipeline.process(
-                    text: text, context: ppContext, llmHandler: llmHandler
+                    text: text, context: ppContext, llmHandler: llmHandler,
+                    outputFormat: self.matchedProfile?.outputFormat
                 )
 
                 partialText = ""

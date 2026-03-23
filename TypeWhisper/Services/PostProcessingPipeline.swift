@@ -8,23 +8,32 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhis
 final class PostProcessingPipeline {
     private let snippetService: SnippetService
     private let dictionaryService: DictionaryService
+    private let appFormatterService: AppFormatterService?
 
-    init(snippetService: SnippetService, dictionaryService: DictionaryService) {
+    init(snippetService: SnippetService, dictionaryService: DictionaryService, appFormatterService: AppFormatterService? = nil) {
         self.snippetService = snippetService
         self.dictionaryService = dictionaryService
+        self.appFormatterService = appFormatterService
     }
 
     func process(
         text: String,
         context: PostProcessingContext,
-        llmHandler: ((String) async throws -> String)? = nil
+        llmHandler: ((String) async throws -> String)? = nil,
+        outputFormat: String? = nil
     ) async throws -> String {
         // Collect plugin processors with their priorities
         let plugins = PluginManager.shared.postProcessors
 
         // Build priority-ordered step list: (priority, id)
-        // IDs: -1 = LLM, -2 = snippets, -3 = dictionary, 0+ = plugin index
+        // IDs: -1 = LLM, -2 = snippets, -3 = dictionary, -4 = app formatter, 0+ = plugin index
         var steps: [(priority: Int, id: Int)] = []
+
+        // App formatter at priority 150 (before LLM at 300)
+        let formattingEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.appFormattingEnabled)
+        if formattingEnabled, outputFormat != nil, appFormatterService != nil {
+            steps.append((150, -4))
+        }
 
         if llmHandler != nil {
             steps.append((300, -1))
@@ -40,6 +49,12 @@ final class PostProcessingPipeline {
         for step in steps {
             do {
                 switch step.id {
+                case -4:
+                    result = appFormatterService!.format(
+                        text: result,
+                        bundleId: context.bundleIdentifier,
+                        outputFormat: outputFormat
+                    )
                 case -1:
                     result = try await llmHandler!(result)
                 case -2:
@@ -52,6 +67,7 @@ final class PostProcessingPipeline {
             } catch {
                 let name: String
                 switch step.id {
+                case -4: name = "AppFormatter"
                 case -1: name = "LLM/Translation"
                 case -2: name = "Snippets"
                 case -3: name = "Dictionary"

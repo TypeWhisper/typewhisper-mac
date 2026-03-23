@@ -202,6 +202,7 @@
 		AA00000000000000000244 /* OpenAIVectorMemoryPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000232 /* OpenAIVectorMemoryPlugin.swift */; };
 		AA00000000000000000245 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000233 /* manifest.json */; };
 		AA00000000000000000246 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000033 /* TypeWhisperPluginSDK */; };
+		AA00000000000000000247 /* AppFormatterService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000235 /* AppFormatterService.swift */; };
 		AA00000000000000000248 /* VoiceCommandService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000236 /* VoiceCommandService.swift */; };
 		AA00000000000000000249 /* VoiceCommandHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000237 /* VoiceCommandHandler.swift */; };
 		AA00000000000000000250 /* AudioRecorderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000238 /* AudioRecorderService.swift */; };
@@ -409,6 +410,7 @@
 		BB00000000000000000232 /* OpenAIVectorMemoryPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIVectorMemoryPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000233 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000234 /* OpenAIVectorMemoryPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OpenAIVectorMemoryPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB00000000000000000235 /* AppFormatterService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppFormatterService.swift; sourceTree = "<group>"; };
 		BB00000000000000000236 /* VoiceCommandService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCommandService.swift; sourceTree = "<group>"; };
 		BB00000000000000000237 /* VoiceCommandHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCommandHandler.swift; sourceTree = "<group>"; };
 		BB00000000000000000238 /* AudioRecorderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderService.swift; sourceTree = "<group>"; };
@@ -861,6 +863,7 @@
 				BB00000000000000000126 /* PostProcessingPipeline.swift */,
 				BB00000000000000000180 /* WidgetDataService.swift */,
 				BB00000000000000000228 /* MemoryService.swift */,
+				BB00000000000000000235 /* AppFormatterService.swift */,
 				BB00000000000000000236 /* VoiceCommandService.swift */,
 				BB00000000000000000238 /* AudioRecorderService.swift */,
 				BB00000000000000000241 /* WatchFolderService.swift */,
@@ -2116,6 +2119,7 @@
 				AA00000000000000000189 /* WidgetData.swift in Sources */,
 				AA00000000000000000197 /* WidgetDataService.swift in Sources */,
 				AA00000000000000000240 /* MemoryService.swift in Sources */,
+				AA00000000000000000247 /* AppFormatterService.swift in Sources */,
 				AA00000000000000000248 /* VoiceCommandService.swift in Sources */,
 				AA00000000000000000249 /* VoiceCommandHandler.swift in Sources */,
 				AA00000000000000000250 /* AudioRecorderService.swift in Sources */,

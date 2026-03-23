@@ -26,6 +26,7 @@ final class ServiceContainer: ObservableObject {
     let pluginRegistryService: PluginRegistryService
     let widgetDataService: WidgetDataService
     let memoryService: MemoryService
+    let appFormatterService: AppFormatterService
     let audioRecorderService: AudioRecorderService
     let watchFolderService: WatchFolderService
     let accessibilityAnnouncementService: AccessibilityAnnouncementService
@@ -79,6 +80,7 @@ final class ServiceContainer: ObservableObject {
         pluginRegistryService = PluginRegistryService()
         widgetDataService = WidgetDataService(historyService: historyService)
         memoryService = MemoryService(promptProcessingService: promptProcessingService)
+        appFormatterService = AppFormatterService()
         audioRecorderService = AudioRecorderService()
         promptProcessingService.memoryService = memoryService
         watchFolderService = WatchFolderService(audioFileService: audioFileService, modelManagerService: modelManagerService)
@@ -113,6 +115,7 @@ final class ServiceContainer: ObservableObject {
             promptActionService: promptActionService,
             promptProcessingService: promptProcessingService,
             voiceCommandHandler: voiceCommandHandler,
+            appFormatterService: appFormatterService,
             speechFeedbackService: speechFeedbackService,
             accessibilityAnnouncementService: accessibilityAnnouncementService,
             errorLogService: errorLogService

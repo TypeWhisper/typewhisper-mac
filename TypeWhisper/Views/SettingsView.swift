@@ -362,6 +362,17 @@ struct RecordingSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section(String(localized: "Output Formatting")) {
+                Toggle(String(localized: "App-aware formatting"), isOn: Binding(
+                    get: { UserDefaults.standard.bool(forKey: UserDefaultsKeys.appFormattingEnabled) },
+                    set: { UserDefaults.standard.set($0, forKey: UserDefaultsKeys.appFormattingEnabled) }
+                ))
+
+                Text(String(localized: "Automatically format transcribed text based on the target app. Configure the output format per profile."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section(String(localized: "Audio Ducking")) {
                 Toggle(String(localized: "Reduce system volume during recording"), isOn: $dictation.audioDuckingEnabled)
 
