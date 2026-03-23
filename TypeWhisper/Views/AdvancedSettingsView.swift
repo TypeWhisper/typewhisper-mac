@@ -136,6 +136,10 @@ struct AdvancedSettingsView: View {
                         }
                     }
 
+                Text(String(localized: "Advanced automation interface for local tools. Disabled by default and bound to 127.0.0.1 only."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 if viewModel.isEnabled {
                     HStack {
                         Image(systemName: "circle.fill")
@@ -354,12 +358,12 @@ struct AdvancedSettingsView: View {
         }
     }
 
-    private func runOsascript(_ source: String, completion: @escaping () -> Void) {
+    private func runOsascript(_ source: String, completion: @escaping @MainActor @Sendable () -> Void) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         process.arguments = ["-e", source]
         process.terminationHandler = { _ in
-            DispatchQueue.main.async { completion() }
+            Task { @MainActor in completion() }
         }
         try? process.run()
     }

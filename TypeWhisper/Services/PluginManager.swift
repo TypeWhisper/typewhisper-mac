@@ -5,18 +5,6 @@ import os.log
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "PluginManager")
 
-// MARK: - Plugin Manifest
-
-struct PluginManifest: Codable {
-    let id: String
-    let name: String
-    let version: String
-    let minHostVersion: String?
-    let minOSVersion: String?
-    let author: String?
-    let principalClass: String
-}
-
 // MARK: - Loaded Plugin
 
 struct LoadedPlugin: Identifiable {
@@ -88,8 +76,8 @@ final class PluginManager: ObservableObject {
         llmProviders.first { $0.providerName.caseInsensitiveCompare(providerName) == .orderedSame }
     }
 
-    init() {
-        self.pluginsDirectory = AppConstants.appSupportDirectory
+    init(appSupportDirectory: URL = AppConstants.appSupportDirectory) {
+        self.pluginsDirectory = appSupportDirectory
             .appendingPathComponent("Plugins", isDirectory: true)
 
         try? FileManager.default.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)

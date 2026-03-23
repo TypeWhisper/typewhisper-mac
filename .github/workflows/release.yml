@@ -14,8 +14,87 @@ permissions:
   pages: write
 
 jobs:
+  verify-release-build:
+    if: "!startsWith(github.ref_name, 'plugin-')"
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "26.2"
+
+      - name: Resolve Swift packages
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project $PROJECT \
+            -scheme $SCHEME
+
+      - name: Verify Release Build
+        run: |
+          set -o pipefail
+          xcodebuild -project $PROJECT \
+            -scheme $SCHEME \
+            -configuration Release \
+            -derivedDataPath verify-build \
+            -destination 'generic/platform=macOS' \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO | tee verify-build.log
+
+      - name: Check First-Party Warnings
+        run: bash scripts/check_first_party_warnings.sh verify-build.log
+
+  app-tests:
+    if: "!startsWith(github.ref_name, 'plugin-')"
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "26.2"
+
+      - name: Resolve Swift packages
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project $PROJECT \
+            -scheme $SCHEME
+
+      - name: Run App Tests
+        run: |
+          set -o pipefail
+          xcodebuild test -project $PROJECT \
+            -scheme $SCHEME \
+            -destination 'platform=macOS,arch=arm64' \
+            -parallel-testing-enabled NO \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO | tee test.log
+
+      - name: Check First-Party Warnings
+        run: bash scripts/check_first_party_warnings.sh test.log
+
+  plugin-sdk-tests:
+    if: "!startsWith(github.ref_name, 'plugin-')"
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run Plugin SDK Tests
+        run: swift test --package-path TypeWhisperPluginSDK
+
   build:
     if: "!startsWith(github.ref_name, 'plugin-')"
+    needs:
+      - verify-release-build
+      - app-tests
+      - plugin-sdk-tests
     runs-on: macos-15
     steps:
       - name: Checkout
@@ -63,6 +142,7 @@ jobs:
           echo "Building version: $VERSION (build $BUILD_NUMBER)"
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
 
+          set -o pipefail
           xcodebuild -project $PROJECT \
             -scheme $SCHEME \
             -configuration Release \
@@ -73,7 +153,10 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             DEVELOPMENT_TEAM=2D8ALY3LCL \
             MARKETING_VERSION="$VERSION" \
-            CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" | tee build.log
+
+      - name: Check First-Party Warnings
+        run: bash scripts/check_first_party_warnings.sh build.log
 
       - name: Sign App (Developer ID)
         env:

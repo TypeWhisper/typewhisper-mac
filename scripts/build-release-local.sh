@@ -31,6 +31,7 @@ xcodebuild -resolvePackageDependencies \
 
 # Build
 echo "--- Building Release ---"
+set -o pipefail
 xcodebuild -project "$PROJECT_DIR/$PROJECT" \
   -scheme "$SCHEME" \
   -configuration Release \
@@ -38,7 +39,9 @@ xcodebuild -project "$PROJECT_DIR/$PROJECT" \
   -destination 'platform=macOS,arch=arm64' \
   CODE_SIGN_IDENTITY="-" \
   CODE_SIGNING_REQUIRED=NO \
-  CODE_SIGNING_ALLOWED=NO
+  CODE_SIGNING_ALLOWED=NO | tee "$BUILD_DIR/build.log"
+
+bash "$PROJECT_DIR/scripts/check_first_party_warnings.sh" "$BUILD_DIR/build.log"
 
 APP_PATH="$BUILD_DIR/Build/Products/Release/$APP_NAME.app"
 

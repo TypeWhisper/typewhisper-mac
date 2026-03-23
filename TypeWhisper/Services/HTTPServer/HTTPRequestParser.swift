@@ -15,7 +15,7 @@ struct MultipartPart {
     let data: Data
 }
 
-enum HTTPParseError: Error {
+enum HTTPParseError: Error, Equatable {
     case incomplete
     case malformed
     case bodyTooLarge

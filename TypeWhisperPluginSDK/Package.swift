@@ -10,5 +10,9 @@ let package = Package(
     ],
     targets: [
         .target(name: "TypeWhisperPluginSDK"),
+        .testTarget(
+            name: "TypeWhisperPluginSDKTests",
+            dependencies: ["TypeWhisperPluginSDK"]
+        ),
     ]
 )

@@ -263,10 +263,8 @@ final class DictationViewModel: ObservableObject {
         stopDictation()
     }
 
-    deinit {
-        MainActor.assumeIsolated {
-            recordingTimer?.invalidate()
-        }
+    isolated deinit {
+        recordingTimer?.invalidate()
     }
 
     private func setupBindings() {

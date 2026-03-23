@@ -2,6 +2,7 @@ import Foundation
 import AppKit
 import ApplicationServices
 import Carbon.HIToolbox
+import os
 import os.log
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "TextInsertionService")
@@ -181,7 +182,7 @@ enum InsertionResult {
     }
 
     nonisolated private static func executeAppleScript(_ source: String, timeout: TimeInterval, validateURL: Bool = true) -> String? {
-        var result: String?
+        let resultState = OSAllocatedUnfairLock(initialState: Optional<String>.none)
         let semaphore = DispatchSemaphore(value: 0)
 
         DispatchQueue.global(qos: .userInitiated).async {
@@ -192,7 +193,7 @@ enum InsertionResult {
                 logger.warning("NSAppleScript error: \(errorDict)")
             }
             if let stringValue = descriptor?.stringValue {
-                result = stringValue
+                resultState.withLock { $0 = stringValue }
             }
             semaphore.signal()
         }
@@ -203,7 +204,7 @@ enum InsertionResult {
             return nil
         }
 
-        guard let result, !result.isEmpty else { return nil }
+        guard let result = resultState.withLock({ $0 }), !result.isEmpty else { return nil }
         if validateURL {
             guard isValidURL(result) else { return nil }
         }

@@ -6,6 +6,10 @@
 
 Speech-to-text and AI text processing for macOS. Transcribe audio using on-device AI models or cloud APIs (Groq, OpenAI), then process the result with custom LLM prompts. Your voice data stays on your Mac with local models - or use cloud APIs for faster processing.
 
+TypeWhisper `1.0` is scoped as a reliable direct-download release. The supported core is system-wide dictation, file transcription, prompt processing, profiles, history, dictionary, snippets, and bundled integrations. HTTP API, CLI, widgets, and the plugin SDK remain available as advanced surfaces.
+
+See [docs/1.0-readiness.md](docs/1.0-readiness.md), [docs/support-matrix.md](docs/support-matrix.md), and [docs/release-checklist.md](docs/release-checklist.md) for the current release definition and ship gates.
+
 <p align="center">
   <video src="https://github.com/user-attachments/assets/98e1aef9-de31-434b-aa13-cfd36c0f3155" autoplay loop muted playsinline width="270"></video>
 </p>
@@ -92,6 +96,13 @@ brew install --cask typewhisper/tap/typewhisper
 
 Download the latest DMG from [GitHub Releases](https://github.com/TypeWhisper/typewhisper-mac/releases/latest).
 
+## Quick Start
+
+1. Install TypeWhisper from Homebrew or the latest DMG.
+2. Open Settings and grant Microphone plus Accessibility access.
+3. Pick an engine and, if needed, download a local model.
+4. Trigger the global hotkey and complete your first dictation.
+
 ## System Requirements
 
 - macOS 14.0 (Sonoma) or later
@@ -124,9 +135,17 @@ Download the latest DMG from [GitHub Releases](https://github.com/TypeWhisper/ty
 
 4. Run the app. It appears as a menu bar icon - open Settings to download a model.
 
+5. Run the automated checks before shipping changes:
+   ```bash
+   xcodebuild test -project TypeWhisper.xcodeproj -scheme TypeWhisper -destination 'platform=macOS,arch=arm64' -parallel-testing-enabled NO CODE_SIGN_IDENTITY='-' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+   swift test --package-path TypeWhisperPluginSDK
+   ```
+
 ## HTTP API
 
-Enable the API server in Settings > Advanced (default port: 8978).
+The HTTP API is an advanced local automation surface. It binds to `127.0.0.1` only, is disabled by default, and is intended for local tools and scripts.
+
+Enable the API server in Settings > Advanced (default port: `8978`).
 
 ### Check Status
 
@@ -221,7 +240,7 @@ curl http://localhost:8978/v1/dictation/status
 
 ## CLI Tool
 
-TypeWhisper includes a command-line tool for shell-friendly transcription. It connects to the running API server.
+TypeWhisper includes a command-line tool for shell-friendly transcription. It is part of the advanced automation surface and connects to the running local API server.
 
 ### Installation
 
@@ -258,7 +277,7 @@ cat audio.wav | typewhisper transcribe -
 typewhisper transcribe meeting.m4a --json | jq -r '.text'
 ```
 
-The CLI requires the API server to be running (Settings > Advanced).
+The CLI requires the API server to be running (Settings > Advanced) and follows the documented `1.0.x` command and flag surface.
 
 ## Profiles
 

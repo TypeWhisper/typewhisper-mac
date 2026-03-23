@@ -36,13 +36,13 @@ final class DictionaryService: ObservableObject {
         corrections.count
     }
 
-    init() {
-        setupModelContainer()
+    init(appSupportDirectory: URL = AppConstants.appSupportDirectory) {
+        setupModelContainer(appSupportDirectory: appSupportDirectory)
     }
 
-    private func setupModelContainer() {
+    private func setupModelContainer(appSupportDirectory: URL) {
         let schema = Schema([DictionaryEntry.self])
-        let storeDir = AppConstants.appSupportDirectory
+        let storeDir = appSupportDirectory
         try? FileManager.default.createDirectory(at: storeDir, withIntermediateDirectories: true)
 
         let storeURL = storeDir.appendingPathComponent("dictionary.store")

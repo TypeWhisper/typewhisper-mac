@@ -17,7 +17,7 @@ env:
   PROJECT: TypeWhisper.xcodeproj
 
 jobs:
-  build:
+  release-build:
     runs-on: macos-15
     steps:
       - name: Checkout
@@ -36,6 +36,7 @@ jobs:
 
       - name: Build App
         run: |
+          set -o pipefail
           xcodebuild -project $PROJECT \
             -scheme $SCHEME \
             -configuration Release \
@@ -43,7 +44,10 @@ jobs:
             -destination 'generic/platform=macOS' \
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO | tee build.log
+
+      - name: Check First-Party Warnings
+        run: bash scripts/check_first_party_warnings.sh build.log
 
       - name: Install dmgbuild
         run: |
@@ -76,3 +80,43 @@ jobs:
           name: TypeWhisper-DMG
           path: build/TypeWhisper-*.dmg
           retention-days: 14
+
+  app-tests:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "26.2"
+
+      - name: Resolve Swift packages
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project $PROJECT \
+            -scheme $SCHEME
+
+      - name: Run App Tests
+        run: |
+          set -o pipefail
+          xcodebuild test -project $PROJECT \
+            -scheme $SCHEME \
+            -destination 'platform=macOS,arch=arm64' \
+            -parallel-testing-enabled NO \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO | tee test.log
+
+      - name: Check First-Party Warnings
+        run: bash scripts/check_first_party_warnings.sh test.log
+
+  plugin-sdk-tests:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run Plugin SDK Tests
+        run: swift test --package-path TypeWhisperPluginSDK

@@ -273,7 +273,7 @@ final class ModelManagerService: ObservableObject {
                 try? await Task.sleep(for: .seconds(seconds))
             }
             guard !Task.isCancelled else { return }
-            await self?.performAutoUnload()
+            self?.performAutoUnload()
         }
     }
 

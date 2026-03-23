@@ -12,9 +12,9 @@ final class ProfileService: ObservableObject {
     private let modelContainer: ModelContainer
     private let modelContext: ModelContext
 
-    init() {
+    init(appSupportDirectory: URL = AppConstants.appSupportDirectory) {
         let schema = Schema([Profile.self])
-        let storeDir = AppConstants.appSupportDirectory
+        let storeDir = appSupportDirectory
         try? FileManager.default.createDirectory(at: storeDir, withIntermediateDirectories: true)
 
         let storeURL = storeDir.appendingPathComponent("profiles.store")

@@ -278,8 +278,8 @@ final class AudioRecorderViewModel: ObservableObject {
     }
 
     private func audioDuration(for url: URL) -> TimeInterval {
-        let asset = AVURLAsset(url: url)
-        return asset.duration.seconds.isFinite ? asset.duration.seconds : 0
+        guard let player = try? AVAudioPlayer(contentsOf: url) else { return 0 }
+        return player.duration.isFinite ? player.duration : 0
     }
 
     func formattedDuration(_ duration: TimeInterval) -> String {

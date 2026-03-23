@@ -1,9 +1,11 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ErrorLogView: View {
     @ObservedObject private var errorLogService = ServiceContainer.shared.errorLogService
 
     @State private var showClearConfirmation = false
+    @State private var exportErrorMessage: String?
 
     var body: some View {
         Group {
@@ -15,6 +17,14 @@ struct ErrorLogView: View {
         }
         .frame(minWidth: 400, minHeight: 300)
         .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    exportDiagnostics()
+                } label: {
+                    Label(String(localized: "Export Diagnostics"), systemImage: "square.and.arrow.up")
+                }
+            }
+
             ToolbarItem(placement: .automatic) {
                 Button(role: .destructive) {
                     showClearConfirmation = true
@@ -33,6 +43,13 @@ struct ErrorLogView: View {
                     Text(String(localized: "This will permanently delete all recorded errors."))
                 }
             }
+        }
+        .alert(String(localized: "Export Failed"), isPresented: exportErrorPresented) {
+            Button(String(localized: "OK"), role: .cancel) {
+                exportErrorMessage = nil
+            }
+        } message: {
+            Text(exportErrorMessage ?? "")
         }
     }
 
@@ -75,6 +92,35 @@ struct ErrorLogView: View {
                 }
             }
             .padding(.vertical, 2)
+        }
+    }
+
+    private var exportErrorPresented: Binding<Bool> {
+        Binding(
+            get: { exportErrorMessage != nil },
+            set: { presented in
+                if !presented {
+                    exportErrorMessage = nil
+                }
+            }
+        )
+    }
+
+    private func exportDiagnostics() {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withDashSeparatorInDate, .withColonSeparatorInTime]
+
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.json]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "typewhisper-diagnostics-\(formatter.string(from: Date()).replacingOccurrences(of: ":", with: "-")).json"
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            try errorLogService.exportDiagnostics(to: url)
+        } catch {
+            exportErrorMessage = error.localizedDescription
         }
     }
 }

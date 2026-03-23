@@ -28,9 +28,16 @@ echo 'DEVELOPMENT_TEAM = YOUR_TEAM_ID' > CodeSigning.local.xcconfig
 
 1. Create a feature branch from `main`
 2. Keep changes focused - one feature or fix per PR
-3. Test your changes manually
+3. Test your changes manually and run the automated checks
 4. Fill out the PR template (Summary + Test Plan)
 5. PRs are squash-merged into `main`
+
+Recommended checks:
+
+```bash
+xcodebuild test -project TypeWhisper.xcodeproj -scheme TypeWhisper -destination 'platform=macOS,arch=arm64' -parallel-testing-enabled NO CODE_SIGN_IDENTITY='-' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+swift test --package-path TypeWhisperPluginSDK
+```
 
 ## Code Style
 

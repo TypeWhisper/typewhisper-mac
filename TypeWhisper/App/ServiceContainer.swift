@@ -166,6 +166,8 @@ final class ServiceContainer: ObservableObject {
     }
 
     func initialize() async {
+        guard !AppConstants.isRunningTests else { return }
+
         hotkeyService.setup()
         dictationViewModel.registerInitialProfileHotkeys()
         let retentionDays = UserDefaults.standard.integer(forKey: UserDefaultsKeys.historyRetentionDays)
