@@ -4,6 +4,8 @@ struct AdvancedSettingsView: View {
     @ObservedObject private var viewModel = APIServerViewModel.shared
     @ObservedObject private var memoryService = ServiceContainer.shared.memoryService
     @ObservedObject private var promptProcessingService = ServiceContainer.shared.promptProcessingService
+    @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
+    @ObservedObject private var dictation = DictationViewModel.shared
     #if !APPSTORE
     @State private var cliInstalled = false
     @State private var cliSymlinkTarget = ""
@@ -104,6 +106,33 @@ struct AdvancedSettingsView: View {
                         Text(String(localized: "This will permanently delete all stored memories from all plugins. This cannot be undone."))
                     }
                 }
+            }
+
+            // MARK: - Recording
+            Section(String(localized: "Recording")) {
+                Picker(String(localized: "Auto-unload model"), selection: Binding(
+                    get: { modelManager.autoUnloadSeconds },
+                    set: { modelManager.autoUnloadSeconds = $0 }
+                )) {
+                    Text(String(localized: "Never")).tag(0)
+                    Divider()
+                    Text(String(localized: "Immediate")).tag(-1)
+                    Text(String(localized: "After 2 minutes")).tag(120)
+                    Text(String(localized: "After 5 minutes")).tag(300)
+                    Text(String(localized: "After 10 minutes")).tag(600)
+                    Text(String(localized: "After 30 minutes")).tag(1800)
+                    Text(String(localized: "After 1 hour")).tag(3600)
+                }
+
+                Text(String(localized: "Automatically unloads local models from memory after inactivity. It reloads when needed. Does not affect cloud engines."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Toggle(String(localized: "Spoken feedback"), isOn: $dictation.spokenFeedbackEnabled)
+
+                Text(String(localized: "Reads back the transcribed text via speech synthesis after each dictation."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             // MARK: - History

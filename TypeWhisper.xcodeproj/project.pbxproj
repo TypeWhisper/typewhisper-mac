@@ -227,6 +227,9 @@
 		BA68B1E282D5D714132FEA24 /* PortDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000105 /* PortDiscovery.swift */; };
 		E2DA879FDEFA04FBD013E837 /* OutputFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000106 /* OutputFormatter.swift */; };
 		F635B3F08018D57E0CB709BF /* HTTPRequestParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E39448D561C47B16EEF4C6B /* HTTPRequestParserTests.swift */; };
+		AA00000000000000000260 /* HotkeyRecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000248 /* HotkeyRecorderView.swift */; };
+		AA00000000000000000261 /* HotkeySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000249 /* HotkeySettingsView.swift */; };
+		AA00000000000000000262 /* AboutSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000250 /* AboutSettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -503,6 +506,9 @@
 		E808D246301E36546EEB811F /* TestSupport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
 		F41BD305007A3A158038C75C /* ProfileServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProfileServiceTests.swift; sourceTree = "<group>"; };
 		FD34FDF9D999D85DA1C35375 /* CLISupportTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CLISupportTests.swift; sourceTree = "<group>"; };
+		BB00000000000000000248 /* HotkeyRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyRecorderView.swift; sourceTree = "<group>"; };
+		BB00000000000000000249 /* HotkeySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeySettingsView.swift; sourceTree = "<group>"; };
+		BB00000000000000000250 /* AboutSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutSettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -903,6 +909,9 @@
 				BB00000000000000000207 /* IndicatorPreviewView.swift */,
 				BB00000000000000000240 /* AudioRecorderView.swift */,
 				BB00000000000000000245 /* ErrorLogView.swift */,
+				BB00000000000000000248 /* HotkeyRecorderView.swift */,
+				BB00000000000000000249 /* HotkeySettingsView.swift */,
+				BB00000000000000000250 /* AboutSettingsView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -2175,6 +2184,9 @@
 				AA00000000000000000257 /* ErrorLogView.swift in Sources */,
 				AA00000000000000000258 /* AccessibilityAnnouncementService.swift in Sources */,
 				AA00000000000000000259 /* SpeechFeedbackService.swift in Sources */,
+				AA00000000000000000260 /* HotkeyRecorderView.swift in Sources */,
+				AA00000000000000000261 /* HotkeySettingsView.swift in Sources */,
+				AA00000000000000000262 /* AboutSettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
