@@ -48,6 +48,8 @@ private struct DiagnosticsReport: Encodable {
     }
 
     struct SettingsSnapshot: Encodable {
+        let bundledReleaseChannel: String
+        let selectedUpdateChannel: String
         let selectedLanguage: String?
         let selectedTask: String?
         let translationEnabled: Bool
@@ -179,6 +181,8 @@ final class ErrorLogService: ObservableObject {
                 )
             },
             settings: .init(
+                bundledReleaseChannel: AppConstants.releaseChannel.rawValue,
+                selectedUpdateChannel: AppConstants.effectiveUpdateChannel.rawValue,
                 selectedLanguage: defaults.string(forKey: UserDefaultsKeys.selectedLanguage),
                 selectedTask: defaults.string(forKey: UserDefaultsKeys.selectedTask),
                 translationEnabled: defaults.bool(forKey: UserDefaultsKeys.translationEnabled),

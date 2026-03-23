@@ -1,6 +1,27 @@
 import SwiftUI
 
 struct AboutSettingsView: View {
+    #if !APPSTORE
+    @AppStorage(UserDefaultsKeys.updateChannel) private var selectedUpdateChannelRawValue = AppConstants.defaultReleaseChannel.rawValue
+    #endif
+
+    #if !APPSTORE
+    private var selectedUpdateChannel: AppConstants.ReleaseChannel {
+        AppConstants.ReleaseChannel(rawValue: selectedUpdateChannelRawValue) ?? AppConstants.defaultReleaseChannel
+    }
+
+    private var updateChannelBinding: Binding<AppConstants.ReleaseChannel> {
+        Binding(
+            get: { selectedUpdateChannel },
+            set: { newChannel in
+                guard selectedUpdateChannel != newChannel else { return }
+                selectedUpdateChannelRawValue = newChannel.rawValue
+                UpdateChecker.shared?.resetUpdateCycleAfterSettingsChange()
+            }
+        )
+    }
+    #endif
+
     var body: some View {
         Form {
             Section {
@@ -15,7 +36,7 @@ struct AboutSettingsView: View {
 
                     let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
                     let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
-                    let channelSuffix = AppConstants.releaseChannel.displayName.map { " - \($0)" } ?? ""
+                    let channelSuffix = AppConstants.releaseChannel.versionDisplayName.map { " - \($0)" } ?? ""
                     Text("Version \(version) (\(build))\(channelSuffix)")
                         .foregroundStyle(.secondary)
 
@@ -30,6 +51,18 @@ struct AboutSettingsView: View {
 
             #if !APPSTORE
             Section {
+                Picker(String(localized: "Update Channel"), selection: updateChannelBinding) {
+                    ForEach(AppConstants.ReleaseChannel.allCases, id: \.self) { channel in
+                        Text(channel.selectionDisplayName)
+                            .tag(channel)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                Text(selectedUpdateChannel.updateDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 HStack {
                     Spacer()
                     Button(String(localized: "Check for Updates...")) {

@@ -31,6 +31,7 @@ enum UserDefaultsKeys {
     // MARK: - API Server
     static let apiServerEnabled = "apiServerEnabled"
     static let apiServerPort = "apiServerPort"
+    static let updateChannel = "updateChannel"
 
     // MARK: - Audio Device
     static let selectedInputDeviceUID = "selectedInputDeviceUID"

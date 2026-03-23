@@ -150,7 +150,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         UserDefaults.standard.register(defaults: [
-            UserDefaultsKeys.showMenuBarIcon: true
+            UserDefaultsKeys.showMenuBarIcon: true,
+            UserDefaultsKeys.updateChannel: AppConstants.defaultReleaseChannel.rawValue
         ])
 
         guard !AppConstants.isRunningTests else {
@@ -296,7 +297,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
 
     #if !APPSTORE
     nonisolated func allowedChannels(for updater: SPUUpdater) -> Set<String> {
-        AppConstants.releaseChannel.sparkleChannels
+        AppConstants.effectiveUpdateChannel.sparkleChannels
     }
     #endif
 }

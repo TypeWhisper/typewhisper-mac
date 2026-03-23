@@ -1,7 +1,7 @@
 import Foundation
 
 enum AppConstants {
-    enum ReleaseChannel: String {
+    enum ReleaseChannel: String, CaseIterable {
         case stable
         case releaseCandidate = "release-candidate"
         case daily
@@ -17,14 +17,34 @@ enum AppConstants {
             }
         }
 
-        var displayName: String? {
+        var selectionDisplayName: String {
+            switch self {
+            case .stable:
+                return String(localized: "Stable")
+            case .releaseCandidate:
+                return String(localized: "Release Candidate")
+            case .daily:
+                return String(localized: "Daily")
+            }
+        }
+
+        var versionDisplayName: String? {
             switch self {
             case .stable:
                 return nil
+            case .releaseCandidate, .daily:
+                return selectionDisplayName
+            }
+        }
+
+        var updateDescription: String {
+            switch self {
+            case .stable:
+                return String(localized: "Stable gets production releases only.")
             case .releaseCandidate:
-                return "Release Candidate"
+                return String(localized: "Release Candidate includes stable and preview builds.")
             case .daily:
-                return "Daily"
+                return String(localized: "Daily includes stable, release candidate, and daily builds.")
             }
         }
     }
@@ -63,7 +83,34 @@ enum AppConstants {
 
     static let appVersion: String = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
     static let buildVersion: String = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0"
-    static let releaseChannel: ReleaseChannel = {
+    static func bundledReleaseChannel(infoDictionary: [String: Any]? = Bundle.main.infoDictionary) -> ReleaseChannel {
+        guard let rawValue = infoDictionary?["TypeWhisperReleaseChannel"] as? String,
+              let channel = ReleaseChannel(rawValue: rawValue) else {
+            return .stable
+        }
+        return channel
+    }
+
+    static func selectedUpdateChannel(
+        defaults: UserDefaults = .standard,
+        infoDictionary: [String: Any]? = Bundle.main.infoDictionary
+    ) -> ReleaseChannel {
+        guard let rawValue = defaults.string(forKey: UserDefaultsKeys.updateChannel),
+              let channel = ReleaseChannel(rawValue: rawValue) else {
+            return bundledReleaseChannel(infoDictionary: infoDictionary)
+        }
+        return channel
+    }
+
+    static var releaseChannel: ReleaseChannel {
+        bundledReleaseChannel()
+    }
+
+    static var effectiveUpdateChannel: ReleaseChannel {
+        selectedUpdateChannel()
+    }
+
+    static let defaultReleaseChannel: ReleaseChannel = {
         guard let rawValue = Bundle.main.infoDictionary?["TypeWhisperReleaseChannel"] as? String,
               let channel = ReleaseChannel(rawValue: rawValue) else {
             return .stable
