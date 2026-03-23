@@ -213,6 +213,9 @@
 		AA00000000000000000257 /* ErrorLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000245 /* ErrorLogView.swift */; };
 		AA00000000000000000258 /* AccessibilityAnnouncementService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000246 /* AccessibilityAnnouncementService.swift */; };
 		AA00000000000000000259 /* SpeechFeedbackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000247 /* SpeechFeedbackService.swift */; };
+		AA00000000000000000260 /* HotkeyRecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000248 /* HotkeyRecorderView.swift */; };
+		AA00000000000000000261 /* HotkeySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000249 /* HotkeySettingsView.swift */; };
+		AA00000000000000000262 /* AboutSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000250 /* AboutSettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -419,6 +422,9 @@
 		BB00000000000000000245 /* ErrorLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorLogView.swift; sourceTree = "<group>"; };
 		BB00000000000000000246 /* AccessibilityAnnouncementService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityAnnouncementService.swift; sourceTree = "<group>"; };
 		BB00000000000000000247 /* SpeechFeedbackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechFeedbackService.swift; sourceTree = "<group>"; };
+		BB00000000000000000248 /* HotkeyRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyRecorderView.swift; sourceTree = "<group>"; };
+		BB00000000000000000249 /* HotkeySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeySettingsView.swift; sourceTree = "<group>"; };
+		BB00000000000000000250 /* AboutSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutSettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -930,6 +936,9 @@
 				BB00000000000000000207 /* IndicatorPreviewView.swift */,
 				BB00000000000000000240 /* AudioRecorderView.swift */,
 				BB00000000000000000245 /* ErrorLogView.swift */,
+				BB00000000000000000248 /* HotkeyRecorderView.swift */,
+				BB00000000000000000249 /* HotkeySettingsView.swift */,
+				BB00000000000000000250 /* AboutSettingsView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -2124,6 +2133,9 @@
 				AA00000000000000000257 /* ErrorLogView.swift in Sources */,
 				AA00000000000000000258 /* AccessibilityAnnouncementService.swift in Sources */,
 				AA00000000000000000259 /* SpeechFeedbackService.swift in Sources */,
+				AA00000000000000000260 /* HotkeyRecorderView.swift in Sources */,
+				AA00000000000000000261 /* HotkeySettingsView.swift in Sources */,
+				AA00000000000000000262 /* AboutSettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
