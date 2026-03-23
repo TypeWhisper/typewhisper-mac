@@ -95,6 +95,7 @@ struct OverlayIndicatorView: View {
                 IndicatorActionFeedback(
                     message: viewModel.actionFeedbackMessage ?? "",
                     icon: viewModel.actionFeedbackIcon,
+                    isError: viewModel.actionFeedbackIsError,
                     contentPadding: contentPadding
                 )
             }
@@ -104,6 +105,7 @@ struct OverlayIndicatorView: View {
                 IndicatorActionFeedback(
                     message: viewModel.actionFeedbackMessage ?? "",
                     icon: viewModel.actionFeedbackIcon,
+                    isError: viewModel.actionFeedbackIsError,
                     contentPadding: contentPadding
                 )
                 Divider().background(Color.white.opacity(0.1))

@@ -112,6 +112,7 @@ final class GroqPlugin: NSObject, TranscriptionEnginePlugin, LLMProviderPlugin, 
             PluginModelInfo(id: "llama-3.1-8b-instant", displayName: "Llama 3.1 8B"),
             PluginModelInfo(id: "openai/gpt-oss-120b", displayName: "GPT-OSS 120B"),
             PluginModelInfo(id: "openai/gpt-oss-20b", displayName: "GPT-OSS 20B"),
+            PluginModelInfo(id: "moonshotai/kimi-k2-instruct-0905", displayName: "Kimi K2"),
         ]
     }
 

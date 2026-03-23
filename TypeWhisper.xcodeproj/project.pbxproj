@@ -204,6 +204,14 @@
 		AA00000000000000000246 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000033 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000248 /* VoiceCommandService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000236 /* VoiceCommandService.swift */; };
 		AA00000000000000000249 /* VoiceCommandHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000237 /* VoiceCommandHandler.swift */; };
+		AA00000000000000000250 /* AudioRecorderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000238 /* AudioRecorderService.swift */; };
+		AA00000000000000000251 /* AudioRecorderViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000239 /* AudioRecorderViewModel.swift */; };
+		AA00000000000000000252 /* AudioRecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000240 /* AudioRecorderView.swift */; };
+		AA00000000000000000253 /* WatchFolderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000241 /* WatchFolderService.swift */; };
+		AA00000000000000000254 /* WatchFolderViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000242 /* WatchFolderViewModel.swift */; };
+		AA00000000000000000255 /* ErrorLogEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000243 /* ErrorLogEntry.swift */; };
+		AA00000000000000000256 /* ErrorLogService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000244 /* ErrorLogService.swift */; };
+		AA00000000000000000257 /* ErrorLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000245 /* ErrorLogView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -401,6 +409,14 @@
 		BB00000000000000000234 /* OpenAIVectorMemoryPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OpenAIVectorMemoryPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000236 /* VoiceCommandService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCommandService.swift; sourceTree = "<group>"; };
 		BB00000000000000000237 /* VoiceCommandHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCommandHandler.swift; sourceTree = "<group>"; };
+		BB00000000000000000238 /* AudioRecorderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderService.swift; sourceTree = "<group>"; };
+		BB00000000000000000239 /* AudioRecorderViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderViewModel.swift; sourceTree = "<group>"; };
+		BB00000000000000000240 /* AudioRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderView.swift; sourceTree = "<group>"; };
+		BB00000000000000000241 /* WatchFolderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchFolderService.swift; sourceTree = "<group>"; };
+		BB00000000000000000242 /* WatchFolderViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchFolderViewModel.swift; sourceTree = "<group>"; };
+		BB00000000000000000243 /* ErrorLogEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorLogEntry.swift; sourceTree = "<group>"; };
+		BB00000000000000000244 /* ErrorLogService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorLogService.swift; sourceTree = "<group>"; };
+		BB00000000000000000245 /* ErrorLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorLogView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -803,6 +819,7 @@
 				BB00000000000000000078 /* TermPack.swift */,
 				BB00000000000000000080 /* Snippet.swift */,
 				BB00000000000000000110 /* PromptAction.swift */,
+				BB00000000000000000243 /* ErrorLogEntry.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -841,6 +858,9 @@
 				BB00000000000000000180 /* WidgetDataService.swift */,
 				BB00000000000000000228 /* MemoryService.swift */,
 				BB00000000000000000236 /* VoiceCommandService.swift */,
+				BB00000000000000000238 /* AudioRecorderService.swift */,
+				BB00000000000000000241 /* WatchFolderService.swift */,
+				BB00000000000000000244 /* ErrorLogService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -873,6 +893,8 @@
 				BB00000000000000000173 /* PromptPaletteHandler.swift */,
 				BB00000000000000000174 /* DictationSettingsHandler.swift */,
 				BB00000000000000000237 /* VoiceCommandHandler.swift */,
+				BB00000000000000000239 /* AudioRecorderViewModel.swift */,
+				BB00000000000000000242 /* WatchFolderViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -903,6 +925,8 @@
 				BB00000000000000000122 /* NotchShape.swift */,
 				BB00000000000000000127 /* PluginSettingsView.swift */,
 				BB00000000000000000207 /* IndicatorPreviewView.swift */,
+				BB00000000000000000240 /* AudioRecorderView.swift */,
+				BB00000000000000000245 /* ErrorLogView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -2088,6 +2112,14 @@
 				AA00000000000000000240 /* MemoryService.swift in Sources */,
 				AA00000000000000000248 /* VoiceCommandService.swift in Sources */,
 				AA00000000000000000249 /* VoiceCommandHandler.swift in Sources */,
+				AA00000000000000000250 /* AudioRecorderService.swift in Sources */,
+				AA00000000000000000251 /* AudioRecorderViewModel.swift in Sources */,
+				AA00000000000000000252 /* AudioRecorderView.swift in Sources */,
+				AA00000000000000000253 /* WatchFolderService.swift in Sources */,
+				AA00000000000000000254 /* WatchFolderViewModel.swift in Sources */,
+				AA00000000000000000255 /* ErrorLogEntry.swift in Sources */,
+				AA00000000000000000256 /* ErrorLogService.swift in Sources */,
+				AA00000000000000000257 /* ErrorLogView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

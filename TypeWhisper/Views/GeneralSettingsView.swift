@@ -12,6 +12,7 @@ struct GeneralSettingsView: View {
     @State private var showRestartAlert = false
     @State private var showMenuBarIconHiddenAlert = false
     @AppStorage(UserDefaultsKeys.showMenuBarIcon) private var showMenuBarIcon = true
+    @AppStorage(UserDefaultsKeys.showRecorderTab) private var showRecorderTab = false
     @ObservedObject private var pluginManager = PluginManager.shared
     @ObservedObject private var settings = SettingsViewModel.shared
     @ObservedObject private var dictation = DictationViewModel.shared
@@ -88,6 +89,12 @@ struct GeneralSettingsView: View {
                     }
 
                 Text(String(localized: "When hidden, the app is accessible via the Dock icon."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Toggle(String(localized: "settings.showRecorderTab"), isOn: $showRecorderTab)
+
+                Text(String(localized: "settings.showRecorderTab.description"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
