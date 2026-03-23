@@ -1,44 +1,44 @@
 # TypeWhisper Support Matrix
 
-Diese Matrix beschreibt den offiziell unterstuetzten `1.0`-Pfad fuer Direct-Download-Releases.
+This matrix describes the officially supported `1.0` path for direct-download releases.
 
-## Plattform
+## Platform
 
-| Bereich | Support |
+| Area | Support |
 | --- | --- |
-| Basis-Support | macOS 14+ |
-| Empfohlene Hardware | Apple Silicon |
-| Intel | Smoke-test vor Releases, solange Universal Binary versprochen wird |
+| Base support | macOS 14+ |
+| Recommended hardware | Apple Silicon |
+| Intel | Smoke-test before releases as long as Universal Binary support is advertised |
 
-## Feature-Matrix nach macOS-Version
+## Feature Matrix by macOS Version
 
-| Feature | macOS 14 | macOS 15 | macOS 26+ | Hinweise |
+| Feature | macOS 14 | macOS 15 | macOS 26+ | Notes |
 | --- | --- | --- | --- | --- |
-| Systemweite Dictation | Ja | Ja | Ja | Kernworkflow fuer `1.0` |
-| Datei-Transkription | Ja | Ja | Ja | Kernworkflow fuer `1.0` |
-| Prompt-Verarbeitung | Ja | Ja | Ja | Kernworkflow fuer `1.0` |
-| Profiles, History, Dictionary, Snippets | Ja | Ja | Ja | Kernworkflow fuer `1.0` |
-| Widgets | Ja | Ja | Ja | Nicht Teil des Kernpfads |
-| HTTP API | Ja | Ja | Ja | Loopback-only, standardmaessig deaktiviert |
-| CLI | Ja | Ja | Ja | Benoetigt laufenden lokalen API-Server |
-| Apple Translate Integration | Nein | Ja | Ja | Advanced surface |
-| Verbesserte Settings-UI | Nein | Ja | Ja | Optionaler Komfortgewinn |
-| Apple Intelligence Provider | Nein | Nein | Ja | Optional, nicht Teil des Kernpfads |
-| SpeechAnalyzer Engine | Nein | Nein | Ja | Optional, nicht Teil des Kernpfads |
+| System-wide dictation | Yes | Yes | Yes | Core workflow for `1.0` |
+| File transcription | Yes | Yes | Yes | Core workflow for `1.0` |
+| Prompt processing | Yes | Yes | Yes | Core workflow for `1.0` |
+| Profiles, History, Dictionary, Snippets | Yes | Yes | Yes | Core workflow for `1.0` |
+| Widgets | Yes | Yes | Yes | Not part of the core path |
+| HTTP API | Yes | Yes | Yes | Loopback-only, disabled by default |
+| CLI | Yes | Yes | Yes | Requires the local API server to be running |
+| Apple Translate integration | No | Yes | Yes | Advanced surface |
+| Improved settings UI | No | Yes | Yes | Optional usability improvement |
+| Apple Intelligence provider | No | No | Yes | Optional, not part of the core path |
+| SpeechAnalyzer engine | No | No | Yes | Optional, not part of the core path |
 
-## Engine-Hinweise
+## Engine Notes
 
-| Engine-Typ | Support in 1.0 | Hinweise |
+| Engine Type | Support in 1.0 | Notes |
 | --- | --- | --- |
-| Lokale Engines | Ja | Empfohlener Standardpfad |
-| Cloud-Engines | Ja | Brauchen gueltige API-Keys |
-| Gebuendelte Plugins | Ja | Teil des getesteten Produktpfads |
-| Externe Drittanbieter-Plugins | Best effort | Kein Launch-Blocker fuer `1.0` |
+| Local engines | Yes | Recommended default path |
+| Cloud engines | Yes | Require valid API keys |
+| Bundled plugins | Yes | Part of the tested product path |
+| External third-party plugins | Best effort | Not a launch blocker for `1.0` |
 
-## Automation-Hinweise
+## Automation Notes
 
 | Surface | Status in 1.0 |
 | --- | --- |
-| HTTP API `/v1/*` | Stabil fuer `1.x` |
-| `typewhisper` CLI | Stabil fuer `1.0.x` |
-| Plugin SDK | Stabil fuer `1.x` |
+| HTTP API `/v1/*` | Stable for `1.x` |
+| `typewhisper` CLI | Stable for `1.0.x` |
+| Plugin SDK | Stable for `1.x` |
