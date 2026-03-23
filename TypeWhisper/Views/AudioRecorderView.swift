@@ -6,6 +6,10 @@ struct AudioRecorderView: View {
     @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
     @State private var selectedProvider: String?
 
+    private var isEditingLocked: Bool {
+        viewModel.state != .idle
+    }
+
     var body: some View {
         Form {
             // Recording Controls
@@ -21,7 +25,7 @@ struct AudioRecorderView: View {
                     Button {
                         if viewModel.state == .recording {
                             viewModel.stopRecording()
-                        } else {
+                        } else if viewModel.state == .idle {
                             viewModel.startRecording()
                         }
                     } label: {
@@ -37,7 +41,7 @@ struct AudioRecorderView: View {
                     .buttonStyle(.borderedProminent)
                     .tint(viewModel.state == .recording ? .red : .accentColor)
                     .controlSize(.large)
-                    .disabled(!viewModel.micEnabled && !viewModel.systemAudioEnabled)
+                    .disabled(viewModel.state == .finalizing || (!viewModel.micEnabled && !viewModel.systemAudioEnabled))
 
                     // Level meters
                     if viewModel.state == .recording {
@@ -70,7 +74,7 @@ struct AudioRecorderView: View {
             }
 
             // Transcribing indicator after stop
-            if viewModel.isTranscribing && viewModel.state == .idle {
+            if viewModel.state == .finalizing {
                 Section {
                     HStack(spacing: 8) {
                         ProgressView()
@@ -84,10 +88,10 @@ struct AudioRecorderView: View {
             // Audio Sources
             Section(String(localized: "recorder.sources")) {
                 Toggle(String(localized: "recorder.mic"), isOn: $viewModel.micEnabled)
-                    .disabled(viewModel.state == .recording)
+                    .disabled(isEditingLocked)
 
                 Toggle(String(localized: "recorder.systemAudio"), isOn: $viewModel.systemAudioEnabled)
-                    .disabled(viewModel.state == .recording)
+                    .disabled(isEditingLocked)
 
                 if viewModel.systemAudioEnabled {
                     Label(
@@ -102,13 +106,24 @@ struct AudioRecorderView: View {
                     Text("WAV").tag(AudioRecorderService.OutputFormat.wav)
                     Text("M4A").tag(AudioRecorderService.OutputFormat.m4a)
                 }
-                .disabled(viewModel.state == .recording)
+                .disabled(isEditingLocked)
+
+                Picker(String(localized: "Echo Handling"), selection: $viewModel.micDuckingMode) {
+                    ForEach(AudioRecorderService.MicDuckingMode.allCases, id: \.self) { mode in
+                        Text(mode.displayName).tag(mode)
+                    }
+                }
+                .disabled(isEditingLocked || !viewModel.micEnabled || !viewModel.systemAudioEnabled)
+
+                Text(String(localized: "Affects only TypeWhisper recordings and transcriptions, not your live meeting microphone."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             // Transcription Settings
             Section(String(localized: "recorder.transcription")) {
                 Toggle(String(localized: "recorder.liveTranscription"), isOn: $viewModel.transcriptionEnabled)
-                    .disabled(viewModel.state == .recording)
+                    .disabled(isEditingLocked)
 
                 if viewModel.transcriptionEnabled {
                     // Engine picker
@@ -131,7 +146,7 @@ struct AudioRecorderView: View {
                             modelManager.selectProvider(newValue)
                         }
                     }
-                    .disabled(viewModel.state == .recording)
+                    .disabled(isEditingLocked)
 
                     // Model picker
                     if let providerId = selectedProvider,
@@ -146,7 +161,7 @@ struct AudioRecorderView: View {
                                     Text(model.displayName).tag(model.id as String?)
                                 }
                             }
-                            .disabled(viewModel.state == .recording)
+                            .disabled(isEditingLocked)
                         }
                     }
 
@@ -158,7 +173,7 @@ struct AudioRecorderView: View {
                             Text(lang.name).tag(lang.code as String?)
                         }
                     }
-                    .disabled(viewModel.state == .recording)
+                    .disabled(isEditingLocked)
 
                     // Task picker (transcribe/translate)
                     if viewModel.supportsTranslation {
@@ -167,7 +182,7 @@ struct AudioRecorderView: View {
                                 Text(task.displayName).tag(task)
                             }
                         }
-                        .disabled(viewModel.state == .recording)
+                        .disabled(isEditingLocked)
                     }
 
                     // LiveTranscriptPlugin status

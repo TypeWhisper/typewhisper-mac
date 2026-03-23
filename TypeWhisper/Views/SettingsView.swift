@@ -491,6 +491,10 @@ struct HotkeyRecorderView: View {
     @State private var modifierReleaseTimer: DispatchWorkItem?
     private static var activeRecorder: UUID?
     @State private var id = UUID()
+    // Double-tap recording state
+    @State private var firstTapHotkey: UnifiedHotkey?
+    @State private var firstTapDisplayName: String?
+    @State private var doubleTapTimer: DispatchWorkItem?
 
     var body: some View {
         HStack {
@@ -507,10 +511,15 @@ struct HotkeyRecorderView: View {
                 Button {
                     cancelRecording()
                 } label: {
-                    Text(pendingModifierString.isEmpty
-                        ? String(localized: "Press a key…")
-                        : pendingModifierString)
-                        .foregroundStyle(.orange)
+                    if let displayName = firstTapDisplayName {
+                        Text("\(displayName) - \(String(localized: "tap again for double-tap…"))")
+                            .foregroundStyle(.orange)
+                    } else {
+                        Text(pendingModifierString.isEmpty
+                            ? String(localized: "Press a key…")
+                            : pendingModifierString)
+                            .foregroundStyle(.orange)
+                    }
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -600,35 +609,45 @@ struct HotkeyRecorderView: View {
                 let modifierList: [NSEvent.ModifierFlags] = [.command, .option, .control, .shift, .function]
                 let peakCount = modifierList.filter { peakModifiers.contains($0) }.count
 
+                // Build the candidate single-tap hotkey for this release
+                let candidateHotkey: UnifiedHotkey?
                 if peakCount > 1 {
-                    // Multi-modifier combo (e.g. CMD+OPT, Fn+CMD)
-                    let comboFlags = peakModifiers
-                    let work = DispatchWorkItem { [self] in
-                        finishRecording(UnifiedHotkey(keyCode: UnifiedHotkey.modifierComboKeyCode, modifierFlags: comboFlags.rawValue, isFn: false))
-                    }
-                    modifierReleaseTimer = work
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
-                    pendingModifiers = []
-                    peakModifiers = []
-                    return true
+                    candidateHotkey = UnifiedHotkey(keyCode: UnifiedHotkey.modifierComboKeyCode, modifierFlags: peakModifiers.rawValue, isFn: false)
                 } else if peakModifiers.contains(.function) {
-                    // Fn alone
-                    let work = DispatchWorkItem { [self] in
-                        finishRecording(UnifiedHotkey(keyCode: 0, modifierFlags: 0, isFn: true))
-                    }
-                    modifierReleaseTimer = work
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
-                    pendingModifiers = []
-                    peakModifiers = []
-                    return true
+                    candidateHotkey = UnifiedHotkey(keyCode: 0, modifierFlags: 0, isFn: true)
                 } else if HotkeyService.modifierKeyCodes.contains(event.keyCode) {
-                    // Single modifier key (CMD, OPT, etc.)
-                    let keyCode = event.keyCode
-                    let work = DispatchWorkItem { [self] in
-                        finishRecording(UnifiedHotkey(keyCode: keyCode, modifierFlags: 0, isFn: false))
+                    candidateHotkey = UnifiedHotkey(keyCode: event.keyCode, modifierFlags: 0, isFn: false)
+                } else {
+                    candidateHotkey = nil
+                }
+
+                if let candidate = candidateHotkey {
+                    // Check if this is a second tap of the same key (double-tap detection)
+                    if let firstTap = firstTapHotkey, firstTap == candidate {
+                        // Second tap - finish as double-tap
+                        doubleTapTimer?.cancel()
+                        doubleTapTimer = nil
+                        let doubleTapHotkey = UnifiedHotkey(keyCode: candidate.keyCode, modifierFlags: candidate.modifierFlags, isFn: candidate.isFn, isDoubleTap: true)
+                        let work = DispatchWorkItem { [self] in
+                            finishRecording(doubleTapHotkey)
+                        }
+                        modifierReleaseTimer = work
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
+                    } else {
+                        // First tap - wait for possible second tap
+                        doubleTapTimer?.cancel()
+                        firstTapHotkey = candidate
+                        firstTapDisplayName = HotkeyService.displayName(for: candidate)
+                        let singleTapHotkey = candidate
+                        let work = DispatchWorkItem { [self] in
+                            // Timer expired - finish as single-tap
+                            firstTapHotkey = nil
+                            firstTapDisplayName = nil
+                            finishRecording(singleTapHotkey)
+                        }
+                        doubleTapTimer = work
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
                     }
-                    modifierReleaseTimer = work
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
                     pendingModifiers = []
                     peakModifiers = []
                     return true
@@ -661,6 +680,10 @@ struct HotkeyRecorderView: View {
     private func finishRecording(_ hotkey: UnifiedHotkey) {
         modifierReleaseTimer?.cancel()
         modifierReleaseTimer = nil
+        doubleTapTimer?.cancel()
+        doubleTapTimer = nil
+        firstTapHotkey = nil
+        firstTapDisplayName = nil
         if Self.activeRecorder == id {
             Self.activeRecorder = nil
         }
@@ -675,6 +698,10 @@ struct HotkeyRecorderView: View {
     private func cancelRecording() {
         modifierReleaseTimer?.cancel()
         modifierReleaseTimer = nil
+        doubleTapTimer?.cancel()
+        doubleTapTimer = nil
+        firstTapHotkey = nil
+        firstTapDisplayName = nil
         if Self.activeRecorder == id {
             Self.activeRecorder = nil
         }

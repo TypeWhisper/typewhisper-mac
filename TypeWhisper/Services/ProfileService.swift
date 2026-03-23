@@ -52,6 +52,7 @@ final class ProfileService: ObservableObject {
         promptActionId: String? = nil,
         memoryEnabled: Bool = false,
         hotkeyData: Data? = nil,
+        inlineCommandsEnabled: Bool = false,
         priority: Int = 0
     ) {
         let profile = Profile(
@@ -66,7 +67,8 @@ final class ProfileService: ObservableObject {
             cloudModelOverride: cloudModelOverride,
             promptActionId: promptActionId,
             memoryEnabled: memoryEnabled,
-            hotkeyData: hotkeyData
+            hotkeyData: hotkeyData,
+            inlineCommandsEnabled: inlineCommandsEnabled
         )
         modelContext.insert(profile)
         save()

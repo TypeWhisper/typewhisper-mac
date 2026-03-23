@@ -8,6 +8,7 @@ struct UnifiedHotkey: Equatable, Sendable, Codable {
     let keyCode: UInt16
     let modifierFlags: UInt
     let isFn: Bool
+    let isDoubleTap: Bool
 
     /// Sentinel keyCode for modifier-only combos (e.g. CMD+OPT).
     /// 0x00 is the "A" key, so we use 0xFFFF which is not a real keyCode.
@@ -27,6 +28,22 @@ struct UnifiedHotkey: Equatable, Sendable, Codable {
         if keyCode == Self.modifierComboKeyCode && modifierFlags != 0 { return .modifierCombo }
         if modifierFlags != 0 { return .keyWithModifiers }
         return .bareKey
+    }
+
+    init(keyCode: UInt16, modifierFlags: UInt, isFn: Bool, isDoubleTap: Bool = false) {
+        self.keyCode = keyCode
+        self.modifierFlags = modifierFlags
+        self.isFn = isFn
+        self.isDoubleTap = isDoubleTap
+    }
+
+    // Backward-compatible decoding: old hotkeys without isDoubleTap decode as single-tap
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        keyCode = try container.decode(UInt16.self, forKey: .keyCode)
+        modifierFlags = try container.decode(UInt.self, forKey: .modifierFlags)
+        isFn = try container.decode(Bool.self, forKey: .isFn)
+        isDoubleTap = try container.decodeIfPresent(Bool.self, forKey: .isDoubleTap) ?? false
     }
 }
 
@@ -70,6 +87,7 @@ final class HotkeyService: ObservableObject {
     private(set) var activeProfileId: UUID?
 
     private static let toggleThreshold: TimeInterval = 1.0
+    private static let doubleTapThreshold: TimeInterval = 0.4
 
     // MARK: - Per-Slot State
 
@@ -78,6 +96,9 @@ final class HotkeyService: ObservableObject {
         var fnWasDown = false
         var modifierWasDown = false
         var keyWasDown = false
+        // Double-tap tracking
+        var lastTapUpTime: Date?
+        var tapCount: Int = 0 // 0=idle, 1=first tap released, 2=second tap active
     }
 
     private var slots: [HotkeySlotType: SlotState] = [
@@ -95,6 +116,9 @@ final class HotkeyService: ObservableObject {
         var fnWasDown = false
         var modifierWasDown = false
         var keyWasDown = false
+        // Double-tap tracking
+        var lastTapUpTime: Date?
+        var tapCount: Int = 0
     }
 
     private var profileSlots: [UUID: ProfileHotkeyState] = [:]
@@ -138,9 +162,15 @@ final class HotkeyService: ObservableObject {
     }
 
     /// Returns which slot already has this hotkey assigned, excluding a given slot.
+    /// Also detects conflicts between single-tap and double-tap variants of the same key.
     func isHotkeyAssigned(_ hotkey: UnifiedHotkey, excluding: HotkeySlotType) -> HotkeySlotType? {
         for slotType in HotkeySlotType.allCases where slotType != excluding {
-            if slots[slotType]?.hotkey == hotkey {
+            guard let existing = slots[slotType]?.hotkey else { continue }
+            if existing == hotkey { return slotType }
+            if existing.keyCode == hotkey.keyCode
+                && existing.modifierFlags == hotkey.modifierFlags
+                && existing.isFn == hotkey.isFn
+                && existing.isDoubleTap != hotkey.isDoubleTap {
                 return slotType
             }
         }
@@ -175,13 +205,26 @@ final class HotkeyService: ObservableObject {
     func isHotkeyAssignedToProfile(_ hotkey: UnifiedHotkey, excludingProfileId: UUID?) -> UUID? {
         for (id, state) in profileSlots where id != excludingProfileId {
             if state.hotkey == hotkey { return id }
+            if state.hotkey.keyCode == hotkey.keyCode
+                && state.hotkey.modifierFlags == hotkey.modifierFlags
+                && state.hotkey.isFn == hotkey.isFn
+                && state.hotkey.isDoubleTap != hotkey.isDoubleTap {
+                return id
+            }
         }
         return nil
     }
 
     func isHotkeyAssignedToGlobalSlot(_ hotkey: UnifiedHotkey) -> HotkeySlotType? {
         for slotType in HotkeySlotType.allCases {
-            if slots[slotType]?.hotkey == hotkey { return slotType }
+            guard let existing = slots[slotType]?.hotkey else { continue }
+            if existing == hotkey { return slotType }
+            if existing.keyCode == hotkey.keyCode
+                && existing.modifierFlags == hotkey.modifierFlags
+                && existing.isFn == hotkey.isFn
+                && existing.isDoubleTap != hotkey.isDoubleTap {
+                return slotType
+            }
         }
         return nil
     }
@@ -340,11 +383,14 @@ final class HotkeyService: ObservableObject {
         for profileId in Array(profileSlots.keys) {
             guard var pState = profileSlots[profileId] else { continue }
             var state = SlotState(hotkey: pState.hotkey, fnWasDown: pState.fnWasDown,
-                                  modifierWasDown: pState.modifierWasDown, keyWasDown: pState.keyWasDown)
+                                  modifierWasDown: pState.modifierWasDown, keyWasDown: pState.keyWasDown,
+                                  lastTapUpTime: pState.lastTapUpTime, tapCount: pState.tapCount)
             let (keyDown, keyUp) = processKeyEvent(event, hotkey: pState.hotkey, state: &state)
             pState.fnWasDown = state.fnWasDown
             pState.modifierWasDown = state.modifierWasDown
             pState.keyWasDown = state.keyWasDown
+            pState.lastTapUpTime = state.lastTapUpTime
+            pState.tapCount = state.tapCount
             profileSlots[profileId] = pState
             if keyDown {
                 shouldSuppress = true
@@ -380,11 +426,14 @@ final class HotkeyService: ObservableObject {
         for profileId in Array(profileSlots.keys) {
             guard var pState = profileSlots[profileId] else { continue }
             var state = SlotState(hotkey: pState.hotkey, fnWasDown: pState.fnWasDown,
-                                  modifierWasDown: pState.modifierWasDown, keyWasDown: pState.keyWasDown)
+                                  modifierWasDown: pState.modifierWasDown, keyWasDown: pState.keyWasDown,
+                                  lastTapUpTime: pState.lastTapUpTime, tapCount: pState.tapCount)
             let (keyDown, keyUp) = processKeyEvent(event, hotkey: pState.hotkey, state: &state)
             pState.fnWasDown = state.fnWasDown
             pState.modifierWasDown = state.modifierWasDown
             pState.keyWasDown = state.keyWasDown
+            pState.lastTapUpTime = state.lastTapUpTime
+            pState.tapCount = state.tapCount
             profileSlots[profileId] = pState
             if keyDown { handleProfileKeyDown(profileId: profileId) }
             else if keyUp { handleProfileKeyUp(profileId: profileId) }
@@ -394,13 +443,13 @@ final class HotkeyService: ObservableObject {
     /// Processes a key event against a hotkey, updating state booleans.
     /// Returns (keyDown, keyUp) flags.
     private func processKeyEvent(_ event: NSEvent, hotkey: UnifiedHotkey, state: inout SlotState) -> (keyDown: Bool, keyUp: Bool) {
-        let (keyDown, keyUp) = detectKeyEvent(
+        let (rawKeyDown, rawKeyUp) = detectKeyEvent(
             event, hotkey: hotkey,
             fnWasDown: state.fnWasDown,
             modifierWasDown: state.modifierWasDown,
             keyWasDown: state.keyWasDown
         )
-        let value = keyDown ? true : keyUp ? false : nil
+        let value = rawKeyDown ? true : rawKeyUp ? false : nil
         if let value {
             switch hotkey.kind {
             case .fn: state.fnWasDown = value
@@ -408,7 +457,43 @@ final class HotkeyService: ObservableObject {
             case .keyWithModifiers, .bareKey: state.keyWasDown = value
             }
         }
-        return (keyDown, keyUp)
+
+        // For non-double-tap hotkeys, pass through directly
+        guard hotkey.isDoubleTap else {
+            return (rawKeyDown, rawKeyUp)
+        }
+
+        // Double-tap state machine: layer on top of single-tap detection
+        if rawKeyDown {
+            if state.tapCount == 1,
+               let lastUp = state.lastTapUpTime,
+               Date().timeIntervalSince(lastUp) < Self.doubleTapThreshold {
+                // Second tap within threshold - fire
+                state.tapCount = 2
+                state.lastTapUpTime = nil
+                return (true, false)
+            } else {
+                // First tap (or threshold expired) - don't fire yet
+                state.tapCount = 0
+                state.lastTapUpTime = nil
+                return (false, false)
+            }
+        }
+
+        if rawKeyUp {
+            if state.tapCount == 2 {
+                // Release after second tap - real keyUp
+                state.tapCount = 0
+                return (false, true)
+            } else {
+                // Release after first tap - start waiting for second
+                state.tapCount = 1
+                state.lastTapUpTime = Date()
+                return (false, false)
+            }
+        }
+
+        return (false, false)
     }
 
     /// Generic key event detection: returns (isKeyDown, isKeyUp) for a given hotkey configuration.
@@ -562,7 +647,7 @@ final class HotkeyService: ObservableObject {
     // MARK: - Display Name
 
     nonisolated static func displayName(for hotkey: UnifiedHotkey) -> String {
-        if hotkey.isFn { return "Fn" }
+        if hotkey.isFn { return hotkey.isDoubleTap ? "Fn x2" : "Fn" }
 
         var parts: [String] = []
 
@@ -577,7 +662,8 @@ final class HotkeyService: ObservableObject {
             parts.append(keyName(for: hotkey.keyCode))
         }
 
-        return parts.joined()
+        let baseName = parts.joined()
+        return hotkey.isDoubleTap ? "\(baseName) x2" : baseName
     }
 
     nonisolated static func keyName(for keyCode: UInt16) -> String {

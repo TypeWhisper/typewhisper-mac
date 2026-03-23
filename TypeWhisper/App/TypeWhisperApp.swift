@@ -33,6 +33,12 @@ struct TypeWhisperApp: App {
         }
         .windowResizability(.contentMinSize)
         .defaultSize(width: 900, height: 500)
+
+        Window(String(localized: "Error Log"), id: "errors") {
+            ErrorLogView()
+        }
+        .windowResizability(.contentMinSize)
+        .defaultSize(width: 500, height: 400)
     }
 
     private var settingsScene: some Scene {
@@ -213,6 +219,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard let id = window.identifier?.rawValue else { return false }
         return id.localizedCaseInsensitiveContains("settings")
             || id.localizedCaseInsensitiveContains("history")
+            || id.localizedCaseInsensitiveContains("errors")
     }
 
     @MainActor private var hasVisibleManagedWindow: Bool {

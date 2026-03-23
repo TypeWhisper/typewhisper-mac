@@ -59,6 +59,7 @@ struct NotchIndicatorView: View {
                 IndicatorActionFeedback(
                     message: viewModel.actionFeedbackMessage ?? "",
                     icon: viewModel.actionFeedbackIcon,
+                    isError: viewModel.actionFeedbackIsError,
                     contentPadding: contentPadding
                 )
             }

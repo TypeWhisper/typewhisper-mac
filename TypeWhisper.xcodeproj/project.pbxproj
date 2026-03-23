@@ -207,8 +207,11 @@
 		AA00000000000000000252 /* AudioRecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000240 /* AudioRecorderView.swift */; };
 		AA00000000000000000253 /* WatchFolderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000241 /* WatchFolderService.swift */; };
 		AA00000000000000000254 /* WatchFolderViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000242 /* WatchFolderViewModel.swift */; };
-		AA00000000000000000255 /* AccessibilityAnnouncementService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000243 /* AccessibilityAnnouncementService.swift */; };
-		AA00000000000000000256 /* SpeechFeedbackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000244 /* SpeechFeedbackService.swift */; };
+		AA00000000000000000255 /* ErrorLogEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000243 /* ErrorLogEntry.swift */; };
+		AA00000000000000000256 /* ErrorLogService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000244 /* ErrorLogService.swift */; };
+		AA00000000000000000257 /* ErrorLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000245 /* ErrorLogView.swift */; };
+		AA00000000000000000258 /* AccessibilityAnnouncementService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000246 /* AccessibilityAnnouncementService.swift */; };
+		AA00000000000000000259 /* SpeechFeedbackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000247 /* SpeechFeedbackService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -409,8 +412,11 @@
 		BB00000000000000000240 /* AudioRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderView.swift; sourceTree = "<group>"; };
 		BB00000000000000000241 /* WatchFolderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchFolderService.swift; sourceTree = "<group>"; };
 		BB00000000000000000242 /* WatchFolderViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchFolderViewModel.swift; sourceTree = "<group>"; };
-		BB00000000000000000243 /* AccessibilityAnnouncementService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityAnnouncementService.swift; sourceTree = "<group>"; };
-		BB00000000000000000244 /* SpeechFeedbackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechFeedbackService.swift; sourceTree = "<group>"; };
+		BB00000000000000000243 /* ErrorLogEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorLogEntry.swift; sourceTree = "<group>"; };
+		BB00000000000000000244 /* ErrorLogService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorLogService.swift; sourceTree = "<group>"; };
+		BB00000000000000000245 /* ErrorLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorLogView.swift; sourceTree = "<group>"; };
+		BB00000000000000000246 /* AccessibilityAnnouncementService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityAnnouncementService.swift; sourceTree = "<group>"; };
+		BB00000000000000000247 /* SpeechFeedbackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechFeedbackService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -813,6 +819,7 @@
 				BB00000000000000000078 /* TermPack.swift */,
 				BB00000000000000000080 /* Snippet.swift */,
 				BB00000000000000000110 /* PromptAction.swift */,
+				BB00000000000000000243 /* ErrorLogEntry.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -852,8 +859,9 @@
 				BB00000000000000000228 /* MemoryService.swift */,
 				BB00000000000000000238 /* AudioRecorderService.swift */,
 				BB00000000000000000241 /* WatchFolderService.swift */,
-				BB00000000000000000243 /* AccessibilityAnnouncementService.swift */,
-				BB00000000000000000244 /* SpeechFeedbackService.swift */,
+				BB00000000000000000244 /* ErrorLogService.swift */,
+				BB00000000000000000246 /* AccessibilityAnnouncementService.swift */,
+				BB00000000000000000247 /* SpeechFeedbackService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -918,6 +926,7 @@
 				BB00000000000000000127 /* PluginSettingsView.swift */,
 				BB00000000000000000207 /* IndicatorPreviewView.swift */,
 				BB00000000000000000240 /* AudioRecorderView.swift */,
+				BB00000000000000000245 /* ErrorLogView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -2106,8 +2115,11 @@
 				AA00000000000000000252 /* AudioRecorderView.swift in Sources */,
 				AA00000000000000000253 /* WatchFolderService.swift in Sources */,
 				AA00000000000000000254 /* WatchFolderViewModel.swift in Sources */,
-				AA00000000000000000255 /* AccessibilityAnnouncementService.swift in Sources */,
-				AA00000000000000000256 /* SpeechFeedbackService.swift in Sources */,
+				AA00000000000000000255 /* ErrorLogEntry.swift in Sources */,
+				AA00000000000000000256 /* ErrorLogService.swift in Sources */,
+				AA00000000000000000257 /* ErrorLogView.swift in Sources */,
+				AA00000000000000000258 /* AccessibilityAnnouncementService.swift in Sources */,
+				AA00000000000000000259 /* SpeechFeedbackService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

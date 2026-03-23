@@ -98,6 +98,13 @@ struct MenuBarView: View {
         }
 
         Button {
+            openWindow(id: "errors")
+            activateAppWindow("errors")
+        } label: {
+            Label(String(localized: "Error Log"), systemImage: "exclamationmark.triangle")
+        }
+
+        Button {
             openWindow(id: "settings")
             activateAppWindow("settings")
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {

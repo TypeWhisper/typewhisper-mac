@@ -216,18 +216,19 @@ struct IndicatorExpandableText: View {
 struct IndicatorActionFeedback: View {
     let message: String
     let icon: String?
+    let isError: Bool
     let contentPadding: CGFloat
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: icon ?? "checkmark.circle.fill")
-                .foregroundStyle(.green)
+            Image(systemName: icon ?? (isError ? "xmark.circle.fill" : "checkmark.circle.fill"))
+                .foregroundStyle(isError ? .red : .green)
                 .font(.system(size: 16))
                 .accessibilityHidden(true)
             Text(message)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.white.opacity(0.9))
-                .lineLimit(1)
+                .lineLimit(2)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
