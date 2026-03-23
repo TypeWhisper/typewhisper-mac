@@ -28,6 +28,7 @@ final class ServiceContainer: ObservableObject {
     let memoryService: MemoryService
     let audioRecorderService: AudioRecorderService
     let watchFolderService: WatchFolderService
+    let errorLogService: ErrorLogService
 
     // HTTP API
     let httpServer: HTTPServer
@@ -79,6 +80,7 @@ final class ServiceContainer: ObservableObject {
         audioRecorderService = AudioRecorderService()
         promptProcessingService.memoryService = memoryService
         watchFolderService = WatchFolderService(audioFileService: audioFileService, modelManagerService: modelManagerService)
+        errorLogService = ErrorLogService()
 
         // ViewModels (created before HTTP API so DictationViewModel is available)
         fileTranscriptionViewModel = FileTranscriptionViewModel(
@@ -101,7 +103,8 @@ final class ServiceContainer: ObservableObject {
             soundService: soundService,
             audioDeviceService: audioDeviceService,
             promptActionService: promptActionService,
-            promptProcessingService: promptProcessingService
+            promptProcessingService: promptProcessingService,
+            errorLogService: errorLogService
         )
 
 

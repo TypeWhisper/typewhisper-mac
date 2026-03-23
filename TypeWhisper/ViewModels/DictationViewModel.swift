@@ -51,6 +51,7 @@ final class DictationViewModel: ObservableObject {
     @Published var activeProfileName: String?
     @Published var actionFeedbackMessage: String?
     @Published var actionFeedbackIcon: String?
+    @Published var actionFeedbackIsError: Bool = false
     @Published var activeAppIcon: NSImage?
     private var actionDisplayDuration: TimeInterval = 3.5
 
@@ -93,6 +94,7 @@ final class DictationViewModel: ObservableObject {
     private let audioDeviceService: AudioDeviceService
     private let promptActionService: PromptActionService
     private let promptProcessingService: PromptProcessingService
+    private let errorLogService: ErrorLogService
     private let postProcessingPipeline: PostProcessingPipeline
     private var matchedProfile: Profile?
     private var forcedProfileId: UUID?
@@ -125,7 +127,8 @@ final class DictationViewModel: ObservableObject {
         soundService: SoundService,
         audioDeviceService: AudioDeviceService,
         promptActionService: PromptActionService,
-        promptProcessingService: PromptProcessingService
+        promptProcessingService: PromptProcessingService,
+        errorLogService: ErrorLogService
     ) {
         self.audioRecordingService = audioRecordingService
         self.textInsertionService = textInsertionService
@@ -142,6 +145,7 @@ final class DictationViewModel: ObservableObject {
         self.audioDeviceService = audioDeviceService
         self.promptActionService = promptActionService
         self.promptProcessingService = promptProcessingService
+        self.errorLogService = errorLogService
         self.postProcessingPipeline = PostProcessingPipeline(
             snippetService: snippetService,
             dictionaryService: dictionaryService
@@ -196,11 +200,11 @@ final class DictationViewModel: ObservableObject {
             self?.isStreaming = streaming
         }
 
-        promptPaletteHandler.onShowNotchFeedback = { [weak self] message, icon, duration, isError in
-            self?.showNotchFeedback(message: message, icon: icon, duration: duration, isError: isError)
+        promptPaletteHandler.onShowNotchFeedback = { [weak self] message, icon, duration, isError, category in
+            self?.showNotchFeedback(message: message, icon: icon, duration: duration, isError: isError, errorCategory: category ?? "general")
         }
         promptPaletteHandler.onShowError = { [weak self] message in
-            self?.showError(message)
+            self?.showError(message, category: "prompt")
         }
         promptPaletteHandler.executeActionPlugin = { [weak self] plugin, pluginId, text, activeApp, originalText, language in
             try await self?.executeActionPlugin(plugin, pluginId: pluginId, text: text, activeApp: activeApp, language: language, originalText: originalText)
@@ -305,7 +309,8 @@ final class DictationViewModel: ObservableObject {
                     message: String(localized: "Microphone disconnected"),
                     icon: "mic.slash",
                     duration: 3.0,
-                    isError: true
+                    isError: true,
+                    errorCategory: "recording"
                 )
             }
             .store(in: &cancellables)
@@ -337,12 +342,12 @@ final class DictationViewModel: ObservableObject {
         modelManager.cancelAutoUnloadTimer()
 
         guard canDictate else {
-            showError("No model loaded. Please download a model first.")
+            showError("No model loaded. Please download a model first.", category: "recording")
             return
         }
 
         guard audioRecordingService.hasMicrophonePermission else {
-            showError("Microphone permission required.")
+            showError("Microphone permission required.", category: "recording")
             return
         }
 
@@ -441,8 +446,7 @@ final class DictationViewModel: ObservableObject {
             )))
         } catch {
             audioDuckingService.restoreAudio()
-            soundService.play(.error, enabled: soundFeedbackEnabled)
-            showError(error.localizedDescription)
+            showError(error.localizedDescription, category: "recording")
             hotkeyService.cancelDictation()
         }
     }
@@ -659,8 +663,7 @@ final class DictationViewModel: ObservableObject {
                     appName: capturedActiveApp?.name,
                     bundleIdentifier: capturedActiveApp?.bundleId
                 )))
-                soundService.play(.error, enabled: soundFeedbackEnabled)
-                showError(error.localizedDescription)
+                showError(error.localizedDescription, category: "transcription")
                 matchedProfile = nil
                 forcedProfileId = nil
                 capturedActiveApp = nil
@@ -700,6 +703,7 @@ final class DictationViewModel: ObservableObject {
         activeProfileName = nil
         actionFeedbackMessage = nil
         actionFeedbackIcon = nil
+        actionFeedbackIsError = false
         actionDisplayDuration = 3.5
     }
 
@@ -801,11 +805,17 @@ final class DictationViewModel: ObservableObject {
         promptPaletteHandler.triggerSelection(currentState: state, soundFeedbackEnabled: soundFeedbackEnabled)
     }
 
-    private func showNotchFeedback(message: String, icon: String, duration: TimeInterval = 2.5, isError: Bool = false) {
+    private func showNotchFeedback(message: String, icon: String, duration: TimeInterval = 2.5, isError: Bool = false, errorCategory: String = "general") {
         actionFeedbackMessage = message
         actionFeedbackIcon = icon
+        actionFeedbackIsError = isError
         actionDisplayDuration = duration
-        state = isError ? .error(message) : .inserting
+        state = .inserting
+
+        if isError {
+            errorLogService.addEntry(message: message, category: errorCategory)
+        }
+
         insertingResetTask?.cancel()
         insertingResetTask = Task {
             try? await Task.sleep(for: .seconds(duration))
@@ -814,15 +824,9 @@ final class DictationViewModel: ObservableObject {
         }
     }
 
-    private func showError(_ message: String) {
-        state = .error(message)
-        errorResetTask?.cancel()
-        errorResetTask = Task {
-            try? await Task.sleep(for: .seconds(3))
-            if case .error = state {
-                state = .idle
-            }
-        }
+    private func showError(_ message: String, category: String = "general") {
+        soundService.play(.error, enabled: soundFeedbackEnabled)
+        showNotchFeedback(message: message, icon: "xmark.circle.fill", duration: 3.0, isError: true, errorCategory: category)
     }
 
     private func startRecordingTimer() {

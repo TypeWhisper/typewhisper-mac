@@ -25,7 +25,7 @@ final class PromptPaletteHandler {
     private let promptProcessingService: PromptProcessingService
     private let soundService: SoundService
 
-    var onShowNotchFeedback: ((String, String, TimeInterval, Bool) -> Void)?
+    var onShowNotchFeedback: ((String, String, TimeInterval, Bool, String?) -> Void)?
     var onShowError: ((String) -> Void)?
     var executeActionPlugin: ((any ActionPlugin, String, String,
         (name: String?, bundleId: String?, url: String?), String?, String?) async throws -> Void)?
@@ -143,7 +143,7 @@ final class PromptPaletteHandler {
         guard let ctx = paletteContext else { return }
         paletteContext = nil
 
-        onShowNotchFeedback?(action.name + "...", "ellipsis.circle", 30, false)
+        onShowNotchFeedback?(action.name + "...", "ellipsis.circle", 30, false, nil)
 
         Task { [weak self] in
             guard let self else { return }
@@ -173,7 +173,8 @@ final class PromptPaletteHandler {
                         feedback.0 ?? "Done",
                         feedback.1 ?? "checkmark.circle.fill",
                         feedback.2,
-                        false
+                        false,
+                        nil
                     )
                     return
                 }
@@ -199,12 +200,13 @@ final class PromptPaletteHandler {
                     inserted ? String(localized: "Text replaced") : String(localized: "Copied to clipboard"),
                     inserted ? "checkmark.circle.fill" : "doc.on.clipboard.fill",
                     2.5,
-                    false
+                    false,
+                    nil
                 )
             } catch {
                 guard !Task.isCancelled else { return }
                 soundService.play(.error, enabled: soundFeedbackEnabled)
-                onShowNotchFeedback?(error.localizedDescription, "xmark.circle.fill", 2.5, true)
+                onShowNotchFeedback?(error.localizedDescription, "xmark.circle.fill", 2.5, true, "prompt")
             }
         }
     }
