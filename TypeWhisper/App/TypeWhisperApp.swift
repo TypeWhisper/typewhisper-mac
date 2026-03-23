@@ -132,12 +132,12 @@ final class SettingsWindowOpener {
 // MARK: - App Delegate
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     private var indicatorCoordinator: IndicatorCoordinator?
     private var translationHostWindow: NSWindow?
     private var menuBarIconObserver: NSKeyValueObservation?
     #if !APPSTORE
-    private lazy var updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+    private lazy var updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil)
 
     var updateChecker: UpdateChecker {
         .sparkle(updaterController.updater)
@@ -293,4 +293,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
     }
+
+    #if !APPSTORE
+    nonisolated func feedURLString(for updater: SPUUpdater) -> String? {
+        guard AppConstants.releaseChannel == .prerelease else {
+            return nil
+        }
+        return AppConstants.prereleaseAppcastURLString
+    }
+    #endif
 }

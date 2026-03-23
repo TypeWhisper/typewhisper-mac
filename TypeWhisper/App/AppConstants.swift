@@ -1,6 +1,11 @@
 import Foundation
 
 enum AppConstants {
+    enum ReleaseChannel: String {
+        case stable
+        case prerelease
+    }
+
     nonisolated(unsafe) static var testAppSupportDirectoryOverride: URL?
 
     static let appSupportDirectoryName: String = {
@@ -35,6 +40,14 @@ enum AppConstants {
 
     static let appVersion: String = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
     static let buildVersion: String = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0"
+    static let prereleaseAppcastURLString = "https://typewhisper.github.io/typewhisper-mac/prerelease-appcast.xml"
+    static let releaseChannel: ReleaseChannel = {
+        guard let rawValue = Bundle.main.infoDictionary?["TypeWhisperReleaseChannel"] as? String,
+              let channel = ReleaseChannel(rawValue: rawValue) else {
+            return .stable
+        }
+        return channel
+    }()
 
     static let isRunningTests: Bool = {
         let environment = ProcessInfo.processInfo.environment

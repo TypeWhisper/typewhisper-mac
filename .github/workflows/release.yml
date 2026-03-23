@@ -158,6 +158,16 @@ jobs:
       - name: Check First-Party Warnings
         run: bash scripts/check_first_party_warnings.sh build.log
 
+      - name: Configure Release Channel
+        run: |
+          APP_INFO_PLIST="build/Build/Products/Release/TypeWhisper.app/Contents/Info.plist"
+
+          if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
+            /usr/libexec/PlistBuddy -c "Set :TypeWhisperReleaseChannel prerelease" "$APP_INFO_PLIST"
+          else
+            /usr/libexec/PlistBuddy -c "Set :TypeWhisperReleaseChannel stable" "$APP_INFO_PLIST"
+          fi
+
       - name: Sign App (Developer ID)
         env:
           MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
@@ -283,6 +293,11 @@ jobs:
           TAG="${{ github.ref_name }}"
           ASSET_DMG="build/Build/Products/Release/TypeWhisper-${TAG}.dmg"
           ASSET_ZIP="build/Build/Products/Release/TypeWhisper-${TAG}.zip"
+          IS_PRERELEASE=false
+
+          if [[ "$TAG" == *-* ]]; then
+            IS_PRERELEASE=true
+          fi
 
           # Check if a draft release already exists (manual feature release notes)
           EXISTING_DRAFT=$(gh release view "$TAG" --json isDraft --jq '.isDraft' 2>/dev/null || echo "")
@@ -290,10 +305,17 @@ jobs:
           if [ "$EXISTING_DRAFT" = "true" ]; then
             echo "Draft release found for $TAG. Uploading assets and publishing..."
             gh release upload "$TAG" "$ASSET_DMG" "$ASSET_ZIP" --clobber
-            gh release edit "$TAG" --draft=false
+            if [ "$IS_PRERELEASE" = "true" ]; then
+              gh release edit "$TAG" --draft=false --prerelease
+            else
+              gh release edit "$TAG" --draft=false
+            fi
           elif [ "$EXISTING_DRAFT" = "false" ]; then
             echo "Published release found for $TAG. Uploading assets..."
             gh release upload "$TAG" "$ASSET_DMG" "$ASSET_ZIP" --clobber
+            if [ "$IS_PRERELEASE" = "true" ]; then
+              gh release edit "$TAG" --prerelease
+            fi
           else
             echo "No existing release. Generating notes from commits..."
 
@@ -352,14 +374,22 @@ jobs:
               NOTES="Maintenance release ${TAG}"
             fi
 
-            gh release create "$TAG" "$ASSET_DMG" "$ASSET_ZIP" \
-              --title "$TAG" \
-              --notes "$(printf '%b' "$NOTES")"
+            if [ "$IS_PRERELEASE" = "true" ]; then
+              gh release create "$TAG" "$ASSET_DMG" "$ASSET_ZIP" \
+                --title "$TAG" \
+                --notes "$(printf '%b' "$NOTES")" \
+                --prerelease
+            else
+              gh release create "$TAG" "$ASSET_DMG" "$ASSET_ZIP" \
+                --title "$TAG" \
+                --notes "$(printf '%b' "$NOTES")"
+            fi
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Generate and Deploy Appcast
+      - name: Generate and Deploy Stable Appcast
+        if: "!contains(github.ref_name, '-')"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -418,7 +448,49 @@ jobs:
           git commit -m "Update appcast for ${TAG}" || echo "No changes to commit"
           git push origin gh-pages
 
+      - name: Generate and Deploy Prerelease Appcast
+        if: contains(github.ref_name, '-')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          PUB_DATE=$(date -u +"%a, %d %b %Y %H:%M:%S %z")
+
+          cat > /tmp/prerelease-appcast.xml <<APPCAST_EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+            <channel>
+              <title>TypeWhisper Prerelease Updates</title>
+              <language>en</language>
+              <description>Prerelease builds are distributed via GitHub prereleases and installed manually.</description>
+              <lastBuildDate>${PUB_DATE}</lastBuildDate>
+            </channel>
+          </rss>
+          APPCAST_EOF
+
+          cd "$GITHUB_WORKSPACE"
+          git fetch origin gh-pages || true
+
+          if git rev-parse --verify origin/gh-pages >/dev/null 2>&1; then
+            git worktree add -B gh-pages /tmp/gh-pages origin/gh-pages
+          else
+            git worktree add --detach /tmp/gh-pages
+            cd /tmp/gh-pages
+            git checkout --orphan gh-pages
+            git rm -rf . 2>/dev/null || true
+            cd "$GITHUB_WORKSPACE"
+          fi
+
+          cp /tmp/prerelease-appcast.xml /tmp/gh-pages/prerelease-appcast.xml
+          cd /tmp/gh-pages
+          git add prerelease-appcast.xml
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "Update prerelease appcast for ${TAG}" || echo "No changes to commit"
+          git push origin gh-pages
+
   trigger-website:
+    if: "!contains(github.ref_name, '-')"
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -430,6 +502,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.WEBSITE_DEPLOY_TOKEN }}
 
   update-homebrew:
+    if: "!contains(github.ref_name, '-')"
     needs: build
     runs-on: ubuntu-latest
     steps:

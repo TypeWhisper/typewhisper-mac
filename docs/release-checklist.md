@@ -10,6 +10,7 @@
 
 ## RC Smoke-Checks
 
+- `1.0.0-rc*` nur als GitHub-Prerelease fuer manuellen Download verteilen; installierte RC-Builds duerfen nicht auf den Stable-Sparkle-Feed zeigen
 - Fresh install
 - Permission recovery
 - Erste Dictation
@@ -26,4 +27,5 @@
 - `1.0.0-rc1` mehrere Tage auf echten Maschinen beobachten
 - Keine offenen P0/P1-Bugs im Kernworkflow
 - Release Notes aktualisieren
-- DMG, Appcast und Homebrew-Update pruefen
+- RC-Tags duerfen Sparkle-Appcast und Homebrew nicht aktualisieren
+- DMG, Appcast und Homebrew-Update erst am finalen `1.0.0` pruefen

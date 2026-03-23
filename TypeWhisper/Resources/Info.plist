@@ -38,6 +38,8 @@
 	<string>https://typewhisper.github.io/typewhisper-mac/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>OdAMiN136Ckglxnq4FeLagPjcrZiASYGaeUWBkK6tuc=</string>
+	<key>TypeWhisperReleaseChannel</key>
+	<string>stable</string>
 	<key>AppGroupIdentifier</key>
 	<string>$(APP_GROUP_ID)</string>
 </dict>
