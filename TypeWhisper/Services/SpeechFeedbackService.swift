@@ -67,7 +67,7 @@ class SpeechFeedbackService {
         stopSpeaking()
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/say")
-        process.arguments = [text]
+        process.arguments = ["--", text]
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         process.terminationHandler = { [weak self] _ in
