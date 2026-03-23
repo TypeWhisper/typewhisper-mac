@@ -125,6 +125,14 @@ class PromptActionsViewModel: ObservableObject {
         promptActionService.toggleAction(action)
     }
 
+    var availablePresets: [PromptAction] {
+        promptActionService.availablePresets
+    }
+
+    func importPreset(_ preset: PromptAction) {
+        promptActionService.addPreset(preset)
+    }
+
     func loadPresets() {
         promptActionService.seedPresetsIfNeeded()
     }

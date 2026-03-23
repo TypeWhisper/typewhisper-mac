@@ -3,21 +3,203 @@ import UniformTypeIdentifiers
 
 struct FileTranscriptionView: View {
     @ObservedObject private var viewModel = FileTranscriptionViewModel.shared
+    @ObservedObject private var watchFolder = WatchFolderViewModel.shared
 
     @State private var isDragTargeted = false
     @State private var showFilePicker = false
     @State private var expandedFileId: UUID?
 
     var body: some View {
-        VStack(spacing: 16) {
-            if viewModel.files.isEmpty {
-                dropZone
-            } else {
-                fileList
-                controls
+        ScrollView {
+            VStack(spacing: 16) {
+                if viewModel.files.isEmpty {
+                    dropZone
+                } else {
+                    fileList
+                    controls
+                }
             }
+            .padding()
+
+            Divider()
+                .padding(.horizontal)
+
+            // MARK: - Watch Folder
+
+            Form {
+                Section(String(localized: "watchFolder.folders")) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(String(localized: "watchFolder.watchFolder"))
+                                .font(.body)
+                            if let path = watchFolder.watchFolderPath {
+                                Text(path)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            } else {
+                                Text(String(localized: "watchFolder.noFolder"))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Spacer()
+                        Button(String(localized: "watchFolder.selectFolder")) {
+                            watchFolder.selectWatchFolder()
+                        }
+                    }
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(String(localized: "watchFolder.outputFolder"))
+                                .font(.body)
+                            if let path = watchFolder.outputFolderPath {
+                                Text(path)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            } else {
+                                Text(String(localized: "watchFolder.outputFolder.sameAsWatch"))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Spacer()
+                        if watchFolder.outputFolderPath != nil {
+                            Button {
+                                watchFolder.clearOutputFolder()
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        Button(String(localized: "watchFolder.selectFolder")) {
+                            watchFolder.selectOutputFolder()
+                        }
+                    }
+                }
+
+                Section(String(localized: "fileTranscription.transcription")) {
+                    Picker(String(localized: "watchFolder.engine"), selection: $watchFolder.selectedEngine) {
+                        Text(String(localized: "watchFolder.engine.default")).tag(nil as String?)
+                        Divider()
+                        ForEach(watchFolder.availableEngines, id: \.providerId) { engine in
+                            HStack {
+                                Text(engine.providerDisplayName)
+                                if !engine.isConfigured {
+                                    Text("(\(String(localized: "not ready")))")
+                                        .foregroundStyle(.secondary)
+                                }
+                            }.tag(engine.providerId as String?)
+                        }
+                    }
+
+                    if let engine = watchFolder.resolvedEngine {
+                        let models = engine.transcriptionModels
+                        if models.count > 1 {
+                            Picker(String(localized: "Model"), selection: $watchFolder.selectedModel) {
+                                Text(String(localized: "watchFolder.model.default")).tag(nil as String?)
+                                Divider()
+                                ForEach(models, id: \.id) { model in
+                                    Text(model.displayName).tag(model.id as String?)
+                                }
+                            }
+                        }
+                    }
+
+                    Picker(String(localized: "watchFolder.language"), selection: Binding(
+                        get: { watchFolder.language ?? "__auto__" },
+                        set: { watchFolder.language = $0 == "__auto__" ? nil : $0 }
+                    )) {
+                        Text(String(localized: "watchFolder.language.auto")).tag("__auto__")
+                        let languages = watchFolder.selectedEngineSupportedLanguages
+                        if !languages.isEmpty {
+                            Divider()
+                            ForEach(languages, id: \.self) { code in
+                                Text(Locale.current.localizedString(forLanguageCode: code) ?? code)
+                                    .tag(code)
+                            }
+                        }
+                    }
+                }
+
+                Section(String(localized: "watchFolder.settings")) {
+                    Picker(String(localized: "watchFolder.outputFormat"), selection: $watchFolder.outputFormat) {
+                        Text("Markdown (.md)").tag("md")
+                        Text(String(localized: "watchFolder.plainText")).tag("txt")
+                    }
+
+                    Toggle(String(localized: "watchFolder.deleteSource"), isOn: $watchFolder.deleteSourceFiles)
+
+                    Toggle(String(localized: "watchFolder.autoStart"), isOn: $watchFolder.autoStartOnLaunch)
+                }
+
+                Section {
+                    HStack {
+                        Button {
+                            watchFolder.toggleWatching()
+                        } label: {
+                            Label(
+                                watchFolder.watchFolderService.isWatching
+                                    ? String(localized: "watchFolder.stopWatching")
+                                    : String(localized: "watchFolder.startWatching"),
+                                systemImage: watchFolder.watchFolderService.isWatching ? "stop.fill" : "play.fill"
+                            )
+                        }
+                        .disabled(watchFolder.watchFolderPath == nil)
+
+                        if let processing = watchFolder.watchFolderService.currentlyProcessing {
+                            Spacer()
+                            Label(processing, systemImage: "arrow.trianglehead.2.counterclockwise")
+                                .foregroundStyle(.secondary)
+                                .font(.caption)
+                        }
+                    }
+
+                    Text(String(localized: "watchFolder.description"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section(String(localized: "watchFolder.history")) {
+                    if watchFolder.watchFolderService.processedFiles.isEmpty {
+                        Text(String(localized: "watchFolder.history.empty"))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(watchFolder.watchFolderService.processedFiles.prefix(20)) { item in
+                            HStack {
+                                Image(systemName: item.success ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                    .foregroundStyle(item.success ? .green : .red)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(item.fileName)
+                                        .lineLimit(1)
+                                    if let error = item.errorMessage {
+                                        Text(error)
+                                            .font(.caption)
+                                            .foregroundStyle(.red)
+                                            .lineLimit(1)
+                                    } else {
+                                        Text(item.date, style: .relative)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+
+                        if !watchFolder.watchFolderService.processedFiles.isEmpty {
+                            Button(String(localized: "watchFolder.history.clear"), role: .destructive) {
+                                watchFolder.watchFolderService.clearHistory()
+                            }
+                        }
+                    }
+                }
+            }
+            .formStyle(.grouped)
         }
-        .padding()
         .frame(minWidth: 500, minHeight: 400)
         .onDrop(of: [.fileURL], isTargeted: $isDragTargeted) { providers in
             handleDrop(providers)
@@ -84,14 +266,11 @@ struct FileTranscriptionView: View {
 
     @ViewBuilder
     private var fileList: some View {
-        ScrollView {
-            LazyVStack(spacing: 8) {
-                ForEach(viewModel.files) { item in
-                    fileRow(item)
-                }
+        LazyVStack(spacing: 8) {
+            ForEach(viewModel.files) { item in
+                fileRow(item)
             }
         }
-        .frame(maxHeight: .infinity)
     }
 
     @ViewBuilder

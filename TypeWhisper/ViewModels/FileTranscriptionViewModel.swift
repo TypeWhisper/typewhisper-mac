@@ -132,7 +132,9 @@ final class FileTranscriptionViewModel: ObservableObject {
             let result = try await modelManager.transcribe(
                 audioSamples: samples,
                 language: selectedLanguage,
-                task: selectedTask
+                task: selectedTask,
+                engineOverrideId: nil,
+                cloudModelOverride: nil
             )
 
             files[index].result = result

@@ -346,6 +346,12 @@ private struct ProfileEditorSheet: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
+                    Toggle(String(localized: "Inline Commands"), isOn: $viewModel.editorInlineCommandsEnabled)
+
+                    Text(String(localized: "Detect spoken instructions in your dictation (e.g., 'write this as an email') and apply them automatically via LLM."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
                     // Memory toggle
                     Toggle(String(localized: "Memory"), isOn: $viewModel.editorMemoryEnabled)
                     Text(String(localized: "When enabled, transcriptions from this profile are stored as memories and used as context for prompts."))

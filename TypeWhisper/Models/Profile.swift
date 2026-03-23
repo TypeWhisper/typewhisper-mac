@@ -18,6 +18,7 @@ final class Profile {
     var memoryEnabled: Bool = false
     var outputFormat: String?
     var hotkeyData: Data?
+    var inlineCommandsEnabled: Bool
     var createdAt: Date
     var updatedAt: Date
 
@@ -47,6 +48,7 @@ final class Profile {
         memoryEnabled: Bool = false,
         outputFormat: String? = nil,
         hotkeyData: Data? = nil,
+        inlineCommandsEnabled: Bool = false,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -65,6 +67,7 @@ final class Profile {
         self.memoryEnabled = memoryEnabled
         self.outputFormat = outputFormat
         self.hotkeyData = hotkeyData
+        self.inlineCommandsEnabled = inlineCommandsEnabled
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
