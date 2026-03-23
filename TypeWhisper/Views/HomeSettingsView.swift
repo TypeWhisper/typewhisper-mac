@@ -37,8 +37,12 @@ struct HomeSettingsView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    // Row 1: Stats grid
-                    statsGrid
+                    // Row 1: Stats grid or Getting Started
+                    if viewModel.hasAnyTranscriptions {
+                        statsGrid
+                    } else {
+                        gettingStartedCard
+                    }
 
                     // Row 2: Activity chart
                     chartSection
@@ -157,7 +161,9 @@ struct HomeSettingsView: View {
                 .font(.headline)
 
             if viewModel.chartData.isEmpty || viewModel.chartData.allSatisfy({ $0.wordCount == 0 }) {
-                Text(String(localized: "No activity in this period."))
+                Text(viewModel.hasAnyTranscriptions
+                    ? String(localized: "No activity in this period.")
+                    : String(localized: "Your activity will appear here after your first transcription."))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 200)
             } else {
@@ -241,7 +247,7 @@ struct HomeSettingsView: View {
                 .font(.headline)
 
             if viewModel.recentTranscriptions.isEmpty {
-                Text(String(localized: "No transcriptions yet."))
+                Text(String(localized: "Press \(primaryHotkeyLabel) in any app to get started."))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, minHeight: 60)
             } else {
@@ -286,6 +292,49 @@ struct HomeSettingsView: View {
             }
         }
         .padding()
+        .background(.quaternary.opacity(0.3))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    // MARK: - Getting Started Card
+
+    private var primaryHotkeyLabel: String {
+        if UserDefaults.standard.data(forKey: UserDefaultsKeys.hybridHotkey) != nil {
+            return dictation.hybridHotkeyLabel
+        }
+        if UserDefaults.standard.data(forKey: UserDefaultsKeys.pttHotkey) != nil {
+            return dictation.pttHotkeyLabel
+        }
+        if UserDefaults.standard.data(forKey: UserDefaultsKeys.toggleHotkey) != nil {
+            return dictation.toggleHotkeyLabel
+        }
+        return dictation.hybridHotkeyLabel
+    }
+
+    private var gettingStartedCard: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "mic.badge.plus")
+                .font(.system(size: 36))
+                .foregroundStyle(.blue)
+
+            Text(String(localized: "Ready to start dictating?"))
+                .font(.headline)
+
+            HStack(spacing: 6) {
+                Text(String(localized: "Press"))
+                    .foregroundStyle(.secondary)
+                Text(primaryHotkeyLabel)
+                    .font(.body.weight(.medium))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(.blue.opacity(0.1)))
+                Text(String(localized: "in any app to begin."))
+                    .foregroundStyle(.secondary)
+            }
+            .font(.callout)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
         .background(.quaternary.opacity(0.3))
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }

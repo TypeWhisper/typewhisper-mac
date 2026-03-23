@@ -54,14 +54,19 @@ final class TextDiffService {
                 let insertion = insertions[match.index]
                 usedInsertions.insert(match.index)
 
-                // Skip punctuation-only changes
-                let origClean = removal.element.filter { $0.isLetter || $0.isNumber }
-                let replClean = insertion.element.filter { $0.isLetter || $0.isNumber }
-                if origClean.lowercased() == replClean.lowercased() { continue }
+                // Strip surrounding punctuation from words
+                let origStripped = removal.element.trimmingCharacters(in: .punctuationCharacters)
+                let replStripped = insertion.element.trimmingCharacters(in: .punctuationCharacters)
+
+                // Skip empty or punctuation-only tokens
+                guard !origStripped.isEmpty, !replStripped.isEmpty else { continue }
+
+                // Skip if only punctuation or case changed
+                if origStripped.lowercased() == replStripped.lowercased() { continue }
 
                 suggestions.append(CorrectionSuggestion(
-                    original: removal.element,
-                    replacement: insertion.element
+                    original: origStripped,
+                    replacement: replStripped
                 ))
             }
         }

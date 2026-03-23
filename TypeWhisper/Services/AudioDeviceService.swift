@@ -218,13 +218,17 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         let status = AudioObjectGetPropertyDataSize(deviceID, &address, 0, nil, &size)
         guard status == noErr, size > 0 else { return 0 }
 
-        let bufferListPointer = UnsafeMutablePointer<AudioBufferList>.allocate(capacity: 1)
-        defer { bufferListPointer.deallocate() }
+        // Allocate based on actual size - AudioBufferList is variable-length
+        let rawPointer = UnsafeMutableRawPointer.allocate(
+            byteCount: Int(size),
+            alignment: MemoryLayout<AudioBufferList>.alignment
+        )
+        defer { rawPointer.deallocate() }
 
-        let getStatus = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, bufferListPointer)
+        let getStatus = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, rawPointer)
         guard getStatus == noErr else { return 0 }
 
-        let bufferList = UnsafeMutableAudioBufferListPointer(bufferListPointer)
+        let bufferList = UnsafeMutableAudioBufferListPointer(rawPointer.assumingMemoryBound(to: AudioBufferList.self))
         var channels = 0
         for buffer in bufferList {
             channels += Int(buffer.mNumberChannels)

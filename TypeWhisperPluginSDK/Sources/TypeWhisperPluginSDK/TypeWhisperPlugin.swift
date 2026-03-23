@@ -170,3 +170,178 @@ public protocol ActionPlugin: TypeWhisperPlugin {
     var actionIcon: String { get }
     func execute(input: String, context: ActionContext) async throws -> ActionResult
 }
+
+// MARK: - Memory Storage Plugin
+
+public enum MemoryType: String, Codable, Sendable, CaseIterable {
+    case fact
+    case preference
+    case pattern
+    case correction
+    case context
+    case instruction
+}
+
+public struct MemorySource: Codable, Sendable {
+    public let appName: String?
+    public let bundleIdentifier: String?
+    public let profileName: String?
+    public let timestamp: Date
+
+    public init(appName: String? = nil, bundleIdentifier: String? = nil,
+                profileName: String? = nil, timestamp: Date = Date()) {
+        self.appName = appName
+        self.bundleIdentifier = bundleIdentifier
+        self.profileName = profileName
+        self.timestamp = timestamp
+    }
+}
+
+public struct MemoryEntry: Codable, Sendable, Identifiable {
+    public let id: UUID
+    public var content: String
+    public let type: MemoryType
+    public let source: MemorySource
+    public let metadata: [String: String]
+    public let createdAt: Date
+    public var lastAccessedAt: Date
+    public var accessCount: Int
+    public var confidence: Double
+
+    public init(
+        id: UUID = UUID(),
+        content: String,
+        type: MemoryType,
+        source: MemorySource = MemorySource(),
+        metadata: [String: String] = [:],
+        createdAt: Date = Date(),
+        lastAccessedAt: Date = Date(),
+        accessCount: Int = 0,
+        confidence: Double = 1.0
+    ) {
+        self.id = id
+        self.content = content
+        self.type = type
+        self.source = source
+        self.metadata = metadata
+        self.createdAt = createdAt
+        self.lastAccessedAt = lastAccessedAt
+        self.accessCount = accessCount
+        self.confidence = confidence
+    }
+}
+
+// MARK: - Memory JSON Coding
+
+public extension JSONEncoder {
+    static var memoryEncoder: JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }
+}
+
+public extension JSONDecoder {
+    static var memoryDecoder: JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }
+}
+
+// MARK: - Memory Row View (shared across plugins)
+
+public struct MemoryRowView: View {
+    public let memory: MemoryEntry
+    public let onDelete: () -> Void
+    public let onSave: (String) -> Void
+    @State private var isEditing = false
+    @State private var editText = ""
+
+    public init(memory: MemoryEntry, onDelete: @escaping () -> Void, onSave: @escaping (String) -> Void) {
+        self.memory = memory
+        self.onDelete = onDelete
+        self.onSave = onSave
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if isEditing {
+                TextField("", text: $editText)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { saveEdit() }
+                HStack {
+                    Button(String(localized: "Cancel")) { isEditing = false }
+                        .buttonStyle(.borderless).font(.caption)
+                    Button(String(localized: "Save")) { saveEdit() }
+                        .buttonStyle(.borderless).font(.caption)
+                }
+            } else {
+                Text(memory.content).font(.body)
+            }
+
+            HStack(spacing: 8) {
+                Text(memory.type.rawValue)
+                    .font(.caption)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(.secondary.opacity(0.15))
+                    .clipShape(Capsule())
+                if let app = memory.source.appName {
+                    Text(app).font(.caption).foregroundStyle(.secondary)
+                }
+                Text(memory.createdAt, style: .relative)
+                    .font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Button { editText = memory.content; isEditing = true } label: {
+                    Image(systemName: "pencil").font(.caption)
+                }.buttonStyle(.borderless)
+                Button(role: .destructive, action: onDelete) {
+                    Image(systemName: "trash").font(.caption)
+                }.buttonStyle(.borderless)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func saveEdit() {
+        let trimmed = editText.trimmingCharacters(in: .whitespaces)
+        if !trimmed.isEmpty { onSave(trimmed) }
+        isEditing = false
+    }
+}
+
+public struct MemoryQuery: Sendable {
+    public let text: String
+    public let types: [MemoryType]?
+    public let maxResults: Int
+    public let minConfidence: Double
+
+    public init(text: String, types: [MemoryType]? = nil, maxResults: Int = 10, minConfidence: Double = 0.3) {
+        self.text = text
+        self.types = types
+        self.maxResults = maxResults
+        self.minConfidence = minConfidence
+    }
+}
+
+public struct MemorySearchResult: Sendable {
+    public let entry: MemoryEntry
+    public let relevanceScore: Double
+
+    public init(entry: MemoryEntry, relevanceScore: Double) {
+        self.entry = entry
+        self.relevanceScore = relevanceScore
+    }
+}
+
+public protocol MemoryStoragePlugin: TypeWhisperPlugin {
+    var storageName: String { get }
+    var isReady: Bool { get }
+    var memoryCount: Int { get }
+    func store(_ entries: [MemoryEntry]) async throws
+    func search(_ query: MemoryQuery) async throws -> [MemorySearchResult]
+    func delete(_ ids: [UUID]) async throws
+    func update(_ entry: MemoryEntry) async throws
+    func listAll(offset: Int, limit: Int) async throws -> [MemoryEntry]
+    func deleteAll() async throws
+}

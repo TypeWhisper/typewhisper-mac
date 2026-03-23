@@ -11,6 +11,16 @@
         }
       }
     },
+    "New text" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neuer Text"
+          }
+        }
+      }
+    },
     "Font size" : {
       "localizations" : {
         "de" : {
@@ -21,12 +31,52 @@
         }
       }
     },
+    "Press a key combination..." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tastenkombination drücken..."
+          }
+        }
+      }
+    },
+    "Record Shortcut" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnehmen"
+          }
+        }
+      }
+    },
+    "Show or hide the transcript window with a keyboard shortcut." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transkript-Fenster mit einem Tastenkürzel ein- oder ausblenden."
+          }
+        }
+      }
+    },
     "Show the transcript window automatically when recording starts." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Transkript-Fenster automatisch bei Aufnahmestart anzeigen."
+          }
+        }
+      }
+    },
+    "Toggle Shortcut" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tastenkürzel"
           }
         }
       }

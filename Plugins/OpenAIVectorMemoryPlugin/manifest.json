@@ -1,0 +1,15 @@
+{
+    "id": "com.typewhisper.memory.openai-vector",
+    "name": "OpenAI Vector Memory",
+    "version": "1.0.0",
+    "minHostVersion": "0.14.0",
+    "minOSVersion": "14.0",
+    "author": "TypeWhisper",
+    "description": "Store and search memories using the OpenAI Vector Store API with semantic embeddings.",
+    "descriptions": {
+        "de": "Speichert und durchsucht Erinnerungen ueber die OpenAI Vector Store API mit semantischen Embeddings."
+    },
+    "category": "memory",
+    "iconSystemName": "brain",
+    "principalClass": "OpenAIVectorMemoryPlugin"
+}

@@ -1,4 +1,5 @@
 import SwiftUI
+import TypeWhisperPluginSDK
 
 struct PluginSettingsView: View {
     @ObservedObject private var pluginManager = PluginManager.shared
@@ -7,6 +8,8 @@ struct PluginSettingsView: View {
     @State private var showUninstallAlert = false
     @State private var pluginToUninstall: LoadedPlugin?
     @State private var installFromFileError: String?
+    @State private var hostingFilter: Int = 0 // 0=All, 1=Local, 2=Cloud
+    @State private var expandedCategories: Set<String> = Set(PluginCategory.allCases.map(\.rawValue))
 
     var body: some View {
         VStack(spacing: 0) {
@@ -51,11 +54,22 @@ struct PluginSettingsView: View {
 
     // MARK: - Installed Tab
 
-    private var sortedPlugins: [LoadedPlugin] {
-        pluginManager.loadedPlugins.sorted { a, b in
-            if a.isBundled != b.isBundled { return a.isBundled }
-            return a.manifest.name.localizedCompare(b.manifest.name) == .orderedAscending
+    private func categoryForPlugin(_ plugin: LoadedPlugin) -> PluginCategory {
+        if let regPlugin = registryService.registry.first(where: { $0.id == plugin.id }) {
+            return PluginCategory(rawValue: regPlugin.category) ?? .utility
         }
+        if plugin.instance is TranscriptionEnginePlugin { return .transcription }
+        if plugin.instance is LLMProviderPlugin { return .llm }
+        if plugin.instance is PostProcessorPlugin { return .postProcessor }
+        if plugin.instance is ActionPlugin { return .action }
+        return .utility
+    }
+
+    private var groupedInstalledPlugins: [(category: PluginCategory, plugins: [LoadedPlugin])] {
+        let grouped = Dictionary(grouping: pluginManager.loadedPlugins) { categoryForPlugin($0) }
+        return grouped
+            .sorted { $0.key.sortOrder < $1.key.sortOrder }
+            .map { (category: $0.key, plugins: $0.value.sorted { $0.manifest.name.localizedCompare($1.manifest.name) == .orderedAscending }) }
     }
 
     private var installedTab: some View {
@@ -73,23 +87,42 @@ struct PluginSettingsView: View {
                     .padding(.vertical, 8)
                 }
             } else {
-                Section(String(localized: "Plugins")) {
-                    ForEach(sortedPlugins) { plugin in
-                        InstalledPluginRow(
-                            plugin: plugin,
-                            installInfo: registryService.installInfo(for: plugin.id),
-                            installState: registryService.installStates[plugin.id],
-                            registryPlugin: registryService.registry.first(where: { $0.id == plugin.id }),
-                            onUpdate: {
-                                if let registryPlugin = registryService.registry.first(where: { $0.id == plugin.id }) {
-                                    Task { await registryService.downloadAndInstall(registryPlugin) }
+                ForEach(groupedInstalledPlugins, id: \.category) { group in
+                    Section {
+                        CategoryHeaderButton(
+                            category: group.category,
+                            count: group.plugins.count,
+                            isExpanded: expandedCategories.contains(group.category.rawValue)
+                        ) {
+                            withAnimation {
+                                if expandedCategories.contains(group.category.rawValue) {
+                                    expandedCategories.remove(group.category.rawValue)
+                                } else {
+                                    expandedCategories.insert(group.category.rawValue)
                                 }
-                            },
-                            onUninstall: {
-                                pluginToUninstall = plugin
-                                showUninstallAlert = true
                             }
-                        )
+                        }
+
+                        if expandedCategories.contains(group.category.rawValue) {
+                            ForEach(group.plugins) { plugin in
+                                InstalledPluginRow(
+                                    plugin: plugin,
+                                    installInfo: registryService.installInfo(for: plugin.id),
+                                    installState: registryService.installStates[plugin.id],
+                                    registryPlugin: registryService.registry.first(where: { $0.id == plugin.id }),
+                                    onUpdate: {
+                                        if let registryPlugin = registryService.registry.first(where: { $0.id == plugin.id }) {
+                                            Task { await registryService.downloadAndInstall(registryPlugin) }
+                                        }
+                                    },
+                                    onUninstall: {
+                                        pluginToUninstall = plugin
+                                        showUninstallAlert = true
+                                    }
+                                )
+                                .padding(.vertical, 4)
+                            }
+                        }
                     }
                 }
             }
@@ -114,6 +147,28 @@ struct PluginSettingsView: View {
     }
 
     // MARK: - Available Tab
+
+    private var filteredAvailablePlugins: [RegistryPlugin] {
+        let available = registryService.registry.filter { registryPlugin in
+            let info = registryService.installInfo(for: registryPlugin.id)
+            if case .notInstalled = info { return true }
+            return false
+        }
+        switch hostingFilter {
+        case 1: return available.filter { $0.requiresAPIKey != true }
+        case 2: return available.filter { $0.requiresAPIKey == true }
+        default: return available
+        }
+    }
+
+    private var groupedAvailablePlugins: [(category: PluginCategory, plugins: [RegistryPlugin])] {
+        let grouped = Dictionary(grouping: filteredAvailablePlugins) { plugin in
+            PluginCategory(rawValue: plugin.category) ?? .utility
+        }
+        return grouped
+            .sorted { $0.key.sortOrder < $1.key.sortOrder }
+            .map { (category: $0.key, plugins: $0.value.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }) }
+    }
 
     private var availableTab: some View {
         Form {
@@ -143,13 +198,17 @@ struct PluginSettingsView: View {
                     .padding(.vertical, 8)
                 }
             case .loaded:
-                let availablePlugins = registryService.registry.filter { registryPlugin in
-                    let info = registryService.installInfo(for: registryPlugin.id)
-                    if case .notInstalled = info { return true }
-                    return false
+                Picker("", selection: $hostingFilter) {
+                    Text(String(localized: "All")).tag(0)
+                    Text(String(localized: "Local")).tag(1)
+                    Text(String(localized: "Cloud")).tag(2)
                 }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
 
-                if availablePlugins.isEmpty {
+                if filteredAvailablePlugins.isEmpty {
                     Section {
                         VStack(spacing: 8) {
                             Text(String(localized: "All available plugins are already installed."))
@@ -159,18 +218,37 @@ struct PluginSettingsView: View {
                         .padding(.vertical, 8)
                     }
                 } else {
-                    Section(String(localized: "Available Plugins")) {
-                        ForEach(availablePlugins) { plugin in
-                            AvailablePluginRow(
-                                plugin: plugin,
-                                installState: registryService.installStates[plugin.id],
-                                onInstall: {
-                                    Task {
-                                        await registryService.downloadAndInstall(plugin)
-                                        PluginManager.shared.setPluginEnabled(plugin.id, enabled: true)
+                    ForEach(groupedAvailablePlugins, id: \.category) { group in
+                        Section {
+                            CategoryHeaderButton(
+                                category: group.category,
+                                count: group.plugins.count,
+                                isExpanded: expandedCategories.contains(group.category.rawValue)
+                            ) {
+                                withAnimation {
+                                    if expandedCategories.contains(group.category.rawValue) {
+                                        expandedCategories.remove(group.category.rawValue)
+                                    } else {
+                                        expandedCategories.insert(group.category.rawValue)
                                     }
                                 }
-                            )
+                            }
+
+                            if expandedCategories.contains(group.category.rawValue) {
+                                ForEach(group.plugins) { plugin in
+                                    AvailablePluginRow(
+                                        plugin: plugin,
+                                        installState: registryService.installStates[plugin.id],
+                                        onInstall: {
+                                            Task {
+                                                await registryService.downloadAndInstall(plugin)
+                                                PluginManager.shared.setPluginEnabled(plugin.id, enabled: true)
+                                            }
+                                        }
+                                    )
+                                    .padding(.vertical, 4)
+                                }
+                            }
                         }
                     }
                 }
@@ -204,6 +282,72 @@ struct PluginSettingsView: View {
     }
 }
 
+// MARK: - Shared Components
+
+private struct HostingBadge: View {
+    let isCloud: Bool
+
+    var body: some View {
+        if isCloud {
+            Text("Cloud")
+                .font(.caption2)
+                .fontWeight(.medium)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1)
+                .background(.cyan.opacity(0.15))
+                .foregroundStyle(.cyan)
+                .clipShape(Capsule())
+        } else {
+            Text(String(localized: "Local"))
+                .font(.caption2)
+                .fontWeight(.medium)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1)
+                .background(.green.opacity(0.15))
+                .foregroundStyle(.green)
+                .clipShape(Capsule())
+        }
+    }
+}
+
+private struct CategoryHeaderButton: View {
+    let category: PluginCategory
+    let count: Int
+    let isExpanded: Bool
+    let onToggle: () -> Void
+
+    var body: some View {
+        Button(action: onToggle) {
+            HStack(spacing: 8) {
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
+
+                Image(systemName: category.iconSystemName)
+                    .foregroundStyle(.secondary)
+
+                Text(category.displayName)
+                    .font(.headline)
+
+                Text("\(count)")
+                    .font(.caption2)
+                    .fontWeight(.medium)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .background(.secondary.opacity(0.15))
+                    .foregroundStyle(.secondary)
+                    .clipShape(Capsule())
+
+                Spacer()
+            }
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 // MARK: - Installed Plugin Row
 
 private struct InstalledPluginRow: View {
@@ -221,9 +365,9 @@ private struct InstalledPluginRow: View {
 
     var body: some View {
         HStack {
-            Image(systemName: "puzzlepiece.extension")
+            Image(systemName: registryPlugin?.iconSystemName ?? "puzzlepiece.extension")
                 .font(.title2)
-                .foregroundStyle(.purple)
+                .foregroundStyle(.blue)
                 .frame(width: 32)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -240,15 +384,8 @@ private struct InstalledPluginRow: View {
                             .foregroundStyle(.blue)
                             .clipShape(Capsule())
                     }
-                    if isCloud {
-                        Text("Cloud")
-                            .font(.caption2)
-                            .fontWeight(.medium)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(.cyan.opacity(0.15))
-                            .foregroundStyle(.cyan)
-                            .clipShape(Capsule())
+                    if !plugin.isBundled {
+                        HostingBadge(isCloud: isCloud)
                     }
                     if plugin.isBundled {
                         Text(String(localized: "Built-in"))
@@ -384,16 +521,7 @@ struct AvailablePluginRow: View {
                 HStack(spacing: 6) {
                     Text(plugin.name)
                         .font(.headline)
-                    if plugin.requiresAPIKey == true {
-                        Text("Cloud")
-                            .font(.caption2)
-                            .fontWeight(.medium)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(.cyan.opacity(0.15))
-                            .foregroundStyle(.cyan)
-                            .clipShape(Capsule())
-                    }
+                    HostingBadge(isCloud: plugin.requiresAPIKey == true)
                 }
                 Text(plugin.localizedDescription)
                     .font(.caption)

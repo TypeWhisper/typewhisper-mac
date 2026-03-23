@@ -37,6 +37,7 @@ enum UserDefaultsKeys {
 
     // MARK: - Home / Setup
     static let setupWizardCompleted = "setupWizardCompleted"
+    static let setupWizardCurrentStep = "setupWizardCurrentStep"
 
     // MARK: - Dictionary
     static let activatedTermPacks = "activatedTermPacks"
@@ -56,6 +57,31 @@ enum UserDefaultsKeys {
     static let showMenuBarIcon = "showMenuBarIcon"
     static let menuBarIconHiddenAlertShown = "menuBarIconHiddenAlertShown"
 
+    // MARK: - Memory
+    static let memoryEnabled = "memoryEnabled"
+    static let memoryExtractionProvider = "memoryExtractionProvider"
+    static let memoryExtractionModel = "memoryExtractionModel"
+    static let memoryMinTextLength = "memoryMinTextLength"
+    static let memoryExtractionPrompt = "memoryExtractionPrompt"
+
     // MARK: - Plugin Registry
     static let pluginRegistryLastFetch = "pluginRegistryLastFetch"
+
+    // MARK: - Recorder
+    static let recorderMicEnabled = "recorderMicEnabled"
+    static let recorderSystemAudioEnabled = "recorderSystemAudioEnabled"
+    static let recorderOutputFormat = "recorderOutputFormat"
+    static let recorderTranscriptionEnabled = "recorderTranscriptionEnabled"
+    static let recorderMicDuckingMode = "recorderMicDuckingMode"
+    static let showRecorderTab = "showRecorderTab"
+
+    // MARK: - Watch Folder
+    static let watchFolderBookmark = "watchFolderBookmark"
+    static let watchFolderOutputBookmark = "watchFolderOutputBookmark"
+    static let watchFolderOutputFormat = "watchFolderOutputFormat"
+    static let watchFolderDeleteSource = "watchFolderDeleteSource"
+    static let watchFolderAutoStart = "watchFolderAutoStart"
+    static let watchFolderLanguage = "watchFolderLanguage"
+    static let watchFolderEngine = "watchFolderEngine"
+    static let watchFolderModel = "watchFolderModel"
 }

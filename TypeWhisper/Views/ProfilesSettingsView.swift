@@ -352,6 +352,11 @@ private struct ProfileEditorSheet: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
+                    // Memory toggle
+                    Toggle(String(localized: "Memory"), isOn: $viewModel.editorMemoryEnabled)
+                    Text(String(localized: "When enabled, transcriptions from this profile are stored as memories and used as context for prompts."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section(String(localized: "Priority")) {

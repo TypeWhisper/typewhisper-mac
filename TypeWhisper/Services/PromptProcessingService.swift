@@ -13,6 +13,7 @@ class PromptProcessingService: ObservableObject {
         didSet { UserDefaults.standard.set(selectedCloudModel, forKey: "llmCloudModel") }
     }
 
+    weak var memoryService: MemoryService?
     private var appleIntelligenceProvider: LLMProvider?
 
     static let appleIntelligenceId = "appleIntelligence"
@@ -104,7 +105,16 @@ class PromptProcessingService: ObservableObject {
         }
     }
 
-    func process(prompt: String, text: String, providerOverride: String? = nil, cloudModelOverride: String? = nil) async throws -> String {
+    func process(prompt: String, text: String, providerOverride: String? = nil, cloudModelOverride: String? = nil, skipMemoryInjection: Bool = false) async throws -> String {
+        // Inject memory context into prompt if available
+        var effectivePrompt = prompt
+        if !skipMemoryInjection, let memoryService {
+            let memoryContext = await memoryService.retrieveRelevantMemories(for: text)
+            if !memoryContext.isEmpty {
+                effectivePrompt = memoryContext + "\n\n" + prompt
+            }
+        }
+
         let effectiveId = providerOverride ?? selectedProviderId
 
         if effectiveId == Self.appleIntelligenceId {
@@ -112,7 +122,7 @@ class PromptProcessingService: ObservableObject {
                 throw LLMError.notAvailable
             }
             logger.info("Processing prompt with Apple Intelligence")
-            let result = try await provider.process(systemPrompt: prompt, userText: text)
+            let result = try await provider.process(systemPrompt: effectivePrompt, userText: text)
             logger.info("Prompt processing complete, result length: \(result.count)")
             return result
         }
@@ -128,7 +138,7 @@ class PromptProcessingService: ObservableObject {
         let model = cloudModelOverride ?? selectedCloudModel
         logger.info("Processing prompt with plugin \(effectiveId)")
         let result = try await plugin.process(
-            systemPrompt: prompt,
+            systemPrompt: effectivePrompt,
             userText: text,
             model: model.isEmpty ? nil : model
         )

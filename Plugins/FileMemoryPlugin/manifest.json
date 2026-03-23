@@ -1,0 +1,15 @@
+{
+    "id": "com.typewhisper.memory.file",
+    "name": "File Memory",
+    "version": "1.0.0",
+    "minHostVersion": "0.14.0",
+    "minOSVersion": "14.0",
+    "author": "TypeWhisper",
+    "description": "Store memories as local JSON files with text-based search. Fully offline, no API key required.",
+    "descriptions": {
+        "de": "Speichert Erinnerungen als lokale JSON-Dateien mit textbasierter Suche. Komplett offline, kein API-Key noetig."
+    },
+    "category": "memory",
+    "iconSystemName": "doc.text",
+    "principalClass": "FileMemoryPlugin"
+}

@@ -45,6 +45,10 @@ jobs:
             obsidian) TARGET="ObsidianPlugin" ;;
             script) TARGET="ScriptPlugin" ;;
             livetranscript) TARGET="LiveTranscriptPlugin" ;;
+            granite) TARGET="GranitePlugin" ;;
+            cloudflare-asr) TARGET="CloudflareASRPlugin" ;;
+            file-memory) TARGET="FileMemoryPlugin" ;;
+            openai-vector-memory) TARGET="OpenAIVectorMemoryPlugin" ;;
             *) echo "Unknown plugin: $PLUGIN_NAME" && exit 1 ;;
           esac
           # Set deployment target and Swift embedding per plugin
@@ -57,7 +61,7 @@ jobs:
           XCODE_VERSION="26.2"
           if [ "$TARGET" = "SpeechAnalyzerPlugin" ]; then
             DEPLOY_TARGET="26.0"
-          elif [ "$TARGET" = "Qwen3Plugin" ] || [ "$TARGET" = "VoxtralPlugin" ]; then
+          elif [ "$TARGET" = "Qwen3Plugin" ] || [ "$TARGET" = "VoxtralPlugin" ] || [ "$TARGET" = "GranitePlugin" ]; then
             DEPLOY_TARGET="14.0"
             EMBED_SWIFT_LIBS="YES"
           else

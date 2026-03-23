@@ -40,6 +40,7 @@ final class ProfilesViewModel: ObservableObject {
     @Published var editorEngineOverride: String?
     @Published var editorCloudModelOverride: String?
     @Published var editorPromptActionId: String?
+    @Published var editorMemoryEnabled: Bool = false
     @Published var editorInlineCommandsEnabled = false
     @Published var editorHotkey: UnifiedHotkey?
     @Published var editorHotkeyLabel: String = ""
@@ -90,6 +91,7 @@ final class ProfilesViewModel: ObservableObject {
             engineOverride: editorEngineOverride,
             cloudModelOverride: editorCloudModelOverride,
             promptActionId: editorPromptActionId,
+            memoryEnabled: editorMemoryEnabled,
             hotkeyData: editorHotkey.flatMap { try? JSONEncoder().encode($0) },
             inlineCommandsEnabled: editorInlineCommandsEnabled,
             priority: editorPriority
@@ -107,6 +109,7 @@ final class ProfilesViewModel: ObservableObject {
             profile.engineOverride = editorEngineOverride
             profile.cloudModelOverride = editorCloudModelOverride
             profile.promptActionId = editorPromptActionId
+            profile.memoryEnabled = editorMemoryEnabled
             profile.inlineCommandsEnabled = editorInlineCommandsEnabled
             profile.hotkey = editorHotkey
             profile.priority = editorPriority
@@ -138,6 +141,7 @@ final class ProfilesViewModel: ObservableObject {
         editorEngineOverride = nil
         editorCloudModelOverride = nil
         editorPromptActionId = nil
+        editorMemoryEnabled = false
         editorInlineCommandsEnabled = false
         editorHotkey = nil
         editorHotkeyLabel = ""
@@ -167,6 +171,7 @@ final class ProfilesViewModel: ObservableObject {
             editorCloudModelOverride = profile.cloudModelOverride
         }
         editorPromptActionId = profile.promptActionId
+        editorMemoryEnabled = profile.memoryEnabled
         editorInlineCommandsEnabled = profile.inlineCommandsEnabled
         editorHotkey = profile.hotkey
         editorHotkeyLabel = profile.hotkey.map { HotkeyService.displayName(for: $0) } ?? ""

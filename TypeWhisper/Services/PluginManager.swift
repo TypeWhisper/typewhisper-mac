@@ -70,6 +70,12 @@ final class PluginManager: ObservableObject {
             .compactMap { $0.instance as? ActionPlugin }
     }
 
+    var memoryStoragePlugins: [MemoryStoragePlugin] {
+        loadedPlugins
+            .filter { $0.isEnabled }
+            .compactMap { $0.instance as? MemoryStoragePlugin }
+    }
+
     func transcriptionEngine(for providerId: String) -> TranscriptionEnginePlugin? {
         transcriptionEngines.first { $0.providerId == providerId }
     }

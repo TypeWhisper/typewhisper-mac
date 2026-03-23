@@ -51,6 +51,7 @@ final class HomeViewModel: ObservableObject {
     @Published var timeSavedTrend: Double? = nil
     @Published var recentTranscriptions: [TranscriptionRecord] = []
     @Published var navigateToHistory = false
+    @Published var hasAnyTranscriptions = false
     @Published var showSetupWizard: Bool {
         didSet { UserDefaults.standard.set(!showSetupWizard, forKey: UserDefaultsKeys.setupWizardCompleted) }
     }
@@ -92,6 +93,7 @@ final class HomeViewModel: ObservableObject {
     func refresh() {
         let now = Date()
         let allRecords = historyService.records
+        hasAnyTranscriptions = !allRecords.isEmpty
 
         // Filter records for current period
         let filtered: [TranscriptionRecord]
@@ -207,10 +209,12 @@ final class HomeViewModel: ObservableObject {
     }
 
     func completeSetupWizard() {
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.setupWizardCurrentStep)
         showSetupWizard = false
     }
 
     func resetSetupWizard() {
+        UserDefaults.standard.set(0, forKey: UserDefaultsKeys.setupWizardCurrentStep)
         showSetupWizard = true
     }
 }

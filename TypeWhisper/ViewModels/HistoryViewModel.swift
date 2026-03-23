@@ -191,6 +191,13 @@ final class HistoryViewModel: ObservableObject {
             }
             correctionSuggestions = suggestions
             showCorrectionBanner = true
+
+            // Store corrections as memories
+            ServiceContainer.shared.memoryService.storeCorrections(
+                suggestions.map { (original: $0.original, replacement: $0.replacement) },
+                appName: record.appName,
+                bundleIdentifier: record.appBundleIdentifier
+            )
         }
     }
 

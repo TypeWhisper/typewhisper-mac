@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import ApplicationServices
+import Carbon.HIToolbox
 import os.log
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "TextInsertionService")
@@ -364,26 +365,64 @@ enum InsertionResult {
     }
 
     private func simulatePaste() {
-        // Key code 0x09 = V
+        let vKeyCode = virtualKeyCode(for: "v") ?? 0x09 // Fallback to QWERTY
         // Use nil source + .cgSessionEventTap for App Sandbox compatibility
-        let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: 0x09, keyDown: true)
+        let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: vKeyCode, keyDown: true)
         keyDown?.flags = .maskCommand
         keyDown?.post(tap: .cgSessionEventTap)
 
-        let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: 0x09, keyDown: false)
+        let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: vKeyCode, keyDown: false)
         keyUp?.flags = .maskCommand
         keyUp?.post(tap: .cgSessionEventTap)
     }
 
     private func simulateCopy() {
-        // Key code 0x08 = C
-        let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: 0x08, keyDown: true)
+        let cKeyCode = virtualKeyCode(for: "c") ?? 0x08 // Fallback to QWERTY
+        let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: cKeyCode, keyDown: true)
         keyDown?.flags = .maskCommand
         keyDown?.post(tap: .cgSessionEventTap)
 
-        let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: 0x08, keyDown: false)
+        let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: cKeyCode, keyDown: false)
         keyUp?.flags = .maskCommand
         keyUp?.post(tap: .cgSessionEventTap)
+    }
+
+    /// Resolves the virtual key code for a character in the current keyboard layout.
+    /// Uses Carbon HIToolbox APIs to scan all key codes and match against the layout.
+    private func virtualKeyCode(for character: String) -> CGKeyCode? {
+        let source = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
+        guard let layoutDataRef = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else {
+            return nil
+        }
+        let layoutData = unsafeBitCast(layoutDataRef, to: CFData.self)
+        let keyLayoutPtr = unsafeBitCast(CFDataGetBytePtr(layoutData), to: UnsafePointer<UCKeyboardLayout>.self)
+
+        var deadKeyState: UInt32 = 0
+        var chars = [UniChar](repeating: 0, count: 4)
+        var length = 0
+
+        for keyCode: UInt16 in 0...127 {
+            deadKeyState = 0
+            let status = UCKeyTranslate(
+                keyLayoutPtr,
+                keyCode,
+                UInt16(kUCKeyActionDown),
+                0, // no modifiers
+                UInt32(LMGetKbdType()),
+                UInt32(kUCKeyTranslateNoDeadKeysMask),
+                &deadKeyState,
+                chars.count,
+                &length,
+                &chars
+            )
+            if status == noErr && length > 0 {
+                let s = String(utf16CodeUnits: chars, count: length)
+                if s == character {
+                    return CGKeyCode(keyCode)
+                }
+            }
+        }
+        return nil
     }
 
     /// Attempts to get selected text by simulating Cmd+C. Saves and restores the clipboard.

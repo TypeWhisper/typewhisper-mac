@@ -186,6 +186,27 @@
 		AA00000000000000000228 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000218 /* Localizable.xcstrings */; };
 		AA00000000000000000229 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000027 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000230 /* AudioPlaybackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000220 /* AudioPlaybackService.swift */; };
+		AA00000000000000000231 /* GranitePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000221 /* GranitePlugin.swift */; };
+		AA00000000000000000232 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000222 /* manifest.json */; };
+		AA00000000000000000233 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000223 /* Localizable.xcstrings */; };
+		AA00000000000000000234 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000028 /* TypeWhisperPluginSDK */; };
+		AA00000000000000000235 /* MLXAudioSTT in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000029 /* MLXAudioSTT */; };
+		AA00000000000000000236 /* MLXAudioCore in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000030 /* MLXAudioCore */; };
+		AA00000000000000000237 /* CloudflareASRPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000225 /* CloudflareASRPlugin.swift */; };
+		AA00000000000000000238 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000226 /* manifest.json */; };
+		AA00000000000000000239 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000031 /* TypeWhisperPluginSDK */; };
+		AA00000000000000000240 /* MemoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000228 /* MemoryService.swift */; };
+		AA00000000000000000241 /* FileMemoryPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000229 /* FileMemoryPlugin.swift */; };
+		AA00000000000000000242 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000230 /* manifest.json */; };
+		AA00000000000000000243 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000032 /* TypeWhisperPluginSDK */; };
+		AA00000000000000000244 /* OpenAIVectorMemoryPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000232 /* OpenAIVectorMemoryPlugin.swift */; };
+		AA00000000000000000245 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000233 /* manifest.json */; };
+		AA00000000000000000246 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000033 /* TypeWhisperPluginSDK */; };
+		AA00000000000000000250 /* AudioRecorderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000238 /* AudioRecorderService.swift */; };
+		AA00000000000000000251 /* AudioRecorderViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000239 /* AudioRecorderViewModel.swift */; };
+		AA00000000000000000252 /* AudioRecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000240 /* AudioRecorderView.swift */; };
+		AA00000000000000000253 /* WatchFolderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000241 /* WatchFolderService.swift */; };
+		AA00000000000000000254 /* WatchFolderViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000242 /* WatchFolderViewModel.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -367,6 +388,25 @@
 		BB00000000000000000218 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		BB00000000000000000219 /* LiveTranscriptPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LiveTranscriptPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000220 /* AudioPlaybackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlaybackService.swift; sourceTree = "<group>"; };
+		BB00000000000000000221 /* GranitePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GranitePlugin.swift; sourceTree = "<group>"; };
+		BB00000000000000000222 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		BB00000000000000000223 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		BB00000000000000000224 /* GranitePlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GranitePlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB00000000000000000225 /* CloudflareASRPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudflareASRPlugin.swift; sourceTree = "<group>"; };
+		BB00000000000000000226 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		BB00000000000000000227 /* CloudflareASRPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CloudflareASRPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB00000000000000000228 /* MemoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryService.swift; sourceTree = "<group>"; };
+		BB00000000000000000229 /* FileMemoryPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileMemoryPlugin.swift; sourceTree = "<group>"; };
+		BB00000000000000000230 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		BB00000000000000000231 /* FileMemoryPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FileMemoryPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB00000000000000000232 /* OpenAIVectorMemoryPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIVectorMemoryPlugin.swift; sourceTree = "<group>"; };
+		BB00000000000000000233 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		BB00000000000000000234 /* OpenAIVectorMemoryPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OpenAIVectorMemoryPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB00000000000000000238 /* AudioRecorderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderService.swift; sourceTree = "<group>"; };
+		BB00000000000000000239 /* AudioRecorderViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderViewModel.swift; sourceTree = "<group>"; };
+		BB00000000000000000240 /* AudioRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderView.swift; sourceTree = "<group>"; };
+		BB00000000000000000241 /* WatchFolderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchFolderService.swift; sourceTree = "<group>"; };
+		BB00000000000000000242 /* WatchFolderViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchFolderViewModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -524,6 +564,40 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000229 /* TypeWhisperPluginSDK in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FF00000000000000000108 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA00000000000000000234 /* TypeWhisperPluginSDK in Frameworks */,
+				AA00000000000000000235 /* MLXAudioSTT in Frameworks */,
+				AA00000000000000000236 /* MLXAudioCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FF00000000000000000112 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA00000000000000000239 /* TypeWhisperPluginSDK in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FF00000000000000000116 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA00000000000000000243 /* TypeWhisperPluginSDK in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FF00000000000000000120 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA00000000000000000246 /* TypeWhisperPluginSDK in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -689,6 +763,10 @@
 				CC00000000000000000030 /* ObsidianPlugin */,
 				CC00000000000000000031 /* ScriptPlugin */,
 				CC00000000000000000032 /* LiveTranscriptPlugin */,
+				CC00000000000000000033 /* GranitePlugin */,
+				CC00000000000000000034 /* CloudflareASRPlugin */,
+				CC00000000000000000035 /* FileMemoryPlugin */,
+				CC00000000000000000036 /* OpenAIVectorMemoryPlugin */,
 				CC00000000000000000025 /* TypeWhisperWidgetExtension */,
 				CC00000000000000000026 /* TypeWhisperWidgetShared */,
 				CC00000000000000000090 /* Products */,
@@ -767,6 +845,9 @@
 				BB00000000000000000125 /* HostServicesImpl.swift */,
 				BB00000000000000000126 /* PostProcessingPipeline.swift */,
 				BB00000000000000000180 /* WidgetDataService.swift */,
+				BB00000000000000000228 /* MemoryService.swift */,
+				BB00000000000000000238 /* AudioRecorderService.swift */,
+				BB00000000000000000241 /* WatchFolderService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -798,6 +879,8 @@
 				BB00000000000000000172 /* StreamingHandler.swift */,
 				BB00000000000000000173 /* PromptPaletteHandler.swift */,
 				BB00000000000000000174 /* DictationSettingsHandler.swift */,
+				BB00000000000000000239 /* AudioRecorderViewModel.swift */,
+				BB00000000000000000242 /* WatchFolderViewModel.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -828,6 +911,7 @@
 				BB00000000000000000122 /* NotchShape.swift */,
 				BB00000000000000000127 /* PluginSettingsView.swift */,
 				BB00000000000000000207 /* IndicatorPreviewView.swift */,
+				BB00000000000000000240 /* AudioRecorderView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -910,6 +994,10 @@
 				BB00000000000000000211 /* ObsidianPlugin.bundle */,
 				BB00000000000000000215 /* ScriptPlugin.bundle */,
 				BB00000000000000000219 /* LiveTranscriptPlugin.bundle */,
+				BB00000000000000000224 /* GranitePlugin.bundle */,
+				BB00000000000000000227 /* CloudflareASRPlugin.bundle */,
+				BB00000000000000000231 /* FileMemoryPlugin.bundle */,
+				BB00000000000000000234 /* OpenAIVectorMemoryPlugin.bundle */,
 				BB00000000000000000188 /* TypeWhisperWidgetExtension.appex */,
 			);
 			name = Products;
@@ -1045,6 +1133,47 @@
 			);
 			name = LiveTranscriptPlugin;
 			path = Plugins/LiveTranscriptPlugin;
+			sourceTree = "<group>";
+		};
+		CC00000000000000000033 /* GranitePlugin */ = {
+			isa = PBXGroup;
+			children = (
+				BB00000000000000000221 /* GranitePlugin.swift */,
+				BB00000000000000000222 /* manifest.json */,
+				BB00000000000000000223 /* Localizable.xcstrings */,
+			);
+			name = GranitePlugin;
+			path = Plugins/GranitePlugin;
+			sourceTree = "<group>";
+		};
+		CC00000000000000000034 /* CloudflareASRPlugin */ = {
+			isa = PBXGroup;
+			children = (
+				BB00000000000000000225 /* CloudflareASRPlugin.swift */,
+				BB00000000000000000226 /* manifest.json */,
+			);
+			name = CloudflareASRPlugin;
+			path = Plugins/CloudflareASRPlugin;
+			sourceTree = "<group>";
+		};
+		CC00000000000000000035 /* FileMemoryPlugin */ = {
+			isa = PBXGroup;
+			children = (
+				BB00000000000000000229 /* FileMemoryPlugin.swift */,
+				BB00000000000000000230 /* manifest.json */,
+			);
+			name = FileMemoryPlugin;
+			path = Plugins/FileMemoryPlugin;
+			sourceTree = "<group>";
+		};
+		CC00000000000000000036 /* OpenAIVectorMemoryPlugin */ = {
+			isa = PBXGroup;
+			children = (
+				BB00000000000000000232 /* OpenAIVectorMemoryPlugin.swift */,
+				BB00000000000000000233 /* manifest.json */,
+			);
+			name = OpenAIVectorMemoryPlugin;
+			path = Plugins/OpenAIVectorMemoryPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000021 /* WhisperKitPlugin */ = {
@@ -1524,6 +1653,88 @@
 			productReference = BB00000000000000000219 /* LiveTranscriptPlugin.bundle */;
 			productType = "com.apple.product-type.bundle";
 		};
+		DD00000000000000000021 /* GranitePlugin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FF00000000000000000110 /* Build configuration list for PBXNativeTarget "GranitePlugin" */;
+			buildPhases = (
+				FF00000000000000000107 /* Sources */,
+				FF00000000000000000108 /* Frameworks */,
+				FF00000000000000000109 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = GranitePlugin;
+			packageProductDependencies = (
+				PP00000000000000000028 /* TypeWhisperPluginSDK */,
+				PP00000000000000000029 /* MLXAudioSTT */,
+				PP00000000000000000030 /* MLXAudioCore */,
+			);
+			productName = GranitePlugin;
+			productReference = BB00000000000000000224 /* GranitePlugin.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
+		DD00000000000000000022 /* CloudflareASRPlugin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FF00000000000000000114 /* Build configuration list for PBXNativeTarget "CloudflareASRPlugin" */;
+			buildPhases = (
+				FF00000000000000000111 /* Sources */,
+				FF00000000000000000112 /* Frameworks */,
+				FF00000000000000000113 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CloudflareASRPlugin;
+			packageProductDependencies = (
+				PP00000000000000000031 /* TypeWhisperPluginSDK */,
+			);
+			productName = CloudflareASRPlugin;
+			productReference = BB00000000000000000227 /* CloudflareASRPlugin.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
+		DD00000000000000000023 /* FileMemoryPlugin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FF00000000000000000118 /* Build configuration list for PBXNativeTarget "FileMemoryPlugin" */;
+			buildPhases = (
+				FF00000000000000000115 /* Sources */,
+				FF00000000000000000116 /* Frameworks */,
+				FF00000000000000000117 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = FileMemoryPlugin;
+			packageProductDependencies = (
+				PP00000000000000000032 /* TypeWhisperPluginSDK */,
+			);
+			productName = FileMemoryPlugin;
+			productReference = BB00000000000000000231 /* FileMemoryPlugin.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
+		DD00000000000000000024 /* OpenAIVectorMemoryPlugin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FF00000000000000000122 /* Build configuration list for PBXNativeTarget "OpenAIVectorMemoryPlugin" */;
+			buildPhases = (
+				FF00000000000000000119 /* Sources */,
+				FF00000000000000000120 /* Frameworks */,
+				FF00000000000000000121 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = OpenAIVectorMemoryPlugin;
+			packageProductDependencies = (
+				PP00000000000000000033 /* TypeWhisperPluginSDK */,
+			);
+			productName = OpenAIVectorMemoryPlugin;
+			productReference = BB00000000000000000234 /* OpenAIVectorMemoryPlugin.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -1581,6 +1792,10 @@
 				DD00000000000000000018 /* ObsidianPlugin */,
 				DD00000000000000000019 /* ScriptPlugin */,
 				DD00000000000000000020 /* LiveTranscriptPlugin */,
+				DD00000000000000000021 /* GranitePlugin */,
+				DD00000000000000000022 /* CloudflareASRPlugin */,
+				DD00000000000000000023 /* FileMemoryPlugin */,
+				DD00000000000000000024 /* OpenAIVectorMemoryPlugin */,
 				DD00000000000000000014 /* TypeWhisperWidgetExtension */,
 			);
 		};
@@ -1752,6 +1967,39 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		FF00000000000000000109 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA00000000000000000232 /* manifest.json in Resources */,
+				AA00000000000000000233 /* Localizable.xcstrings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FF00000000000000000113 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA00000000000000000238 /* manifest.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FF00000000000000000117 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA00000000000000000242 /* manifest.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FF00000000000000000121 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA00000000000000000245 /* manifest.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -1846,6 +2094,12 @@
 				AA00000000000000000152 /* AppConstants.swift in Sources */,
 				AA00000000000000000189 /* WidgetData.swift in Sources */,
 				AA00000000000000000197 /* WidgetDataService.swift in Sources */,
+				AA00000000000000000240 /* MemoryService.swift in Sources */,
+				AA00000000000000000250 /* AudioRecorderService.swift in Sources */,
+				AA00000000000000000251 /* AudioRecorderViewModel.swift in Sources */,
+				AA00000000000000000252 /* AudioRecorderView.swift in Sources */,
+				AA00000000000000000253 /* WatchFolderService.swift in Sources */,
+				AA00000000000000000254 /* WatchFolderViewModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2001,6 +2255,38 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		FF00000000000000000107 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA00000000000000000231 /* GranitePlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FF00000000000000000111 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA00000000000000000237 /* CloudflareASRPlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FF00000000000000000115 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA00000000000000000241 /* FileMemoryPlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FF00000000000000000119 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA00000000000000000244 /* OpenAIVectorMemoryPlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
@@ -2150,7 +2436,7 @@
 					"@executable_path/../Frameworks",
 				);
 				INFOPLIST_KEY_CFBundleDisplayName = "TypeWhisper Dev";
-				MARKETING_VERSION = 0.13.2;
+				MARKETING_VERSION = 0.14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.dev;
 				PRODUCT_NAME = TypeWhisper;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -2178,7 +2464,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.13.2;
+				MARKETING_VERSION = 0.14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac;
 				PRODUCT_NAME = TypeWhisper;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -2193,7 +2479,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
-				MARKETING_VERSION = 0.13.2;
+				MARKETING_VERSION = 0.14.0;
 				PRODUCT_NAME = "typewhisper-cli";
 				SWIFT_VERSION = 6.0;
 			};
@@ -2205,7 +2491,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
-				MARKETING_VERSION = 0.13.2;
+				MARKETING_VERSION = 0.14.0;
 				PRODUCT_NAME = "typewhisper-cli";
 				SWIFT_VERSION = 6.0;
 			};
@@ -2357,7 +2643,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.13.2;
+				MARKETING_VERSION = 0.14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.typewhisper-mac;
 				PRODUCT_NAME = TypeWhisper;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -2387,7 +2673,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 0.13.2;
+				MARKETING_VERSION = 0.14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.typewhisper-mac;
 				PRODUCT_NAME = TypeWhisper;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -2402,7 +2688,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
-				MARKETING_VERSION = 0.13.2;
+				MARKETING_VERSION = 0.14.0;
 				PRODUCT_NAME = "typewhisper-cli";
 				SWIFT_VERSION = 6.0;
 			};
@@ -2415,7 +2701,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Distribution";
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
-				MARKETING_VERSION = 0.13.2;
+				MARKETING_VERSION = 0.14.0;
 				PRODUCT_NAME = "typewhisper-cli";
 				SWIFT_VERSION = 6.0;
 			};
@@ -3363,7 +3649,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 0.13.2;
+				MARKETING_VERSION = 0.14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.dev.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -3390,7 +3676,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 0.13.2;
+				MARKETING_VERSION = 0.14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -3417,7 +3703,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 0.13.2;
+				MARKETING_VERSION = 0.14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.typewhisper-mac.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -3445,7 +3731,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 0.13.2;
+				MARKETING_VERSION = 0.14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.typewhisper-mac.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -4006,6 +4292,386 @@
 			};
 			name = AppStoreRelease;
 		};
+		XX00000000000000000085 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Granite Speech (MLX)";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = GranitePlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.granite;
+				PRODUCT_NAME = GranitePlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
+		XX00000000000000000086 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Granite Speech (MLX)";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = GranitePlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.granite;
+				PRODUCT_NAME = GranitePlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
+		XX00000000000000000087 /* AppStoreDebug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Granite Speech (MLX)";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = GranitePlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.granite;
+				PRODUCT_NAME = GranitePlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = AppStoreDebug;
+		};
+		XX00000000000000000088 /* AppStoreRelease */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Granite Speech (MLX)";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = GranitePlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.granite;
+				PRODUCT_NAME = GranitePlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = AppStoreRelease;
+		};
+		XX00000000000000000089 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Cloudflare ASR";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = CloudflareASRPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.cloudflare-asr";
+				PRODUCT_NAME = CloudflareASRPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
+		XX00000000000000000090 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Cloudflare ASR";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = CloudflareASRPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.cloudflare-asr";
+				PRODUCT_NAME = CloudflareASRPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
+		XX00000000000000000091 /* AppStoreDebug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Cloudflare ASR";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = CloudflareASRPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.cloudflare-asr";
+				PRODUCT_NAME = CloudflareASRPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = AppStoreDebug;
+		};
+		XX00000000000000000092 /* AppStoreRelease */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Cloudflare ASR";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = CloudflareASRPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.cloudflare-asr";
+				PRODUCT_NAME = CloudflareASRPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = AppStoreRelease;
+		};
+		XX00000000000000000093 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "File Memory";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = FileMemoryPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.memory.file";
+				PRODUCT_NAME = FileMemoryPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
+		XX00000000000000000094 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "File Memory";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = FileMemoryPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.memory.file";
+				PRODUCT_NAME = FileMemoryPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
+		XX00000000000000000095 /* AppStoreDebug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "File Memory";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = FileMemoryPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.memory.file";
+				PRODUCT_NAME = FileMemoryPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = AppStoreDebug;
+		};
+		XX00000000000000000096 /* AppStoreRelease */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "File Memory";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = FileMemoryPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.memory.file";
+				PRODUCT_NAME = FileMemoryPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = AppStoreRelease;
+		};
+		XX00000000000000000097 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "OpenAI Vector Memory";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = OpenAIVectorMemoryPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.memory.openai-vector";
+				PRODUCT_NAME = OpenAIVectorMemoryPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
+		XX00000000000000000098 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "OpenAI Vector Memory";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = OpenAIVectorMemoryPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.memory.openai-vector";
+				PRODUCT_NAME = OpenAIVectorMemoryPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
+		XX00000000000000000099 /* AppStoreDebug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "OpenAI Vector Memory";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = OpenAIVectorMemoryPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.memory.openai-vector";
+				PRODUCT_NAME = OpenAIVectorMemoryPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = AppStoreDebug;
+		};
+		XX00000000000000000100 /* AppStoreRelease */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "OpenAI Vector Memory";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = OpenAIVectorMemoryPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.memory.openai-vector";
+				PRODUCT_NAME = OpenAIVectorMemoryPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = AppStoreRelease;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -4229,6 +4895,50 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		FF00000000000000000110 /* Build configuration list for PBXNativeTarget "GranitePlugin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				XX00000000000000000085 /* Debug */,
+				XX00000000000000000086 /* Release */,
+				XX00000000000000000087 /* AppStoreDebug */,
+				XX00000000000000000088 /* AppStoreRelease */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		FF00000000000000000114 /* Build configuration list for PBXNativeTarget "CloudflareASRPlugin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				XX00000000000000000089 /* Debug */,
+				XX00000000000000000090 /* Release */,
+				XX00000000000000000091 /* AppStoreDebug */,
+				XX00000000000000000092 /* AppStoreRelease */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		FF00000000000000000118 /* Build configuration list for PBXNativeTarget "FileMemoryPlugin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				XX00000000000000000093 /* Debug */,
+				XX00000000000000000094 /* Release */,
+				XX00000000000000000095 /* AppStoreDebug */,
+				XX00000000000000000096 /* AppStoreRelease */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		FF00000000000000000122 /* Build configuration list for PBXNativeTarget "OpenAIVectorMemoryPlugin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				XX00000000000000000097 /* Debug */,
+				XX00000000000000000098 /* Release */,
+				XX00000000000000000099 /* AppStoreDebug */,
+				XX00000000000000000100 /* AppStoreRelease */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -4372,6 +5082,30 @@
 			productName = TypeWhisperPluginSDK;
 		};
 		PP00000000000000000027 /* TypeWhisperPluginSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TypeWhisperPluginSDK;
+		};
+		PP00000000000000000028 /* TypeWhisperPluginSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TypeWhisperPluginSDK;
+		};
+		PP00000000000000000029 /* MLXAudioSTT */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MLXAudioSTT;
+		};
+		PP00000000000000000030 /* MLXAudioCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MLXAudioCore;
+		};
+		PP00000000000000000031 /* TypeWhisperPluginSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TypeWhisperPluginSDK;
+		};
+		PP00000000000000000032 /* TypeWhisperPluginSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TypeWhisperPluginSDK;
+		};
+		PP00000000000000000033 /* TypeWhisperPluginSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TypeWhisperPluginSDK;
 		};

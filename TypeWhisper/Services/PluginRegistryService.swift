@@ -3,6 +3,50 @@ import os.log
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "PluginRegistry")
 
+// MARK: - Plugin Category
+
+enum PluginCategory: String, CaseIterable {
+    case transcription
+    case llm
+    case postProcessor = "post-processor"
+    case action
+    case memory
+    case utility
+
+    var displayName: String {
+        switch self {
+        case .transcription: String(localized: "Transcription Engines")
+        case .llm: String(localized: "LLM Providers")
+        case .postProcessor: String(localized: "Post-Processors")
+        case .action: String(localized: "Actions")
+        case .memory: String(localized: "Memory")
+        case .utility: String(localized: "Utilities")
+        }
+    }
+
+    var iconSystemName: String {
+        switch self {
+        case .transcription: "waveform"
+        case .llm: "brain"
+        case .postProcessor: "arrow.triangle.2.circlepath"
+        case .action: "bolt.fill"
+        case .memory: "brain.head.profile"
+        case .utility: "wrench"
+        }
+    }
+
+    var sortOrder: Int {
+        switch self {
+        case .transcription: 0
+        case .llm: 1
+        case .postProcessor: 2
+        case .action: 3
+        case .memory: 4
+        case .utility: 5
+        }
+    }
+}
+
 // MARK: - Registry Models
 
 struct RegistryPlugin: Codable, Identifiable {

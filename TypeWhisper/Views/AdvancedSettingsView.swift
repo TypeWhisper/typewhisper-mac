@@ -2,17 +2,109 @@ import SwiftUI
 
 struct AdvancedSettingsView: View {
     @ObservedObject private var viewModel = APIServerViewModel.shared
+    @ObservedObject private var memoryService = ServiceContainer.shared.memoryService
+    @ObservedObject private var promptProcessingService = ServiceContainer.shared.promptProcessingService
     #if !APPSTORE
     @State private var cliInstalled = false
     @State private var cliSymlinkTarget = ""
     #endif
     @State private var raycastInstalled = false
+    @State private var showClearMemoryConfirmation = false
 
     @AppStorage(UserDefaultsKeys.historyRetentionDays) private var historyRetentionDays: Int = 0
     @AppStorage(UserDefaultsKeys.saveAudioWithHistory) private var saveAudioWithHistory: Bool = false
 
     var body: some View {
         Form {
+            // MARK: - Memory
+            Section(String(localized: "Memory")) {
+                Toggle(String(localized: "Enable Memory"), isOn: $memoryService.isEnabled)
+                Text(String(localized: "Automatically extracts facts, preferences and patterns from your transcriptions using an LLM. Memories are injected into prompt context."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if memoryService.isEnabled {
+                    Picker(String(localized: "Extraction Provider"), selection: $memoryService.extractionProviderId) {
+                        Text(String(localized: "None")).tag("")
+                        ForEach(promptProcessingService.availableProviders, id: \.id) { provider in
+                            Text(provider.displayName).tag(provider.id)
+                        }
+                    }
+
+                    if !memoryService.extractionProviderId.isEmpty {
+                        let models = promptProcessingService.modelsForProvider(memoryService.extractionProviderId)
+                        if !models.isEmpty {
+                            Picker(String(localized: "Extraction Model"), selection: $memoryService.extractionModel) {
+                                Text(String(localized: "Default")).tag("")
+                                ForEach(models, id: \.id) { model in
+                                    Text(model.displayName).tag(model.id)
+                                }
+                            }
+                        }
+                    }
+
+                    Stepper(value: $memoryService.minimumTextLength, in: 10...200, step: 10) {
+                        HStack {
+                            Text(String(localized: "Min. text length"))
+                            Spacer()
+                            Text("\(memoryService.minimumTextLength)")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Text(String(localized: "Transcriptions shorter than this are skipped for memory extraction."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    DisclosureGroup(String(localized: "Extraction Prompt")) {
+                        TextEditor(text: $memoryService.extractionPrompt)
+                            .font(.system(.caption, design: .monospaced))
+                            .frame(minHeight: 120)
+                            .border(.separator)
+
+                        Button(String(localized: "Reset to Default")) {
+                            memoryService.extractionPrompt = MemoryService.defaultExtractionPrompt
+                        }
+                        .font(.caption)
+                    }
+
+                    let pluginCount = PluginManager.shared.memoryStoragePlugins.count
+                    HStack {
+                        Image(systemName: "circle.fill")
+                            .foregroundStyle(pluginCount > 0 && !memoryService.extractionProviderId.isEmpty ? .green : .orange)
+                            .font(.caption2)
+                        if pluginCount == 0 {
+                            Text(String(localized: "No memory storage plugins active. Enable one in Integrations."))
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        } else if memoryService.extractionProviderId.isEmpty {
+                            Text(String(localized: "Select an extraction provider to start collecting memories."))
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text(String(localized: "\(pluginCount) storage plugin(s) active"))
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Button(role: .destructive) {
+                        showClearMemoryConfirmation = true
+                    } label: {
+                        Label(String(localized: "Clear All Memories"), systemImage: "trash")
+                    }
+                    .confirmationDialog(
+                        String(localized: "Clear All Memories?"),
+                        isPresented: $showClearMemoryConfirmation
+                    ) {
+                        Button(String(localized: "Clear All"), role: .destructive) {
+                            Task { await memoryService.clearAllMemories() }
+                        }
+                    } message: {
+                        Text(String(localized: "This will permanently delete all stored memories from all plugins. This cannot be undone."))
+                    }
+                }
+            }
+
             // MARK: - History
             Section(String(localized: "History")) {
                 Toggle(String(localized: "Save audio with transcriptions"), isOn: $saveAudioWithHistory)

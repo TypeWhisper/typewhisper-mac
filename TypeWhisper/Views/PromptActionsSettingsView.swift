@@ -30,6 +30,8 @@ struct PromptActionsSettingsView: View {
 
                     Spacer()
 
+                    presetMenu
+
                     Button {
                         viewModel.startCreating()
                     } label: {
@@ -119,6 +121,34 @@ struct PromptActionsSettingsView: View {
 
     // MARK: - Empty State
 
+    private var presetMenu: some View {
+        Menu {
+            let available = viewModel.availablePresets
+            if available.isEmpty {
+                Text(String(localized: "All presets imported"))
+            } else {
+                ForEach(available, id: \.name) { preset in
+                    Button {
+                        viewModel.importPreset(preset)
+                    } label: {
+                        Label(preset.name, systemImage: preset.icon)
+                    }
+                }
+
+                Divider()
+
+                Button {
+                    viewModel.loadPresets()
+                } label: {
+                    Label(String(localized: "Import All"), systemImage: "square.and.arrow.down.on.square")
+                }
+            }
+        } label: {
+            Image(systemName: "tray.and.arrow.down")
+        }
+        .help(String(localized: "Import Preset"))
+    }
+
     private var emptyState: some View {
         VStack {
             Spacer()
@@ -136,10 +166,8 @@ struct PromptActionsSettingsView: View {
                     .frame(maxWidth: 320)
 
                 HStack(spacing: 12) {
-                    Button(String(localized: "Load Presets")) {
-                        viewModel.loadPresets()
-                    }
-                    .buttonStyle(.borderedProminent)
+                    presetMenu
+                        .buttonStyle(.borderedProminent)
 
                     Button(String(localized: "Add Prompt")) {
                         viewModel.startCreating()
