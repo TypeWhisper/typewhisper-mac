@@ -46,6 +46,11 @@ final class DictationViewModel: ObservableObject {
     @Published var voiceCommandsEnabled: Bool {
         didSet { UserDefaults.standard.set(voiceCommandsEnabled, forKey: UserDefaultsKeys.voiceCommandsEnabled) }
     }
+    @Published var spokenFeedbackEnabled: Bool {
+        didSet { speechFeedbackService.spokenFeedbackEnabled = spokenFeedbackEnabled }
+    }
+    @Published private(set) var lastTranscribedText: String?
+    @Published private(set) var lastTranscriptionLanguage: String?
     @Published var hotkeyLabelsVersion = 0
     var hybridHotkeyLabel: String { Self.loadHotkeyLabel(for: .hybrid) }
     var pttHotkeyLabel: String { Self.loadHotkeyLabel(for: .pushToTalk) }
@@ -97,6 +102,8 @@ final class DictationViewModel: ObservableObject {
     private let audioDeviceService: AudioDeviceService
     private let promptActionService: PromptActionService
     private let promptProcessingService: PromptProcessingService
+    private let speechFeedbackService: SpeechFeedbackService
+    private let accessibilityAnnouncementService: AccessibilityAnnouncementService
     private let errorLogService: ErrorLogService
     private let postProcessingPipeline: PostProcessingPipeline
     private var matchedProfile: Profile?
@@ -133,6 +140,8 @@ final class DictationViewModel: ObservableObject {
         promptActionService: PromptActionService,
         promptProcessingService: PromptProcessingService,
         voiceCommandHandler: VoiceCommandHandler,
+        speechFeedbackService: SpeechFeedbackService,
+        accessibilityAnnouncementService: AccessibilityAnnouncementService,
         errorLogService: ErrorLogService
     ) {
         self.audioRecordingService = audioRecordingService
@@ -151,6 +160,8 @@ final class DictationViewModel: ObservableObject {
         self.promptActionService = promptActionService
         self.promptProcessingService = promptProcessingService
         self.voiceCommandHandler = voiceCommandHandler
+        self.speechFeedbackService = speechFeedbackService
+        self.accessibilityAnnouncementService = accessibilityAnnouncementService
         self.errorLogService = errorLogService
         self.postProcessingPipeline = PostProcessingPipeline(
             snippetService: snippetService,
@@ -166,7 +177,9 @@ final class DictationViewModel: ObservableObject {
             textInsertionService: textInsertionService,
             promptActionService: promptActionService,
             promptProcessingService: promptProcessingService,
-            soundService: soundService
+            soundService: soundService,
+            accessibilityAnnouncementService: accessibilityAnnouncementService,
+            speechFeedbackService: speechFeedbackService
         )
         self.settingsHandler = DictationSettingsHandler(
             hotkeyService: hotkeyService,
@@ -178,6 +191,7 @@ final class DictationViewModel: ObservableObject {
         self.audioDuckingLevel = UserDefaults.standard.object(forKey: UserDefaultsKeys.audioDuckingLevel) as? Double ?? 0.2
         self.soundFeedbackEnabled = UserDefaults.standard.object(forKey: UserDefaultsKeys.soundFeedbackEnabled) as? Bool ?? true
         self.voiceCommandsEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.voiceCommandsEnabled)
+        self.spokenFeedbackEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.spokenFeedbackEnabled)
         self.indicatorStyle = UserDefaults.standard.string(forKey: UserDefaultsKeys.indicatorStyle)
             .flatMap { IndicatorStyle(rawValue: $0) } ?? .notch
         self.notchIndicatorVisibility = UserDefaults.standard.string(forKey: UserDefaultsKeys.notchIndicatorVisibility)
@@ -441,6 +455,8 @@ final class DictationViewModel: ObservableObject {
             // would otherwise make the hold appear as "long press" → PTT stop.
             hotkeyService.resetKeyDownTime()
             soundService.play(.recordingStarted, enabled: soundFeedbackEnabled)
+            accessibilityAnnouncementService.announceRecordingStarted()
+            speechFeedbackService.announceEvent(.recordingStarted)
             partialText = ""
             recordingStartTime = Date()
             startRecordingTimer()
@@ -458,6 +474,8 @@ final class DictationViewModel: ObservableObject {
             )))
         } catch {
             audioDuckingService.restoreAudio()
+            accessibilityAnnouncementService.announceError(error.localizedDescription)
+            speechFeedbackService.announceEvent(.error(reason: error.localizedDescription))
             showError(error.localizedDescription, category: "recording")
             hotkeyService.cancelDictation()
         }
@@ -663,6 +681,12 @@ final class DictationViewModel: ObservableObject {
                 )))
 
                 soundService.play(.transcriptionSuccess, enabled: soundFeedbackEnabled)
+                let wordCount = text.split(separator: " ").count
+                let detectedLang = result.detectedLanguage ?? language
+                accessibilityAnnouncementService.announceTranscriptionComplete(wordCount: wordCount)
+                speechFeedbackService.announceEvent(.transcriptionComplete(text: text, language: detectedLang))
+                lastTranscribedText = text
+                lastTranscriptionLanguage = detectedLang
 
                 state = .inserting
                 insertingResetTask?.cancel()
@@ -679,6 +703,8 @@ final class DictationViewModel: ObservableObject {
                     appName: capturedActiveApp?.name,
                     bundleIdentifier: capturedActiveApp?.bundleId
                 )))
+                accessibilityAnnouncementService.announceError(error.localizedDescription)
+                speechFeedbackService.announceEvent(.error(reason: error.localizedDescription))
                 showError(error.localizedDescription, category: "transcription")
                 matchedProfile = nil
                 forcedProfileId = nil
@@ -834,6 +860,11 @@ final class DictationViewModel: ObservableObject {
     }
 
     // MARK: - Standalone Prompt Palette
+
+    func readBackLastTranscription() {
+        guard let text = lastTranscribedText else { return }
+        speechFeedbackService.readBack(text: text, language: lastTranscriptionLanguage)
+    }
 
     func triggerStandalonePromptSelection() {
         promptPaletteHandler.triggerSelection(currentState: state, soundFeedbackEnabled: soundFeedbackEnabled)

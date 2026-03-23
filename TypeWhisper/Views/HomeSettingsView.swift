@@ -117,6 +117,9 @@ struct HomeSettingsView: View {
             .onTapGesture {
                 viewModel.selectedTimePeriod = period
             }
+            .accessibilityAddTraits(.isButton)
+            .accessibilityLabel(period.displayName)
+            .accessibilityValue(isSelected ? String(localized: "Selected") : "")
     }
 
     // MARK: - Stats Grid
@@ -224,6 +227,7 @@ struct HomeSettingsView: View {
                     }
                 }
                 .frame(height: 200)
+                .accessibilityHidden(true)
             }
         }
         .padding()
@@ -316,6 +320,7 @@ struct HomeSettingsView: View {
             Image(systemName: "mic.badge.plus")
                 .font(.system(size: 36))
                 .foregroundStyle(.blue)
+                .accessibilityHidden(true)
 
             Text(String(localized: "Ready to start dictating?"))
                 .font(.headline)
@@ -392,6 +397,7 @@ private struct StatCard: View {
             Image(systemName: systemImage)
                 .font(.title2)
                 .foregroundStyle(.blue)
+                .accessibilityHidden(true)
             Text(value)
                 .font(.title)
                 .fontWeight(.bold)
@@ -407,6 +413,8 @@ private struct StatCard: View {
         .padding(.vertical, 12)
         .background(.quaternary.opacity(0.3))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("\(title), \(value)"))
     }
 
     @ViewBuilder

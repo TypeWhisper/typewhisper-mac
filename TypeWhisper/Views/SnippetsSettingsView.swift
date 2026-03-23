@@ -22,6 +22,7 @@ struct SnippetsSettingsView: View {
                         Image(systemName: "plus")
                     }
                     .help(String(localized: "Add new snippet"))
+                    .accessibilityLabel(String(localized: "Add new snippet"))
                 }
                 .padding(.horizontal, 4)
                 .padding(.bottom, 8)
@@ -122,6 +123,7 @@ private struct SnippetCardView: View {
             ))
             .toggleStyle(.switch)
             .labelsHidden()
+            .accessibilityLabel(String(localized: "Enable \(snippet.trigger)"))
             .onTapGesture {}
         }
         .padding(.horizontal, 10)
@@ -141,6 +143,7 @@ private struct SnippetCardView: View {
         .onTapGesture {
             viewModel.startEditing(snippet)
         }
+        .accessibilityElement(children: .combine)
         .contextMenu {
             Button(String(localized: "Edit")) {
                 viewModel.startEditing(snippet)

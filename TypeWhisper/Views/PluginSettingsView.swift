@@ -345,6 +345,8 @@ private struct CategoryHeaderButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(String(localized: "\(category.displayName), \(count) plugins"))
+        .accessibilityValue(isExpanded ? String(localized: "Expanded") : String(localized: "Collapsed"))
     }
 }
 
@@ -421,6 +423,9 @@ private struct InstalledPluginRow: View {
                             .monospacedDigit()
                             .frame(width: 32, alignment: .trailing)
                     }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(String(localized: "Downloading \(plugin.manifest.name)"))
+                    .accessibilityValue("\(Int(progress * 100))%")
                 case .extracting:
                     HStack(spacing: 6) {
                         ProgressView()
@@ -455,6 +460,7 @@ private struct InstalledPluginRow: View {
                 }
                 .buttonStyle(.borderless)
                 .help(String(localized: "Uninstall"))
+                .accessibilityLabel(String(localized: "Uninstall \(plugin.manifest.name)"))
             }
 
             if plugin.instance.settingsView != nil {
@@ -464,6 +470,7 @@ private struct InstalledPluginRow: View {
                     Image(systemName: "gear")
                 }
                 .buttonStyle(.borderless)
+                .accessibilityLabel(String(localized: "Settings for \(plugin.manifest.name)"))
             }
 
             Toggle("", isOn: Binding(
@@ -473,6 +480,7 @@ private struct InstalledPluginRow: View {
                 }
             ))
             .labelsHidden()
+            .accessibilityLabel(String(localized: "Enable \(plugin.manifest.name)"))
         }
         .sheet(isPresented: $showSettings) {
             if let view = plugin.instance.settingsView {
@@ -550,6 +558,9 @@ struct AvailablePluginRow: View {
                             .monospacedDigit()
                             .frame(width: 32, alignment: .trailing)
                     }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(String(localized: "Downloading \(plugin.name)"))
+                    .accessibilityValue("\(Int(progress * 100))%")
                 case .extracting:
                     HStack(spacing: 6) {
                         ProgressView()
@@ -577,6 +588,7 @@ struct AvailablePluginRow: View {
                     onInstall()
                 }
                 .controlSize(.small)
+                .accessibilityLabel(String(localized: "Install \(plugin.name)"))
             }
         }
     }

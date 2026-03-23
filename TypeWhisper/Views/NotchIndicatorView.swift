@@ -86,6 +86,26 @@ struct NotchIndicatorView: View {
             }
         }
         .animation(.easeInOut(duration: 1.0), value: dotPulse)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(notchAccessibilityLabel)
+    }
+
+    private var notchAccessibilityLabel: String {
+        switch viewModel.state {
+        case .idle, .promptSelection, .promptProcessing:
+            return String(localized: "Idle")
+        case .recording:
+            return String(localized: "Recording")
+        case .processing:
+            return String(localized: "Processing transcription")
+        case .inserting:
+            if let feedback = viewModel.actionFeedbackMessage {
+                return feedback
+            }
+            return String(localized: "Inserting text")
+        case .error(let message):
+            return String(localized: "Error - \(message)")
+        }
     }
 
     // MARK: - Status bar (three-zone layout)

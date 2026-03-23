@@ -60,6 +60,7 @@ struct IndicatorAppIconView: View {
                 RoundedRectangle(cornerRadius: sizing.iconCornerRadius)
                     .stroke(borderColor ?? .clear, lineWidth: 1.5)
             )
+            .accessibilityHidden(true)
     }
 }
 
@@ -72,6 +73,12 @@ struct IndicatorLeftStatus: View {
     let hasActionFeedback: Bool
 
     var body: some View {
+        statusContent
+            .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private var statusContent: some View {
         switch viewModel.state {
         case .idle, .promptSelection, .promptProcessing:
             Color.clear.frame(width: 0, height: 0)
@@ -124,6 +131,7 @@ struct IndicatorDot: View {
             .frame(width: sizing.dotSize, height: sizing.dotSize)
             .scaleEffect(1.0 + CGFloat(audioLevel) * 0.8)
             .shadow(color: .yellow.opacity(dotPulse ? 0.8 : 0.2), radius: dotPulse ? 6 : 2)
+            .accessibilityHidden(true)
     }
 }
 
@@ -143,6 +151,8 @@ struct IndicatorRecordingContent: View {
             Text(formatDuration(viewModel.recordingDuration))
                 .font(.system(size: sizing.timerFontSize, weight: .medium).monospacedDigit())
                 .foregroundStyle(.white.opacity(sizing.timerOpacity))
+                .accessibilityLabel(String(localized: "Recording timer"))
+                .accessibilityValue(formatDuration(viewModel.recordingDuration))
         case .waveform:
             AudioWaveformView(
                 audioLevel: viewModel.audioLevel,
@@ -159,6 +169,8 @@ struct IndicatorRecordingContent: View {
                     .padding(.horizontal, sizing.profilePaddingH)
                     .padding(.vertical, sizing.profilePaddingV)
                     .background(.white.opacity(0.2), in: Capsule())
+                    .accessibilityLabel(String(localized: "Active profile"))
+                    .accessibilityValue(name)
             } else {
                 Color.clear
             }
@@ -194,6 +206,8 @@ struct IndicatorExpandableText: View {
             }
         }
         .transaction { $0.disablesAnimations = true }
+        .accessibilityLabel(String(localized: "Streaming text"))
+        .accessibilityValue(text)
     }
 }
 
@@ -210,6 +224,7 @@ struct IndicatorActionFeedback: View {
             Image(systemName: icon ?? (isError ? "xmark.circle.fill" : "checkmark.circle.fill"))
                 .foregroundStyle(isError ? .red : .green)
                 .font(.system(size: 16))
+                .accessibilityHidden(true)
             Text(message)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.white.opacity(0.9))
@@ -218,6 +233,8 @@ struct IndicatorActionFeedback: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
         .padding(.horizontal, contentPadding)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(message)
     }
 }
 

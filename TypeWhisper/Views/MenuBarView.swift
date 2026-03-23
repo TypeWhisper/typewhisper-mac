@@ -115,6 +115,14 @@ struct MenuBarView: View {
         }
         .disabled(!status.isModelReady)
 
+        Button {
+            DictationViewModel.shared.readBackLastTranscription()
+        } label: {
+            Label(String(localized: "Read Back Last Transcription"), systemImage: "speaker.wave.2")
+        }
+        .keyboardShortcut("r", modifiers: [.command, .shift])
+        .disabled(DictationViewModel.shared.lastTranscribedText == nil)
+
         #if !APPSTORE
         Button(String(localized: "Check for Updates...")) {
             UpdateChecker.shared?.checkForUpdates()

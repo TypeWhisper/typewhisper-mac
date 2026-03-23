@@ -24,6 +24,8 @@ final class PromptPaletteHandler {
     private let promptActionService: PromptActionService
     private let promptProcessingService: PromptProcessingService
     private let soundService: SoundService
+    private let accessibilityAnnouncementService: AccessibilityAnnouncementService
+    private let speechFeedbackService: SpeechFeedbackService
 
     var onShowNotchFeedback: ((String, String, TimeInterval, Bool, String?) -> Void)?
     var onShowError: ((String) -> Void)?
@@ -37,12 +39,16 @@ final class PromptPaletteHandler {
         textInsertionService: TextInsertionService,
         promptActionService: PromptActionService,
         promptProcessingService: PromptProcessingService,
-        soundService: SoundService
+        soundService: SoundService,
+        accessibilityAnnouncementService: AccessibilityAnnouncementService,
+        speechFeedbackService: SpeechFeedbackService
     ) {
         self.textInsertionService = textInsertionService
         self.promptActionService = promptActionService
         self.promptProcessingService = promptProcessingService
         self.soundService = soundService
+        self.accessibilityAnnouncementService = accessibilityAnnouncementService
+        self.speechFeedbackService = speechFeedbackService
     }
 
     func hide() {
@@ -144,6 +150,8 @@ final class PromptPaletteHandler {
         paletteContext = nil
 
         onShowNotchFeedback?(action.name + "...", "ellipsis.circle", 30, false, nil)
+        accessibilityAnnouncementService.announcePromptProcessing(action.name)
+        speechFeedbackService.announceEvent(.promptProcessing)
 
         Task { [weak self] in
             guard let self else { return }
@@ -168,6 +176,8 @@ final class PromptPaletteHandler {
                         resolvedApp, ctx.text, nil
                     )
                     soundService.play(.transcriptionSuccess, enabled: soundFeedbackEnabled)
+                    self.accessibilityAnnouncementService.announcePromptComplete()
+                    self.speechFeedbackService.announceEvent(.promptComplete)
                     let feedback = getActionFeedback?() ?? (message: nil, icon: nil, duration: 3.5)
                     onShowNotchFeedback?(
                         feedback.0 ?? "Done",
@@ -196,6 +206,8 @@ final class PromptPaletteHandler {
                 }
 
                 soundService.play(.transcriptionSuccess, enabled: soundFeedbackEnabled)
+                self.accessibilityAnnouncementService.announcePromptComplete()
+                self.speechFeedbackService.announceEvent(.promptComplete)
                 onShowNotchFeedback?(
                     inserted ? String(localized: "Text replaced") : String(localized: "Copied to clipboard"),
                     inserted ? "checkmark.circle.fill" : "doc.on.clipboard.fill",
@@ -206,6 +218,8 @@ final class PromptPaletteHandler {
             } catch {
                 guard !Task.isCancelled else { return }
                 soundService.play(.error, enabled: soundFeedbackEnabled)
+                self.accessibilityAnnouncementService.announceError(error.localizedDescription)
+                self.speechFeedbackService.announceEvent(.error(reason: error.localizedDescription))
                 onShowNotchFeedback?(error.localizedDescription, "xmark.circle.fill", 2.5, true, "prompt")
             }
         }

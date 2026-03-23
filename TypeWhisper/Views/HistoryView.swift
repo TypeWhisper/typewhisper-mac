@@ -45,6 +45,7 @@ struct HistoryView: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(String(localized: "Clear search"))
                 }
             }
             .padding(8)
@@ -269,6 +270,9 @@ private struct SectionHeader: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(String(localized: "\(group.displayName), \(count) entries"))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityValue(isCollapsed ? String(localized: "Collapsed") : String(localized: "Expanded"))
     }
 }
 
@@ -308,6 +312,7 @@ private struct RecordRow: View {
             }
         }
         .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
     }
 
     private func relativeTime(_ date: Date) -> String {
@@ -466,6 +471,7 @@ private struct RecordDetailView: View {
                     Image(systemName: "doc.on.doc")
                 }
                 .help(String(localized: "Copy"))
+                .accessibilityLabel(String(localized: "Copy"))
 
                 Button {
                     viewModel.startEditing()
@@ -473,6 +479,7 @@ private struct RecordDetailView: View {
                     Image(systemName: "pencil")
                 }
                 .help(String(localized: "Edit"))
+                .accessibilityLabel(String(localized: "Edit"))
 
                 Button(role: .destructive) {
                     viewModel.deleteRecord(record)
@@ -480,6 +487,7 @@ private struct RecordDetailView: View {
                     Image(systemName: "trash")
                 }
                 .help(String(localized: "Delete"))
+                .accessibilityLabel(String(localized: "Delete"))
             }
         }
         .buttonStyle(.borderless)
@@ -517,6 +525,7 @@ private struct AudioPlaybackBar: View {
                     .frame(width: 20)
             }
             .buttonStyle(.borderless)
+            .accessibilityLabel(playbackService.isPlaying ? String(localized: "Pause") : String(localized: "Play"))
 
             if playbackService.duration > 0 {
                 Slider(
@@ -527,6 +536,7 @@ private struct AudioPlaybackBar: View {
                     in: 0...playbackService.duration
                 )
                 .controlSize(.small)
+                .accessibilityLabel(String(localized: "Playback position"))
 
                 Text(formatTime(playbackService.currentTime) + " / " + formatTime(playbackService.duration))
                     .font(.caption)
@@ -547,6 +557,7 @@ private struct AudioPlaybackBar: View {
             }
             .buttonStyle(.borderless)
             .help(String(localized: "Show in Finder"))
+            .accessibilityLabel(String(localized: "Show in Finder"))
         }
     }
 

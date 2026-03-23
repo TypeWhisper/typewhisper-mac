@@ -72,6 +72,7 @@ struct AdvancedSettingsView: View {
                         Image(systemName: "circle.fill")
                             .foregroundStyle(pluginCount > 0 && !memoryService.extractionProviderId.isEmpty ? .green : .orange)
                             .font(.caption2)
+                            .accessibilityHidden(true)
                         if pluginCount == 0 {
                             Text(String(localized: "No memory storage plugins active. Enable one in Integrations."))
                                 .font(.callout)
@@ -140,6 +141,7 @@ struct AdvancedSettingsView: View {
                         Image(systemName: "circle.fill")
                             .foregroundStyle(viewModel.isRunning ? .green : .orange)
                             .font(.caption2)
+                            .accessibilityHidden(true)
                         Text(viewModel.isRunning
                              ? String(localized: "Running on port \(String(viewModel.port))")
                              : String(localized: "Not running"))
@@ -162,6 +164,7 @@ struct AdvancedSettingsView: View {
                     Image(systemName: "circle.fill")
                         .foregroundStyle(cliInstalled ? .green : .orange)
                         .font(.caption2)
+                        .accessibilityHidden(true)
                     if cliInstalled {
                         Text(String(localized: "Installed at /usr/local/bin/typewhisper"))
                             .font(.callout)

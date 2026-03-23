@@ -38,10 +38,12 @@ struct PromptPaletteContentView: View {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 14))
                     .foregroundColor(.secondary)
+                    .accessibilityHidden(true)
 
                 TextField(String(localized: "Search prompts..."), text: $searchText)
                     .textFieldStyle(.plain)
                     .font(.system(size: 15))
+                    .accessibilityLabel(String(localized: "Search prompts"))
                     .onSubmit {
                         if let action = filteredActions[safe: selectedIndex] {
                             onSelect(action)
@@ -126,6 +128,7 @@ private struct PromptPaletteRow: View {
                 .font(.system(size: 14))
                 .foregroundColor(isSelected ? .white : .accentColor)
                 .frame(width: 24, height: 24)
+                .accessibilityHidden(true)
 
             Text(action.name)
                 .font(.system(size: 13))
@@ -139,6 +142,8 @@ private struct PromptPaletteRow: View {
             RoundedRectangle(cornerRadius: 6)
                 .fill(isSelected ? Color.accentColor : Color.clear)
         )
+        .accessibilityLabel(action.name)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

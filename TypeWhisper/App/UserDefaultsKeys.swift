@@ -65,6 +65,9 @@ enum UserDefaultsKeys {
     static let memoryMinTextLength = "memoryMinTextLength"
     static let memoryExtractionPrompt = "memoryExtractionPrompt"
 
+    // MARK: - Accessibility
+    static let spokenFeedbackEnabled = "spokenFeedbackEnabled"
+
     // MARK: - Plugin Registry
     static let pluginRegistryLastFetch = "pluginRegistryLastFetch"
 
