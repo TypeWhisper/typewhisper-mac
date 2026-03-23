@@ -3184,6 +3184,16 @@
         }
       }
     },
+    "tap again for double-tap…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "erneut drücken für Doppel-Tap…"
+          }
+        }
+      }
+    },
     "Press to start, press again to stop." : {
       "localizations" : {
         "de" : {
