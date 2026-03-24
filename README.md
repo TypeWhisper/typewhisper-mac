@@ -11,7 +11,7 @@ TypeWhisper `1.0` is scoped as a reliable direct-download release. The supported
 See [docs/1.0-readiness.md](docs/1.0-readiness.md), [docs/support-matrix.md](docs/support-matrix.md), and [docs/release-checklist.md](docs/release-checklist.md) for the current release definition and ship gates.
 
 <p align="center">
-  <video src="https://github.com/user-attachments/assets/98e1aef9-de31-434b-aa13-cfd36c0f3155" autoplay loop muted playsinline width="270"></video>
+  <video src="https://github.com/user-attachments/assets/22fe922d-4a4c-47d1-805e-684a148ebd03" autoplay loop muted playsinline width="270"></video>
 </p>
 
 ## Screenshots
