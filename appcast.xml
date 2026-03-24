@@ -1,15 +1,25 @@
-<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+<?xml version='1.0' encoding='utf-8'?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
   <channel>
     <title>TypeWhisper Updates</title>
     <language>en</language>
+    <description>Stable, release candidate, and daily updates for TypeWhisper.</description>
+    <item>
+      <title>Version 1.0.0-rc1</title>
+      <pubDate>Tue, 24 Mar 2026 09:40:25 +0000</pubDate>
+      <sparkle:version>393</sparkle:version>
+      <sparkle:shortVersionString>1.0.0-rc1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <sparkle:channel>release-candidate</sparkle:channel>
+      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.0.0-rc1/TypeWhisper-v1.0.0-rc1.zip" sparkle:edSignature="F2k7zEABur8RU/4tQWUpOWLZux5JI26d4KWxQCajbtcqPeVvl/sh0uoJd2A61zlEbjCAVU34R7zhO3Eha/eZDA==" length="7929331" type="application/octet-stream" />
+    </item>
     <item>
       <title>Version 0.13.4</title>
       <pubDate>Wed, 18 Mar 2026 15:50:06 +0000</pubDate>
       <sparkle:version>361</sparkle:version>
       <sparkle:shortVersionString>0.13.4</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
-      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v0.13.4/TypeWhisper-v0.13.4.zip" sparkle:edSignature="y8M+ziXBIOGfX7vFssP+NL2iBX/gY7fOFOqDQZ9rv1CT3bGT3x/gq1tz6NrX4obo8+6ZazeYp12I1dukEWiBCA==" length="5529264" type="application/octet-stream"/>
+      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v0.13.4/TypeWhisper-v0.13.4.zip" sparkle:edSignature="y8M+ziXBIOGfX7vFssP+NL2iBX/gY7fOFOqDQZ9rv1CT3bGT3x/gq1tz6NrX4obo8+6ZazeYp12I1dukEWiBCA==" length="5529264" type="application/octet-stream" />
     </item>
   </channel>
 </rss>
