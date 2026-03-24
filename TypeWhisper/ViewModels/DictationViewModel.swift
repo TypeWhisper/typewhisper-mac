@@ -525,33 +525,20 @@ final class DictationViewModel: ObservableObject {
             )))
         }
         var samples = audioRecordingService.stopRecording()
-
-        // Add silence padding so Whisper can properly finish decoding the last tokens
-        let padCount = Int(0.3 * AudioRecordingService.targetSampleRate)
-        samples.append(contentsOf: [Float](repeating: 0, count: padCount))
-
-        let saveAudio = UserDefaults.standard.bool(forKey: UserDefaultsKeys.saveAudioWithHistory)
-        let audioSamplesForHistory: [Float]? = saveAudio ? samples : nil
-
-        let audioDurationForEvent = Double(samples.count) / 16000.0
-        EventBus.shared.emit(.recordingStopped(RecordingStoppedPayload(
-            durationSeconds: audioDurationForEvent
-        )))
-
-        guard !samples.isEmpty else {
-            resetDictationState()
-            return
-        }
-
-        let audioDuration = Double(samples.count) / 16000.0
-        guard audioDuration >= 0.3 else {
-            // Too short to transcribe meaningfully
-            resetDictationState()
-            return
-        }
-
         let peakLevel = audioRecordingService.peakRawAudioLevel
+        let rawDuration = Double(samples.count) / AudioRecordingService.targetSampleRate
+
+        logger.info("Recording stopped: duration=\(String(format: "%.2f", rawDuration))s, peakLevel=\(String(format: "%.4f", peakLevel)), samples=\(samples.count)")
+
+        // Check real audio duration BEFORE adding silence padding
+        guard !samples.isEmpty, rawDuration >= 0.1 else {
+            logger.info("Recording too short (\(String(format: "%.2f", rawDuration))s) - discarding")
+            resetDictationState()
+            return
+        }
+
         guard peakLevel >= 0.01 else {
+            logger.info("Peak level too low (\(String(format: "%.4f", peakLevel))) - no speech detected")
             showNotchFeedback(
                 message: String(localized: "No speech detected"),
                 icon: "mic.slash",
@@ -560,6 +547,20 @@ final class DictationViewModel: ObservableObject {
             resetDictationState()
             return
         }
+
+        // Add silence padding so Whisper can properly finish decoding the last tokens.
+        // Short recordings get more padding for better recognition.
+        let padSeconds: Double = rawDuration < 1.0 ? 0.5 : 0.3
+        let padCount = Int(padSeconds * AudioRecordingService.targetSampleRate)
+        samples.append(contentsOf: [Float](repeating: 0, count: padCount))
+
+        let saveAudio = UserDefaults.standard.bool(forKey: UserDefaultsKeys.saveAudioWithHistory)
+        let audioSamplesForHistory: [Float]? = saveAudio ? samples : nil
+
+        let audioDuration = Double(samples.count) / AudioRecordingService.targetSampleRate
+        EventBus.shared.emit(.recordingStopped(RecordingStoppedPayload(
+            durationSeconds: audioDuration
+        )))
 
         state = .processing
 
@@ -590,6 +591,13 @@ final class DictationViewModel: ObservableObject {
 
                 var text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !text.isEmpty else {
+                    logger.info("Transcription returned empty text (duration: \(String(format: "%.2f", result.duration))s, engine: \(result.engineUsed))")
+                    showNotchFeedback(
+                        message: String(localized: "No speech recognized"),
+                        icon: "text.magnifyingglass",
+                        duration: 2.0
+                    )
+                    soundService.play(.error, enabled: soundFeedbackEnabled)
                     resetDictationState()
                     return
                 }
