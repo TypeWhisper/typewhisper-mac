@@ -347,6 +347,23 @@
       "minOSVersion": "14.0",
       "iconSystemName": "bolt.fill",
       "requiresAPIKey": true
+    },
+    {
+      "id": "com.typewhisper.gladia",
+      "name": "Gladia",
+      "version": "1.0.0",
+      "minHostVersion": "0.12.0",
+      "author": "TypeWhisper",
+      "description": "Cloud transcription via Gladia Solaria API with real-time WebSocket streaming.",
+      "descriptions": {
+        "de": "Cloud-Transkription ueber die Gladia-Solaria-API mit Echtzeit-WebSocket-Streaming."
+      },
+      "category": "transcription",
+      "size": 200321,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gladia-v1.0.0/GladiaPlugin.zip",
+      "minOSVersion": "14.0",
+      "iconSystemName": "waveform.badge.mic",
+      "requiresAPIKey": true
     }
   ]
 }
