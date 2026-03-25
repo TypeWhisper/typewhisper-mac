@@ -8,6 +8,9 @@ public struct PluginManifest: Codable, Equatable, Sendable {
     public let minOSVersion: String?
     public let author: String?
     public let principalClass: String
+    public let requiresAPIKey: Bool?
+    public let iconSystemName: String?
+    public let category: String?
 
     public init(
         id: String,
@@ -16,7 +19,10 @@ public struct PluginManifest: Codable, Equatable, Sendable {
         minHostVersion: String? = nil,
         minOSVersion: String? = nil,
         author: String? = nil,
-        principalClass: String
+        principalClass: String,
+        requiresAPIKey: Bool? = nil,
+        iconSystemName: String? = nil,
+        category: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -25,5 +31,8 @@ public struct PluginManifest: Codable, Equatable, Sendable {
         self.minOSVersion = minOSVersion
         self.author = author
         self.principalClass = principalClass
+        self.requiresAPIKey = requiresAPIKey
+        self.iconSystemName = iconSystemName
+        self.category = category
     }
 }

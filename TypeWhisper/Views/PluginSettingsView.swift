@@ -362,12 +362,12 @@ private struct InstalledPluginRow: View {
     @State private var showSettings = false
 
     private var isCloud: Bool {
-        registryPlugin?.requiresAPIKey == true
+        registryPlugin?.requiresAPIKey == true || plugin.manifest.requiresAPIKey == true
     }
 
     var body: some View {
         HStack {
-            Image(systemName: registryPlugin?.iconSystemName ?? "puzzlepiece.extension")
+            Image(systemName: registryPlugin?.iconSystemName ?? plugin.manifest.iconSystemName ?? "puzzlepiece.extension")
                 .font(.title2)
                 .foregroundStyle(.blue)
                 .frame(width: 32)

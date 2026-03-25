@@ -49,6 +49,7 @@ jobs:
             cloudflare-asr) TARGET="CloudflareASRPlugin" ;;
             file-memory) TARGET="FileMemoryPlugin" ;;
             openai-vector-memory) TARGET="OpenAIVectorMemoryPlugin" ;;
+            fireworks) TARGET="FireworksPlugin" ;;
             *) echo "Unknown plugin: $PLUGIN_NAME" && exit 1 ;;
           esac
           # Set deployment target and Swift embedding per plugin
