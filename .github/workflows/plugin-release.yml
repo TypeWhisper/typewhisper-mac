@@ -50,6 +50,7 @@ jobs:
             file-memory) TARGET="FileMemoryPlugin" ;;
             openai-vector-memory) TARGET="OpenAIVectorMemoryPlugin" ;;
             fireworks) TARGET="FireworksPlugin" ;;
+            claude) TARGET="ClaudePlugin" ;;
             cerebras) TARGET="CerebrasPlugin" ;;
             *) echo "Unknown plugin: $PLUGIN_NAME" && exit 1 ;;
           esac

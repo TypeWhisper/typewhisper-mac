@@ -1,0 +1,16 @@
+{
+    "id": "com.typewhisper.claude",
+    "name": "Claude",
+    "version": "1.0.0",
+    "minHostVersion": "0.9.0",
+    "minOSVersion": "14.0",
+    "author": "TypeWhisper",
+    "description": "LLM provider via Anthropic Claude API. Requires API key.",
+    "descriptions": {
+        "de": "LLM-Anbieter ueber die Anthropic Claude API. Erfordert API-Key."
+    },
+    "category": "llm",
+    "iconSystemName": "brain.head.profile",
+    "requiresAPIKey": true,
+    "principalClass": "ClaudePlugin"
+}
