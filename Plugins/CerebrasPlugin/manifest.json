@@ -1,0 +1,16 @@
+{
+    "id": "com.typewhisper.cerebras",
+    "name": "Cerebras",
+    "version": "1.0.0",
+    "minHostVersion": "0.9.0",
+    "minOSVersion": "14.0",
+    "author": "TypeWhisper",
+    "description": "Ultra-fast LLM inference via Cerebras API. Up to 3,000 tokens/sec. Requires API key.",
+    "descriptions": {
+        "de": "Ultra-schnelle LLM-Inferenz ueber die Cerebras-API. Bis zu 3.000 Tokens/Sek. Erfordert API-Key."
+    },
+    "category": "llm",
+    "iconSystemName": "bolt.fill",
+    "requiresAPIKey": true,
+    "principalClass": "CerebrasPlugin"
+}

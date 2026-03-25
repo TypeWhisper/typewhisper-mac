@@ -234,6 +234,10 @@
 		AA00000000000000000260 /* HotkeyRecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000248 /* HotkeyRecorderView.swift */; };
 		AA00000000000000000261 /* HotkeySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000249 /* HotkeySettingsView.swift */; };
 		AA00000000000000000262 /* AboutSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000250 /* AboutSettingsView.swift */; };
+		AA00000000000000000267 /* CerebrasPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000255 /* CerebrasPlugin.swift */; };
+		AA00000000000000000268 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000256 /* manifest.json */; };
+		AA00000000000000000269 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000258 /* Localizable.xcstrings */; };
+		AA00000000000000000270 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000036 /* TypeWhisperPluginSDK */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -517,6 +521,10 @@
 		BB00000000000000000248 /* HotkeyRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyRecorderView.swift; sourceTree = "<group>"; };
 		BB00000000000000000249 /* HotkeySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeySettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000250 /* AboutSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutSettingsView.swift; sourceTree = "<group>"; };
+		BB00000000000000000255 /* CerebrasPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CerebrasPlugin.swift; sourceTree = "<group>"; };
+		BB00000000000000000256 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		BB00000000000000000257 /* CerebrasPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CerebrasPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB00000000000000000258 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -728,6 +736,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		FF00000000000000000128 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA00000000000000000270 /* TypeWhisperPluginSDK in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -783,6 +799,7 @@
 				CC00000000000000000035 /* FileMemoryPlugin */,
 				CC00000000000000000036 /* OpenAIVectorMemoryPlugin */,
 				CC00000000000000000037 /* FireworksPlugin */,
+				CC00000000000000000038 /* CerebrasPlugin */,
 				CC00000000000000000025 /* TypeWhisperWidgetExtension */,
 				CC00000000000000000026 /* TypeWhisperWidgetShared */,
 				CC00000000000000000090 /* Products */,
@@ -1250,6 +1267,17 @@
 			path = Plugins/FireworksPlugin;
 			sourceTree = "<group>";
 		};
+		CC00000000000000000038 /* CerebrasPlugin */ = {
+			isa = PBXGroup;
+			children = (
+				BB00000000000000000255 /* CerebrasPlugin.swift */,
+				BB00000000000000000256 /* manifest.json */,
+				BB00000000000000000258 /* Localizable.xcstrings */,
+			);
+			name = CerebrasPlugin;
+			path = Plugins/CerebrasPlugin;
+			sourceTree = "<group>";
+		};
 		CC00000000000000000090 /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -1276,6 +1304,7 @@
 				BB00000000000000000231 /* FileMemoryPlugin.bundle */,
 				BB00000000000000000234 /* OpenAIVectorMemoryPlugin.bundle */,
 				BB00000000000000000254 /* FireworksPlugin.bundle */,
+				BB00000000000000000257 /* CerebrasPlugin.bundle */,
 				BB00000000000000000188 /* TypeWhisperWidgetExtension.appex */,
 				E6F8E5940EF4832A7B8D735D /* TypeWhisperTests.xctest */,
 			);
@@ -1813,6 +1842,26 @@
 			productReference = BB00000000000000000254 /* FireworksPlugin.bundle */;
 			productType = "com.apple.product-type.bundle";
 		};
+		DD00000000000000000026 /* CerebrasPlugin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FF00000000000000000130 /* Build configuration list for PBXNativeTarget "CerebrasPlugin" */;
+			buildPhases = (
+				FF00000000000000000127 /* Sources */,
+				FF00000000000000000128 /* Frameworks */,
+				FF00000000000000000129 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CerebrasPlugin;
+			packageProductDependencies = (
+				PP00000000000000000036 /* TypeWhisperPluginSDK */,
+			);
+			productName = CerebrasPlugin;
+			productReference = BB00000000000000000257 /* CerebrasPlugin.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -1875,6 +1924,7 @@
 				DD00000000000000000023 /* FileMemoryPlugin */,
 				DD00000000000000000024 /* OpenAIVectorMemoryPlugin */,
 				DD00000000000000000025 /* FireworksPlugin */,
+				DD00000000000000000026 /* CerebrasPlugin */,
 				DD00000000000000000014 /* TypeWhisperWidgetExtension */,
 				40F22D3F350BA09ADEFBD2CB /* TypeWhisperTests */,
 			);
@@ -2093,6 +2143,15 @@
 			files = (
 				AA00000000000000000264 /* manifest.json in Resources */,
 				AA00000000000000000265 /* Localizable.xcstrings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FF00000000000000000129 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA00000000000000000268 /* manifest.json in Resources */,
+				AA00000000000000000269 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2438,6 +2497,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000263 /* FireworksPlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FF00000000000000000127 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA00000000000000000267 /* CerebrasPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -5033,6 +5100,102 @@
 			};
 			name = AppStoreRelease;
 		};
+		XX00000000000000000105 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Cerebras;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = CerebrasPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.cerebras;
+				PRODUCT_NAME = CerebrasPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
+		XX00000000000000000106 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Cerebras;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = CerebrasPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.cerebras;
+				PRODUCT_NAME = CerebrasPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
+		XX00000000000000000107 /* AppStoreDebug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Cerebras;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = CerebrasPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.cerebras;
+				PRODUCT_NAME = CerebrasPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = AppStoreDebug;
+		};
+		XX00000000000000000108 /* AppStoreRelease */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Cerebras;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = CerebrasPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.cerebras;
+				PRODUCT_NAME = CerebrasPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = AppStoreRelease;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -5322,6 +5485,17 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		FF00000000000000000130 /* Build configuration list for PBXNativeTarget "CerebrasPlugin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				XX00000000000000000105 /* Debug */,
+				XX00000000000000000106 /* Release */,
+				XX00000000000000000107 /* AppStoreDebug */,
+				XX00000000000000000108 /* AppStoreRelease */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -5497,6 +5671,10 @@
 			productName = TypeWhisperPluginSDK;
 		};
 		PP00000000000000000035 /* TypeWhisperPluginSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TypeWhisperPluginSDK;
+		};
+		PP00000000000000000036 /* TypeWhisperPluginSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TypeWhisperPluginSDK;
 		};
