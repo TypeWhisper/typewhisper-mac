@@ -51,6 +51,7 @@ jobs:
             openai-vector-memory) TARGET="OpenAIVectorMemoryPlugin" ;;
             fireworks) TARGET="FireworksPlugin" ;;
             gladia) TARGET="GladiaPlugin" ;;
+            elevenlabs) TARGET="ElevenLabsPlugin" ;;
             claude) TARGET="ClaudePlugin" ;;
             cerebras) TARGET="CerebrasPlugin" ;;
             *) echo "Unknown plugin: $PLUGIN_NAME" && exit 1 ;;
