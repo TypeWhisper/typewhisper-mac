@@ -32,6 +32,7 @@ final class PromptPaletteHandler {
     var executeActionPlugin: ((any ActionPlugin, String, String,
         (name: String?, bundleId: String?, url: String?), String?, String?) async throws -> Void)?
     var getActionFeedback: (() -> (message: String?, icon: String?, duration: TimeInterval))?
+    var getPreserveClipboard: (() -> Bool)?
 
     var isVisible: Bool { promptPaletteController.isVisible }
 
@@ -189,6 +190,10 @@ final class PromptPaletteHandler {
                     return
                 }
 
+                // Save clipboard if preservation is enabled
+                let preserveClipboard = getPreserveClipboard?() ?? false
+                let savedClipboard = preserveClipboard ? textInsertionService.saveClipboard() : []
+
                 // Always put result on clipboard so the user can paste it
                 let pasteboard = NSPasteboard.general
                 pasteboard.clearContents()
@@ -203,6 +208,12 @@ final class PromptPaletteHandler {
                     inserted = textInsertionService.insertTextAt(element: element, text: result)
                 } else {
                     inserted = false
+                }
+
+                // Restore clipboard if insertion succeeded; keep result on clipboard as fallback otherwise
+                if preserveClipboard && inserted {
+                    try? await Task.sleep(for: .milliseconds(200))
+                    textInsertionService.restoreClipboard(savedClipboard)
                 }
 
                 soundService.play(.transcriptionSuccess, enabled: soundFeedbackEnabled)

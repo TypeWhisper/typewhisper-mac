@@ -282,17 +282,48 @@ enum InsertionResult {
         return result == .success
     }
 
-    func insertText(_ text: String) async throws -> InsertionResult {
+    /// Saves all current clipboard contents for later restoration.
+    func saveClipboard() -> [(NSPasteboard.PasteboardType, Data)] {
+        let pasteboard = NSPasteboard.general
+        return pasteboard.pasteboardItems?.flatMap { item in
+            item.types.compactMap { type in
+                guard let data = item.data(forType: type) else { return nil }
+                return (type, data)
+            }
+        } ?? []
+    }
+
+    /// Restores previously saved clipboard contents.
+    func restoreClipboard(_ savedItems: [(NSPasteboard.PasteboardType, Data)]) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        if !savedItems.isEmpty {
+            let item = NSPasteboardItem()
+            for (type, data) in savedItems {
+                item.setData(data, forType: type)
+            }
+            pasteboard.writeObjects([item])
+        }
+    }
+
+    func insertText(_ text: String, preserveClipboard: Bool = false) async throws -> InsertionResult {
         guard isAccessibilityGranted else {
             throw TextInsertionError.accessibilityNotGranted
         }
 
         let pasteboard = NSPasteboard.general
+        let savedItems = preserveClipboard ? saveClipboard() : []
+
         // Set transcribed text on clipboard and simulate Cmd+V.
         // Text stays on clipboard as fallback if no text field is focused.
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
         simulatePaste()
+
+        if preserveClipboard {
+            try? await Task.sleep(for: .milliseconds(200))
+            restoreClipboard(savedItems)
+        }
 
         return .pasted
     }

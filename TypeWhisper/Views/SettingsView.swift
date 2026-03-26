@@ -285,6 +285,14 @@ struct RecordingSettingsView: View {
 
             }
 
+            Section(String(localized: "Clipboard")) {
+                Toggle(String(localized: "Preserve clipboard content"), isOn: $dictation.preserveClipboard)
+
+                Text(String(localized: "Restores your clipboard after text insertion. Without this, your clipboard contains the transcribed text after dictation."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section(String(localized: "Output Formatting")) {
                 Toggle(String(localized: "App-aware formatting"), isOn: Binding(
                     get: { UserDefaults.standard.bool(forKey: UserDefaultsKeys.appFormattingEnabled) },
