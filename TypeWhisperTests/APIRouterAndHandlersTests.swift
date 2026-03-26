@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import XCTest
 @testable import TypeWhisper
@@ -73,6 +74,43 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual(status["status"] as? String, "no_model")
         XCTAssertEqual((history["entries"] as? [[String: Any]])?.count, 1)
         XCTAssertEqual((profiles["profiles"] as? [[String: Any]])?.first?["name"] as? String, "Docs")
+    }
+
+    @MainActor
+    func testClipboardSnapshotRoundTripsMultiplePasteboardItems() {
+        let firstItem = NSPasteboardItem()
+        firstItem.setString("first", forType: .string)
+        firstItem.setData(Data([0x01, 0x02]), forType: .png)
+
+        let secondItem = NSPasteboardItem()
+        secondItem.setString("second", forType: .string)
+        secondItem.setData(Data([0x03, 0x04]), forType: .tiff)
+
+        let snapshot = TextInsertionService.clipboardSnapshot(from: [firstItem, secondItem])
+        let restoredItems = TextInsertionService.pasteboardItems(from: snapshot)
+
+        XCTAssertEqual(restoredItems.count, 2)
+        XCTAssertEqual(restoredItems[0].string(forType: .string), "first")
+        XCTAssertEqual(restoredItems[0].data(forType: .png), Data([0x01, 0x02]))
+        XCTAssertEqual(restoredItems[1].string(forType: .string), "second")
+        XCTAssertEqual(restoredItems[1].data(forType: .tiff), Data([0x03, 0x04]))
+    }
+
+    @MainActor
+    func testFocusedTextChangeDetectionRequiresAnActualChange() {
+        XCTAssertFalse(
+            TextInsertionService.focusedTextDidChange(
+                from: (value: "Hello", selectedText: nil, selectedRange: NSRange(location: 5, length: 0)),
+                to: (value: "Hello", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
+            )
+        )
+
+        XCTAssertTrue(
+            TextInsertionService.focusedTextDidChange(
+                from: (value: "Hello", selectedText: nil, selectedRange: NSRange(location: 5, length: 0)),
+                to: (value: "Hello world", selectedText: nil, selectedRange: NSRange(location: 11, length: 0))
+            )
+        )
     }
 
     @MainActor

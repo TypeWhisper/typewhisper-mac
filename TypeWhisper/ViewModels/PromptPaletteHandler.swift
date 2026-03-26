@@ -10,6 +10,12 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhis
 final class PromptPaletteHandler {
     private let promptPaletteController = PromptPaletteController()
 
+    private enum InsertionOutcome {
+        case failed
+        case insertedViaAccessibility
+        case insertedViaPaste
+    }
+
     private struct PaletteContext {
         let text: String
         let selection: TextInsertionService.TextSelection?
@@ -193,35 +199,53 @@ final class PromptPaletteHandler {
                 // Save clipboard if preservation is enabled
                 let preserveClipboard = getPreserveClipboard?() ?? false
                 let savedClipboard = preserveClipboard ? textInsertionService.saveClipboard() : []
+                let pasteVerificationState = preserveClipboard ? textInsertionService.capturePasteVerificationState() : nil
 
                 // Always put result on clipboard so the user can paste it
                 let pasteboard = NSPasteboard.general
                 pasteboard.clearContents()
                 pasteboard.setString(result, forType: .string)
 
-                let inserted: Bool
+                let insertionOutcome: InsertionOutcome
                 if let selection = ctx.selection {
-                    inserted = await insertViaAXWithPasteFallback(selection: selection, result: result, originalText: ctx.text, bundleId: ctx.activeApp.bundleId)
+                    insertionOutcome = await insertViaAXWithPasteFallback(
+                        selection: selection,
+                        result: result,
+                        originalText: ctx.text,
+                        bundleId: ctx.activeApp.bundleId
+                    )
                 } else if ctx.selectionViaCopy {
-                    inserted = await activateAndPaste(bundleId: ctx.activeApp.bundleId)
+                    insertionOutcome = await activateAndPaste(bundleId: ctx.activeApp.bundleId) ? .insertedViaPaste : .failed
                 } else if let element = ctx.focusedElement {
-                    inserted = textInsertionService.insertTextAt(element: element, text: result)
+                    insertionOutcome = textInsertionService.insertTextAt(element: element, text: result)
+                        ? .insertedViaAccessibility
+                        : .failed
                 } else {
-                    inserted = false
+                    insertionOutcome = .failed
                 }
 
                 // Restore clipboard if insertion succeeded; keep result on clipboard as fallback otherwise
-                if preserveClipboard && inserted {
-                    try? await Task.sleep(for: .milliseconds(200))
-                    textInsertionService.restoreClipboard(savedClipboard)
+                if preserveClipboard {
+                    switch insertionOutcome {
+                    case .insertedViaAccessibility:
+                        textInsertionService.restoreClipboard(savedClipboard)
+                    case .insertedViaPaste:
+                        try? await Task.sleep(for: .milliseconds(200))
+                        if let pasteVerificationState,
+                           textInsertionService.canRestoreClipboard(afterPasteUsing: pasteVerificationState) {
+                            textInsertionService.restoreClipboard(savedClipboard)
+                        }
+                    case .failed:
+                        break
+                    }
                 }
 
                 soundService.play(.transcriptionSuccess, enabled: soundFeedbackEnabled)
                 self.accessibilityAnnouncementService.announcePromptComplete()
                 self.speechFeedbackService.announceEvent(.promptComplete)
                 onShowNotchFeedback?(
-                    inserted ? String(localized: "Text replaced") : String(localized: "Copied to clipboard"),
-                    inserted ? "checkmark.circle.fill" : "doc.on.clipboard.fill",
+                    insertionOutcome == .failed ? String(localized: "Copied to clipboard") : String(localized: "Text replaced"),
+                    insertionOutcome == .failed ? "doc.on.clipboard.fill" : "checkmark.circle.fill",
                     2.5,
                     false,
                     nil
@@ -242,7 +266,7 @@ final class PromptPaletteHandler {
         result: String,
         originalText: String,
         bundleId: String?
-    ) async -> Bool {
+    ) async -> InsertionOutcome {
         let replaced = textInsertionService.replaceSelectedText(in: selection, with: result)
         logger.info("[PromptPalette] replaceSelectedText reported: \(replaced)")
 
@@ -253,11 +277,11 @@ final class PromptPaletteHandler {
             if let text = currentText as? String, text == originalText {
                 logger.warning("[PromptPalette] AX replace silently ignored, falling back to paste")
             } else {
-                return true
+                return .insertedViaAccessibility
             }
         }
 
-        return await activateAndPaste(bundleId: bundleId)
+        return await activateAndPaste(bundleId: bundleId) ? .insertedViaPaste : .failed
     }
 
     /// Activate the source app and paste from clipboard. Result must already be on the clipboard.

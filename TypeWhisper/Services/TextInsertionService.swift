@@ -223,6 +223,27 @@ enum InsertionResult {
         let element: AXUIElement
     }
 
+    typealias ClipboardItemSnapshot = [NSPasteboard.PasteboardType: Data]
+    typealias ClipboardSnapshot = [ClipboardItemSnapshot]
+
+    struct PasteVerificationState {
+        fileprivate let focusedTextState: FocusedTextState?
+    }
+
+    fileprivate struct FocusedTextState: Equatable {
+        let element: AXUIElement
+        let value: String?
+        let selectedText: String?
+        let selectedRange: NSRange?
+
+        static func == (lhs: FocusedTextState, rhs: FocusedTextState) -> Bool {
+            lhs.element == rhs.element &&
+            lhs.value == rhs.value &&
+            lhs.selectedText == rhs.selectedText &&
+            lhs.selectedRange == rhs.selectedRange
+        }
+    }
+
     func getSelectedText() -> String? {
         getTextSelection()?.text
     }
@@ -283,27 +304,39 @@ enum InsertionResult {
     }
 
     /// Saves all current clipboard contents for later restoration.
-    func saveClipboard() -> [(NSPasteboard.PasteboardType, Data)] {
-        let pasteboard = NSPasteboard.general
-        return pasteboard.pasteboardItems?.flatMap { item in
-            item.types.compactMap { type in
-                guard let data = item.data(forType: type) else { return nil }
-                return (type, data)
-            }
-        } ?? []
+    func saveClipboard(from pasteboard: NSPasteboard = .general) -> ClipboardSnapshot {
+        Self.clipboardSnapshot(from: pasteboard.pasteboardItems ?? [])
     }
 
     /// Restores previously saved clipboard contents.
-    func restoreClipboard(_ savedItems: [(NSPasteboard.PasteboardType, Data)]) {
-        let pasteboard = NSPasteboard.general
+    func restoreClipboard(_ savedItems: ClipboardSnapshot, to pasteboard: NSPasteboard = .general) {
         pasteboard.clearContents()
         if !savedItems.isEmpty {
-            let item = NSPasteboardItem()
-            for (type, data) in savedItems {
-                item.setData(data, forType: type)
-            }
-            pasteboard.writeObjects([item])
+            pasteboard.writeObjects(Self.pasteboardItems(from: savedItems))
         }
+    }
+
+    func capturePasteVerificationState() -> PasteVerificationState {
+        PasteVerificationState(focusedTextState: captureFocusedTextState())
+    }
+
+    func canRestoreClipboard(afterPasteUsing state: PasteVerificationState) -> Bool {
+        guard let initialState = state.focusedTextState,
+              let currentState = captureFocusedTextState(for: initialState.element) else {
+            return false
+        }
+        return Self.focusedTextDidChange(
+            from: (
+                value: initialState.value,
+                selectedText: initialState.selectedText,
+                selectedRange: initialState.selectedRange
+            ),
+            to: (
+                value: currentState.value,
+                selectedText: currentState.selectedText,
+                selectedRange: currentState.selectedRange
+            )
+        )
     }
 
     func insertText(_ text: String, preserveClipboard: Bool = false) async throws -> InsertionResult {
@@ -313,6 +346,7 @@ enum InsertionResult {
 
         let pasteboard = NSPasteboard.general
         let savedItems = preserveClipboard ? saveClipboard() : []
+        let pasteVerificationState = preserveClipboard ? capturePasteVerificationState() : nil
 
         // Set transcribed text on clipboard and simulate Cmd+V.
         // Text stays on clipboard as fallback if no text field is focused.
@@ -322,7 +356,9 @@ enum InsertionResult {
 
         if preserveClipboard {
             try? await Task.sleep(for: .milliseconds(200))
-            restoreClipboard(savedItems)
+            if let pasteVerificationState, canRestoreClipboard(afterPasteUsing: pasteVerificationState) {
+                restoreClipboard(savedItems)
+            }
         }
 
         return .pasted
@@ -462,12 +498,7 @@ enum InsertionResult {
         let pasteboard = NSPasteboard.general
 
         // Save current clipboard contents (all types)
-        let savedItems: [(NSPasteboard.PasteboardType, Data)] = pasteboard.pasteboardItems?.flatMap { item in
-            item.types.compactMap { type in
-                guard let data = item.data(forType: type) else { return nil }
-                return (type, data)
-            }
-        } ?? []
+        let savedItems = saveClipboard(from: pasteboard)
 
         // Clear and simulate Cmd+C
         pasteboard.clearContents()
@@ -480,14 +511,7 @@ enum InsertionResult {
         let copiedText = pasteboard.string(forType: .string)
 
         // Restore original clipboard
-        pasteboard.clearContents()
-        if !savedItems.isEmpty {
-            let item = NSPasteboardItem()
-            for (type, data) in savedItems {
-                item.setData(data, forType: type)
-            }
-            pasteboard.writeObjects([item])
-        }
+        restoreClipboard(savedItems, to: pasteboard)
 
         guard let text = copiedText, !text.isEmpty else { return nil }
         return text
@@ -496,6 +520,69 @@ enum InsertionResult {
     /// Public wrapper for simulatePaste(), for use by PromptPaletteHandler.
     func pasteFromClipboard() {
         simulatePaste()
+    }
+
+    static func clipboardSnapshot(from items: [NSPasteboardItem]) -> ClipboardSnapshot {
+        items.map { item in
+            Dictionary(uniqueKeysWithValues: item.types.compactMap { type in
+                guard let data = item.data(forType: type) else { return nil }
+                return (type, data)
+            })
+        }
+    }
+
+    static func pasteboardItems(from snapshot: ClipboardSnapshot) -> [NSPasteboardItem] {
+        snapshot.map { itemSnapshot in
+            let item = NSPasteboardItem()
+            for (type, data) in itemSnapshot {
+                item.setData(data, forType: type)
+            }
+            return item
+        }
+    }
+
+    static func focusedTextDidChange(
+        from initialState: (value: String?, selectedText: String?, selectedRange: NSRange?),
+        to currentState: (value: String?, selectedText: String?, selectedRange: NSRange?)
+    ) -> Bool {
+        initialState.value != currentState.value ||
+        initialState.selectedText != currentState.selectedText ||
+        initialState.selectedRange != currentState.selectedRange
+    }
+
+    private func captureFocusedTextState() -> FocusedTextState? {
+        guard let element = getFocusedTextElement() else { return nil }
+        return captureFocusedTextState(for: element)
+    }
+
+    private func captureFocusedTextState(for element: AXUIElement) -> FocusedTextState? {
+        FocusedTextState(
+            element: element,
+            value: stringAttribute(kAXValueAttribute as CFString, from: element),
+            selectedText: stringAttribute(kAXSelectedTextAttribute as CFString, from: element),
+            selectedRange: selectedRangeAttribute(from: element)
+        )
+    }
+
+    private func stringAttribute(_ attribute: CFString, from element: AXUIElement) -> String? {
+        var value: AnyObject?
+        guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success else { return nil }
+        return value as? String
+    }
+
+    private func selectedRangeAttribute(from element: AXUIElement) -> NSRange? {
+        var value: AnyObject?
+        guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &value) == .success,
+              let rangeValue = value else {
+            return nil
+        }
+
+        var range = CFRange()
+        guard CFGetTypeID(rangeValue) == AXValueGetTypeID(),
+              AXValueGetValue(rangeValue as! AXValue, .cfRange, &range) else {
+            return nil
+        }
+        return NSRange(location: range.location, length: range.length)
     }
 
 }
