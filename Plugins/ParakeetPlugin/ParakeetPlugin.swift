@@ -16,16 +16,31 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Send
     fileprivate var modelState: ParakeetModelState = .notLoaded
     fileprivate var downloadProgress: Double = 0
 
+    // Vocabulary Boosting
+    fileprivate var ctcModels: CtcModels?
+    fileprivate var ctcTokenizer: CtcTokenizer?
+    fileprivate var vocabularyBoostingEnabled: Bool = false
+    fileprivate var ctcModelState: CtcModelState = .notDownloaded
+    fileprivate var lastConfiguredPrompt: String?
+    fileprivate var lastBoostingTermCount: Int = 0
+
     required override init() {
         super.init()
     }
 
     func activate(host: HostServices) {
         self.host = host
+        vocabularyBoostingEnabled = host.userDefault(forKey: "vocabularyBoostingEnabled") as? Bool ?? false
         Task { await restoreLoadedModel() }
     }
 
     func deactivate() {
+        asrManager?.disableVocabularyBoosting()
+        ctcModels = nil
+        ctcTokenizer = nil
+        ctcModelState = .notDownloaded
+        lastConfiguredPrompt = nil
+        lastBoostingTermCount = 0
         asrManager = nil
         loadedModelId = nil
         modelState = .notLoaded
@@ -75,6 +90,10 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Send
 
         if translate {
             throw PluginTranscriptionError.apiError("Parakeet does not support translation")
+        }
+
+        if vocabularyBoostingEnabled {
+            await configureBoostingIfNeeded(prompt: prompt)
         }
 
         let result = try await asrManager.transcribe(audio.samples, source: .system)
@@ -165,6 +184,79 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Send
         return segments
     }
 
+    // MARK: - Vocabulary Boosting
+
+    fileprivate func downloadCtcModel() async {
+        ctcModelState = .downloading
+        do {
+            let models = try await CtcModels.downloadAndLoad(variant: .ctc110m)
+            let cacheDir = CtcModels.defaultCacheDirectory(for: .ctc110m)
+            let tokenizer = try await CtcTokenizer.load(from: cacheDir)
+            ctcModels = models
+            ctcTokenizer = tokenizer
+            ctcModelState = .ready
+        } catch {
+            ctcModelState = .error(error.localizedDescription)
+        }
+    }
+
+    private func configureBoostingIfNeeded(prompt: String?) async {
+        guard vocabularyBoostingEnabled, let asrManager else { return }
+
+        if prompt == lastConfiguredPrompt { return }
+        lastConfiguredPrompt = prompt
+
+        guard let prompt, !prompt.isEmpty else {
+            asrManager.disableVocabularyBoosting()
+            lastBoostingTermCount = 0
+            return
+        }
+
+        if ctcModels == nil {
+            await downloadCtcModel()
+        }
+        guard let ctcModels, let ctcTokenizer else {
+            lastConfiguredPrompt = nil
+            return
+        }
+
+        let termStrings = prompt.split(separator: ",")
+            .map { String($0).trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+
+        let terms = termStrings.compactMap { text -> CustomVocabularyTerm? in
+            let ids = ctcTokenizer.encode(text)
+            guard !ids.isEmpty else { return nil }
+            return CustomVocabularyTerm(text: text, weight: 10.0, ctcTokenIds: ids)
+        }
+
+        guard !terms.isEmpty else {
+            asrManager.disableVocabularyBoosting()
+            lastBoostingTermCount = 0
+            return
+        }
+
+        let cappedTerms = Array(terms.prefix(256))
+        let vocab = CustomVocabularyContext(terms: cappedTerms)
+        do {
+            try await asrManager.configureVocabularyBoosting(vocabulary: vocab, ctcModels: ctcModels)
+            lastBoostingTermCount = cappedTerms.count
+        } catch {
+            lastBoostingTermCount = 0
+            lastConfiguredPrompt = nil
+        }
+    }
+
+    fileprivate func setBoostingEnabled(_ enabled: Bool) {
+        vocabularyBoostingEnabled = enabled
+        host?.setUserDefault(enabled, forKey: "vocabularyBoostingEnabled")
+        if !enabled {
+            asrManager?.disableVocabularyBoosting()
+            lastConfiguredPrompt = nil
+            lastBoostingTermCount = 0
+        }
+    }
+
     // MARK: - Model Management
 
     fileprivate func loadModel() async {
@@ -185,6 +277,13 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Send
 
             host?.setUserDefault(Self.modelDef.id, forKey: "loadedModel")
             host?.notifyCapabilitiesChanged()
+
+            if vocabularyBoostingEnabled {
+                let cacheDir = CtcModels.defaultCacheDirectory(for: .ctc110m)
+                if CtcModels.modelsExist(at: cacheDir) {
+                    await downloadCtcModel()
+                }
+            }
         } catch {
             modelState = .error(error.localizedDescription)
             downloadProgress = 0
@@ -195,6 +294,12 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Send
     @objc func triggerRestoreModel() { Task { await restoreLoadedModel() } }
 
     func unloadModel(clearPersistence: Bool = true) {
+        asrManager?.disableVocabularyBoosting()
+        ctcModels = nil
+        ctcTokenizer = nil
+        ctcModelState = .notDownloaded
+        lastConfiguredPrompt = nil
+        lastBoostingTermCount = 0
         asrManager = nil
         loadedModelId = nil
         modelState = .notLoaded
@@ -244,6 +349,13 @@ enum ParakeetModelState: Equatable {
     case error(String)
 }
 
+enum CtcModelState: Equatable {
+    case notDownloaded
+    case downloading
+    case ready
+    case error(String)
+}
+
 // MARK: - Settings View
 
 private struct ParakeetSettingsView: View {
@@ -252,6 +364,9 @@ private struct ParakeetSettingsView: View {
     @State private var modelState: ParakeetModelState = .notLoaded
     @State private var downloadProgress: Double = 0
     @State private var isPolling = false
+    @State private var boostingEnabled: Bool = false
+    @State private var ctcModelState: CtcModelState = .notDownloaded
+    @State private var boostingTermCount: Int = 0
 
     private let pollTimer = Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()
 
@@ -309,6 +424,8 @@ private struct ParakeetSettingsView: View {
                         Button(String(localized: "Unload", bundle: bundle)) {
                             plugin.unloadModel()
                             modelState = plugin.modelState
+                            ctcModelState = plugin.ctcModelState
+                            boostingTermCount = 0
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
@@ -340,12 +457,19 @@ private struct ParakeetSettingsView: View {
                 }
             }
             .padding(.vertical, 4)
+
+            if case .ready = modelState {
+                Divider()
+                vocabularyBoostingSection
+            }
         }
         .padding()
         .onAppear {
             modelState = plugin.modelState
             downloadProgress = plugin.downloadProgress
-            // If the plugin is mid-load (e.g., restoring on app launch), start polling
+            boostingEnabled = plugin.vocabularyBoostingEnabled
+            ctcModelState = plugin.ctcModelState
+            boostingTermCount = plugin.lastBoostingTermCount
             if case .downloading = plugin.modelState { isPolling = true }
         }
         .onReceive(pollTimer) { _ in
@@ -355,8 +479,95 @@ private struct ParakeetSettingsView: View {
             if pluginState != .notLoaded {
                 modelState = pluginState
             }
+            ctcModelState = plugin.ctcModelState
+            boostingTermCount = plugin.lastBoostingTermCount
             if case .ready = pluginState { isPolling = false }
             else if case .error = pluginState { isPolling = false }
+        }
+    }
+
+    @ViewBuilder
+    private var vocabularyBoostingSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Vocabulary Boosting", bundle: bundle)
+                .font(.subheadline)
+                .fontWeight(.medium)
+
+            Text("Improves recognition of custom terms from your Dictionary using a secondary CTC model.", bundle: bundle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Toggle(isOn: $boostingEnabled) {
+                Text("Enable Vocabulary Boosting", bundle: bundle)
+            }
+            .onChange(of: boostingEnabled) { _, newValue in
+                plugin.setBoostingEnabled(newValue)
+                ctcModelState = plugin.ctcModelState
+            }
+
+            if boostingEnabled {
+                HStack(spacing: 6) {
+                    switch ctcModelState {
+                    case .notDownloaded:
+                        Image(systemName: "arrow.down.circle")
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                        Text("CTC model (~100 MB) - downloads automatically on first use, or:", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Button(String(localized: "Download Now", bundle: bundle)) {
+                            isPolling = true
+                            Task {
+                                await plugin.downloadCtcModel()
+                                ctcModelState = plugin.ctcModelState
+                                isPolling = false
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+
+                    case .downloading:
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Downloading CTC model...", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                    case .ready:
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                            .font(.caption)
+                        if boostingTermCount > 0 {
+                            Text("Ready - \(boostingTermCount) terms loaded", bundle: bundle)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("Ready - add terms in Dictionary settings", bundle: bundle)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                    case .error(let message):
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                            .font(.caption)
+                        Text(message)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        Button(String(localized: "Retry", bundle: bundle)) {
+                            isPolling = true
+                            Task {
+                                await plugin.downloadCtcModel()
+                                ctcModelState = plugin.ctcModelState
+                                isPolling = false
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                    }
+                }
+            }
         }
     }
 }

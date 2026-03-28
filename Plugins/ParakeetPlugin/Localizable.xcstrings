@@ -1,6 +1,16 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "CTC model (~100 MB) - downloads automatically on first use, or:" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CTC-Modell (~100 MB) - wird automatisch beim ersten Gebrauch geladen, oder:"
+          }
+        }
+      }
+    },
     "Download & Load" : {
       "localizations" : {
         "de" : {
@@ -11,12 +21,72 @@
         }
       }
     },
+    "Download Now" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jetzt herunterladen"
+          }
+        }
+      }
+    },
+    "Downloading CTC model..." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CTC-Modell wird heruntergeladen..."
+          }
+        }
+      }
+    },
+    "Enable Vocabulary Boosting" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vokabel-Boosting aktivieren"
+          }
+        }
+      }
+    },
+    "Improves recognition of custom terms from your Dictionary using a secondary CTC model." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbessert die Erkennung von Fachbegriffen aus dem Wörterbuch mittels eines sekundären CTC-Modells."
+          }
+        }
+      }
+    },
     "NVIDIA Parakeet TDT - extremely fast on Apple Silicon. 25 European languages, no API key required." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "NVIDIA Parakeet TDT - extrem schnell auf Apple Silicon. 25 europäische Sprachen, kein API-Schlüssel nötig."
+          }
+        }
+      }
+    },
+    "Ready - %lld terms loaded" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bereit - %lld Begriffe geladen"
+          }
+        }
+      }
+    },
+    "Ready - add terms in Dictionary settings" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bereit - Begriffe in Wörterbuch-Einstellungen hinzufügen"
           }
         }
       }
@@ -37,6 +107,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Deaktivieren"
+          }
+        }
+      }
+    },
+    "Vocabulary Boosting" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vokabel-Boosting"
           }
         }
       }
