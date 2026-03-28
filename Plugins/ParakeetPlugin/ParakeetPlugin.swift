@@ -35,7 +35,9 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Send
     }
 
     func deactivate() {
-        asrManager?.disableVocabularyBoosting()
+        if let manager = asrManager {
+            Task { await manager.disableVocabularyBoosting() }
+        }
         ctcModels = nil
         ctcTokenizer = nil
         ctcModelState = .notDownloaded
@@ -207,7 +209,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Send
         lastConfiguredPrompt = prompt
 
         guard let prompt, !prompt.isEmpty else {
-            asrManager.disableVocabularyBoosting()
+            await asrManager.disableVocabularyBoosting()
             lastBoostingTermCount = 0
             return
         }
@@ -231,7 +233,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Send
         }
 
         guard !terms.isEmpty else {
-            asrManager.disableVocabularyBoosting()
+            await asrManager.disableVocabularyBoosting()
             lastBoostingTermCount = 0
             return
         }
@@ -251,7 +253,9 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Send
         vocabularyBoostingEnabled = enabled
         host?.setUserDefault(enabled, forKey: "vocabularyBoostingEnabled")
         if !enabled {
-            asrManager?.disableVocabularyBoosting()
+            if let manager = asrManager {
+                Task { await manager.disableVocabularyBoosting() }
+            }
             lastConfiguredPrompt = nil
             lastBoostingTermCount = 0
         }
@@ -294,7 +298,9 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Send
     @objc func triggerRestoreModel() { Task { await restoreLoadedModel() } }
 
     func unloadModel(clearPersistence: Bool = true) {
-        asrManager?.disableVocabularyBoosting()
+        if let manager = asrManager {
+            Task { await manager.disableVocabularyBoosting() }
+        }
         ctcModels = nil
         ctcTokenizer = nil
         ctcModelState = .notDownloaded
