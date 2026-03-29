@@ -33,6 +33,25 @@ struct DictionarySettingsView: View {
                             Label(String(localized: "Term"), systemImage: "plus")
                         }
                     }
+
+                    Menu {
+                        Button {
+                            viewModel.exportDictionary()
+                        } label: {
+                            Label(String(localized: "Export..."), systemImage: "square.and.arrow.up")
+                        }
+                        .disabled(viewModel.entries.isEmpty)
+
+                        Button {
+                            viewModel.importDictionary()
+                        } label: {
+                            Label(String(localized: "Import..."), systemImage: "square.and.arrow.down")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .frame(width: 28)
                 }
                 .padding(.horizontal, 4)
                 .padding(.bottom, 4)
@@ -75,6 +94,14 @@ struct DictionarySettingsView: View {
         } message: {
             Text(viewModel.error ?? "")
         }
+        .alert(String(localized: "Import Complete"), isPresented: Binding(
+            get: { viewModel.importMessage != nil },
+            set: { if !$0 { viewModel.clearImportMessage() } }
+        )) {
+            Button(String(localized: "OK")) { viewModel.clearImportMessage() }
+        } message: {
+            Text(viewModel.importMessage ?? "")
+        }
     }
 
     private var emptyState: some View {
@@ -116,6 +143,13 @@ struct DictionarySettingsView: View {
                 Text(String(localized: "Pre-built collections of technical terms for common domains"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                Button {
+                    viewModel.importDictionary()
+                } label: {
+                    Label(String(localized: "Import Dictionary..."), systemImage: "square.and.arrow.down")
+                }
+                .buttonStyle(.bordered)
             }
             Spacer()
         }

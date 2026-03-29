@@ -187,6 +187,35 @@ final class DictionaryService: ObservableObject {
         }
     }
 
+    /// Import entries preserving all fields including isEnabled state
+    func importEntries(_ items: [(type: DictionaryEntryType, original: String, replacement: String?, caseSensitive: Bool, isEnabled: Bool)]) {
+        guard let context = modelContext, !items.isEmpty else { return }
+
+        var existingOriginals = Set(entries.map { "\($0.type.rawValue):\($0.original.lowercased())" })
+
+        for item in items {
+            let key = "\(item.type.rawValue):\(item.original.lowercased())"
+            guard !existingOriginals.contains(key) else { continue }
+
+            let entry = DictionaryEntry(
+                type: item.type,
+                original: item.original,
+                replacement: item.replacement,
+                caseSensitive: item.caseSensitive,
+                isEnabled: item.isEnabled
+            )
+            context.insert(entry)
+            existingOriginals.insert(key)
+        }
+
+        do {
+            try context.save()
+            loadEntries()
+        } catch {
+            logger.error("Failed to import entries: \(error.localizedDescription)")
+        }
+    }
+
     /// Batch delete multiple entries
     func deleteEntries(_ entriesToDelete: [DictionaryEntry]) {
         guard let context = modelContext, !entriesToDelete.isEmpty else { return }
