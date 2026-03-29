@@ -41,6 +41,7 @@ jobs:
             openai-compatible) TARGET="OpenAICompatiblePlugin" ;;
             voxtral) TARGET="VoxtralPlugin" ;;
             deepgram) TARGET="DeepgramPlugin" ;;
+            google-cloud-stt) TARGET="GoogleCloudSTTPlugin" ;;
             assemblyai) TARGET="AssemblyAIPlugin" ;;
             obsidian) TARGET="ObsidianPlugin" ;;
             script) TARGET="ScriptPlugin" ;;
