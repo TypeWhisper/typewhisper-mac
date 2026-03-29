@@ -1,4 +1,6 @@
 import Foundation
+import AppKit
+import UniformTypeIdentifiers
 import Combine
 
 @MainActor
@@ -13,6 +15,7 @@ class DictionaryViewModel: ObservableObject {
 
     @Published var entries: [DictionaryEntry] = []
     @Published var error: String?
+    @Published var importMessage: String?
 
     // Filter
     enum FilterTab: Int, CaseIterable {
@@ -146,6 +149,44 @@ class DictionaryViewModel: ObservableObject {
 
     func clearError() {
         error = nil
+    }
+
+    func clearImportMessage() {
+        importMessage = nil
+    }
+
+    // MARK: - Export / Import
+
+    func exportDictionary() {
+        DictionaryExporter.saveToFile(entries)
+    }
+
+    func importDictionary() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = String(localized: "Select a dictionary JSON file to import.")
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            let data = try Data(contentsOf: url)
+            let parsed = try DictionaryExporter.parseJSON(data)
+            guard !parsed.isEmpty else {
+                error = String(localized: "The file contains no dictionary entries.")
+                return
+            }
+            let result = DictionaryExporter.importEntries(parsed, into: dictionaryService)
+
+            if result.skipped > 0 {
+                importMessage = String(localized: "\(result.imported) entries imported, \(result.skipped) duplicates skipped.")
+            } else {
+                importMessage = String(localized: "\(result.imported) entries imported.")
+            }
+        } catch {
+            self.error = error.localizedDescription
+        }
     }
 
     // MARK: - Term Packs
