@@ -8,11 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		1834537D0CCC21190DB68EBD /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D8AA5F3DBFD9010D09311C40 /* Cocoa.framework */; };
-		1BD1DCA78A284C27BBBE63AD /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 67BE633BCFA1507F72199015 /* TypeWhisperPluginSDK */; };
 		1E6EDB8B0D1573A05A610078 /* PluginManifestValidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDF548E65340A17A3A16590B /* PluginManifestValidationTests.swift */; };
 		204C804898EAE1127B62EC98 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E808D246301E36546EEB811F /* TestSupport.swift */; };
 		24FFE19AC026C48AE32BCD7C /* AppFormatterServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5852D6767C5FA955B84C52 /* AppFormatterServiceTests.swift */; };
-		255E1D67C9608EBFF3B7112E /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D8AA5F3DBFD9010D09311C40 /* Cocoa.framework */; };
 		6A9D1EE0C163693B1A798779 /* HistoryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */; };
 		76858B5B28A121356A5D9599 /* TextDiffServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05313C25F9E79BCFC02899F2 /* TextDiffServiceTests.swift */; };
 		7DADCC6E1AEA99CA48F83F50 /* CLISupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD34FDF9D999D85DA1C35375 /* CLISupportTests.swift */; };
@@ -214,6 +212,10 @@
 		AA00000000000000000244 /* OpenAIVectorMemoryPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000232 /* OpenAIVectorMemoryPlugin.swift */; };
 		AA00000000000000000245 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000233 /* manifest.json */; };
 		AA00000000000000000246 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000033 /* TypeWhisperPluginSDK */; };
+		AA00000000000000000263 /* FireworksPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000251 /* FireworksPlugin.swift */; };
+		AA00000000000000000264 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000252 /* manifest.json */; };
+		AA00000000000000000265 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000253 /* Localizable.xcstrings */; };
+		AA00000000000000000266 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000035 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000247 /* AppFormatterService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000235 /* AppFormatterService.swift */; };
 		AA00000000000000000250 /* AudioRecorderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000238 /* AudioRecorderService.swift */; };
 		AA00000000000000000251 /* AudioRecorderViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000239 /* AudioRecorderViewModel.swift */; };
@@ -225,13 +227,13 @@
 		AA00000000000000000257 /* ErrorLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000245 /* ErrorLogView.swift */; };
 		AA00000000000000000258 /* AccessibilityAnnouncementService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000246 /* AccessibilityAnnouncementService.swift */; };
 		AA00000000000000000259 /* SpeechFeedbackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000247 /* SpeechFeedbackService.swift */; };
+		B4CC04DF94001FF7220789BC /* DictionaryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D63A42880A0BA4C84F36E873 /* DictionaryServiceTests.swift */; };
+		BA68B1E282D5D714132FEA24 /* PortDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000105 /* PortDiscovery.swift */; };
+		E2DA879FDEFA04FBD013E837 /* OutputFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000106 /* OutputFormatter.swift */; };
+		F635B3F08018D57E0CB709BF /* HTTPRequestParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E39448D561C47B16EEF4C6B /* HTTPRequestParserTests.swift */; };
 		AA00000000000000000260 /* HotkeyRecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000248 /* HotkeyRecorderView.swift */; };
 		AA00000000000000000261 /* HotkeySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000249 /* HotkeySettingsView.swift */; };
 		AA00000000000000000262 /* AboutSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000250 /* AboutSettingsView.swift */; };
-		AA00000000000000000263 /* FireworksPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000251 /* FireworksPlugin.swift */; };
-		AA00000000000000000264 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000252 /* manifest.json */; };
-		AA00000000000000000265 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000253 /* Localizable.xcstrings */; };
-		AA00000000000000000266 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000035 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000267 /* CerebrasPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000255 /* CerebrasPlugin.swift */; };
 		AA00000000000000000268 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000256 /* manifest.json */; };
 		AA00000000000000000269 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000258 /* Localizable.xcstrings */; };
@@ -240,20 +242,17 @@
 		AA00000000000000000272 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000260 /* manifest.json */; };
 		AA00000000000000000273 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000261 /* Localizable.xcstrings */; };
 		AA00000000000000000274 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000037 /* TypeWhisperPluginSDK */; };
-		AA00000000000000000275 /* ElevenLabsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000263 /* ElevenLabsPlugin.swift */; };
-		AA00000000000000000276 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000264 /* manifest.json */; };
-		AA00000000000000000277 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000265 /* Localizable.xcstrings */; };
-		AA00000000000000000278 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000038 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000279 /* GladiaPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000267 /* GladiaPlugin.swift */; };
 		AA00000000000000000280 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000268 /* manifest.json */; };
 		AA00000000000000000281 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000269 /* Localizable.xcstrings */; };
 		AA00000000000000000282 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000039 /* TypeWhisperPluginSDK */; };
-		B4CC04DF94001FF7220789BC /* DictionaryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D63A42880A0BA4C84F36E873 /* DictionaryServiceTests.swift */; };
-		BA68B1E282D5D714132FEA24 /* PortDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000105 /* PortDiscovery.swift */; };
+		AA00000000000000000275 /* ElevenLabsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000263 /* ElevenLabsPlugin.swift */; };
+		AA00000000000000000276 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000264 /* manifest.json */; };
+		AA00000000000000000277 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000265 /* Localizable.xcstrings */; };
+		AA00000000000000000278 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000038 /* TypeWhisperPluginSDK */; };
 		BF1DFDDFBF91D87134DA57E7 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 1D584661B6B55F6329CB5FC4 /* manifest.json */; };
-		E2DA879FDEFA04FBD013E837 /* OutputFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000106 /* OutputFormatter.swift */; };
 		F1177F582D186041B081F9C5 /* GoogleCloudSTTPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01D368E23E2A0AB2390B34EA /* GoogleCloudSTTPlugin.swift */; };
-		F635B3F08018D57E0CB709BF /* HTTPRequestParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E39448D561C47B16EEF4C6B /* HTTPRequestParserTests.swift */; };
+		F774802B61AFC0DCA9E8E668 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 67BE633BCFA1507F72199015 /* TypeWhisperPluginSDK */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -316,11 +315,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		01D368E23E2A0AB2390B34EA /* GoogleCloudSTTPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GoogleCloudSTTPlugin.swift; sourceTree = "<group>"; };
 		05313C25F9E79BCFC02899F2 /* TextDiffServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TextDiffServiceTests.swift; sourceTree = "<group>"; };
-		1D584661B6B55F6329CB5FC4 /* manifest.json */ = {isa = PBXFileReference; includeInIndex = 1; path = manifest.json; sourceTree = "<group>"; };
 		3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HistoryServiceTests.swift; sourceTree = "<group>"; };
-		5CA4DB761B06383B5B8CF082 /* GoogleCloudSTTPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = "wrapper.plug-in"; includeInIndex = 0; path = GoogleCloudSTTPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		8E39448D561C47B16EEF4C6B /* HTTPRequestParserTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HTTPRequestParserTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000001 /* TypeWhisperApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypeWhisperApp.swift; sourceTree = "<group>"; };
 		BB00000000000000000002 /* ServiceContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceContainer.swift; sourceTree = "<group>"; };
@@ -510,6 +506,10 @@
 		BB00000000000000000232 /* OpenAIVectorMemoryPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIVectorMemoryPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000233 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000234 /* OpenAIVectorMemoryPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OpenAIVectorMemoryPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB00000000000000000251 /* FireworksPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FireworksPlugin.swift; sourceTree = "<group>"; };
+		BB00000000000000000252 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		BB00000000000000000253 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		BB00000000000000000254 /* FireworksPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FireworksPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000235 /* AppFormatterService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppFormatterService.swift; sourceTree = "<group>"; };
 		BB00000000000000000238 /* AudioRecorderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderService.swift; sourceTree = "<group>"; };
 		BB00000000000000000239 /* AudioRecorderViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderViewModel.swift; sourceTree = "<group>"; };
@@ -521,29 +521,6 @@
 		BB00000000000000000245 /* ErrorLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorLogView.swift; sourceTree = "<group>"; };
 		BB00000000000000000246 /* AccessibilityAnnouncementService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityAnnouncementService.swift; sourceTree = "<group>"; };
 		BB00000000000000000247 /* SpeechFeedbackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechFeedbackService.swift; sourceTree = "<group>"; };
-		BB00000000000000000248 /* HotkeyRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyRecorderView.swift; sourceTree = "<group>"; };
-		BB00000000000000000249 /* HotkeySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeySettingsView.swift; sourceTree = "<group>"; };
-		BB00000000000000000250 /* AboutSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutSettingsView.swift; sourceTree = "<group>"; };
-		BB00000000000000000251 /* FireworksPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FireworksPlugin.swift; sourceTree = "<group>"; };
-		BB00000000000000000252 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
-		BB00000000000000000253 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
-		BB00000000000000000254 /* FireworksPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FireworksPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
-		BB00000000000000000255 /* CerebrasPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CerebrasPlugin.swift; sourceTree = "<group>"; };
-		BB00000000000000000256 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
-		BB00000000000000000257 /* CerebrasPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CerebrasPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
-		BB00000000000000000258 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
-		BB00000000000000000259 /* ClaudePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudePlugin.swift; sourceTree = "<group>"; };
-		BB00000000000000000260 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
-		BB00000000000000000261 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
-		BB00000000000000000262 /* ClaudePlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClaudePlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
-		BB00000000000000000263 /* ElevenLabsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ElevenLabsPlugin.swift; sourceTree = "<group>"; };
-		BB00000000000000000264 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
-		BB00000000000000000265 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
-		BB00000000000000000266 /* ElevenLabsPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ElevenLabsPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
-		BB00000000000000000267 /* GladiaPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GladiaPlugin.swift; sourceTree = "<group>"; };
-		BB00000000000000000268 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
-		BB00000000000000000269 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
-		BB00000000000000000270 /* GladiaPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GladiaPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BDF548E65340A17A3A16590B /* PluginManifestValidationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PluginManifestValidationTests.swift; sourceTree = "<group>"; };
 		BE6B6611B899F649B097A726 /* SnippetServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SnippetServiceTests.swift; sourceTree = "<group>"; };
 		CE5852D6767C5FA955B84C52 /* AppFormatterServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppFormatterServiceTests.swift; sourceTree = "<group>"; };
@@ -556,6 +533,28 @@
 		E808D246301E36546EEB811F /* TestSupport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
 		F41BD305007A3A158038C75C /* ProfileServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProfileServiceTests.swift; sourceTree = "<group>"; };
 		FD34FDF9D999D85DA1C35375 /* CLISupportTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CLISupportTests.swift; sourceTree = "<group>"; };
+		BB00000000000000000248 /* HotkeyRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyRecorderView.swift; sourceTree = "<group>"; };
+		BB00000000000000000249 /* HotkeySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeySettingsView.swift; sourceTree = "<group>"; };
+		BB00000000000000000250 /* AboutSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutSettingsView.swift; sourceTree = "<group>"; };
+		BB00000000000000000255 /* CerebrasPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CerebrasPlugin.swift; sourceTree = "<group>"; };
+		BB00000000000000000256 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		BB00000000000000000257 /* CerebrasPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CerebrasPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB00000000000000000258 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		BB00000000000000000259 /* ClaudePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudePlugin.swift; sourceTree = "<group>"; };
+		BB00000000000000000260 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		BB00000000000000000261 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		BB00000000000000000262 /* ClaudePlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClaudePlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB00000000000000000267 /* GladiaPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GladiaPlugin.swift; sourceTree = "<group>"; };
+		BB00000000000000000268 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		BB00000000000000000269 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		BB00000000000000000270 /* GladiaPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GladiaPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB00000000000000000263 /* ElevenLabsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ElevenLabsPlugin.swift; sourceTree = "<group>"; };
+		BB00000000000000000264 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		BB00000000000000000265 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		BB00000000000000000266 /* ElevenLabsPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ElevenLabsPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		01D368E23E2A0AB2390B34EA /* GoogleCloudSTTPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleCloudSTTPlugin.swift; sourceTree = "<group>"; };
+		1D584661B6B55F6329CB5FC4 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		5CA4DB761B06383B5B8CF082 /* GoogleCloudSTTPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GoogleCloudSTTPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -565,15 +564,6 @@
 			files = (
 				1834537D0CCC21190DB68EBD /* Cocoa.framework in Frameworks */,
 				928A1F1B7A0D4C62A2B90761 /* TypeWhisperPluginSDK in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		B44AC50D02E0B348403BEE41 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				255E1D67C9608EBFF3B7112E /* Cocoa.framework in Frameworks */,
-				1BD1DCA78A284C27BBBE63AD /* TypeWhisperPluginSDK in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -792,14 +782,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		FF00000000000000000136 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				AA00000000000000000278 /* TypeWhisperPluginSDK in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		FF00000000000000000140 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -808,19 +790,25 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		FF00000000000000000136 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA00000000000000000278 /* TypeWhisperPluginSDK in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B44AC50D02E0B348403BEE41 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F774802B61AFC0DCA9E8E668 /* TypeWhisperPluginSDK in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		0C3F892FBBE11FA7B5924B24 /* GoogleCloudSTTPlugin */ = {
-			isa = PBXGroup;
-			children = (
-				01D368E23E2A0AB2390B34EA /* GoogleCloudSTTPlugin.swift */,
-				1D584661B6B55F6329CB5FC4 /* manifest.json */,
-			);
-			name = GoogleCloudSTTPlugin;
-			path = Plugins/GoogleCloudSTTPlugin;
-			sourceTree = "<group>";
-		};
 		4E2BF06351BDA040CC87C5D5 /* OS X */ = {
 			isa = PBXGroup;
 			children = (
@@ -1367,6 +1355,17 @@
 			path = Plugins/ClaudePlugin;
 			sourceTree = "<group>";
 		};
+		CC00000000000000000041 /* GladiaPlugin */ = {
+			isa = PBXGroup;
+			children = (
+				BB00000000000000000267 /* GladiaPlugin.swift */,
+				BB00000000000000000268 /* manifest.json */,
+				BB00000000000000000269 /* Localizable.xcstrings */,
+			);
+			name = GladiaPlugin;
+			path = Plugins/GladiaPlugin;
+			sourceTree = "<group>";
+		};
 		CC00000000000000000040 /* ElevenLabsPlugin */ = {
 			isa = PBXGroup;
 			children = (
@@ -1378,15 +1377,14 @@
 			path = Plugins/ElevenLabsPlugin;
 			sourceTree = "<group>";
 		};
-		CC00000000000000000041 /* GladiaPlugin */ = {
+		0C3F892FBBE11FA7B5924B24 /* GoogleCloudSTTPlugin */ = {
 			isa = PBXGroup;
 			children = (
-				BB00000000000000000267 /* GladiaPlugin.swift */,
-				BB00000000000000000268 /* manifest.json */,
-				BB00000000000000000269 /* Localizable.xcstrings */,
+				01D368E23E2A0AB2390B34EA /* GoogleCloudSTTPlugin.swift */,
+				1D584661B6B55F6329CB5FC4 /* manifest.json */,
 			);
-			name = GladiaPlugin;
-			path = Plugins/GladiaPlugin;
+			name = GoogleCloudSTTPlugin;
+			path = Plugins/GoogleCloudSTTPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000090 /* Products */ = {
@@ -1420,8 +1418,8 @@
 				BB00000000000000000270 /* GladiaPlugin.bundle */,
 				BB00000000000000000266 /* ElevenLabsPlugin.bundle */,
 				BB00000000000000000188 /* TypeWhisperWidgetExtension.appex */,
-				E6F8E5940EF4832A7B8D735D /* TypeWhisperTests.xctest */,
 				5CA4DB761B06383B5B8CF082 /* GoogleCloudSTTPlugin.bundle */,
+				E6F8E5940EF4832A7B8D735D /* TypeWhisperTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -1997,26 +1995,6 @@
 			productReference = BB00000000000000000262 /* ClaudePlugin.bundle */;
 			productType = "com.apple.product-type.bundle";
 		};
-		DD00000000000000000028 /* ElevenLabsPlugin */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = FF00000000000000000138 /* Build configuration list for PBXNativeTarget "ElevenLabsPlugin" */;
-			buildPhases = (
-				FF00000000000000000135 /* Sources */,
-				FF00000000000000000136 /* Frameworks */,
-				FF00000000000000000137 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			name = ElevenLabsPlugin;
-			packageProductDependencies = (
-				PP00000000000000000038 /* TypeWhisperPluginSDK */,
-			);
-			productName = ElevenLabsPlugin;
-			productReference = BB00000000000000000266 /* ElevenLabsPlugin.bundle */;
-			productType = "com.apple.product-type.bundle";
-		};
 		DD00000000000000000029 /* GladiaPlugin */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = FF00000000000000000142 /* Build configuration list for PBXNativeTarget "GladiaPlugin" */;
@@ -2035,6 +2013,26 @@
 			);
 			productName = GladiaPlugin;
 			productReference = BB00000000000000000270 /* GladiaPlugin.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
+		DD00000000000000000028 /* ElevenLabsPlugin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FF00000000000000000138 /* Build configuration list for PBXNativeTarget "ElevenLabsPlugin" */;
+			buildPhases = (
+				FF00000000000000000135 /* Sources */,
+				FF00000000000000000136 /* Frameworks */,
+				FF00000000000000000137 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ElevenLabsPlugin;
+			packageProductDependencies = (
+				PP00000000000000000038 /* TypeWhisperPluginSDK */,
+			);
+			productName = ElevenLabsPlugin;
+			productReference = BB00000000000000000266 /* ElevenLabsPlugin.bundle */;
 			productType = "com.apple.product-type.bundle";
 		};
 		F3E17BDD5CED7E75F4153E95 /* GoogleCloudSTTPlugin */ = {
@@ -2135,14 +2133,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		5FEDEFEE5F8724EBC9AB3898 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				BF1DFDDFBF91D87134DA57E7 /* manifest.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2371,6 +2361,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		FF00000000000000000141 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA00000000000000000280 /* manifest.json in Resources */,
+				AA00000000000000000281 /* Localizable.xcstrings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FF00000000000000000137 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -2380,12 +2379,11 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		FF00000000000000000141 /* Resources */ = {
+		5FEDEFEE5F8724EBC9AB3898 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AA00000000000000000280 /* manifest.json in Resources */,
-				AA00000000000000000281 /* Localizable.xcstrings in Resources */,
+				BF1DFDDFBF91D87134DA57E7 /* manifest.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2414,14 +2412,6 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		6BB8C9A39AC6D396AE808535 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				F1177F582D186041B081F9C5 /* GoogleCloudSTTPlugin.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		D7199BC8CB6EE00511EFCC10 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -2758,6 +2748,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		FF00000000000000000139 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA00000000000000000279 /* GladiaPlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FF00000000000000000135 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -2766,11 +2764,11 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		FF00000000000000000139 /* Sources */ = {
+		6BB8C9A39AC6D396AE808535 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AA00000000000000000279 /* GladiaPlugin.swift in Sources */,
+				F1177F582D186041B081F9C5 /* GoogleCloudSTTPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2796,54 +2794,6 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		1E03B5BE7E5A687C35D262E8 /* AppStoreDebug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Google Cloud STT";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSPrincipalClass = GoogleCloudSTTPlugin;
-				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.google-cloud-stt";
-				PRODUCT_NAME = GoogleCloudSTTPlugin;
-				SDKROOT = macosx;
-				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 6.0;
-				WRAPPER_EXTENSION = bundle;
-			};
-			name = AppStoreDebug;
-		};
-		31C90797268650EB47DEEB4B /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Google Cloud STT";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSPrincipalClass = GoogleCloudSTTPlugin;
-				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.google-cloud-stt";
-				PRODUCT_NAME = GoogleCloudSTTPlugin;
-				SDKROOT = macosx;
-				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 6.0;
-				WRAPPER_EXTENSION = bundle;
-			};
-			name = Debug;
-		};
 		7228080A44B15D09F842237D /* AppStoreDebug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -2890,30 +2840,6 @@
 			};
 			name = Release;
 		};
-		A689AD2E30672A72FC55C678 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Google Cloud STT";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSPrincipalClass = GoogleCloudSTTPlugin;
-				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.google-cloud-stt";
-				PRODUCT_NAME = GoogleCloudSTTPlugin;
-				SDKROOT = macosx;
-				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 6.0;
-				WRAPPER_EXTENSION = bundle;
-			};
-			name = Release;
-		};
 		B15E98DC20ABD2B0B196EEBC /* AppStoreRelease */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -2934,30 +2860,6 @@
 				SWIFT_VERSION = 6.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TypeWhisper.app/Contents/MacOS/TypeWhisper";
 				TEST_TARGET_NAME = TypeWhisper;
-			};
-			name = AppStoreRelease;
-		};
-		D918FB2E59EB9F588E8F4598 /* AppStoreRelease */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Google Cloud STT";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSPrincipalClass = GoogleCloudSTTPlugin;
-				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.google-cloud-stt";
-				PRODUCT_NAME = GoogleCloudSTTPlugin;
-				SDKROOT = macosx;
-				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 6.0;
-				WRAPPER_EXTENSION = bundle;
 			};
 			name = AppStoreRelease;
 		};
@@ -5654,102 +5556,6 @@
 			};
 			name = AppStoreRelease;
 		};
-		XX00000000000000000113 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = ElevenLabs;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSPrincipalClass = ElevenLabsPlugin;
-				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.elevenlabs;
-				PRODUCT_NAME = ElevenLabsPlugin;
-				SDKROOT = macosx;
-				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 6.0;
-				WRAPPER_EXTENSION = bundle;
-			};
-			name = Debug;
-		};
-		XX00000000000000000114 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = ElevenLabs;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSPrincipalClass = ElevenLabsPlugin;
-				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.elevenlabs;
-				PRODUCT_NAME = ElevenLabsPlugin;
-				SDKROOT = macosx;
-				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 6.0;
-				WRAPPER_EXTENSION = bundle;
-			};
-			name = Release;
-		};
-		XX00000000000000000115 /* AppStoreDebug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = ElevenLabs;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSPrincipalClass = ElevenLabsPlugin;
-				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.elevenlabs;
-				PRODUCT_NAME = ElevenLabsPlugin;
-				SDKROOT = macosx;
-				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 6.0;
-				WRAPPER_EXTENSION = bundle;
-			};
-			name = AppStoreDebug;
-		};
-		XX00000000000000000116 /* AppStoreRelease */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = ElevenLabs;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSPrincipalClass = ElevenLabsPlugin;
-				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
-				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.elevenlabs;
-				PRODUCT_NAME = ElevenLabsPlugin;
-				SDKROOT = macosx;
-				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 6.0;
-				WRAPPER_EXTENSION = bundle;
-			};
-			name = AppStoreRelease;
-		};
 		XX00000000000000000117 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -5766,6 +5572,30 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.gladia;
 				PRODUCT_NAME = GladiaPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
+		XX00000000000000000113 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = ElevenLabs;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = ElevenLabsPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.elevenlabs;
+				PRODUCT_NAME = ElevenLabsPlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -5798,6 +5628,30 @@
 			};
 			name = Release;
 		};
+		XX00000000000000000114 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = ElevenLabs;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = ElevenLabsPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.elevenlabs;
+				PRODUCT_NAME = ElevenLabsPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
 		XX00000000000000000119 /* AppStoreDebug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -5814,6 +5668,30 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.gladia;
 				PRODUCT_NAME = GladiaPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = AppStoreDebug;
+		};
+		XX00000000000000000115 /* AppStoreDebug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = ElevenLabs;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = ElevenLabsPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.elevenlabs;
+				PRODUCT_NAME = ElevenLabsPlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -5846,6 +5724,126 @@
 			};
 			name = AppStoreRelease;
 		};
+		XX00000000000000000116 /* AppStoreRelease */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = ElevenLabs;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = ElevenLabsPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.elevenlabs;
+				PRODUCT_NAME = ElevenLabsPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = AppStoreRelease;
+		};
+		31C90797268650EB47DEEB4B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Google Cloud STT";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = GoogleCloudSTTPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.google-cloud-stt";
+				PRODUCT_NAME = GoogleCloudSTTPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
+		A689AD2E30672A72FC55C678 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Google Cloud STT";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = GoogleCloudSTTPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.google-cloud-stt";
+				PRODUCT_NAME = GoogleCloudSTTPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
+		1E03B5BE7E5A687C35D262E8 /* AppStoreDebug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Google Cloud STT";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = GoogleCloudSTTPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.google-cloud-stt";
+				PRODUCT_NAME = GoogleCloudSTTPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = AppStoreDebug;
+		};
+		D918FB2E59EB9F588E8F4598 /* AppStoreRelease */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Google Cloud STT";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = GoogleCloudSTTPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.google-cloud-stt";
+				PRODUCT_NAME = GoogleCloudSTTPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = AppStoreRelease;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -5856,17 +5854,6 @@
 				F20B970A9CBCD49C1AFA9F43 /* Debug */,
 				7228080A44B15D09F842237D /* AppStoreDebug */,
 				B15E98DC20ABD2B0B196EEBC /* AppStoreRelease */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		7C80F8B2CDA6AFA512E7E2E3 /* Build configuration list for PBXNativeTarget "GoogleCloudSTTPlugin" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				A689AD2E30672A72FC55C678 /* Release */,
-				31C90797268650EB47DEEB4B /* Debug */,
-				1E03B5BE7E5A687C35D262E8 /* AppStoreDebug */,
-				D918FB2E59EB9F588E8F4598 /* AppStoreRelease */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -6168,6 +6155,17 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		FF00000000000000000142 /* Build configuration list for PBXNativeTarget "GladiaPlugin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				XX00000000000000000117 /* Debug */,
+				XX00000000000000000118 /* Release */,
+				XX00000000000000000119 /* AppStoreDebug */,
+				XX00000000000000000120 /* AppStoreRelease */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		FF00000000000000000138 /* Build configuration list for PBXNativeTarget "ElevenLabsPlugin" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -6179,13 +6177,13 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		FF00000000000000000142 /* Build configuration list for PBXNativeTarget "GladiaPlugin" */ = {
+		7C80F8B2CDA6AFA512E7E2E3 /* Build configuration list for PBXNativeTarget "GoogleCloudSTTPlugin" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				XX00000000000000000117 /* Debug */,
-				XX00000000000000000118 /* Release */,
-				XX00000000000000000119 /* AppStoreDebug */,
-				XX00000000000000000120 /* AppStoreRelease */,
+				31C90797268650EB47DEEB4B /* Debug */,
+				A689AD2E30672A72FC55C678 /* Release */,
+				1E03B5BE7E5A687C35D262E8 /* AppStoreDebug */,
+				D918FB2E59EB9F588E8F4598 /* AppStoreRelease */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -6381,11 +6379,11 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = TypeWhisperPluginSDK;
 		};
-		PP00000000000000000038 /* TypeWhisperPluginSDK */ = {
+		PP00000000000000000039 /* TypeWhisperPluginSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TypeWhisperPluginSDK;
 		};
-		PP00000000000000000039 /* TypeWhisperPluginSDK */ = {
+		PP00000000000000000038 /* TypeWhisperPluginSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TypeWhisperPluginSDK;
 		};
