@@ -381,6 +381,23 @@
       "minOSVersion": "14.0",
       "iconSystemName": "waveform.badge.mic",
       "requiresAPIKey": true
+    },
+    {
+      "id": "com.typewhisper.google-cloud-stt",
+      "name": "Google Cloud Speech-to-Text",
+      "version": "1.0.0",
+      "minHostVersion": "0.12.0",
+      "author": "TypeWhisper",
+      "description": "Cloud transcription via Google Cloud Speech-to-Text using a service-account JSON key. Handles long recordings by chunking audio into multiple recognize requests.",
+      "descriptions": {
+        "de": "Cloud-Transkription ueber Google Cloud Speech-to-Text mit einem Service-Account-JSON-Schluessel. Zerlegt laengere Aufnahmen automatisch in mehrere Recognize-Requests."
+      },
+      "category": "transcription",
+      "size": 241557,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-google-cloud-stt-v1.0.0/GoogleCloudSTTPlugin.zip",
+      "minOSVersion": "14.0",
+      "iconSystemName": "globe.badge.chevron.backward",
+      "requiresAPIKey": true
     }
   ]
 }
