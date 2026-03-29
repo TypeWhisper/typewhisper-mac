@@ -4,11 +4,11 @@ import SwiftUI
 import TypeWhisperPluginSDK
 
 private let googleCloudSupportedLanguages = [
-    "ar-SA", "as-IN", "bn-BD", "bn-IN", "de-DE", "en-AU", "en-GB",
+    "ar-SA", "bn-BD", "bn-IN", "de-DE", "en-AU", "en-GB",
     "en-IN", "en-US", "es-ES", "es-US", "fr-FR", "gu-IN", "hi-IN",
     "it-IT", "ja-JP", "kn-IN", "ko-KR", "ml-IN", "mr-IN", "nl-NL",
     "pa-Guru-IN", "pt-BR", "pt-PT", "ru-RU", "ta-IN", "te-IN",
-    "tr-TR", "uk-UA", "ur-PK", "vi-VN", "zh-CN", "zh-TW",
+    "tr-TR", "uk-UA", "ur-IN", "ur-PK", "vi-VN", "zh-CN", "zh-TW",
 ]
 
 private actor GoogleAccessTokenCache {
@@ -104,6 +104,11 @@ private struct GoogleWordInfo: Decodable {
     let startTime: String?
     let endTime: String?
     let word: String
+}
+
+private struct GoogleCredentialValidationResult {
+    let isValid: Bool
+    let message: String
 }
 
 @objc(GoogleCloudSTTPlugin)
@@ -236,18 +241,34 @@ final class GoogleCloudSTTPlugin: NSObject, TranscriptionEnginePlugin, @unchecke
         host?.setUserDefault(normalized, forKey: "defaultLanguageCode")
     }
 
-    fileprivate func validateCredentials(jsonOverride: String? = nil) async -> Bool {
+    fileprivate func validateCredentials(jsonOverride: String? = nil) async -> GoogleCredentialValidationResult {
         let candidate = jsonOverride?.trimmingCharacters(in: .whitespacesAndNewlines)
         let rawJSON = (candidate?.isEmpty == false ? candidate : _serviceAccountJSON) ?? ""
         guard let serviceAccount = Self.parseServiceAccount(from: rawJSON) else {
-            return false
+            return GoogleCredentialValidationResult(
+                isValid: false,
+                message: "The JSON could not be parsed. Paste the full Google service-account JSON file."
+            )
         }
 
         do {
-            _ = try await accessToken(for: serviceAccount, forceRefresh: true)
-            return true
+            let accessToken = try await accessToken(for: serviceAccount, forceRefresh: true)
+            _ = try await recognizeChunk(
+                samples: Array(repeating: 0, count: Self.sampleRate / 10),
+                accessToken: accessToken,
+                languageCode: Self.defaultLanguageCode,
+                modelId: "default",
+                promptPhrases: []
+            )
+            return GoogleCredentialValidationResult(
+                isValid: true,
+                message: "Credentials look valid and Speech-to-Text is reachable."
+            )
         } catch {
-            return false
+            return GoogleCredentialValidationResult(
+                isValid: false,
+                message: Self.validationMessage(for: error)
+            )
         }
     }
 
@@ -290,7 +311,8 @@ final class GoogleCloudSTTPlugin: NSObject, TranscriptionEnginePlugin, @unchecke
         }
 
         guard httpResponse.statusCode == 200 else {
-            let message = Self.extractGoogleErrorMessage(from: data) ?? "HTTP \(httpResponse.statusCode)"
+            let message = Self.formattedGoogleErrorMessage(from: data, statusCode: httpResponse.statusCode)
+                ?? "HTTP \(httpResponse.statusCode)"
             throw PluginTranscriptionError.apiError(message)
         }
 
@@ -415,9 +437,14 @@ final class GoogleCloudSTTPlugin: NSObject, TranscriptionEnginePlugin, @unchecke
         case 200:
             return try Self.parseRecognizeResponse(data)
         case 401:
-            throw PluginTranscriptionError.invalidApiKey
+            throw PluginTranscriptionError.apiError(
+                Self.formatGoogleErrorMessage(
+                    "Google rejected the service-account credentials.",
+                    statusCode: httpResponse.statusCode
+                )
+            )
         case 403:
-            let message = Self.extractGoogleErrorMessage(from: data)
+            let message = Self.formattedGoogleErrorMessage(from: data, statusCode: httpResponse.statusCode)
                 ?? "Google Cloud denied access. Check IAM permissions and whether Speech-to-Text is enabled."
             throw PluginTranscriptionError.apiError(message)
         case 413:
@@ -425,7 +452,8 @@ final class GoogleCloudSTTPlugin: NSObject, TranscriptionEnginePlugin, @unchecke
         case 429:
             throw PluginTranscriptionError.rateLimited
         default:
-            let message = Self.extractGoogleErrorMessage(from: data) ?? "HTTP \(httpResponse.statusCode)"
+            let message = Self.formattedGoogleErrorMessage(from: data, statusCode: httpResponse.statusCode)
+                ?? "HTTP \(httpResponse.statusCode)"
             throw PluginTranscriptionError.apiError(message)
         }
     }
@@ -588,7 +616,6 @@ final class GoogleCloudSTTPlugin: NSObject, TranscriptionEnginePlugin, @unchecke
 
         let mappings = [
             "ar": "ar-SA",
-            "as": "as-IN",
             "bn": "bn-IN",
             "de": "de-DE",
             "en": "en-US",
@@ -610,7 +637,7 @@ final class GoogleCloudSTTPlugin: NSObject, TranscriptionEnginePlugin, @unchecke
             "te": "te-IN",
             "tr": "tr-TR",
             "uk": "uk-UA",
-            "ur": "ur-PK",
+            "ur": "ur-IN",
             "vi": "vi-VN",
             "zh": "zh-CN",
         ]
@@ -644,6 +671,78 @@ final class GoogleCloudSTTPlugin: NSObject, TranscriptionEnginePlugin, @unchecke
         }
 
         return nil
+    }
+
+    private static func formattedGoogleErrorMessage(from data: Data, statusCode: Int? = nil) -> String? {
+        guard let rawMessage = extractGoogleErrorMessage(from: data) else {
+            return nil
+        }
+        return formatGoogleErrorMessage(rawMessage, statusCode: statusCode)
+    }
+
+    private static func formatGoogleErrorMessage(_ message: String, statusCode: Int? = nil) -> String {
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowercase = trimmed.lowercased()
+
+        if lowercase.contains("speech-to-text api has not been used in project")
+            || (lowercase.contains("speech.googleapis.com") && lowercase.contains("disabled")) {
+            if let projectId = extractProjectIdentifier(from: trimmed) {
+                return "Cloud Speech-to-Text API is not enabled for Google Cloud project \(projectId). Open https://console.developers.google.com/apis/api/speech.googleapis.com/overview?project=\(projectId), click Enable, wait a few minutes, and retry."
+            }
+            return "Cloud Speech-to-Text API is not enabled for this Google Cloud project. Enable speech.googleapis.com in Google Cloud, wait a few minutes, and retry."
+        }
+
+        if lowercase.contains("billing")
+            && (lowercase.contains("disabled") || lowercase.contains("not enabled") || lowercase.contains("required")) {
+            return "Google Cloud billing is not enabled for this project. Enable billing for the project and retry."
+        }
+
+        if lowercase.contains("permission denied") || (statusCode == 403 && lowercase.contains("permission")) {
+            return "Google denied access to Speech-to-Text. Make sure the API is enabled and the service account has the Cloud Speech Client role."
+        }
+
+        if statusCode == 401 || lowercase.contains("invalid_grant") || lowercase.contains("unauthorized") {
+            return "Google rejected the service-account credentials. Check that you pasted the full JSON key file for the correct project."
+        }
+
+        return trimmed
+    }
+
+    private static func extractProjectIdentifier(from message: String) -> String? {
+        let pattern = #"project\s+([A-Za-z0-9:-]+)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+            return nil
+        }
+        let range = NSRange(message.startIndex..<message.endIndex, in: message)
+        guard let match = regex.firstMatch(in: message, options: [], range: range),
+              match.numberOfRanges > 1,
+              let matchRange = Range(match.range(at: 1), in: message) else {
+            return nil
+        }
+        return String(message[matchRange])
+    }
+
+    private static func validationMessage(for error: Error) -> String {
+        guard let pluginError = error as? PluginTranscriptionError else {
+            return error.localizedDescription
+        }
+
+        switch pluginError {
+        case .notConfigured:
+            return "No service-account JSON is configured yet."
+        case .noModelSelected:
+            return "No Google recognition model is selected."
+        case .invalidApiKey:
+            return "Google rejected the service-account credentials."
+        case .rateLimited:
+            return "Google Cloud rate-limited the request. Please wait a moment and retry."
+        case .fileTooLarge:
+            return "The verification audio was rejected as too large."
+        case .apiError(let message):
+            return message
+        case .networkError(let message):
+            return "Network error: \(message)"
+        }
     }
 
     private static func mergeTranscripts(_ existing: String, _ incoming: String) -> String {
@@ -681,7 +780,7 @@ private struct GoogleCloudSTTSettingsView: View {
 
     @State private var serviceAccountInput = ""
     @State private var isValidating = false
-    @State private var validationResult: Bool?
+    @State private var validationResult: GoogleCredentialValidationResult?
     @State private var selectedModel = ""
     @State private var defaultLanguageCode = GoogleCloudSTTPlugin.defaultLanguageCode
 
@@ -749,11 +848,11 @@ private struct GoogleCloudSTTSettingsView: View {
                     }
                 } else if let validationResult {
                     HStack(spacing: 4) {
-                        Image(systemName: validationResult ? "checkmark.circle.fill" : "xmark.circle.fill")
-                            .foregroundStyle(validationResult ? .green : .red)
-                        Text(validationResult ? "Credentials look valid" : "Credentials could not be validated")
+                        Image(systemName: validationResult.isValid ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .foregroundStyle(validationResult.isValid ? .green : .red)
+                        Text(validationResult.message)
                             .font(.caption)
-                            .foregroundStyle(validationResult ? .green : .red)
+                            .foregroundStyle(validationResult.isValid ? .green : .red)
                     }
                 }
             }
