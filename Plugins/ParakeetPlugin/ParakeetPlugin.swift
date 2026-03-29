@@ -6,7 +6,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(ParakeetPlugin)
-final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.parakeet"
     static let pluginName = "Parakeet"
 
@@ -343,6 +343,29 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Send
     }
 
     // MARK: - Settings View
+
+    var currentSettingsActivity: PluginSettingsActivity? {
+        switch modelState {
+        case .notLoaded, .ready:
+            break
+        case .downloading:
+            return PluginSettingsActivity(
+                message: "Downloading model",
+                progress: downloadProgress
+            )
+        case .error(let message):
+            return PluginSettingsActivity(message: message, isError: true)
+        }
+
+        switch ctcModelState {
+        case .notDownloaded, .ready:
+            return nil
+        case .downloading:
+            return PluginSettingsActivity(message: "Downloading vocabulary model")
+        case .error(let message):
+            return PluginSettingsActivity(message: message, isError: true)
+        }
+    }
 
     var settingsView: AnyView? {
         AnyView(ParakeetSettingsView(plugin: self))

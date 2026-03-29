@@ -9,7 +9,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(GranitePlugin)
-final class GranitePlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+final class GranitePlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.granite"
     static let pluginName = "Granite Speech"
 
@@ -188,6 +188,17 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, @unchecked Senda
     }
 
     // MARK: - Settings View
+
+    var currentSettingsActivity: PluginSettingsActivity? {
+        switch modelState {
+        case .notLoaded, .ready:
+            return nil
+        case .loading:
+            return PluginSettingsActivity(message: "Preparing model")
+        case .error(let message):
+            return PluginSettingsActivity(message: message, isError: true)
+        }
+    }
 
     var settingsView: AnyView? {
         AnyView(GraniteSettingsView(plugin: self))

@@ -9,7 +9,7 @@ import os
 
 @available(macOS 26, *)
 @objc(SpeechAnalyzerPlugin)
-final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.speechanalyzer"
     static let pluginName = "Apple Speech"
 
@@ -318,6 +318,20 @@ final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, @unchecke
     }
 
     // MARK: - Settings View
+
+    var currentSettingsActivity: PluginSettingsActivity? {
+        switch modelState {
+        case .notLoaded, .ready:
+            return nil
+        case .downloading:
+            return PluginSettingsActivity(
+                message: "Downloading language model",
+                progress: downloadProgress
+            )
+        case .error(let message):
+            return PluginSettingsActivity(message: message, isError: true)
+        }
+    }
 
     var settingsView: AnyView? {
         AnyView(SpeechAnalyzerSettingsView(plugin: self))

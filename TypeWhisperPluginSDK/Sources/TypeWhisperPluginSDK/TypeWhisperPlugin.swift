@@ -17,6 +17,28 @@ public extension TypeWhisperPlugin {
     var settingsView: AnyView? { nil }
 }
 
+// MARK: - Shared Settings Activity
+
+public struct PluginSettingsActivity: Sendable, Equatable {
+    public let message: String
+    public let progress: Double?
+    public let isError: Bool
+
+    public init(message: String, progress: Double? = nil, isError: Bool = false) {
+        self.message = message
+        self.progress = progress
+        self.isError = isError
+    }
+}
+
+public protocol PluginSettingsActivityReporting: TypeWhisperPlugin {
+    var currentSettingsActivity: PluginSettingsActivity? { get }
+}
+
+public extension PluginSettingsActivityReporting {
+    var currentSettingsActivity: PluginSettingsActivity? { nil }
+}
+
 // MARK: - LLM Provider Plugin
 
 public final class PluginModelInfo: @unchecked Sendable {

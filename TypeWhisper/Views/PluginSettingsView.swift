@@ -1,5 +1,71 @@
+import AppKit
 import SwiftUI
 import TypeWhisperPluginSDK
+
+@MainActor
+final class PluginSettingsWindowManager {
+    static let shared = PluginSettingsWindowManager()
+
+    private var windows: [String: NSWindow] = [:]
+    private var delegates: [String: PluginSettingsWindowDelegate] = [:]
+
+    func present(_ plugin: LoadedPlugin) {
+        guard let settingsView = plugin.instance.settingsView else { return }
+
+        if let window = windows[plugin.id] {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let hostingView = NSHostingView(
+            rootView: settingsView
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        )
+        hostingView.sizingOptions = []
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 440),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = plugin.manifest.name
+        window.contentMinSize = NSSize(width: 500, height: 400)
+        window.isReleasedWhenClosed = false
+        window.contentView = hostingView
+
+        let autosaveName = "plugin-settings.\(plugin.id)"
+        if !window.setFrameUsingName(autosaveName) {
+            window.center()
+        }
+        window.setFrameAutosaveName(autosaveName)
+
+        let delegate = PluginSettingsWindowDelegate(pluginId: plugin.id) { [weak self] pluginId in
+            self?.windows[pluginId] = nil
+            self?.delegates[pluginId] = nil
+        }
+        delegates[plugin.id] = delegate
+        windows[plugin.id] = window
+        window.delegate = delegate
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+}
+
+private final class PluginSettingsWindowDelegate: NSObject, NSWindowDelegate {
+    private let pluginId: String
+    private let onClose: (String) -> Void
+
+    init(pluginId: String, onClose: @escaping (String) -> Void) {
+        self.pluginId = pluginId
+        self.onClose = onClose
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        onClose(pluginId)
+    }
+}
 
 struct PluginSettingsView: View {
     @ObservedObject private var pluginManager = PluginManager.shared
@@ -359,7 +425,9 @@ private struct InstalledPluginRow: View {
     let registryPlugin: RegistryPlugin?
     let onUpdate: () -> Void
     let onUninstall: () -> Void
-    @State private var showSettings = false
+    @State private var pluginActivity: PluginSettingsActivity?
+
+    private let activityTimer = Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()
 
     private var isCloud: Bool {
         registryPlugin?.requiresAPIKey == true || plugin.manifest.requiresAPIKey == true
@@ -449,6 +517,8 @@ private struct InstalledPluginRow: View {
                     onUpdate()
                 }
                 .controlSize(.small)
+            } else if let pluginActivity {
+                PluginSettingsActivityView(activity: pluginActivity)
             }
 
             if !plugin.isBundled {
@@ -465,7 +535,7 @@ private struct InstalledPluginRow: View {
 
             if plugin.instance.settingsView != nil {
                 Button {
-                    showSettings = true
+                    PluginSettingsWindowManager.shared.present(plugin)
                 } label: {
                     Image(systemName: "gear")
                 }
@@ -482,32 +552,16 @@ private struct InstalledPluginRow: View {
             .labelsHidden()
             .accessibilityLabel(String(localized: "Enable \(plugin.manifest.name)"))
         }
-        .sheet(isPresented: $showSettings) {
-            if let view = plugin.instance.settingsView {
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack {
-                        Text(plugin.manifest.name)
-                            .font(.headline)
-                        Spacer()
-                        Button {
-                            showSettings = false
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
-                                .font(.title2)
-                        }
-                        .buttonStyle(.borderless)
-                    }
-                    .padding()
-
-                    Divider()
-
-                    view
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                }
-                .frame(minWidth: 500, minHeight: 400)
-            }
+        .onAppear {
+            refreshPluginActivity()
         }
+        .onReceive(activityTimer) { _ in
+            refreshPluginActivity()
+        }
+    }
+
+    private func refreshPluginActivity() {
+        pluginActivity = (plugin.instance as? any PluginSettingsActivityReporting)?.currentSettingsActivity
     }
 }
 
@@ -589,6 +643,42 @@ struct AvailablePluginRow: View {
                 }
                 .controlSize(.small)
                 .accessibilityLabel(String(localized: "Install \(plugin.name)"))
+            }
+        }
+    }
+}
+
+private struct PluginSettingsActivityView: View {
+    let activity: PluginSettingsActivity
+
+    var body: some View {
+        if let progress = activity.progress {
+            HStack(spacing: 6) {
+                ProgressView(value: progress)
+                    .frame(width: 80)
+                Text("\(Int(progress * 100))%")
+                    .font(.caption)
+                    .foregroundStyle(activity.isError ? .red : .secondary)
+                    .monospacedDigit()
+                    .frame(width: 32, alignment: .trailing)
+                Text(activity.message)
+                    .font(.caption)
+                    .foregroundStyle(activity.isError ? .red : .secondary)
+                    .lineLimit(1)
+            }
+        } else {
+            HStack(spacing: 6) {
+                if activity.isError {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                } else {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                Text(activity.message)
+                    .font(.caption)
+                    .foregroundStyle(activity.isError ? .red : .secondary)
+                    .lineLimit(1)
             }
         }
     }

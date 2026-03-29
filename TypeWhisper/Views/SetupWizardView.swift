@@ -817,11 +817,12 @@ struct SetupWizardView: View {
 
 private struct RecommendationSettingsButton: View {
     let manifestId: String
-    @State private var showSettings = false
 
     var body: some View {
         Button {
-            showSettings = true
+            if let loaded = PluginManager.shared.loadedPlugins.first(where: { $0.manifest.id == manifestId }) {
+                PluginSettingsWindowManager.shared.present(loaded)
+            }
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "gear")
@@ -831,33 +832,6 @@ private struct RecommendationSettingsButton: View {
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
-        .sheet(isPresented: $showSettings) {
-            if let loaded = PluginManager.shared.loadedPlugins.first(where: { $0.manifest.id == manifestId }),
-               let view = loaded.instance.settingsView {
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack {
-                        Text(loaded.manifest.name)
-                            .font(.headline)
-                        Spacer()
-                        Button {
-                            showSettings = false
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
-                                .font(.title2)
-                        }
-                        .buttonStyle(.borderless)
-                    }
-                    .padding()
-
-                    Divider()
-
-                    view
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                }
-                .frame(minWidth: 500, minHeight: 400)
-            }
-        }
     }
 }
 
@@ -866,7 +840,6 @@ private struct RecommendationSettingsButton: View {
 private struct SetupEngineRow: View {
     let engine: any TranscriptionEnginePlugin
     @ObservedObject private var pluginManager = PluginManager.shared
-    @State private var showSettings = false
 
     var body: some View {
         HStack {
@@ -902,7 +875,7 @@ private struct SetupEngineRow: View {
                 ($0.instance as? any TranscriptionEnginePlugin)?.providerId == engine.providerId
             }), loaded.instance.settingsView != nil {
                 Button {
-                    showSettings = true
+                    PluginSettingsWindowManager.shared.present(loaded)
                 } label: {
                     Image(systemName: "gear")
                 }
@@ -911,33 +884,5 @@ private struct SetupEngineRow: View {
         }
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 8).fill(.quaternary))
-        .sheet(isPresented: $showSettings) {
-            if let loaded = PluginManager.shared.loadedPlugins.first(where: {
-                ($0.instance as? any TranscriptionEnginePlugin)?.providerId == engine.providerId
-            }), let view = loaded.instance.settingsView {
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack {
-                        Text(loaded.manifest.name)
-                            .font(.headline)
-                        Spacer()
-                        Button {
-                            showSettings = false
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
-                                .font(.title2)
-                        }
-                        .buttonStyle(.borderless)
-                    }
-                    .padding()
-
-                    Divider()
-
-                    view
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                }
-                .frame(minWidth: 500, minHeight: 400)
-            }
-        }
     }
 }

@@ -6,7 +6,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(WhisperKitPlugin)
-final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.whisperkit"
     static let pluginName = "WhisperKit"
 
@@ -298,6 +298,31 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Se
     }
 
     // MARK: - Settings View
+
+    var currentSettingsActivity: PluginSettingsActivity? {
+        switch modelState {
+        case .notLoaded, .ready:
+            return nil
+        case .downloading:
+            return PluginSettingsActivity(
+                message: "Downloading model",
+                progress: downloadProgress
+            )
+        case .loading(let phase):
+            let message: String
+            switch phase {
+            case "prewarming":
+                message = "Optimizing model"
+            case "loading":
+                message = "Loading model"
+            default:
+                message = "Preparing model"
+            }
+            return PluginSettingsActivity(message: message)
+        case .error(let message):
+            return PluginSettingsActivity(message: message, isError: true)
+        }
+    }
 
     var settingsView: AnyView? {
         AnyView(WhisperKitSettingsView(plugin: self))
