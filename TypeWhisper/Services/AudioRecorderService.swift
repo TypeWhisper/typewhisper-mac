@@ -112,6 +112,20 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         var fileExtension: String { rawValue }
     }
 
+    enum TrackMode: String, CaseIterable, Sendable {
+        case mixed
+        case separate
+
+        var displayName: String {
+            switch self {
+            case .mixed:
+                return String(localized: "trackMode.mixed")
+            case .separate:
+                return String(localized: "trackMode.separate")
+            }
+        }
+    }
+
     enum MicDuckingMode: String, CaseIterable, Sendable {
         case aggressive
         case medium
@@ -148,6 +162,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     private var outputFormat: OutputFormat = .wav
     private var micEnabled = false
     private var systemAudioEnabled = false
+    var trackMode: TrackMode = .mixed
     var micDuckingMode: MicDuckingMode = .aggressive
 
     // 16kHz mono buffer for streaming transcription
@@ -563,10 +578,10 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         let micBuffer = try readAndConvert(file: micFile, to: mixFormat, totalFrames: totalFrames)
         let sysBuffer = try readAndConvert(file: sysFile, to: mixFormat, totalFrames: totalFrames)
 
-        let systemLeft = sysBuffer.floatChannelData?[0]
-        let systemRight = sysBuffer.format.channelCount > 1 ? sysBuffer.floatChannelData?[1] : nil
         let micDuckingProfile: MicDuckingProfile?
-        if let systemLeft {
+        if trackMode == .mixed,
+           let systemLeft = sysBuffer.floatChannelData?[0] {
+            let systemRight = sysBuffer.format.channelCount > 1 ? sysBuffer.floatChannelData?[1] : nil
             micDuckingProfile = Self.buildMicDuckingProfile(
                 frameCount: Int(totalFrames),
                 sampleRate: targetSampleRate,
@@ -586,16 +601,38 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         guard let mixedBuffer = AVAudioPCMBuffer(pcmFormat: mixFormat, frameCapacity: totalFrames) else { return }
         mixedBuffer.frameLength = totalFrames
 
-        for ch in 0..<Int(targetChannels) {
-            guard let mixedData = mixedBuffer.floatChannelData?[ch],
-                  let micData = micBuffer.floatChannelData?[ch],
-                  let sysData = sysBuffer.floatChannelData?[ch] else { continue }
+        if trackMode == .separate {
+            guard let leftData = mixedBuffer.floatChannelData?[0],
+                  let rightData = mixedBuffer.floatChannelData?[1],
+                  let micLeft = micBuffer.floatChannelData?[0],
+                  let systemLeft = sysBuffer.floatChannelData?[0] else { return }
+
+            let micRight = micBuffer.format.channelCount > 1 ? micBuffer.floatChannelData?[1] : nil
+            let systemRight = sysBuffer.format.channelCount > 1 ? sysBuffer.floatChannelData?[1] : nil
 
             for i in 0..<Int(totalFrames) {
-                let micSample = i < Int(micBuffer.frameLength) ? micData[i] : 0
-                let sysSample = i < Int(sysBuffer.frameLength) ? sysData[i] : 0
-                let micGain = micDuckingProfile?.gains[i] ?? 1
-                mixedData[i] = (micSample * micGain) + sysSample
+                leftData[i] = i < Int(micBuffer.frameLength)
+                    ? monoSample(left: micLeft, right: micRight, index: i)
+                    : 0
+            }
+
+            for i in 0..<Int(totalFrames) {
+                rightData[i] = i < Int(sysBuffer.frameLength)
+                    ? monoSample(left: systemLeft, right: systemRight, index: i)
+                    : 0
+            }
+        } else {
+            for ch in 0..<Int(targetChannels) {
+                guard let mixedData = mixedBuffer.floatChannelData?[ch],
+                      let micData = micBuffer.floatChannelData?[ch],
+                      let sysData = sysBuffer.floatChannelData?[ch] else { continue }
+
+                for i in 0..<Int(totalFrames) {
+                    let micSample = i < Int(micBuffer.frameLength) ? micData[i] : 0
+                    let sysSample = i < Int(sysBuffer.frameLength) ? sysData[i] : 0
+                    let micGain = micDuckingProfile?.gains[i] ?? 1
+                    mixedData[i] = (micSample * micGain) + sysSample
+                }
             }
         }
 

@@ -3524,6 +3524,22 @@
         }
       }
     },
+    "recorder.trackMode": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spur-Modus"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Track Mode"
+          }
+        }
+      }
+    },
     "recorder.mic": {
       "localizations": {
         "de": {
@@ -3664,6 +3680,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "System audio capture requires Screen Recording permission."
+          }
+        }
+      }
+    },
+    "trackMode.mixed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gemischt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mixed"
+          }
+        }
+      }
+    },
+    "trackMode.separate": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Getrennt (Mic L / System R)"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Separate (Mic L / System R)"
           }
         }
       }

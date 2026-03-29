@@ -84,6 +84,7 @@ enum UserDefaultsKeys {
     static let recorderOutputFormat = "recorderOutputFormat"
     static let recorderTranscriptionEnabled = "recorderTranscriptionEnabled"
     static let recorderMicDuckingMode = "recorderMicDuckingMode"
+    static let recorderTrackMode = "recorderTrackMode"
     static let showRecorderTab = "showRecorderTab"
 
     // MARK: - Watch Folder

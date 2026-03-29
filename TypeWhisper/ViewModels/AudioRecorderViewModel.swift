@@ -60,6 +60,12 @@ final class AudioRecorderViewModel: ObservableObject {
             recorderService.micDuckingMode = micDuckingMode
         }
     }
+    @Published var trackMode: AudioRecorderService.TrackMode {
+        didSet {
+            UserDefaults.standard.set(trackMode.rawValue, forKey: UserDefaultsKeys.recorderTrackMode)
+            recorderService.trackMode = trackMode
+        }
+    }
     @Published var transcriptionEnabled: Bool {
         didSet { UserDefaults.standard.set(transcriptionEnabled, forKey: UserDefaultsKeys.recorderTranscriptionEnabled) }
     }
@@ -111,6 +117,13 @@ final class AudioRecorderViewModel: ObservableObject {
             self.micDuckingMode = .aggressive
         }
 
+        if let modeString = defaults.string(forKey: UserDefaultsKeys.recorderTrackMode),
+           let mode = AudioRecorderService.TrackMode(rawValue: modeString) {
+            self.trackMode = mode
+        } else {
+            self.trackMode = .mixed
+        }
+
         if defaults.object(forKey: UserDefaultsKeys.recorderTranscriptionEnabled) == nil {
             self.transcriptionEnabled = true
         } else {
@@ -118,6 +131,7 @@ final class AudioRecorderViewModel: ObservableObject {
         }
 
         recorderService.micDuckingMode = micDuckingMode
+        recorderService.trackMode = trackMode
 
         setupBindings()
         loadRecordings()

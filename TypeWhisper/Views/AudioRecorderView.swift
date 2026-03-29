@@ -108,12 +108,26 @@ struct AudioRecorderView: View {
                 }
                 .disabled(isEditingLocked)
 
+                if viewModel.micEnabled && viewModel.systemAudioEnabled {
+                    Picker(String(localized: "recorder.trackMode"), selection: $viewModel.trackMode) {
+                        ForEach(AudioRecorderService.TrackMode.allCases, id: \.self) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+                    .disabled(isEditingLocked)
+                }
+
                 Picker(String(localized: "Echo Handling"), selection: $viewModel.micDuckingMode) {
                     ForEach(AudioRecorderService.MicDuckingMode.allCases, id: \.self) { mode in
                         Text(mode.displayName).tag(mode)
                     }
                 }
-                .disabled(isEditingLocked || !viewModel.micEnabled || !viewModel.systemAudioEnabled)
+                .disabled(
+                    isEditingLocked
+                    || !viewModel.micEnabled
+                    || !viewModel.systemAudioEnabled
+                    || viewModel.trackMode == .separate
+                )
 
                 Text(String(localized: "Affects only TypeWhisper recordings and transcriptions, not your live meeting microphone."))
                     .font(.caption)
