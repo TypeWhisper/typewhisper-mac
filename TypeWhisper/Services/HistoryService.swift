@@ -60,7 +60,8 @@ final class HistoryService: ObservableObject {
         language: String?,
         engineUsed: String,
         modelUsed: String? = nil,
-        audioSamples: [Float]? = nil
+        audioSamples: [Float]? = nil,
+        pipelineSteps: [String]? = nil
     ) {
         let sanitizedRaw = Self.sanitize(rawText)
         let sanitizedFinal = Self.sanitize(finalText)
@@ -101,6 +102,7 @@ final class HistoryService: ObservableObject {
             modelUsed: modelUsed,
             audioFileName: audioFileName
         )
+        record.pipelineStepList = pipelineSteps ?? []
         modelContext.insert(record)
         save()
         fetchRecords()

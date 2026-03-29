@@ -4,6 +4,11 @@ import os.log
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "PostProcessingPipeline")
 
+struct PostProcessingResult {
+    let text: String
+    let appliedSteps: [String]
+}
+
 @MainActor
 final class PostProcessingPipeline {
     private let snippetService: SnippetService
@@ -20,8 +25,9 @@ final class PostProcessingPipeline {
         text: String,
         context: PostProcessingContext,
         llmHandler: ((String) async throws -> String)? = nil,
-        outputFormat: String? = nil
-    ) async throws -> String {
+        outputFormat: String? = nil,
+        llmStepName: String? = nil
+    ) async throws -> PostProcessingResult {
         // Collect plugin processors with their priorities
         let plugins = PluginManager.shared.postProcessors
 
@@ -46,7 +52,9 @@ final class PostProcessingPipeline {
         steps.sort { $0.priority < $1.priority }
 
         var result = text
+        var appliedSteps: [String] = []
         for step in steps {
+            let before = result
             do {
                 switch step.id {
                 case -4:
@@ -63,6 +71,17 @@ final class PostProcessingPipeline {
                     result = dictionaryService.applyCorrections(to: result)
                 default:
                     result = try await plugins[step.id].process(text: result, context: context)
+                }
+                if result != before {
+                    let name: String
+                    switch step.id {
+                    case -4: name = "Formatting"
+                    case -1: name = llmStepName ?? "Prompt"
+                    case -2: name = "Snippets"
+                    case -3: name = "Corrections"
+                    default: name = plugins[step.id].processorName
+                    }
+                    appliedSteps.append(name)
                 }
             } catch {
                 let name: String
@@ -81,6 +100,6 @@ final class PostProcessingPipeline {
             }
         }
 
-        return result
+        return PostProcessingResult(text: result, appliedSteps: appliedSteps)
     }
 }

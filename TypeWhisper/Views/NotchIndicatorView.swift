@@ -23,6 +23,10 @@ struct NotchIndicatorView: View {
         viewModel.state == .inserting && viewModel.actionFeedbackMessage != nil
     }
 
+    private var hasProcessingPhase: Bool {
+        viewModel.state == .processing && viewModel.processingPhase != nil
+    }
+
     private var isExpanded: Bool {
         textExpanded || hasActionFeedback
     }
@@ -30,13 +34,14 @@ struct NotchIndicatorView: View {
     private var currentWidth: CGFloat {
         if textExpanded { return max(closedWidth, 400) }
         if hasActionFeedback { return max(closedWidth, 340) }
+        if hasProcessingPhase { return closedWidth + 80 }
         return closedWidth
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             statusBar
-                .frame(width: closedWidth, height: geometry.notchHeight)
+                .frame(width: currentWidth, height: geometry.notchHeight)
                 .frame(maxWidth: .infinity)
 
             if viewModel.state == .recording {
@@ -55,6 +60,14 @@ struct NotchIndicatorView: View {
                 }
             }
 
+            if hasProcessingPhase {
+                Text(viewModel.processingPhase ?? "")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+            }
+
             if hasActionFeedback {
                 IndicatorActionFeedback(
                     message: viewModel.actionFeedbackMessage ?? "",
@@ -67,8 +80,8 @@ struct NotchIndicatorView: View {
         .frame(width: currentWidth)
         .background(.black)
         .clipShape(NotchShape(
-            topCornerRadius: isExpanded ? 19 : 6,
-            bottomCornerRadius: isExpanded ? 24 : 14
+            topCornerRadius: isExpanded ? 19 : (hasProcessingPhase ? 8 : 6),
+            bottomCornerRadius: isExpanded ? 24 : (hasProcessingPhase ? 18 : 14)
         ))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .preferredColorScheme(.dark)

@@ -6,7 +6,55 @@ struct CorrectionSuggestion: Identifiable {
     let replacement: String
 }
 
+enum DiffSegment: Equatable {
+    case unchanged(String)
+    case removed(String)
+    case added(String)
+}
+
 final class TextDiffService {
+
+    func computeWordDiff(original: String, processed: String) -> [DiffSegment] {
+        let origWords = original.split(omittingEmptySubsequences: true, whereSeparator: \.isWhitespace).map(String.init)
+        let procWords = processed.split(omittingEmptySubsequences: true, whereSeparator: \.isWhitespace).map(String.init)
+
+        if origWords.isEmpty && procWords.isEmpty { return [] }
+        if origWords.isEmpty { return procWords.map { .added($0) } }
+        if procWords.isEmpty { return origWords.map { .removed($0) } }
+
+        let m = origWords.count, n = procWords.count
+
+        // LCS dynamic programming
+        var dp = Array(repeating: Array(repeating: 0, count: n + 1), count: m + 1)
+        for i in 1...m {
+            for j in 1...n {
+                if origWords[i - 1] == procWords[j - 1] {
+                    dp[i][j] = dp[i - 1][j - 1] + 1
+                } else {
+                    dp[i][j] = max(dp[i - 1][j], dp[i][j - 1])
+                }
+            }
+        }
+
+        // Backtrack to produce segments
+        var segments: [DiffSegment] = []
+        var i = m, j = n
+        while i > 0 || j > 0 {
+            if i > 0 && j > 0 && origWords[i - 1] == procWords[j - 1] {
+                segments.append(.unchanged(origWords[i - 1]))
+                i -= 1; j -= 1
+            } else if j > 0 && (i == 0 || dp[i][j - 1] >= dp[i - 1][j]) {
+                segments.append(.added(procWords[j - 1]))
+                j -= 1
+            } else {
+                segments.append(.removed(origWords[i - 1]))
+                i -= 1
+            }
+        }
+        segments.reverse()
+        return segments
+    }
+
     func extractCorrections(original: String, edited: String) -> [CorrectionSuggestion] {
         let originalWords = original.split(separator: " ").map(String.init)
         let editedWords = edited.split(separator: " ").map(String.init)

@@ -16,8 +16,38 @@ final class TranscriptionRecord {
     var modelUsed: String?
     var wordsCount: Int = 0
     var audioFileName: String?
+    var pipelineSteps: String?
 
     var preview: String { String(finalText.prefix(100)) }
+
+    var wasPostProcessed: Bool {
+        rawText.trimmingCharacters(in: .whitespacesAndNewlines) != finalText
+    }
+    var pipelineStepList: [String] {
+        get {
+            guard let pipelineSteps, !pipelineSteps.isEmpty else { return [] }
+            if let data = pipelineSteps.data(using: .utf8),
+               let decoded = try? JSONDecoder().decode([String].self, from: data) {
+                return decoded
+            }
+            return pipelineSteps
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
+        set {
+            guard !newValue.isEmpty else {
+                pipelineSteps = nil
+                return
+            }
+            if let data = try? JSONEncoder().encode(newValue),
+               let encoded = String(data: data, encoding: .utf8) {
+                pipelineSteps = encoded
+            } else {
+                pipelineSteps = newValue.joined(separator: ",")
+            }
+        }
+    }
 
     /// Extracts the domain from appURL (e.g. "https://github.com/foo" → "github.com")
     var appDomain: String? {

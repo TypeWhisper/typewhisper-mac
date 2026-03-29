@@ -56,6 +56,10 @@ struct AppEntry: Identifiable, Hashable {
     var id: String { bundleId }
 }
 
+enum HistoryDetailViewMode: Int {
+    case processed, diff, original
+}
+
 // MARK: - ViewModel
 
 @MainActor
@@ -75,6 +79,7 @@ final class HistoryViewModel: ObservableObject {
     @Published var editedText: String = ""
     @Published var correctionSuggestions: [CorrectionSuggestion] = []
     @Published var showCorrectionBanner: Bool = false
+    @Published var detailViewMode: HistoryDetailViewMode = .processed
 
     let audioPlaybackService = AudioPlaybackService()
 
@@ -155,6 +160,7 @@ final class HistoryViewModel: ObservableObject {
 
     func selectRecord(_ record: TranscriptionRecord?) {
         cancelEditing()
+        detailViewMode = .processed
         audioPlaybackService.stop()
         if let record {
             selectedRecordIDs = [record.id]
@@ -165,6 +171,7 @@ final class HistoryViewModel: ObservableObject {
 
     func startEditing() {
         guard let record = selectedRecord else { return }
+        detailViewMode = .processed
         editedText = record.finalText
         isEditing = true
         showCorrectionBanner = false
@@ -182,6 +189,7 @@ final class HistoryViewModel: ObservableObject {
         }
 
         historyService.updateRecord(record, finalText: newText)
+        detailViewMode = .processed
         isEditing = false
 
         let suggestions = textDiffService.extractCorrections(original: originalText, edited: newText)
@@ -258,6 +266,13 @@ final class HistoryViewModel: ObservableObject {
 
     func audioFileURL(for record: TranscriptionRecord) -> URL? {
         historyService.audioFileURL(for: record)
+    }
+
+    func diffSegments(for record: TranscriptionRecord) -> [DiffSegment] {
+        textDiffService.computeWordDiff(
+            original: record.rawText.trimmingCharacters(in: .whitespacesAndNewlines),
+            processed: record.finalText
+        )
     }
 
     func dismissCorrectionBanner() {

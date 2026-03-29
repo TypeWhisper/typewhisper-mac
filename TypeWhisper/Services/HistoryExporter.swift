@@ -61,10 +61,22 @@ enum HistoryExporter {
             lines.append(appLine)
         }
 
+        let steps = record.pipelineStepList
+        if !steps.isEmpty {
+            lines.append("- **Processing:** \(steps.joined(separator: ", "))")
+        }
+
         lines.append("")
         lines.append("---")
         lines.append("")
         lines.append(record.finalText)
+
+        if record.wasPostProcessed {
+            lines.append("")
+            lines.append("### Original")
+            lines.append("")
+            lines.append(record.rawText)
+        }
 
         return lines.joined(separator: "\n")
     }
@@ -102,6 +114,11 @@ enum HistoryExporter {
                 app["url"] = url
             }
             dict["app"] = app
+        }
+
+        let steps = record.pipelineStepList
+        if !steps.isEmpty {
+            dict["pipelineSteps"] = steps
         }
 
         guard let data = try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys]),

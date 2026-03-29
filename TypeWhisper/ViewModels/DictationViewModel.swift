@@ -57,6 +57,7 @@ final class DictationViewModel: ObservableObject {
     var toggleHotkeyLabel: String { Self.loadHotkeyLabel(for: .toggle) }
     var promptPaletteHotkeyLabel: String { Self.loadHotkeyLabel(for: .promptPalette) }
     @Published var activeProfileName: String?
+    @Published var processingPhase: String?
     @Published var actionFeedbackMessage: String?
     @Published var actionFeedbackIcon: String?
     @Published var actionFeedbackIsError: Bool = false
@@ -570,6 +571,7 @@ final class DictationViewModel: ObservableObject {
         )))
 
         state = .processing
+        processingPhase = String(localized: "Transcribing...")
 
         transcriptionTask = Task {
             do {
@@ -618,6 +620,12 @@ final class DictationViewModel: ObservableObject {
                 guard !Task.isCancelled else { return }
 
                 // Post-processing pipeline (priority-based)
+                let llmStepName: String? = if llmHandler != nil {
+                    (self.effectivePromptAction != nil || self.matchedProfile?.inlineCommandsEnabled == true) ? "Prompt" : "Translation"
+                } else {
+                    nil
+                }
+                self.processingPhase = String(localized: "Processing...")
                 let ppContext = PostProcessingContext(
                     appName: activeApp.name,
                     bundleIdentifier: activeApp.bundleId,
@@ -626,10 +634,12 @@ final class DictationViewModel: ObservableObject {
                     profileName: self.matchedProfile?.name,
                     selectedText: self.capturedSelectedText
                 )
-                text = try await postProcessingPipeline.process(
+                let ppResult = try await postProcessingPipeline.process(
                     text: text, context: ppContext, llmHandler: llmHandler,
-                    outputFormat: self.matchedProfile?.outputFormat
+                    outputFormat: self.matchedProfile?.outputFormat,
+                    llmStepName: llmStepName
                 )
+                text = ppResult.text
 
                 partialText = ""
 
@@ -664,7 +674,8 @@ final class DictationViewModel: ObservableObject {
                     language: language,
                     engineUsed: result.engineUsed,
                     modelUsed: modelDisplayName,
-                    audioSamples: audioSamplesForHistory
+                    audioSamples: audioSamplesForHistory,
+                    pipelineSteps: ppResult.appliedSteps.isEmpty ? nil : ppResult.appliedSteps
                 )
 
                 EventBus.shared.emit(.transcriptionCompleted(TranscriptionCompletedPayload(
@@ -743,6 +754,7 @@ final class DictationViewModel: ObservableObject {
         capturedSelectedText = nil
         activeAppIcon = nil
         activeProfileName = nil
+        processingPhase = nil
         actionFeedbackMessage = nil
         actionFeedbackIcon = nil
         actionFeedbackIsError = false

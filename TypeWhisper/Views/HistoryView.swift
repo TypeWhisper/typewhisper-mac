@@ -377,6 +377,11 @@ private struct RecordDetailView: View {
                     if let domain = record.appDomain {
                         metadataTag(domain, icon: "globe.desk")
                     }
+                    if !record.pipelineStepList.isEmpty {
+                        ForEach(record.pipelineStepList, id: \.self) { step in
+                            metadataTag(step, icon: "gearshape.2")
+                        }
+                    }
                 }
             }
             .padding(10)
@@ -429,6 +434,18 @@ private struct RecordDetailView: View {
                 .padding(.top, 8)
             }
 
+            // Raw/Processed/Diff toggle
+            if record.wasPostProcessed && !viewModel.isEditing {
+                Picker("", selection: $viewModel.detailViewMode) {
+                    Text(String(localized: "Processed")).tag(HistoryDetailViewMode.processed)
+                    Text(String(localized: "Diff")).tag(HistoryDetailViewMode.diff)
+                    Text(String(localized: "Original")).tag(HistoryDetailViewMode.original)
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 10)
+                .padding(.top, 8)
+            }
+
             // Content
             if viewModel.isEditing {
                 TextEditor(text: $viewModel.editedText)
@@ -437,17 +454,28 @@ private struct RecordDetailView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    Text(record.finalText)
-                        .textSelection(.enabled)
-                        .font(.body)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(10)
+                    Group {
+                        switch viewModel.detailViewMode {
+                        case .diff where record.wasPostProcessed:
+                            Text(diffAttributedString(segments: viewModel.diffSegments(for: record)))
+                        case .original where record.wasPostProcessed:
+                            Text(record.rawText)
+                        default:
+                            Text(record.finalText)
+                        }
+                    }
+                    .textSelection(.enabled)
+                    .font(.body)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .onChange(of: record.id) {
+            viewModel.cancelEditing()
             viewModel.audioPlaybackService.stop()
+            viewModel.detailViewMode = .processed
         }
     }
 
@@ -466,7 +494,9 @@ private struct RecordDetailView: View {
                 .controlSize(.small)
             } else {
                 Button {
-                    viewModel.copyToClipboard(record.finalText)
+                    let text = viewModel.detailViewMode == .original && record.wasPostProcessed
+                        ? record.rawText : record.finalText
+                    viewModel.copyToClipboard(text)
                 } label: {
                     Image(systemName: "doc.on.doc")
                 }
@@ -491,6 +521,37 @@ private struct RecordDetailView: View {
             }
         }
         .buttonStyle(.borderless)
+    }
+
+    private func diffAttributedString(segments: [DiffSegment]) -> AttributedString {
+        var result = AttributedString()
+        for (index, segment) in segments.enumerated() {
+            let word: String
+            switch segment {
+            case .unchanged(let text): word = text
+            case .removed(let text): word = text
+            case .added(let text): word = text
+            }
+
+            var attr = AttributedString(word)
+            switch segment {
+            case .unchanged:
+                break
+            case .removed:
+                attr.foregroundColor = .red
+                attr.strikethroughStyle = .single
+                attr.backgroundColor = .red.opacity(0.15)
+            case .added:
+                attr.foregroundColor = .green
+                attr.backgroundColor = .green.opacity(0.15)
+            }
+            result += attr
+
+            if index < segments.count - 1 {
+                result += AttributedString(" ")
+            }
+        }
+        return result
     }
 
     private func metadataTag(_ text: String, icon: String) -> some View {

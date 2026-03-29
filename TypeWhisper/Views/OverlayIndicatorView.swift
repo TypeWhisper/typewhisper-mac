@@ -160,6 +160,11 @@ struct OverlayIndicatorView: View {
                     dotPulse: dotPulse
                 )
             } else if case .processing = viewModel.state {
+                if let phase = viewModel.processingPhase {
+                    Text(phase)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.7))
+                }
                 ProgressView()
                     .controlSize(.mini)
                     .tint(.white)
