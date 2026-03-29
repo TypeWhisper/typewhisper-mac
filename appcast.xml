@@ -5,21 +5,21 @@
     <language>en</language>
     <description>Stable, release candidate, and daily updates for TypeWhisper.</description>
     <item>
+      <title>Version 1.0.0-daily.20260329</title>
+      <pubDate>Sun, 29 Mar 2026 05:51:54 +0000</pubDate>
+      <sparkle:version>412</sparkle:version>
+      <sparkle:shortVersionString>1.0.0-daily.20260329</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <sparkle:channel>daily</sparkle:channel>
+      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.0.0-daily.20260329/TypeWhisper-v1.0.0-daily.20260329.zip" sparkle:edSignature="fZkoGOk0OFmvu7XGC3TwQRrHVpmKFXfq9oaFk1j5rFzqXIQU8RTvSuYFo6Fek/18zwI95RXGR7a2d77AmZuVBQ==" length="7973016" type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.0.0</title>
       <pubDate>Sat, 28 Mar 2026 10:11:00 +0000</pubDate>
       <sparkle:version>410</sparkle:version>
       <sparkle:shortVersionString>1.0.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
       <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.0.0/TypeWhisper-v1.0.0.zip" sparkle:edSignature="thFU/ICRAdCLpN4BOmy3OmS1o9HYtYxawTV1RL/RUr6fLnjwkqf1vanF6KTypUu1lXuv+uJDrNvoXFgejpAVAA==" length="7973022" type="application/octet-stream" />
-    </item>
-    <item>
-      <title>Version 0.14.0-daily.20260327</title>
-      <pubDate>Fri, 27 Mar 2026 05:52:25 +0000</pubDate>
-      <sparkle:version>409</sparkle:version>
-      <sparkle:shortVersionString>0.14.0-daily.20260327</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
-      <sparkle:channel>daily</sparkle:channel>
-      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v0.14.0-daily.20260327/TypeWhisper-v0.14.0-daily.20260327.zip" sparkle:edSignature="A9XilokdbN4lkuGHl9oiBeFGt/gRszMmFBmXWDnog5XQ+TKdig7E398uWdDVNw8k2iEXrAW1Mn8R2TXN82k3DA==" length="7972986" type="application/octet-stream" />
     </item>
     <item>
       <title>Version 1.0.0-rc1</title>
