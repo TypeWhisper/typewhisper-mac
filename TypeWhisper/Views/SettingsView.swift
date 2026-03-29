@@ -159,6 +159,8 @@ struct RecordingSettingsView: View {
     @ObservedObject private var pluginManager = PluginManager.shared
     @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
     @State private var selectedProvider: String?
+    @State private var customSounds: [String] = SoundChoice.installedCustomSounds()
+    private let soundService = ServiceContainer.shared.soundService
 
     private var needsPermissions: Bool {
         dictation.needsMicPermission || dictation.needsAccessibilityPermission
@@ -279,6 +281,12 @@ struct RecordingSettingsView: View {
             Section(String(localized: "Sound")) {
                 Toggle(String(localized: "Play sound feedback"), isOn: $dictation.soundFeedbackEnabled)
 
+                if dictation.soundFeedbackEnabled {
+                    SoundEventPicker(event: .recordingStarted, soundService: soundService, customSounds: $customSounds)
+                    SoundEventPicker(event: .transcriptionSuccess, soundService: soundService, customSounds: $customSounds)
+                    SoundEventPicker(event: .error, soundService: soundService, customSounds: $customSounds)
+                }
+
                 Text(String(localized: "Plays a sound when recording starts and when transcription completes."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -367,9 +375,93 @@ struct RecordingSettingsView: View {
         .frame(minWidth: 500, minHeight: 300)
         .onAppear {
             selectedProvider = modelManager.selectedProviderId
+            customSounds = SoundChoice.installedCustomSounds()
         }
     }
 
+}
+
+// MARK: - Sound Event Picker
+
+private struct SoundEventPicker: View {
+    let event: SoundEvent
+    let soundService: SoundService
+    @Binding var customSounds: [String]
+    @State private var selection: String
+
+    init(event: SoundEvent, soundService: SoundService, customSounds: Binding<[String]>) {
+        self.event = event
+        self.soundService = soundService
+        self._customSounds = customSounds
+        self._selection = State(initialValue: soundService.choice(for: event).storageKey)
+    }
+
+    var body: some View {
+        HStack {
+            Picker(event.displayName, selection: $selection) {
+                Text(String(localized: "Default")).tag(event.defaultChoice.storageKey)
+
+                Divider()
+
+                ForEach(SoundChoice.bundledSounds, id: \.name) { sound in
+                    Text(sound.displayName).tag(SoundChoice.bundled(sound.name).storageKey)
+                }
+
+                if !customSounds.isEmpty {
+                    Divider()
+                    ForEach(customSounds, id: \.self) { name in
+                        Text(name).tag(SoundChoice.custom(name).storageKey)
+                    }
+                }
+
+                Divider()
+
+                ForEach(SoundChoice.systemSounds, id: \.self) { name in
+                    Text(name).tag(SoundChoice.system(name).storageKey)
+                }
+
+                Divider()
+
+                Text(String(localized: "None")).tag(SoundChoice.none.storageKey)
+            }
+            .onChange(of: selection) { _, newValue in
+                let choice = SoundChoice(storageKey: newValue)
+                soundService.updateChoice(for: event, choice: choice)
+                soundService.preview(choice)
+            }
+
+            Button {
+                soundService.preview(SoundChoice(storageKey: selection))
+            } label: {
+                Image(systemName: "speaker.wave.2")
+            }
+            .buttonStyle(.borderless)
+            .help(String(localized: "Preview sound"))
+
+            Button {
+                importCustomSound()
+            } label: {
+                Image(systemName: "plus")
+            }
+            .buttonStyle(.borderless)
+            .help(String(localized: "Add custom sound"))
+        }
+    }
+
+    private func importCustomSound() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = SoundChoice.allowedContentTypes
+        panel.allowsMultipleSelection = false
+        panel.message = String(localized: "Choose a sound file")
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let filename = try soundService.importCustomSound(from: url)
+            customSounds = SoundChoice.installedCustomSounds()
+            selection = SoundChoice.custom(filename).storageKey
+        } catch {
+            // File copy failed - silently ignore
+        }
+    }
 }
 
 // MARK: - Permissions Banner
@@ -417,4 +509,3 @@ struct PermissionsBanner: View {
         }
     }
 }
-

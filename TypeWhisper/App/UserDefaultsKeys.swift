@@ -7,6 +7,9 @@ enum UserDefaultsKeys {
     static let audioDuckingEnabled = "audioDuckingEnabled"
     static let audioDuckingLevel = "audioDuckingLevel"
     static let soundFeedbackEnabled = "soundFeedbackEnabled"
+    static let soundRecordingStarted = "soundRecordingStarted"
+    static let soundTranscriptionSuccess = "soundTranscriptionSuccess"
+    static let soundError = "soundError"
     static let indicatorStyle = "indicatorStyle"
     static let preserveClipboard = "preserveClipboard"
 

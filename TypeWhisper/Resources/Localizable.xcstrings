@@ -5911,6 +5911,66 @@
           }
         }
       }
+    },
+    "Recording Start": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufnahmestart"
+          }
+        }
+      }
+    },
+    "Transcription Success": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkription erfolgreich"
+          }
+        }
+      }
+    },
+    "Transcription success": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkription erfolgreich"
+          }
+        }
+      }
+    },
+    "Preview sound": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sound abspielen"
+          }
+        }
+      }
+    },
+    "Add custom sound": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eigenen Sound hinzufuegen"
+          }
+        }
+      }
+    },
+    "Choose a sound file": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sounddatei auswaehlen"
+          }
+        }
+      }
     }
   },
   "version": "1.1"
