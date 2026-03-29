@@ -522,25 +522,28 @@ final class GoogleCloudSTTPlugin: NSObject, TranscriptionEnginePlugin, @unchecke
     }
 
     private static func rsaPrivateKey(fromPEM pem: String) throws -> SecKey {
-        let stripped = pem
-            .components(separatedBy: .newlines)
-            .filter { !$0.hasPrefix("-----BEGIN") && !$0.hasPrefix("-----END") }
-            .joined()
-
-        guard let keyData = Data(base64Encoded: stripped) else {
+        guard let pemData = pem.data(using: .utf8) else {
             throw PluginTranscriptionError.apiError("Invalid private key in service-account JSON")
         }
 
-        let attributes: [String: Any] = [
-            kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
-            kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
-            kSecAttrKeySizeInBits as String: 2048,
-        ]
+        var format = SecExternalFormat.formatUnknown
+        var itemType = SecExternalItemType.itemTypeUnknown
+        var importedItems: CFArray?
+        let status = SecItemImport(
+            pemData as CFData,
+            nil,
+            &format,
+            &itemType,
+            [],
+            nil,
+            nil,
+            &importedItems
+        )
 
-        var error: Unmanaged<CFError>?
-        guard let key = SecKeyCreateWithData(keyData as CFData, attributes as CFDictionary, &error) else {
-            let message = (error?.takeRetainedValue() as Error?)?.localizedDescription ?? "Unable to load RSA private key"
-            throw PluginTranscriptionError.apiError(message)
+        guard status == errSecSuccess,
+              let items = importedItems as? [Any],
+              let key = items.first as! SecKey? else {
+            throw PluginTranscriptionError.apiError("Unable to load RSA private key")
         }
 
         return key
