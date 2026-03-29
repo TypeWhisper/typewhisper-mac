@@ -95,6 +95,14 @@ final class DictionaryExporterTests: XCTestCase {
     }
 
     @MainActor
+    func testParseRejectsCorrectionWithoutReplacement() {
+        let json = """
+        [{"type": "correction", "original": "teh"}]
+        """
+        XCTAssertThrowsError(try DictionaryExporter.parseJSON(Data(json.utf8)))
+    }
+
+    @MainActor
     func testRoundTrip() throws {
         let appDir = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appDir) }
@@ -136,5 +144,26 @@ final class DictionaryExporterTests: XCTestCase {
         XCTAssertEqual(result.imported, 2)
         XCTAssertEqual(result.skipped, 1)
         XCTAssertEqual(service.entries.count, 3)
+    }
+
+    @MainActor
+    func testImportSkipsDuplicatesWithinSameFile() throws {
+        let appDir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appDir) }
+        let service = DictionaryService(appSupportDirectory: appDir)
+
+        let json = """
+        [
+            {"type": "term", "original": "NewTerm", "caseSensitive": false, "isEnabled": true},
+            {"type": "term", "original": "newterm", "caseSensitive": true, "isEnabled": false},
+            {"type": "correction", "original": "teh", "replacement": "the", "caseSensitive": false, "isEnabled": true}
+        ]
+        """
+        let parsed = try DictionaryExporter.parseJSON(Data(json.utf8))
+        let result = DictionaryExporter.importEntries(parsed, into: service)
+
+        XCTAssertEqual(result.imported, 2)
+        XCTAssertEqual(result.skipped, 1)
+        XCTAssertEqual(service.entries.count, 2)
     }
 }

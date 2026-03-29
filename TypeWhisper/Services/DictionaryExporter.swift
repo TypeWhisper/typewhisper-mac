@@ -68,11 +68,22 @@ enum DictionaryExporter {
 
             let typeString = dict["type"] as? String ?? "term"
             let type = DictionaryEntryType(rawValue: typeString) ?? .term
+            let replacement: String?
+
+            if type == .correction {
+                guard let correctionReplacement = dict["replacement"] as? String,
+                      !correctionReplacement.isEmpty else {
+                    throw DictionaryImportError.missingRequiredField("replacement")
+                }
+                replacement = correctionReplacement
+            } else {
+                replacement = nil
+            }
 
             return ParsedEntry(
                 type: type,
                 original: original,
-                replacement: dict["replacement"] as? String,
+                replacement: replacement,
                 caseSensitive: dict["caseSensitive"] as? Bool ?? false,
                 isEnabled: dict["isEnabled"] as? Bool ?? true
             )

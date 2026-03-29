@@ -191,7 +191,7 @@ final class DictionaryService: ObservableObject {
     func importEntries(_ items: [(type: DictionaryEntryType, original: String, replacement: String?, caseSensitive: Bool, isEnabled: Bool)]) {
         guard let context = modelContext, !items.isEmpty else { return }
 
-        let existingOriginals = Set(entries.map { "\($0.type.rawValue):\($0.original.lowercased())" })
+        var existingOriginals = Set(entries.map { "\($0.type.rawValue):\($0.original.lowercased())" })
 
         for item in items {
             let key = "\(item.type.rawValue):\(item.original.lowercased())"
@@ -205,6 +205,7 @@ final class DictionaryService: ObservableObject {
                 isEnabled: item.isEnabled
             )
             context.insert(entry)
+            existingOriginals.insert(key)
         }
 
         do {
