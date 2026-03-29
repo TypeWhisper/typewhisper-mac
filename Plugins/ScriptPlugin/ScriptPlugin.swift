@@ -307,6 +307,7 @@ enum ScriptError: LocalizedError {
 struct ScriptSettingsView: View {
     @ObservedObject var service: ScriptService
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.pluginSettingsClose) private var closeSettings
     @State private var editingScript: ScriptConfig?
 
     private let bundle = Bundle(for: ScriptService.self)
@@ -369,7 +370,11 @@ struct ScriptSettingsView: View {
             HStack {
                 Spacer()
                 Button(String(localized: "Done", bundle: bundle)) {
-                    dismiss()
+                    if let closeSettings {
+                        closeSettings()
+                    } else {
+                        dismiss()
+                    }
                 }
                 .keyboardShortcut(.cancelAction)
             }

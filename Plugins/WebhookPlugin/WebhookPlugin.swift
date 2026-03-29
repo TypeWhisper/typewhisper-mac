@@ -218,6 +218,7 @@ final class ExampleWebhookService: ObservableObject, @unchecked Sendable {
 struct ExampleWebhookSettingsView: View {
     @ObservedObject var service: ExampleWebhookService
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.pluginSettingsClose) private var closeSettings
     @State private var editingWebhook: ExampleWebhookConfig?
 
     private let bundle = Bundle(for: ExampleWebhookService.self)
@@ -273,7 +274,11 @@ struct ExampleWebhookSettingsView: View {
             HStack {
                 Spacer()
                 Button(String(localized: "Done", bundle: bundle)) {
-                    dismiss()
+                    if let closeSettings {
+                        closeSettings()
+                    } else {
+                        dismiss()
+                    }
                 }
                 .keyboardShortcut(.cancelAction)
             }

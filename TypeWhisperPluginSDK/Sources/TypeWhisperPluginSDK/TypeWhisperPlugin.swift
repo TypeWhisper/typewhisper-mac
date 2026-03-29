@@ -39,6 +39,19 @@ public extension PluginSettingsActivityReporting {
     var currentSettingsActivity: PluginSettingsActivity? { nil }
 }
 
+// MARK: - Settings Window Environment
+
+private struct PluginSettingsCloseActionKey: EnvironmentKey {
+    static let defaultValue: (@MainActor @Sendable () -> Void)? = nil
+}
+
+public extension EnvironmentValues {
+    var pluginSettingsClose: (@MainActor @Sendable () -> Void)? {
+        get { self[PluginSettingsCloseActionKey.self] }
+        set { self[PluginSettingsCloseActionKey.self] = newValue }
+    }
+}
+
 // MARK: - LLM Provider Plugin
 
 public final class PluginModelInfo: @unchecked Sendable {

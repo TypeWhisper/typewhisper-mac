@@ -18,18 +18,20 @@ final class PluginSettingsWindowManager {
             return
         }
 
-        let hostingView = NSHostingView(
-            rootView: settingsView
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        )
-        hostingView.sizingOptions = []
-
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 560, height: 440),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
+        let hostingView = NSHostingView(
+            rootView: settingsView
+                .environment(\.pluginSettingsClose, { [weak window] in
+                    window?.close()
+                })
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        )
+        hostingView.sizingOptions = []
         window.title = plugin.manifest.name
         window.contentMinSize = NSSize(width: 500, height: 400)
         window.isReleasedWhenClosed = false
