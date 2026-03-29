@@ -71,6 +71,26 @@
         }
       }
     },
+    "Refresh" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktualisieren"
+          }
+        }
+      }
+    },
+    "Using default models. Press Refresh to fetch all available models." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standard-Modelle werden verwendet. Klicke auf Aktualisieren, um alle verfügbaren Modelle abzurufen."
+          }
+        }
+      }
+    },
     "Validating..." : {
       "localizations" : {
         "de" : {
