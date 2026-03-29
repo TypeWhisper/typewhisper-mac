@@ -94,6 +94,7 @@ final class HotkeyService: ObservableObject {
     private struct SlotState {
         var hotkey: UnifiedHotkey?
         var fnWasDown = false
+        var fnComboKeyPressed = false
         var modifierWasDown = false
         var keyWasDown = false
         // Double-tap tracking
@@ -114,6 +115,7 @@ final class HotkeyService: ObservableObject {
         let profileId: UUID
         var hotkey: UnifiedHotkey
         var fnWasDown = false
+        var fnComboKeyPressed = false
         var modifierWasDown = false
         var keyWasDown = false
         // Double-tap tracking
@@ -382,10 +384,12 @@ final class HotkeyService: ObservableObject {
         for profileId in Array(profileSlots.keys) {
             guard var pState = profileSlots[profileId] else { continue }
             var state = SlotState(hotkey: pState.hotkey, fnWasDown: pState.fnWasDown,
+                                  fnComboKeyPressed: pState.fnComboKeyPressed,
                                   modifierWasDown: pState.modifierWasDown, keyWasDown: pState.keyWasDown,
                                   lastTapUpTime: pState.lastTapUpTime, tapCount: pState.tapCount)
             let (keyDown, keyUp, isMatch) = processKeyEvent(event, hotkey: pState.hotkey, state: &state)
             pState.fnWasDown = state.fnWasDown
+            pState.fnComboKeyPressed = state.fnComboKeyPressed
             pState.modifierWasDown = state.modifierWasDown
             pState.keyWasDown = state.keyWasDown
             pState.lastTapUpTime = state.lastTapUpTime
@@ -424,10 +428,12 @@ final class HotkeyService: ObservableObject {
         for profileId in Array(profileSlots.keys) {
             guard var pState = profileSlots[profileId] else { continue }
             var state = SlotState(hotkey: pState.hotkey, fnWasDown: pState.fnWasDown,
+                                  fnComboKeyPressed: pState.fnComboKeyPressed,
                                   modifierWasDown: pState.modifierWasDown, keyWasDown: pState.keyWasDown,
                                   lastTapUpTime: pState.lastTapUpTime, tapCount: pState.tapCount)
             let (keyDown, keyUp, _) = processKeyEvent(event, hotkey: pState.hotkey, state: &state)
             pState.fnWasDown = state.fnWasDown
+            pState.fnComboKeyPressed = state.fnComboKeyPressed
             pState.modifierWasDown = state.modifierWasDown
             pState.keyWasDown = state.keyWasDown
             pState.lastTapUpTime = state.lastTapUpTime
@@ -449,6 +455,35 @@ final class HotkeyService: ObservableObject {
     /// Processes a key event against a hotkey, updating state booleans.
     /// Returns (keyDown, keyUp, shouldSuppress) flags.
     private func processKeyEvent(_ event: NSEvent, hotkey: UnifiedHotkey, state: inout SlotState) -> (keyDown: Bool, keyUp: Bool, shouldSuppress: Bool) {
+        // Fn hotkeys fire on release to avoid conflicts with Fn+key combos
+        // (e.g. Fn+Backspace = forward delete, Fn+Arrow = page navigation)
+        if hotkey.kind == .fn {
+            if state.fnWasDown && event.type == .keyDown {
+                state.fnComboKeyPressed = true
+                return (false, false, false)
+            }
+            guard event.type == .flagsChanged else { return (false, false, false) }
+            let fnDown = event.modifierFlags.contains(.function)
+            if fnDown, !state.fnWasDown {
+                state.fnWasDown = true
+                state.fnComboKeyPressed = false
+                return (false, false, false)
+            }
+            guard !fnDown, state.fnWasDown else { return (false, false, false) }
+            state.fnWasDown = false
+            let wasComboed = state.fnComboKeyPressed
+            state.fnComboKeyPressed = false
+            if wasComboed { return (false, false, false) }
+            guard hotkey.isDoubleTap else { return (true, false, true) }
+            if state.tapCount == 1, let lastUp = state.lastTapUpTime,
+               Date().timeIntervalSince(lastUp) < Self.doubleTapThreshold {
+                state.tapCount = 0; state.lastTapUpTime = nil
+                return (true, false, true)
+            }
+            state.tapCount = 1; state.lastTapUpTime = Date()
+            return (false, false, true)
+        }
+
         let result = detectKeyEvent(
             event, hotkey: hotkey,
             fnWasDown: state.fnWasDown,
