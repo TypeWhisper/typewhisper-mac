@@ -682,10 +682,17 @@ final class GoogleCloudSTTPlugin: NSObject, TranscriptionEnginePlugin, @unchecke
 
     private static func formatGoogleErrorMessage(_ message: String, statusCode: Int? = nil) -> String {
         let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
-        let lowercase = trimmed.lowercased()
+        let lowercase = trimmed
+            .lowercased()
+            .replacingOccurrences(of: "‑", with: "-")
+            .replacingOccurrences(of: "–", with: "-")
+            .replacingOccurrences(of: "—", with: "-")
 
-        if lowercase.contains("speech-to-text api has not been used in project")
-            || (lowercase.contains("speech.googleapis.com") && lowercase.contains("disabled")) {
+        let speechAPIUnused = lowercase.contains("has not been used in project")
+            && (lowercase.contains("speech") || lowercase.contains("speech.googleapis.com"))
+        let speechAPIDisabled = lowercase.contains("speech.googleapis.com") && lowercase.contains("disabled")
+
+        if speechAPIUnused || speechAPIDisabled {
             if let projectId = extractProjectIdentifier(from: trimmed) {
                 return "Cloud Speech-to-Text API is not enabled for Google Cloud project \(projectId). Open https://console.developers.google.com/apis/api/speech.googleapis.com/overview?project=\(projectId), click Enable, wait a few minutes, and retry."
             }
