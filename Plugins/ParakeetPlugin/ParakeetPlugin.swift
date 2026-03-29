@@ -15,6 +15,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Send
     fileprivate var loadedModelId: String?
     fileprivate var modelState: ParakeetModelState = .notLoaded
     fileprivate var downloadProgress: Double = 0
+    fileprivate var selectedVersion: ParakeetVersion = .v3
 
     // Vocabulary Boosting
     fileprivate var ctcModels: CtcModels?
@@ -31,6 +32,10 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Send
     func activate(host: HostServices) {
         self.host = host
         vocabularyBoostingEnabled = host.userDefault(forKey: "vocabularyBoostingEnabled") as? Bool ?? false
+        if let versionString = host.userDefault(forKey: "selectedVersion") as? String,
+           let version = ParakeetVersion(rawValue: versionString) {
+            selectedVersion = version
+        }
         Task { await restoreLoadedModel() }
     }
 
@@ -59,25 +64,34 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Send
     }
 
     var transcriptionModels: [PluginModelInfo] {
-        guard loadedModelId != nil else { return [] }
-        return [PluginModelInfo(
-            id: Self.modelDef.id,
-            displayName: Self.modelDef.displayName,
-            sizeDescription: Self.modelDef.sizeDescription,
-            languageCount: 25
-        )]
+        ParakeetVersion.allCases.map { version in
+            let def = version.modelDef
+            return PluginModelInfo(
+                id: def.id,
+                displayName: def.displayName,
+                sizeDescription: def.sizeDescription,
+                languageCount: version.languageCount
+            )
+        }
     }
 
     var selectedModelId: String? { loadedModelId }
 
     func selectModel(_ modelId: String) {
-        // Only one model, no-op
+        guard let version = ParakeetVersion.from(modelId: modelId) else { return }
+        if version == selectedVersion && loadedModelId == modelId { return }
+        Task {
+            unloadModel(clearPersistence: false)
+            selectedVersion = version
+            host?.setUserDefault(version.rawValue, forKey: "selectedVersion")
+            await loadModel()
+        }
     }
 
     var supportsTranslation: Bool { false }
 
     var supportedLanguages: [String] {
-        ["bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it", "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk"]
+        selectedVersion.supportedLanguages
     }
 
     func transcribe(
@@ -268,7 +282,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Send
         downloadProgress = 0.1
 
         do {
-            let models = try await AsrModels.downloadAndLoad(version: .v3)
+            let models = try await AsrModels.downloadAndLoad(version: selectedVersion.asrModelVersion)
             downloadProgress = 0.7
 
             let manager = AsrManager(config: .default)
@@ -276,10 +290,11 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Send
             downloadProgress = 1.0
 
             asrManager = manager
-            loadedModelId = Self.modelDef.id
+            loadedModelId = selectedVersion.modelDef.id
             modelState = .ready
 
-            host?.setUserDefault(Self.modelDef.id, forKey: "loadedModel")
+            host?.setUserDefault(selectedVersion.modelDef.id, forKey: "loadedModel")
+            host?.setUserDefault(selectedVersion.rawValue, forKey: "selectedVersion")
             host?.notifyCapabilitiesChanged()
 
             if vocabularyBoostingEnabled {
@@ -317,8 +332,12 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Send
     }
 
     func restoreLoadedModel() async {
-        guard host?.userDefault(forKey: "loadedModel") as? String != nil else {
+        guard let savedModelId = host?.userDefault(forKey: "loadedModel") as? String else {
             return
+        }
+        // Infer version from persisted model ID for backwards compatibility
+        if let version = ParakeetVersion.from(modelId: savedModelId) {
+            selectedVersion = version
         }
         await loadModel()
     }
@@ -328,15 +347,65 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Send
     var settingsView: AnyView? {
         AnyView(ParakeetSettingsView(plugin: self))
     }
+}
 
-    // MARK: - Model Definition
+// MARK: - Model Version
 
-    static let modelDef = ParakeetModelDef(
-        id: "parakeet-tdt-0.6b-v3",
-        displayName: "Parakeet TDT v3",
-        sizeDescription: "~600 MB",
-        ramRequirement: "8 GB+"
-    )
+enum ParakeetVersion: String, CaseIterable {
+    case v2
+    case v3
+
+    var asrModelVersion: AsrModelVersion {
+        switch self {
+        case .v2: return .v2
+        case .v3: return .v3
+        }
+    }
+
+    var modelDef: ParakeetModelDef {
+        switch self {
+        case .v2:
+            return ParakeetModelDef(
+                id: "parakeet-tdt-0.6b-v2",
+                displayName: "Parakeet TDT v2",
+                sizeDescription: "~600 MB",
+                ramRequirement: "8 GB+"
+            )
+        case .v3:
+            return ParakeetModelDef(
+                id: "parakeet-tdt-0.6b-v3",
+                displayName: "Parakeet TDT v3",
+                sizeDescription: "~600 MB",
+                ramRequirement: "8 GB+"
+            )
+        }
+    }
+
+    var supportedLanguages: [String] {
+        switch self {
+        case .v2:
+            return ["en"]
+        case .v3:
+            return ["bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it", "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk"]
+        }
+    }
+
+    var languageCount: Int {
+        supportedLanguages.count
+    }
+
+    func settingsDescription(bundle: Bundle) -> String {
+        switch self {
+        case .v2:
+            return String(localized: "NVIDIA Parakeet TDT V2 - extremely fast on Apple Silicon. English only, highest recall. No API key required.", bundle: bundle)
+        case .v3:
+            return String(localized: "NVIDIA Parakeet TDT - extremely fast on Apple Silicon. 25 European languages, no API key required.", bundle: bundle)
+        }
+    }
+
+    static func from(modelId: String) -> ParakeetVersion? {
+        allCases.first { $0.modelDef.id == modelId }
+    }
 }
 
 // MARK: - Model Types
@@ -367,6 +436,7 @@ enum CtcModelState: Equatable {
 private struct ParakeetSettingsView: View {
     let plugin: ParakeetPlugin
     private let bundle = Bundle(for: ParakeetPlugin.self)
+    @State private var selectedVersion: ParakeetVersion = .v3
     @State private var modelState: ParakeetModelState = .notLoaded
     @State private var downloadProgress: Double = 0
     @State private var isPolling = false
@@ -381,17 +451,33 @@ private struct ParakeetSettingsView: View {
             Text("Parakeet")
                 .font(.headline)
 
-            Text("NVIDIA Parakeet TDT - extremely fast on Apple Silicon. 25 European languages, no API key required.", bundle: bundle)
+            Text(selectedVersion.settingsDescription(bundle: bundle))
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
             Divider()
 
+            // Model version picker
+            HStack {
+                Text("Model Version", bundle: bundle)
+                Spacer()
+                Picker("", selection: $selectedVersion) {
+                    ForEach(ParakeetVersion.allCases, id: \.self) { version in
+                        Text(version.modelDef.displayName).tag(version)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .fixedSize()
+                .disabled(modelState == .downloading)
+            }
+
+            // Model info and action
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(ParakeetPlugin.modelDef.displayName)
+                    Text(selectedVersion.modelDef.displayName)
                         .font(.body)
-                    Text("\(ParakeetPlugin.modelDef.sizeDescription) - RAM: \(ParakeetPlugin.modelDef.ramRequirement)")
+                    Text("\(selectedVersion.modelDef.sizeDescription) - RAM: \(selectedVersion.modelDef.ramRequirement)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -471,12 +557,31 @@ private struct ParakeetSettingsView: View {
         }
         .padding()
         .onAppear {
+            selectedVersion = plugin.selectedVersion
             modelState = plugin.modelState
             downloadProgress = plugin.downloadProgress
             boostingEnabled = plugin.vocabularyBoostingEnabled
             ctcModelState = plugin.ctcModelState
             boostingTermCount = plugin.lastBoostingTermCount
             if case .downloading = plugin.modelState { isPolling = true }
+        }
+        .onChange(of: selectedVersion) { _, newVersion in
+            guard newVersion != plugin.selectedVersion else { return }
+            plugin.selectedVersion = newVersion
+            plugin.host?.setUserDefault(newVersion.rawValue, forKey: "selectedVersion")
+            if plugin.loadedModelId != nil {
+                // Reload with new version
+                modelState = .downloading
+                downloadProgress = 0.05
+                isPolling = true
+                Task {
+                    plugin.unloadModel(clearPersistence: false)
+                    await plugin.loadModel()
+                    isPolling = false
+                    modelState = plugin.modelState
+                    downloadProgress = plugin.downloadProgress
+                }
+            }
         }
         .onReceive(pollTimer) { _ in
             guard isPolling else { return }

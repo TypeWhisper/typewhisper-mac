@@ -61,6 +61,26 @@
         }
       }
     },
+    "Model Version" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modellversion"
+          }
+        }
+      }
+    },
+    "NVIDIA Parakeet TDT V2 - extremely fast on Apple Silicon. English only, highest recall. No API key required." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "NVIDIA Parakeet TDT V2 - extrem schnell auf Apple Silicon. Nur Englisch, höchster Recall. Kein API-Schlüssel nötig."
+          }
+        }
+      }
+    },
     "NVIDIA Parakeet TDT - extremely fast on Apple Silicon. 25 European languages, no API key required." : {
       "localizations" : {
         "de" : {
