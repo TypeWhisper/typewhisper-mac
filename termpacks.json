@@ -1,0 +1,227 @@
+{
+  "schemaVersion": 1,
+  "packs": [
+    {
+      "id": "british-english",
+      "name": "British English Spelling",
+      "description": "Corrections from US to British English spelling",
+      "names": {
+        "de": "Britisches Englisch"
+      },
+      "descriptions": {
+        "de": "Korrekturen von US- zu britischer Schreibweise"
+      },
+      "icon": "flag",
+      "version": "1.0.0",
+      "author": "TypeWhisper",
+      "corrections": [
+        {
+          "original": "color",
+          "replacement": "colour",
+          "caseSensitive": false
+        },
+        {
+          "original": "favor",
+          "replacement": "favour",
+          "caseSensitive": false
+        },
+        {
+          "original": "honor",
+          "replacement": "honour",
+          "caseSensitive": false
+        },
+        {
+          "original": "humor",
+          "replacement": "humour",
+          "caseSensitive": false
+        },
+        {
+          "original": "labor",
+          "replacement": "labour",
+          "caseSensitive": false
+        },
+        {
+          "original": "neighbor",
+          "replacement": "neighbour",
+          "caseSensitive": false
+        },
+        {
+          "original": "organize",
+          "replacement": "organise",
+          "caseSensitive": false
+        },
+        {
+          "original": "recognize",
+          "replacement": "recognise",
+          "caseSensitive": false
+        },
+        {
+          "original": "realize",
+          "replacement": "realise",
+          "caseSensitive": false
+        },
+        {
+          "original": "analyze",
+          "replacement": "analyse",
+          "caseSensitive": false
+        },
+        {
+          "original": "apologize",
+          "replacement": "apologise",
+          "caseSensitive": false
+        },
+        {
+          "original": "customize",
+          "replacement": "customise",
+          "caseSensitive": false
+        },
+        {
+          "original": "minimize",
+          "replacement": "minimise",
+          "caseSensitive": false
+        },
+        {
+          "original": "optimize",
+          "replacement": "optimise",
+          "caseSensitive": false
+        },
+        {
+          "original": "center",
+          "replacement": "centre",
+          "caseSensitive": false
+        },
+        {
+          "original": "fiber",
+          "replacement": "fibre",
+          "caseSensitive": false
+        },
+        {
+          "original": "liter",
+          "replacement": "litre",
+          "caseSensitive": false
+        },
+        {
+          "original": "meter",
+          "replacement": "metre",
+          "caseSensitive": false
+        },
+        {
+          "original": "theater",
+          "replacement": "theatre",
+          "caseSensitive": false
+        },
+        {
+          "original": "defense",
+          "replacement": "defence",
+          "caseSensitive": false
+        },
+        {
+          "original": "license",
+          "replacement": "licence",
+          "caseSensitive": false
+        },
+        {
+          "original": "offense",
+          "replacement": "offence",
+          "caseSensitive": false
+        },
+        {
+          "original": "practice",
+          "replacement": "practise",
+          "caseSensitive": false
+        },
+        {
+          "original": "catalog",
+          "replacement": "catalogue",
+          "caseSensitive": false
+        },
+        {
+          "original": "dialog",
+          "replacement": "dialogue",
+          "caseSensitive": false
+        },
+        {
+          "original": "program",
+          "replacement": "programme",
+          "caseSensitive": false
+        },
+        {
+          "original": "gray",
+          "replacement": "grey",
+          "caseSensitive": false
+        },
+        {
+          "original": "aging",
+          "replacement": "ageing",
+          "caseSensitive": false
+        },
+        {
+          "original": "jewelry",
+          "replacement": "jewellery",
+          "caseSensitive": false
+        },
+        {
+          "original": "traveling",
+          "replacement": "travelling",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "rust-dev",
+      "name": "Rust Development",
+      "description": "Common Rust ecosystem terms for better speech recognition",
+      "names": {
+        "de": "Rust-Entwicklung"
+      },
+      "descriptions": {
+        "de": "Begriffe aus dem Rust-Oekosystem fuer bessere Spracherkennung"
+      },
+      "icon": "gearshape.2",
+      "version": "1.0.0",
+      "author": "TypeWhisper",
+      "terms": [
+        "Rust",
+        "Cargo",
+        "Tokio",
+        "Serde",
+        "Axum",
+        "Actix",
+        "Hyper",
+        "Warp",
+        "Rocket",
+        "Diesel",
+        "async-std",
+        "Rayon",
+        "Crossbeam",
+        "Clippy",
+        "Rustfmt",
+        "Rustup",
+        "Rustc",
+        "Bevy",
+        "Tauri",
+        "Leptos",
+        "Yew",
+        "Dioxus",
+        "Reqwest",
+        "Tonic",
+        "Prost",
+        "Anyhow",
+        "Thiserror",
+        "Tracing",
+        "Tower",
+        "SQLx",
+        "SeaORM",
+        "Miri",
+        "Cranelift",
+        "WebAssembly",
+        "Wasm",
+        "no_std",
+        "unsafe",
+        "borrow checker",
+        "lifetime",
+        "crates.io"
+      ]
+    }
+  ]
+}
