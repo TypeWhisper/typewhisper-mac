@@ -1,14 +1,97 @@
 import Foundation
 
+// MARK: - Term Pack Correction
+
+struct TermPackCorrection: Codable, Hashable {
+    let original: String
+    let replacement: String
+    let caseSensitive: Bool
+
+    init(original: String, replacement: String, caseSensitive: Bool = true) {
+        self.original = original
+        self.replacement = replacement
+        self.caseSensitive = caseSensitive
+    }
+}
+
+// MARK: - Term Pack
+
 struct TermPack: Identifiable {
     let id: String
-    let nameKey: String
-    let descriptionKey: String
     let icon: String
     let terms: [String]
+    let corrections: [TermPackCorrection]
+    let source: Source
+    let version: String?
+    let author: String?
 
-    var name: String { String(localized: String.LocalizationValue(nameKey)) }
-    var description: String { String(localized: String.LocalizationValue(descriptionKey)) }
+    let defaultName: String
+    let defaultDescription: String
+    let localizedNames: [String: String]?
+    let localizedDescriptions: [String: String]?
+
+    enum Source: String {
+        case builtIn
+        case community
+    }
+
+    var name: String {
+        if source == .community,
+           let localizedNames,
+           let lang = Locale.current.language.languageCode?.identifier,
+           let localized = localizedNames[lang] {
+            return localized
+        }
+        return String(localized: String.LocalizationValue(defaultName))
+    }
+
+    var description: String {
+        if source == .community,
+           let localizedDescriptions,
+           let lang = Locale.current.language.languageCode?.identifier,
+           let localized = localizedDescriptions[lang] {
+            return localized
+        }
+        return String(localized: String.LocalizationValue(defaultDescription))
+    }
+
+    /// Built-in convenience init - same signature as the old memberwise init
+    init(id: String, nameKey: String, descriptionKey: String, icon: String, terms: [String]) {
+        self.id = id
+        self.defaultName = nameKey
+        self.defaultDescription = descriptionKey
+        self.icon = icon
+        self.terms = terms
+        self.corrections = []
+        self.source = .builtIn
+        self.version = nil
+        self.author = nil
+        self.localizedNames = nil
+        self.localizedDescriptions = nil
+    }
+
+    /// Community pack init
+    init(id: String, name: String, description: String, icon: String,
+         terms: [String], corrections: [TermPackCorrection],
+         version: String, author: String,
+         localizedNames: [String: String]?, localizedDescriptions: [String: String]?) {
+        self.id = id
+        self.defaultName = name
+        self.defaultDescription = description
+        self.icon = icon
+        self.terms = terms
+        self.corrections = corrections
+        self.source = .community
+        self.version = version
+        self.author = author
+        self.localizedNames = localizedNames
+        self.localizedDescriptions = localizedDescriptions
+    }
+
+    /// Total number of entries (terms + corrections)
+    var entryCount: Int { terms.count + corrections.count }
+
+    static let builtInIDs: Set<String> = Set(allPacks.map(\.id))
 
     static let allPacks: [TermPack] = [
         TermPack(

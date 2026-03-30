@@ -1,0 +1,30 @@
+{
+    "id": "rust-dev",
+    "name": "Rust Development",
+    "description": "Common Rust ecosystem terms for better speech recognition",
+    "names": {
+        "de": "Rust-Entwicklung"
+    },
+    "descriptions": {
+        "de": "Begriffe aus dem Rust-Oekosystem fuer bessere Spracherkennung"
+    },
+    "icon": "gearshape.2",
+    "version": "1.0.0",
+    "author": "TypeWhisper",
+    "terms": [
+        "Rust", "Cargo", "Tokio", "Serde", "Axum", "Actix",
+        "Hyper", "Warp", "Rocket", "Diesel",
+        "async-std", "Rayon", "Crossbeam",
+        "Clippy", "Rustfmt", "Rustup", "Rustc",
+        "Bevy", "Tauri", "Leptos", "Yew", "Dioxus",
+        "Reqwest", "Tonic", "Prost",
+        "Anyhow", "Thiserror",
+        "Tracing", "Tower",
+        "SQLx", "SeaORM",
+        "Miri", "Cranelift",
+        "WebAssembly", "Wasm",
+        "no_std", "unsafe",
+        "borrow checker", "lifetime",
+        "crates.io"
+    ]
+}

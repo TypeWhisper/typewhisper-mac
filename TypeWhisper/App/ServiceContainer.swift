@@ -24,6 +24,7 @@ final class ServiceContainer: ObservableObject {
     let promptProcessingService: PromptProcessingService
     let pluginManager: PluginManager
     let pluginRegistryService: PluginRegistryService
+    let termPackRegistryService: TermPackRegistryService
     let widgetDataService: WidgetDataService
     let memoryService: MemoryService
     let appFormatterService: AppFormatterService
@@ -78,6 +79,7 @@ final class ServiceContainer: ObservableObject {
         promptProcessingService = PromptProcessingService()
         pluginManager = PluginManager()
         pluginRegistryService = PluginRegistryService()
+        termPackRegistryService = TermPackRegistryService()
         widgetDataService = WidgetDataService(historyService: historyService)
         memoryService = MemoryService(promptProcessingService: promptProcessingService)
         appFormatterService = AppFormatterService()
@@ -161,6 +163,7 @@ final class ServiceContainer: ObservableObject {
         EventBus.shared = EventBus()
         PluginManager.shared = pluginManager
         PluginRegistryService.shared = pluginRegistryService
+        TermPackRegistryService.shared = termPackRegistryService
 
         settingsViewModel.observePluginManager()
     }
@@ -190,6 +193,9 @@ final class ServiceContainer: ObservableObject {
 
         // Check for plugin updates in background
         pluginRegistryService.checkForUpdatesInBackground()
+
+        // Check for term pack updates in background
+        termPackRegistryService.checkForUpdatesInBackground()
 
         // Start memory service
         memoryService.startListening()

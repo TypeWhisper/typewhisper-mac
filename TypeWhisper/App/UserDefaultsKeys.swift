@@ -45,7 +45,9 @@ enum UserDefaultsKeys {
     static let setupWizardCurrentStep = "setupWizardCurrentStep"
 
     // MARK: - Dictionary
-    static let activatedTermPacks = "activatedTermPacks"
+    static let activatedTermPacks = "activatedTermPacks" // Legacy - kept for migration cleanup
+    static let activatedTermPackStates = "activatedTermPackStates"
+    static let termPackRegistryLastUpdateCheck = "termPackRegistryLastUpdateCheck"
 
     // MARK: - History
     static let historyRetentionDays = "historyRetentionDays"

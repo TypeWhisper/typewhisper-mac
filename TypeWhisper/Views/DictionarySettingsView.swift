@@ -157,12 +157,83 @@ struct DictionarySettingsView: View {
 
     private var termPacksView: some View {
         ScrollView {
-            LazyVStack(spacing: 10) {
+            LazyVStack(alignment: .leading, spacing: 10) {
+                // Built-in Packs
                 ForEach(TermPack.allPacks) { pack in
                     TermPackCardView(pack: pack, viewModel: viewModel)
                 }
+
+                // Community Packs
+                communityPacksSection
             }
             .padding(.horizontal, 2)
+        }
+    }
+
+    @ViewBuilder
+    private var communityPacksSection: some View {
+        let registry = TermPackRegistryService.shared!
+
+        Section {
+            switch registry.fetchState {
+            case .idle, .loading:
+                HStack {
+                    Spacer()
+                    ProgressView()
+                    Text(String(localized: "Loading community packs..."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(.vertical, 12)
+
+            case .error(let message):
+                HStack {
+                    Spacer()
+                    VStack(spacing: 8) {
+                        Text(String(localized: "Failed to load community packs."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(message)
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(2)
+                        Button(String(localized: "Retry")) {
+                            Task { await registry.fetchRegistry(force: true) }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                    Spacer()
+                }
+                .padding(.vertical, 12)
+
+            case .loaded:
+                if registry.communityPacks.isEmpty {
+                    HStack {
+                        Spacer()
+                        Text(String(localized: "No community packs available yet."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    .padding(.vertical, 12)
+                } else {
+                    ForEach(registry.communityPacks) { pack in
+                        TermPackCardView(pack: pack, viewModel: viewModel)
+                    }
+                }
+            }
+        } header: {
+            Text(String(localized: "Community Packs"))
+                .font(.callout)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
+                .padding(.top, 16)
+                .padding(.bottom, 4)
+        }
+        .task {
+            await registry.fetchRegistry()
         }
     }
 }
@@ -179,6 +250,10 @@ private struct TermPackCardView: View {
         viewModel.isPackActivated(pack)
     }
 
+    private var showUpdate: Bool {
+        isActivated && viewModel.hasUpdate(for: pack)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
@@ -188,20 +263,52 @@ private struct TermPackCardView: View {
                     .frame(width: 28)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(pack.name)
-                        .font(.callout)
-                        .fontWeight(.medium)
-                    Text(pack.description)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(pack.name)
+                            .font(.callout)
+                            .fontWeight(.medium)
+
+                        if showUpdate {
+                            Text(String(localized: "Update Available"))
+                                .font(.caption2)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.orange.opacity(0.15))
+                                .foregroundStyle(.orange)
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                        }
+                    }
+
+                    HStack(spacing: 4) {
+                        Text(pack.description)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+
+                        if pack.source == .community, let author = pack.author {
+                            Text("-")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                            Text(String(localized: "by \(author)"))
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
                 }
 
                 Spacer()
 
-                Text(String(format: String(localized: "%d terms"), pack.terms.count))
+                Text(String(localized: "\(pack.entryCount) entries"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                if showUpdate {
+                    Button(String(localized: "Update")) {
+                        viewModel.updatePack(pack)
+                    }
+                    .controlSize(.small)
+                    .buttonStyle(.bordered)
+                }
 
                 Toggle("", isOn: Binding(
                     get: { isActivated },
@@ -232,14 +339,39 @@ private struct TermPackCardView: View {
                 Divider()
                     .padding(.horizontal, 10)
 
-                FlowLayout(spacing: 6) {
-                    ForEach(pack.terms, id: \.self) { term in
-                        Text(term)
-                            .font(.caption)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.accentColor.opacity(0.1))
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                VStack(alignment: .leading, spacing: 8) {
+                    if !pack.terms.isEmpty {
+                        FlowLayout(spacing: 6) {
+                            ForEach(pack.terms, id: \.self) { term in
+                                Text(term)
+                                    .font(.caption)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.accentColor.opacity(0.1))
+                                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                            }
+                        }
+                    }
+
+                    if !pack.corrections.isEmpty {
+                        FlowLayout(spacing: 6) {
+                            ForEach(pack.corrections, id: \.self) { correction in
+                                HStack(spacing: 4) {
+                                    Text(correction.original)
+                                        .strikethrough()
+                                        .foregroundStyle(.secondary)
+                                    Image(systemName: "arrow.right")
+                                        .font(.caption2)
+                                        .foregroundStyle(.tertiary)
+                                    Text(correction.replacement)
+                                }
+                                .font(.caption)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.orange.opacity(0.1))
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                            }
+                        }
                     }
                 }
                 .padding(10)

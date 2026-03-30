@@ -1,0 +1,65 @@
+name: Update Term Packs Registry
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'termpacks/**'
+      - 'scripts/assemble_termpacks.py'
+
+jobs:
+  update-registry:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate and assemble termpacks.json
+        run: python3 scripts/assemble_termpacks.py /tmp/termpacks.json
+
+      - name: Deploy to gh-pages
+        run: |
+          git fetch origin gh-pages || {
+            echo "gh-pages branch does not exist, bootstrapping..."
+            git checkout --orphan gh-pages
+            git rm -rf .
+            echo '{"schemaVersion":1,"packs":[]}' > termpacks.json
+            git add termpacks.json
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git commit -m "Bootstrap gh-pages with empty termpacks.json"
+            git push origin gh-pages
+            git checkout -
+            git fetch origin gh-pages
+          }
+
+          git worktree add -B gh-pages /tmp/gh-pages origin/gh-pages
+
+          update_registry() {
+            cd /tmp/gh-pages
+            git fetch origin gh-pages
+            git reset --hard origin/gh-pages
+
+            cp /tmp/termpacks.json /tmp/gh-pages/termpacks.json
+
+            git add termpacks.json
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git diff --cached --quiet || git commit -m "Update termpacks.json"
+            git push origin gh-pages
+          }
+
+          # Retry up to 5 times to handle concurrent pushes
+          for i in 1 2 3 4 5; do
+            if update_registry; then
+              echo "Successfully updated termpacks.json (attempt $i)"
+              break
+            fi
+            if [ "$i" -eq 5 ]; then
+              echo "Failed to update termpacks.json after 5 attempts"
+              exit 1
+            fi
+            echo "Attempt $i failed, retrying..."
+            sleep 2
+          done
