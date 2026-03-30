@@ -7,6 +7,8 @@ struct SetupWizardView: View {
     @ObservedObject private var registryService = PluginRegistryService.shared
     @ObservedObject private var audioDevice = ServiceContainer.shared.audioDeviceService
     @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
+    @ObservedObject private var promptActionsViewModel = PromptActionsViewModel.shared
+    @ObservedObject private var promptProcessingService: PromptProcessingService
 
     @State private var currentStep: Int
     @State private var selectedProvider: String?
@@ -15,11 +17,12 @@ struct SetupWizardView: View {
     @State private var trialText = ""
     @FocusState private var isTrialFieldFocused: Bool
 
-    private let totalSteps = 5
+    private let totalSteps = 6
 
     init() {
         let saved = UserDefaults.standard.integer(forKey: UserDefaultsKeys.setupWizardCurrentStep)
-        _currentStep = State(initialValue: min(saved, 4))
+        _currentStep = State(initialValue: min(saved, 5))
+        _promptProcessingService = ObservedObject(wrappedValue: PromptActionsViewModel.shared.promptProcessingService)
 
         if UserDefaults.standard.data(forKey: UserDefaultsKeys.hybridHotkey) != nil {
             _selectedHotkeyMode = State(initialValue: .hybrid)
@@ -82,7 +85,8 @@ struct SetupWizardView: View {
         case 1: return String(localized: "Permissions")
         case 2: return String(localized: "Transcription Engine")
         case 3: return String(localized: "Hotkey")
-        case 4: return String(localized: "Try It Out")
+        case 4: return String(localized: "Prompts & AI")
+        case 5: return String(localized: "Try It Out")
         default: return String(localized: "Setup")
         }
     }
@@ -96,7 +100,8 @@ struct SetupWizardView: View {
             case 1: permissionsStep
             case 2: engineStep
             case 3: hotkeyStep
-            case 4: tryItOutStep
+            case 4: promptsAIStep
+            case 5: tryItOutStep
             default: EmptyView()
             }
         }
@@ -611,7 +616,265 @@ struct SetupWizardView: View {
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(isSelected ? Color.accentColor.opacity(0.3) : Color.clear, lineWidth: 1))
     }
 
-    // MARK: - Step 4: Try It Out
+    // MARK: - Step 4: Prompts & AI
+
+    private var promptsAIStep: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(String(localized: "Process your dictated text with AI - translate, reformat, summarize, and more."))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+
+            if hasAnyLLMProvider {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    Text(String(localized: "You have an LLM provider ready."))
+                        .foregroundStyle(.secondary)
+                }
+                .font(.callout)
+            }
+
+            Text(String(localized: "Recommended"))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            if #available(macOS 26, *) {
+                appleIntelligenceCard
+            }
+
+            llmProviderCard(
+                manifestId: "com.typewhisper.groq",
+                title: "Groq",
+                badge: groqAlreadyInstalled
+                    ? String(localized: "Already Installed")
+                    : String(localized: "Free API Key"),
+                description: groqAlreadyInstalled
+                    ? String(localized: "Groq is already installed and also works as an LLM provider.")
+                    : String(localized: "Fast cloud AI. Also supports transcription. Requires a free API key."),
+                systemImage: "bolt.fill"
+            )
+
+            let otherProviders = pluginManager.llmProviders
+                .filter { $0.providerName.caseInsensitiveCompare("Groq") != .orderedSame }
+            if !otherProviders.isEmpty {
+                Text(String(localized: "Also Available"))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                ForEach(otherProviders, id: \.providerName) { provider in
+                    HStack {
+                        Text(provider.providerName)
+                            .font(.body.weight(.medium))
+                        Spacer()
+                        if provider.isAvailable {
+                            HStack(spacing: 4) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                                Text(String(localized: "Ready"))
+                                    .font(.caption)
+                                    .foregroundStyle(.green)
+                            }
+                        } else {
+                            Text(String(localized: "API key required"))
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                    .padding(10)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(.quaternary))
+                }
+            }
+
+            Divider()
+
+            Text(String(localized: "Prompt Presets"))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(String(localized: "Built-in prompts for common tasks like translation, email drafting, and formatting."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                if promptActionsViewModel.availablePresets.isEmpty && !promptActionsViewModel.promptActions.isEmpty {
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                        Text(String(localized: "All imported"))
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                    }
+                } else {
+                    Button(String(localized: "Import Presets")) {
+                        promptActionsViewModel.loadPresets()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            }
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: 10).fill(.quaternary))
+
+            Text(String(localized: "You can manage prompts and install more providers in the Prompts and Integrations tabs after setup."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .task {
+            if registryService.fetchState == .idle {
+                await registryService.fetchRegistry()
+            }
+        }
+    }
+
+    private var hasAnyLLMProvider: Bool {
+        if #available(macOS 26, *) {
+            if promptProcessingService.isAppleIntelligenceAvailable { return true }
+        }
+        return !pluginManager.llmProviders.isEmpty
+    }
+
+    private var groqAlreadyInstalled: Bool {
+        pluginManager.loadedPlugins.contains { $0.manifest.id == "com.typewhisper.groq" }
+    }
+
+    @ViewBuilder
+    private func llmProviderCard(
+        manifestId: String,
+        title: String,
+        badge: String,
+        description: String,
+        systemImage: String
+    ) -> some View {
+        let loadedPlugin = pluginManager.loadedPlugins.first { $0.manifest.id == manifestId }
+        let isInstalled = loadedPlugin != nil
+        let llmProvider = loadedPlugin?.instance as? any LLMProviderPlugin
+        let isReady = llmProvider?.isAvailable ?? false
+        let registryPlugin = registryService.registry.first { $0.id == manifestId }
+        let installState = registryService.installStates[manifestId]
+
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.title2)
+                .foregroundStyle(.blue)
+                .frame(width: 40, height: 40)
+                .background(Circle().fill(.blue.opacity(0.1)))
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(title)
+                        .font(.body.weight(.medium))
+
+                    Text(badge)
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.blue.opacity(0.1))
+                        .foregroundStyle(.blue)
+                        .clipShape(Capsule())
+                }
+
+                Text(description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if isReady {
+                HStack(spacing: 4) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    Text(String(localized: "Ready"))
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                }
+            } else if isInstalled {
+                RecommendationSettingsButton(manifestId: manifestId)
+            } else if let installState {
+                switch installState {
+                case .downloading(let progress):
+                    ProgressView(value: progress)
+                        .frame(width: 60)
+                case .extracting:
+                    ProgressView()
+                        .controlSize(.small)
+                case .error(let message):
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .lineLimit(1)
+                }
+            } else if let registryPlugin {
+                Button(String(localized: "Install")) {
+                    Task {
+                        await registryService.downloadAndInstall(registryPlugin)
+                        PluginManager.shared.setPluginEnabled(registryPlugin.id, enabled: true)
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            } else {
+                ProgressView()
+                    .controlSize(.small)
+            }
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 10).fill(.quaternary))
+    }
+
+    @available(macOS 26, *)
+    private var appleIntelligenceCard: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "wand.and.stars")
+                .font(.title2)
+                .foregroundStyle(.blue)
+                .frame(width: 40, height: 40)
+                .background(Circle().fill(.blue.opacity(0.1)))
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text("Apple Intelligence")
+                        .font(.body.weight(.medium))
+
+                    Text(String(localized: "Built-in"))
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.blue.opacity(0.1))
+                        .foregroundStyle(.blue)
+                        .clipShape(Capsule())
+                }
+
+                Text(String(localized: "On-device AI processing. No API key needed."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if promptProcessingService.isAppleIntelligenceAvailable {
+                HStack(spacing: 4) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    Text(String(localized: "Ready"))
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                }
+            } else {
+                Text(String(localized: "Enable in System Settings"))
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 10).fill(.quaternary))
+    }
+
+    // MARK: - Step 5: Try It Out
 
     private var tryItOutStep: some View {
         VStack(spacing: 20) {
@@ -718,10 +981,10 @@ struct SetupWizardView: View {
 
     private var navigation: some View {
         HStack {
-            if currentStep == 4 && trialSuccess {
+            if currentStep == 5 && trialSuccess {
                 Spacer()
             } else {
-                Button(currentStep == 4
+                Button(currentStep == 5
                     ? String(localized: "I'll try later")
                     : String(localized: "Skip Setup")
                 ) {
@@ -734,7 +997,7 @@ struct SetupWizardView: View {
                 Spacer()
             }
 
-            if currentStep == 4 {
+            if currentStep == 5 {
                 if trialSuccess {
                     Button(String(localized: "Try Again")) {
                         trialSuccess = false
@@ -781,6 +1044,7 @@ struct SetupWizardView: View {
         case 1: return !dictation.needsMicPermission
         case 2: return hasAnyEngineReady
         case 3: return true
+        case 4: return true
         default: return true
         }
     }

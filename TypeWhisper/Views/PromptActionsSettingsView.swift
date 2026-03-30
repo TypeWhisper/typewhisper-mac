@@ -79,10 +79,15 @@ struct PromptActionsSettingsView: View {
                     Image(systemName: "puzzlepiece.extension")
                         .font(.system(size: 24))
                         .foregroundStyle(.secondary)
-                    Text(String(localized: "Install an LLM provider plugin (e.g. Groq, OpenAI) from the Integrations tab to use prompts."))
+                    Text(String(localized: "Install an LLM provider plugin (e.g. Groq, OpenAI) to use prompts."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
+                    Button(String(localized: "Go to Integrations")) {
+                        viewModel.navigateToIntegrations = true
+                    }
+                    .buttonStyle(.link)
+                    .font(.caption)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
@@ -102,16 +107,21 @@ struct PromptActionsSettingsView: View {
                     ProviderStatusView(
                         providerId: processingService.selectedProviderId,
                         processingService: processingService,
-                        cloudModel: $processingService.selectedCloudModel
+                        cloudModel: $processingService.selectedCloudModel,
+                        onNavigateToIntegrations: { viewModel.navigateToIntegrations = true }
                     )
 
                     if PluginManager.shared.llmProviders.isEmpty {
-                        Label(
-                            String(localized: "Install additional LLM providers from the Integrations tab."),
-                            systemImage: "info.circle"
-                        )
+                        Button {
+                            viewModel.navigateToIntegrations = true
+                        } label: {
+                            Label(
+                                String(localized: "Install additional LLM providers from the Integrations tab."),
+                                systemImage: "info.circle"
+                            )
+                        }
+                        .buttonStyle(.link)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -187,6 +197,7 @@ struct ProviderStatusView: View {
     let providerId: String
     let processingService: PromptProcessingService
     var cloudModel: Binding<String>?
+    var onNavigateToIntegrations: (() -> Void)? = nil
 
     var body: some View {
         if providerId == PromptProcessingService.appleIntelligenceId {
@@ -204,6 +215,15 @@ struct ProviderStatusView: View {
                 Label(String(localized: "API key configured"), systemImage: "checkmark.circle.fill")
                     .font(.caption)
                     .foregroundStyle(.green)
+            } else if let onNavigateToIntegrations {
+                Button {
+                    onNavigateToIntegrations()
+                } label: {
+                    Label(String(localized: "API key required - configure in Integrations tab"), systemImage: "exclamationmark.triangle.fill")
+                }
+                .buttonStyle(.link)
+                .font(.caption)
+                .foregroundStyle(.orange)
             } else {
                 Label(String(localized: "API key required - configure in Integrations tab"), systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
@@ -411,10 +431,15 @@ private struct PromptActionEditorSheet: View {
                                 Image(systemName: "puzzlepiece.extension")
                                     .font(.system(size: 20))
                                     .foregroundStyle(.secondary)
-                                Text(String(localized: "Install an LLM provider plugin (e.g. Groq, OpenAI) from the Integrations tab to use prompts."))
+                                Text(String(localized: "Install an LLM provider plugin (e.g. Groq, OpenAI) to use prompts."))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .multilineTextAlignment(.center)
+                                Button(String(localized: "Go to Integrations")) {
+                                    viewModel.navigateToIntegrations = true
+                                }
+                                .buttonStyle(.link)
+                                .font(.caption)
                             }
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 8)

@@ -10,6 +10,7 @@ struct SettingsView: View {
     @ObservedObject private var fileTranscription = FileTranscriptionViewModel.shared
     @ObservedObject private var registryService = PluginRegistryService.shared
     @ObservedObject private var homeViewModel = HomeViewModel.shared
+    @ObservedObject private var promptActionsViewModel = PromptActionsViewModel.shared
     @AppStorage(UserDefaultsKeys.showRecorderTab) private var showRecorderTab = false
 
     var body: some View {
@@ -81,6 +82,12 @@ struct SettingsView: View {
             if navigate {
                 selectedTab = .history
                 homeViewModel.navigateToHistory = false
+            }
+        }
+        .onChange(of: promptActionsViewModel.navigateToIntegrations) { _, navigate in
+            if navigate {
+                selectedTab = .integrations
+                promptActionsViewModel.navigateToIntegrations = false
             }
         }
     }

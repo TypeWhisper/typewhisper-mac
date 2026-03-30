@@ -13,6 +13,7 @@ class PromptActionsViewModel: ObservableObject {
 
     @Published var promptActions: [PromptAction] = []
     @Published var error: String?
+    @Published var navigateToIntegrations = false
 
     // Editor state
     @Published var isEditing = false

@@ -2047,16 +2047,6 @@
         }
       }
     },
-    "Install an LLM provider plugin (e.g. Groq, OpenAI) from the Integrations tab to use prompts.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Installiere ein LLM-Anbieter-Plugin (z.B. Groq, OpenAI) im Reiter \"Integrationen\", um Prompts zu verwenden."
-          }
-        }
-      }
-    },
     "Install Command Line Tool": {
       "localizations": {
         "de": {
@@ -4127,7 +4117,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stellt die Zwischenablage nach dem Einf\u00FCgen wieder her. Ohne diese Option enth\u00E4lt die Zwischenablage nach dem Diktieren den transkribierten Text."
+            "value": "Stellt die Zwischenablage nach dem Einfügen wieder her. Ohne diese Option enthält die Zwischenablage nach dem Diktieren den transkribierten Text."
           }
         }
       }
@@ -6026,12 +6016,12 @@
     "Active profile": {},
     "Current shortcut: %@. Click to change.": {},
     "Uninstall %@": {},
-    "\u00A9 2024-2026 TypeWhisper Contributors": {
+    "© 2024-2026 TypeWhisper Contributors": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "\u00A9 2024-2026 TypeWhisper Contributors"
+            "value": "© 2024-2026 TypeWhisper Contributors"
           }
         }
       }
@@ -6092,6 +6082,186 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sounddatei auswaehlen"
+          }
+        }
+      }
+    },
+    "Prompts & AI": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prompts & KI"
+          }
+        }
+      }
+    },
+    "Process your dictated text with AI - translate, reformat, summarize, and more.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verarbeite diktierten Text mit KI - übersetzen, formatieren, zusammenfassen und mehr."
+          }
+        }
+      }
+    },
+    "You have an LLM provider ready.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein LLM-Anbieter ist bereit."
+          }
+        }
+      }
+    },
+    "Already Installed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bereits installiert"
+          }
+        }
+      }
+    },
+    "Free API Key": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kostenloser API-Key"
+          }
+        }
+      }
+    },
+    "Groq is already installed and also works as an LLM provider.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Groq ist bereits installiert und funktioniert auch als LLM-Anbieter."
+          }
+        }
+      }
+    },
+    "Fast cloud AI. Also supports transcription. Requires a free API key.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schnelle Cloud-KI. Unterstützt auch Transkription. Benötigt einen kostenlosen API-Key."
+          }
+        }
+      }
+    },
+    "Also Available": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ebenfalls verfügbar"
+          }
+        }
+      }
+    },
+    "API key required": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API-Key erforderlich"
+          }
+        }
+      }
+    },
+    "Prompt Presets": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prompt-Vorlagen"
+          }
+        }
+      }
+    },
+    "Built-in prompts for common tasks like translation, email drafting, and formatting.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eingebaute Prompts für häufige Aufgaben wie Übersetzung, E-Mail-Entwurf und Formatierung."
+          }
+        }
+      }
+    },
+    "All imported": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle importiert"
+          }
+        }
+      }
+    },
+    "Import Presets": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vorlagen importieren"
+          }
+        }
+      }
+    },
+    "You can manage prompts and install more providers in the Prompts and Integrations tabs after setup.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du kannst Prompts verwalten und weitere Anbieter im Prompts- und Integrations-Tab nach dem Setup installieren."
+          }
+        }
+      }
+    },
+    "On-device AI processing. No API key needed.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "KI-Verarbeitung auf dem Gerät. Kein API-Key nötig."
+          }
+        }
+      }
+    },
+    "Enable in System Settings": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Systemeinstellungen aktivieren"
+          }
+        }
+      }
+    },
+    "Go to Integrations": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zu Integrationen"
+          }
+        }
+      }
+    },
+    "Install an LLM provider plugin (e.g. Groq, OpenAI) to use prompts.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installiere ein LLM-Provider-Plugin (z.B. Groq, OpenAI) um Prompts zu nutzen."
           }
         }
       }
