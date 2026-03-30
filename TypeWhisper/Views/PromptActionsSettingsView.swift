@@ -258,53 +258,59 @@ private struct PromptActionCardView: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: "line.3.horizontal")
-                .font(.system(size: 12))
-                .foregroundColor(.secondary)
-                .frame(width: 16, height: 28)
-                .opacity(isHovering ? 1 : 0)
-                .accessibilityHidden(true)
-
-            Image(systemName: action.icon)
-                .font(.system(size: 16))
-                .foregroundColor(.accentColor)
-                .frame(width: 28, height: 28)
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    Text(action.name)
-                        .font(.callout)
-                        .fontWeight(.medium)
-
-                    if let providerName = action.providerType {
-                        Text(processingService.displayName(for: providerName))
-                            .font(.caption2)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(Color.accentColor.opacity(0.12))
-                            .foregroundColor(.accentColor)
-                            .cornerRadius(3)
-                    }
-
-                    if let actionId = action.targetActionPluginId,
-                       let plugin = PluginManager.shared.actionPlugin(for: actionId) {
-                        Text(plugin.actionName)
-                            .font(.caption2)
-                            .padding(.horizontal, 4)
-                            .padding(.vertical, 1)
-                            .background(Color.orange.opacity(0.12))
-                            .foregroundColor(.orange)
-                            .cornerRadius(3)
-                    }
-                }
-                Text(action.prompt)
-                    .font(.caption)
+            HStack(spacing: 6) {
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: 12))
                     .foregroundColor(.secondary)
-                    .lineLimit(1)
-            }
+                    .frame(width: 16, height: 28)
+                    .opacity(isHovering ? 1 : 0)
+                    .accessibilityHidden(true)
 
-            Spacer()
+                Image(systemName: action.icon)
+                    .font(.system(size: 16))
+                    .foregroundColor(.accentColor)
+                    .frame(width: 28, height: 28)
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 4) {
+                        Text(action.name)
+                            .font(.callout)
+                            .fontWeight(.medium)
+
+                        if let providerName = action.providerType {
+                            Text(processingService.displayName(for: providerName))
+                                .font(.caption2)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(Color.accentColor.opacity(0.12))
+                                .foregroundColor(.accentColor)
+                                .cornerRadius(3)
+                        }
+
+                        if let actionId = action.targetActionPluginId,
+                           let plugin = PluginManager.shared.actionPlugin(for: actionId) {
+                            Text(plugin.actionName)
+                                .font(.caption2)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(Color.orange.opacity(0.12))
+                                .foregroundColor(.orange)
+                                .cornerRadius(3)
+                        }
+                    }
+                    Text(action.prompt)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                viewModel.startEditing(action)
+            }
 
             Toggle("", isOn: Binding(
                 get: { action.isEnabled },
@@ -313,7 +319,6 @@ private struct PromptActionCardView: View {
             .toggleStyle(.switch)
             .labelsHidden()
             .accessibilityLabel(String(localized: "Enable \(action.name)"))
-            .onTapGesture {}
         }
         .padding(.leading, 4)
         .padding(.trailing, 10)
@@ -326,13 +331,9 @@ private struct PromptActionCardView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .strokeBorder(isDropTargeted ? Color.accentColor.opacity(0.5) : isHovering ? Color.accentColor.opacity(0.3) : Color.primary.opacity(0.06), lineWidth: isDropTargeted ? 2 : 1)
         )
-        .contentShape(Rectangle())
         .overlay(OpenHandCursorView())
         .onHover { hovering in
             isHovering = hovering
-        }
-        .onTapGesture {
-            viewModel.startEditing(action)
         }
         .draggable(action.id.uuidString)
         .dropDestination(for: String.self) { droppedItems, _ in
