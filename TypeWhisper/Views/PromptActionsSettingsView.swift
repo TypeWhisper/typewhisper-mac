@@ -258,14 +258,14 @@ private struct PromptActionCardView: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            HStack(spacing: 6) {
-                Image(systemName: "line.3.horizontal")
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
-                    .frame(width: 16, height: 28)
-                    .opacity(isHovering ? 1 : 0)
-                    .accessibilityHidden(true)
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+                .frame(width: 16, height: 28)
+                .opacity(isHovering ? 1 : 0)
+                .accessibilityHidden(true)
 
+            HStack(spacing: 6) {
                 Image(systemName: action.icon)
                     .font(.system(size: 16))
                     .foregroundColor(.accentColor)
@@ -304,13 +304,13 @@ private struct PromptActionCardView: View {
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
-
-                Spacer()
             }
             .contentShape(Rectangle())
             .onTapGesture {
                 viewModel.startEditing(action)
             }
+
+            Spacer()
 
             Toggle("", isOn: Binding(
                 get: { action.isEnabled },
