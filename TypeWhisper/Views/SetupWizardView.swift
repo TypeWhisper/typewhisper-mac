@@ -685,6 +685,20 @@ struct SetupWizardView: View {
                 }
             }
 
+            if case .error(let message) = registryService.fetchState {
+                HStack {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                    Spacer()
+                    Button(String(localized: "Retry")) {
+                        Task { await registryService.fetchRegistry() }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            }
+
             Divider()
 
             Text(String(localized: "Prompt Presets"))
