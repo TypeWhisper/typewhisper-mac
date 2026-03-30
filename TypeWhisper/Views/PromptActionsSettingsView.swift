@@ -234,9 +234,17 @@ private struct PromptActionCardView: View {
     @ObservedObject var viewModel: PromptActionsViewModel
     let processingService: PromptProcessingService
     @State private var isHovering = false
+    @State private var isDropTargeted = false
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 6) {
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
+                .frame(width: 16, height: 28)
+                .opacity(isHovering ? 1 : 0)
+                .accessibilityHidden(true)
+
             Image(systemName: action.icon)
                 .font(.system(size: 16))
                 .foregroundColor(.accentColor)
@@ -287,7 +295,8 @@ private struct PromptActionCardView: View {
             .accessibilityLabel(String(localized: "Enable \(action.name)"))
             .onTapGesture {}
         }
-        .padding(.horizontal, 10)
+        .padding(.leading, 4)
+        .padding(.trailing, 10)
         .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -295,14 +304,27 @@ private struct PromptActionCardView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(isHovering ? Color.accentColor.opacity(0.3) : Color.primary.opacity(0.06), lineWidth: 1)
+                .strokeBorder(isDropTargeted ? Color.accentColor.opacity(0.5) : isHovering ? Color.accentColor.opacity(0.3) : Color.primary.opacity(0.06), lineWidth: isDropTargeted ? 2 : 1)
         )
         .contentShape(Rectangle())
+        .overlay(OpenHandCursorView())
         .onHover { hovering in
             isHovering = hovering
         }
         .onTapGesture {
             viewModel.startEditing(action)
+        }
+        .draggable(action.id.uuidString)
+        .dropDestination(for: String.self) { droppedItems, _ in
+            guard let droppedId = droppedItems.first,
+                  let fromIndex = viewModel.promptActions.firstIndex(where: { $0.id.uuidString == droppedId }),
+                  let toIndex = viewModel.promptActions.firstIndex(where: { $0.id == action.id }) else {
+                return false
+            }
+            viewModel.moveAction(fromIndex: fromIndex, toIndex: toIndex)
+            return true
+        } isTargeted: { targeted in
+            isDropTargeted = targeted
         }
         .contextMenu {
             Button(String(localized: "Edit")) {
@@ -503,6 +525,22 @@ private struct PromptActionEditorSheet: View {
         .fixedSize(horizontal: false, vertical: true)
         .onAppear {
             focusedField = .name
+        }
+    }
+}
+
+// MARK: - Drag Handle Cursor
+
+private struct OpenHandCursorView: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        CursorView()
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    class CursorView: NSView {
+        override func resetCursorRects() {
+            addCursorRect(bounds, cursor: .openHand)
         }
     }
 }

@@ -185,6 +185,28 @@ class PromptActionService: ObservableObject {
         }
     }
 
+    func moveAction(fromIndex: Int, toIndex: Int) {
+        guard let context = modelContext,
+              fromIndex != toIndex,
+              fromIndex >= 0, fromIndex < promptActions.count,
+              toIndex >= 0, toIndex < promptActions.count else { return }
+
+        var actions = promptActions
+        let moved = actions.remove(at: fromIndex)
+        actions.insert(moved, at: toIndex)
+
+        for (index, action) in actions.enumerated() {
+            action.sortOrder = index
+        }
+
+        do {
+            try context.save()
+            loadActions()
+        } catch {
+            logger.error("Failed to move prompt action: \(error.localizedDescription)")
+        }
+    }
+
     func getEnabledActions() -> [PromptAction] {
         promptActions.filter { $0.isEnabled }
     }
