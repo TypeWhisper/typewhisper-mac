@@ -9,6 +9,37 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhis
 
 /// Captures microphone audio via AVAudioEngine and converts to 16kHz mono Float32 samples.
 final class AudioRecordingService: ObservableObject, @unchecked Sendable {
+    enum StopPolicy {
+        case immediate
+        case finalizeShortSpeech(
+            minBufferedDuration: TimeInterval = 0.05,
+            maxExtraCapture: TimeInterval = 0.06,
+            pollInterval: TimeInterval = 0.01
+        )
+
+        var logDescription: String {
+            switch self {
+            case .immediate:
+                "immediate"
+            case .finalizeShortSpeech(let minBufferedDuration, let maxExtraCapture, let pollInterval):
+                String(
+                    format: "finalizeShortSpeech(min=%.3f,max=%.3f,poll=%.3f)",
+                    minBufferedDuration,
+                    maxExtraCapture,
+                    pollInterval
+                )
+            }
+        }
+
+        func shouldApplyGracePeriod(bufferedDuration: TimeInterval) -> Bool {
+            switch self {
+            case .immediate:
+                false
+            case .finalizeShortSpeech(let minBufferedDuration, _, _):
+                bufferedDuration < minBufferedDuration
+            }
+        }
+    }
 
     enum AudioRecordingError: LocalizedError {
         case microphonePermissionDenied
@@ -45,14 +76,21 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private var _peakRawAudioLevel: Float = 0
     private let bufferLock = NSLock()
     private let configLock = NSLock()
+    private let stopStateLock = NSLock()
     private let processingQueue = DispatchQueue(label: "com.typewhisper.audio-processing", qos: .userInteractive)
+    private var _lastStopGraceCaptureApplied = false
 
     static let targetSampleRate: Double = 16000
+    private static let captureTapFrames: AVAudioFrameCount = 1024
 
     var peakRawAudioLevel: Float {
         bufferLock.lock()
         defer { bufferLock.unlock() }
         return _peakRawAudioLevel
+    }
+
+    var lastStopGraceCaptureApplied: Bool {
+        stopStateLock.withLock { _lastStopGraceCaptureApplied }
     }
 
     var hasMicrophonePermission: Bool {
@@ -148,7 +186,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         _peakRawAudioLevel = 0
         bufferLock.unlock()
 
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
+        inputNode.installTap(onBus: 0, bufferSize: Self.captureTapFrames, format: inputFormat) { [weak self] buffer, _ in
             self?.processAudioBuffer(buffer, converter: converter, targetFormat: targetFormat)
         }
 
@@ -172,7 +210,23 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
     }
 
-    func stopRecording() -> [Float] {
+    func stopRecording(policy: StopPolicy) async -> [Float] {
+        let bufferedDuration = totalBufferDuration
+        var graceApplied = false
+
+        if policy.shouldApplyGracePeriod(bufferedDuration: bufferedDuration),
+           case .finalizeShortSpeech(_, let maxExtraCapture, let pollInterval) = policy,
+           audioEngine != nil {
+            let deadline = Date().addingTimeInterval(maxExtraCapture)
+            graceApplied = true
+
+            while Date() < deadline, policy.shouldApplyGracePeriod(bufferedDuration: totalBufferDuration) {
+                try? await Task.sleep(for: .seconds(pollInterval))
+            }
+        }
+
+        setLastStopGraceCaptureApplied(graceApplied)
+
         if let observer = configChangeObserver {
             NotificationCenter.default.removeObserver(observer)
             configChangeObserver = nil
@@ -184,10 +238,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         // Flush pending audio processing before grabbing the buffer
         processingQueue.sync { }
 
-        bufferLock.lock()
-        let samples = sampleBuffer
-        sampleBuffer.removeAll()
-        bufferLock.unlock()
+        let samples = drainSampleBuffer()
 
         DispatchQueue.main.async { [weak self] in
             self?.isRecording = false
@@ -236,7 +287,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             return
         }
 
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
+        inputNode.installTap(onBus: 0, bufferSize: Self.captureTapFrames, format: inputFormat) { [weak self] buffer, _ in
             self?.processAudioBuffer(buffer, converter: converter, targetFormat: targetFormat)
         }
 
@@ -307,5 +358,19 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             self.audioLevel = normalizedLevel
             self.rawAudioLevel = rms
         }
+    }
+
+    private func setLastStopGraceCaptureApplied(_ applied: Bool) {
+        stopStateLock.withLock {
+            _lastStopGraceCaptureApplied = applied
+        }
+    }
+
+    private func drainSampleBuffer() -> [Float] {
+        bufferLock.lock()
+        defer { bufferLock.unlock() }
+        let samples = sampleBuffer
+        sampleBuffer.removeAll()
+        return samples
     }
 }

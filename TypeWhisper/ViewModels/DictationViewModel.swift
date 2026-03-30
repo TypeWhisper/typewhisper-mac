@@ -122,6 +122,7 @@ final class DictationViewModel: ObservableObject {
     private var errorResetTask: Task<Void, Never>?
     private var insertingResetTask: Task<Void, Never>?
     private var urlResolutionTask: Task<Void, Never>?
+    private var isStopInFlight = false
 
     init(
         audioRecordingService: AudioRecordingService,
@@ -321,11 +322,13 @@ final class DictationViewModel: ObservableObject {
         audioDeviceService.$disconnectedDeviceName
             .compactMap { $0 }
             .sink { [weak self] _ in
-                guard let self, self.state == .recording else { return }
+                guard let self, self.state == .recording, !self.isStopInFlight else { return }
                 self.audioDuckingService.restoreAudio()
                 self.streamingHandler.stop()
                 self.stopRecordingTimer()
-                _ = self.audioRecordingService.stopRecording()
+                Task {
+                    _ = await self.audioRecordingService.stopRecording(policy: .immediate)
+                }
                 self.hotkeyService.cancelDictation()
                 self.showNotchFeedback(
                     message: String(localized: "Microphone disconnected"),
@@ -341,10 +344,13 @@ final class DictationViewModel: ObservableObject {
     private func cancelCurrentOperation() {
         switch state {
         case .recording:
+            guard !isStopInFlight else { return }
             audioDuckingService.restoreAudio()
             streamingHandler.stop()
             stopRecordingTimer()
-            _ = audioRecordingService.stopRecording()
+            Task {
+                _ = await audioRecordingService.stopRecording(policy: .immediate)
+            }
             hotkeyService.cancelDictation()
             showNotchFeedback(message: String(localized: "Cancelled"), icon: "xmark.circle", duration: 1.5)
         case .processing:
@@ -454,6 +460,7 @@ final class DictationViewModel: ObservableObject {
             accessibilityAnnouncementService.announceRecordingStarted()
             speechFeedbackService.announceEvent(.recordingStarted)
             partialText = ""
+            isStopInFlight = false
             recordingStartTime = Date()
             startRecordingTimer()
             streamingHandler.start(
@@ -518,8 +525,14 @@ final class DictationViewModel: ObservableObject {
     }
 
     private func stopDictation() {
-        guard state == .recording else { return }
+        guard state == .recording, !isStopInFlight else { return }
+        isStopInFlight = true
+        Task {
+            await finalizeStopDictation()
+        }
+    }
 
+    private func finalizeStopDictation() async {
         audioDuckingService.restoreAudio()
         streamingHandler.stop()
         stopRecordingTimer()
@@ -532,35 +545,39 @@ final class DictationViewModel: ObservableObject {
                 elapsedSeconds: elapsed
             )))
         }
-        var samples = audioRecordingService.stopRecording()
+
+        let stopPolicy = AudioRecordingService.StopPolicy.finalizeShortSpeech()
+        var samples = await audioRecordingService.stopRecording(policy: stopPolicy)
         let peakLevel = audioRecordingService.peakRawAudioLevel
         let rawDuration = Double(samples.count) / AudioRecordingService.targetSampleRate
+        let decision = classifyShortSpeech(rawDuration: rawDuration, peakLevel: peakLevel)
+        let graceApplied = audioRecordingService.lastStopGraceCaptureApplied
 
-        logger.info("Recording stopped: duration=\(String(format: "%.2f", rawDuration))s, peakLevel=\(String(format: "%.4f", peakLevel)), samples=\(samples.count)")
+        logger.info(
+            "Stop finalized: rawDuration=\(String(format: "%.3f", rawDuration), privacy: .public)s, bufferedSamples=\(samples.count), peakLevel=\(String(format: "%.4f", peakLevel), privacy: .public), stopPolicy=\(stopPolicy.logDescription, privacy: .public), graceApplied=\(graceApplied, privacy: .public), decision=\(decision.logDescription, privacy: .public)"
+        )
 
-        // Check real audio duration BEFORE adding silence padding
-        guard !samples.isEmpty, rawDuration >= 0.1 else {
-            logger.info("Recording too short (\(String(format: "%.2f", rawDuration))s) - discarding")
-            resetDictationState()
+        switch decision {
+        case .discardTooShort:
+            showNotchFeedback(
+                message: String(localized: "Too short, hold the hotkey a bit longer"),
+                icon: "waveform.badge.exclamationmark",
+                duration: 1.8
+            )
             return
-        }
-
-        guard peakLevel >= 0.01 else {
+        case .discardNoSpeech:
             logger.info("Peak level too low (\(String(format: "%.4f", peakLevel))) - no speech detected")
             showNotchFeedback(
                 message: String(localized: "No speech detected"),
                 icon: "mic.slash",
                 duration: 2.0
             )
-            resetDictationState()
             return
+        case .transcribe:
+            break
         }
 
-        // Add silence padding so Whisper can properly finish decoding the last tokens.
-        // Short recordings get more padding for better recognition.
-        let padSeconds: Double = rawDuration < 1.0 ? 0.5 : 0.3
-        let padCount = Int(padSeconds * AudioRecordingService.targetSampleRate)
-        samples.append(contentsOf: [Float](repeating: 0, count: padCount))
+        samples = paddedSamplesForFinalTranscription(samples, rawDuration: rawDuration)
 
         let saveAudio = UserDefaults.standard.bool(forKey: UserDefaultsKeys.saveAudioWithHistory)
         let audioSamplesForHistory: [Float]? = saveAudio ? samples : nil
@@ -607,7 +624,6 @@ final class DictationViewModel: ObservableObject {
                         duration: 2.0
                     )
                     soundService.play(.error, enabled: soundFeedbackEnabled)
-                    resetDictationState()
                     return
                 }
 
@@ -746,8 +762,10 @@ final class DictationViewModel: ObservableObject {
         insertingResetTask = nil
         urlResolutionTask?.cancel()
         urlResolutionTask = nil
+        isStopInFlight = false
         state = .idle
         partialText = ""
+        recordingStartTime = nil
         matchedProfile = nil
         forcedProfileId = nil
         capturedActiveApp = nil
@@ -921,4 +939,46 @@ final class DictationViewModel: ObservableObject {
         recordingTimer = nil
         recordingDuration = 0
     }
+}
+
+enum ShortSpeechDecision: Equatable {
+    case discardTooShort
+    case discardNoSpeech
+    case transcribe
+
+    var logDescription: String {
+        switch self {
+        case .discardTooShort:
+            "discardTooShort"
+        case .discardNoSpeech:
+            "discardNoSpeech"
+        case .transcribe:
+            "transcribe"
+        }
+    }
+}
+
+func classifyShortSpeech(rawDuration: TimeInterval, peakLevel: Float) -> ShortSpeechDecision {
+    guard rawDuration >= 0.04 else { return .discardTooShort }
+
+    if rawDuration < 0.25 {
+        return peakLevel < 0.006 ? .discardNoSpeech : .transcribe
+    }
+
+    return peakLevel < 0.01 ? .discardNoSpeech : .transcribe
+}
+
+func paddedSamplesForFinalTranscription(_ samples: [Float], rawDuration: TimeInterval) -> [Float] {
+    var paddedSamples = samples
+
+    if rawDuration < 0.75 {
+        let targetSampleCount = Int(0.75 * AudioRecordingService.targetSampleRate)
+        let padCount = max(0, targetSampleCount - samples.count)
+        paddedSamples.append(contentsOf: [Float](repeating: 0, count: padCount))
+    } else {
+        let tailPadCount = Int(0.3 * AudioRecordingService.targetSampleRate)
+        paddedSamples.append(contentsOf: [Float](repeating: 0, count: tailPadCount))
+    }
+
+    return paddedSamples
 }
