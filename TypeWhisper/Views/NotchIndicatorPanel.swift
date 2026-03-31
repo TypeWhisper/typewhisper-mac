@@ -58,6 +58,7 @@ class NotchIndicatorPanel: NSPanel {
         ignoresMouseEvents = true
 
         let hostingView = FirstMouseHostingView(rootView: NotchIndicatorView(geometry: notchGeometry))
+        hostingView.sizingOptions = []
         contentView = hostingView
     }
 
@@ -86,6 +87,15 @@ class NotchIndicatorPanel: NSPanel {
             .sink { [weak self] _ in
                 self?.cachedScreen = nil
                 self?.updateVisibility(state: vm.state, vm: vm)
+            }
+            .store(in: &cancellables)
+
+        NSWorkspace.shared.notificationCenter
+            .publisher(for: NSWorkspace.activeSpaceDidChangeNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self, self.isVisible else { return }
+                self.orderFrontRegardless()
             }
             .store(in: &cancellables)
     }
