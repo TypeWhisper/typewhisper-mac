@@ -21,8 +21,10 @@ class MediaPlaybackService {
     }
 
     /// Pauses media playback. kMRPause (1) is an explicit pause - safe to send even if nothing plays.
-    /// Note: MRMediaRemoteGetNowPlayingApplicationIsPlaying returns false inside signed apps,
-    /// so we skip the isPlaying check and send pause unconditionally.
+    /// Note: All MediaRemote query APIs (isPlaying, NowPlayingInfo) return empty/false inside signed
+    /// apps, so we send pause unconditionally and always resume. This means manually-paused media
+    /// will be resumed after recording - an acceptable trade-off since the command APIs are the only
+    /// ones that work.
     func pauseIfPlaying() {
         guard !didPause, let sendCommand else { return }
         let result = sendCommand(1, nil)
