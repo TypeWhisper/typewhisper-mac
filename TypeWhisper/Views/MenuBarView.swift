@@ -123,12 +123,10 @@ struct MenuBarView: View {
         .keyboardShortcut("r", modifiers: [.command, .shift])
         .disabled(DictationViewModel.shared.lastTranscribedText == nil)
 
-        #if !APPSTORE
         Button(String(localized: "Check for Updates...")) {
             UpdateChecker.shared?.checkForUpdates()
         }
         .disabled(UpdateChecker.shared?.canCheckForUpdates() != true)
-        #endif
 
         Divider()
 

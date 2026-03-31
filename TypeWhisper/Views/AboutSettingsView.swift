@@ -1,11 +1,8 @@
 import SwiftUI
 
 struct AboutSettingsView: View {
-    #if !APPSTORE
     @AppStorage(UserDefaultsKeys.updateChannel) private var selectedUpdateChannelRawValue = AppConstants.defaultReleaseChannel.rawValue
-    #endif
 
-    #if !APPSTORE
     private var selectedUpdateChannel: AppConstants.ReleaseChannel {
         AppConstants.ReleaseChannel(rawValue: selectedUpdateChannelRawValue) ?? AppConstants.defaultReleaseChannel
     }
@@ -20,7 +17,6 @@ struct AboutSettingsView: View {
             }
         )
     }
-    #endif
 
     var body: some View {
         Form {
@@ -49,7 +45,6 @@ struct AboutSettingsView: View {
                 .padding(.vertical, 12)
             }
 
-            #if !APPSTORE
             Section {
                 Picker(String(localized: "Update Channel"), selection: updateChannelBinding) {
                     ForEach(AppConstants.ReleaseChannel.allCases, id: \.self) { channel in
@@ -72,7 +67,6 @@ struct AboutSettingsView: View {
                     Spacer()
                 }
             }
-            #endif
 
             Section {
                 VStack(spacing: 4) {
