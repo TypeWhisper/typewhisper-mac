@@ -156,7 +156,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
             appFormatterService: appFormatterService,
             speechFeedbackService: speechFeedbackService,
             accessibilityAnnouncementService: accessibilityAnnouncementService,
-            errorLogService: errorLogService
+            errorLogService: errorLogService,
+            mediaPlaybackService: MediaPlaybackService()
         )
 
         let router = APIRouter()
