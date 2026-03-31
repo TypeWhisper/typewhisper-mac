@@ -1,9 +1,7 @@
 import SwiftUI
 import AVFoundation
 import Combine
-#if !APPSTORE
 @preconcurrency import Sparkle
-#endif
 
 extension UserDefaults {
     @objc dynamic var showMenuBarIcon: Bool {
@@ -136,13 +134,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     private var indicatorCoordinator: IndicatorCoordinator?
     private var translationHostWindow: NSWindow?
     private var menuBarIconObserver: NSKeyValueObservation?
-    #if !APPSTORE
     private lazy var updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil)
 
     var updateChecker: UpdateChecker {
         .sparkle(updaterController.updater)
     }
-    #endif
 
     private var isMenuBarIconHidden: Bool {
         !UserDefaults.standard.bool(forKey: UserDefaultsKeys.showMenuBarIcon)
@@ -158,9 +154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             return
         }
 
-        #if !APPSTORE
         UpdateChecker.shared = updateChecker
-        #endif
 
         // If menu bar icon is hidden, show dock icon immediately
         if isMenuBarIconHidden {
@@ -295,9 +289,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         }
     }
 
-    #if !APPSTORE
     nonisolated func allowedChannels(for updater: SPUUpdater) -> Set<String> {
         AppConstants.effectiveUpdateChannel.sparkleChannels
     }
-    #endif
 }

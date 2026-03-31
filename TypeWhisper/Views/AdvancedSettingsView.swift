@@ -6,10 +6,8 @@ struct AdvancedSettingsView: View {
     @ObservedObject private var promptProcessingService = ServiceContainer.shared.promptProcessingService
     @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
     @ObservedObject private var dictation = DictationViewModel.shared
-    #if !APPSTORE
     @State private var cliInstalled = false
     @State private var cliSymlinkTarget = ""
-    #endif
     @State private var raycastInstalled = false
     @State private var showClearMemoryConfirmation = false
 
@@ -190,7 +188,6 @@ struct AdvancedSettingsView: View {
                 }
             }
 
-            #if !APPSTORE
             // MARK: - Command Line Tool
             Section(String(localized: "Command Line Tool")) {
                 HStack {
@@ -223,20 +220,15 @@ struct AdvancedSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            #endif
 
             // MARK: - Usage Examples
             if viewModel.isEnabled {
                 Section(String(localized: "Usage Examples")) {
-                    #if !APPSTORE
                     if cliInstalled {
                         cliExamples
                     } else {
                         curlExamples
                     }
-                    #else
-                    curlExamples
-                    #endif
                 }
             }
 
@@ -286,15 +278,12 @@ struct AdvancedSettingsView: View {
             raycastInstalled = NSWorkspace.shared.urlForApplication(
                 withBundleIdentifier: "com.raycast.macos"
             ) != nil
-            #if !APPSTORE
             checkCLIInstallation()
-            #endif
         }
     }
 
     // MARK: - Examples
 
-    #if !APPSTORE
     private var cliExamples: some View {
         VStack(alignment: .leading, spacing: 8) {
             exampleRow(String(localized: "Show help:"), "typewhisper --help")
@@ -312,7 +301,6 @@ struct AdvancedSettingsView: View {
             exampleRow(String(localized: "List models:"), "typewhisper models")
         }
     }
-    #endif
 
     private var curlExamples: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -349,7 +337,6 @@ struct AdvancedSettingsView: View {
 
     // MARK: - CLI Installation
 
-    #if !APPSTORE
     private static let symlinkPath = "/usr/local/bin/typewhisper"
 
     private var cliBinaryPath: String {
@@ -396,5 +383,4 @@ struct AdvancedSettingsView: View {
         }
         try? process.run()
     }
-    #endif
 }

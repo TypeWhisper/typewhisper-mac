@@ -201,7 +201,6 @@ private struct ProfileEditorSheet: View {
                     }
                 }
 
-                #if !APPSTORE
                 Section(String(localized: "URL Patterns")) {
                     if viewModel.editorUrlPatterns.isEmpty {
                         Text(String(localized: "No URL patterns"))
@@ -269,7 +268,6 @@ private struct ProfileEditorSheet: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                #endif
 
                 Section(String(localized: "Overrides")) {
                     // Input language override

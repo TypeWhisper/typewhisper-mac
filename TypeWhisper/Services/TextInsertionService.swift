@@ -51,24 +51,15 @@ enum InsertionResult {
     }
 
     func resolveBrowserURL(bundleId: String) async -> String? {
-        #if APPSTORE
-        // Apple Events to other apps are blocked in the App Sandbox
-        return nil
-        #else
         await Task.detached(priority: .utility) {
             Self.getBrowserURL(bundleId: bundleId)
         }.value
-        #endif
     }
 
     func resolveBrowserInfo(bundleId: String) async -> (url: String?, title: String?) {
-        #if APPSTORE
-        return (nil, nil)
-        #else
         await Task.detached(priority: .utility) {
             Self.getBrowserURLAndTitle(bundleId: bundleId)
         }.value
-        #endif
     }
 
     // MARK: - Browser URL Detection
