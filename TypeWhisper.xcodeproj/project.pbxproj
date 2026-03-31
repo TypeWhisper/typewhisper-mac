@@ -1507,6 +1507,7 @@
 			packageProductDependencies = (
 				PP00000000000000000004 /* Sparkle */,
 				PP00000000000000000005 /* TypeWhisperPluginSDK */,
+				PP00000000000000000040 /* MediaRemoteAdapter */,
 			);
 			productName = TypeWhisper;
 			productReference = DD00000000000000000099 /* TypeWhisper.app */;
@@ -2107,6 +2108,7 @@
 				RR00000000000000000004 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				RR00000000000000000005 /* XCLocalSwiftPackageReference "TypeWhisperPluginSDK" */,
 				RR00000000000000000006 /* XCRemoteSwiftPackageReference "mlx-audio-swift" */,
+				RR00000000000000000007 /* XCRemoteSwiftPackageReference "mediaremote-adapter" */,
 			);
 			productRefGroup = CC00000000000000000090 /* Products */;
 			projectDirPath = "";
@@ -6254,6 +6256,14 @@
 				kind = branch;
 			};
 		};
+		RR00000000000000000007 /* XCRemoteSwiftPackageReference "mediaremote-adapter" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ejbills/mediaremote-adapter.git";
+			requirement = {
+				branch = master;
+				kind = branch;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -6410,6 +6420,11 @@
 		PP00000000000000000038 /* TypeWhisperPluginSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TypeWhisperPluginSDK;
+		};
+		PP00000000000000000040 /* MediaRemoteAdapter */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = RR00000000000000000007 /* XCRemoteSwiftPackageReference "mediaremote-adapter" */;
+			productName = MediaRemoteAdapter;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
