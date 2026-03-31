@@ -337,6 +337,14 @@ struct RecordingSettingsView: View {
                 }
             }
 
+            Section(String(localized: "Media Pause")) {
+                Toggle(String(localized: "Pause media playback during recording"), isOn: $dictation.mediaPauseEnabled)
+
+                Text(String(localized: "Automatically pauses music and videos while recording and resumes when done. Uses macOS system media controls - may not work with all apps."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             if needsPermissions {
                 Section(String(localized: "Permissions")) {
                     if dictation.needsMicPermission {

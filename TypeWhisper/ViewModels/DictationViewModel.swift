@@ -46,6 +46,9 @@ final class DictationViewModel: ObservableObject {
     @Published var preserveClipboard: Bool {
         didSet { UserDefaults.standard.set(preserveClipboard, forKey: UserDefaultsKeys.preserveClipboard) }
     }
+    @Published var mediaPauseEnabled: Bool {
+        didSet { UserDefaults.standard.set(mediaPauseEnabled, forKey: UserDefaultsKeys.mediaPauseEnabled) }
+    }
     @Published var spokenFeedbackEnabled: Bool {
         didSet { speechFeedbackService.spokenFeedbackEnabled = spokenFeedbackEnabled }
     }
@@ -106,6 +109,7 @@ final class DictationViewModel: ObservableObject {
     private let speechFeedbackService: SpeechFeedbackService
     private let accessibilityAnnouncementService: AccessibilityAnnouncementService
     private let errorLogService: ErrorLogService
+    private let mediaPlaybackService: MediaPlaybackService
     private let postProcessingPipeline: PostProcessingPipeline
     private var matchedProfile: Profile?
     private var forcedProfileId: UUID?
@@ -143,7 +147,8 @@ final class DictationViewModel: ObservableObject {
         appFormatterService: AppFormatterService,
         speechFeedbackService: SpeechFeedbackService,
         accessibilityAnnouncementService: AccessibilityAnnouncementService,
-        errorLogService: ErrorLogService
+        errorLogService: ErrorLogService,
+        mediaPlaybackService: MediaPlaybackService
     ) {
         self.audioRecordingService = audioRecordingService
         self.textInsertionService = textInsertionService
@@ -163,6 +168,7 @@ final class DictationViewModel: ObservableObject {
         self.speechFeedbackService = speechFeedbackService
         self.accessibilityAnnouncementService = accessibilityAnnouncementService
         self.errorLogService = errorLogService
+        self.mediaPlaybackService = mediaPlaybackService
         self.postProcessingPipeline = PostProcessingPipeline(
             snippetService: snippetService,
             dictionaryService: dictionaryService,
@@ -191,6 +197,7 @@ final class DictationViewModel: ObservableObject {
         self.audioDuckingLevel = UserDefaults.standard.object(forKey: UserDefaultsKeys.audioDuckingLevel) as? Double ?? 0.2
         self.soundFeedbackEnabled = UserDefaults.standard.object(forKey: UserDefaultsKeys.soundFeedbackEnabled) as? Bool ?? true
         self.preserveClipboard = UserDefaults.standard.bool(forKey: UserDefaultsKeys.preserveClipboard)
+        self.mediaPauseEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.mediaPauseEnabled)
         self.spokenFeedbackEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.spokenFeedbackEnabled)
         self.indicatorStyle = UserDefaults.standard.string(forKey: UserDefaultsKeys.indicatorStyle)
             .flatMap { IndicatorStyle(rawValue: $0) } ?? .notch
@@ -446,6 +453,7 @@ final class DictationViewModel: ObservableObject {
         }
 
         do {
+            if mediaPauseEnabled { mediaPlaybackService.pauseIfPlaying() }
             audioRecordingService.selectedDeviceID = audioDeviceService.selectedDeviceID
             try audioRecordingService.startRecording()
             if audioDuckingEnabled {
@@ -477,6 +485,7 @@ final class DictationViewModel: ObservableObject {
             )))
         } catch {
             audioDuckingService.restoreAudio()
+            mediaPlaybackService.resumeIfWePaused()
             accessibilityAnnouncementService.announceError(error.localizedDescription)
             speechFeedbackService.announceEvent(.error(reason: error.localizedDescription))
             showError(error.localizedDescription, category: "recording")
@@ -534,6 +543,7 @@ final class DictationViewModel: ObservableObject {
 
     private func finalizeStopDictation() async {
         audioDuckingService.restoreAudio()
+        mediaPlaybackService.resumeIfWePaused()
         streamingHandler.stop()
         stopRecordingTimer()
 

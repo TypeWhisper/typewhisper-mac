@@ -250,6 +250,7 @@
 		AA00000000000000000282 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000039 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000283 /* DictionaryExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000271 /* DictionaryExporter.swift */; };
 		AA00000000000000000284 /* TermPackRegistryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000272 /* TermPackRegistryService.swift */; };
+		AA00000000000000000285 /* MediaPlaybackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000273 /* MediaPlaybackService.swift */; };
 		C7A3E9F1D5B2084A6E9C3D71 /* DictionaryExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8D4F2B6E1C3097B5F8A4E62 /* DictionaryExporterTests.swift */; };
 		AA00000000000000000275 /* ElevenLabsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000263 /* ElevenLabsPlugin.swift */; };
 		AA00000000000000000276 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000264 /* manifest.json */; };
@@ -561,6 +562,7 @@
 		BB00000000000000000266 /* ElevenLabsPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ElevenLabsPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000271 /* DictionaryExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryExporter.swift; sourceTree = "<group>"; };
 		BB00000000000000000272 /* TermPackRegistryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TermPackRegistryService.swift; sourceTree = "<group>"; };
+		BB00000000000000000273 /* MediaPlaybackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPlaybackService.swift; sourceTree = "<group>"; };
 		A8D4F2B6E1C3097B5F8A4E62 /* DictionaryExporterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictionaryExporterTests.swift; sourceTree = "<group>"; };
 		01D368E23E2A0AB2390B34EA /* GoogleCloudSTTPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleCloudSTTPlugin.swift; sourceTree = "<group>"; };
 		1D584661B6B55F6329CB5FC4 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
@@ -945,6 +947,7 @@
 				BB00000000000000000066 /* ProfileService.swift */,
 				BB00000000000000000073 /* TranslationService.swift */,
 				BB00000000000000000074 /* AudioDuckingService.swift */,
+				BB00000000000000000273 /* MediaPlaybackService.swift */,
 				BB00000000000000000079 /* DictionaryService.swift */,
 				BB00000000000000000271 /* DictionaryExporter.swift */,
 				BB00000000000000000081 /* SnippetService.swift */,
@@ -2498,6 +2501,7 @@
 				AA00000000000000000070 /* UpdateChecker.swift in Sources */,
 				AA00000000000000000073 /* TranslationService.swift in Sources */,
 				AA00000000000000000074 /* AudioDuckingService.swift in Sources */,
+				AA00000000000000000285 /* MediaPlaybackService.swift in Sources */,
 				AA00000000000000000075 /* TranslationHostWindow.swift in Sources */,
 				AA00000000000000000077 /* DictionaryEntry.swift in Sources */,
 				AA00000000000000000078 /* TermPack.swift in Sources */,

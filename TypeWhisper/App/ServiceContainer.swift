@@ -16,6 +16,7 @@ final class ServiceContainer: ObservableObject {
     let profileService: ProfileService
     let translationService: AnyObject? // TranslationService (macOS 15+)
     let audioDuckingService: AudioDuckingService
+    let mediaPlaybackService: MediaPlaybackService
     let dictionaryService: DictionaryService
     let snippetService: SnippetService
     let soundService: SoundService
@@ -71,6 +72,7 @@ final class ServiceContainer: ObservableObject {
         translationService = nil
         #endif
         audioDuckingService = AudioDuckingService()
+        mediaPlaybackService = MediaPlaybackService()
         dictionaryService = DictionaryService()
         snippetService = SnippetService()
         soundService = SoundService()
@@ -115,7 +117,8 @@ final class ServiceContainer: ObservableObject {
             appFormatterService: appFormatterService,
             speechFeedbackService: speechFeedbackService,
             accessibilityAnnouncementService: accessibilityAnnouncementService,
-            errorLogService: errorLogService
+            errorLogService: errorLogService,
+            mediaPlaybackService: mediaPlaybackService
         )
 
 
