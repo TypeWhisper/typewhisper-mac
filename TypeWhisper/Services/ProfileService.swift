@@ -54,6 +54,7 @@ final class ProfileService: ObservableObject {
         outputFormat: String? = nil,
         hotkeyData: Data? = nil,
         inlineCommandsEnabled: Bool = false,
+        autoEnterEnabled: Bool = false,
         priority: Int = 0
     ) {
         let profile = Profile(
@@ -70,7 +71,8 @@ final class ProfileService: ObservableObject {
             memoryEnabled: memoryEnabled,
             outputFormat: outputFormat,
             hotkeyData: hotkeyData,
-            inlineCommandsEnabled: inlineCommandsEnabled
+            inlineCommandsEnabled: inlineCommandsEnabled,
+            autoEnterEnabled: autoEnterEnabled
         )
         modelContext.insert(profile)
         save()

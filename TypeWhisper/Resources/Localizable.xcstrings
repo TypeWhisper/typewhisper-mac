@@ -729,6 +729,16 @@
         }
       }
     },
+    "Auto Enter": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto Enter"
+          }
+        }
+      }
+    },
     "Auto-unload model": {
       "localizations": {
         "de": {
@@ -745,6 +755,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Extrahiert automatisch Fakten, Präferenzen und Muster aus deinen Transkriptionen per LLM. Erinnerungen werden als Kontext in Prompts eingefügt."
+          }
+        }
+      }
+    },
+    "Automatically press Enter after inserting text. In chat apps this sends the message, in editors it adds a new line.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drückt nach dem Einfügen automatisch Enter. In Chat-Apps wird die Nachricht gesendet, in Editoren eine neue Zeile eingefügt."
           }
         }
       }

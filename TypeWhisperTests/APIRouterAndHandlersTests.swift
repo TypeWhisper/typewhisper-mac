@@ -114,6 +114,51 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    func testAutoEnterSkipsReturnWithoutFocusedTextField() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextFieldOverride = { false }
+
+        var didSimulatePaste = false
+        service.pasteSimulatorOverride = {
+            didSimulatePaste = true
+        }
+
+        var didSimulateReturn = false
+        service.returnSimulatorOverride = {
+            didSimulateReturn = true
+        }
+
+        _ = try await service.insertText("Hello", autoEnter: true)
+
+        XCTAssertTrue(didSimulatePaste)
+        XCTAssertFalse(didSimulateReturn)
+        XCTAssertEqual(pasteboard.string(forType: .string), "Hello")
+    }
+
+    @MainActor
+    func testAutoEnterTriggersReturnWithFocusedTextField() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextFieldOverride = { true }
+        service.pasteSimulatorOverride = {}
+
+        var didSimulateReturn = false
+        service.returnSimulatorOverride = {
+            didSimulateReturn = true
+        }
+
+        _ = try await service.insertText("Hello", autoEnter: true)
+
+        XCTAssertTrue(didSimulateReturn)
+        XCTAssertEqual(pasteboard.string(forType: .string), "Hello")
+    }
+
+    @MainActor
     private static func makeAPIContext(appSupportDirectory: URL) -> APIContext {
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
 

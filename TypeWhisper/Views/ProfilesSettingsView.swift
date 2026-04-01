@@ -372,6 +372,11 @@ private struct ProfileEditorSheet: View {
                     Text(String(localized: "Format transcribed text for the target app. Auto-detect chooses the format based on the app's bundle ID. Requires app-aware formatting to be enabled in Recording settings."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
+
+                    Toggle(String(localized: "Auto Enter"), isOn: $viewModel.editorAutoEnterEnabled)
+                    Text(String(localized: "Automatically press Enter after inserting text. In chat apps this sends the message, in editors it adds a new line."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section(String(localized: "Priority")) {

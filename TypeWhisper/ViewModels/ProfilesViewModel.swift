@@ -43,6 +43,7 @@ final class ProfilesViewModel: ObservableObject {
     @Published var editorMemoryEnabled: Bool = false
     @Published var editorOutputFormat: String?
     @Published var editorInlineCommandsEnabled = false
+    @Published var editorAutoEnterEnabled = false
     @Published var editorHotkey: UnifiedHotkey?
     @Published var editorHotkeyLabel: String = ""
     @Published var editorPriority: Int = 0
@@ -96,6 +97,7 @@ final class ProfilesViewModel: ObservableObject {
             outputFormat: editorOutputFormat,
             hotkeyData: editorHotkey.flatMap { try? JSONEncoder().encode($0) },
             inlineCommandsEnabled: editorInlineCommandsEnabled,
+            autoEnterEnabled: editorAutoEnterEnabled,
             priority: editorPriority
         )
     }
@@ -114,6 +116,7 @@ final class ProfilesViewModel: ObservableObject {
             profile.memoryEnabled = editorMemoryEnabled
             profile.outputFormat = editorOutputFormat
             profile.inlineCommandsEnabled = editorInlineCommandsEnabled
+            profile.autoEnterEnabled = editorAutoEnterEnabled
             profile.hotkey = editorHotkey
             profile.priority = editorPriority
             profileService.updateProfile(profile)
@@ -147,6 +150,7 @@ final class ProfilesViewModel: ObservableObject {
         editorMemoryEnabled = false
         editorOutputFormat = nil
         editorInlineCommandsEnabled = false
+        editorAutoEnterEnabled = false
         editorHotkey = nil
         editorHotkeyLabel = ""
         editorPriority = 0
@@ -178,6 +182,7 @@ final class ProfilesViewModel: ObservableObject {
         editorMemoryEnabled = profile.memoryEnabled
         editorOutputFormat = profile.outputFormat
         editorInlineCommandsEnabled = profile.inlineCommandsEnabled
+        editorAutoEnterEnabled = profile.autoEnterEnabled
         editorHotkey = profile.hotkey
         editorHotkeyLabel = profile.hotkey.map { HotkeyService.displayName(for: $0) } ?? ""
         editorPriority = profile.priority

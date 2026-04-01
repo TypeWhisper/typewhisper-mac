@@ -19,6 +19,7 @@ final class Profile {
     var outputFormat: String?
     var hotkeyData: Data?
     var inlineCommandsEnabled: Bool
+    var autoEnterEnabled: Bool = false
     var createdAt: Date
     var updatedAt: Date
 
@@ -49,6 +50,7 @@ final class Profile {
         outputFormat: String? = nil,
         hotkeyData: Data? = nil,
         inlineCommandsEnabled: Bool = false,
+        autoEnterEnabled: Bool = false,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -68,6 +70,7 @@ final class Profile {
         self.outputFormat = outputFormat
         self.hotkeyData = hotkeyData
         self.inlineCommandsEnabled = inlineCommandsEnabled
+        self.autoEnterEnabled = autoEnterEnabled
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }

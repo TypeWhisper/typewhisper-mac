@@ -10,6 +10,11 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhis
 /// Inserts transcribed text into the active application via clipboard + simulated Cmd+V.
 @MainActor
 final class TextInsertionService {
+    var accessibilityGrantedOverride: Bool?
+    var pasteboardProvider: () -> NSPasteboard = { .general }
+    var focusedTextFieldOverride: (() -> Bool)?
+    var pasteSimulatorOverride: (() -> Void)?
+    var returnSimulatorOverride: (() -> Void)?
 
 enum InsertionResult {
         case pasted
@@ -30,7 +35,7 @@ enum InsertionResult {
     }
 
     var isAccessibilityGranted: Bool {
-        AXIsProcessTrusted()
+        accessibilityGrantedOverride ?? AXIsProcessTrusted()
     }
 
     func requestAccessibilityPermission() {
@@ -330,13 +335,18 @@ enum InsertionResult {
         )
     }
 
-    func insertText(_ text: String, preserveClipboard: Bool = false) async throws -> InsertionResult {
+    func insertText(
+        _ text: String,
+        preserveClipboard: Bool = false,
+        autoEnter: Bool = false
+    ) async throws -> InsertionResult {
         guard isAccessibilityGranted else {
             throw TextInsertionError.accessibilityNotGranted
         }
 
-        let pasteboard = NSPasteboard.general
-        let savedItems = preserveClipboard ? saveClipboard() : []
+        let hadFocusedTextField = autoEnter && hasFocusedTextField()
+        let pasteboard = pasteboardProvider()
+        let savedItems = preserveClipboard ? saveClipboard(from: pasteboard) : []
         let pasteVerificationState = preserveClipboard ? capturePasteVerificationState() : nil
 
         // Set transcribed text on clipboard and simulate Cmd+V.
@@ -348,8 +358,13 @@ enum InsertionResult {
         if preserveClipboard {
             try? await Task.sleep(for: .milliseconds(200))
             if let pasteVerificationState, canRestoreClipboard(afterPasteUsing: pasteVerificationState) {
-                restoreClipboard(savedItems)
+                restoreClipboard(savedItems, to: pasteboard)
             }
+        }
+
+        if hadFocusedTextField {
+            try? await Task.sleep(for: .milliseconds(50))
+            simulateReturn()
         }
 
         return .pasted
@@ -377,6 +392,9 @@ enum InsertionResult {
 
     /// Checks if the currently focused UI element is a text input field.
     func hasFocusedTextField() -> Bool {
+        if let focusedTextFieldOverride {
+            return focusedTextFieldOverride()
+        }
         guard isAccessibilityGranted else { return false }
 
         let systemWide = AXUIElementCreateSystemWide()
@@ -423,7 +441,26 @@ enum InsertionResult {
         return point
     }
 
+    func simulateReturn() {
+        if let returnSimulatorOverride {
+            returnSimulatorOverride()
+            return
+        }
+        let returnKeyCode: CGKeyCode = 0x24
+        let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: returnKeyCode, keyDown: true)
+        keyDown?.flags = []
+        keyDown?.post(tap: .cgSessionEventTap)
+
+        let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: returnKeyCode, keyDown: false)
+        keyUp?.flags = []
+        keyUp?.post(tap: .cgSessionEventTap)
+    }
+
     private func simulatePaste() {
+        if let pasteSimulatorOverride {
+            pasteSimulatorOverride()
+            return
+        }
         let vKeyCode = virtualKeyCode(for: "v") ?? 0x09 // Fallback to QWERTY
         // Use nil source + .cgSessionEventTap for App Sandbox compatibility
         let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: vKeyCode, keyDown: true)
