@@ -690,19 +690,21 @@ final class DictationViewModel: ObservableObject {
                     cloudModelOverride: cloudModelOverride
                 )
 
-                historyService.addRecord(
-                    rawText: result.text,
-                    finalText: text,
-                    appName: activeApp.name,
-                    appBundleIdentifier: activeApp.bundleId,
-                    appURL: activeApp.url,
-                    durationSeconds: audioDuration,
-                    language: language,
-                    engineUsed: result.engineUsed,
-                    modelUsed: modelDisplayName,
-                    audioSamples: audioSamplesForHistory,
-                    pipelineSteps: ppResult.appliedSteps.isEmpty ? nil : ppResult.appliedSteps
-                )
+                if UserDefaults.standard.object(forKey: UserDefaultsKeys.historyEnabled) as? Bool ?? true {
+                    historyService.addRecord(
+                        rawText: result.text,
+                        finalText: text,
+                        appName: activeApp.name,
+                        appBundleIdentifier: activeApp.bundleId,
+                        appURL: activeApp.url,
+                        durationSeconds: audioDuration,
+                        language: language,
+                        engineUsed: result.engineUsed,
+                        modelUsed: modelDisplayName,
+                        audioSamples: audioSamplesForHistory,
+                        pipelineSteps: ppResult.appliedSteps.isEmpty ? nil : ppResult.appliedSteps
+                    )
+                }
 
                 EventBus.shared.emit(.transcriptionCompleted(TranscriptionCompletedPayload(
                     rawText: result.text,

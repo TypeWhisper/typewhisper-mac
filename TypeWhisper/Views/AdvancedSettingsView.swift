@@ -11,6 +11,7 @@ struct AdvancedSettingsView: View {
     @State private var raycastInstalled = false
     @State private var showClearMemoryConfirmation = false
 
+    @AppStorage(UserDefaultsKeys.historyEnabled) private var historyEnabled: Bool = true
     @AppStorage(UserDefaultsKeys.historyRetentionDays) private var historyRetentionDays: Int = 0
     @AppStorage(UserDefaultsKeys.saveAudioWithHistory) private var saveAudioWithHistory: Bool = false
 
@@ -135,21 +136,28 @@ struct AdvancedSettingsView: View {
 
             // MARK: - History
             Section(String(localized: "History")) {
-                Toggle(String(localized: "Save audio with transcriptions"), isOn: $saveAudioWithHistory)
-                Text(String(localized: "Stores a WAV recording alongside each transcription. Uses approximately 1 MB per 30 seconds."))
+                Toggle(String(localized: "Save history"), isOn: $historyEnabled)
+                Text(String(localized: "Saves transcriptions to the history tab."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Picker(String(localized: "Auto-delete after"), selection: $historyRetentionDays) {
-                    Text(String(localized: "Unlimited")).tag(0)
-                    Text(String(localized: "30 days")).tag(30)
-                    Text(String(localized: "60 days")).tag(60)
-                    Text(String(localized: "90 days")).tag(90)
-                    Text(String(localized: "180 days")).tag(180)
+                if historyEnabled {
+                    Toggle(String(localized: "Save audio with transcriptions"), isOn: $saveAudioWithHistory)
+                    Text(String(localized: "Stores a WAV recording alongside each transcription. Uses approximately 1 MB per 30 seconds."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Picker(String(localized: "Auto-delete after"), selection: $historyRetentionDays) {
+                        Text(String(localized: "Unlimited")).tag(0)
+                        Text(String(localized: "30 days")).tag(30)
+                        Text(String(localized: "60 days")).tag(60)
+                        Text(String(localized: "90 days")).tag(90)
+                        Text(String(localized: "180 days")).tag(180)
+                    }
+                    Text(String(localized: "Older entries are automatically removed at app launch."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                Text(String(localized: "Older entries are automatically removed at app launch."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
             // MARK: - API Server
