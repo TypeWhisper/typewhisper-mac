@@ -4198,6 +4198,26 @@
         }
       }
     },
+    "Save history": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlauf speichern"
+          }
+        }
+      }
+    },
+    "Saves transcriptions to the history tab.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speichert Transkriptionen im Verlauf-Tab."
+          }
+        }
+      }
+    },
     "Save audio with transcriptions": {
       "localizations": {
         "de": {

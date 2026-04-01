@@ -51,6 +51,7 @@ enum UserDefaultsKeys {
     static let termPackRegistryLastUpdateCheck = "termPackRegistryLastUpdateCheck"
 
     // MARK: - History
+    static let historyEnabled = "historyEnabled"
     static let historyRetentionDays = "historyRetentionDays"
     static let saveAudioWithHistory = "saveAudioWithHistory"
 
