@@ -251,6 +251,8 @@
 		AA00000000000000000283 /* DictionaryExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000271 /* DictionaryExporter.swift */; };
 		AA00000000000000000284 /* TermPackRegistryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000272 /* TermPackRegistryService.swift */; };
 		AA00000000000000000285 /* MediaPlaybackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000273 /* MediaPlaybackService.swift */; };
+		AA00000000000000000286 /* MediaRemoteAdapter in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000040 /* MediaRemoteAdapter */; };
+		AA00000000000000000287 /* MediaRemoteAdapter in Embed Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000040 /* MediaRemoteAdapter */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		C7A3E9F1D5B2084A6E9C3D71 /* DictionaryExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8D4F2B6E1C3097B5F8A4E62 /* DictionaryExporterTests.swift */; };
 		AA00000000000000000275 /* ElevenLabsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000263 /* ElevenLabsPlugin.swift */; };
 		AA00000000000000000276 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000264 /* manifest.json */; };
@@ -303,6 +305,7 @@
 			dstSubfolderSpec = 10;
 			files = (
 				AA00000000000000000134 /* TypeWhisperPluginSDK in Embed Frameworks */,
+				AA00000000000000000287 /* MediaRemoteAdapter in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -583,6 +586,7 @@
 			files = (
 				AA00000000000000000071 /* Sparkle in Frameworks */,
 				AA00000000000000000128 /* TypeWhisperPluginSDK in Frameworks */,
+				AA00000000000000000286 /* MediaRemoteAdapter in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
