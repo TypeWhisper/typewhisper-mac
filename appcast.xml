@@ -5,6 +5,15 @@
     <language>en</language>
     <description>Stable, release candidate, and daily updates for TypeWhisper.</description>
     <item>
+      <title>Version 1.1.0-rc2</title>
+      <pubDate>Wed, 01 Apr 2026 10:13:18 +0000</pubDate>
+      <sparkle:version>434</sparkle:version>
+      <sparkle:shortVersionString>1.1.0-rc2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
+      <sparkle:channel>release-candidate</sparkle:channel>
+      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.1.0-rc2/TypeWhisper-v1.1.0-rc2.zip" sparkle:edSignature="5j2aIlwjH41RHXclKKokUuOiVdu/BE2uzaHeZJldxkPADm7kifKKNLHo86kWW9mJwWyK32Uw7Py8SisYYoE4BA==" length="8727960" type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.1.0-daily.20260401</title>
       <pubDate>Wed, 01 Apr 2026 09:44:30 +0000</pubDate>
       <sparkle:version>433</sparkle:version>
@@ -12,15 +21,6 @@
       <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
       <sparkle:channel>daily</sparkle:channel>
       <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.1.0-daily.20260401/TypeWhisper-v1.1.0-daily.20260401.zip" sparkle:edSignature="cHr/AxBMaNrpuZZl1AsUiIYkaoh8xvWgDEatNFCAXHE+WXCdC4DmbOsa+qbAzWZKvYdiMw5VU/s2ywhCdkhNAw==" length="8728061" type="application/octet-stream" />
-    </item>
-    <item>
-      <title>Version 1.1.0-rc1</title>
-      <pubDate>Mon, 30 Mar 2026 12:11:47 +0000</pubDate>
-      <sparkle:version>426</sparkle:version>
-      <sparkle:shortVersionString>1.1.0-rc1</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
-      <sparkle:channel>release-candidate</sparkle:channel>
-      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.1.0-rc1/TypeWhisper-v1.1.0-rc1.zip" sparkle:edSignature="j4pOvsmWzLrJ3AErvS+iK4JKCOgmpvxsLSZAMAr8H6BK34DEKIldGG0lkcZarux+WI4n3jEI/PJqJ76qNh+ODQ==" length="8435415" type="application/octet-stream" />
     </item>
     <item>
       <title>Version 1.0.0</title>
