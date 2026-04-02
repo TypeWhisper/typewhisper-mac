@@ -13,7 +13,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Validate and assemble termpacks.json
         run: python3 scripts/assemble_termpacks.py /tmp/termpacks.json
