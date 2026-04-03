@@ -258,6 +258,10 @@
 		AA00000000000000000289 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000275 /* manifest.json */; };
 		AA00000000000000000290 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000276 /* Localizable.xcstrings */; };
 		AA00000000000000000291 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000041 /* TypeWhisperPluginSDK */; };
+		AA00000000000000000292 /* SonioxPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000278 /* SonioxPlugin.swift */; };
+		AA00000000000000000293 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000279 /* manifest.json */; };
+		AA00000000000000000294 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000280 /* Localizable.xcstrings */; };
+		AA00000000000000000295 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000042 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000275 /* ElevenLabsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000263 /* ElevenLabsPlugin.swift */; };
 		AA00000000000000000276 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000264 /* manifest.json */; };
 		AA00000000000000000277 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000265 /* Localizable.xcstrings */; };
@@ -569,10 +573,10 @@
 		BB00000000000000000272 /* TermPackRegistryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TermPackRegistryService.swift; sourceTree = "<group>"; };
 		BB00000000000000000273 /* MediaPlaybackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPlaybackService.swift; sourceTree = "<group>"; };
 		A8D4F2B6E1C3097B5F8A4E62 /* DictionaryExporterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictionaryExporterTests.swift; sourceTree = "<group>"; };
-		BB00000000000000000274 /* SonioxPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonioxPlugin.swift; sourceTree = "<group>"; };
-		BB00000000000000000275 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
-		BB00000000000000000276 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
-		BB00000000000000000277 /* SonioxPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SonioxPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB00000000000000000278 /* SonioxPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonioxPlugin.swift; sourceTree = "<group>"; };
+		BB00000000000000000279 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		BB00000000000000000280 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		BB00000000000000000281 /* SonioxPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SonioxPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		01D368E23E2A0AB2390B34EA /* GoogleCloudSTTPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleCloudSTTPlugin.swift; sourceTree = "<group>"; };
 		1D584661B6B55F6329CB5FC4 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		5CA4DB761B06383B5B8CF082 /* GoogleCloudSTTPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GoogleCloudSTTPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -840,11 +844,11 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		FF00000000000000000144 /* Frameworks */ = {
+		FF00000000000000000148 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AA00000000000000000291 /* TypeWhisperPluginSDK in Frameworks */,
+				AA00000000000000000295 /* TypeWhisperPluginSDK in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -908,6 +912,7 @@
 				CC00000000000000000041 /* GladiaPlugin */,
 				CC00000000000000000040 /* ElevenLabsPlugin */,
 				CC00000000000000000091 /* OpenRouterPlugin */,
+				CC00000000000000000042 /* SonioxPlugin */,
 				CC00000000000000000025 /* TypeWhisperWidgetExtension */,
 				CC00000000000000000026 /* TypeWhisperWidgetShared */,
 				CC00000000000000000090 /* Products */,
@@ -1435,9 +1440,9 @@
 		CC00000000000000000042 /* SonioxPlugin */ = {
 			isa = PBXGroup;
 			children = (
-				BB00000000000000000274 /* SonioxPlugin.swift */,
-				BB00000000000000000275 /* manifest.json */,
-				BB00000000000000000276 /* Localizable.xcstrings */,
+				BB00000000000000000278 /* SonioxPlugin.swift */,
+				BB00000000000000000279 /* manifest.json */,
+				BB00000000000000000280 /* Localizable.xcstrings */,
 			);
 			name = SonioxPlugin;
 			path = Plugins/SonioxPlugin;
@@ -1484,6 +1489,7 @@
 				BB00000000000000000270 /* GladiaPlugin.bundle */,
 				BB00000000000000000266 /* ElevenLabsPlugin.bundle */,
 				BB00000000000000000277 /* OpenRouterPlugin.bundle */,
+				BB00000000000000000281 /* SonioxPlugin.bundle */,
 				BB00000000000000000188 /* TypeWhisperWidgetExtension.appex */,
 				5CA4DB761B06383B5B8CF082 /* GoogleCloudSTTPlugin.bundle */,
 				E6F8E5940EF4832A7B8D735D /* TypeWhisperTests.xctest */,
@@ -2125,13 +2131,13 @@
 			productReference = BB00000000000000000266 /* ElevenLabsPlugin.bundle */;
 			productType = "com.apple.product-type.bundle";
 		};
-		DD00000000000000000030 /* SonioxPlugin */ = {
+		DD00000000000000000031 /* SonioxPlugin */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = FF00000000000000000146 /* Build configuration list for PBXNativeTarget "SonioxPlugin" */;
+			buildConfigurationList = FF00000000000000000150 /* Build configuration list for PBXNativeTarget "SonioxPlugin" */;
 			buildPhases = (
-				FF00000000000000000143 /* Sources */,
-				FF00000000000000000144 /* Frameworks */,
-				FF00000000000000000145 /* Resources */,
+				FF00000000000000000147 /* Sources */,
+				FF00000000000000000148 /* Frameworks */,
+				FF00000000000000000149 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -2139,10 +2145,10 @@
 			);
 			name = SonioxPlugin;
 			packageProductDependencies = (
-				PP00000000000000000041 /* TypeWhisperPluginSDK */,
+				PP00000000000000000042 /* TypeWhisperPluginSDK */,
 			);
 			productName = SonioxPlugin;
-			productReference = BB00000000000000000277 /* SonioxPlugin.bundle */;
+			productReference = BB00000000000000000281 /* SonioxPlugin.bundle */;
 			productType = "com.apple.product-type.bundle";
 		};
 		F3E17BDD5CED7E75F4153E95 /* GoogleCloudSTTPlugin */ = {
@@ -2233,6 +2239,7 @@
 				DD00000000000000000029 /* GladiaPlugin */,
 				DD00000000000000000028 /* ElevenLabsPlugin */,
 				DD00000000000000000030 /* OpenRouterPlugin */,
+				DD00000000000000000031 /* SonioxPlugin */,
 				DD00000000000000000014 /* TypeWhisperWidgetExtension */,
 				40F22D3F350BA09ADEFBD2CB /* TypeWhisperTests */,
 				F3E17BDD5CED7E75F4153E95 /* GoogleCloudSTTPlugin */,
@@ -2508,12 +2515,12 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		FF00000000000000000145 /* Resources */ = {
+		FF00000000000000000149 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AA00000000000000000289 /* manifest.json in Resources */,
-				AA00000000000000000290 /* Localizable.xcstrings in Resources */,
+				AA00000000000000000293 /* manifest.json in Resources */,
+				AA00000000000000000294 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2881,11 +2888,11 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		FF00000000000000000143 /* Sources */ = {
+		FF00000000000000000147 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AA00000000000000000288 /* SonioxPlugin.swift in Sources */,
+				AA00000000000000000292 /* SonioxPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -4402,7 +4409,7 @@
 			};
 			name = Release;
 		};
-		XX00000000000000000119 /* Debug */ = {
+		XX00000000000000000121 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
@@ -4426,7 +4433,7 @@
 			};
 			name = Debug;
 		};
-		XX00000000000000000120 /* Release */ = {
+		XX00000000000000000122 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
@@ -4819,11 +4826,11 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		FF00000000000000000146 /* Build configuration list for PBXNativeTarget "SonioxPlugin" */ = {
+		FF00000000000000000150 /* Build configuration list for PBXNativeTarget "SonioxPlugin" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				XX00000000000000000119 /* Debug */,
-				XX00000000000000000120 /* Release */,
+				XX00000000000000000121 /* Debug */,
+				XX00000000000000000122 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -5062,7 +5069,7 @@
 			package = RR00000000000000000007 /* XCRemoteSwiftPackageReference "mediaremote-adapter" */;
 			productName = MediaRemoteAdapter;
 		};
-		PP00000000000000000041 /* TypeWhisperPluginSDK */ = {
+		PP00000000000000000042 /* TypeWhisperPluginSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TypeWhisperPluginSDK;
 		};
