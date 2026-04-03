@@ -254,6 +254,10 @@
 		AA00000000000000000286 /* MediaRemoteAdapter in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000040 /* MediaRemoteAdapter */; };
 		AA00000000000000000287 /* MediaRemoteAdapter in Embed Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000040 /* MediaRemoteAdapter */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		C7A3E9F1D5B2084A6E9C3D71 /* DictionaryExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8D4F2B6E1C3097B5F8A4E62 /* DictionaryExporterTests.swift */; };
+		AA00000000000000000288 /* SonioxPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000274 /* SonioxPlugin.swift */; };
+		AA00000000000000000289 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000275 /* manifest.json */; };
+		AA00000000000000000290 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000276 /* Localizable.xcstrings */; };
+		AA00000000000000000291 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000041 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000275 /* ElevenLabsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000263 /* ElevenLabsPlugin.swift */; };
 		AA00000000000000000276 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000264 /* manifest.json */; };
 		AA00000000000000000277 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000265 /* Localizable.xcstrings */; };
@@ -565,6 +569,10 @@
 		BB00000000000000000272 /* TermPackRegistryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TermPackRegistryService.swift; sourceTree = "<group>"; };
 		BB00000000000000000273 /* MediaPlaybackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPlaybackService.swift; sourceTree = "<group>"; };
 		A8D4F2B6E1C3097B5F8A4E62 /* DictionaryExporterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictionaryExporterTests.swift; sourceTree = "<group>"; };
+		BB00000000000000000274 /* SonioxPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonioxPlugin.swift; sourceTree = "<group>"; };
+		BB00000000000000000275 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		BB00000000000000000276 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		BB00000000000000000277 /* SonioxPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SonioxPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		01D368E23E2A0AB2390B34EA /* GoogleCloudSTTPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleCloudSTTPlugin.swift; sourceTree = "<group>"; };
 		1D584661B6B55F6329CB5FC4 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		5CA4DB761B06383B5B8CF082 /* GoogleCloudSTTPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GoogleCloudSTTPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -812,6 +820,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		FF00000000000000000144 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA00000000000000000291 /* TypeWhisperPluginSDK in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B44AC50D02E0B348403BEE41 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -879,6 +895,7 @@
 				CC00000000000000000039 /* ClaudePlugin */,
 				CC00000000000000000041 /* GladiaPlugin */,
 				CC00000000000000000040 /* ElevenLabsPlugin */,
+				CC00000000000000000042 /* SonioxPlugin */,
 				CC00000000000000000025 /* TypeWhisperWidgetExtension */,
 				CC00000000000000000026 /* TypeWhisperWidgetShared */,
 				CC00000000000000000090 /* Products */,
@@ -1392,6 +1409,17 @@
 			path = Plugins/ElevenLabsPlugin;
 			sourceTree = "<group>";
 		};
+		CC00000000000000000042 /* SonioxPlugin */ = {
+			isa = PBXGroup;
+			children = (
+				BB00000000000000000274 /* SonioxPlugin.swift */,
+				BB00000000000000000275 /* manifest.json */,
+				BB00000000000000000276 /* Localizable.xcstrings */,
+			);
+			name = SonioxPlugin;
+			path = Plugins/SonioxPlugin;
+			sourceTree = "<group>";
+		};
 		0C3F892FBBE11FA7B5924B24 /* GoogleCloudSTTPlugin */ = {
 			isa = PBXGroup;
 			children = (
@@ -1432,6 +1460,7 @@
 				BB00000000000000000262 /* ClaudePlugin.bundle */,
 				BB00000000000000000270 /* GladiaPlugin.bundle */,
 				BB00000000000000000266 /* ElevenLabsPlugin.bundle */,
+				BB00000000000000000277 /* SonioxPlugin.bundle */,
 				BB00000000000000000188 /* TypeWhisperWidgetExtension.appex */,
 				5CA4DB761B06383B5B8CF082 /* GoogleCloudSTTPlugin.bundle */,
 				E6F8E5940EF4832A7B8D735D /* TypeWhisperTests.xctest */,
@@ -2053,6 +2082,26 @@
 			productReference = BB00000000000000000266 /* ElevenLabsPlugin.bundle */;
 			productType = "com.apple.product-type.bundle";
 		};
+		DD00000000000000000030 /* SonioxPlugin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FF00000000000000000146 /* Build configuration list for PBXNativeTarget "SonioxPlugin" */;
+			buildPhases = (
+				FF00000000000000000143 /* Sources */,
+				FF00000000000000000144 /* Frameworks */,
+				FF00000000000000000145 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SonioxPlugin;
+			packageProductDependencies = (
+				PP00000000000000000041 /* TypeWhisperPluginSDK */,
+			);
+			productName = SonioxPlugin;
+			productReference = BB00000000000000000277 /* SonioxPlugin.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
 		F3E17BDD5CED7E75F4153E95 /* GoogleCloudSTTPlugin */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 7C80F8B2CDA6AFA512E7E2E3 /* Build configuration list for PBXNativeTarget "GoogleCloudSTTPlugin" */;
@@ -2140,6 +2189,7 @@
 				DD00000000000000000027 /* ClaudePlugin */,
 				DD00000000000000000029 /* GladiaPlugin */,
 				DD00000000000000000028 /* ElevenLabsPlugin */,
+				DD00000000000000000030 /* SonioxPlugin */,
 				DD00000000000000000014 /* TypeWhisperWidgetExtension */,
 				40F22D3F350BA09ADEFBD2CB /* TypeWhisperTests */,
 				F3E17BDD5CED7E75F4153E95 /* GoogleCloudSTTPlugin */,
@@ -2395,6 +2445,15 @@
 			files = (
 				AA00000000000000000276 /* manifest.json in Resources */,
 				AA00000000000000000277 /* Localizable.xcstrings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FF00000000000000000145 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA00000000000000000289 /* manifest.json in Resources */,
+				AA00000000000000000290 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2767,6 +2826,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000275 /* ElevenLabsPlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FF00000000000000000143 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA00000000000000000288 /* SonioxPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -4275,6 +4342,54 @@
 			};
 			name = Release;
 		};
+		XX00000000000000000119 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Soniox;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = SonioxPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.soniox;
+				PRODUCT_NAME = SonioxPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
+		XX00000000000000000120 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Soniox;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = SonioxPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.soniox;
+				PRODUCT_NAME = SonioxPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
 		31C90797268650EB47DEEB4B /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -4596,6 +4711,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		FF00000000000000000146 /* Build configuration list for PBXNativeTarget "SonioxPlugin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				XX00000000000000000119 /* Debug */,
+				XX00000000000000000120 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		7C80F8B2CDA6AFA512E7E2E3 /* Build configuration list for PBXNativeTarget "GoogleCloudSTTPlugin" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -4809,6 +4933,10 @@
 			productName = TypeWhisperPluginSDK;
 		};
 		PP00000000000000000038 /* TypeWhisperPluginSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TypeWhisperPluginSDK;
+		};
+		PP00000000000000000041 /* TypeWhisperPluginSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TypeWhisperPluginSDK;
 		};
