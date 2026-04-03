@@ -54,6 +54,7 @@ jobs:
             elevenlabs) TARGET="ElevenLabsPlugin" ;;
             claude) TARGET="ClaudePlugin" ;;
             cerebras) TARGET="CerebrasPlugin" ;;
+            openrouter) TARGET="OpenRouterPlugin" ;;
             *) echo "Unknown plugin: $PLUGIN_NAME" && exit 1 ;;
           esac
           # Set deployment target and Swift embedding per plugin

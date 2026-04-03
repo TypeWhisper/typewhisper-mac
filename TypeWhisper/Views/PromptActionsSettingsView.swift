@@ -98,11 +98,6 @@ struct PromptActionsSettingsView: View {
                             Text(provider.displayName).tag(provider.id)
                         }
                     }
-                    .onChange(of: processingService.selectedProviderId) { _, newId in
-                        // Reset cloud model when switching providers
-                        let models = processingService.modelsForProvider(newId)
-                        processingService.selectedCloudModel = models.first?.id ?? ""
-                    }
 
                     ProviderStatusView(
                         providerId: processingService.selectedProviderId,
@@ -230,17 +225,60 @@ struct ProviderStatusView: View {
                     .foregroundStyle(.orange)
             }
 
-            let models = processingService.modelsForProvider(providerId)
-            if let cloudModel, !models.isEmpty {
-                Picker(String(localized: "Model"), selection: cloudModel) {
-                    ForEach(models, id: \.id) { model in
-                        Text(model.displayName).tag(model.id)
+            if let plugin = PluginManager.shared.llmProvider(for: providerId) {
+                if let modelId = (plugin as? LLMModelSelectable)?.preferredModelId as? String {
+                    // Plugin manages its own model selection - just show info
+                    let displayName = plugin.supportedModels.first(where: { $0.id == modelId })?.displayName ?? modelId
+                    HStack(spacing: 4) {
+                        Text(String(localized: "Model:"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(displayName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else if let cloudModel {
+                    // Plugin without LLMModelSelectable - show picker as before
+                    let models = plugin.supportedModels
+                    if !models.isEmpty {
+                        ModelPickerView(models: models, selection: cloudModel)
                     }
                 }
-                .onAppear {
-                    if cloudModel.wrappedValue.isEmpty || !models.contains(where: { $0.id == cloudModel.wrappedValue }) {
-                        cloudModel.wrappedValue = models.first?.id ?? ""
-                    }
+            }
+        }
+    }
+}
+
+// MARK: - Model Picker with Search
+
+struct ModelPickerView: View {
+    let models: [PluginModelInfo]
+    @Binding var selection: String
+    @State private var searchText = ""
+
+    private var filteredModels: [PluginModelInfo] {
+        if searchText.isEmpty { return models }
+        let query = searchText.lowercased()
+        return models.filter {
+            $0.displayName.lowercased().contains(query) || $0.id.lowercased().contains(query)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if models.count > 20 {
+                TextField(String(localized: "Search models..."), text: $searchText)
+                    .textFieldStyle(.roundedBorder)
+                    .controlSize(.small)
+            }
+            Picker(String(localized: "Model"), selection: $selection) {
+                ForEach(filteredModels, id: \.id) { model in
+                    Text(model.displayName).tag(model.id)
+                }
+            }
+            .onAppear {
+                if selection.isEmpty || !models.contains(where: { $0.id == selection }) {
+                    selection = models.first?.id ?? ""
                 }
             }
         }

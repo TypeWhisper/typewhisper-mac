@@ -101,7 +101,8 @@ class PromptProcessingService: ObservableObject {
         // Validate cloud model against available models for the selected provider
         let models = modelsForProvider(selectedProviderId)
         if !models.isEmpty && !models.contains(where: { $0.id == selectedCloudModel }) {
-            selectedCloudModel = models.first?.id ?? ""
+            let pluginPreferred = (PluginManager.shared.llmProvider(for: selectedProviderId) as? LLMModelSelectable)?.preferredModelId as? String
+            selectedCloudModel = pluginPreferred ?? models.first?.id ?? ""
         }
     }
 
@@ -135,12 +136,13 @@ class PromptProcessingService: ObservableObject {
             throw LLMError.noApiKey
         }
 
-        let model = cloudModelOverride ?? selectedCloudModel
+        let preferred = (plugin as? LLMModelSelectable)?.preferredModelId as? String
+        let model = cloudModelOverride ?? preferred ?? (selectedCloudModel.isEmpty ? nil : selectedCloudModel)
         logger.info("Processing prompt with plugin \(effectiveId)")
         let result = try await plugin.process(
             systemPrompt: effectivePrompt,
             userText: text,
-            model: model.isEmpty ? nil : model
+            model: model
         )
         logger.info("Prompt processing complete, result length: \(result.count)")
         return result

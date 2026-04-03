@@ -75,6 +75,12 @@ public protocol LLMProviderPlugin: TypeWhisperPlugin {
     func process(systemPrompt: String, userText: String, model: String?) async throws -> String
 }
 
+/// Optional protocol for LLM plugins that expose their selected model.
+/// Kept separate from LLMProviderPlugin to preserve binary compatibility with existing plugins.
+@objc public protocol LLMModelSelectable {
+    @objc optional var preferredModelId: String? { get }
+}
+
 // MARK: - Post-Processor Plugin
 
 public struct PostProcessingContext: Sendable {
