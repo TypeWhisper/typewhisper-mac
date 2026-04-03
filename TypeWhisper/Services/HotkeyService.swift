@@ -9,6 +9,8 @@ struct UnifiedHotkey: Equatable, Sendable, Codable {
     let modifierFlags: UInt
     let isFn: Bool
     let isDoubleTap: Bool
+    /// nil = keyboard hotkey; 0..N = mouse button number (macOS convention: 2=middle, 3=back, 4=forward)
+    let mouseButton: UInt16?
 
     /// Sentinel keyCode for modifier-only combos (e.g. CMD+OPT).
     /// 0x00 is the "A" key, so we use 0xFFFF which is not a real keyCode.
@@ -20,9 +22,11 @@ struct UnifiedHotkey: Equatable, Sendable, Codable {
         case modifierCombo
         case keyWithModifiers
         case bareKey
+        case mouseButton
     }
 
     var kind: Kind {
+        if mouseButton != nil { return .mouseButton }
         if isFn { return .fn }
         if modifierFlags == 0 && HotkeyService.modifierKeyCodes.contains(keyCode) { return .modifierOnly }
         if keyCode == Self.modifierComboKeyCode && modifierFlags != 0 { return .modifierCombo }
@@ -35,15 +39,25 @@ struct UnifiedHotkey: Equatable, Sendable, Codable {
         self.modifierFlags = modifierFlags
         self.isFn = isFn
         self.isDoubleTap = isDoubleTap
+        self.mouseButton = nil
     }
 
-    // Backward-compatible decoding: old hotkeys without isDoubleTap decode as single-tap
+    init(mouseButton: UInt16, isDoubleTap: Bool = false) {
+        self.keyCode = 0
+        self.modifierFlags = 0
+        self.isFn = false
+        self.isDoubleTap = isDoubleTap
+        self.mouseButton = mouseButton
+    }
+
+    // Backward-compatible decoding: old hotkeys without isDoubleTap/mouseButton decode correctly
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         keyCode = try container.decode(UInt16.self, forKey: .keyCode)
         modifierFlags = try container.decode(UInt.self, forKey: .modifierFlags)
         isFn = try container.decode(Bool.self, forKey: .isFn)
         isDoubleTap = try container.decodeIfPresent(Bool.self, forKey: .isDoubleTap) ?? false
+        mouseButton = try container.decodeIfPresent(UInt16.self, forKey: .mouseButton)
     }
 }
 
@@ -97,6 +111,7 @@ final class HotkeyService: ObservableObject {
         var fnComboKeyPressed = false
         var modifierWasDown = false
         var keyWasDown = false
+        var mouseButtonWasDown = false
         // Double-tap tracking
         var lastTapUpTime: Date?
         var tapCount: Int = 0 // 0=idle, 1=first tap released, 2=second tap active
@@ -118,6 +133,7 @@ final class HotkeyService: ObservableObject {
         var fnComboKeyPressed = false
         var modifierWasDown = false
         var keyWasDown = false
+        var mouseButtonWasDown = false
         // Double-tap tracking
         var lastTapUpTime: Date?
         var tapCount: Int = 0
@@ -172,6 +188,7 @@ final class HotkeyService: ObservableObject {
             if existing.keyCode == hotkey.keyCode
                 && existing.modifierFlags == hotkey.modifierFlags
                 && existing.isFn == hotkey.isFn
+                && existing.mouseButton == hotkey.mouseButton
                 && existing.isDoubleTap != hotkey.isDoubleTap {
                 return slotType
             }
@@ -210,6 +227,7 @@ final class HotkeyService: ObservableObject {
             if state.hotkey.keyCode == hotkey.keyCode
                 && state.hotkey.modifierFlags == hotkey.modifierFlags
                 && state.hotkey.isFn == hotkey.isFn
+                && state.hotkey.mouseButton == hotkey.mouseButton
                 && state.hotkey.isDoubleTap != hotkey.isDoubleTap {
                 return id
             }
@@ -224,6 +242,7 @@ final class HotkeyService: ObservableObject {
             if existing.keyCode == hotkey.keyCode
                 && existing.modifierFlags == hotkey.modifierFlags
                 && existing.isFn == hotkey.isFn
+                && existing.mouseButton == hotkey.mouseButton
                 && existing.isDoubleTap != hotkey.isDoubleTap {
                 return slotType
             }
@@ -254,13 +273,13 @@ final class HotkeyService: ObservableObject {
 
         // Fallback: NSEvent monitors (no event suppression)
         logger.info("CGEventTap unavailable, falling back to NSEvent monitors (hotkey events will pass through)")
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged, .keyDown, .keyUp]) { [weak self] event in
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged, .keyDown, .keyUp, .otherMouseDown, .otherMouseUp]) { [weak self] event in
             Task { @MainActor [weak self] in
                 self?.handleEvent(event)
             }
         }
 
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown, .keyUp]) { [weak self] event in
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown, .keyUp, .otherMouseDown, .otherMouseUp]) { [weak self] event in
             Task { @MainActor [weak self] in
                 self?.handleEvent(event)
             }
@@ -303,6 +322,8 @@ final class HotkeyService: ObservableObject {
         let eventMask: CGEventMask = (1 << CGEventType.keyDown.rawValue)
             | (1 << CGEventType.keyUp.rawValue)
             | (1 << CGEventType.flagsChanged.rawValue)
+            | (1 << CGEventType.otherMouseDown.rawValue)
+            | (1 << CGEventType.otherMouseUp.rawValue)
 
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
 
@@ -386,12 +407,14 @@ final class HotkeyService: ObservableObject {
             var state = SlotState(hotkey: pState.hotkey, fnWasDown: pState.fnWasDown,
                                   fnComboKeyPressed: pState.fnComboKeyPressed,
                                   modifierWasDown: pState.modifierWasDown, keyWasDown: pState.keyWasDown,
+                                  mouseButtonWasDown: pState.mouseButtonWasDown,
                                   lastTapUpTime: pState.lastTapUpTime, tapCount: pState.tapCount)
             let (keyDown, keyUp, isMatch) = processKeyEvent(event, hotkey: pState.hotkey, state: &state)
             pState.fnWasDown = state.fnWasDown
             pState.fnComboKeyPressed = state.fnComboKeyPressed
             pState.modifierWasDown = state.modifierWasDown
             pState.keyWasDown = state.keyWasDown
+            pState.mouseButtonWasDown = state.mouseButtonWasDown
             pState.lastTapUpTime = state.lastTapUpTime
             pState.tapCount = state.tapCount
             profileSlots[profileId] = pState
@@ -430,12 +453,14 @@ final class HotkeyService: ObservableObject {
             var state = SlotState(hotkey: pState.hotkey, fnWasDown: pState.fnWasDown,
                                   fnComboKeyPressed: pState.fnComboKeyPressed,
                                   modifierWasDown: pState.modifierWasDown, keyWasDown: pState.keyWasDown,
+                                  mouseButtonWasDown: pState.mouseButtonWasDown,
                                   lastTapUpTime: pState.lastTapUpTime, tapCount: pState.tapCount)
             let (keyDown, keyUp, _) = processKeyEvent(event, hotkey: pState.hotkey, state: &state)
             pState.fnWasDown = state.fnWasDown
             pState.fnComboKeyPressed = state.fnComboKeyPressed
             pState.modifierWasDown = state.modifierWasDown
             pState.keyWasDown = state.keyWasDown
+            pState.mouseButtonWasDown = state.mouseButtonWasDown
             pState.lastTapUpTime = state.lastTapUpTime
             pState.tapCount = state.tapCount
             profileSlots[profileId] = pState
@@ -455,6 +480,47 @@ final class HotkeyService: ObservableObject {
     /// Processes a key event against a hotkey, updating state booleans.
     /// Returns (keyDown, keyUp, shouldSuppress) flags.
     private func processKeyEvent(_ event: NSEvent, hotkey: UnifiedHotkey, state: inout SlotState) -> (keyDown: Bool, keyUp: Bool, shouldSuppress: Bool) {
+        // Mouse button hotkeys - self-contained path (no modifier interplay)
+        if hotkey.kind == .mouseButton {
+            guard event.type == .otherMouseDown || event.type == .otherMouseUp else {
+                return (false, false, false)
+            }
+            guard let button = hotkey.mouseButton, event.buttonNumber == Int(button) else {
+                return (false, false, false)
+            }
+
+            let isDown = event.type == .otherMouseDown
+            let wasDown = state.mouseButtonWasDown
+
+            if isDown && !wasDown {
+                state.mouseButtonWasDown = true
+                guard hotkey.isDoubleTap else { return (true, false, true) }
+                if state.tapCount == 1,
+                   let lastUp = state.lastTapUpTime,
+                   Date().timeIntervalSince(lastUp) < Self.doubleTapThreshold {
+                    state.tapCount = 2
+                    state.lastTapUpTime = nil
+                    return (true, false, true)
+                } else {
+                    state.tapCount = 0
+                    state.lastTapUpTime = nil
+                    return (false, false, true)
+                }
+            } else if !isDown && wasDown {
+                state.mouseButtonWasDown = false
+                guard hotkey.isDoubleTap else { return (false, true, true) }
+                if state.tapCount == 2 {
+                    state.tapCount = 0
+                    return (false, true, true)
+                } else {
+                    state.tapCount = 1
+                    state.lastTapUpTime = Date()
+                    return (false, false, true)
+                }
+            }
+            return (false, false, false)
+        }
+
         // Fn hotkeys fire on release to avoid conflicts with Fn+key combos
         // (e.g. Fn+Backspace = forward delete, Fn+Arrow = page navigation)
         if hotkey.kind == .fn {
@@ -503,6 +569,7 @@ final class HotkeyService: ObservableObject {
             case .fn: state.fnWasDown = value
             case .modifierOnly, .modifierCombo: state.modifierWasDown = value
             case .keyWithModifiers, .bareKey: state.keyWasDown = value
+            case .mouseButton: state.mouseButtonWasDown = value
             }
         }
 
@@ -623,6 +690,9 @@ final class HotkeyService: ObservableObject {
             if event.type == .keyUp {
                 return .up
             }
+
+        case .mouseButton:
+            return .none // Handled directly in processKeyEvent
         }
         return .none
     }
@@ -722,6 +792,10 @@ final class HotkeyService: ObservableObject {
     // MARK: - Display Name
 
     nonisolated static func displayName(for hotkey: UnifiedHotkey) -> String {
+        if let button = hotkey.mouseButton {
+            let baseName = mouseButtonName(for: button)
+            return hotkey.isDoubleTap ? "\(baseName) x2" : baseName
+        }
         if hotkey.isFn { return hotkey.isDoubleTap ? "Fn x2" : "Fn" }
 
         var parts: [String] = []
@@ -817,6 +891,15 @@ final class HotkeyService: ObservableObject {
             return nil
         }
         return result
+    }
+
+    nonisolated static func mouseButtonName(for button: UInt16) -> String {
+        switch button {
+        case 2: return String(localized: "Middle Click")
+        case 3: return String(localized: "Mouse Button 4")
+        case 4: return String(localized: "Mouse Button 5")
+        default: return String(localized: "Mouse Button \(button + 1)")
+        }
     }
 
     // MARK: - Helpers

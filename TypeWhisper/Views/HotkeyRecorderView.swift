@@ -40,7 +40,7 @@ struct HotkeyRecorderView: View {
                             .foregroundStyle(.orange)
                     } else {
                         Text(pendingModifierString.isEmpty
-                            ? String(localized: "Press a key…")
+                            ? String(localized: "Press a key or mouse button…")
                             : pendingModifierString)
                             .foregroundStyle(.orange)
                     }
@@ -103,13 +103,13 @@ struct HotkeyRecorderView: View {
         ServiceContainer.shared.hotkeyService.suspendMonitoring()
 
         // Local monitor - can swallow events (return nil)
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged, .otherMouseDown]) { event in
             let handled = handleRecorderEvent(event)
             return handled ? nil : event
         }
 
         // Global monitor - captures events intercepted by macOS (e.g. Ctrl+Space for input switching)
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown, .flagsChanged, .otherMouseDown]) { event in
             handleRecorderEvent(event)
         }
     }
@@ -179,6 +179,39 @@ struct HotkeyRecorderView: View {
             }
 
             pendingModifiers = current
+            return true
+        }
+
+        if event.type == .otherMouseDown {
+            modifierReleaseTimer?.cancel()
+            modifierReleaseTimer = nil
+
+            let buttonNumber = UInt16(event.buttonNumber)
+            let candidate = UnifiedHotkey(mouseButton: buttonNumber)
+
+            // Double-tap detection for mouse buttons
+            if let firstTap = firstTapHotkey, firstTap == candidate {
+                doubleTapTimer?.cancel()
+                doubleTapTimer = nil
+                let doubleTapHotkey = UnifiedHotkey(mouseButton: buttonNumber, isDoubleTap: true)
+                let work = DispatchWorkItem { [self] in
+                    finishRecording(doubleTapHotkey)
+                }
+                modifierReleaseTimer = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: work)
+            } else {
+                doubleTapTimer?.cancel()
+                firstTapHotkey = candidate
+                firstTapDisplayName = HotkeyService.displayName(for: candidate)
+                let singleTapHotkey = candidate
+                let work = DispatchWorkItem { [self] in
+                    firstTapHotkey = nil
+                    firstTapDisplayName = nil
+                    finishRecording(singleTapHotkey)
+                }
+                doubleTapTimer = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
+            }
             return true
         }
 
