@@ -2940,16 +2940,6 @@
         }
       }
     },
-    "Original": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Original"
-          }
-        }
-      }
-    },
     "Open an engine's settings to download a model.": {
       "comment": "A description below the list of transcription engines, explaining that users can open an engine's settings to download a model.",
       "extractionState": "stale",
@@ -6062,16 +6052,6 @@
         }
       }
     },
-    "Processed": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Verarbeitet"
-          }
-        }
-      }
-    },
     "Error: %@": {},
     "Show terms for %@": {},
     "Pending": {
@@ -6382,6 +6362,76 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pausiert automatisch Musik und Videos während der Aufnahme und setzt die Wiedergabe fort, wenn fertig. Verwendet macOS-Systemsteuerung - funktioniert möglicherweise nicht mit allen Apps."
+          }
+        }
+      }
+    },
+    "Compare": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vergleich"
+          }
+        }
+      }
+    },
+    "Original Transcription": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Originale Transkription"
+          }
+        }
+      }
+    },
+    "AI Processed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "KI-verarbeitet"
+          }
+        }
+      }
+    },
+    "AI enhanced": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "KI-verarbeitet"
+          }
+        }
+      }
+    },
+    "Copy original": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Original kopieren"
+          }
+        }
+      }
+    },
+    "Copy processed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verarbeitet kopieren"
+          }
+        }
+      }
+    },
+    "Diff": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diff"
           }
         }
       }
