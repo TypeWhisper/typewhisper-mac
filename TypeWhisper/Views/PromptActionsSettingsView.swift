@@ -603,6 +603,10 @@ private struct OpenHandCursorView: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {}
 
     class CursorView: NSView {
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            return nil
+        }
+
         override func resetCursorRects() {
             addCursorRect(bounds, cursor: .openHand)
         }
