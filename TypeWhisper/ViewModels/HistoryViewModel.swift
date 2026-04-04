@@ -57,7 +57,7 @@ struct AppEntry: Identifiable, Hashable {
 }
 
 enum HistoryDetailViewMode: Int {
-    case processed, diff, original
+    case compare, diff
 }
 
 // MARK: - ViewModel
@@ -79,7 +79,7 @@ final class HistoryViewModel: ObservableObject {
     @Published var editedText: String = ""
     @Published var correctionSuggestions: [CorrectionSuggestion] = []
     @Published var showCorrectionBanner: Bool = false
-    @Published var detailViewMode: HistoryDetailViewMode = .processed
+    @Published var detailViewMode: HistoryDetailViewMode = .compare
 
     let audioPlaybackService = AudioPlaybackService()
 
@@ -160,7 +160,7 @@ final class HistoryViewModel: ObservableObject {
 
     func selectRecord(_ record: TranscriptionRecord?) {
         cancelEditing()
-        detailViewMode = .processed
+        detailViewMode = .compare
         audioPlaybackService.stop()
         if let record {
             selectedRecordIDs = [record.id]
@@ -171,7 +171,7 @@ final class HistoryViewModel: ObservableObject {
 
     func startEditing() {
         guard let record = selectedRecord else { return }
-        detailViewMode = .processed
+        detailViewMode = .compare
         editedText = record.finalText
         isEditing = true
         showCorrectionBanner = false
@@ -189,7 +189,7 @@ final class HistoryViewModel: ObservableObject {
         }
 
         historyService.updateRecord(record, finalText: newText)
-        detailViewMode = .processed
+        detailViewMode = .compare
         isEditing = false
 
         let suggestions = textDiffService.extractCorrections(original: originalText, edited: newText)
