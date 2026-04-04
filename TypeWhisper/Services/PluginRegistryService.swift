@@ -63,6 +63,7 @@ struct RegistryPlugin: Codable, Identifiable {
     let iconSystemName: String?
     let requiresAPIKey: Bool?
     let descriptions: [String: String]?
+    let downloadCount: Int?
 
     var localizedDescription: String {
         if let descriptions,
@@ -369,6 +370,17 @@ final class PluginRegistryService: ObservableObject {
         formatter.allowedUnits = [.useMB, .useGB]
         formatter.countStyle = .file
         return formatter.string(fromByteCount: bytes)
+    }
+
+    static func formattedDownloadCount(_ count: Int) -> String {
+        if count >= 1000 {
+            let k = Double(count) / 1000.0
+            if k.truncatingRemainder(dividingBy: 1) == 0 {
+                return "\(Int(k))K"
+            }
+            return String(format: "%.1fK", k)
+        }
+        return "\(count)"
     }
 }
 
