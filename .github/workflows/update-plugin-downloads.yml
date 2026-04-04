@@ -1,0 +1,91 @@
+name: Update Plugin Download Counts
+
+on:
+  schedule:
+    - cron: '30 5 * * *' # Daily at 05:30 UTC
+  workflow_dispatch:
+
+jobs:
+  update-counts:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Fetch download counts from GitHub Releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api repos/TypeWhisper/typewhisper-mac/releases --paginate > /tmp/releases.json
+
+      - name: Update plugins.json on gh-pages
+        run: |
+          git fetch origin gh-pages
+          git worktree add -B gh-pages /tmp/gh-pages origin/gh-pages
+
+          update_registry() {
+            cd /tmp/gh-pages
+            git fetch origin gh-pages
+            git reset --hard origin/gh-pages
+
+            python3 << 'PYEOF'
+          import json, re
+
+          with open("/tmp/releases.json") as f:
+              releases = json.load(f)
+
+          # Sum download counts per plugin across all versions
+          counts = {}
+          for release in releases:
+              tag = release.get("tag_name", "")
+              m = re.match(r"^plugin-(.+)-v\d", tag)
+              if not m:
+                  continue
+              plugin_name = m.group(1)
+              for asset in release.get("assets", []):
+                  counts[plugin_name] = counts.get(plugin_name, 0) + asset.get("download_count", 0)
+
+          with open("/tmp/gh-pages/plugins.json") as f:
+              registry = json.load(f)
+
+          changed = False
+          for plugin in registry["plugins"]:
+              pid = plugin["id"]  # e.g. "com.typewhisper.qwen3"
+              for name, count in counts.items():
+                  if name in pid:
+                      old = plugin.get("downloadCount", 0)
+                      if old != count:
+                          plugin["downloadCount"] = count
+                          changed = True
+                          print(f"{pid}: {old} -> {count}")
+                      break
+
+          if changed:
+              with open("/tmp/gh-pages/plugins.json", "w") as f:
+                  json.dump(registry, f, indent=2)
+                  f.write("\n")
+              print("plugins.json updated")
+          else:
+              print("No changes needed")
+          PYEOF
+
+            git add plugins.json
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git diff --cached --quiet || git commit -m "Update plugin download counts"
+            git push origin gh-pages
+          }
+
+          for i in 1 2 3 4 5; do
+            if update_registry; then
+              echo "Successfully updated plugins.json (attempt $i)"
+              break
+            fi
+            if [ "$i" -eq 5 ]; then
+              echo "Failed to update plugins.json after 5 attempts"
+              exit 1
+            fi
+            echo "Attempt $i failed, retrying..."
+            sleep 2
+          done
