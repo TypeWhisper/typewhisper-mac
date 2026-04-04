@@ -56,6 +56,7 @@ jobs:
             cerebras) TARGET="CerebrasPlugin" ;;
             openrouter) TARGET="OpenRouterPlugin" ;;
             soniox) TARGET="SonioxPlugin" ;;
+            cohere) TARGET="CoherePlugin" ;;
             *) echo "Unknown plugin: $PLUGIN_NAME" && exit 1 ;;
           esac
           # Set deployment target and Swift embedding per plugin
