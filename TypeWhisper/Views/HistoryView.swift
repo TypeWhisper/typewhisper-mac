@@ -304,6 +304,13 @@ private struct RecordRow: View {
                         .foregroundStyle(.tertiary)
                 }
 
+                if record.wasPostProcessed {
+                    Image(systemName: "sparkles")
+                        .font(.caption2)
+                        .foregroundStyle(.purple.opacity(0.7))
+                        .help(String(localized: "AI enhanced"))
+                }
+
                 Spacer()
 
                 Text(formatDuration(record.durationSeconds))
@@ -434,12 +441,11 @@ private struct RecordDetailView: View {
                 .padding(.top, 8)
             }
 
-            // Raw/Processed/Diff toggle
+            // Compare/Diff toggle
             if record.wasPostProcessed && !viewModel.isEditing {
                 Picker("", selection: $viewModel.detailViewMode) {
-                    Text(String(localized: "Processed")).tag(HistoryDetailViewMode.processed)
+                    Text(String(localized: "Compare")).tag(HistoryDetailViewMode.compare)
                     Text(String(localized: "Diff")).tag(HistoryDetailViewMode.diff)
-                    Text(String(localized: "Original")).tag(HistoryDetailViewMode.original)
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal, 10)
@@ -454,20 +460,70 @@ private struct RecordDetailView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    Group {
-                        switch viewModel.detailViewMode {
-                        case .diff where record.wasPostProcessed:
-                            Text(diffAttributedString(segments: viewModel.diffSegments(for: record)))
-                        case .original where record.wasPostProcessed:
-                            Text(record.rawText)
-                        default:
-                            Text(record.finalText)
+                    if viewModel.detailViewMode == .compare && record.wasPostProcessed {
+                        VStack(alignment: .leading, spacing: 0) {
+                            // Original STT section
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Label(String(localized: "Original Transcription"), systemImage: "waveform")
+                                        .font(.caption.bold())
+                                        .foregroundStyle(.secondary)
+                                    Spacer()
+                                    Button {
+                                        viewModel.copyToClipboard(record.rawText)
+                                    } label: {
+                                        Image(systemName: "doc.on.doc")
+                                            .font(.caption2)
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .help(String(localized: "Copy original"))
+                                }
+                                Text(record.rawText)
+                                    .textSelection(.enabled)
+                                    .font(.body)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .padding(10)
+
+                            Divider()
+                                .padding(.horizontal, 10)
+
+                            // AI Processed section
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Label(String(localized: "AI Processed"), systemImage: "sparkles")
+                                        .font(.caption.bold())
+                                        .foregroundStyle(.secondary)
+                                    Spacer()
+                                    Button {
+                                        viewModel.copyToClipboard(record.finalText)
+                                    } label: {
+                                        Image(systemName: "doc.on.doc")
+                                            .font(.caption2)
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .help(String(localized: "Copy processed"))
+                                }
+                                Text(record.finalText)
+                                    .textSelection(.enabled)
+                                    .font(.body)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .padding(10)
                         }
+                    } else if viewModel.detailViewMode == .diff && record.wasPostProcessed {
+                        Text(diffAttributedString(segments: viewModel.diffSegments(for: record)))
+                            .textSelection(.enabled)
+                            .font(.body)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(10)
+                    } else {
+                        Text(record.finalText)
+                            .textSelection(.enabled)
+                            .font(.body)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(10)
                     }
-                    .textSelection(.enabled)
-                    .font(.body)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(10)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -475,7 +531,7 @@ private struct RecordDetailView: View {
         .onChange(of: record.id) {
             viewModel.cancelEditing()
             viewModel.audioPlaybackService.stop()
-            viewModel.detailViewMode = .processed
+            viewModel.detailViewMode = .compare
         }
     }
 
@@ -494,9 +550,7 @@ private struct RecordDetailView: View {
                 .controlSize(.small)
             } else {
                 Button {
-                    let text = viewModel.detailViewMode == .original && record.wasPostProcessed
-                        ? record.rawText : record.finalText
-                    viewModel.copyToClipboard(text)
+                    viewModel.copyToClipboard(record.finalText)
                 } label: {
                     Image(systemName: "doc.on.doc")
                 }
