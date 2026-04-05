@@ -154,6 +154,13 @@ private struct SettingsExtraTabs: TabContent {
             PluginSettingsView()
         }
         .badge(self.pluginUpdatesBadge)
+        SettingsBottomTabs()
+    }
+}
+
+@available(macOS 15, *)
+private struct SettingsBottomTabs: TabContent {
+    var body: some TabContent<SettingsTab> {
         Tab(String(localized: "Advanced"), systemImage: "gearshape.2", value: SettingsTab.advanced) {
             AdvancedSettingsView()
         }
