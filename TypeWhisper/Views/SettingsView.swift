@@ -2,7 +2,7 @@ import SwiftUI
 
 enum SettingsTab: Hashable {
     case home, general, recording, hotkeys, recorder
-    case fileTranscription, history, dictionary, snippets, profiles, prompts, integrations, advanced, about
+    case fileTranscription, history, dictionary, snippets, profiles, prompts, integrations, advanced, license, about
 }
 
 struct SettingsView: View {
@@ -66,6 +66,9 @@ struct SettingsView: View {
                         AdvancedSettingsView()
                             .tabItem { Label(String(localized: "Advanced"), systemImage: "gearshape.2") }
                             .tag(SettingsTab.advanced)
+                        LicenseSettingsView()
+                            .tabItem { Label(String(localized: "License"), systemImage: "key") }
+                            .tag(SettingsTab.license)
                         AboutSettingsView()
                             .tabItem { Label(String(localized: "About"), systemImage: "info.circle") }
                             .tag(SettingsTab.about)
@@ -153,6 +156,9 @@ private struct SettingsExtraTabs: TabContent {
         .badge(self.pluginUpdatesBadge)
         Tab(String(localized: "Advanced"), systemImage: "gearshape.2", value: SettingsTab.advanced) {
             AdvancedSettingsView()
+        }
+        Tab(String(localized: "License"), systemImage: "key", value: SettingsTab.license) {
+            LicenseSettingsView()
         }
         Tab(String(localized: "About"), systemImage: "info.circle", value: SettingsTab.about) {
             AboutSettingsView()

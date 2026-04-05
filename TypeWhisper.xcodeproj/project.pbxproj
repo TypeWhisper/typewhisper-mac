@@ -273,6 +273,9 @@
 		BF1DFDDFBF91D87134DA57E7 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 1D584661B6B55F6329CB5FC4 /* manifest.json */; };
 		F1177F582D186041B081F9C5 /* GoogleCloudSTTPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01D368E23E2A0AB2390B34EA /* GoogleCloudSTTPlugin.swift */; };
 		F774802B61AFC0DCA9E8E668 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 67BE633BCFA1507F72199015 /* TypeWhisperPluginSDK */; };
+		AA00000000000000000300 /* LicenseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000286 /* LicenseService.swift */; };
+		AA00000000000000000301 /* LicenseSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000287 /* LicenseSettingsView.swift */; };
+		AA00000000000000000302 /* WelcomeSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000288 /* WelcomeSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -592,6 +595,9 @@
 		BB00000000000000000275 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000276 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		BB00000000000000000277 /* OpenRouterPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OpenRouterPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB00000000000000000286 /* LicenseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LicenseService.swift; sourceTree = "<group>"; };
+		BB00000000000000000287 /* LicenseSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LicenseSettingsView.swift; sourceTree = "<group>"; };
+		BB00000000000000000288 /* WelcomeSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeSheet.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1022,6 +1028,7 @@
 				BB00000000000000000246 /* AccessibilityAnnouncementService.swift */,
 				BB00000000000000000247 /* SpeechFeedbackService.swift */,
 				BB00000000000000000272 /* TermPackRegistryService.swift */,
+				BB00000000000000000286 /* LicenseService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -1080,6 +1087,8 @@
 				BB00000000000000000248 /* HotkeyRecorderView.swift */,
 				BB00000000000000000249 /* HotkeySettingsView.swift */,
 				BB00000000000000000250 /* AboutSettingsView.swift */,
+				BB00000000000000000287 /* LicenseSettingsView.swift */,
+				BB00000000000000000288 /* WelcomeSheet.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -2720,6 +2729,9 @@
 				AA00000000000000000260 /* HotkeyRecorderView.swift in Sources */,
 				AA00000000000000000261 /* HotkeySettingsView.swift in Sources */,
 				AA00000000000000000262 /* AboutSettingsView.swift in Sources */,
+				AA00000000000000000300 /* LicenseService.swift in Sources */,
+				AA00000000000000000301 /* LicenseSettingsView.swift in Sources */,
+				AA00000000000000000302 /* WelcomeSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
