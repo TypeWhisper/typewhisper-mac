@@ -511,6 +511,12 @@ final class DictationViewModel: ObservableObject {
     }
 
     private var effectiveTranslationTarget: String? {
+        // Per-profile translation override
+        if let profileEnabled = matchedProfile?.translationEnabled {
+            if !profileEnabled { return nil }
+            return matchedProfile?.translationTargetLanguage ?? settingsViewModel.translationTargetLanguage
+        }
+        // Existing behavior: profile target language override, then global setting
         if let profileTarget = matchedProfile?.translationTargetLanguage {
             return profileTarget
         }

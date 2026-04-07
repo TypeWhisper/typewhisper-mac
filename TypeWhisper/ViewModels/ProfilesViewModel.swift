@@ -35,6 +35,7 @@ final class ProfilesViewModel: ObservableObject {
     @Published var editorBundleIdentifiers: [String] = []
     @Published var editorUrlPatterns: [String] = []
     @Published var editorInputLanguage: String?
+    @Published var editorTranslationEnabled: Bool?
     @Published var editorTranslationTargetLanguage: String?
     @Published var editorSelectedTask: String?
     @Published var editorEngineOverride: String?
@@ -88,6 +89,7 @@ final class ProfilesViewModel: ObservableObject {
             bundleIdentifiers: editorBundleIdentifiers,
             urlPatterns: editorUrlPatterns,
             inputLanguage: editorInputLanguage,
+            translationEnabled: editorTranslationEnabled,
             translationTargetLanguage: editorTranslationTargetLanguage,
             selectedTask: editorSelectedTask,
             engineOverride: editorEngineOverride,
@@ -108,6 +110,7 @@ final class ProfilesViewModel: ObservableObject {
             profile.bundleIdentifiers = editorBundleIdentifiers
             profile.urlPatterns = editorUrlPatterns
             profile.inputLanguage = editorInputLanguage
+            profile.translationEnabled = editorTranslationEnabled
             profile.translationTargetLanguage = editorTranslationTargetLanguage
             profile.selectedTask = editorSelectedTask
             profile.engineOverride = editorEngineOverride
@@ -142,6 +145,7 @@ final class ProfilesViewModel: ObservableObject {
         editorBundleIdentifiers = []
         editorUrlPatterns = []
         editorInputLanguage = nil
+        editorTranslationEnabled = nil
         editorTranslationTargetLanguage = nil
         editorSelectedTask = nil
         editorEngineOverride = nil
@@ -166,6 +170,7 @@ final class ProfilesViewModel: ObservableObject {
         editorBundleIdentifiers = profile.bundleIdentifiers
         editorUrlPatterns = profile.urlPatterns
         editorInputLanguage = profile.inputLanguage
+        editorTranslationEnabled = profile.translationEnabled
         editorTranslationTargetLanguage = profile.translationTargetLanguage
         editorSelectedTask = profile.selectedTask
         editorEngineOverride = profile.engineOverride
@@ -310,9 +315,13 @@ final class ProfilesViewModel: ObservableObject {
             let name = Locale.current.localizedString(forLanguageCode: lang) ?? lang
             parts.append(name)
         }
-        if let lang = profile.translationTargetLanguage {
+        if profile.translationEnabled == false {
+            parts.append(String(localized: "Translation Off"))
+        } else if let lang = profile.translationTargetLanguage {
             let name = Locale.current.localizedString(forLanguageCode: lang) ?? lang
             parts.append("→ " + name)
+        } else if profile.translationEnabled == true {
+            parts.append(String(localized: "Translation On"))
         }
         if let engine = profile.engineOverride {
             let displayName = PluginManager.shared.transcriptionEngine(for: engine)?.providerDisplayName ?? engine

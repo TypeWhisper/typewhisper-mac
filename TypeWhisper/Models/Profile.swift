@@ -10,6 +10,7 @@ final class Profile {
     var bundleIdentifiers: [String]
     var urlPatterns: [String]
     var inputLanguage: String?
+    var translationEnabled: Bool?
     var translationTargetLanguage: String?
     var selectedTask: String?
     var engineOverride: String?
@@ -41,6 +42,7 @@ final class Profile {
         bundleIdentifiers: [String] = [],
         urlPatterns: [String] = [],
         inputLanguage: String? = nil,
+        translationEnabled: Bool? = nil,
         translationTargetLanguage: String? = nil,
         selectedTask: String? = nil,
         engineOverride: String? = nil,
@@ -61,6 +63,7 @@ final class Profile {
         self.bundleIdentifiers = bundleIdentifiers
         self.urlPatterns = urlPatterns
         self.inputLanguage = inputLanguage
+        self.translationEnabled = translationEnabled
         self.translationTargetLanguage = translationTargetLanguage
         self.selectedTask = selectedTask
         self.engineOverride = engineOverride
