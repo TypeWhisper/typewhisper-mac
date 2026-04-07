@@ -165,19 +165,14 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked 
 
         let boundary = UUID().uuidString
 
-        var config: [String: Any] = [
+        let lang = (language?.isEmpty == false) ? language! : "auto"
+        let config: [String: Any] = [
             "type": "transcription",
             "transcription_config": [
-                "language": language ?? "en",
+                "language": lang,
                 "operating_point": modelId,
             ] as [String: Any],
         ]
-
-        if language == nil || language?.isEmpty == true {
-            var transcriptionConfig = config["transcription_config"] as? [String: Any] ?? [:]
-            transcriptionConfig["language"] = "auto"
-            config["transcription_config"] = transcriptionConfig
-        }
 
         let configData = try JSONSerialization.data(withJSONObject: config)
 
@@ -227,50 +222,76 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked 
     }
 
     private func pollJob(jobId: String, apiKey: String) async throws -> PluginTranscriptionResult {
-        guard let transcriptURL = URL(string: "https://asr.api.speechmatics.com/v2/jobs/\(jobId)/transcript?format=json-v2") else {
-            throw PluginTranscriptionError.apiError("Invalid transcript URL")
+        guard let statusURL = URL(string: "https://asr.api.speechmatics.com/v2/jobs/\(jobId)") else {
+            throw PluginTranscriptionError.apiError("Invalid job URL")
         }
 
-        var transcriptRequest = URLRequest(url: transcriptURL)
-        transcriptRequest.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        transcriptRequest.timeoutInterval = 15
+        var statusRequest = URLRequest(url: statusURL)
+        statusRequest.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        statusRequest.timeoutInterval = 15
 
         for _ in 0..<300 {
             try await Task.sleep(for: .seconds(1))
 
-            let (data, response) = try await PluginHTTPClient.data(for: transcriptRequest)
+            let (data, response) = try await PluginHTTPClient.data(for: statusRequest)
 
-            guard let httpResponse = response as? HTTPURLResponse else {
+            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
                 continue
             }
 
-            switch httpResponse.statusCode {
-            case 200:
-                guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                      let results = json["results"] as? [[String: Any]] else {
-                    throw PluginTranscriptionError.apiError("Invalid transcript response")
-                }
-
-                let text = results.compactMap { result -> String? in
-                    guard let alternatives = result["alternatives"] as? [[String: Any]],
-                          let first = alternatives.first,
-                          let content = first["content"] as? String else {
-                        return nil
-                    }
-                    return content
-                }.joined(separator: " ")
-
-                let detectedLanguage = (json["metadata"] as? [String: Any])?["language"] as? String
-                return PluginTranscriptionResult(text: text, detectedLanguage: detectedLanguage)
-            case 404:
-                // Job not ready yet
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let job = json["job"] as? [String: Any],
+                  let status = job["status"] as? String else {
                 continue
+            }
+
+            switch status {
+            case "done":
+                return try await fetchTranscript(jobId: jobId, apiKey: apiKey)
+            case "rejected":
+                let errors = job["errors"] as? [[String: Any]]
+                let errorMsg = errors?.first?["message"] as? String ?? "Job rejected"
+                throw PluginTranscriptionError.apiError(errorMsg)
             default:
+                // running, waiting - keep polling
                 continue
             }
         }
 
         throw PluginTranscriptionError.apiError("Transcription timed out after 5 minutes")
+    }
+
+    private func fetchTranscript(jobId: String, apiKey: String) async throws -> PluginTranscriptionResult {
+        guard let url = URL(string: "https://asr.api.speechmatics.com/v2/jobs/\(jobId)/transcript?format=json-v2") else {
+            throw PluginTranscriptionError.apiError("Invalid transcript URL")
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 30
+
+        let (data, response) = try await PluginHTTPClient.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw PluginTranscriptionError.apiError("Failed to fetch transcript")
+        }
+
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let results = json["results"] as? [[String: Any]] else {
+            throw PluginTranscriptionError.apiError("Invalid transcript response")
+        }
+
+        let text = results.compactMap { result -> String? in
+            guard let alternatives = result["alternatives"] as? [[String: Any]],
+                  let first = alternatives.first,
+                  let content = first["content"] as? String else {
+                return nil
+            }
+            return content
+        }.joined(separator: " ")
+
+        let detectedLanguage = (json["metadata"] as? [String: Any])?["language"] as? String
+        return PluginTranscriptionResult(text: text, detectedLanguage: detectedLanguage)
     }
 
     // MARK: - WebSocket Implementation (Real-Time v2)
@@ -338,7 +359,6 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked 
 
         // Receive loop in background
         let loggerRef = self.logger
-        var seqNo = 0
         let receiveTask = Task {
             do {
                 while !Task.isCancelled {
@@ -361,10 +381,10 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked 
                     }
 
                     if messageType == "AddTranscript" {
-                        let transcript = (json["metadata"] as? [String: Any])?["transcript"] as? String ?? ""
+                        let transcript = json["transcript"] as? String ?? ""
                         await collector.addFinal(transcript)
                     } else if messageType == "AddPartialTranscript" {
-                        let transcript = (json["metadata"] as? [String: Any])?["transcript"] as? String ?? ""
+                        let transcript = json["transcript"] as? String ?? ""
                         await collector.setInterim(transcript)
                     } else {
                         continue
@@ -382,6 +402,7 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked 
 
         // Send audio as binary frames
         var offset = 0
+        var seqNo = 0
         while offset < pcmData.count {
             let end = min(offset + chunkSize, pcmData.count)
             let chunk = pcmData.subdata(in: offset..<end)
