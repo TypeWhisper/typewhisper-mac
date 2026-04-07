@@ -454,6 +454,9 @@ final class DictationViewModel: ObservableObject {
 
         do {
             if mediaPauseEnabled { mediaPlaybackService.pauseIfPlaying() }
+            // Play start sound BEFORE engine setup - AVAudioEngine reconfigures
+            // audio hardware (aggregate device) which disrupts NSSound playback.
+            soundService.play(.recordingStarted, enabled: soundFeedbackEnabled)
             audioRecordingService.selectedDeviceID = audioDeviceService.selectedDeviceID
             try audioRecordingService.startRecording()
             if audioDuckingEnabled {
@@ -464,7 +467,6 @@ final class DictationViewModel: ObservableObject {
             // not from key press. Slow device init (e.g. iPhone Continuity ~2-3s)
             // would otherwise make the hold appear as "long press" → PTT stop.
             hotkeyService.resetKeyDownTime()
-            soundService.play(.recordingStarted, enabled: soundFeedbackEnabled)
             accessibilityAnnouncementService.announceRecordingStarted()
             speechFeedbackService.announceEvent(.recordingStarted)
             partialText = ""

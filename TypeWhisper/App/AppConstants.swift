@@ -140,4 +140,13 @@ enum AppConstants {
         return false
         #endif
     }()
+
+    // MARK: - Polar.sh Licensing
+    enum Polar {
+        static let organizationId = "96de503c-3c8b-4d08-9ded-c7f6e20fdde4"
+        static let checkoutURL = "https://polar.sh/typewhisper"
+        static let checkoutURLIndividual = "https://buy.polar.sh/polar_cl_Yfw7BSIXSNFESlrNPL0fNG8GHPqX9qhmxGce32wZfYJ"
+        static let checkoutURLTeam = "https://buy.polar.sh/polar_cl_kSqGfvss0Ces3W7R4xw7hr5NdgvEbPbhhUGRH4ad3Hj"
+        static let checkoutURLEnterprise = "https://buy.polar.sh/polar_cl_uzCNIsF0vY9gx2peWljyJU7JQoEzxHUueCPTA0MoOQe"
+    }
 }

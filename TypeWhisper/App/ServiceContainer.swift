@@ -34,6 +34,7 @@ final class ServiceContainer: ObservableObject {
     let accessibilityAnnouncementService: AccessibilityAnnouncementService
     let speechFeedbackService: SpeechFeedbackService
     let errorLogService: ErrorLogService
+    let licenseService: LicenseService
 
     // HTTP API
     let httpServer: HTTPServer
@@ -91,6 +92,7 @@ final class ServiceContainer: ObservableObject {
         accessibilityAnnouncementService = AccessibilityAnnouncementService()
         speechFeedbackService = SpeechFeedbackService()
         errorLogService = ErrorLogService()
+        licenseService = LicenseService()
 
         // ViewModels (created before HTTP API so DictationViewModel is available)
         fileTranscriptionViewModel = FileTranscriptionViewModel(
@@ -162,6 +164,9 @@ final class ServiceContainer: ObservableObject {
         AudioRecorderViewModel._shared = audioRecorderViewModel
         WatchFolderViewModel._shared = watchFolderViewModel
 
+        // License
+        LicenseService.shared = licenseService
+
         // Plugin system
         EventBus.shared = EventBus()
         PluginManager.shared = pluginManager
@@ -202,6 +207,9 @@ final class ServiceContainer: ObservableObject {
 
         // Start memory service
         memoryService.startListening()
+
+        // Validate license if needed
+        await licenseService.validateIfNeeded()
 
         // Auto-start watch folder if configured
         if UserDefaults.standard.bool(forKey: UserDefaultsKeys.watchFolderAutoStart),

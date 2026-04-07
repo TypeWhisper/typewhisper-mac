@@ -53,13 +53,11 @@ final class ModelManagerService: ObservableObject {
         return PluginManager.shared.transcriptionEngine(for: providerId)?.isConfigured ?? false
     }
 
-    /// True when a model is ready or can be auto-restored (was auto-unloaded but provider exists).
+    /// True when the selected engine plugin exists. The actual model readiness check
+    /// happens in transcribe() which handles restoration via triggerRestoreModel().
     var canTranscribe: Bool {
         guard let providerId = selectedProviderId else { return false }
-        let plugin = PluginManager.shared.transcriptionEngine(for: providerId)
-        if plugin?.isConfigured == true { return true }
-        // Auto-unloaded models can be restored if auto-unload is active
-        return autoUnloadSeconds != 0 && plugin != nil
+        return PluginManager.shared.transcriptionEngine(for: providerId) != nil
     }
 
     var activeEngineName: String? {
@@ -120,12 +118,19 @@ final class ModelManagerService: ObservableObject {
         return plugin.providerDisplayName
     }
 
-    /// Re-restore provider selection after plugins have been loaded.
+    /// Re-validate provider selection after plugins have been loaded.
+    /// If the selected plugin is missing, fall back to the first available engine.
     func restoreProviderSelection() {
-        guard let providerId = selectedProviderId,
-              let plugin = PluginManager.shared.transcriptionEngine(for: providerId),
-              plugin.isConfigured else { return }
-        // Plugin is loaded and ready, nothing else to do
+        if let providerId = selectedProviderId,
+           PluginManager.shared.transcriptionEngine(for: providerId) != nil {
+            return
+        }
+        // Selected provider doesn't exist - find a fallback
+        if let fallback = PluginManager.shared.transcriptionEngines.first(where: { $0.isConfigured }) {
+            selectProvider(fallback.providerId)
+        } else if let anyEngine = PluginManager.shared.transcriptionEngines.first {
+            selectProvider(anyEngine.providerId)
+        }
     }
 
     // MARK: - Transcription

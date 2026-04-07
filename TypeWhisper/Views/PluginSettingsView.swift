@@ -235,7 +235,12 @@ struct PluginSettingsView: View {
         }
         return grouped
             .sorted { $0.key.sortOrder < $1.key.sortOrder }
-            .map { (category: $0.key, plugins: $0.value.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }) }
+            .map { (category: $0.key, plugins: $0.value.sorted {
+                let d0 = $0.downloadCount ?? 0
+                let d1 = $1.downloadCount ?? 0
+                if d0 != d1 { return d0 > d1 }
+                return $0.name.localizedCompare($1.name) == .orderedAscending
+            }) }
     }
 
     private var availableTab: some View {
@@ -595,6 +600,12 @@ struct AvailablePluginRow: View {
                     Text("v\(plugin.version)")
                     Text(plugin.author)
                     Text(PluginRegistryService.formattedSize(plugin.size))
+                    if let count = plugin.downloadCount, count > 0 {
+                        Label(
+                            String(localized: "\(PluginRegistryService.formattedDownloadCount(count)) downloads"),
+                            systemImage: "arrow.down.circle"
+                        )
+                    }
                 }
                 .font(.caption2)
                 .foregroundStyle(.tertiary)

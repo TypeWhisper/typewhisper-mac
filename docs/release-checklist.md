@@ -31,6 +31,10 @@
 - Dictionary JSON export and import
 - Parakeet V2/V3 model version selection
 - Media pause during recording (play music, start recording, verify pause, stop recording, verify resume)
+- Mouse button shortcut (configure and trigger dictation)
+- Auto Enter profile setting (enable in profile, verify Enter is sent after dictation)
+- Disable history saving (toggle off, dictate, verify no entry created)
+- STT and AI-processed text both shown in history entry
 - Verify CLI and HTTP API locally
 - Upgrade from `1.0.0`
 
