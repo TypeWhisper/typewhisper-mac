@@ -111,6 +111,13 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked 
         }
     }
 
+    fileprivate var batchHost: String {
+        switch _selectedRegion {
+        case "us": return "usa.asr.api.speechmatics.com"
+        default: return "asr.api.speechmatics.com"
+        }
+    }
+
     // MARK: - Transcription (REST Fallback)
 
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
@@ -159,7 +166,7 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked 
     }
 
     private func submitJob(wavData: Data, language: String?, modelId: String, apiKey: String) async throws -> String {
-        guard let url = URL(string: "https://asr.api.speechmatics.com/v2/jobs") else {
+        guard let url = URL(string: "https://\(batchHost)/v2/jobs") else {
             throw PluginTranscriptionError.apiError("Invalid jobs URL")
         }
 
@@ -222,7 +229,7 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked 
     }
 
     private func pollJob(jobId: String, apiKey: String) async throws -> PluginTranscriptionResult {
-        guard let statusURL = URL(string: "https://asr.api.speechmatics.com/v2/jobs/\(jobId)") else {
+        guard let statusURL = URL(string: "https://\(batchHost)/v2/jobs/\(jobId)") else {
             throw PluginTranscriptionError.apiError("Invalid job URL")
         }
 
@@ -262,7 +269,7 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked 
     }
 
     private func fetchTranscript(jobId: String, apiKey: String) async throws -> PluginTranscriptionResult {
-        guard let url = URL(string: "https://asr.api.speechmatics.com/v2/jobs/\(jobId)/transcript?format=json-v2") else {
+        guard let url = URL(string: "https://\(batchHost)/v2/jobs/\(jobId)/transcript?format=json-v2") else {
             throw PluginTranscriptionError.apiError("Invalid transcript URL")
         }
 
@@ -316,7 +323,7 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked 
         wsTask.resume()
 
         // Send StartRecognition message
-        let lang = (language?.isEmpty == false) ? language! : "en"
+        let lang = (language?.isEmpty == false) ? language! : "auto"
         let startMessage: [String: Any] = [
             "message": "StartRecognition",
             "audio_format": [
@@ -338,19 +345,23 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked 
 
         // Wait for RecognitionStarted
         let ackMessage = try await wsTask.receive()
-        if case .string(let text) = ackMessage,
-           let data = text.data(using: .utf8),
-           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let messageType = json["message"] as? String {
-            if messageType == "Error" {
-                let reason = json["reason"] as? String ?? "Unknown error"
-                wsTask.cancel(with: .normalClosure, reason: nil)
-                throw PluginTranscriptionError.apiError("Speechmatics error: \(reason)")
-            }
-            if messageType != "RecognitionStarted" {
-                wsTask.cancel(with: .normalClosure, reason: nil)
-                throw PluginTranscriptionError.apiError("Unexpected response: \(messageType)")
-            }
+        guard case .string(let ackText) = ackMessage,
+              let ackData = ackText.data(using: .utf8),
+              let ackJson = try? JSONSerialization.jsonObject(with: ackData) as? [String: Any],
+              let ackType = ackJson["message"] as? String else {
+            wsTask.cancel(with: .normalClosure, reason: nil)
+            throw PluginTranscriptionError.apiError("Unexpected response from server")
+        }
+
+        if ackType == "Error" {
+            let reason = ackJson["reason"] as? String ?? "Unknown error"
+            wsTask.cancel(with: .normalClosure, reason: nil)
+            throw PluginTranscriptionError.apiError("Speechmatics error: \(reason)")
+        }
+
+        guard ackType == "RecognitionStarted" else {
+            wsTask.cancel(with: .normalClosure, reason: nil)
+            throw PluginTranscriptionError.apiError("Unexpected response: \(ackType)")
         }
 
         let collector = TranscriptCollector()
@@ -359,7 +370,7 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked 
 
         // Receive loop in background
         let loggerRef = self.logger
-        let receiveTask = Task {
+        let receiveTask = Task { @Sendable in
             do {
                 while !Task.isCancelled {
                     let message = try await wsTask.receive()
@@ -400,16 +411,17 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked 
             }
         }
 
+        // Cancel receive task on any exit path
+        defer { receiveTask.cancel() }
+
         // Send audio as binary frames
         var offset = 0
         var seqNo = 0
         while offset < pcmData.count {
             let end = min(offset + chunkSize, pcmData.count)
             let chunk = pcmData.subdata(in: offset..<end)
-            if chunk.count >= 1600 || end == pcmData.count {
-                try await wsTask.send(.data(chunk))
-                seqNo += 1
-            }
+            try await wsTask.send(.data(chunk))
+            seqNo += 1
             offset = end
         }
 
@@ -446,7 +458,7 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked 
     // MARK: - API Key Validation
 
     fileprivate func validateApiKey(_ key: String) async -> Bool {
-        guard let url = URL(string: "https://asr.api.speechmatics.com/v2/jobs?limit=1") else { return false }
+        guard let url = URL(string: "https://\(batchHost)/v2/jobs?limit=1") else { return false }
         var request = URLRequest(url: url)
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 10
