@@ -199,7 +199,6 @@ final class PromptPaletteHandler {
                 // Save clipboard if preservation is enabled
                 let preserveClipboard = getPreserveClipboard?() ?? false
                 let savedClipboard = preserveClipboard ? textInsertionService.saveClipboard() : []
-                let pasteVerificationState = preserveClipboard ? textInsertionService.capturePasteVerificationState() : nil
 
                 // Always put result on clipboard so the user can paste it
                 let pasteboard = NSPasteboard.general
@@ -224,32 +223,30 @@ final class PromptPaletteHandler {
                     insertionOutcome = .failed
                 }
 
-                // Restore clipboard if insertion succeeded; keep result on clipboard as fallback otherwise
+                // Restore clipboard unconditionally when preservation is enabled
                 if preserveClipboard {
-                    switch insertionOutcome {
-                    case .insertedViaAccessibility:
-                        textInsertionService.restoreClipboard(savedClipboard)
-                    case .insertedViaPaste:
+                    if insertionOutcome == .insertedViaPaste {
                         try? await Task.sleep(for: .milliseconds(200))
-                        if let pasteVerificationState,
-                           textInsertionService.canRestoreClipboard(afterPasteUsing: pasteVerificationState) {
-                            textInsertionService.restoreClipboard(savedClipboard)
-                        }
-                    case .failed:
-                        break
                     }
+                    textInsertionService.restoreClipboard(savedClipboard)
                 }
 
                 soundService.play(.transcriptionSuccess, enabled: soundFeedbackEnabled)
                 self.accessibilityAnnouncementService.announcePromptComplete()
                 self.speechFeedbackService.announceEvent(.promptComplete)
-                onShowNotchFeedback?(
-                    insertionOutcome == .failed ? String(localized: "Copied to clipboard") : String(localized: "Text replaced"),
-                    insertionOutcome == .failed ? "doc.on.clipboard.fill" : "checkmark.circle.fill",
-                    2.5,
-                    false,
-                    nil
-                )
+                let feedbackMessage: String
+                let feedbackIcon: String
+                if insertionOutcome == .failed && preserveClipboard {
+                    feedbackMessage = String(localized: "Insertion failed")
+                    feedbackIcon = "xmark.circle"
+                } else if insertionOutcome == .failed {
+                    feedbackMessage = String(localized: "Copied to clipboard")
+                    feedbackIcon = "doc.on.clipboard.fill"
+                } else {
+                    feedbackMessage = String(localized: "Text replaced")
+                    feedbackIcon = "checkmark.circle.fill"
+                }
+                onShowNotchFeedback?(feedbackMessage, feedbackIcon, 2.5, false, nil)
             } catch {
                 guard !Task.isCancelled else { return }
                 soundService.play(.error, enabled: soundFeedbackEnabled)
