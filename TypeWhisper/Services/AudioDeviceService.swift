@@ -82,20 +82,15 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
 
         let engine = AVAudioEngine()
 
-        if let deviceID = selectedDeviceID,
-           let audioUnit = engine.inputNode.audioUnit {
-            var id = deviceID
-            AudioUnitSetProperty(
-                audioUnit,
-                kAudioOutputUnitProperty_CurrentDevice,
-                kAudioUnitScope_Global, 0,
-                &id,
-                UInt32(MemoryLayout<AudioDeviceID>.size)
-            )
+        if let deviceID = selectedDeviceID {
+            if !setInputDevice(deviceID, on: engine, label: "preview") {
+                logger.error("Failed to set preview input device (\(deviceID)), falling back to system default")
+            }
         }
 
         let inputNode = engine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
+        logger.info("Preview input format: sampleRate=\(format.sampleRate), channels=\(format.channelCount)")
         guard format.sampleRate > 0, format.channelCount > 0 else {
             logger.warning("No audio input available for preview")
             return
@@ -345,4 +340,66 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             disconnectVerificationTask = nil
         }
     }
+}
+
+// MARK: - Audio Device Helper
+
+private let deviceHelperLogger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhisper-mac", category: "AudioDeviceHelper")
+
+/// Sets the CoreAudio input device on an AVAudioEngine's input node AUHAL.
+/// Checks the return status and verifies the device was actually set.
+/// Returns true if the device was set successfully.
+func setInputDevice(_ deviceID: AudioDeviceID, on engine: AVAudioEngine, label: String) -> Bool {
+    guard let audioUnit = engine.inputNode.audioUnit else {
+        deviceHelperLogger.error("[\(label)] engine.inputNode.audioUnit is nil - cannot set device \(deviceID)")
+        return false
+    }
+
+    var id = deviceID
+    let setStatus = AudioUnitSetProperty(
+        audioUnit,
+        kAudioOutputUnitProperty_CurrentDevice,
+        kAudioUnitScope_Global, 0,
+        &id,
+        UInt32(MemoryLayout<AudioDeviceID>.size)
+    )
+
+    if setStatus != noErr {
+        deviceHelperLogger.error("[\(label)] AudioUnitSetProperty failed: status=\(setStatus) (\(audioStatusString(setStatus))), deviceID=\(deviceID)")
+        return false
+    }
+
+    // Verify by reading back the current device
+    var verifyID = AudioDeviceID(0)
+    var verifySize = UInt32(MemoryLayout<AudioDeviceID>.size)
+    let getStatus = AudioUnitGetProperty(
+        audioUnit,
+        kAudioOutputUnitProperty_CurrentDevice,
+        kAudioUnitScope_Global, 0,
+        &verifyID,
+        &verifySize
+    )
+
+    if getStatus != noErr {
+        deviceHelperLogger.warning("[\(label)] Could not verify device after set: status=\(getStatus)")
+    } else if verifyID != deviceID {
+        deviceHelperLogger.error("[\(label)] Device verification mismatch: requested=\(deviceID), actual=\(verifyID)")
+        return false
+    }
+
+    deviceHelperLogger.info("[\(label)] Input device set and verified: \(deviceID)")
+    return true
+}
+
+private func audioStatusString(_ status: OSStatus) -> String {
+    let bytes: [UInt8] = [
+        UInt8((status >> 24) & 0xFF),
+        UInt8((status >> 16) & 0xFF),
+        UInt8((status >> 8) & 0xFF),
+        UInt8(status & 0xFF),
+    ]
+    if bytes.allSatisfy({ $0 >= 0x20 && $0 < 0x7F }) {
+        return String(bytes.map { Character(UnicodeScalar($0)) })
+    }
+    return "\(status)"
 }
