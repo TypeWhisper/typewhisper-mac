@@ -139,6 +139,26 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         return Double(sampleBuffer.count) / Self.targetSampleRate
     }
 
+    /// Build a mono tap format from a (possibly multi-channel) input format.
+    ///
+    /// AVAudioConverter silently produces zero-filled output when asked to downmix
+    /// non-standard multi-channel layouts (e.g. 6-channel USB interfaces like
+    /// Focusrite Scarlett) to mono. By requesting a mono tap format, AVAudioEngine
+    /// performs the channel downmix internally — which handles arbitrary layouts
+    /// correctly — and the converter only needs to resample.
+    private static func monoTapFormat(for inputFormat: AVAudioFormat) -> AVAudioFormat {
+        if inputFormat.channelCount > 1,
+           let mono = AVAudioFormat(
+               commonFormat: .pcmFormatFloat32,
+               sampleRate: inputFormat.sampleRate,
+               channels: 1,
+               interleaved: false
+           ) {
+            return mono
+        }
+        return inputFormat
+    }
+
     func startRecording() throws {
         guard hasMicrophonePermission else {
             throw AudioRecordingError.microphonePermissionDenied
@@ -147,20 +167,15 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let engine = AVAudioEngine()
 
         // Set the input device before reading the format
-        if let deviceID = selectedDeviceID,
-           let audioUnit = engine.inputNode.audioUnit {
-            var id = deviceID
-            AudioUnitSetProperty(
-                audioUnit,
-                kAudioOutputUnitProperty_CurrentDevice,
-                kAudioUnitScope_Global, 0,
-                &id,
-                UInt32(MemoryLayout<AudioDeviceID>.size)
-            )
+        if let deviceID = selectedDeviceID {
+            if !setInputDevice(deviceID, on: engine, label: "recording") {
+                logger.error("Failed to set recording input device (\(deviceID)), falling back to system default")
+            }
         }
 
         let inputNode = engine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
+        logger.info("Recording input format: sampleRate=\(inputFormat.sampleRate), channels=\(inputFormat.channelCount)")
 
         guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
             throw AudioRecordingError.engineStartFailed("No audio input available")
@@ -176,7 +191,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             throw AudioRecordingError.engineStartFailed("Cannot create target audio format")
         }
 
-        let converter = AVAudioConverter(from: inputFormat, to: targetFormat)
+        let tapFormat = Self.monoTapFormat(for: inputFormat)
+
+        let converter = AVAudioConverter(from: tapFormat, to: targetFormat)
         guard let converter else {
             throw AudioRecordingError.engineStartFailed("Cannot create audio converter")
         }
@@ -186,7 +203,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         _peakRawAudioLevel = 0
         bufferLock.unlock()
 
-        inputNode.installTap(onBus: 0, bufferSize: Self.captureTapFrames, format: inputFormat) { [weak self] buffer, _ in
+        inputNode.installTap(onBus: 0, bufferSize: Self.captureTapFrames, format: tapFormat) { [weak self] buffer, _ in
             self?.processAudioBuffer(buffer, converter: converter, targetFormat: targetFormat)
         }
 
@@ -258,19 +275,15 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         engine.stop()
 
         let deviceID = selectedDeviceID
-        if let deviceID, let audioUnit = engine.inputNode.audioUnit {
-            var id = deviceID
-            AudioUnitSetProperty(
-                audioUnit,
-                kAudioOutputUnitProperty_CurrentDevice,
-                kAudioUnitScope_Global, 0,
-                &id,
-                UInt32(MemoryLayout<AudioDeviceID>.size)
-            )
+        if let deviceID {
+            if !setInputDevice(deviceID, on: engine, label: "config-change") {
+                logger.warning("Failed to re-set device after config change (\(deviceID)), using default")
+            }
         }
 
         let inputNode = engine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
+        logger.info("Config-change input format: sampleRate=\(inputFormat.sampleRate), channels=\(inputFormat.channelCount)")
 
         guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
             logger.error("Cannot restart engine: no audio input available")
@@ -282,12 +295,19 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             sampleRate: Self.targetSampleRate,
             channels: 1,
             interleaved: false
-        ), let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
-            logger.error("Cannot restart engine: failed to create format/converter")
+        ) else {
+            logger.error("Cannot restart engine: failed to create target format")
             return
         }
 
-        inputNode.installTap(onBus: 0, bufferSize: Self.captureTapFrames, format: inputFormat) { [weak self] buffer, _ in
+        let tapFormat = Self.monoTapFormat(for: inputFormat)
+
+        guard let converter = AVAudioConverter(from: tapFormat, to: targetFormat) else {
+            logger.error("Cannot restart engine: failed to create audio converter")
+            return
+        }
+
+        inputNode.installTap(onBus: 0, bufferSize: Self.captureTapFrames, format: tapFormat) { [weak self] buffer, _ in
             self?.processAudioBuffer(buffer, converter: converter, targetFormat: targetFormat)
         }
 

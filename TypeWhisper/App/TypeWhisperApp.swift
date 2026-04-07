@@ -16,6 +16,7 @@ extension Notification.Name {
 struct TypeWhisperApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @AppStorage(UserDefaultsKeys.showMenuBarIcon) private var showMenuBarIcon = true
+    @State private var showWelcomeSheet = false
 
     var body: some Scene {
         MenuBarExtra(AppConstants.isDevelopment ? "TypeWhisper Dev" : "TypeWhisper", systemImage: "waveform", isInserted: $showMenuBarIcon) {
@@ -62,6 +63,14 @@ struct TypeWhisperApp: App {
         } else {
             SettingsView()
                 .background(SettingsWindowBridge())
+                .sheet(isPresented: $showWelcomeSheet) {
+                    WelcomeSheet()
+                }
+                .task {
+                    if LicenseService.shared.needsWelcomeSheet {
+                        showWelcomeSheet = true
+                    }
+                }
         }
     }
 

@@ -1,0 +1,136 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "API Key" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API-Schl\u00FCssel"
+          }
+        }
+      }
+    },
+    "API keys are stored securely in the Keychain" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API-Schl\u00FCssel werden sicher im Schl\u00FCsselbund gespeichert"
+          }
+        }
+      }
+    },
+    "Enhanced provides the best accuracy. Standard is faster and more cost-effective." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enhanced bietet die beste Genauigkeit. Standard ist schneller und kosteneffizienter."
+          }
+        }
+      }
+    },
+    "EU" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EU"
+          }
+        }
+      }
+    },
+    "Invalid API Key" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ung\u00FCltiger API-Schl\u00FCssel"
+          }
+        }
+      }
+    },
+    "Model" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modell"
+          }
+        }
+      }
+    },
+    "Region" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Region"
+          }
+        }
+      }
+    },
+    "Remove" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entfernen"
+          }
+        }
+      }
+    },
+    "Save" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Speichern"
+          }
+        }
+      }
+    },
+    "Select the server region closest to you for lower latency." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "W\u00E4hle die Serverregion, die dir am n\u00E4chsten ist, f\u00FCr geringere Latenz."
+          }
+        }
+      }
+    },
+    "US" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "US"
+          }
+        }
+      }
+    },
+    "Valid API Key" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "G\u00FCltiger API-Schl\u00FCssel"
+          }
+        }
+      }
+    },
+    "Validating..." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wird \u00FCberpr\u00FCft..."
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

@@ -100,4 +100,11 @@ enum UserDefaultsKeys {
     static let watchFolderLanguage = "watchFolderLanguage"
     static let watchFolderEngine = "watchFolderEngine"
     static let watchFolderModel = "watchFolderModel"
+
+    // MARK: - Licensing
+    static let userType = "userType"
+    static let licenseStatus = "licenseStatus"
+    static let licenseTier = "licenseTier"
+    static let lastLicenseValidation = "lastLicenseValidation"
+    static let welcomeSheetShown = "welcomeSheetShown"
 }

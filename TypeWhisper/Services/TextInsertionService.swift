@@ -347,7 +347,6 @@ enum InsertionResult {
         let hadFocusedTextField = autoEnter && hasFocusedTextField()
         let pasteboard = pasteboardProvider()
         let savedItems = preserveClipboard ? saveClipboard(from: pasteboard) : []
-        let pasteVerificationState = preserveClipboard ? capturePasteVerificationState() : nil
 
         // Set transcribed text on clipboard and simulate Cmd+V.
         // Text stays on clipboard as fallback if no text field is focused.
@@ -357,9 +356,7 @@ enum InsertionResult {
 
         if preserveClipboard {
             try? await Task.sleep(for: .milliseconds(200))
-            if let pasteVerificationState, canRestoreClipboard(afterPasteUsing: pasteVerificationState) {
-                restoreClipboard(savedItems, to: pasteboard)
-            }
+            restoreClipboard(savedItems, to: pasteboard)
         }
 
         if hadFocusedTextField {
