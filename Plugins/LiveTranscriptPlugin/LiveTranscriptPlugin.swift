@@ -48,6 +48,8 @@ final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendab
         subscriptionId = host.eventBus.subscribe { [weak self] event in
             await self?.handleEvent(event)
         }
+
+        host.setStreamingDisplayActive(true)
     }
 
     func deactivate() {
@@ -55,6 +57,7 @@ final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendab
             host?.eventBus.unsubscribe(id: id)
             subscriptionId = nil
         }
+        host?.setStreamingDisplayActive(false)
         tearDownHotkeyMonitor()
         autoCloseTask?.cancel()
         Task { @MainActor [weak self] in

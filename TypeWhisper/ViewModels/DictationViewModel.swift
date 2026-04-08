@@ -34,6 +34,7 @@ final class DictationViewModel: ObservableObject {
     @Published var hotkeyMode: HotkeyService.HotkeyMode?
     @Published var partialText: String = ""
     @Published var isStreaming: Bool = false
+    @Published private(set) var externalStreamingDisplayCount: Int = 0
     @Published var audioDuckingEnabled: Bool {
         didSet { UserDefaults.standard.set(audioDuckingEnabled, forKey: UserDefaultsKeys.audioDuckingEnabled) }
     }
@@ -941,6 +942,10 @@ final class DictationViewModel: ObservableObject {
             guard !Task.isCancelled else { return }
             resetDictationState()
         }
+    }
+
+    func updateExternalStreamingDisplay(active: Bool) {
+        externalStreamingDisplayCount += active ? 1 : -1
     }
 
     private func showError(_ message: String, category: String = "general") {

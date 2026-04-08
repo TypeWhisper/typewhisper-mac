@@ -70,4 +70,12 @@ final class HostServicesImpl: HostServices, @unchecked Sendable {
             PluginManager.shared?.notifyPluginStateChanged()
         }
     }
+
+    // MARK: - Streaming Display
+
+    func setStreamingDisplayActive(_ active: Bool) {
+        DispatchQueue.main.async {
+            DictationViewModel._shared?.updateExternalStreamingDisplay(active: active)
+        }
+    }
 }

@@ -11,6 +11,10 @@ struct OverlayIndicatorView: View {
     private let sizing: IndicatorSizing = .overlay
     private var closedWidth: CGFloat { 280 }
 
+    private var suppressStreamingText: Bool {
+        viewModel.externalStreamingDisplayCount > 0
+    }
+
     private var hasActionFeedback: Bool {
         viewModel.state == .inserting && viewModel.actionFeedbackMessage != nil
     }
@@ -65,6 +69,13 @@ struct OverlayIndicatorView: View {
                 textExpanded = false
             }
         }
+        .onChange(of: suppressStreamingText) {
+            if suppressStreamingText {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    textExpanded = false
+                }
+            }
+        }
         .animation(.easeInOut(duration: 1.0), value: dotPulse)
     }
 
@@ -74,7 +85,7 @@ struct OverlayIndicatorView: View {
     private var expandableContent: some View {
         if isTop {
             // Top position: text expands downward, action feedback below text
-            if viewModel.state == .recording {
+            if viewModel.state == .recording, !suppressStreamingText {
                 IndicatorExpandableText(
                     text: viewModel.partialText,
                     sizing: sizing,
@@ -111,7 +122,7 @@ struct OverlayIndicatorView: View {
                 Divider().background(Color.white.opacity(0.1))
             }
 
-            if viewModel.state == .recording {
+            if viewModel.state == .recording, !suppressStreamingText {
                 IndicatorExpandableText(
                     text: viewModel.partialText,
                     sizing: sizing,
