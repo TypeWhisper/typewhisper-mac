@@ -254,7 +254,7 @@
     {
       "id": "com.typewhisper.livetranscript",
       "name": "Live Transcript",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "minHostVersion": "0.12.0",
       "minOSVersion": "14.0",
       "author": "TypeWhisper",
@@ -263,8 +263,8 @@
         "de": "Zeigt ein schwebendes Live-Transkript-Fenster waehrend der Aufnahme."
       },
       "category": "utility",
-      "size": 198271,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-livetranscript-v1.0.2/LiveTranscriptPlugin.zip",
+      "size": 198506,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-livetranscript-v1.0.3/LiveTranscriptPlugin.zip",
       "iconSystemName": "text.bubble",
       "downloadCount": 192
     },
