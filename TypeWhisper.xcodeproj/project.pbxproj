@@ -3355,7 +3355,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.webhook;
 				PRODUCT_NAME = WebhookPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -3379,7 +3379,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.webhook;
 				PRODUCT_NAME = WebhookPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -3402,7 +3402,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.groq;
 				PRODUCT_NAME = GroqPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -3425,7 +3425,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.groq;
 				PRODUCT_NAME = GroqPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -3448,7 +3448,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.openai;
 				PRODUCT_NAME = OpenAIPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -3471,7 +3471,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.openai;
 				PRODUCT_NAME = OpenAIPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -3494,7 +3494,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.gemini;
 				PRODUCT_NAME = GeminiPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -3517,7 +3517,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.gemini;
 				PRODUCT_NAME = GeminiPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -3540,7 +3540,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.linear;
 				PRODUCT_NAME = LinearPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -3563,7 +3563,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.linear;
 				PRODUCT_NAME = LinearPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -3586,7 +3586,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.qwen3;
 				PRODUCT_NAME = Qwen3Plugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -3609,7 +3609,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.qwen3;
 				PRODUCT_NAME = Qwen3Plugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -3632,7 +3632,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.whisperkit;
 				PRODUCT_NAME = WhisperKitPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -3655,7 +3655,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.whisperkit;
 				PRODUCT_NAME = WhisperKitPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -3678,7 +3678,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.parakeet;
 				PRODUCT_NAME = ParakeetPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -3701,7 +3701,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.parakeet;
 				PRODUCT_NAME = ParakeetPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -3724,7 +3724,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.speechanalyzer;
 				PRODUCT_NAME = SpeechAnalyzerPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -3747,7 +3747,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.speechanalyzer;
 				PRODUCT_NAME = SpeechAnalyzerPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -3770,7 +3770,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.openai-compatible";
 				PRODUCT_NAME = OpenAICompatiblePlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -3793,7 +3793,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.openai-compatible";
 				PRODUCT_NAME = OpenAICompatiblePlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -3870,7 +3870,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.voxtral;
 				PRODUCT_NAME = VoxtralPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -3893,7 +3893,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.voxtral;
 				PRODUCT_NAME = VoxtralPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -3916,7 +3916,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.deepgram;
 				PRODUCT_NAME = DeepgramPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -3939,7 +3939,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.deepgram;
 				PRODUCT_NAME = DeepgramPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -3962,7 +3962,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.assemblyai;
 				PRODUCT_NAME = AssemblyAIPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -3985,7 +3985,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.assemblyai;
 				PRODUCT_NAME = AssemblyAIPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4008,7 +4008,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.obsidian;
 				PRODUCT_NAME = ObsidianPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4031,7 +4031,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.obsidian;
 				PRODUCT_NAME = ObsidianPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4054,7 +4054,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.script;
 				PRODUCT_NAME = ScriptPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4077,7 +4077,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.script;
 				PRODUCT_NAME = ScriptPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4100,7 +4100,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.livetranscript;
 				PRODUCT_NAME = LiveTranscriptPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4123,7 +4123,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.livetranscript;
 				PRODUCT_NAME = LiveTranscriptPlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4146,7 +4146,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.granite;
 				PRODUCT_NAME = GranitePlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4169,7 +4169,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.granite;
 				PRODUCT_NAME = GranitePlugin;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4193,7 +4193,7 @@
 				PRODUCT_NAME = CloudflareASRPlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4217,7 +4217,7 @@
 				PRODUCT_NAME = CloudflareASRPlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4241,7 +4241,7 @@
 				PRODUCT_NAME = FileMemoryPlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4265,7 +4265,7 @@
 				PRODUCT_NAME = FileMemoryPlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4289,7 +4289,7 @@
 				PRODUCT_NAME = OpenAIVectorMemoryPlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4313,7 +4313,7 @@
 				PRODUCT_NAME = OpenAIVectorMemoryPlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4337,7 +4337,7 @@
 				PRODUCT_NAME = FireworksPlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4361,7 +4361,7 @@
 				PRODUCT_NAME = FireworksPlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4385,7 +4385,7 @@
 				PRODUCT_NAME = CerebrasPlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4409,7 +4409,7 @@
 				PRODUCT_NAME = CerebrasPlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4433,7 +4433,7 @@
 				PRODUCT_NAME = ClaudePlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4457,7 +4457,7 @@
 				PRODUCT_NAME = ClaudePlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4481,7 +4481,7 @@
 				PRODUCT_NAME = GladiaPlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4505,7 +4505,7 @@
 				PRODUCT_NAME = ElevenLabsPlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4529,7 +4529,7 @@
 				PRODUCT_NAME = GladiaPlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4553,7 +4553,7 @@
 				PRODUCT_NAME = ElevenLabsPlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4577,7 +4577,7 @@
 				PRODUCT_NAME = SonioxPlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4601,7 +4601,7 @@
 				PRODUCT_NAME = SonioxPlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4625,7 +4625,7 @@
 				PRODUCT_NAME = CoherePlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4649,7 +4649,7 @@
 				PRODUCT_NAME = CoherePlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4673,7 +4673,7 @@
 				PRODUCT_NAME = SpeechmaticsPlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4697,7 +4697,7 @@
 				PRODUCT_NAME = SpeechmaticsPlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4721,7 +4721,7 @@
 				PRODUCT_NAME = GoogleCloudSTTPlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4745,7 +4745,7 @@
 				PRODUCT_NAME = GoogleCloudSTTPlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4769,7 +4769,7 @@
 				PRODUCT_NAME = OpenRouterPlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
@@ -4793,7 +4793,7 @@
 				PRODUCT_NAME = OpenRouterPlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
