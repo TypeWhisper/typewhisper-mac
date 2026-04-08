@@ -19,6 +19,10 @@ struct NotchIndicatorView: View {
         geometry.hasNotch ? geometry.notchWidth + 2 * extensionWidth : 200
     }
 
+    private var suppressStreamingText: Bool {
+        viewModel.externalStreamingDisplayCount > 0
+    }
+
     private var hasActionFeedback: Bool {
         viewModel.state == .inserting && viewModel.actionFeedbackMessage != nil
     }
@@ -44,7 +48,7 @@ struct NotchIndicatorView: View {
                 .frame(width: currentWidth, height: geometry.notchHeight)
                 .frame(maxWidth: .infinity)
 
-            if viewModel.state == .recording {
+            if viewModel.state == .recording, !suppressStreamingText {
                 IndicatorExpandableText(
                     text: viewModel.partialText,
                     sizing: sizing,
@@ -96,6 +100,13 @@ struct NotchIndicatorView: View {
             } else {
                 dotPulse = false
                 textExpanded = false
+            }
+        }
+        .onChange(of: suppressStreamingText) {
+            if suppressStreamingText {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    textExpanded = false
+                }
             }
         }
         .animation(.easeInOut(duration: 1.0), value: dotPulse)

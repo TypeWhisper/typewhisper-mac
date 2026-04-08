@@ -57,6 +57,7 @@ private struct MockHostServices: HostServices {
     }
 
     func notifyCapabilitiesChanged() {}
+    func setStreamingDisplayActive(_ active: Bool) {}
 }
 
 @objc(MockTranscriptionPlugin)

@@ -27,6 +27,10 @@ public protocol HostServices: Sendable {
 
     // Notify host that plugin capabilities changed (e.g. model loaded/unloaded)
     func notifyCapabilitiesChanged()
+
+    // Streaming display: call with true when the plugin provides its own streaming text UI,
+    // so the built-in indicator suppresses its streaming text display.
+    func setStreamingDisplayActive(_ active: Bool)
 }
 
 // MARK: - HTTP Client (Ephemeral Sessions)
