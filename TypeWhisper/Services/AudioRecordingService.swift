@@ -77,6 +77,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private let bufferLock = NSLock()
     private let configLock = NSLock()
     private let stopStateLock = NSLock()
+    private let engineLock = NSLock()
     private let processingQueue = DispatchQueue(label: "com.typewhisper.audio-processing", qos: .userInteractive)
     private var _lastStopGraceCaptureApplied = false
 
@@ -214,7 +215,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             throw AudioRecordingError.engineStartFailed(error.localizedDescription)
         }
 
-        audioEngine = engine
+        engineLock.withLock { audioEngine = engine }
         isRecording = true
 
         // Restart engine when macOS changes audio config (e.g. notification sounds)
@@ -228,12 +229,19 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     func stopRecording(policy: StopPolicy) async -> [Float] {
+        // Atomically claim the engine - only the first concurrent caller proceeds
+        let engine: AVAudioEngine? = engineLock.withLock {
+            let e = audioEngine
+            audioEngine = nil
+            return e
+        }
+        guard let engine else { return [] }
+
         let bufferedDuration = totalBufferDuration
         var graceApplied = false
 
         if policy.shouldApplyGracePeriod(bufferedDuration: bufferedDuration),
-           case .finalizeShortSpeech(_, let maxExtraCapture, let pollInterval) = policy,
-           audioEngine != nil {
+           case .finalizeShortSpeech(_, let maxExtraCapture, let pollInterval) = policy {
             let deadline = Date().addingTimeInterval(maxExtraCapture)
             graceApplied = true
 
@@ -248,9 +256,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             NotificationCenter.default.removeObserver(observer)
             configChangeObserver = nil
         }
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        audioEngine?.stop()
-        audioEngine = nil
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
 
         // Flush pending audio processing before grabbing the buffer
         processingQueue.sync { }
@@ -268,7 +275,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     /// Re-setup the audio engine after a system configuration change (e.g. notification sound).
     /// Preserves already-buffered samples so no audio is lost.
     private func handleConfigurationChange() {
-        guard isRecording, let engine = audioEngine else { return }
+        let engine: AVAudioEngine? = engineLock.withLock { audioEngine }
+        guard isRecording, let engine else { return }
         logger.warning("Audio engine configuration changed during recording, restarting engine")
 
         engine.inputNode.removeTap(onBus: 0)
