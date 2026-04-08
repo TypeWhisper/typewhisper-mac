@@ -210,6 +210,7 @@ final class ServiceContainer: ObservableObject {
 
         // Validate license if needed
         await licenseService.validateIfNeeded()
+        await licenseService.validateSupporterIfNeeded()
 
         // Auto-start watch folder if configured
         if UserDefaults.standard.bool(forKey: UserDefaultsKeys.watchFolderAutoStart),

@@ -20,6 +20,12 @@ enum LicenseTier: String {
     case enterprise
 }
 
+enum SupporterTier: String, CaseIterable {
+    case bronze
+    case silver
+    case gold
+}
+
 struct PolarActivationResponse: Codable {
     let id: String
 }
@@ -54,8 +60,9 @@ final class LicenseService: ObservableObject {
     private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "LicenseService")
     private let keychainKeyPrefix = AppConstants.keychainServicePrefix
     private let validationInterval: TimeInterval = 7 * 24 * 60 * 60 // 7 days
+    private let supporterValidationInterval: TimeInterval = 30 * 24 * 60 * 60 // 30 days
 
-    // MARK: - Published state
+    // MARK: - Published state (Business)
 
     @Published var userType: LicenseUserType? {
         didSet { UserDefaults.standard.set(userType?.rawValue, forKey: UserDefaultsKeys.userType) }
@@ -66,9 +73,26 @@ final class LicenseService: ObservableObject {
     @Published var licenseTier: LicenseTier? {
         didSet { UserDefaults.standard.set(licenseTier?.rawValue, forKey: UserDefaultsKeys.licenseTier) }
     }
+    @Published var licenseIsLifetime: Bool {
+        didSet { UserDefaults.standard.set(licenseIsLifetime, forKey: UserDefaultsKeys.licenseIsLifetime) }
+    }
     @Published var isActivating = false
     @Published var activationError: String?
     @Published var deactivationError: String?
+
+    // MARK: - Published state (Supporter)
+
+    @Published var supporterTier: SupporterTier? {
+        didSet { UserDefaults.standard.set(supporterTier?.rawValue, forKey: UserDefaultsKeys.supporterTier) }
+    }
+    @Published var supporterStatus: LicenseStatus {
+        didSet { UserDefaults.standard.set(supporterStatus.rawValue, forKey: UserDefaultsKeys.supporterStatus) }
+    }
+    @Published var isSupporterActivating = false
+    @Published var supporterActivationError: String?
+    @Published var supporterDeactivationError: String?
+
+    var isSupporter: Bool { supporterStatus == .active && supporterTier != nil }
 
     var needsWelcomeSheet: Bool {
         !UserDefaults.standard.bool(forKey: UserDefaultsKeys.welcomeSheetShown)
@@ -81,6 +105,7 @@ final class LicenseService: ObservableObject {
     // MARK: - Init
 
     init() {
+        // Business license state
         if let raw = UserDefaults.standard.string(forKey: UserDefaultsKeys.userType) {
             self.userType = LicenseUserType(rawValue: raw)
         } else {
@@ -96,6 +121,20 @@ final class LicenseService: ObservableObject {
             self.licenseTier = LicenseTier(rawValue: raw)
         } else {
             self.licenseTier = nil
+        }
+        self.licenseIsLifetime = UserDefaults.standard.bool(forKey: UserDefaultsKeys.licenseIsLifetime)
+
+        // Supporter state
+        if let raw = UserDefaults.standard.string(forKey: UserDefaultsKeys.supporterStatus),
+           let status = LicenseStatus(rawValue: raw) {
+            self.supporterStatus = status
+        } else {
+            self.supporterStatus = .unlicensed
+        }
+        if let raw = UserDefaults.standard.string(forKey: UserDefaultsKeys.supporterTier) {
+            self.supporterTier = SupporterTier(rawValue: raw)
+        } else {
+            self.supporterTier = nil
         }
     }
 
@@ -122,7 +161,12 @@ final class LicenseService: ObservableObject {
             saveLicenseToKeychain(key: key, activationId: response.id)
             licenseStatus = .active
             UserDefaults.standard.set(Date(), forKey: UserDefaultsKeys.lastLicenseValidation)
-            logger.info("License activated via Polar (activation: \(response.id))")
+
+            // Detect lifetime vs subscription
+            let validation = try? await polarValidate(key: key, activationId: response.id)
+            licenseIsLifetime = validation?.expiresAt == nil
+
+            logger.info("License activated via Polar (activation: \(response.id), lifetime: \(self.licenseIsLifetime))")
         } catch {
             activationError = error.localizedDescription
             logger.error("License activation failed: \(error)")
@@ -138,8 +182,9 @@ final class LicenseService: ObservableObject {
             let response = try await polarValidate(key: key, activationId: activationId)
             if response.status == "granted" {
                 licenseStatus = .active
+                licenseIsLifetime = response.expiresAt == nil
                 UserDefaults.standard.set(Date(), forKey: UserDefaultsKeys.lastLicenseValidation)
-                logger.info("License validation successful")
+                logger.info("License validation successful (lifetime: \(self.licenseIsLifetime))")
             } else {
                 licenseStatus = .expired
                 logger.warning("License revoked or disabled (status: \(response.status))")
@@ -184,6 +229,7 @@ final class LicenseService: ObservableObject {
             removeLicenseFromKeychain()
             licenseStatus = .unlicensed
             licenseTier = nil
+            licenseIsLifetime = false
             UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.lastLicenseValidation)
         } catch {
             deactivationError = error.localizedDescription
@@ -191,7 +237,110 @@ final class LicenseService: ObservableObject {
         }
     }
 
+    // MARK: - Supporter License
+
+    func activateSupporterKey(_ key: String) async {
+        isSupporterActivating = true
+        supporterActivationError = nil
+        supporterDeactivationError = nil
+
+        do {
+            let response = try await polarActivate(key: key)
+            saveSupporterToKeychain(key: key, activationId: response.id)
+            supporterStatus = .active
+            UserDefaults.standard.set(Date(), forKey: UserDefaultsKeys.lastSupporterValidation)
+
+            // Detect tier from benefit description
+            if let validation = try? await polarValidate(key: key, activationId: response.id),
+               let description = validation.benefit?.description?.lowercased() {
+                if description.contains("gold") {
+                    supporterTier = .gold
+                } else if description.contains("silver") {
+                    supporterTier = .silver
+                } else {
+                    supporterTier = .bronze
+                }
+            } else {
+                supporterTier = .bronze
+            }
+
+            logger.info("Supporter activated via Polar (activation: \(response.id), tier: \(self.supporterTier?.rawValue ?? "unknown"))")
+        } catch {
+            supporterActivationError = error.localizedDescription
+            logger.error("Supporter activation failed: \(error)")
+        }
+
+        isSupporterActivating = false
+    }
+
+    func validateSupporterIfNeeded() async {
+        guard let (key, activationId) = loadSupporterFromKeychain() else {
+            if supporterStatus != .unlicensed || supporterTier != nil {
+                supporterStatus = .unlicensed
+                supporterTier = nil
+            }
+            return
+        }
+
+        if supporterStatus != .active {
+            await validateSupporter(key: key, activationId: activationId)
+            return
+        }
+
+        guard let lastValidation = UserDefaults.standard.object(forKey: UserDefaultsKeys.lastSupporterValidation) as? Date else {
+            await validateSupporter(key: key, activationId: activationId)
+            return
+        }
+        if Date().timeIntervalSince(lastValidation) > supporterValidationInterval {
+            await validateSupporter(key: key, activationId: activationId)
+        }
+    }
+
+    private func validateSupporter(key: String, activationId: String) async {
+        do {
+            let response = try await polarValidate(key: key, activationId: activationId)
+            if response.status == "granted" {
+                supporterStatus = .active
+                UserDefaults.standard.set(Date(), forKey: UserDefaultsKeys.lastSupporterValidation)
+                logger.info("Supporter validation successful")
+            } else {
+                supporterStatus = .expired
+                logger.warning("Supporter revoked or disabled (status: \(response.status))")
+            }
+        } catch {
+            logger.error("Supporter validation failed: \(error)")
+        }
+    }
+
+    func deactivateSupporterLicense() async {
+        guard let (key, activationId) = loadSupporterFromKeychain() else { return }
+        supporterDeactivationError = nil
+
+        do {
+            try await polarDeactivate(key: key, activationId: activationId)
+            logger.info("Supporter deactivated on Polar")
+
+            removeSupporterFromKeychain()
+            supporterStatus = .unlicensed
+            supporterTier = nil
+            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.lastSupporterValidation)
+        } catch {
+            supporterDeactivationError = error.localizedDescription
+            logger.error("Supporter deactivation failed: \(error)")
+        }
+    }
+
     // MARK: - Polar API
+
+    private func withRetry<T>(_ operation: () async throws -> T) async throws -> T {
+        do {
+            return try await operation()
+        } catch let error as NSError where error.domain == NSURLErrorDomain && error.code == NSURLErrorNetworkConnectionLost {
+            logger.info("Network connection lost, retrying once...")
+            try await Task.sleep(for: .milliseconds(500))
+            return try await operation()
+        }
+    }
 
     private func polarActivate(key: String) async throws -> PolarActivationResponse {
         let url = URL(string: "https://api.polar.sh/v1/customer-portal/license-keys/activate")!
@@ -207,7 +356,7 @@ final class LicenseService: ObservableObject {
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await withRetry { try await URLSession.shared.data(for: request) }
         guard let httpResponse = response as? HTTPURLResponse else {
             throw LicenseError.networkError
         }
@@ -233,7 +382,7 @@ final class LicenseService: ObservableObject {
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await withRetry { try await URLSession.shared.data(for: request) }
         guard let httpResponse = response as? HTTPURLResponse else {
             throw LicenseError.networkError
         }
@@ -258,7 +407,7 @@ final class LicenseService: ObservableObject {
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (_, response) = try await withRetry { try await URLSession.shared.data(for: request) }
         guard let httpResponse = response as? HTTPURLResponse,
               (200 ... 299).contains(httpResponse.statusCode) else {
             throw LicenseError.deactivationFailed
@@ -311,6 +460,53 @@ final class LicenseService: ObservableObject {
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
             kSecAttrAccount as String: "polar-license",
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
+
+    // MARK: - Supporter Keychain
+
+    private func saveSupporterToKeychain(key: String, activationId: String) {
+        let data = "\(key)|\(activationId)".data(using: .utf8)!
+
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: "polar-supporter",
+        ]
+
+        SecItemDelete(query as CFDictionary)
+
+        var addQuery = query
+        addQuery[kSecValueData as String] = data
+        SecItemAdd(addQuery as CFDictionary, nil)
+    }
+
+    private func loadSupporterFromKeychain() -> (key: String, activationId: String)? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: "polar-supporter",
+            kSecReturnData as String: true,
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess, let data = result as? Data,
+              let string = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+
+        let parts = string.split(separator: "|", maxSplits: 1)
+        guard parts.count == 2 else { return nil }
+        return (key: String(parts[0]), activationId: String(parts[1]))
+    }
+
+    private func removeSupporterFromKeychain() {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: "polar-supporter",
         ]
         SecItemDelete(query as CFDictionary)
     }

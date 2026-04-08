@@ -106,5 +106,11 @@ enum UserDefaultsKeys {
     static let licenseStatus = "licenseStatus"
     static let licenseTier = "licenseTier"
     static let lastLicenseValidation = "lastLicenseValidation"
+    static let licenseIsLifetime = "licenseIsLifetime"
     static let welcomeSheetShown = "welcomeSheetShown"
+
+    // MARK: - Supporter
+    static let supporterTier = "supporterTier"
+    static let supporterStatus = "supporterStatus"
+    static let lastSupporterValidation = "lastSupporterValidation"
 }

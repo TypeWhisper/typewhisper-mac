@@ -452,7 +452,14 @@
       }
     },
     "Activate" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktivieren"
+          }
+        }
+      }
     },
     "Activate with License Key" : {
 
@@ -1572,7 +1579,14 @@
       }
     },
     "Deactivate License on This Mac" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lizenz auf diesem Mac deaktivieren"
+          }
+        }
+      }
     },
     "Deactivation failed. Please try again." : {
 
@@ -2229,10 +2243,34 @@
       }
     },
     "Free for personal and GPL-compliant open-source use" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kostenlos für privaten und GPL-konformen Open-Source-Gebrauch"
+          }
+        }
+      }
+    },
+    "from %@ %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ab %@ %@"
+          }
+        }
+      }
     },
     "from %@ EUR/mo" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ab %@ EUR/Monat"
+          }
+        }
+      }
     },
     "General" : {
       "localizations" : {
@@ -2397,7 +2435,14 @@
       }
     },
     "I use TypeWhisper" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ich nutze TypeWhisper"
+          }
+        }
+      }
     },
     "I'll try later" : {
       "comment" : "A button label that says the user can skip the setup process later.",
@@ -2417,7 +2462,14 @@
 
     },
     "If you need a commercial license for proprietary or otherwise non-GPL-compliant use, purchase it on Polar.sh and enter the key below." : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wenn du eine kommerzielle Lizenz für proprietären oder nicht GPL-konformen Gebrauch brauchst, kaufe sie auf Polar.sh und gib den Key unten ein."
+          }
+        }
+      }
     },
     "Immediate" : {
       "localizations" : {
@@ -2805,13 +2857,34 @@
 
     },
     "License expired or revoked" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lizenz abgelaufen oder widerrufen"
+          }
+        }
+      }
     },
     "License Status" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lizenzstatus"
+          }
+        }
+      }
     },
     "Licensed" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lizenziert"
+          }
+        }
+      }
     },
     "Licensed under the GNU General Public License v3.0" : {
       "localizations" : {
@@ -3179,7 +3252,14 @@
       }
     },
     "No active commercial license" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine aktive kommerzielle Lizenz"
+          }
+        }
+      }
     },
     "No activity in this period." : {
       "localizations" : {
@@ -3701,7 +3781,14 @@
       }
     },
     "Pay-what-you-want starting at the listed price. Click a tier to open the checkout page." : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zahle, was du möchtest, ab dem angegebenen Preis. Klicke auf eine Stufe, um die Checkout-Seite zu öffnen."
+          }
+        }
+      }
     },
     "Pending" : {
       "comment" : "A label indicating that a file is currently being processed.",
@@ -3728,13 +3815,27 @@
       }
     },
     "Personal / OSS" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Privat / OSS"
+          }
+        }
+      }
     },
     "Personal or open source" : {
 
     },
     "Personal use and GPL-compliant open-source use are free. Proprietary or otherwise non-GPL-compliant use requires a commercial license." : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Privater und GPL-konformer Open-Source-Gebrauch sind kostenlos. Proprietärer oder nicht GPL-konformer Gebrauch erfordert eine kommerzielle Lizenz."
+          }
+        }
+      }
     },
     "Pipe to clipboard:" : {
       "localizations" : {
@@ -4191,7 +4292,14 @@
       }
     },
     "Proprietary" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proprietär"
+          }
+        }
+      }
     },
     "Proprietary use" : {
 
@@ -4780,7 +4888,14 @@
 
     },
     "Removes the license from this device. You can reactivate it on another Mac." : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entfernt die Lizenz von diesem Gerät. Du kannst sie auf einem anderen Mac wieder aktivieren."
+          }
+        }
+      }
     },
     "Replacement" : {
       "localizations" : {
@@ -6097,7 +6212,14 @@
       }
     },
     "User Type" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nutzertyp"
+          }
+        }
+      }
     },
     "Uses Apple Translate (on-device)" : {
       "localizations" : {
@@ -6750,6 +6872,196 @@
     },
     "Your words appear as text instantly." : {
 
+    },
+    "Already have a key?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bereits einen Key?"
+          }
+        }
+      }
+    },
+    "Bronze Supporter" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bronze-Unterstützer"
+          }
+        }
+      }
+    },
+    "Silver Supporter" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Silber-Unterstützer"
+          }
+        }
+      }
+    },
+    "Gold Supporter" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gold-Unterstützer"
+          }
+        }
+      }
+    },
+    "Supporter Status" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unterstützer-Status"
+          }
+        }
+      }
+    },
+    "Support TypeWhisper" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper unterstützen"
+          }
+        }
+      }
+    },
+    "Deactivate Supporter License" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Supporter-Lizenz deaktivieren"
+          }
+        }
+      }
+    },
+    "Thank you for supporting TypeWhisper! Join our Discord to claim your supporter role." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Danke für deine Unterstützung! Tritt unserem Discord bei, um deine Supporter-Rolle zu erhalten."
+          }
+        }
+      }
+    },
+    "TypeWhisper is free for personal use. If you'd like to support development, grab a supporter license for a Discord role and an in-app badge." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper ist für den privaten Gebrauch kostenlos. Wenn du die Entwicklung unterstützen möchtest, hol dir eine Supporter-Lizenz für eine Discord-Rolle und ein In-App-Badge."
+          }
+        }
+      }
+    },
+    "Manage Purchase" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kauf verwalten"
+          }
+        }
+      }
+    },
+    "Manage Subscription" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abo verwalten"
+          }
+        }
+      }
+    },
+    "Opens the Polar.sh customer portal where you can manage your subscription, update payment methods, or cancel." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öffnet das Polar.sh-Kundenportal, wo du dein Abo verwalten, Zahlungsmethoden ändern oder kündigen kannst."
+          }
+        }
+      }
+    },
+    "Monthly Subscription" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Monatsabo"
+          }
+        }
+      }
+    },
+    "Lifetime (one-time)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lifetime (einmalig)"
+          }
+        }
+      }
+    },
+    "One-time payment. Use TypeWhisper commercially forever with no recurring fees." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einmalzahlung. Nutze TypeWhisper kommerziell für immer ohne laufende Kosten."
+          }
+        }
+      }
+    },
+    "Purchase a License" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lizenz kaufen"
+          }
+        }
+      }
+    },
+    "2 devices" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "2 Geräte"
+          }
+        }
+      }
+    },
+    "10 devices" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "10 Geräte"
+          }
+        }
+      }
+    },
+    "Unlimited devices" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unbegrenzt Geräte"
+          }
+        }
+      }
     }
   },
   "version" : "1.1"
