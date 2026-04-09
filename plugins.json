@@ -237,7 +237,7 @@
     {
       "id": "com.typewhisper.voxtral",
       "name": "Voxtral",
-      "version": "1.0.5",
+      "version": "1.0.4",
       "minHostVersion": "0.12.0",
       "minOSVersion": "14.0",
       "author": "TypeWhisper",
@@ -246,8 +246,8 @@
         "de": "Lokale Spracherkennung mit Voxtral MLX auf Apple Silicon. Schnell und praezise."
       },
       "category": "transcription",
-      "size": 28744952,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-voxtral-v1.0.5/VoxtralPlugin.zip",
+      "size": 17576658,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-voxtral-v1.0.4/VoxtralPlugin.zip",
       "iconSystemName": "cpu",
       "downloadCount": 134
     },
