@@ -277,21 +277,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         !isMenuBarIconHidden && !hasVisibleManagedWindow
     }
 
-    @objc private func windowDidBecomeKey(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow,
-              isManagedWindow(window),
-              window.isVisible
-        else { return }
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate()
+    @objc nonisolated private func windowDidBecomeKey(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        DispatchQueue.main.async { [self] in
+            guard isManagedWindow(window), window.isVisible else { return }
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate()
+        }
     }
 
-    @objc private func windowWillClose(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow,
-              isManagedWindow(window)
-        else { return }
+    @objc nonisolated private func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
         // Only go back to accessory if menu bar icon is visible and no other managed window is open
         DispatchQueue.main.async { [weak self] in
+            guard self?.isManagedWindow(window) == true else { return }
             if self?.shouldRevertToAccessory == true {
                 NSApp.setActivationPolicy(.accessory)
             }
