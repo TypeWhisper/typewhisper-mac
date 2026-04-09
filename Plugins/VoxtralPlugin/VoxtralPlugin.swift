@@ -17,6 +17,7 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Senda
     fileprivate var _selectedModelId: String?
     fileprivate var model: VoxtralRealtimeModel?
     fileprivate var loadedModelId: String?
+    fileprivate var _hfToken: String?
 
     fileprivate var modelState: VoxtralModelState = .notLoaded
 
@@ -44,6 +45,7 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Senda
         self.host = host
         _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
             ?? Self.availableModels.first?.id
+        _hfToken = host.loadSecret(key: "hf-token")
 
         Task { await restoreLoadedModel() }
     }
@@ -151,6 +153,9 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Senda
             try? FileManager.default.createDirectory(at: modelsDir, withIntermediateDirectories: true)
 
             let cache = HubCache(cacheDirectory: modelsDir)
+            if let token = _hfToken, !token.isEmpty {
+                setenv("HF_TOKEN", token, 1)
+            }
             guard let repoID = Repo.ID(rawValue: modelDef.repoId) else {
                 throw NSError(
                     domain: "VoxtralPlugin", code: 1,
@@ -174,7 +179,7 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Senda
             modelState = .ready(modelDef.id)
             host?.notifyCapabilitiesChanged()
         } catch {
-            modelState = .error(error.localizedDescription)
+            modelState = .error("\(error)")
             throw error
         }
     }
@@ -289,6 +294,8 @@ private struct VoxtralSettingsView: View {
     @State private var modelState: VoxtralModelState = .notLoaded
     @State private var selectedModelId: String = ""
     @State private var isPolling = false
+    @State private var hfTokenInput = ""
+    @State private var showHfToken = false
 
     private let pollTimer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
@@ -300,6 +307,56 @@ private struct VoxtralSettingsView: View {
             Text("Local speech-to-text by Mistral, powered by MLX on Apple Silicon. 15 languages, no API key required.", bundle: bundle)
                 .font(.callout)
                 .foregroundStyle(.secondary)
+
+            Divider()
+
+            // HuggingFace Token
+            VStack(alignment: .leading, spacing: 8) {
+                Text("HuggingFace Token", bundle: bundle)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+
+                Text("Optional. Increases download rate limits. Free at huggingface.co/settings/tokens", bundle: bundle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                HStack {
+                    if showHfToken {
+                        TextField("hf_...", text: $hfTokenInput)
+                            .textFieldStyle(.roundedBorder)
+                    } else {
+                        SecureField("hf_...", text: $hfTokenInput)
+                            .textFieldStyle(.roundedBorder)
+                    }
+
+                    Button {
+                        showHfToken.toggle()
+                    } label: {
+                        Image(systemName: showHfToken ? "eye.slash" : "eye")
+                    }
+                    .buttonStyle(.borderless)
+
+                    if plugin._hfToken != nil, !plugin._hfToken!.isEmpty {
+                        Button(String(localized: "Remove", bundle: bundle)) {
+                            hfTokenInput = ""
+                            plugin._hfToken = nil
+                            try? plugin.host?.storeSecret(key: "hf-token", value: "")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+
+                    Button(String(localized: "Save", bundle: bundle)) {
+                        let trimmed = hfTokenInput.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !trimmed.isEmpty else { return }
+                        plugin._hfToken = trimmed
+                        try? plugin.host?.storeSecret(key: "hf-token", value: trimmed)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(hfTokenInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
 
             Divider()
 
@@ -327,6 +384,9 @@ private struct VoxtralSettingsView: View {
         .onAppear {
             modelState = plugin.modelState
             selectedModelId = plugin.selectedModelId ?? VoxtralPlugin.availableModels.first?.id ?? ""
+            if let token = plugin._hfToken, !token.isEmpty {
+                hfTokenInput = token
+            }
         }
         .task {
             if case .notLoaded = plugin.modelState {

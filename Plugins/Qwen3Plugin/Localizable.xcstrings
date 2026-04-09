@@ -31,6 +31,46 @@
         }
       }
     },
+    "HuggingFace Token" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HuggingFace Token"
+          }
+        }
+      }
+    },
+    "Optional. Increases download rate limits. Free at huggingface.co/settings/tokens" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Optional. Erhöht Download-Rate-Limits. Kostenlos unter huggingface.co/settings/tokens"
+          }
+        }
+      }
+    },
+    "Remove" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entfernen"
+          }
+        }
+      }
+    },
+    "Save" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Speichern"
+          }
+        }
+      }
+    },
     "Unload" : {
       "localizations" : {
         "de" : {
