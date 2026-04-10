@@ -8,6 +8,14 @@ import os
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhisper-mac", category: "AudioRecordingService")
 
 final class DelayedReleaseRetainer<Object: AnyObject>: @unchecked Sendable {
+    private final class RetainedObjectBox: @unchecked Sendable {
+        let object: Object
+
+        init(_ object: Object) {
+            self.object = object
+        }
+    }
+
     private let queue: DispatchQueue
 
     init(label: String, qos: DispatchQoS = .utility) {
@@ -15,7 +23,7 @@ final class DelayedReleaseRetainer<Object: AnyObject>: @unchecked Sendable {
     }
 
     func retain(_ object: Object, for duration: TimeInterval) {
-        let retainedObject = object
+        let retainedObject = RetainedObjectBox(object)
         queue.asyncAfter(deadline: .now() + duration) {
             withExtendedLifetime(retainedObject) {}
         }

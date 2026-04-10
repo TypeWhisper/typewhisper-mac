@@ -3,7 +3,17 @@ import XCTest
 @testable import TypeWhisper
 
 final class DictationShortSpeechTests: XCTestCase {
-    private final class ReleaseProbe {}
+    private final class ReleaseProbe {
+        private let onDeinit: () -> Void
+
+        init(onDeinit: @escaping () -> Void = {}) {
+            self.onDeinit = onDeinit
+        }
+
+        deinit {
+            onDeinit()
+        }
+    }
 
     func testEmptyBuffer_isDiscardedAsTooShort() {
         XCTAssertEqual(classifyShortSpeech(rawDuration: 0, peakLevel: 0), .discardTooShort)
@@ -46,19 +56,24 @@ final class DictationShortSpeechTests: XCTestCase {
         XCTAssertFalse(AudioRecordingService.StopPolicy.immediate.shouldApplyGracePeriod(bufferedDuration: 0.01))
     }
 
-    func testDelayedReleaseRetainer_keepsObjectAliveUntilDelayExpires() async throws {
+    func testDelayedReleaseRetainer_keepsObjectAliveUntilDelayExpires() throws {
         let retainer = DelayedReleaseRetainer<ReleaseProbe>(label: "com.typewhisper.tests.delayed-release")
-        var probe: ReleaseProbe? = ReleaseProbe()
-        weak var weakProbe = probe
+        let released = expectation(description: "release after delay")
+        let releaseLock = NSLock()
+        var didRelease = false
+        var probe: ReleaseProbe? = ReleaseProbe {
+            releaseLock.withLock {
+                didRelease = true
+            }
+            released.fulfill()
+        }
 
         retainer.retain(try XCTUnwrap(probe), for: 0.1)
         probe = nil
 
-        try await Task.sleep(for: .milliseconds(30))
-        XCTAssertNotNil(weakProbe)
-
-        try await Task.sleep(for: .milliseconds(180))
-        XCTAssertNil(weakProbe)
+        Thread.sleep(forTimeInterval: 0.03)
+        XCTAssertFalse(releaseLock.withLock { didRelease })
+        wait(for: [released], timeout: 0.5)
     }
 
     private func makeSamples(duration: TimeInterval) -> [Float] {
