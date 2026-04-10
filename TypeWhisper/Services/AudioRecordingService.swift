@@ -7,6 +7,29 @@ import os
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhisper-mac", category: "AudioRecordingService")
 
+final class DelayedReleaseRetainer<Object: AnyObject>: @unchecked Sendable {
+    private final class RetainedObjectBox: @unchecked Sendable {
+        let object: Object
+
+        init(_ object: Object) {
+            self.object = object
+        }
+    }
+
+    private let queue: DispatchQueue
+
+    init(label: String, qos: DispatchQoS = .utility) {
+        queue = DispatchQueue(label: label, qos: qos)
+    }
+
+    func retain(_ object: Object, for duration: TimeInterval) {
+        let retainedObject = RetainedObjectBox(object)
+        queue.asyncAfter(deadline: .now() + duration) {
+            withExtendedLifetime(retainedObject) {}
+        }
+    }
+}
+
 /// Captures microphone audio via AVAudioEngine and converts to 16kHz mono Float32 samples.
 final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     enum StopPolicy {
@@ -79,10 +102,12 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private let stopStateLock = NSLock()
     private let engineLock = NSLock()
     private let processingQueue = DispatchQueue(label: "com.typewhisper.audio-processing", qos: .userInteractive)
+    private let engineTeardownRetainer = DelayedReleaseRetainer<AVAudioEngine>(label: "com.typewhisper.audio-engine-teardown")
     private var _lastStopGraceCaptureApplied = false
 
     static let targetSampleRate: Double = 16000
     private static let captureTapFrames: AVAudioFrameCount = 1024
+    private static let engineTeardownRetentionInterval: TimeInterval = 0.3
 
     var peakRawAudioLevel: Float {
         bufferLock.lock()
@@ -222,7 +247,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         configChangeObserver = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange,
             object: engine,
-            queue: nil
+            queue: .main
         ) { [weak self] _ in
             self?.handleConfigurationChange()
         }
@@ -258,6 +283,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
+        // Keep the engine alive briefly so CoreAudio's internal teardown callbacks
+        // cannot outlive the AVAudioEngine objects they still reference.
+        engineTeardownRetainer.retain(engine, for: Self.engineTeardownRetentionInterval)
 
         // Flush pending audio processing before grabbing the buffer
         processingQueue.sync { }
