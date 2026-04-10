@@ -3,6 +3,8 @@ import XCTest
 @testable import TypeWhisper
 
 final class DictationShortSpeechTests: XCTestCase {
+    private final class ReleaseProbe {}
+
     func testEmptyBuffer_isDiscardedAsTooShort() {
         XCTAssertEqual(classifyShortSpeech(rawDuration: 0, peakLevel: 0), .discardTooShort)
     }
@@ -42,6 +44,21 @@ final class DictationShortSpeechTests: XCTestCase {
         XCTAssertFalse(policy.shouldApplyGracePeriod(bufferedDuration: 0.05))
         XCTAssertFalse(policy.shouldApplyGracePeriod(bufferedDuration: 0.08))
         XCTAssertFalse(AudioRecordingService.StopPolicy.immediate.shouldApplyGracePeriod(bufferedDuration: 0.01))
+    }
+
+    func testDelayedReleaseRetainer_keepsObjectAliveUntilDelayExpires() async throws {
+        let retainer = DelayedReleaseRetainer<ReleaseProbe>(label: "com.typewhisper.tests.delayed-release")
+        var probe: ReleaseProbe? = ReleaseProbe()
+        weak var weakProbe = probe
+
+        retainer.retain(try XCTUnwrap(probe), for: 0.1)
+        probe = nil
+
+        try await Task.sleep(for: .milliseconds(30))
+        XCTAssertNotNil(weakProbe)
+
+        try await Task.sleep(for: .milliseconds(180))
+        XCTAssertNil(weakProbe)
     }
 
     private func makeSamples(duration: TimeInterval) -> [Float] {
