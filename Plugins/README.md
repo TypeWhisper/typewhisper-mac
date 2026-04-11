@@ -42,8 +42,8 @@ Plugins can subscribe to events without modifying the transcription pipeline:
     "id": "com.yourname.plugin-id",
     "name": "My Plugin",
     "version": "1.0.0",
-    "minHostVersion": "0.9.0",
-    "minOSVersion": "15.0",
+    "minHostVersion": "1.0.0",
+    "minOSVersion": "14.0",
     "author": "Your Name",
     "principalClass": "MyPluginClassName"
 }
@@ -60,6 +60,9 @@ Each plugin receives a `HostServices` object providing:
 - **Profiles**: `availableProfileNames` - list of user-defined profile names
 - **Event Bus**: `eventBus` for subscribing to events
 - **Capabilities**: `notifyCapabilitiesChanged()` - notify the host when plugin state changes (e.g. model loaded/unloaded)
+- **Streaming display hint**: `setStreamingDisplayActive(_:)` - tell TypeWhisper that your plugin renders its own streaming UI
+
+Bundled MLX plugins such as Qwen3, Granite, and Voxtral store their optional HuggingFace token via the same plugin-scoped keychain helpers.
 
 ## Example
 

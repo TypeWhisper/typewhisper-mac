@@ -96,7 +96,7 @@ def main() -> None:
     parser.add_argument("--url", required=True)
     parser.add_argument("--signature", required=True)
     parser.add_argument("--length", required=True)
-    parser.add_argument("--minimum-system-version", default="15.0")
+    parser.add_argument("--minimum-system-version", default="14.0")
     args = parser.parse_args()
 
     appcast_path = Path(args.appcast)

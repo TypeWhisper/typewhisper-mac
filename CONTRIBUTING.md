@@ -20,7 +20,8 @@ echo 'DEVELOPMENT_TEAM = YOUR_TEAM_ID' > CodeSigning.local.xcconfig
 
 ## Development Setup
 
-- **macOS 15.0+** required
+- **Product runtime support:** macOS 14.0+
+- **Contributor machine:** macOS 15.0+ recommended for the current Xcode toolchain
 - **Swift 6** with strict concurrency
 - Debug builds use a separate data directory (`TypeWhisper-Dev`) and keychain prefix, so they don't interfere with release builds
 
