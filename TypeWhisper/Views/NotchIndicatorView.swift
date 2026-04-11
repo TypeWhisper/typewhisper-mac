@@ -31,6 +31,10 @@ struct NotchIndicatorView: View {
         viewModel.state == .processing && viewModel.processingPhase != nil
     }
 
+    private var showTranscriptPreview: Bool {
+        viewModel.indicatorTranscriptPreviewEnabled && !suppressStreamingText
+    }
+
     private var isExpanded: Bool {
         textExpanded || hasActionFeedback
     }
@@ -48,7 +52,7 @@ struct NotchIndicatorView: View {
                 .frame(width: currentWidth, height: geometry.notchHeight)
                 .frame(maxWidth: .infinity)
 
-            if viewModel.state == .recording, !suppressStreamingText {
+            if viewModel.state == .recording, showTranscriptPreview {
                 IndicatorExpandableText(
                     text: viewModel.partialText,
                     sizing: sizing,
@@ -56,7 +60,7 @@ struct NotchIndicatorView: View {
                     contentPadding: 34
                 )
                 .onChange(of: viewModel.partialText) {
-                    if !viewModel.partialText.isEmpty, !textExpanded {
+                    if showTranscriptPreview, !viewModel.partialText.isEmpty, !textExpanded {
                         withAnimation(.easeOut(duration: 0.25)) {
                             textExpanded = true
                         }
@@ -103,7 +107,18 @@ struct NotchIndicatorView: View {
             }
         }
         .onChange(of: suppressStreamingText) {
-            if suppressStreamingText {
+            if !showTranscriptPreview {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    textExpanded = false
+                }
+            }
+        }
+        .onChange(of: viewModel.indicatorTranscriptPreviewEnabled) {
+            if showTranscriptPreview, viewModel.state == .recording, !viewModel.partialText.isEmpty {
+                withAnimation(.easeOut(duration: 0.25)) {
+                    textExpanded = true
+                }
+            } else if !showTranscriptPreview {
                 withAnimation(.easeInOut(duration: 0.3)) {
                     textExpanded = false
                 }
@@ -147,7 +162,7 @@ struct NotchIndicatorView: View {
                 leftContent
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            .padding(.leading, 14)
+            .padding(.leading, 20)
 
             if geometry.hasNotch {
                 Color.clear

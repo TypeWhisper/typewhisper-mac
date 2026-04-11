@@ -19,6 +19,10 @@ struct OverlayIndicatorView: View {
         viewModel.state == .inserting && viewModel.actionFeedbackMessage != nil
     }
 
+    private var showTranscriptPreview: Bool {
+        viewModel.indicatorTranscriptPreviewEnabled && !suppressStreamingText
+    }
+
     private var isExpanded: Bool {
         textExpanded || hasActionFeedback
     }
@@ -70,7 +74,18 @@ struct OverlayIndicatorView: View {
             }
         }
         .onChange(of: suppressStreamingText) {
-            if suppressStreamingText {
+            if !showTranscriptPreview {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    textExpanded = false
+                }
+            }
+        }
+        .onChange(of: viewModel.indicatorTranscriptPreviewEnabled) {
+            if showTranscriptPreview, viewModel.state == .recording, !viewModel.partialText.isEmpty {
+                withAnimation(.easeOut(duration: 0.25)) {
+                    textExpanded = true
+                }
+            } else if !showTranscriptPreview {
                 withAnimation(.easeInOut(duration: 0.3)) {
                     textExpanded = false
                 }
@@ -85,7 +100,7 @@ struct OverlayIndicatorView: View {
     private var expandableContent: some View {
         if isTop {
             // Top position: text expands downward, action feedback below text
-            if viewModel.state == .recording, !suppressStreamingText {
+            if viewModel.state == .recording, showTranscriptPreview {
                 IndicatorExpandableText(
                     text: viewModel.partialText,
                     sizing: sizing,
@@ -93,7 +108,7 @@ struct OverlayIndicatorView: View {
                     contentPadding: contentPadding
                 )
                 .onChange(of: viewModel.partialText) {
-                    if !viewModel.partialText.isEmpty, !textExpanded {
+                    if showTranscriptPreview, !viewModel.partialText.isEmpty, !textExpanded {
                         withAnimation(.easeOut(duration: 0.25)) {
                             textExpanded = true
                         }
@@ -122,7 +137,7 @@ struct OverlayIndicatorView: View {
                 Divider().background(Color.white.opacity(0.1))
             }
 
-            if viewModel.state == .recording, !suppressStreamingText {
+            if viewModel.state == .recording, showTranscriptPreview {
                 IndicatorExpandableText(
                     text: viewModel.partialText,
                     sizing: sizing,
@@ -130,7 +145,7 @@ struct OverlayIndicatorView: View {
                     contentPadding: contentPadding
                 )
                 .onChange(of: viewModel.partialText) {
-                    if !viewModel.partialText.isEmpty, !textExpanded {
+                    if showTranscriptPreview, !viewModel.partialText.isEmpty, !textExpanded {
                         withAnimation(.easeOut(duration: 0.25)) {
                             textExpanded = true
                         }

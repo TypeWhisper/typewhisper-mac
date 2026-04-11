@@ -108,6 +108,14 @@ struct GeneralSettingsView: View {
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
 
+                Toggle(String(localized: "Show live transcript preview"), isOn: $dictation.indicatorTranscriptPreviewEnabled)
+
+                if !dictation.indicatorTranscriptPreviewEnabled {
+                    Text(String(localized: "When disabled, the indicator only shows recording status while transcription continues in the background."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Picker(String(localized: "Visibility"), selection: $dictation.notchIndicatorVisibility) {
                     Text(String(localized: "Always visible")).tag(NotchIndicatorVisibility.always)
                     Text(String(localized: "Only during activity")).tag(NotchIndicatorVisibility.duringActivity)
