@@ -555,6 +555,8 @@ final class DictationViewModel: ObservableObject {
         mediaPlaybackService.resumeIfWePaused()
         streamingHandler.stop()
         stopRecordingTimer()
+        let previewText = partialText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasPreviewText = !previewText.isEmpty
 
         if !partialText.isEmpty {
             let elapsed = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
@@ -569,11 +571,15 @@ final class DictationViewModel: ObservableObject {
         var samples = await audioRecordingService.stopRecording(policy: stopPolicy)
         let peakLevel = audioRecordingService.peakRawAudioLevel
         let rawDuration = Double(samples.count) / AudioRecordingService.targetSampleRate
-        let decision = classifyShortSpeech(rawDuration: rawDuration, peakLevel: peakLevel)
+        let decision = classifyShortSpeech(
+            rawDuration: rawDuration,
+            peakLevel: peakLevel,
+            hasPreviewText: hasPreviewText
+        )
         let graceApplied = audioRecordingService.lastStopGraceCaptureApplied
 
         logger.info(
-            "Stop finalized: rawDuration=\(String(format: "%.3f", rawDuration), privacy: .public)s, bufferedSamples=\(samples.count), peakLevel=\(String(format: "%.4f", peakLevel), privacy: .public), stopPolicy=\(stopPolicy.logDescription, privacy: .public), graceApplied=\(graceApplied, privacy: .public), decision=\(decision.logDescription, privacy: .public)"
+            "Stop finalized: rawDuration=\(String(format: "%.3f", rawDuration), privacy: .public)s, bufferedSamples=\(samples.count), peakLevel=\(String(format: "%.4f", peakLevel), privacy: .public), hasPreviewText=\(hasPreviewText, privacy: .public), previewTextLength=\(previewText.count, privacy: .public), stopPolicy=\(stopPolicy.logDescription, privacy: .public), graceApplied=\(graceApplied, privacy: .public), decision=\(decision.logDescription, privacy: .public)"
         )
 
         switch decision {
@@ -987,8 +993,9 @@ enum ShortSpeechDecision: Equatable {
     }
 }
 
-func classifyShortSpeech(rawDuration: TimeInterval, peakLevel: Float) -> ShortSpeechDecision {
+func classifyShortSpeech(rawDuration: TimeInterval, peakLevel: Float, hasPreviewText: Bool) -> ShortSpeechDecision {
     guard rawDuration >= 0.04 else { return .discardTooShort }
+    if hasPreviewText { return .transcribe }
 
     if rawDuration < 0.25 {
         return peakLevel < 0.006 ? .discardNoSpeech : .transcribe
