@@ -38,16 +38,16 @@ final class DictationShortSpeechTests: XCTestCase {
     }
 
     func testOneHundredTwentyMsQuietClip_isNoSpeech() {
-        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.12, peakLevel: 0.005, hasPreviewText: false), .discardNoSpeech)
+        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.12, peakLevel: 0.0049, hasPreviewText: false), .discardNoSpeech)
     }
 
     func testOneHundredTwentyMsQuietClip_withPreviewText_transcribes() {
-        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.12, peakLevel: 0.005, hasPreviewText: true), .transcribe)
+        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.12, peakLevel: 0.0049, hasPreviewText: true), .transcribe)
     }
 
-    func testFourHundredMsSpeech_usesStandardNoSpeechThresholdAndNoMinimumPad() {
-        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.4, peakLevel: 0.009, hasPreviewText: false), .discardNoSpeech)
-        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.4, peakLevel: 0.011, hasPreviewText: false), .transcribe)
+    func testFourHundredMsSpeech_usesRelaxedShortClipThresholdAndNoMinimumPad() {
+        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.4, peakLevel: 0.0049, hasPreviewText: false), .discardNoSpeech)
+        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.4, peakLevel: 0.009, hasPreviewText: false), .transcribe)
 
         let paddedSamples = paddedSamplesForFinalTranscription(makeSamples(duration: 0.4), rawDuration: 0.4)
         XCTAssertEqual(paddedSamples.count, 12_000)
@@ -55,7 +55,11 @@ final class DictationShortSpeechTests: XCTestCase {
     }
 
     func testFourHundredMsQuietClip_withPreviewText_transcribes() {
-        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.4, peakLevel: 0.009, hasPreviewText: true), .transcribe)
+        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.4, peakLevel: 0.0049, hasPreviewText: true), .transcribe)
+    }
+
+    func testEightHundredEightyFiveMsClip_withLowSpeechPeakStillTranscribes() {
+        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.885, peakLevel: 0.0069, hasPreviewText: false), .transcribe)
     }
 
     func testFinalizeShortSpeechPolicy_waitsOnlyWhenBufferedDurationIsBelowFiveHundredths() {

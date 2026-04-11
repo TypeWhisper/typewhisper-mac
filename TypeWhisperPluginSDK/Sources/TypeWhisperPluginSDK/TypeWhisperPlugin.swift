@@ -121,6 +121,31 @@ public struct AudioData: Sendable {
     }
 }
 
+public enum PluginAudioUtils {
+    public static func paddedSamples(
+        _ samples: [Float],
+        minimumDuration: TimeInterval,
+        sampleRate: Int = 16_000
+    ) -> [Float] {
+        let minimumSampleCount = Int(minimumDuration * Double(sampleRate))
+        guard samples.count < minimumSampleCount else { return samples }
+
+        var paddedSamples = samples
+        paddedSamples.append(contentsOf: repeatElement(Float.zero, count: minimumSampleCount - samples.count))
+        return paddedSamples
+    }
+
+    public static func shouldAcceptShortClipTranscription(
+        audioDuration: TimeInterval,
+        confidence: Float,
+        minimumDuration: TimeInterval = 1.0,
+        minimumConfidence: Float = 0.55
+    ) -> Bool {
+        guard audioDuration < minimumDuration else { return true }
+        return confidence >= minimumConfidence
+    }
+}
+
 public struct PluginTranscriptionSegment: Sendable {
     public let text: String
     public let start: Double

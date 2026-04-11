@@ -144,10 +144,29 @@ public enum PluginTranscriptionError: LocalizedError, Sendable {
 public struct PluginOpenAITranscriptionHelper: Sendable {
     public let baseURL: String
     public let responseFormat: String
+    static let minimumUploadDuration: TimeInterval = 1.0
+    static let uploadSampleRate = 16000
 
     public init(baseURL: String, responseFormat: String = "verbose_json") {
         self.baseURL = baseURL
         self.responseFormat = responseFormat
+    }
+
+    func normalizedAudioForUpload(_ audio: AudioData) -> AudioData {
+        guard audio.duration < Self.minimumUploadDuration else { return audio }
+
+        let paddedSamples = PluginAudioUtils.paddedSamples(
+            audio.samples,
+            minimumDuration: Self.minimumUploadDuration,
+            sampleRate: Self.uploadSampleRate
+        )
+        guard paddedSamples.count != audio.samples.count else { return audio }
+
+        return AudioData(
+            samples: paddedSamples,
+            wavData: PluginWavEncoder.encode(paddedSamples, sampleRate: Self.uploadSampleRate),
+            duration: Double(paddedSamples.count) / Double(Self.uploadSampleRate)
+        )
     }
 
     public func transcribe(
@@ -177,13 +196,14 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 30
 
+        let uploadAudio = normalizedAudioForUpload(audio)
         var body = Data()
 
         // file field
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append("Content-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\n".data(using: .utf8)!)
         body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
-        body.append(audio.wavData)
+        body.append(uploadAudio.wavData)
         body.append("\r\n".data(using: .utf8)!)
 
         // model field

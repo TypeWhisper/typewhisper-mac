@@ -130,6 +130,7 @@ final class DictationViewModel: ObservableObject {
     private var errorResetTask: Task<Void, Never>?
     private var insertingResetTask: Task<Void, Never>?
     private var urlResolutionTask: Task<Void, Never>?
+    private var metadataCaptureTask: Task<Void, Never>?
     private var isStopInFlight = false
 
     init(
@@ -391,6 +392,8 @@ final class DictationViewModel: ObservableObject {
     }
 
     private func startRecording(forcedProfileId: UUID? = nil) {
+        let startTimestamp = CFAbsoluteTimeGetCurrent()
+
         // Dismiss prompt palette if active
         promptPaletteHandler.hide()
 
@@ -412,22 +415,18 @@ final class DictationViewModel: ObservableObject {
         transcriptionTask = nil
         insertingResetTask?.cancel()
         insertingResetTask = nil
+        metadataCaptureTask?.cancel()
+        metadataCaptureTask = nil
+        urlResolutionTask?.cancel()
+        urlResolutionTask = nil
 
         self.forcedProfileId = forcedProfileId
 
         // Match profile: forced profile or app-based matching
         let activeApp = textInsertionService.captureActiveApp()
         capturedActiveApp = activeApp
-        capturedSelectedText = textInsertionService.getSelectedText()
-        if let sel = capturedSelectedText {
-            logger.info("Captured selected text (\(sel.count) chars)")
-        }
-        if let bundleId = activeApp.bundleId,
-           let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) {
-            activeAppIcon = NSWorkspace.shared.icon(forFile: appURL.path)
-        } else {
-            activeAppIcon = nil
-        }
+        capturedSelectedText = nil
+        activeAppIcon = nil
 
         if let forcedProfileId,
            let forcedProfile = profileService.profiles.first(where: { $0.id == forcedProfileId && $0.isEnabled }) {
@@ -437,49 +436,15 @@ final class DictationViewModel: ObservableObject {
             matchedProfile = profileService.matchProfile(bundleIdentifier: activeApp.bundleId, url: nil)
             activeProfileName = matchedProfile?.name
         }
-
-        // Resolve browser URL asynchronously to avoid blocking the main thread.
-        // If a more specific URL profile matches, update the active profile on the fly.
-        // Skip URL resolution when a forced profile is set (profile hotkey overrides app matching).
-        if forcedProfileId == nil, let bundleId = activeApp.bundleId {
-            urlResolutionTask = Task { [weak self] in
-                guard let self else { return }
-                logger.info("URL resolution: starting for bundleId=\(bundleId)")
-                let resolvedURL = await textInsertionService.resolveBrowserURL(bundleId: bundleId)
-                logger.info("URL resolution: resolvedURL=\(resolvedURL ?? "nil"), state=\(String(describing: self.state))")
-                guard state == .recording || state == .processing else {
-                    logger.info("URL resolution: skipped - state is \(String(describing: self.state))")
-                    return
-                }
-                guard let currentApp = capturedActiveApp, currentApp.bundleId == bundleId else {
-                    logger.info("URL resolution: skipped - bundleId mismatch")
-                    return
-                }
-
-                capturedActiveApp = (name: currentApp.name, bundleId: currentApp.bundleId, url: resolvedURL)
-
-                guard let resolvedURL else {
-                    logger.info("URL resolution: no URL resolved")
-                    return
-                }
-                guard let refinedProfile = profileService.matchProfile(bundleIdentifier: bundleId, url: resolvedURL) else {
-                    logger.info("URL resolution: no profile matched for URL \(resolvedURL)")
-                    return
-                }
-
-                logger.info("URL resolution: matched profile '\(refinedProfile.name)'")
-                matchedProfile = refinedProfile
-                activeProfileName = refinedProfile.name
-            }
-        }
+        let immediateContextMs = (CFAbsoluteTimeGetCurrent() - startTimestamp) * 1000
 
         do {
-            if mediaPauseEnabled { mediaPlaybackService.pauseIfPlaying() }
             // Play start sound BEFORE engine setup - AVAudioEngine reconfigures
             // audio hardware (aggregate device) which disrupts NSSound playback.
             soundService.play(.recordingStarted, enabled: soundFeedbackEnabled)
             audioRecordingService.selectedDeviceID = audioDeviceService.selectedDeviceID
             try audioRecordingService.startRecording()
+            if mediaPauseEnabled { mediaPlaybackService.pauseIfPlaying() }
             if audioDuckingEnabled {
                 audioDuckingService.duckAudio(to: Float(audioDuckingLevel))
             }
@@ -506,13 +471,85 @@ final class DictationViewModel: ObservableObject {
                 appName: capturedActiveApp?.name,
                 bundleIdentifier: capturedActiveApp?.bundleId
             )))
+            scheduleDeferredRecordingMetadataCapture(activeApp: activeApp, forcedProfileId: forcedProfileId)
+
+            let totalStartMs = (CFAbsoluteTimeGetCurrent() - startTimestamp) * 1000
+            logger.info(
+                "Recording started: immediateContextMs=\(String(format: "%.1f", immediateContextMs), privacy: .public), totalStartMs=\(String(format: "%.1f", totalStartMs), privacy: .public)"
+            )
         } catch {
+            metadataCaptureTask?.cancel()
+            metadataCaptureTask = nil
+            urlResolutionTask?.cancel()
+            urlResolutionTask = nil
             audioDuckingService.restoreAudio()
             mediaPlaybackService.resumeIfWePaused()
             accessibilityAnnouncementService.announceError(error.localizedDescription)
             speechFeedbackService.announceEvent(.error(reason: error.localizedDescription))
             showError(error.localizedDescription, category: "recording")
             hotkeyService.cancelDictation()
+        }
+    }
+
+    private func scheduleDeferredRecordingMetadataCapture(
+        activeApp: (name: String?, bundleId: String?, url: String?),
+        forcedProfileId: UUID?
+    ) {
+        let metadataStartTimestamp = CFAbsoluteTimeGetCurrent()
+
+        metadataCaptureTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            let selectedText = textInsertionService.getSelectedText()
+            guard !Task.isCancelled else { return }
+            capturedSelectedText = selectedText
+            if let selectedText {
+                logger.info("Captured selected text (\(selectedText.count) chars)")
+            }
+
+            if let bundleId = activeApp.bundleId,
+               let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) {
+                activeAppIcon = NSWorkspace.shared.icon(forFile: appURL.path)
+            } else {
+                activeAppIcon = nil
+            }
+
+            let elapsedMs = (CFAbsoluteTimeGetCurrent() - metadataStartTimestamp) * 1000
+            logger.info("Deferred recording metadata captured in \(String(format: "%.1f", elapsedMs), privacy: .public)ms")
+        }
+
+        // Resolve browser URL asynchronously after recording has already started.
+        // If a more specific URL profile matches, update the active profile on the fly.
+        // Skip URL resolution when a forced profile is set (profile hotkey overrides app matching).
+        guard forcedProfileId == nil, let bundleId = activeApp.bundleId else { return }
+        urlResolutionTask = Task { [weak self] in
+            guard let self else { return }
+            logger.info("URL resolution: starting for bundleId=\(bundleId)")
+            let resolvedURL = await textInsertionService.resolveBrowserURL(bundleId: bundleId)
+            logger.info("URL resolution: resolvedURL=\(resolvedURL ?? "nil"), state=\(String(describing: self.state))")
+            guard state == .recording || state == .processing else {
+                logger.info("URL resolution: skipped - state is \(String(describing: self.state))")
+                return
+            }
+            guard let currentApp = capturedActiveApp, currentApp.bundleId == bundleId else {
+                logger.info("URL resolution: skipped - bundleId mismatch")
+                return
+            }
+
+            capturedActiveApp = (name: currentApp.name, bundleId: currentApp.bundleId, url: resolvedURL)
+
+            guard let resolvedURL else {
+                logger.info("URL resolution: no URL resolved")
+                return
+            }
+            guard let refinedProfile = profileService.matchProfile(bundleIdentifier: bundleId, url: resolvedURL) else {
+                logger.info("URL resolution: no profile matched for URL \(resolvedURL)")
+                return
+            }
+
+            logger.info("URL resolution: matched profile '\(refinedProfile.name)'")
+            matchedProfile = refinedProfile
+            activeProfileName = refinedProfile.name
         }
     }
 
@@ -687,6 +724,7 @@ final class DictationViewModel: ObservableObject {
                     nil
                 }
                 self.processingPhase = String(localized: "Processing...")
+                await metadataCaptureTask?.value
                 let ppContext = PostProcessingContext(
                     appName: activeApp.name,
                     bundleIdentifier: activeApp.bundleId,
@@ -813,6 +851,8 @@ final class DictationViewModel: ObservableObject {
         insertingResetTask = nil
         urlResolutionTask?.cancel()
         urlResolutionTask = nil
+        metadataCaptureTask?.cancel()
+        metadataCaptureTask = nil
         isStopInFlight = false
         state = .idle
         partialText = ""
@@ -1017,8 +1057,10 @@ func classifyShortSpeech(rawDuration: TimeInterval, peakLevel: Float, hasPreview
     guard rawDuration >= 0.04 else { return .discardTooShort }
     if hasPreviewText { return .transcribe }
 
-    if rawDuration < 0.25 {
-        return peakLevel < 0.006 ? .discardNoSpeech : .transcribe
+    if rawDuration < 1.0 {
+        // Bias toward transcribing short clips. False negatives here are worse than
+        // letting the recognizer return empty text for actual silence.
+        return peakLevel < 0.005 ? .discardNoSpeech : .transcribe
     }
 
     return peakLevel < 0.01 ? .discardNoSpeech : .transcribe

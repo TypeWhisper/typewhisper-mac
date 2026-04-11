@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import SwiftUI
 import FluidAudio
 import TypeWhisperPluginSDK
@@ -9,6 +10,9 @@ import TypeWhisperPluginSDK
 final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.parakeet"
     static let pluginName = "Parakeet"
+    private static let logger = Logger(subsystem: "com.typewhisper.plugin.parakeet", category: "Transcription")
+    private static let shortClipConfidenceThreshold: Float = 0.55
+    private static let shortClipConfidenceGateDuration: TimeInterval = 1.0
 
     fileprivate var host: HostServices?
     fileprivate var asrManager: AsrManager?
@@ -112,7 +116,31 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsA
             await configureBoostingIfNeeded(prompt: prompt)
         }
 
-        let result = try await asrManager.transcribe(audio.samples, source: .system)
+        let normalizedSamples = PluginAudioUtils.paddedSamples(
+            audio.samples,
+            minimumDuration: 1.0,
+            sampleRate: 16_000
+        )
+        let result = try await asrManager.transcribe(normalizedSamples, source: .system)
+        let trimmedText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if audio.duration < Self.shortClipConfidenceGateDuration {
+            Self.logger.info(
+                "Short clip transcription: rawDuration=\(String(format: "%.3f", audio.duration), privacy: .public)s, confidence=\(String(format: "%.3f", result.confidence), privacy: .public), textLength=\(trimmedText.count, privacy: .public)"
+            )
+        }
+
+        guard PluginAudioUtils.shouldAcceptShortClipTranscription(
+            audioDuration: audio.duration,
+            confidence: result.confidence,
+            minimumDuration: Self.shortClipConfidenceGateDuration,
+            minimumConfidence: Self.shortClipConfidenceThreshold
+        ) else {
+            Self.logger.info(
+                "Discarding low-confidence short clip: rawDuration=\(String(format: "%.3f", audio.duration), privacy: .public)s, confidence=\(String(format: "%.3f", result.confidence), privacy: .public)"
+            )
+            return PluginTranscriptionResult(text: "", detectedLanguage: nil, segments: [])
+        }
 
         let segments: [PluginTranscriptionSegment]
         if let tokenTimings = result.tokenTimings, !tokenTimings.isEmpty {
@@ -123,7 +151,6 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsA
 
         return PluginTranscriptionResult(text: result.text, detectedLanguage: nil, segments: segments)
     }
-
     // MARK: - Token-to-Segment Grouping
 
     private static func groupTokensIntoSegments(_ tokenTimings: [TokenTiming]) -> [PluginTranscriptionSegment] {

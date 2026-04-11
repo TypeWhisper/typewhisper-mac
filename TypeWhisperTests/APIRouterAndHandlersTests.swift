@@ -1,9 +1,33 @@
 import AppKit
 import Foundation
 import XCTest
+import TypeWhisperPluginSDK
 @testable import TypeWhisper
 
 final class APIRouterAndHandlersTests: XCTestCase {
+    @objc(APIRouterMockTranscriptionPlugin)
+    private final class MockTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.transcription" }
+        static var pluginName: String { "Mock Transcription" }
+
+        required override init() {}
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+
+        var providerId: String { "mock" }
+        var providerDisplayName: String { "Mock" }
+        var isConfigured: Bool { true }
+        var transcriptionModels: [PluginModelInfo] { [PluginModelInfo(id: "tiny", displayName: "Tiny")] }
+        var selectedModelId: String? { "tiny" }
+        func selectModel(_ modelId: String) {}
+        var supportsTranslation: Bool { false }
+
+        func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+            PluginTranscriptionResult(text: "transcribed", detectedLanguage: language)
+        }
+    }
+
     private final class APIContext: @unchecked Sendable {
         let router: APIRouter
         let historyService: HistoryService
@@ -15,6 +39,20 @@ final class APIRouterAndHandlersTests: XCTestCase {
             self.historyService = historyService
             self.profileService = profileService
             self.retainedObjects = retainedObjects
+        }
+    }
+
+    @MainActor
+    private final class MockMediaPlaybackService: MediaPlaybackService {
+        let onPause: () -> Void
+
+        init(onPause: @escaping () -> Void) {
+            self.onPause = onPause
+            super.init()
+        }
+
+        override func pauseIfPlaying() {
+            onPause()
         }
     }
 
@@ -159,6 +197,110 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    func testApiStartRecording_startsAudioBeforeDeferredSelectedTextCapture() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+
+        var events: [String] = []
+        let selectedTextCaptured = expectation(description: "selected text captured")
+
+        context.textInsertionService.captureActiveAppOverride = { () -> (name: String?, bundleId: String?, url: String?) in
+            events.append("capture_app")
+            return ("Notes", nil, nil)
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.startRecordingOverride = {
+            events.append("start_audio")
+        }
+        context.textInsertionService.selectedTextOverride = { () -> String? in
+            events.append("selected_text")
+            selectedTextCaptured.fulfill()
+            return "Already selected"
+        }
+
+        context.dictationViewModel.apiStartRecording()
+
+        XCTAssertEqual(context.dictationViewModel.state, DictationViewModel.State.recording)
+        XCTAssertEqual(events, ["capture_app", "start_audio"])
+
+        await fulfillment(of: [selectedTextCaptured], timeout: 1.0)
+        XCTAssertEqual(Array(events.prefix(3)), ["capture_app", "start_audio", "selected_text"])
+    }
+
+    @MainActor
+    func testApiStartRecording_appliesBundleProfileBeforeDeferredMetadataCapture() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        context.profileService.addProfile(name: "Docs", bundleIdentifiers: ["com.typewhisper.tests"])
+
+        let selectedTextCaptured = expectation(description: "selected text captured")
+        context.textInsertionService.captureActiveAppOverride = { () -> (name: String?, bundleId: String?, url: String?) in
+            ("Docs App", "com.typewhisper.tests", nil)
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.startRecordingOverride = {}
+        context.textInsertionService.selectedTextOverride = { () -> String? in
+            selectedTextCaptured.fulfill()
+            return nil
+        }
+
+        context.dictationViewModel.apiStartRecording()
+
+        XCTAssertEqual(context.dictationViewModel.state, DictationViewModel.State.recording)
+        XCTAssertEqual(context.dictationViewModel.activeProfileName, "Docs")
+
+        await fulfillment(of: [selectedTextCaptured], timeout: 1.0)
+    }
+
+    @MainActor
+    func testApiStartRecording_pausesMediaAfterAudioStart() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var events: [String] = []
+        let mediaPlaybackService = MockMediaPlaybackService {
+            events.append("pause_media")
+        }
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            mediaPlaybackService: mediaPlaybackService
+        )
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.mediaPauseEnabled = true
+
+        context.textInsertionService.captureActiveAppOverride = { () -> (name: String?, bundleId: String?, url: String?) in
+            events.append("capture_app")
+            return ("Music", "com.apple.Music", nil)
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.startRecordingOverride = {
+            events.append("start_audio")
+        }
+
+        context.dictationViewModel.apiStartRecording()
+
+        XCTAssertEqual(Array(events.prefix(3)), ["capture_app", "start_audio", "pause_media"])
+    }
+
+    @MainActor
     private static func makeAPIContext(appSupportDirectory: URL) -> APIContext {
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
 
@@ -244,6 +386,134 @@ final class APIRouterAndHandlersTests: XCTestCase {
                 dictationViewModel,
                 router,
                 handlers
+            ]
+        )
+    }
+
+    private final class DictationContext: @unchecked Sendable {
+        let dictationViewModel: DictationViewModel
+        let audioRecordingService: AudioRecordingService
+        let textInsertionService: TextInsertionService
+        let profileService: ProfileService
+        private let retainedObjects: [AnyObject]
+
+        init(
+            dictationViewModel: DictationViewModel,
+            audioRecordingService: AudioRecordingService,
+            textInsertionService: TextInsertionService,
+            profileService: ProfileService,
+            retainedObjects: [AnyObject]
+        ) {
+            self.dictationViewModel = dictationViewModel
+            self.audioRecordingService = audioRecordingService
+            self.textInsertionService = textInsertionService
+            self.profileService = profileService
+            self.retainedObjects = retainedObjects
+        }
+    }
+
+    @MainActor
+    private static func makeDictationContext(
+        appSupportDirectory: URL,
+        mediaPlaybackService: MediaPlaybackService? = nil
+    ) -> DictationContext {
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let mockPlugin = MockTranscriptionPlugin()
+        let manifest = PluginManifest(
+            id: "com.typewhisper.mock.transcription",
+            name: "Mock Transcription",
+            version: "1.0.0",
+            principalClass: "APIRouterMockTranscriptionPlugin"
+        )
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: manifest,
+                instance: mockPlugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(mockPlugin.providerId)
+
+        let audioRecordingService = AudioRecordingService()
+        let hotkeyService = HotkeyService()
+        let textInsertionService = TextInsertionService()
+        let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
+        let profileService = ProfileService(appSupportDirectory: appSupportDirectory)
+        let audioDuckingService = AudioDuckingService()
+        let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
+        let snippetService = SnippetService(appSupportDirectory: appSupportDirectory)
+        let soundService = SoundService()
+        let audioDeviceService = AudioDeviceService()
+        let promptActionService = PromptActionService(appSupportDirectory: appSupportDirectory)
+        let promptProcessingService = PromptProcessingService()
+        let appFormatterService = AppFormatterService()
+        let speechFeedbackService = SpeechFeedbackService()
+        let accessibilityAnnouncementService = AccessibilityAnnouncementService()
+        let errorLogService = ErrorLogService(appSupportDirectory: appSupportDirectory)
+        let settingsViewModel = SettingsViewModel(modelManager: modelManager)
+        let mediaPlaybackService = mediaPlaybackService ?? MediaPlaybackService()
+
+        let dictationViewModel = DictationViewModel(
+            audioRecordingService: audioRecordingService,
+            textInsertionService: textInsertionService,
+            hotkeyService: hotkeyService,
+            modelManager: modelManager,
+            settingsViewModel: settingsViewModel,
+            historyService: historyService,
+            profileService: profileService,
+            translationService: nil,
+            audioDuckingService: audioDuckingService,
+            dictionaryService: dictionaryService,
+            snippetService: snippetService,
+            soundService: soundService,
+            audioDeviceService: audioDeviceService,
+            promptActionService: promptActionService,
+            promptProcessingService: promptProcessingService,
+            appFormatterService: appFormatterService,
+            speechFeedbackService: speechFeedbackService,
+            accessibilityAnnouncementService: accessibilityAnnouncementService,
+            errorLogService: errorLogService,
+            mediaPlaybackService: mediaPlaybackService
+        )
+        dictationViewModel.soundFeedbackEnabled = false
+        dictationViewModel.spokenFeedbackEnabled = false
+        dictationViewModel.audioDuckingEnabled = false
+        dictationViewModel.mediaPauseEnabled = false
+
+        return DictationContext(
+            dictationViewModel: dictationViewModel,
+            audioRecordingService: audioRecordingService,
+            textInsertionService: textInsertionService,
+            profileService: profileService,
+            retainedObjects: [
+                EventBus.shared,
+                PluginManager.shared,
+                modelManager,
+                audioRecordingService,
+                hotkeyService,
+                textInsertionService,
+                historyService,
+                profileService,
+                audioDuckingService,
+                dictionaryService,
+                snippetService,
+                soundService,
+                audioDeviceService,
+                promptActionService,
+                promptProcessingService,
+                appFormatterService,
+                speechFeedbackService,
+                accessibilityAnnouncementService,
+                errorLogService,
+                settingsViewModel,
+                mediaPlaybackService,
+                dictationViewModel
             ]
         )
     }

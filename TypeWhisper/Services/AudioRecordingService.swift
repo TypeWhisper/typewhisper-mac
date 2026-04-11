@@ -84,6 +84,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     @Published private(set) var isRecording = false
     @Published private(set) var audioLevel: Float = 0
     @Published private(set) var rawAudioLevel: Float = 0
+    var hasMicrophonePermissionOverride: Bool?
+    var startRecordingOverride: (() throws -> Void)?
 
     /// CoreAudio device ID to use for recording. nil = system default input.
     var selectedDeviceID: AudioDeviceID? {
@@ -120,7 +122,10 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     var hasMicrophonePermission: Bool {
-        AVAudioApplication.shared.recordPermission == .granted
+        if let hasMicrophonePermissionOverride {
+            return hasMicrophonePermissionOverride
+        }
+        return AVAudioApplication.shared.recordPermission == .granted
     }
 
     func requestMicrophonePermission() async -> Bool {
@@ -190,6 +195,16 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             throw AudioRecordingError.microphonePermissionDenied
         }
 
+        if let startRecordingOverride {
+            bufferLock.lock()
+            sampleBuffer.removeAll()
+            _peakRawAudioLevel = 0
+            bufferLock.unlock()
+            try startRecordingOverride()
+            isRecording = true
+            return
+        }
+
         let engine = AVAudioEngine()
 
         // Set the input device before reading the format
@@ -233,8 +248,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             self?.processAudioBuffer(buffer, converter: converter, targetFormat: targetFormat)
         }
 
+        let engineStartTime = CFAbsoluteTimeGetCurrent()
         do {
             try engine.start()
+            let elapsedMs = (CFAbsoluteTimeGetCurrent() - engineStartTime) * 1000
+            logger.info("Audio engine started in \(String(format: "%.1f", elapsedMs), privacy: .public)ms")
         } catch {
             inputNode.removeTap(onBus: 0)
             throw AudioRecordingError.engineStartFailed(error.localizedDescription)

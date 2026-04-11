@@ -15,6 +15,8 @@ final class TextInsertionService {
     var focusedTextFieldOverride: (() -> Bool)?
     var pasteSimulatorOverride: (() -> Void)?
     var returnSimulatorOverride: (() -> Void)?
+    var captureActiveAppOverride: (() -> (name: String?, bundleId: String?, url: String?))?
+    var selectedTextOverride: (() -> String?)?
 
 enum InsertionResult {
         case pasted
@@ -50,6 +52,9 @@ enum InsertionResult {
     }
 
     func captureActiveApp() -> (name: String?, bundleId: String?, url: String?) {
+        if let captureActiveAppOverride {
+            return captureActiveAppOverride()
+        }
         let app = NSWorkspace.shared.frontmostApplication
         let bundleId = app?.bundleIdentifier
         return (app?.localizedName, bundleId, nil)
@@ -241,7 +246,10 @@ enum InsertionResult {
     }
 
     func getSelectedText() -> String? {
-        getTextSelection()?.text
+        if let selectedTextOverride {
+            return selectedTextOverride()
+        }
+        return getTextSelection()?.text
     }
 
     /// Returns the selected text and the AXUIElement, so the selection can be replaced later.
