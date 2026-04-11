@@ -37,6 +37,7 @@ final class ModelManagerService: ObservableObject {
     }
 
     private var autoUnloadTask: Task<Void, Never>?
+    private var cancellables = Set<AnyCancellable>()
 
     private let providerKey = UserDefaultsKeys.selectedEngine
     private let modelKey = UserDefaultsKeys.selectedModelId
@@ -87,6 +88,17 @@ final class ModelManagerService: ObservableObject {
     func selectModel(_ providerId: String, modelId: String) {
         selectProvider(providerId)
         PluginManager.shared.transcriptionEngine(for: providerId)?.selectModel(modelId)
+    }
+
+    func observePluginManager() {
+        PluginManager.shared.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.restoreProviderSelection()
+                self.objectWillChange.send()
+            }
+            .store(in: &cancellables)
     }
 
     var supportsTranslation: Bool {

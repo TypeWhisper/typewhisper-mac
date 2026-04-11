@@ -173,6 +173,7 @@ final class ServiceContainer: ObservableObject {
         PluginRegistryService.shared = pluginRegistryService
         TermPackRegistryService.shared = termPackRegistryService
 
+        modelManagerService.observePluginManager()
         settingsViewModel.observePluginManager()
     }
 

@@ -401,7 +401,7 @@ final class DictationViewModel: ObservableObject {
         modelManager.cancelAutoUnloadTimer()
 
         guard canDictate else {
-            showError("No model loaded. Please download a model first.", category: "recording")
+            showError(TranscriptionEngineError.modelNotLoaded.localizedDescription, category: "recording")
             return
         }
 
