@@ -173,11 +173,13 @@
 		AA00000000000000000202 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000020 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000203 /* MLXAudioSTT in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000021 /* MLXAudioSTT */; };
 		AA00000000000000000204 /* MLXAudioCore in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000022 /* MLXAudioCore */; };
-		AA00000000000000000205 /* OverlayIndicatorPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000198 /* OverlayIndicatorPanel.swift */; };
-		AA00000000000000000206 /* OverlayIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000195 /* OverlayIndicatorView.swift */; };
-		AA00000000000000000207 /* IndicatorCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000196 /* IndicatorCoordinator.swift */; };
-		AA00000000000000000208 /* SharedIndicatorComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000197 /* SharedIndicatorComponents.swift */; };
-		AA00000000000000000209 /* DeepgramPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000200 /* DeepgramPlugin.swift */; };
+			AA00000000000000000205 /* OverlayIndicatorPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000198 /* OverlayIndicatorPanel.swift */; };
+			AA00000000000000000206 /* OverlayIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000195 /* OverlayIndicatorView.swift */; };
+			AA00000000000000000207 /* IndicatorCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000196 /* IndicatorCoordinator.swift */; };
+			AA00000000000000000208 /* SharedIndicatorComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000197 /* SharedIndicatorComponents.swift */; };
+			AA00000000000000000311 /* MinimalIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000309 /* MinimalIndicatorView.swift */; };
+			AA00000000000000000312 /* MinimalIndicatorPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000310 /* MinimalIndicatorPanel.swift */; };
+			AA00000000000000000209 /* DeepgramPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000200 /* DeepgramPlugin.swift */; };
 		AA00000000000000000210 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000201 /* manifest.json */; };
 		AA00000000000000000211 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000202 /* Localizable.xcstrings */; };
 		AA00000000000000000212 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000023 /* TypeWhisperPluginSDK */; };
@@ -496,11 +498,13 @@
 		BB00000000000000000192 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000193 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		BB00000000000000000194 /* CodeSigning.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = CodeSigning.xcconfig; sourceTree = "<group>"; };
-		BB00000000000000000195 /* OverlayIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayIndicatorView.swift; sourceTree = "<group>"; };
-		BB00000000000000000196 /* IndicatorCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndicatorCoordinator.swift; sourceTree = "<group>"; };
-		BB00000000000000000197 /* SharedIndicatorComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedIndicatorComponents.swift; sourceTree = "<group>"; };
-		BB00000000000000000198 /* OverlayIndicatorPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayIndicatorPanel.swift; sourceTree = "<group>"; };
-		BB00000000000000000199 /* DeepgramPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DeepgramPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+			BB00000000000000000195 /* OverlayIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayIndicatorView.swift; sourceTree = "<group>"; };
+			BB00000000000000000196 /* IndicatorCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndicatorCoordinator.swift; sourceTree = "<group>"; };
+			BB00000000000000000197 /* SharedIndicatorComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedIndicatorComponents.swift; sourceTree = "<group>"; };
+			BB00000000000000000198 /* OverlayIndicatorPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayIndicatorPanel.swift; sourceTree = "<group>"; };
+			BB00000000000000000309 /* MinimalIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinimalIndicatorView.swift; sourceTree = "<group>"; };
+			BB00000000000000000310 /* MinimalIndicatorPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinimalIndicatorPanel.swift; sourceTree = "<group>"; };
+			BB00000000000000000199 /* DeepgramPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DeepgramPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000200 /* DeepgramPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepgramPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000201 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000202 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
@@ -1077,14 +1081,16 @@
 			path = ViewModels;
 			sourceTree = "<group>";
 		};
-		CC00000000000000000008 /* Views */ = {
-			isa = PBXGroup;
-			children = (
-				BB00000000000000000198 /* OverlayIndicatorPanel.swift */,
-				BB00000000000000000195 /* OverlayIndicatorView.swift */,
-				BB00000000000000000197 /* SharedIndicatorComponents.swift */,
-				BB00000000000000000014 /* MenuBarView.swift */,
-				BB00000000000000000016 /* FileTranscriptionView.swift */,
+			CC00000000000000000008 /* Views */ = {
+				isa = PBXGroup;
+				children = (
+					BB00000000000000000198 /* OverlayIndicatorPanel.swift */,
+					BB00000000000000000195 /* OverlayIndicatorView.swift */,
+					BB00000000000000000310 /* MinimalIndicatorPanel.swift */,
+					BB00000000000000000309 /* MinimalIndicatorView.swift */,
+					BB00000000000000000197 /* SharedIndicatorComponents.swift */,
+					BB00000000000000000014 /* MenuBarView.swift */,
+					BB00000000000000000016 /* FileTranscriptionView.swift */,
 				BB00000000000000000017 /* SettingsView.swift */,
 				BB00000000000000000046 /* AdvancedSettingsView.swift */,
 				BB00000000000000000051 /* GeneralSettingsView.swift */,
@@ -2768,14 +2774,16 @@
 				AA00000000000000000117 /* PromptActionsSettingsView.swift in Sources */,
 				AA00000000000000000118 /* PromptPalettePanel.swift in Sources */,
 				AA00000000000000000217 /* IndicatorPreviewView.swift in Sources */,
-				AA00000000000000000123 /* EventBus.swift in Sources */,
-				AA00000000000000000124 /* PluginManager.swift in Sources */,
-				AA00000000000000000160 /* PluginRegistryService.swift in Sources */,
-				AA00000000000000000125 /* HostServicesImpl.swift in Sources */,
-				AA00000000000000000205 /* OverlayIndicatorPanel.swift in Sources */,
-				AA00000000000000000206 /* OverlayIndicatorView.swift in Sources */,
-				AA00000000000000000208 /* SharedIndicatorComponents.swift in Sources */,
-				AA00000000000000000126 /* PostProcessingPipeline.swift in Sources */,
+					AA00000000000000000123 /* EventBus.swift in Sources */,
+					AA00000000000000000124 /* PluginManager.swift in Sources */,
+					AA00000000000000000160 /* PluginRegistryService.swift in Sources */,
+					AA00000000000000000125 /* HostServicesImpl.swift in Sources */,
+					AA00000000000000000205 /* OverlayIndicatorPanel.swift in Sources */,
+					AA00000000000000000206 /* OverlayIndicatorView.swift in Sources */,
+					AA00000000000000000312 /* MinimalIndicatorPanel.swift in Sources */,
+					AA00000000000000000311 /* MinimalIndicatorView.swift in Sources */,
+					AA00000000000000000208 /* SharedIndicatorComponents.swift in Sources */,
+					AA00000000000000000126 /* PostProcessingPipeline.swift in Sources */,
 				AA00000000000000000127 /* PluginSettingsView.swift in Sources */,
 				AA00000000000000000152 /* AppConstants.swift in Sources */,
 				AA00000000000000000189 /* WidgetData.swift in Sources */,

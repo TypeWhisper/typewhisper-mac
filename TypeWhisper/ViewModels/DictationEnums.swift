@@ -3,6 +3,7 @@ import Foundation
 enum IndicatorStyle: String, CaseIterable {
     case notch
     case overlay
+    case minimal
 }
 
 enum NotchIndicatorVisibility: String, CaseIterable {

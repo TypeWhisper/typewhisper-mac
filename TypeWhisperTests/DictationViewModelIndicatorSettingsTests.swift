@@ -38,4 +38,23 @@ final class DictationViewModelIndicatorSettingsTests: XCTestCase {
 
         XCTAssertTrue(DictationViewModel.loadIndicatorTranscriptPreviewEnabled(defaults: defaults))
     }
+
+    func testIndicatorStyleDefaultsToNotch() {
+        defaults.removeObject(forKey: UserDefaultsKeys.indicatorStyle)
+
+        XCTAssertEqual(DictationViewModel.loadIndicatorStyle(defaults: defaults), .notch)
+    }
+
+    func testIndicatorStylePersistsMinimal() {
+        DictationViewModel.persistIndicatorStyle(.minimal, defaults: defaults)
+
+        XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.indicatorStyle), IndicatorStyle.minimal.rawValue)
+        XCTAssertEqual(DictationViewModel.loadIndicatorStyle(defaults: defaults), .minimal)
+    }
+
+    func testUnknownIndicatorStyleFallsBackToNotch() {
+        defaults.set("mystery", forKey: UserDefaultsKeys.indicatorStyle)
+
+        XCTAssertEqual(DictationViewModel.loadIndicatorStyle(defaults: defaults), .notch)
+    }
 }

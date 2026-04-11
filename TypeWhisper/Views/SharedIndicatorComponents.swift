@@ -42,6 +42,20 @@ struct IndicatorSizing {
         textFontSize: 13,
         textExpandedHeight: 100
     )
+
+    static let minimal = IndicatorSizing(
+        iconSize: 14,
+        iconCornerRadius: 3,
+        dotSize: 6,
+        symbolSize: 12,
+        timerFontSize: 11,
+        timerOpacity: 0.75,
+        profileFontSize: 10,
+        profilePaddingH: 5,
+        profilePaddingV: 2,
+        textFontSize: 12,
+        textExpandedHeight: 0
+    )
 }
 
 // MARK: - App Icon
@@ -172,10 +186,10 @@ struct IndicatorRecordingContent: View {
                     .accessibilityLabel(String(localized: "Active profile"))
                     .accessibilityValue(name)
             } else {
-                Color.clear
+                Color.clear.frame(width: 0, height: 0)
             }
         case .none:
-            Color.clear
+            Color.clear.frame(width: 0, height: 0)
         }
     }
 }

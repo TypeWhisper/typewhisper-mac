@@ -5936,6 +5936,16 @@
         }
       }
     },
+    "The indicator style is a compact power-user indicator that only shows status, errors, and action feedback." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Indikator-Stil ist ein kompakter Power-User-Indikator, der nur Status, Fehler und Aktions-Feedback zeigt."
+          }
+        }
+      }
+    },
     "When disabled, the indicator only shows recording status while transcription continues in the background." : {
       "localizations" : {
         "de" : {

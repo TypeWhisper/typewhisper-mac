@@ -4,13 +4,17 @@ struct IndicatorPreviewView: View {
     @ObservedObject private var dictation = DictationViewModel.shared
 
     private let streamingText = String(localized: "Hello, this is a live preview of the streaming text...")
-    private var showTranscriptPreview: Bool { dictation.indicatorTranscriptPreviewEnabled }
+    private var showTranscriptPreview: Bool {
+        dictation.indicatorTranscriptPreviewEnabled && dictation.indicatorStyle != .minimal
+    }
     private var previewHeight: CGFloat {
         switch dictation.indicatorStyle {
         case .notch:
             return showTranscriptPreview ? 110 : 88
         case .overlay:
             return showTranscriptPreview ? 110 : 82
+        case .minimal:
+            return 72
         }
     }
 
@@ -22,8 +26,10 @@ struct IndicatorPreviewView: View {
             Group {
                 if dictation.indicatorStyle == .notch {
                     notchPreview
-                } else {
+                } else if dictation.indicatorStyle == .overlay {
                     overlayPreview
+                } else {
+                    minimalPreview
                 }
             }
             .environment(\.colorScheme, .dark)
@@ -116,6 +122,23 @@ struct IndicatorPreviewView: View {
         )
     }
 
+    @ViewBuilder
+    private var minimalPreview: some View {
+        HStack(spacing: 8) {
+            appIconPlaceholder(size: 14, cornerRadius: 3)
+            if dictation.notchIndicatorRightContent != .none {
+                contentLabel(dictation.notchIndicatorRightContent, size: 11)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(.black.opacity(0.85), in: Capsule())
+        .overlay(
+            Capsule()
+                .stroke(Color.white.opacity(0.14), lineWidth: 1)
+        )
+    }
+
     // MARK: - App Icon Placeholder
 
     private func appIconPlaceholder(size: CGFloat, cornerRadius: CGFloat) -> some View {
@@ -170,45 +193,64 @@ struct IndicatorPreviewView: View {
 
 struct IndicatorStylePicker: View {
     @ObservedObject private var dictation = DictationViewModel.shared
+    private let notchTileWidth: CGFloat = 84
+    private let compactTileWidth: CGFloat = 70
 
     var body: some View {
         HStack(spacing: 8) {
             styleTile(.notch, label: String(localized: "Notch")) {
                 HStack(spacing: 0) {
-                    RoundedRectangle(cornerRadius: 1)
-                        .fill(.white.opacity(0.5))
-                        .frame(width: 16, height: 8)
-                    Color.clear.frame(width: 30)
-                    RoundedRectangle(cornerRadius: 1)
-                        .fill(.white.opacity(0.3))
-                        .frame(width: 8, height: 8)
+                    HStack(spacing: 3) {
+                        tileStatusIndicator(size: 7, cornerRadius: 2)
+                        tileContentLabel(dictation.notchIndicatorLeftContent, size: 7)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, 6)
+
+                    Color.clear.frame(width: 24)
+
+                    tileContentLabel(dictation.notchIndicatorRightContent, size: 7)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding(.trailing, 6)
                 }
-                .padding(.leading, 6)
-                .frame(width: 70, height: 20)
+                .frame(width: notchTileWidth, height: 20)
                 .background(.black)
                 .clipShape(NotchShape(topCornerRadius: 3, bottomCornerRadius: 6))
             }
 
             styleTile(.overlay, label: String(localized: "Overlay")) {
-                HStack(spacing: 3) {
-                    Circle().fill(.white.opacity(0.5)).frame(width: 4, height: 4)
-                    RoundedRectangle(cornerRadius: 1)
-                        .fill(.white.opacity(0.3))
-                        .frame(width: 16, height: 4)
-                    Spacer()
-                    RoundedRectangle(cornerRadius: 1)
-                        .fill(.white.opacity(0.3))
-                        .frame(width: 8, height: 4)
+                HStack(spacing: 4) {
+                    tileStatusIndicator(size: 5, cornerRadius: 1.5)
+                    tileContentLabel(dictation.notchIndicatorLeftContent, size: 7)
+                    Spacer(minLength: 4)
+                    tileContentLabel(dictation.notchIndicatorRightContent, size: 7)
                 }
                 .padding(.horizontal, 6)
-                .frame(width: 70, height: 20)
+                .frame(width: compactTileWidth, height: 20)
                 .background(.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .stroke(Color.white.opacity(0.15), lineWidth: 0.5)
                 )
             }
+
+            styleTile(.minimal, label: String(localized: "Indicator")) {
+                HStack(spacing: 4) {
+                    tileStatusIndicator(size: 7, cornerRadius: 2)
+                    if dictation.notchIndicatorRightContent != .none {
+                        tileContentLabel(dictation.notchIndicatorRightContent, size: 7)
+                    }
+                }
+                .padding(.horizontal, 7)
+                .frame(width: 52, height: 20)
+                .background(.black.opacity(0.85), in: Capsule())
+                .overlay(
+                    Capsule()
+                        .stroke(Color.white.opacity(0.15), lineWidth: 0.5)
+                )
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
@@ -235,9 +277,50 @@ struct IndicatorStylePicker: View {
                     .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.2), lineWidth: isSelected ? 2 : 1)
             )
         }
+        .frame(maxWidth: .infinity)
         .buttonStyle(.plain)
         .accessibilityLabel(label)
         .accessibilityAddTraits(.isButton)
         .accessibilityValue(isSelected ? String(localized: "Selected") : "")
+    }
+
+    private func tileStatusIndicator(size: CGFloat, cornerRadius: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: cornerRadius)
+            .fill(.white.opacity(0.45))
+            .frame(width: size, height: size)
+    }
+
+    @ViewBuilder
+    private func tileContentLabel(_ content: NotchIndicatorContent, size: CGFloat) -> some View {
+        switch content {
+        case .indicator:
+            Circle()
+                .fill(Color.red)
+                .frame(width: size * 0.7, height: size * 0.7)
+        case .timer:
+            Text("1:23")
+                .font(.system(size: size, weight: .medium).monospacedDigit())
+                .foregroundStyle(.white.opacity(0.65))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+        case .waveform:
+            HStack(spacing: 1) {
+                ForEach(0..<5, id: \.self) { index in
+                    RoundedRectangle(cornerRadius: 0.7)
+                        .fill(.white.opacity(0.9))
+                        .frame(width: 1.8, height: [3, 6, 8, 5, 3][index])
+                }
+            }
+            .frame(height: 10)
+        case .profile:
+            Text("P")
+                .font(.system(size: size * 0.9, weight: .medium))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 3)
+                .padding(.vertical, 1)
+                .background(.white.opacity(0.2), in: Capsule())
+        case .none:
+            Color.clear.frame(width: 0, height: 0)
+        }
     }
 }

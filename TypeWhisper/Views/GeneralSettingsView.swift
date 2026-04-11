@@ -17,6 +17,14 @@ struct GeneralSettingsView: View {
     @ObservedObject private var settings = SettingsViewModel.shared
     @ObservedObject private var dictation = DictationViewModel.shared
 
+    private var supportsTranscriptPreview: Bool {
+        dictation.indicatorStyle != .minimal
+    }
+
+    private var supportsPositionSelection: Bool {
+        dictation.indicatorStyle == .overlay || dictation.indicatorStyle == .minimal
+    }
+
     var body: some View {
         Form {
             Section(String(localized: "Spoken Language")) {
@@ -108,12 +116,14 @@ struct GeneralSettingsView: View {
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
 
-                Toggle(String(localized: "Show live transcript preview"), isOn: $dictation.indicatorTranscriptPreviewEnabled)
+                if supportsTranscriptPreview {
+                    Toggle(String(localized: "Show live transcript preview"), isOn: $dictation.indicatorTranscriptPreviewEnabled)
 
-                if !dictation.indicatorTranscriptPreviewEnabled {
-                    Text(String(localized: "When disabled, the indicator only shows recording status while transcription continues in the background."))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if !dictation.indicatorTranscriptPreviewEnabled {
+                        Text(String(localized: "When disabled, the indicator only shows recording status while transcription continues in the background."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Picker(String(localized: "Visibility"), selection: $dictation.notchIndicatorVisibility) {
@@ -128,15 +138,17 @@ struct GeneralSettingsView: View {
                     Text(String(localized: "Built-in Display")).tag(NotchIndicatorDisplay.builtInScreen)
                 }
 
-                if dictation.indicatorStyle == .overlay {
+                if supportsPositionSelection {
                     Picker(String(localized: "Position"), selection: $dictation.overlayPosition) {
                         Text(String(localized: "Top")).tag(OverlayPosition.top)
                         Text(String(localized: "Bottom")).tag(OverlayPosition.bottom)
                     }
                 }
 
-                Picker(String(localized: "Left Side"), selection: $dictation.notchIndicatorLeftContent) {
-                    notchContentPickerOptions
+                if dictation.indicatorStyle != .minimal {
+                    Picker(String(localized: "Left Side"), selection: $dictation.notchIndicatorLeftContent) {
+                        notchContentPickerOptions
+                    }
                 }
 
                 Picker(String(localized: "Right Side"), selection: $dictation.notchIndicatorRightContent) {
@@ -145,6 +157,10 @@ struct GeneralSettingsView: View {
 
                 if dictation.indicatorStyle == .notch {
                     Text(String(localized: "The notch indicator extends the MacBook notch area to show recording status."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if dictation.indicatorStyle == .minimal {
+                    Text(String(localized: "The indicator style is a compact power-user indicator that only shows status, errors, and action feedback."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {

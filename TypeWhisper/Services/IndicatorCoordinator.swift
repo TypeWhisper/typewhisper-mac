@@ -7,6 +7,7 @@ import Combine
 final class IndicatorCoordinator {
     private let notchPanel = NotchIndicatorPanel()
     private let overlayPanel = OverlayIndicatorPanel()
+    private let minimalPanel = MinimalIndicatorPanel()
     private var cancellables = Set<AnyCancellable>()
 
     func startObserving() {
@@ -23,16 +24,23 @@ final class IndicatorCoordinator {
         // Both panels observe state; the coordinator and panels gate which one is active
         notchPanel.startObserving()
         overlayPanel.startObserving()
+        minimalPanel.startObserving()
     }
 
     private func switchStyle(_ style: IndicatorStyle, vm: DictationViewModel) {
         switch style {
         case .notch:
             overlayPanel.dismiss()
+            minimalPanel.dismiss()
             notchPanel.updateVisibility(state: vm.state, vm: vm)
         case .overlay:
             notchPanel.dismiss()
+            minimalPanel.dismiss()
             overlayPanel.updateVisibility(state: vm.state, vm: vm)
+        case .minimal:
+            notchPanel.dismiss()
+            overlayPanel.dismiss()
+            minimalPanel.updateVisibility(state: vm.state, vm: vm)
         }
     }
 }

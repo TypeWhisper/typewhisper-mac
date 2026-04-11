@@ -72,7 +72,7 @@ final class DictationViewModel: ObservableObject {
     private var actionDisplayDuration: TimeInterval = 3.5
 
     @Published var indicatorStyle: IndicatorStyle {
-        didSet { UserDefaults.standard.set(indicatorStyle.rawValue, forKey: UserDefaultsKeys.indicatorStyle) }
+        didSet { Self.persistIndicatorStyle(indicatorStyle) }
     }
 
     @Published var notchIndicatorVisibility: NotchIndicatorVisibility {
@@ -204,8 +204,7 @@ final class DictationViewModel: ObservableObject {
         self.preserveClipboard = UserDefaults.standard.bool(forKey: UserDefaultsKeys.preserveClipboard)
         self.mediaPauseEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.mediaPauseEnabled)
         self.spokenFeedbackEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.spokenFeedbackEnabled)
-        self.indicatorStyle = UserDefaults.standard.string(forKey: UserDefaultsKeys.indicatorStyle)
-            .flatMap { IndicatorStyle(rawValue: $0) } ?? .notch
+        self.indicatorStyle = Self.loadIndicatorStyle()
         self.notchIndicatorVisibility = UserDefaults.standard.string(forKey: UserDefaultsKeys.notchIndicatorVisibility)
             .flatMap { NotchIndicatorVisibility(rawValue: $0) } ?? .duringActivity
         self.notchIndicatorLeftContent = UserDefaults.standard.string(forKey: UserDefaultsKeys.notchIndicatorLeftContent)
@@ -268,6 +267,15 @@ final class DictationViewModel: ObservableObject {
 
     nonisolated static func persistIndicatorTranscriptPreviewEnabled(_ enabled: Bool, defaults: UserDefaults = .standard) {
         defaults.set(enabled, forKey: UserDefaultsKeys.indicatorTranscriptPreviewEnabled)
+    }
+
+    nonisolated static func loadIndicatorStyle(defaults: UserDefaults = .standard) -> IndicatorStyle {
+        defaults.string(forKey: UserDefaultsKeys.indicatorStyle)
+            .flatMap { IndicatorStyle(rawValue: $0) } ?? .notch
+    }
+
+    nonisolated static func persistIndicatorStyle(_ style: IndicatorStyle, defaults: UserDefaults = .standard) {
+        defaults.set(style.rawValue, forKey: UserDefaultsKeys.indicatorStyle)
     }
 
     var needsMicPermission: Bool {
