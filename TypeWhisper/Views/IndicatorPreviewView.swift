@@ -4,6 +4,15 @@ struct IndicatorPreviewView: View {
     @ObservedObject private var dictation = DictationViewModel.shared
 
     private let streamingText = String(localized: "Hello, this is a live preview of the streaming text...")
+    private var showTranscriptPreview: Bool { dictation.indicatorTranscriptPreviewEnabled }
+    private var previewHeight: CGFloat {
+        switch dictation.indicatorStyle {
+        case .notch:
+            return showTranscriptPreview ? 110 : 88
+        case .overlay:
+            return showTranscriptPreview ? 110 : 82
+        }
+    }
 
     var body: some View {
         ZStack {
@@ -19,10 +28,11 @@ struct IndicatorPreviewView: View {
             }
             .environment(\.colorScheme, .dark)
         }
-        .frame(height: 110)
+        .frame(height: previewHeight)
         .animation(.easeInOut(duration: 0.2), value: dictation.indicatorStyle)
         .animation(.easeInOut(duration: 0.2), value: dictation.notchIndicatorLeftContent)
         .animation(.easeInOut(duration: 0.2), value: dictation.notchIndicatorRightContent)
+        .animation(.easeInOut(duration: 0.2), value: dictation.indicatorTranscriptPreviewEnabled)
         .accessibilityHidden(true)
     }
 
@@ -35,7 +45,6 @@ struct IndicatorPreviewView: View {
     @ViewBuilder
     private var notchPreview: some View {
         let closedWidth = notchWidth + 2 * extensionWidth
-        let expandedWidth: CGFloat = max(closedWidth, 360)
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 0) {
                 HStack(spacing: 5) {
@@ -43,7 +52,7 @@ struct IndicatorPreviewView: View {
                     contentLabel(dictation.notchIndicatorLeftContent, size: 9)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                .padding(.leading, 14)
+                .padding(.leading, 20)
 
                 Color.clear
                     .frame(width: notchWidth)
@@ -55,17 +64,24 @@ struct IndicatorPreviewView: View {
             .frame(width: closedWidth, height: notchHeight)
             .frame(maxWidth: .infinity)
 
-            Text(streamingText)
-                .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.7))
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 28)
-                .padding(.vertical, 8)
+            if showTranscriptPreview {
+                Text(streamingText)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 8)
+            }
         }
-        .frame(width: expandedWidth)
+        .frame(width: showTranscriptPreview ? max(closedWidth, 360) : closedWidth)
         .background(.black)
-        .clipShape(NotchShape(topCornerRadius: 19, bottomCornerRadius: 24))
+        .clipShape(
+            NotchShape(
+                topCornerRadius: showTranscriptPreview ? 19 : 6,
+                bottomCornerRadius: showTranscriptPreview ? 24 : 14
+            )
+        )
     }
 
     // MARK: - Overlay Preview
@@ -82,15 +98,17 @@ struct IndicatorPreviewView: View {
             .padding(.horizontal, 20)
             .frame(height: 42)
 
-            Text(streamingText)
-                .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(0.7))
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 20)
-                .padding(.bottom, 10)
+            if showTranscriptPreview {
+                Text(streamingText)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 10)
+            }
         }
-        .frame(width: 320)
+        .frame(width: showTranscriptPreview ? 320 : 280)
         .background(.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -165,6 +183,7 @@ struct IndicatorStylePicker: View {
                         .fill(.white.opacity(0.3))
                         .frame(width: 8, height: 8)
                 }
+                .padding(.leading, 6)
                 .frame(width: 70, height: 20)
                 .background(.black)
                 .clipShape(NotchShape(topCornerRadius: 3, bottomCornerRadius: 6))
