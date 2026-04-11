@@ -104,7 +104,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private let stopStateLock = NSLock()
     private let engineLock = NSLock()
     private let processingQueue = DispatchQueue(label: "com.typewhisper.audio-processing", qos: .userInteractive)
+    private let recoveryQueue = DispatchQueue(label: "com.typewhisper.audio-recovery", qos: .userInitiated)
     private let engineTeardownRetainer = DelayedReleaseRetainer<AVAudioEngine>(label: "com.typewhisper.audio-engine-teardown")
+    private let recoveryCoordinator = AudioEngineRecoveryCoordinator()
     private var _lastStopGraceCaptureApplied = false
 
     static let targetSampleRate: Double = 16000
@@ -205,69 +207,25 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             return
         }
 
+        clearRecordingBuffer()
         let engine = AVAudioEngine()
-
-        // Set the input device before reading the format
-        if let deviceID = selectedDeviceID {
-            if !setInputDevice(deviceID, on: engine, label: "recording") {
-                logger.error("Failed to set recording input device (\(deviceID)), falling back to system default")
-            }
-        }
-
-        let inputNode = engine.inputNode
-        let inputFormat = inputNode.outputFormat(forBus: 0)
-        logger.info("Recording input format: sampleRate=\(inputFormat.sampleRate), channels=\(inputFormat.channelCount)")
-
-        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
-            throw AudioRecordingError.engineStartFailed("No audio input available")
-        }
-
-        // Target format: 16kHz mono Float32
-        guard let targetFormat = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: Self.targetSampleRate,
-            channels: 1,
-            interleaved: false
-        ) else {
-            throw AudioRecordingError.engineStartFailed("Cannot create target audio format")
-        }
-
-        let tapFormat = Self.monoTapFormat(for: inputFormat)
-
-        let converter = AVAudioConverter(from: tapFormat, to: targetFormat)
-        guard let converter else {
-            throw AudioRecordingError.engineStartFailed("Cannot create audio converter")
-        }
-
-        bufferLock.lock()
-        sampleBuffer.removeAll()
-        _peakRawAudioLevel = 0
-        bufferLock.unlock()
-
-        inputNode.installTap(onBus: 0, bufferSize: Self.captureTapFrames, format: tapFormat) { [weak self] buffer, _ in
-            self?.processAudioBuffer(buffer, converter: converter, targetFormat: targetFormat)
-        }
-
-        let engineStartTime = CFAbsoluteTimeGetCurrent()
-        do {
-            try engine.start()
-            let elapsedMs = (CFAbsoluteTimeGetCurrent() - engineStartTime) * 1000
-            logger.info("Audio engine started in \(String(format: "%.1f", elapsedMs), privacy: .public)ms")
-        } catch {
-            inputNode.removeTap(onBus: 0)
-            throw AudioRecordingError.engineStartFailed(error.localizedDescription)
-        }
-
         engineLock.withLock { audioEngine = engine }
-        isRecording = true
+        recoveryCoordinator.beginStarting()
+        installConfigurationObserver(for: engine)
 
-        // Restart engine when macOS changes audio config (e.g. notification sounds)
-        configChangeObserver = NotificationCenter.default.addObserver(
-            forName: .AVAudioEngineConfigurationChange,
-            object: engine,
-            queue: .main
-        ) { [weak self] _ in
-            self?.handleConfigurationChange()
+        do {
+            try startEngineWithRecovery(engine, label: "recording")
+
+            if recoveryCoordinator.finishStartingSuccessfully() == .performImmediateRecovery {
+                logger.warning("Audio engine configuration changed while recording was starting, restarting with fresh input format")
+                try restartEngineWithRecovery(engine, label: "recording-startup")
+                scheduleRecoveryIfNeeded(recoveryCoordinator.finishRecovery())
+            }
+
+            isRecording = true
+        } catch {
+            cleanupAfterFailedStart(engine)
+            throw error
         }
     }
 
@@ -294,13 +252,10 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
 
         setLastStopGraceCaptureApplied(graceApplied)
+        recoveryCoordinator.transitionToIdle()
 
-        if let observer = configChangeObserver {
-            NotificationCenter.default.removeObserver(observer)
-            configChangeObserver = nil
-        }
-        engine.inputNode.removeTap(onBus: 0)
-        engine.stop()
+        removeConfigurationObserver()
+        teardownEngine(engine)
         // Keep the engine alive briefly so CoreAudio's internal teardown callbacks
         // cannot outlive the AVAudioEngine objects they still reference.
         engineTeardownRetainer.retain(engine, for: Self.engineTeardownRetentionInterval)
@@ -320,28 +275,99 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
     /// Re-setup the audio engine after a system configuration change (e.g. notification sound).
     /// Preserves already-buffered samples so no audio is lost.
-    private func handleConfigurationChange() {
+    private func handleConfigurationChangeNotification() {
+        scheduleRecoveryIfNeeded(recoveryCoordinator.noteConfigurationChange())
+    }
+
+    private func scheduleRecoveryIfNeeded(_ action: AudioEngineRecoveryAction) {
+        guard case .schedule(let generation, let delay) = action else { return }
+
+        recoveryQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
+            self?.performScheduledRecovery(generation: generation)
+        }
+    }
+
+    private func performScheduledRecovery(generation: UInt64) {
+        guard recoveryCoordinator.beginScheduledRecovery(generation: generation) else { return }
+        defer {
+            scheduleRecoveryIfNeeded(recoveryCoordinator.finishRecovery())
+        }
+
         let engine: AVAudioEngine? = engineLock.withLock { audioEngine }
         guard isRecording, let engine else { return }
+
         logger.warning("Audio engine configuration changed during recording, restarting engine")
 
-        engine.inputNode.removeTap(onBus: 0)
-        engine.stop()
+        do {
+            try restartEngineWithRecovery(engine, label: "config-change")
+        } catch {
+            logger.error("Failed to restart audio engine after configuration change: \(error.localizedDescription)")
+        }
+    }
 
-        let deviceID = selectedDeviceID
-        if let deviceID {
-            if !setInputDevice(deviceID, on: engine, label: "config-change") {
-                logger.warning("Failed to re-set device after config change (\(deviceID)), using default")
+    private func installConfigurationObserver(for engine: AVAudioEngine) {
+        removeConfigurationObserver()
+        configChangeObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: nil
+        ) { [weak self] _ in
+            self?.handleConfigurationChangeNotification()
+        }
+    }
+
+    private func removeConfigurationObserver() {
+        if let observer = configChangeObserver {
+            NotificationCenter.default.removeObserver(observer)
+            configChangeObserver = nil
+        }
+    }
+
+    private func startEngineWithRecovery(_ engine: AVAudioEngine, label: String) throws {
+        for (attempt, delay) in AudioEngineRecoveryPolicy.retryBackoff.enumerated() {
+            do {
+                try configureAndStartEngine(engine, label: label)
+                return
+            } catch let error as AudioRecordingError {
+                throw error
+            } catch {
+                guard AudioEngineRecoveryPolicy.isRetryable(error: error) else {
+                    throw AudioRecordingError.engineStartFailed(error.localizedDescription)
+                }
+
+                logger.warning("\(label, privacy: .public) audio engine start failed with retryable error, retry \(attempt + 1) in \(delay, privacy: .public)s: \(error.localizedDescription, privacy: .public)")
+                Thread.sleep(forTimeInterval: delay)
+            }
+        }
+
+        do {
+            try configureAndStartEngine(engine, label: label)
+        } catch let error as AudioRecordingError {
+            throw error
+        } catch {
+            throw AudioRecordingError.engineStartFailed(error.localizedDescription)
+        }
+    }
+
+    private func restartEngineWithRecovery(_ engine: AVAudioEngine, label: String) throws {
+        teardownEngine(engine)
+        try startEngineWithRecovery(engine, label: label)
+    }
+
+    private func configureAndStartEngine(_ engine: AVAudioEngine, label: String) throws {
+        // Set the input device before reading the format so each retry sees fresh hardware state.
+        if let deviceID = selectedDeviceID {
+            if !setInputDevice(deviceID, on: engine, label: label) {
+                logger.error("Failed to set \(label, privacy: .public) input device (\(deviceID)), falling back to system default")
             }
         }
 
         let inputNode = engine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
-        logger.info("Config-change input format: sampleRate=\(inputFormat.sampleRate), channels=\(inputFormat.channelCount)")
+        logger.info("\(label, privacy: .public) input format: sampleRate=\(inputFormat.sampleRate), channels=\(inputFormat.channelCount)")
 
         guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
-            logger.error("Cannot restart engine: no audio input available")
-            return
+            throw AudioRecordingError.engineStartFailed("No audio input available")
         }
 
         guard let targetFormat = AVAudioFormat(
@@ -350,28 +376,58 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             channels: 1,
             interleaved: false
         ) else {
-            logger.error("Cannot restart engine: failed to create target format")
-            return
+            throw AudioRecordingError.engineStartFailed("Cannot create target audio format")
         }
 
         let tapFormat = Self.monoTapFormat(for: inputFormat)
 
         guard let converter = AVAudioConverter(from: tapFormat, to: targetFormat) else {
-            logger.error("Cannot restart engine: failed to create audio converter")
-            return
+            throw AudioRecordingError.engineStartFailed("Cannot create audio converter")
         }
 
         inputNode.installTap(onBus: 0, bufferSize: Self.captureTapFrames, format: tapFormat) { [weak self] buffer, _ in
             self?.processAudioBuffer(buffer, converter: converter, targetFormat: targetFormat)
         }
 
+        let engineStartTime = CFAbsoluteTimeGetCurrent()
         do {
             try engine.start()
-            logger.info("Audio engine restarted successfully")
+            let elapsedMs = (CFAbsoluteTimeGetCurrent() - engineStartTime) * 1000
+            logger.info("\(label, privacy: .public) audio engine started in \(String(format: "%.1f", elapsedMs), privacy: .public)ms")
         } catch {
             inputNode.removeTap(onBus: 0)
-            logger.error("Failed to restart audio engine: \(error.localizedDescription)")
+            engine.stop()
+            throw error
         }
+    }
+
+    private func teardownEngine(_ engine: AVAudioEngine) {
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+    }
+
+    private func cleanupAfterFailedStart(_ engine: AVAudioEngine) {
+        recoveryCoordinator.transitionToIdle()
+        removeConfigurationObserver()
+        engineLock.withLock {
+            if audioEngine === engine {
+                audioEngine = nil
+            }
+        }
+        teardownEngine(engine)
+        engineTeardownRetainer.retain(engine, for: Self.engineTeardownRetentionInterval)
+        DispatchQueue.main.async { [weak self] in
+            self?.isRecording = false
+            self?.audioLevel = 0
+            self?.rawAudioLevel = 0
+        }
+    }
+
+    private func clearRecordingBuffer() {
+        bufferLock.lock()
+        sampleBuffer.removeAll()
+        _peakRawAudioLevel = 0
+        bufferLock.unlock()
     }
 
     private func processAudioBuffer(

@@ -37,9 +37,14 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
 
     private var listenerBlock: AudioObjectPropertyListenerBlock?
     private var previewEngine: AVAudioEngine?
+    private var previewConfigChangeObserver: NSObjectProtocol?
     private let deviceChangeSubject = PassthroughSubject<Void, Never>()
     private var cancellables = Set<AnyCancellable>()
     private var disconnectVerificationTask: Task<Void, Never>?
+    private let previewLock = NSLock()
+    private let previewRecoveryQueue = DispatchQueue(label: "com.typewhisper.preview-recovery", qos: .userInitiated)
+    private let previewRecoveryCoordinator = AudioEngineRecoveryCoordinator()
+    private var activePreviewDeviceID: AudioDeviceID?
 
     init() {
         selectedDeviceUID = UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedInputDeviceUID)
@@ -81,40 +86,43 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         }
 
         let engine = AVAudioEngine()
+        let preferredDeviceID = selectedDeviceID
 
-        if let deviceID = selectedDeviceID {
-            if !setInputDevice(deviceID, on: engine, label: "preview") {
-                logger.error("Failed to set preview input device (\(deviceID)), falling back to system default")
-            }
+        previewLock.withLock {
+            previewEngine = engine
+            activePreviewDeviceID = preferredDeviceID
         }
-
-        let inputNode = engine.inputNode
-        let format = inputNode.outputFormat(forBus: 0)
-        logger.info("Preview input format: sampleRate=\(format.sampleRate), channels=\(format.channelCount)")
-        guard format.sampleRate > 0, format.channelCount > 0 else {
-            logger.warning("No audio input available for preview")
-            return
-        }
-
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
-            self?.processPreviewBuffer(buffer)
-        }
+        previewRecoveryCoordinator.beginStarting()
+        installPreviewConfigurationObserver(for: engine)
 
         do {
-            try engine.start()
-            previewEngine = engine
+            try startPreviewEngineWithRecovery(engine, preferredDeviceID: preferredDeviceID, label: "preview")
+
+            if previewRecoveryCoordinator.finishStartingSuccessfully() == .performImmediateRecovery {
+                logger.warning("Preview engine configuration changed while starting, restarting with fresh input format")
+                try restartPreviewEngineWithRecovery(engine, preferredDeviceID: preferredDeviceID, label: "preview-startup")
+                schedulePreviewRecoveryIfNeeded(previewRecoveryCoordinator.finishRecovery())
+            }
+
             isPreviewActive = true
         } catch {
             logger.error("Failed to start preview engine: \(error.localizedDescription)")
-            inputNode.removeTap(onBus: 0)
-            engine.stop()
+            cleanupAfterFailedPreviewStart(engine)
         }
     }
 
     func stopPreview() {
-        previewEngine?.inputNode.removeTap(onBus: 0)
-        previewEngine?.stop()
-        previewEngine = nil
+        previewRecoveryCoordinator.transitionToIdle()
+        removePreviewConfigurationObserver()
+        let engine: AVAudioEngine? = previewLock.withLock {
+            let engine = previewEngine
+            previewEngine = nil
+            activePreviewDeviceID = nil
+            return engine
+        }
+        if let engine {
+            teardownPreviewEngine(engine)
+        }
         isPreviewActive = false
         previewAudioLevel = 0
         previewRawLevel = 0
@@ -135,6 +143,142 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             self.previewAudioLevel = level
             self.previewRawLevel = rms
         }
+    }
+
+    private func handlePreviewConfigurationChangeNotification() {
+        schedulePreviewRecoveryIfNeeded(previewRecoveryCoordinator.noteConfigurationChange())
+    }
+
+    private func schedulePreviewRecoveryIfNeeded(_ action: AudioEngineRecoveryAction) {
+        guard case .schedule(let generation, let delay) = action else { return }
+
+        previewRecoveryQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
+            self?.performScheduledPreviewRecovery(generation: generation)
+        }
+    }
+
+    private func performScheduledPreviewRecovery(generation: UInt64) {
+        guard previewRecoveryCoordinator.beginScheduledRecovery(generation: generation) else { return }
+        defer {
+            schedulePreviewRecoveryIfNeeded(previewRecoveryCoordinator.finishRecovery())
+        }
+
+        let (engine, preferredDeviceID): (AVAudioEngine?, AudioDeviceID?) = previewLock.withLock {
+            (previewEngine, activePreviewDeviceID)
+        }
+        guard isPreviewActive, let engine else { return }
+
+        logger.warning("Preview audio engine configuration changed, restarting engine")
+
+        do {
+            try restartPreviewEngineWithRecovery(engine, preferredDeviceID: preferredDeviceID, label: "preview-config-change")
+        } catch {
+            logger.error("Failed to restart preview engine after configuration change: \(error.localizedDescription)")
+        }
+    }
+
+    private func installPreviewConfigurationObserver(for engine: AVAudioEngine) {
+        removePreviewConfigurationObserver()
+        previewConfigChangeObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: nil
+        ) { [weak self] _ in
+            self?.handlePreviewConfigurationChangeNotification()
+        }
+    }
+
+    private func removePreviewConfigurationObserver() {
+        if let observer = previewConfigChangeObserver {
+            NotificationCenter.default.removeObserver(observer)
+            previewConfigChangeObserver = nil
+        }
+    }
+
+    private func startPreviewEngineWithRecovery(
+        _ engine: AVAudioEngine,
+        preferredDeviceID: AudioDeviceID?,
+        label: String
+    ) throws {
+        for (attempt, delay) in AudioEngineRecoveryPolicy.retryBackoff.enumerated() {
+            do {
+                try configureAndStartPreviewEngine(engine, preferredDeviceID: preferredDeviceID, label: label)
+                return
+            } catch {
+                guard AudioEngineRecoveryPolicy.isRetryable(error: error) else {
+                    throw error
+                }
+
+                logger.warning("\(label, privacy: .public) audio engine start failed with retryable error, retry \(attempt + 1) in \(delay, privacy: .public)s: \(error.localizedDescription, privacy: .public)")
+                Thread.sleep(forTimeInterval: delay)
+            }
+        }
+
+        try configureAndStartPreviewEngine(engine, preferredDeviceID: preferredDeviceID, label: label)
+    }
+
+    private func restartPreviewEngineWithRecovery(
+        _ engine: AVAudioEngine,
+        preferredDeviceID: AudioDeviceID?,
+        label: String
+    ) throws {
+        teardownPreviewEngine(engine)
+        try startPreviewEngineWithRecovery(engine, preferredDeviceID: preferredDeviceID, label: label)
+    }
+
+    private func configureAndStartPreviewEngine(
+        _ engine: AVAudioEngine,
+        preferredDeviceID: AudioDeviceID?,
+        label: String
+    ) throws {
+        if let preferredDeviceID {
+            if !setInputDevice(preferredDeviceID, on: engine, label: label) {
+                logger.error("Failed to set \(label, privacy: .public) input device (\(preferredDeviceID)), falling back to system default")
+            }
+        }
+
+        let inputNode = engine.inputNode
+        let format = inputNode.outputFormat(forBus: 0)
+        logger.info("\(label, privacy: .public) input format: sampleRate=\(format.sampleRate), channels=\(format.channelCount)")
+        guard format.sampleRate > 0, format.channelCount > 0 else {
+            throw NSError(
+                domain: "AudioDeviceService",
+                code: 0,
+                userInfo: [NSLocalizedDescriptionKey: "No audio input available for preview"]
+            )
+        }
+
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+            self?.processPreviewBuffer(buffer)
+        }
+
+        do {
+            try engine.start()
+        } catch {
+            inputNode.removeTap(onBus: 0)
+            engine.stop()
+            throw error
+        }
+    }
+
+    private func teardownPreviewEngine(_ engine: AVAudioEngine) {
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+    }
+
+    private func cleanupAfterFailedPreviewStart(_ engine: AVAudioEngine) {
+        previewRecoveryCoordinator.transitionToIdle()
+        removePreviewConfigurationObserver()
+        previewLock.withLock {
+            if previewEngine === engine {
+                previewEngine = nil
+                activePreviewDeviceID = nil
+            }
+        }
+        teardownPreviewEngine(engine)
+        isPreviewActive = false
+        previewAudioLevel = 0
+        previewRawLevel = 0
     }
 
     // MARK: - CoreAudio Device Enumeration

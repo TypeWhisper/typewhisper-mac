@@ -12,6 +12,7 @@
 		204C804898EAE1127B62EC98 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E808D246301E36546EEB811F /* TestSupport.swift */; };
 		24FFE19AC026C48AE32BCD7C /* AppFormatterServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5852D6767C5FA955B84C52 /* AppFormatterServiceTests.swift */; };
 		2F4D6A8B0C1E3F5A7B9D2C4E /* DictationViewModelIndicatorSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F4D6A8B0C1E3F5A7B9D2C4F /* DictationViewModelIndicatorSettingsTests.swift */; };
+		3A4B5C6D7E8F901234567890 /* AudioEngineRecoverySupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A4B5C6D7E8F901234567891 /* AudioEngineRecoverySupportTests.swift */; };
 		6A9D1EE0C163693B1A798779 /* HistoryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */; };
 		6C1F7A8B9D2E4F5061728394 /* SoundServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D2E4F50617283946C1F7A8B /* SoundServiceTests.swift */; };
 		BB8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift */; };
@@ -81,6 +82,7 @@
 		AA00000000000000000095 /* WavEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000095 /* WavEncoder.swift */; };
 		AA00000000000000000096 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000096 /* KeychainService.swift */; };
 		AA00000000000000000102 /* AudioDeviceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000102 /* AudioDeviceService.swift */; };
+		AA00000000000000000320 /* AudioEngineRecoverySupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000320 /* AudioEngineRecoverySupport.swift */; };
 		AA00000000000000000103 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000103 /* main.swift */; };
 		AA00000000000000000104 /* CLIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000104 /* CLIClient.swift */; };
 		AA00000000000000000105 /* PortDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000105 /* PortDiscovery.swift */; };
@@ -348,6 +350,7 @@
 
 /* Begin PBXFileReference section */
 		05313C25F9E79BCFC02899F2 /* TextDiffServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TextDiffServiceTests.swift; sourceTree = "<group>"; };
+		3A4B5C6D7E8F901234567891 /* AudioEngineRecoverySupportTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AudioEngineRecoverySupportTests.swift; sourceTree = "<group>"; };
 		3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HistoryServiceTests.swift; sourceTree = "<group>"; };
 		7D2E4F50617283946C1F7A8B /* SoundServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SoundServiceTests.swift; sourceTree = "<group>"; };
 		AA8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictationShortSpeechTests.swift; sourceTree = "<group>"; };
@@ -413,6 +416,7 @@
 		BB00000000000000000095 /* WavEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WavEncoder.swift; sourceTree = "<group>"; };
 		BB00000000000000000096 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		BB00000000000000000102 /* AudioDeviceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioDeviceService.swift; sourceTree = "<group>"; };
+		BB00000000000000000320 /* AudioEngineRecoverySupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioEngineRecoverySupport.swift; sourceTree = "<group>"; };
 		BB00000000000000000103 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		BB00000000000000000104 /* CLIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIClient.swift; sourceTree = "<group>"; };
 		BB00000000000000000105 /* PortDiscovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortDiscovery.swift; sourceTree = "<group>"; };
@@ -1037,6 +1041,7 @@
 				BB00000000000000000081 /* SnippetService.swift */,
 				BB00000000000000000086 /* SoundService.swift */,
 				BB00000000000000000102 /* AudioDeviceService.swift */,
+				BB00000000000000000320 /* AudioEngineRecoverySupport.swift */,
 				BB00000000000000000111 /* PromptActionService.swift */,
 				BB00000000000000000115 /* PromptProcessingService.swift */,
 				BB00000000000000000123 /* EventBus.swift */,
@@ -1579,6 +1584,7 @@
 			isa = PBXGroup;
 			children = (
 				E6D200DCDD6580F443C5CE0A /* APIRouterAndHandlersTests.swift */,
+				3A4B5C6D7E8F901234567891 /* AudioEngineRecoverySupportTests.swift */,
 				CE5852D6767C5FA955B84C52 /* AppFormatterServiceTests.swift */,
 				FD34FDF9D999D85DA1C35375 /* CLISupportTests.swift */,
 				2F4D6A8B0C1E3F5A7B9D2C4F /* DictationViewModelIndicatorSettingsTests.swift */,
@@ -2677,6 +2683,7 @@
 				24FFE19AC026C48AE32BCD7C /* AppFormatterServiceTests.swift in Sources */,
 				7DADCC6E1AEA99CA48F83F50 /* CLISupportTests.swift in Sources */,
 				2F4D6A8B0C1E3F5A7B9D2C4E /* DictationViewModelIndicatorSettingsTests.swift in Sources */,
+				3A4B5C6D7E8F901234567890 /* AudioEngineRecoverySupportTests.swift in Sources */,
 				BB8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift in Sources */,
 				B4CC04DF94001FF7220789BC /* DictionaryServiceTests.swift in Sources */,
 				C7A3E9F1D5B2084A6E9C3D71 /* DictionaryExporterTests.swift in Sources */,
@@ -2765,6 +2772,7 @@
 				AA00000000000000000095 /* WavEncoder.swift in Sources */,
 				AA00000000000000000096 /* KeychainService.swift in Sources */,
 				AA00000000000000000102 /* AudioDeviceService.swift in Sources */,
+				AA00000000000000000320 /* AudioEngineRecoverySupport.swift in Sources */,
 				AA00000000000000000110 /* PromptAction.swift in Sources */,
 				AA00000000000000000111 /* PromptActionService.swift in Sources */,
 				AA00000000000000000112 /* LLMProvider.swift in Sources */,
