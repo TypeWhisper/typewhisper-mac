@@ -28,6 +28,35 @@ final class APIRouterAndHandlersTests: XCTestCase {
         }
     }
 
+    @objc(APIRouterConfigurableTranscriptionPlugin)
+    private final class ConfigurableTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.configurable-transcription" }
+        static var pluginName: String { "Configurable Mock Transcription" }
+
+        var configured = false
+        var currentModelId: String?
+
+        required override init() {}
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+
+        var providerId: String { "configurable-mock" }
+        var providerDisplayName: String { "Configurable Mock" }
+        var isConfigured: Bool { configured }
+        var transcriptionModels: [PluginModelInfo] { [PluginModelInfo(id: "tiny", displayName: "Tiny")] }
+        var selectedModelId: String? { currentModelId }
+        func selectModel(_ modelId: String) {
+            currentModelId = modelId
+            configured = true
+        }
+        var supportsTranslation: Bool { false }
+
+        func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+            PluginTranscriptionResult(text: "transcribed", detectedLanguage: language)
+        }
+    }
+
     private final class APIContext: @unchecked Sendable {
         let router: APIRouter
         let historyService: HistoryService
@@ -298,6 +327,131 @@ final class APIRouterAndHandlersTests: XCTestCase {
         context.dictationViewModel.apiStartRecording()
 
         XCTAssertEqual(Array(events.prefix(3)), ["capture_app", "start_audio", "pause_media"])
+    }
+
+    @MainActor
+    func testApiStartRecording_showsSelectModelErrorWhenNoProviderIsSelected() async throws {
+        let selectedEngineKey = UserDefaultsKeys.selectedEngine
+        let originalSelection = UserDefaults.standard.object(forKey: selectedEngineKey)
+        UserDefaults.standard.removeObject(forKey: selectedEngineKey)
+        defer {
+            if let originalSelection {
+                UserDefaults.standard.set(originalSelection, forKey: selectedEngineKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: selectedEngineKey)
+            }
+        }
+
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let modelManager = ModelManagerService()
+        let audioRecordingService = AudioRecordingService()
+        let hotkeyService = HotkeyService()
+        let textInsertionService = TextInsertionService()
+        let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
+        let profileService = ProfileService(appSupportDirectory: appSupportDirectory)
+        let audioDuckingService = AudioDuckingService()
+        let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
+        let snippetService = SnippetService(appSupportDirectory: appSupportDirectory)
+        let soundService = SoundService()
+        let audioDeviceService = AudioDeviceService()
+        let promptActionService = PromptActionService(appSupportDirectory: appSupportDirectory)
+        let promptProcessingService = PromptProcessingService()
+        let appFormatterService = AppFormatterService()
+        let speechFeedbackService = SpeechFeedbackService()
+        let accessibilityAnnouncementService = AccessibilityAnnouncementService()
+        let errorLogService = ErrorLogService(appSupportDirectory: appSupportDirectory)
+        let settingsViewModel = SettingsViewModel(modelManager: modelManager)
+
+        let dictationViewModel = DictationViewModel(
+            audioRecordingService: audioRecordingService,
+            textInsertionService: textInsertionService,
+            hotkeyService: hotkeyService,
+            modelManager: modelManager,
+            settingsViewModel: settingsViewModel,
+            historyService: historyService,
+            profileService: profileService,
+            translationService: nil,
+            audioDuckingService: audioDuckingService,
+            dictionaryService: dictionaryService,
+            snippetService: snippetService,
+            soundService: soundService,
+            audioDeviceService: audioDeviceService,
+            promptActionService: promptActionService,
+            promptProcessingService: promptProcessingService,
+            appFormatterService: appFormatterService,
+            speechFeedbackService: speechFeedbackService,
+            accessibilityAnnouncementService: accessibilityAnnouncementService,
+            errorLogService: errorLogService,
+            mediaPlaybackService: MediaPlaybackService(startListening: false)
+        )
+        dictationViewModel.soundFeedbackEnabled = false
+        dictationViewModel.spokenFeedbackEnabled = false
+
+        dictationViewModel.apiStartRecording()
+
+        XCTAssertEqual(dictationViewModel.state, .inserting)
+        XCTAssertEqual(
+            dictationViewModel.actionFeedbackMessage,
+            TranscriptionEngineError.modelNotLoaded.localizedDescription
+        )
+    }
+
+    @MainActor
+    func testModelManagerAutoSelectsConfiguredEngineAfterPluginCapabilityChange() async throws {
+        let selectedEngineKey = UserDefaultsKeys.selectedEngine
+        let originalSelection = UserDefaults.standard.object(forKey: selectedEngineKey)
+        UserDefaults.standard.removeObject(forKey: selectedEngineKey)
+        defer {
+            if let originalSelection {
+                UserDefaults.standard.set(originalSelection, forKey: selectedEngineKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: selectedEngineKey)
+            }
+        }
+
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = ConfigurableTranscriptionPlugin()
+        let manifest = PluginManifest(
+            id: "com.typewhisper.mock.configurable-transcription",
+            name: "Configurable Mock Transcription",
+            version: "1.0.0",
+            principalClass: "APIRouterConfigurableTranscriptionPlugin"
+        )
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: manifest,
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.observePluginManager()
+        XCTAssertNil(modelManager.selectedProviderId)
+
+        plugin.currentModelId = "tiny"
+        plugin.configured = true
+        PluginManager.shared.notifyPluginStateChanged()
+
+        let propagation = expectation(description: "plugin capability propagation")
+        DispatchQueue.main.async {
+            propagation.fulfill()
+        }
+        await fulfillment(of: [propagation], timeout: 1.0)
+
+        XCTAssertEqual(modelManager.selectedProviderId, plugin.providerId)
     }
 
     @MainActor
