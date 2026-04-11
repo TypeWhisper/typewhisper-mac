@@ -4,7 +4,7 @@ import Carbon.HIToolbox
 import Combine
 import os
 
-struct UnifiedHotkey: Equatable, Sendable, Codable {
+struct UnifiedHotkey: Equatable, Hashable, Sendable, Codable {
     let keyCode: UInt16
     let modifierFlags: UInt
     let isFn: Bool
@@ -81,6 +81,26 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
 /// hybrid (short=toggle, long=push-to-talk), push-to-talk, and toggle.
 @MainActor
 final class HotkeyService: ObservableObject {
+    enum HotkeyEventSource: Sendable {
+        case eventTap
+        case monitor
+    }
+
+    private enum HotkeyDispatchPhase: Hashable {
+        case down
+        case up
+    }
+
+    private struct HotkeyDispatchKey: Hashable {
+        enum Target: Hashable {
+            case slot(HotkeySlotType)
+            case profile(UUID)
+        }
+
+        let target: Target
+        let phase: HotkeyDispatchPhase
+        let hotkey: UnifiedHotkey
+    }
 
     enum HotkeyMode: String {
         case pushToTalk
@@ -102,6 +122,7 @@ final class HotkeyService: ObservableObject {
 
     private static let toggleThreshold: TimeInterval = 1.0
     private static let doubleTapThreshold: TimeInterval = 0.4
+    private static let monitorDedupWindow: TimeInterval = 0.12
 
     // MARK: - Per-Slot State
 
@@ -145,6 +166,7 @@ final class HotkeyService: ObservableObject {
     private var localMonitor: Any?
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    private var recentEventTapDispatches: [HotkeyDispatchKey: Date] = [:]
 
     private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "HotkeyService")
 
@@ -267,21 +289,32 @@ final class HotkeyService: ObservableObject {
 
         // Try CGEventTap first - it can suppress hotkey events from reaching other apps
         if setupEventTap() {
-            logger.info("Using CGEventTap for hotkey monitoring (events will be suppressed)")
+            logger.info("Using tail-appended CGEventTap for hotkey monitoring with NSEvent compatibility fallback")
+            installEventMonitors(includeMouse: false)
             return
         }
 
         // Fallback: NSEvent monitors (no event suppression)
         logger.info("CGEventTap unavailable, falling back to NSEvent monitors (hotkey events will pass through)")
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged, .keyDown, .keyUp, .otherMouseDown, .otherMouseUp]) { [weak self] event in
+        installEventMonitors(includeMouse: true)
+    }
+
+    private func installEventMonitors(includeMouse: Bool) {
+        var mask: NSEvent.EventTypeMask = [.flagsChanged, .keyDown, .keyUp]
+        if includeMouse {
+            mask.insert(.otherMouseDown)
+            mask.insert(.otherMouseUp)
+        }
+
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
             Task { @MainActor [weak self] in
-                self?.handleEvent(event)
+                _ = self?.handleEvent(event, source: .monitor)
             }
         }
 
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown, .keyUp, .otherMouseDown, .otherMouseUp]) { [weak self] event in
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
             Task { @MainActor [weak self] in
-                self?.handleEvent(event)
+                _ = self?.handleEvent(event, source: .monitor)
             }
             return event
         }
@@ -304,6 +337,7 @@ final class HotkeyService: ObservableObject {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
             runLoopSource = nil
         }
+        recentEventTapDispatches.removeAll()
     }
 
     func suspendMonitoring() {
@@ -358,7 +392,7 @@ final class HotkeyService: ObservableObject {
 
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
-            place: .headInsertEventTap,
+            place: .tailAppendEventTap,
             options: .defaultTap,
             eventsOfInterest: eventMask,
             callback: callback,
@@ -378,10 +412,21 @@ final class HotkeyService: ObservableObject {
     /// Processes event for CGEventTap: matches hotkeys synchronously, dispatches handling asynchronously.
     /// Returns true if the event should be suppressed (consumed by TypeWhisper).
     private func handleEventTapEvent(_ event: NSEvent) -> Bool {
-        // Escape key cancels active recording but should not be suppressed
+        handleEvent(event, source: .eventTap)
+    }
+
+    // MARK: - NSEvent Fallback
+
+    @discardableResult
+    private func handleEvent(_ event: NSEvent, source: HotkeyEventSource) -> Bool {
+        // Escape key cancels active recording/transcription
         if event.type == .keyDown && event.keyCode == 0x35 {
-            Task { @MainActor [weak self] in
-                self?.onCancelPressed?()
+            if source == .eventTap {
+                Task { @MainActor [weak self] in
+                    self?.onCancelPressed?()
+                }
+            } else {
+                onCancelPressed?()
             }
             return false
         }
@@ -394,11 +439,13 @@ final class HotkeyService: ObservableObject {
             let (keyDown, keyUp, isMatch) = processKeyEvent(event, hotkey: hotkey, state: &state)
             slots[slotType] = state
             if isMatch { shouldSuppress = true }
-            if keyDown {
-                Task { @MainActor [weak self] in self?.handleKeyDown(slotType: slotType) }
-            } else if keyUp {
-                Task { @MainActor [weak self] in self?.handleKeyUp(slotType: slotType) }
-            }
+            dispatchGlobalMatch(
+                slotType: slotType,
+                hotkey: hotkey,
+                keyDown: keyDown,
+                keyUp: keyUp,
+                source: source
+            )
         }
 
         // Profile slots
@@ -419,55 +466,119 @@ final class HotkeyService: ObservableObject {
             pState.tapCount = state.tapCount
             profileSlots[profileId] = pState
             if isMatch { shouldSuppress = true }
-            if keyDown {
-                Task { @MainActor [weak self] in self?.handleProfileKeyDown(profileId: profileId) }
-            } else if keyUp {
-                Task { @MainActor [weak self] in self?.handleProfileKeyUp(profileId: profileId) }
-            }
+            dispatchProfileMatch(
+                profileId: profileId,
+                hotkey: pState.hotkey,
+                keyDown: keyDown,
+                keyUp: keyUp,
+                source: source
+            )
         }
 
         return shouldSuppress
     }
 
-    // MARK: - NSEvent Fallback
-
-    private func handleEvent(_ event: NSEvent) {
-        // Escape key cancels active recording/transcription
-        if event.type == .keyDown && event.keyCode == 0x35 {
-            onCancelPressed?()
-            return
-        }
-
-        // Global slots
-        for slotType in HotkeySlotType.allCases {
-            guard var state = slots[slotType], let hotkey = state.hotkey else { continue }
-            let (keyDown, keyUp, _) = processKeyEvent(event, hotkey: hotkey, state: &state)
-            slots[slotType] = state
-            if keyDown { handleKeyDown(slotType: slotType) }
-            else if keyUp { handleKeyUp(slotType: slotType) }
-        }
-
-        // Profile slots
-        for profileId in Array(profileSlots.keys) {
-            guard var pState = profileSlots[profileId] else { continue }
-            var state = SlotState(hotkey: pState.hotkey, fnWasDown: pState.fnWasDown,
-                                  fnComboKeyPressed: pState.fnComboKeyPressed,
-                                  modifierWasDown: pState.modifierWasDown, keyWasDown: pState.keyWasDown,
-                                  mouseButtonWasDown: pState.mouseButtonWasDown,
-                                  lastTapUpTime: pState.lastTapUpTime, tapCount: pState.tapCount)
-            let (keyDown, keyUp, _) = processKeyEvent(event, hotkey: pState.hotkey, state: &state)
-            pState.fnWasDown = state.fnWasDown
-            pState.fnComboKeyPressed = state.fnComboKeyPressed
-            pState.modifierWasDown = state.modifierWasDown
-            pState.keyWasDown = state.keyWasDown
-            pState.mouseButtonWasDown = state.mouseButtonWasDown
-            pState.lastTapUpTime = state.lastTapUpTime
-            pState.tapCount = state.tapCount
-            profileSlots[profileId] = pState
-            if keyDown { handleProfileKeyDown(profileId: profileId) }
-            else if keyUp { handleProfileKeyUp(profileId: profileId) }
+    private func dispatchGlobalMatch(
+        slotType: HotkeySlotType,
+        hotkey: UnifiedHotkey,
+        keyDown: Bool,
+        keyUp: Bool,
+        source: HotkeyEventSource
+    ) {
+        if keyDown, shouldDispatch(
+            target: .slot(slotType),
+            phase: .down,
+            hotkey: hotkey,
+            source: source
+        ) {
+            if source == .eventTap {
+                Task { @MainActor [weak self] in self?.handleKeyDown(slotType: slotType) }
+            } else {
+                logFallbackMatchIfNeeded(hotkey: hotkey, source: source)
+                handleKeyDown(slotType: slotType)
+            }
+        } else if keyUp, shouldDispatch(
+            target: .slot(slotType),
+            phase: .up,
+            hotkey: hotkey,
+            source: source
+        ) {
+            if source == .eventTap {
+                Task { @MainActor [weak self] in self?.handleKeyUp(slotType: slotType) }
+            } else {
+                handleKeyUp(slotType: slotType)
+            }
         }
     }
+
+    private func dispatchProfileMatch(
+        profileId: UUID,
+        hotkey: UnifiedHotkey,
+        keyDown: Bool,
+        keyUp: Bool,
+        source: HotkeyEventSource
+    ) {
+        if keyDown, shouldDispatch(
+            target: .profile(profileId),
+            phase: .down,
+            hotkey: hotkey,
+            source: source
+        ) {
+            if source == .eventTap {
+                Task { @MainActor [weak self] in self?.handleProfileKeyDown(profileId: profileId) }
+            } else {
+                logFallbackMatchIfNeeded(hotkey: hotkey, source: source)
+                handleProfileKeyDown(profileId: profileId)
+            }
+        } else if keyUp, shouldDispatch(
+            target: .profile(profileId),
+            phase: .up,
+            hotkey: hotkey,
+            source: source
+        ) {
+            if source == .eventTap {
+                Task { @MainActor [weak self] in self?.handleProfileKeyUp(profileId: profileId) }
+            } else {
+                handleProfileKeyUp(profileId: profileId)
+            }
+        }
+    }
+
+    private func shouldDispatch(
+        target: HotkeyDispatchKey.Target,
+        phase: HotkeyDispatchPhase,
+        hotkey: UnifiedHotkey,
+        source: HotkeyEventSource
+    ) -> Bool {
+        let now = Date()
+        recentEventTapDispatches = recentEventTapDispatches.filter {
+            now.timeIntervalSince($0.value) < Self.monitorDedupWindow
+        }
+
+        let dispatchKey = HotkeyDispatchKey(target: target, phase: phase, hotkey: hotkey)
+        if source == .eventTap {
+            recentEventTapDispatches[dispatchKey] = now
+            return true
+        }
+
+        return recentEventTapDispatches[dispatchKey] == nil
+    }
+
+    private func logFallbackMatchIfNeeded(hotkey: UnifiedHotkey, source: HotkeyEventSource) {
+        guard source == .monitor, eventTap != nil, hotkey.mouseButton == nil else { return }
+        logger.info("Matched hotkey via NSEvent compatibility fallback: \(Self.displayName(for: hotkey), privacy: .public)")
+    }
+
+#if DEBUG
+    func setHotkeyForTesting(_ hotkey: UnifiedHotkey, for slotType: HotkeySlotType) {
+        slots[slotType] = SlotState(hotkey: hotkey)
+    }
+
+    @discardableResult
+    func processEventForTesting(_ event: NSEvent, source: HotkeyEventSource) -> Bool {
+        handleEvent(event, source: source)
+    }
+#endif
 
     private enum KeyEventResult {
         case none

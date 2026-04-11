@@ -523,3 +523,86 @@ final class APIRouterAndHandlersTests: XCTestCase {
         return try XCTUnwrap(object as? [String: Any])
     }
 }
+
+final class HotkeyServiceCompatibilityTests: XCTestCase {
+    @MainActor
+    func testMonitorFallbackStartsToggleHotkey() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(spaceHotkey(), for: .toggle)
+
+        var startCount = 0
+        service.onDictationStart = {
+            startCount += 1
+        }
+
+        let keyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+    }
+
+    @MainActor
+    func testEventTapDispatchDedupesFollowingMonitorDispatch() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(spaceHotkey(), for: .toggle)
+
+        var startCount = 0
+        service.onDictationStart = {
+            startCount += 1
+        }
+
+        let keyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .eventTap))
+        await Task.yield()
+        XCTAssertEqual(startCount, 1)
+
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+    }
+
+    @MainActor
+    func testMonitorFallbackStopsPushToTalkOnKeyUp() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(spaceHotkey(), for: .pushToTalk)
+
+        var startCount = 0
+        var stopCount = 0
+        service.onDictationStart = {
+            startCount += 1
+        }
+        service.onDictationStop = {
+            stopCount += 1
+        }
+
+        let keyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
+        let keyUp = try makeKeyboardEvent(keyCode: 0x31, keyDown: false)
+
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertTrue(service.processEventForTesting(keyUp, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(stopCount, 1)
+    }
+
+    @MainActor
+    private func spaceHotkey() -> UnifiedHotkey {
+        UnifiedHotkey(
+            keyCode: 0x31,
+            modifierFlags: NSEvent.ModifierFlags([.control, .option, .shift, .command]).rawValue,
+            isFn: false
+        )
+    }
+
+    private func makeKeyboardEvent(keyCode: UInt16, keyDown: Bool) throws -> NSEvent {
+        let flags: CGEventFlags = [.maskControl, .maskAlternate, .maskShift, .maskCommand]
+        let event = try XCTUnwrap(
+            CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(keyCode), keyDown: keyDown)
+        )
+        event.flags = flags
+        return try XCTUnwrap(NSEvent(cgEvent: event))
+    }
+}
