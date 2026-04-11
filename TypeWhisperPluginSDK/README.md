@@ -21,8 +21,8 @@ Create `Contents/Resources/manifest.json` in your bundle:
   "id": "com.yourname.myplugin",
   "name": "My Plugin",
   "version": "1.0.0",
-  "minHostVersion": "0.11",
-  "minOSVersion": "15.0",
+  "minHostVersion": "1.0.0",
+  "minOSVersion": "14.0",
   "author": "Your Name",
   "principalClass": "MyPlugin"
 }
@@ -254,6 +254,10 @@ func activate(host: HostServices) {
 
     // Profile names
     let profiles = host.availableProfileNames
+
+    // Host UI coordination
+    host.notifyCapabilitiesChanged()
+    host.setStreamingDisplayActive(true)
 }
 ```
 
@@ -306,13 +310,25 @@ The view appears as a sheet when the user clicks the gear icon in Settings > Int
 
 ### PluginOpenAITranscriptionHelper
 
-For OpenAI-compatible Whisper APIs:
+For OpenAI-compatible Whisper APIs. Clips shorter than one second are padded automatically before upload so providers do not reject them as too short:
 
 ```swift
 let helper = PluginOpenAITranscriptionHelper(baseURL: "https://api.groq.com/openai")
 let result = try await helper.transcribe(
     audio: audio, apiKey: apiKey, modelName: "whisper-large-v3",
     language: "en", translate: false, prompt: nil
+)
+```
+
+### PluginAudioUtils
+
+Helpers for short-clip handling:
+
+```swift
+let padded = PluginAudioUtils.paddedSamples(samples, minimumDuration: 1.0)
+let shouldKeep = PluginAudioUtils.shouldAcceptShortClipTranscription(
+    audioDuration: audio.duration,
+    confidence: confidence
 )
 ```
 
@@ -345,8 +361,8 @@ let wavData = PluginWavEncoder.encode(samples, sampleRate: 16000)
 | `id` | Yes | Unique reverse-domain ID (e.g. `com.yourname.myplugin`) |
 | `name` | Yes | Display name |
 | `version` | Yes | Semver string (e.g. `1.0.0`) |
-| `minHostVersion` | No | Minimum TypeWhisper version |
-| `minOSVersion` | No | Minimum macOS version (e.g. `15.0`, `26.0`). Plugin is skipped on older systems. |
+| `minHostVersion` | No | Minimum TypeWhisper version (e.g. `1.0.0`) |
+| `minOSVersion` | No | Minimum macOS version (e.g. `14.0`, `26.0`). Plugin is skipped on older systems. |
 | `author` | No | Author name |
 | `principalClass` | Yes | Objective-C class name, must match `@objc(Name)` |
 
@@ -368,8 +384,8 @@ Registry entry format:
   "id": "com.yourname.myplugin",
   "name": "My Plugin",
   "version": "1.0.0",
-  "minHostVersion": "0.11",
-  "minOSVersion": "15.0",
+  "minHostVersion": "1.0.0",
+  "minOSVersion": "14.0",
   "author": "Your Name",
   "description": "What your plugin does.",
   "category": "transcription|llm|postprocessor|action",
@@ -383,6 +399,6 @@ Registry entry format:
 
 ## Requirements
 
-- macOS 15.0+
+- macOS 14.0+
 - Swift 6.0
-- TypeWhisper 0.11+
+- TypeWhisper 1.0+

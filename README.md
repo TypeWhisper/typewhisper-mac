@@ -6,7 +6,7 @@
 
 Speech-to-text and AI text processing for macOS. Transcribe audio using on-device AI models or cloud APIs (Groq, OpenAI), then process the result with custom LLM prompts. Your voice data stays on your Mac with local models - or use cloud APIs for faster processing.
 
-TypeWhisper `1.1` is scoped as a reliable direct-download release. The supported core remains system-wide dictation, file transcription, prompt processing, profiles, history, dictionary, snippets, and bundled integrations. HTTP API, CLI, widgets, Watch Folder, and the plugin SDK remain available as advanced surfaces.
+TypeWhisper `1.x` is the direct-download macOS release line. The supported core remains system-wide dictation, file transcription, prompt processing, profiles, history, dictionary, snippets, and bundled integrations. HTTP API, CLI, widgets, watch folders, and the plugin SDK remain supported advanced surfaces.
 
 See [docs/1.1-readiness.md](docs/1.1-readiness.md), [docs/support-matrix.md](docs/support-matrix.md), and [docs/release-checklist.md](docs/release-checklist.md) for the current release definition and ship gates.
 
@@ -39,13 +39,24 @@ See [docs/1.1-readiness.md](docs/1.1-readiness.md), [docs/support-matrix.md](doc
   <a href=".github/screenshots/advanced.png"><img src=".github/screenshots/advanced.png" width="270" alt="Advanced Settings"></a>
 </p>
 
+## What's New in 1.2
+
+- **Minimal indicator** - A compact power-user status view alongside the existing Notch and Overlay styles
+- **Transcript preview toggle** - Live preview can now be disabled for Notch and Overlay indicators
+- **Faster dictation start** - Metadata capture and URL resolution move off the critical start path
+- **Short-clip improvements** - Better handling for brief utterances, especially with streaming preview and Parakeet
+- **Audio recovery fixes** - More resilient recording and preview after device switches, AirPods profile changes, and `AVAudioEngine` reconfiguration
+- **MLX plugin setup** - Qwen3, Granite, and Voxtral now support an optional HuggingFace token in settings for higher download limits
+- **Localized term packs** - Built-in term pack metadata now renders in English and German
+
 ## Features
 
 ### Transcription
 
-- **Eight engines** - WhisperKit (99+ languages, streaming, translation), Parakeet TDT v3 (25 European languages, extremely fast), Apple SpeechAnalyzer (macOS 26+, no model download needed), Qwen3 ASR (MLX-based), Voxtral (local Voxtral Mini 4B, MLX-based), Groq Whisper, OpenAI Whisper, and OpenAI Compatible (any OpenAI-compatible API)
+- **Nine engines** - WhisperKit (99+ languages, streaming, translation), Parakeet TDT v3 (25 European languages, extremely fast), Apple SpeechAnalyzer (macOS 26+, no model download needed), Granite Speech (MLX-based), Qwen3 ASR (MLX-based), Voxtral (local Voxtral Mini 4B, MLX-based), Groq Whisper, OpenAI Whisper, and OpenAI Compatible (any OpenAI-compatible API)
 - **On-device or cloud** - All processing happens locally on your Mac, or use Groq/OpenAI Whisper APIs for faster processing
 - **Streaming preview** - See partial transcription in real-time while speaking (WhisperKit)
+- **Short-clip handling** - Better retention of brief utterances and fewer false no-speech discards
 - **File transcription** - Batch-process multiple audio/video files with drag & drop
 - **Subtitle export** - Export transcriptions as SRT or WebVTT with timestamps
 
@@ -53,8 +64,9 @@ See [docs/1.1-readiness.md](docs/1.1-readiness.md), [docs/support-matrix.md](doc
 
 - **System-wide** - Push-to-talk, toggle, or hybrid mode via global hotkey, auto-pastes into any app
 - **Modifier-key hotkeys** - Use a single modifier key (Command, Shift, Option, Control) as your hotkey
+- **Indicator styles** - Choose Notch, Overlay, or Minimal, with optional live transcript preview where supported
 - **Sound feedback** - Audio cues for recording start, transcription success, and errors
-- **Microphone selection** - Choose a specific input device with live preview
+- **Microphone selection** - Choose a specific input device with live preview and improved recovery after route changes
 
 ### AI Processing
 
@@ -66,12 +78,14 @@ See [docs/1.1-readiness.md](docs/1.1-readiness.md), [docs/support-matrix.md](doc
 
 - **Profiles** - Per-app and per-website overrides for language, task, engine, prompt, hotkey, and auto-submit. Match by app (bundle ID) and/or domain with subdomain support
 - **Dictionary** - Terms improve cloud recognition accuracy. Corrections fix common transcription mistakes automatically. Auto-learns from manual corrections. Includes importable term packs
+- **Localized term packs** - Built-in term pack names and descriptions are localized in English and German
 - **Snippets** - Text shortcuts with trigger/replacement. Supports placeholders like `{{DATE}}`, `{{TIME}}`, and `{{CLIPBOARD}}`
 - **History** - Searchable transcription history with inline editing, correction detection, app context tracking, timeline grouping, filters, bulk delete, multi-select export, auto-retention, and a standalone window accessible from the tray menu
 
 ### Integration & Extensibility
 
-- **Plugin system** - Extend TypeWhisper with custom LLM providers, transcription engines, post-processors, and action plugins. Groq, OpenAI, OpenAI Compatible, Gemini, Linear, Voxtral, and Webhook ship as bundled plugins. Linear plugin enables voice-to-issue creation. See [Plugins/README.md](Plugins/README.md)
+- **Plugin system** - Extend TypeWhisper with custom LLM providers, transcription engines, post-processors, and action plugins. Granite, Groq, OpenAI, OpenAI Compatible, Gemini, Linear, Qwen3, Voxtral, and Webhook ship as bundled plugins, alongside the local engine plugins. Linear plugin enables voice-to-issue creation. See [Plugins/README.md](Plugins/README.md)
+- **MLX download controls** - Bundled Qwen3, Granite, and Voxtral plugins support an optional HuggingFace token for higher rate limits and clearer download errors
 - **HTTP API** - Local REST API for integration with external tools and scripts
 - **CLI tool** - Shell-friendly transcription via the command line
 
@@ -96,7 +110,7 @@ brew install --cask typewhisper/tap/typewhisper
 
 Download the latest DMG from [GitHub Releases](https://github.com/TypeWhisper/typewhisper-mac/releases/latest).
 
-Stable direct-download releases use the default Sparkle channel. Release candidates such as `1.1.0-rc1` and daily builds are published as GitHub prereleases, update the shared Sparkle appcast on their own channels, and are excluded from Homebrew.
+Stable direct-download releases use the default Sparkle channel. Release candidates such as `1.2.0-rc1` and daily builds are published as GitHub prereleases, update the shared Sparkle appcast on their own channels, and are excluded from Homebrew.
 Installed builds can switch channels in `Settings -> About` via the `Update Channel` picker.
 
 ## Quick Start
@@ -280,7 +294,7 @@ cat audio.wav | typewhisper transcribe -
 typewhisper transcribe meeting.m4a --json | jq -r '.text'
 ```
 
-The CLI requires the API server to be running (Settings > Advanced) and follows the documented `1.1.x` command and flag surface.
+The CLI requires the API server to be running (Settings > Advanced) and follows the documented `1.x` command and flag surface.
 
 ## Profiles
 
@@ -307,7 +321,7 @@ Multiple engines can be loaded simultaneously for instant switching between prof
 
 TypeWhisper supports plugins for adding custom LLM providers, transcription engines, post-processors, and action plugins. Plugins are macOS `.bundle` files placed in `~/Library/Application Support/TypeWhisper/Plugins/`.
 
-All 11 engines and integrations (WhisperKit, Parakeet, SpeechAnalyzer, Qwen3, Voxtral, Groq, OpenAI, OpenAI Compatible, Gemini, Linear, Webhook) are implemented as bundled plugins and serve as reference implementations.
+All 12 engines and integrations (WhisperKit, Parakeet, SpeechAnalyzer, Granite, Qwen3, Voxtral, Groq, OpenAI, OpenAI Compatible, Gemini, Linear, Webhook) are implemented as bundled plugins and serve as reference implementations.
 
 See [Plugins/README.md](Plugins/README.md) for the full plugin development guide, including the event bus, host services API, and manifest format.
 
@@ -316,8 +330,8 @@ See [Plugins/README.md](Plugins/README.md) for the full plugin development guide
 ```
 TypeWhisper/
 ├── typewhisper-cli/           # Command-line tool (status, models, transcribe)
-├── Plugins/                # Bundled plugins (WhisperKit, Parakeet, SpeechAnalyzer, Qwen3,
-│                           #   Voxtral, Groq, OpenAI, OpenAI Compatible, Gemini, Linear, Webhook)
+├── Plugins/                # Bundled plugins (WhisperKit, Parakeet, SpeechAnalyzer, Granite,
+│                           #   Qwen3, Voxtral, Groq, OpenAI, OpenAI Compatible, Gemini, Linear, Webhook)
 ├── TypeWhisperPluginSDK/   # Plugin SDK (Swift package)
 ├── TypeWhisperWidgetExtension/ # WidgetKit widgets (stats, activity, history)
 ├── TypeWhisperWidgetShared/    # Shared widget data models

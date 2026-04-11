@@ -403,59 +403,73 @@ jobs:
               RANGE="$RANGE_END"
             fi
 
-            # Parse commits into categories
-            FEATURES=""
-            FIXES=""
-            OTHER=""
+            RELEASE_NOTES_FILE="docs/release-notes/${RAW_VERSION}.md"
 
-            while IFS= read -r line; do
-              # Skip empty lines
-              [ -z "$line" ] && continue
+            if [ -f "$RELEASE_NOTES_FILE" ]; then
+              echo "Using curated release notes from $RELEASE_NOTES_FILE"
+              CREATE_ARGS=(
+                "$TAG"
+                "$ASSET_DMG"
+                "$ASSET_ZIP"
+                --title "$TAG"
+                --notes-file "$RELEASE_NOTES_FILE"
+              )
+            else
 
-              # Extract message (remove short hash prefix)
-              MSG=$(echo "$line" | sed 's/^[a-f0-9]* //')
+              # Parse commits into categories
+              FEATURES=""
+              FIXES=""
+              OTHER=""
 
-              # Filter out noise
-              echo "$MSG" | grep -qiE '^(Merge |chore: bump|chore\(release\)|docs: update README)' && continue
+              while IFS= read -r line; do
+                # Skip empty lines
+                [ -z "$line" ] && continue
 
-              # Categorize by conventional commit prefix
-              if echo "$MSG" | grep -qE '^feat(\(.*\))?:'; then
-                ENTRY=$(echo "$MSG" | sed 's/^feat\(([^)]*)\)\{0,1\}: //')
-                FEATURES="${FEATURES}- ${ENTRY}\n"
-              elif echo "$MSG" | grep -qE '^fix(\(.*\))?:'; then
-                ENTRY=$(echo "$MSG" | sed 's/^fix\(([^)]*)\)\{0,1\}: //')
-                FIXES="${FIXES}- ${ENTRY}\n"
-              else
-                # Strip any other conventional prefix for cleaner display
-                ENTRY=$(echo "$MSG" | sed 's/^[a-z]*\(([^)]*)\)\{0,1\}: //')
-                OTHER="${OTHER}- ${ENTRY}\n"
+                # Extract message (remove short hash prefix)
+                MSG=$(echo "$line" | sed 's/^[a-f0-9]* //')
+
+                # Filter out noise
+                echo "$MSG" | grep -qiE '^(Merge |chore: bump|chore\(release\)|docs: update README)' && continue
+
+                # Categorize by conventional commit prefix
+                if echo "$MSG" | grep -qE '^feat(\(.*\))?:'; then
+                  ENTRY=$(echo "$MSG" | sed 's/^feat\(([^)]*)\)\{0,1\}: //')
+                  FEATURES="${FEATURES}- ${ENTRY}\n"
+                elif echo "$MSG" | grep -qE '^fix(\(.*\))?:'; then
+                  ENTRY=$(echo "$MSG" | sed 's/^fix\(([^)]*)\)\{0,1\}: //')
+                  FIXES="${FIXES}- ${ENTRY}\n"
+                else
+                  # Strip any other conventional prefix for cleaner display
+                  ENTRY=$(echo "$MSG" | sed 's/^[a-z]*\(([^)]*)\)\{0,1\}: //')
+                  OTHER="${OTHER}- ${ENTRY}\n"
+                fi
+              done <<< "$(git log --oneline --no-merges "$RANGE")"
+
+              # Build release notes
+              NOTES=""
+              if [ -n "$FEATURES" ]; then
+                NOTES="${NOTES}## New Features\n${FEATURES}\n"
               fi
-            done <<< "$(git log --oneline --no-merges "$RANGE")"
+              if [ -n "$FIXES" ]; then
+                NOTES="${NOTES}## Bug Fixes\n${FIXES}\n"
+              fi
+              if [ -n "$OTHER" ]; then
+                NOTES="${NOTES}## Other Changes\n${OTHER}\n"
+              fi
 
-            # Build release notes
-            NOTES=""
-            if [ -n "$FEATURES" ]; then
-              NOTES="${NOTES}## New Features\n${FEATURES}\n"
-            fi
-            if [ -n "$FIXES" ]; then
-              NOTES="${NOTES}## Bug Fixes\n${FIXES}\n"
-            fi
-            if [ -n "$OTHER" ]; then
-              NOTES="${NOTES}## Other Changes\n${OTHER}\n"
-            fi
+              # Fallback if no categorized commits
+              if [ -z "$NOTES" ]; then
+                NOTES="Maintenance release ${TAG}"
+              fi
 
-            # Fallback if no categorized commits
-            if [ -z "$NOTES" ]; then
-              NOTES="Maintenance release ${TAG}"
+              CREATE_ARGS=(
+                "$TAG"
+                "$ASSET_DMG"
+                "$ASSET_ZIP"
+                --title "$TAG"
+                --notes "$(printf '%b' "$NOTES")"
+              )
             fi
-
-            CREATE_ARGS=(
-              "$TAG"
-              "$ASSET_DMG"
-              "$ASSET_ZIP"
-              --title "$TAG"
-              --notes "$(printf '%b' "$NOTES")"
-            )
 
             if [ "$IS_PRERELEASE" = "true" ]; then
               CREATE_ARGS+=(--prerelease)
@@ -511,7 +525,7 @@ jobs:
             --url "$DOWNLOAD_URL" \
             --signature "$ED_SIGNATURE" \
             --length "$ED_LENGTH" \
-            --minimum-system-version "15.0"
+            --minimum-system-version "14.0"
 
           cd /tmp/gh-pages
           git add appcast.xml
