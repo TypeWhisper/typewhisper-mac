@@ -15,7 +15,7 @@ class MediaPlaybackService {
     private var isMediaPlaying = false
     private var nowPlayingBundleID: String?
 
-    init() {
+    init(startListening: Bool = true) {
         mediaController.onTrackInfoReceived = { [weak self] trackInfo in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -30,8 +30,10 @@ class MediaPlaybackService {
                 }
             }
         }
-        mediaController.startListening()
-        logger.info("MediaRemoteAdapter listener started")
+        if startListening {
+            mediaController.startListening()
+            logger.info("MediaRemoteAdapter listener started")
+        }
     }
 
     /// Pauses media playback only if something is actually playing.
@@ -56,7 +58,7 @@ class MediaPlaybackService {
         logger.info("Media playback resumed")
     }
     #else
-    init() {}
+    init(startListening: Bool = true) {}
     func pauseIfPlaying() {}
     func resumeIfWePaused() {}
     #endif

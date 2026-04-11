@@ -94,7 +94,7 @@ final class DictationViewModelIndicatorSettingsTests: XCTestCase {
             speechFeedbackService: speechFeedbackService,
             accessibilityAnnouncementService: accessibilityAnnouncementService,
             errorLogService: errorLogService,
-            mediaPlaybackService: MediaPlaybackService()
+            mediaPlaybackService: MediaPlaybackService(startListening: false)
         )
     }
 }

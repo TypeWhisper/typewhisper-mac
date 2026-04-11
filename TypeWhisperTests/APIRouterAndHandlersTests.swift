@@ -202,7 +202,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             speechFeedbackService: speechFeedbackService,
             accessibilityAnnouncementService: accessibilityAnnouncementService,
             errorLogService: errorLogService,
-            mediaPlaybackService: MediaPlaybackService()
+            mediaPlaybackService: MediaPlaybackService(startListening: false)
         )
 
         let router = APIRouter()
