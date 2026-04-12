@@ -162,4 +162,35 @@ enum AppConstants {
         static let checkoutURLSupporterSilver = "https://buy.polar.sh/polar_cl_lXFAqnanhrrPd1RZ95SCb2L05L3lNrUQIkYVd0ZmK5b"
         static let checkoutURLSupporterGold = "https://buy.polar.sh/polar_cl_FpojMlLmyF73gOqpXLihSE0lNYnoQoaMxGp724IIor4"
     }
+
+    // MARK: - Discord Claim Service
+    enum DiscordClaim {
+        static let defaultBaseURLString = "http://127.0.0.1:8787"
+        static let callbackScheme = "typewhisper"
+        static let callbackHost = "community"
+        static let callbackPath = "/claim-result"
+
+        static var baseURL: URL {
+            let environment = ProcessInfo.processInfo.environment
+            let configured = environment["TYPEWHISPER_DISCORD_CLAIM_BASE_URL"]
+                ?? Bundle.main.object(forInfoDictionaryKey: "TypeWhisperDiscordClaimBaseURL") as? String
+                ?? defaultBaseURLString
+
+            return URL(string: configured) ?? URL(string: defaultBaseURLString)!
+        }
+
+        static var callbackURL: URL {
+            URL(string: "\(callbackScheme)://\(callbackHost)\(callbackPath)")!
+        }
+
+        static var githubSponsorsURL: URL {
+            baseURL.appendingPathComponent("claims").appendingPathComponent("github")
+        }
+
+        static func isCallbackURL(_ url: URL) -> Bool {
+            url.scheme == callbackScheme &&
+                url.host == callbackHost &&
+                url.path == callbackPath
+        }
+    }
 }

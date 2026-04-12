@@ -35,6 +35,7 @@ final class ServiceContainer: ObservableObject {
     let speechFeedbackService: SpeechFeedbackService
     let errorLogService: ErrorLogService
     let licenseService: LicenseService
+    let supporterDiscordService: SupporterDiscordService
 
     // HTTP API
     let httpServer: HTTPServer
@@ -93,6 +94,7 @@ final class ServiceContainer: ObservableObject {
         speechFeedbackService = SpeechFeedbackService()
         errorLogService = ErrorLogService()
         licenseService = LicenseService()
+        supporterDiscordService = SupporterDiscordService(licenseService: licenseService)
 
         // ViewModels (created before HTTP API so DictationViewModel is available)
         fileTranscriptionViewModel = FileTranscriptionViewModel(
@@ -166,6 +168,7 @@ final class ServiceContainer: ObservableObject {
 
         // License
         LicenseService.shared = licenseService
+        SupporterDiscordService.shared = supporterDiscordService
 
         // Plugin system
         EventBus.shared = EventBus()
@@ -212,6 +215,7 @@ final class ServiceContainer: ObservableObject {
         // Validate license if needed
         await licenseService.validateIfNeeded()
         await licenseService.validateSupporterIfNeeded()
+        await supporterDiscordService.refreshStatusIfNeeded()
 
         // Auto-start watch folder if configured
         if UserDefaults.standard.bool(forKey: UserDefaultsKeys.watchFolderAutoStart),

@@ -93,6 +93,17 @@ final class LicenseService: ObservableObject {
     @Published var supporterDeactivationError: String?
 
     var isSupporter: Bool { supporterStatus == .active && supporterTier != nil }
+    var supporterClaimProof: SupporterClaimProof? {
+        guard supporterStatus == .active,
+              let supporterTier,
+              let stored = loadSupporterFromKeychain() else { return nil }
+
+        return SupporterClaimProof(
+            key: stored.key,
+            activationId: stored.activationId,
+            tier: supporterTier
+        )
+    }
 
     var needsWelcomeSheet: Bool {
         !UserDefaults.standard.bool(forKey: UserDefaultsKeys.welcomeSheetShown)
@@ -251,15 +262,8 @@ final class LicenseService: ObservableObject {
             UserDefaults.standard.set(Date(), forKey: UserDefaultsKeys.lastSupporterValidation)
 
             // Detect tier from benefit description
-            if let validation = try? await polarValidate(key: key, activationId: response.id),
-               let description = validation.benefit?.description?.lowercased() {
-                if description.contains("gold") {
-                    supporterTier = .gold
-                } else if description.contains("silver") {
-                    supporterTier = .silver
-                } else {
-                    supporterTier = .bronze
-                }
+            if let validation = try? await polarValidate(key: key, activationId: response.id) {
+                supporterTier = supporterTier(from: validation.benefit?.description)
             } else {
                 supporterTier = .bronze
             }
@@ -279,6 +283,7 @@ final class LicenseService: ObservableObject {
                 supporterStatus = .unlicensed
                 supporterTier = nil
             }
+            SupporterDiscordService.shared?.handleSupporterEntitlementRemoved()
             return
         }
 
@@ -301,10 +306,13 @@ final class LicenseService: ObservableObject {
             let response = try await polarValidate(key: key, activationId: activationId)
             if response.status == "granted" {
                 supporterStatus = .active
+                supporterTier = supporterTier(from: response.benefit?.description)
                 UserDefaults.standard.set(Date(), forKey: UserDefaultsKeys.lastSupporterValidation)
                 logger.info("Supporter validation successful")
             } else {
                 supporterStatus = .expired
+                supporterTier = nil
+                SupporterDiscordService.shared?.handleSupporterEntitlementRemoved()
                 logger.warning("Supporter revoked or disabled (status: \(response.status))")
             }
         } catch {
@@ -324,10 +332,18 @@ final class LicenseService: ObservableObject {
             supporterStatus = .unlicensed
             supporterTier = nil
             UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.lastSupporterValidation)
+            SupporterDiscordService.shared?.handleSupporterEntitlementRemoved()
         } catch {
             supporterDeactivationError = error.localizedDescription
             logger.error("Supporter deactivation failed: \(error)")
         }
+    }
+
+    private func supporterTier(from benefitDescription: String?) -> SupporterTier {
+        guard let description = benefitDescription?.lowercased() else { return .bronze }
+        if description.contains("gold") { return .gold }
+        if description.contains("silver") { return .silver }
+        return .bronze
     }
 
     // MARK: - Polar API
@@ -531,5 +547,425 @@ enum LicenseError: LocalizedError {
         case .deactivationFailed:
             return String(localized: "Deactivation failed. Please try again.")
         }
+    }
+}
+
+// MARK: - Discord Claim Models
+
+struct SupporterClaimProof: Equatable, Sendable {
+    let key: String
+    let activationId: String
+    let tier: SupporterTier
+}
+
+struct SupporterDiscordClaimStatus: Codable, Equatable, Sendable {
+    enum State: String, Codable, Sendable {
+        case unavailable
+        case unlinked
+        case pending
+        case linked
+        case failed
+    }
+
+    var state: State
+    var discordUsername: String?
+    var linkedRoles: [String]
+    var errorMessage: String?
+    var sessionId: String?
+    var updatedAt: Date
+
+    static let unavailable = SupporterDiscordClaimStatus(
+        state: .unavailable,
+        discordUsername: nil,
+        linkedRoles: [],
+        errorMessage: nil,
+        sessionId: nil,
+        updatedAt: Date()
+    )
+}
+
+private struct SupporterDiscordStartRequest: Encodable {
+    let key: String
+    let activationId: String
+    let tier: String
+    let appVersion: String
+}
+
+private struct SupporterDiscordStartResponse: Decodable {
+    let sessionId: String
+    let claimURL: URL
+
+    enum CodingKeys: String, CodingKey {
+        case sessionId = "session_id"
+        case claimURL = "claim_url"
+    }
+}
+
+private struct SupporterDiscordStatusResponse: Decodable {
+    let status: String
+    let discordUsername: String?
+    let linkedRoles: [String]
+    let errorMessage: String?
+    let sessionId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case discordUsername = "discord_username"
+        case linkedRoles = "linked_roles"
+        case errorMessage = "error"
+        case sessionId = "session_id"
+    }
+}
+
+private struct SupporterDiscordServiceErrorResponse: Decodable {
+    let error: String
+}
+
+private struct SupporterDiscordCallbackPayload: Sendable {
+    let flow: String?
+    let status: String?
+    let sessionId: String?
+    let errorMessage: String?
+}
+
+enum SupporterDiscordServiceError: LocalizedError {
+    case notEligible
+    case invalidBaseURL
+    case invalidResponse
+    case requestFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .notEligible:
+            return "An active supporter license is required before you can claim Discord status."
+        case .invalidBaseURL:
+            return "The Discord claim service URL is not configured correctly."
+        case .invalidResponse:
+            return "The Discord claim service returned an invalid response."
+        case .requestFailed(let message):
+            return message
+        }
+    }
+}
+
+typealias SupporterDiscordTransport = @Sendable (URLRequest) async throws -> (Data, URLResponse)
+
+@MainActor
+final class SupporterDiscordService: ObservableObject {
+    nonisolated(unsafe) static var shared: SupporterDiscordService?
+
+    @Published private(set) var claimStatus: SupporterDiscordClaimStatus
+    @Published private(set) var isWorking = false
+
+    private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "SupporterDiscordService")
+    private let defaults: UserDefaults
+    private let transport: SupporterDiscordTransport
+    private let claimProofProvider: @MainActor () -> SupporterClaimProof?
+    private let baseURLProvider: @MainActor () -> URL
+
+    init(
+        licenseService: LicenseService,
+        defaults: UserDefaults = .standard,
+        transport: @escaping SupporterDiscordTransport = { request in
+            try await URLSession.shared.data(for: request)
+        },
+        claimProofProvider: (@MainActor () -> SupporterClaimProof?)? = nil,
+        baseURLProvider: (@MainActor () -> URL)? = nil
+    ) {
+        self.defaults = defaults
+        self.transport = transport
+        self.claimProofProvider = claimProofProvider ?? { licenseService.supporterClaimProof }
+        self.baseURLProvider = baseURLProvider ?? { AppConstants.DiscordClaim.baseURL }
+        self.claimStatus = Self.loadPersistedStatus(defaults: defaults)
+    }
+
+    var githubSponsorsURL: URL {
+        AppConstants.DiscordClaim.githubSponsorsURL
+    }
+
+    static func canHandleCallbackURL(_ url: URL) -> Bool {
+        AppConstants.DiscordClaim.isCallbackURL(url)
+    }
+
+    @discardableResult
+    func createClaimSession() async -> URL? {
+        guard let proof = claimProofProvider() else {
+            handleSupporterEntitlementRemoved()
+            claimStatus = Self.status(
+                from: claimStatus,
+                state: .failed,
+                errorMessage: SupporterDiscordServiceError.notEligible.errorDescription
+            )
+            persist()
+            return nil
+        }
+
+        isWorking = true
+        defer { isWorking = false }
+
+        do {
+            let endpoint = try endpointURL(path: "/claims/polar/start")
+            var request = URLRequest(url: endpoint)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONEncoder().encode(
+                SupporterDiscordStartRequest(
+                    key: proof.key,
+                    activationId: proof.activationId,
+                    tier: proof.tier.rawValue,
+                    appVersion: AppConstants.appVersion
+                )
+            )
+
+            let response: SupporterDiscordStartResponse = try await send(request)
+            claimStatus = SupporterDiscordClaimStatus(
+                state: .pending,
+                discordUsername: nil,
+                linkedRoles: [],
+                errorMessage: nil,
+                sessionId: response.sessionId,
+                updatedAt: Date()
+            )
+            persist()
+            logger.info("Started Discord claim session \(response.sessionId, privacy: .public)")
+            return response.claimURL
+        } catch {
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            claimStatus = Self.status(from: claimStatus, state: .failed, errorMessage: message)
+            persist()
+            logger.error("Failed to start Discord claim session: \(message, privacy: .public)")
+            return nil
+        }
+    }
+
+    @discardableResult
+    func reconnect() async -> URL? {
+        claimStatus = SupporterDiscordClaimStatus(
+            state: .unlinked,
+            discordUsername: nil,
+            linkedRoles: [],
+            errorMessage: nil,
+            sessionId: nil,
+            updatedAt: Date()
+        )
+        persist()
+        return await createClaimSession()
+    }
+
+    func refreshStatusIfNeeded() async {
+        guard claimProofProvider() != nil else {
+            handleSupporterEntitlementRemoved()
+            return
+        }
+
+        guard claimStatus.state == .pending || claimStatus.state == .linked || claimStatus.sessionId != nil else {
+            return
+        }
+
+        await refreshClaimStatus()
+    }
+
+    func refreshClaimStatus() async {
+        guard let proof = claimProofProvider() else {
+            handleSupporterEntitlementRemoved()
+            return
+        }
+
+        isWorking = true
+        defer { isWorking = false }
+
+        do {
+            let statusURL = try statusEndpointURL(
+                activationId: proof.activationId,
+                sessionId: claimStatus.sessionId
+            )
+            var request = URLRequest(url: statusURL)
+            request.httpMethod = "GET"
+
+            let response: SupporterDiscordStatusResponse = try await send(request)
+            claimStatus = Self.status(
+                from: claimStatus,
+                state: Self.mapState(response.status),
+                discordUsername: response.discordUsername,
+                linkedRoles: response.linkedRoles,
+                errorMessage: response.errorMessage,
+                sessionId: response.sessionId != nil ? .some(response.sessionId) : nil
+            )
+            persist()
+        } catch {
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            logger.error("Failed to refresh Discord claim status: \(message, privacy: .public)")
+
+            if claimStatus.state == .linked {
+                claimStatus = Self.status(from: claimStatus, errorMessage: message)
+            } else {
+                claimStatus = Self.status(from: claimStatus, state: .failed, errorMessage: message)
+            }
+            persist()
+        }
+    }
+
+    @discardableResult
+    func handleCallbackURL(_ url: URL) async -> Bool {
+        guard let payload = Self.parseCallbackURL(url) else {
+            return false
+        }
+
+        guard payload.flow == nil || payload.flow == "polar" else {
+            return true
+        }
+
+        claimStatus = Self.status(
+            from: claimStatus,
+            state: Self.mapCallbackState(payload.status),
+            errorMessage: payload.errorMessage.map(Optional.some) ?? nil,
+            sessionId: payload.sessionId.map(Optional.some) ?? nil
+        )
+        persist()
+
+        await refreshClaimStatus()
+        return true
+    }
+
+    func handleSupporterEntitlementRemoved() {
+        claimStatus = SupporterDiscordClaimStatus(
+            state: .unavailable,
+            discordUsername: nil,
+            linkedRoles: [],
+            errorMessage: nil,
+            sessionId: nil,
+            updatedAt: Date()
+        )
+        defaults.removeObject(forKey: UserDefaultsKeys.supporterDiscordSessionId)
+        persist()
+    }
+
+    private func endpointURL(path: String) throws -> URL {
+        let baseURL = baseURLProvider()
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            throw SupporterDiscordServiceError.invalidBaseURL
+        }
+        components.path = path
+        guard let url = components.url else {
+            throw SupporterDiscordServiceError.invalidBaseURL
+        }
+        return url
+    }
+
+    private func statusEndpointURL(activationId: String, sessionId: String?) throws -> URL {
+        let url = try endpointURL(path: "/claims/polar/status")
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            throw SupporterDiscordServiceError.invalidBaseURL
+        }
+        var queryItems = [URLQueryItem(name: "activation_id", value: activationId)]
+        if let sessionId, !sessionId.isEmpty {
+            queryItems.append(URLQueryItem(name: "session_id", value: sessionId))
+        }
+        components.queryItems = queryItems
+        guard let composed = components.url else {
+            throw SupporterDiscordServiceError.invalidBaseURL
+        }
+        return composed
+    }
+
+    private func send<Response: Decodable>(_ request: URLRequest) async throws -> Response {
+        let (data, response) = try await transport(request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw SupporterDiscordServiceError.invalidResponse
+        }
+
+        guard (200 ... 299).contains(httpResponse.statusCode) else {
+            if let errorResponse = try? JSONDecoder().decode(SupporterDiscordServiceErrorResponse.self, from: data) {
+                throw SupporterDiscordServiceError.requestFailed(errorResponse.error)
+            }
+            throw SupporterDiscordServiceError.requestFailed("Discord claim service returned HTTP \(httpResponse.statusCode).")
+        }
+
+        do {
+            return try JSONDecoder().decode(Response.self, from: data)
+        } catch {
+            throw SupporterDiscordServiceError.invalidResponse
+        }
+    }
+
+    private func persist() {
+        if let data = try? JSONEncoder().encode(claimStatus) {
+            defaults.set(data, forKey: UserDefaultsKeys.supporterDiscordClaimStatus)
+        }
+        defaults.set(claimStatus.sessionId, forKey: UserDefaultsKeys.supporterDiscordSessionId)
+    }
+
+    private static func loadPersistedStatus(defaults: UserDefaults) -> SupporterDiscordClaimStatus {
+        if let data = defaults.data(forKey: UserDefaultsKeys.supporterDiscordClaimStatus),
+           let status = try? JSONDecoder().decode(SupporterDiscordClaimStatus.self, from: data) {
+            return status
+        }
+        return .unavailable
+    }
+
+    private static func mapState(_ rawValue: String) -> SupporterDiscordClaimStatus.State {
+        switch rawValue {
+        case "unlinked":
+            return .unlinked
+        case "pending":
+            return .pending
+        case "linked":
+            return .linked
+        case "failed":
+            return .failed
+        default:
+            return .failed
+        }
+    }
+
+    private static func mapCallbackState(_ rawValue: String?) -> SupporterDiscordClaimStatus.State? {
+        guard let rawValue else { return nil }
+        switch rawValue {
+        case "linked", "pending":
+            return .pending
+        case "unlinked":
+            return .unlinked
+        case "failed", "expired":
+            return .failed
+        default:
+            return nil
+        }
+    }
+
+    private static func parseCallbackURL(_ url: URL) -> SupporterDiscordCallbackPayload? {
+        guard canHandleCallbackURL(url),
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+
+        let queryItems = components.queryItems ?? []
+        func value(_ name: String) -> String? {
+            queryItems.first(where: { $0.name == name })?.value
+        }
+
+        return SupporterDiscordCallbackPayload(
+            flow: value("flow"),
+            status: value("status"),
+            sessionId: value("session_id"),
+            errorMessage: value("error")
+        )
+    }
+
+    private static func status(
+        from current: SupporterDiscordClaimStatus,
+        state: SupporterDiscordClaimStatus.State? = nil,
+        discordUsername: String?? = nil,
+        linkedRoles: [String]? = nil,
+        errorMessage: String?? = nil,
+        sessionId: String?? = nil
+    ) -> SupporterDiscordClaimStatus {
+        SupporterDiscordClaimStatus(
+            state: state ?? current.state,
+            discordUsername: discordUsername ?? current.discordUsername,
+            linkedRoles: linkedRoles ?? current.linkedRoles,
+            errorMessage: errorMessage ?? current.errorMessage,
+            sessionId: sessionId ?? current.sessionId,
+            updatedAt: Date()
+        )
     }
 }

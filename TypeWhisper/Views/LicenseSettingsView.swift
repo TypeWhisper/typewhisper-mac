@@ -2,6 +2,8 @@ import SwiftUI
 
 struct LicenseSettingsView: View {
     @ObservedObject private var license = LicenseService.shared
+    @ObservedObject private var supporterDiscord =
+        SupporterDiscordService.shared ?? SupporterDiscordService(licenseService: LicenseService.shared)
 
     @State private var licenseKeyInput = ""
     @State private var supporterKeyInput = ""
@@ -24,6 +26,13 @@ struct LicenseSettingsView: View {
         .formStyle(.grouped)
         .padding()
         .frame(minWidth: 500, minHeight: 300)
+        .task(id: "\(license.supporterStatus.rawValue)-\(license.supporterTier?.rawValue ?? "none")") {
+            if license.isSupporter {
+                await supporterDiscord.refreshStatusIfNeeded()
+            } else {
+                supporterDiscord.handleSupporterEntitlementRemoved()
+            }
+        }
     }
 
     // MARK: - User Type
@@ -162,9 +171,7 @@ struct LicenseSettingsView: View {
                     Spacer()
                 }
 
-                Text(String(localized: "Thank you for supporting TypeWhisper! Join our Discord to claim your supporter role."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                supporterDiscordSection(tier: tier)
 
                 Button {
                     if let url = URL(string: AppConstants.Polar.customerPortalURL) {
@@ -196,6 +203,12 @@ struct LicenseSettingsView: View {
                     supporterTierButton(tier: .gold, price: "50")
                 }
                 .padding(.vertical, 4)
+
+                Button {
+                    NSWorkspace.shared.open(supporterDiscord.githubSponsorsURL)
+                } label: {
+                    Label("Claim GitHub Sponsors status on the web", systemImage: "link")
+                }
 
                 keyActivationField(
                     input: $supporterKeyInput,
@@ -245,6 +258,108 @@ struct LicenseSettingsView: View {
     }
 
     // MARK: - Helpers
+
+    @ViewBuilder
+    private func supporterDiscordSection(tier: SupporterTier) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            switch supporterDiscord.claimStatus.state {
+            case .unavailable, .unlinked:
+                Label("Discord not connected", systemImage: "person.crop.circle.badge.xmark")
+                    .foregroundStyle(.secondary)
+
+                Text("Connect Discord to claim your \(supporterTierDisplayName(tier)) supporter status in the community server.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                actionButton(title: "Connect Discord", systemImage: "person.crop.circle.badge.plus") {
+                    await openClaimURL(await supporterDiscord.createClaimSession())
+                }
+            case .pending:
+                Label("Claim in progress", systemImage: "clock.badge")
+                    .foregroundStyle(.orange)
+
+                Text("Finish the Discord authorization flow in your browser, then refresh the status here.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                actionButton(title: "Reconnect Discord", systemImage: "arrow.clockwise.circle") {
+                    await openClaimURL(await supporterDiscord.reconnect())
+                }
+
+                actionButton(title: "Refresh Discord Status", systemImage: "arrow.clockwise") {
+                    await supporterDiscord.refreshClaimStatus()
+                }
+            case .linked:
+                Label("Discord connected", systemImage: "checkmark.seal.fill")
+                    .foregroundStyle(.green)
+
+                if let username = supporterDiscord.claimStatus.discordUsername {
+                    Text("Linked account: \(username)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if !supporterDiscord.claimStatus.linkedRoles.isEmpty {
+                    Text("Active roles: \(supporterDiscord.claimStatus.linkedRoles.joined(separator: ", "))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                actionButton(title: "Refresh Discord Status", systemImage: "arrow.clockwise") {
+                    await supporterDiscord.refreshClaimStatus()
+                }
+
+                actionButton(title: "Reconnect Discord", systemImage: "link.badge.plus") {
+                    await openClaimURL(await supporterDiscord.reconnect())
+                }
+            case .failed:
+                Label("Discord claim failed", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+
+                Text(supporterDiscord.claimStatus.errorMessage ?? "The Discord claim service returned an unknown error.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                actionButton(title: "Retry Discord Claim", systemImage: "arrow.clockwise.circle") {
+                    await openClaimURL(await supporterDiscord.reconnect())
+                }
+
+                actionButton(title: "Refresh Discord Status", systemImage: "arrow.clockwise") {
+                    await supporterDiscord.refreshClaimStatus()
+                }
+            }
+
+            if supporterDiscord.isWorking {
+                ProgressView()
+                    .controlSize(.small)
+            }
+
+            if let message = supporterDiscord.claimStatus.errorMessage,
+               supporterDiscord.claimStatus.state == .linked {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func actionButton(
+        title: String,
+        systemImage: String,
+        action: @escaping () async -> Void
+    ) -> some View {
+        Button {
+            Task { await action() }
+        } label: {
+            Label(title, systemImage: systemImage)
+        }
+        .disabled(supporterDiscord.isWorking)
+    }
+
+    private func openClaimURL(_ url: URL?) async {
+        guard let url else { return }
+        NSWorkspace.shared.open(url)
+    }
 
     private func businessTierButton(tier: LicenseTier, price: String, suffix: String, url: String) -> some View {
         Button {

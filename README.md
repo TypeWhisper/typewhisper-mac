@@ -88,6 +88,7 @@ See [docs/1.1-readiness.md](docs/1.1-readiness.md), [docs/support-matrix.md](doc
 - **MLX download controls** - Bundled Qwen3, Granite, and Voxtral plugins support an optional HuggingFace token for higher rate limits and clearer download errors
 - **HTTP API** - Local REST API for integration with external tools and scripts
 - **CLI tool** - Shell-friendly transcription via the command line
+- **Discord claim service** - Optional external service for Polar supporter and GitHub Sponsors Discord role claims
 
 ### General
 

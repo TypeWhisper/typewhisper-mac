@@ -240,6 +240,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         return true
     }
 
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            handleIncomingURL(url)
+        }
+    }
+
     private func openSettingsWindow() {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate()
@@ -260,6 +266,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
 
         // Last resort: post notification for bridge view
         NotificationCenter.default.post(name: .openSettingsFromDock, object: nil)
+    }
+
+    private func handleIncomingURL(_ url: URL) {
+        guard SupporterDiscordService.canHandleCallbackURL(url) else { return }
+
+        openSettingsWindow()
+
+        Task { @MainActor in
+            await SupporterDiscordService.shared?.handleCallbackURL(url)
+        }
     }
 
     private func isManagedWindow(_ window: NSWindow) -> Bool {

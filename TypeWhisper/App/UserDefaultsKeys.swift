@@ -114,4 +114,6 @@ enum UserDefaultsKeys {
     static let supporterTier = "supporterTier"
     static let supporterStatus = "supporterStatus"
     static let lastSupporterValidation = "lastSupporterValidation"
+    static let supporterDiscordClaimStatus = "supporterDiscordClaimStatus"
+    static let supporterDiscordSessionId = "supporterDiscordSessionId"
 }

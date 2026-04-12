@@ -8,6 +8,19 @@
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.typewhisper.mac.community</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>typewhisper</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleName</key>
 	<string>TypeWhisper</string>
 	<key>CFBundleShortVersionString</key>
@@ -40,6 +53,8 @@
 	<string>OdAMiN136Ckglxnq4FeLagPjcrZiASYGaeUWBkK6tuc=</string>
 	<key>TypeWhisperReleaseChannel</key>
 	<string>stable</string>
+	<key>TypeWhisperDiscordClaimBaseURL</key>
+	<string>https://community.typewhisper.com</string>
 	<key>AppGroupIdentifier</key>
 	<string>$(APP_GROUP_ID)</string>
 </dict>
