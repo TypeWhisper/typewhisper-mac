@@ -14,28 +14,46 @@ class MediaPlaybackService {
     private var mediaController: MediaController?
     private var isMediaPlaying = false
     private var nowPlayingBundleID: String?
+    private(set) var isListening = false
 
     init(startListening: Bool = true) {
         guard startListening else { return }
+        setListeningEnabled(true)
+    }
 
-        let mediaController = MediaController()
-        mediaController.onTrackInfoReceived = { [weak self] trackInfo in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                if let info = trackInfo {
-                    let playing = info.payload.isPlaying ?? false
-                    let rate = info.payload.playbackRate ?? 0
-                    self.isMediaPlaying = playing || rate > 0
-                    self.nowPlayingBundleID = info.payload.bundleIdentifier
-                } else {
-                    self.isMediaPlaying = false
-                    self.nowPlayingBundleID = nil
+    func setListeningEnabled(_ enabled: Bool) {
+        if enabled {
+            guard !isListening else { return }
+
+            let mediaController = MediaController()
+            mediaController.onTrackInfoReceived = { [weak self] trackInfo in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if let info = trackInfo {
+                        let playing = info.payload.isPlaying ?? false
+                        let rate = info.payload.playbackRate ?? 0
+                        self.isMediaPlaying = playing || rate > 0
+                        self.nowPlayingBundleID = info.payload.bundleIdentifier
+                    } else {
+                        self.isMediaPlaying = false
+                        self.nowPlayingBundleID = nil
+                    }
                 }
             }
+            mediaController.startListening()
+            self.mediaController = mediaController
+            self.isListening = true
+            logger.info("MediaRemoteAdapter listener started")
+            return
         }
-        mediaController.startListening()
-        self.mediaController = mediaController
-        logger.info("MediaRemoteAdapter listener started")
+
+        guard isListening else { return }
+        mediaController?.stopListening()
+        mediaController = nil
+        isListening = false
+        isMediaPlaying = false
+        nowPlayingBundleID = nil
+        logger.info("MediaRemoteAdapter listener stopped")
     }
 
     /// Pauses media playback only if something is actually playing.
@@ -63,6 +81,7 @@ class MediaPlaybackService {
     }
     #else
     init(startListening: Bool = true) {}
+    func setListeningEnabled(_ enabled: Bool) {}
     func pauseIfPlaying() {}
     func resumeIfWePaused() {}
     #endif

@@ -74,10 +74,15 @@ final class APIRouterAndHandlersTests: XCTestCase {
     @MainActor
     private final class MockMediaPlaybackService: MediaPlaybackService {
         let onPause: () -> Void
+        private(set) var listeningStates: [Bool] = []
 
         init(onPause: @escaping () -> Void) {
             self.onPause = onPause
-            super.init()
+            super.init(startListening: false)
+        }
+
+        override func setListeningEnabled(_ enabled: Bool) {
+            listeningStates.append(enabled)
         }
 
         override func pauseIfPlaying() {
@@ -327,6 +332,30 @@ final class APIRouterAndHandlersTests: XCTestCase {
         context.dictationViewModel.apiStartRecording()
 
         XCTAssertEqual(Array(events.prefix(3)), ["capture_app", "start_audio", "pause_media"])
+    }
+
+    @MainActor
+    func testMediaPauseSettingControlsListenerLifecycle() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let mediaPlaybackService = MockMediaPlaybackService {}
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            mediaPlaybackService: mediaPlaybackService
+        )
+        let context = try XCTUnwrap(dictationContext)
+
+        XCTAssertEqual(mediaPlaybackService.listeningStates, [false])
+
+        context.dictationViewModel.mediaPauseEnabled = true
+        context.dictationViewModel.mediaPauseEnabled = false
+
+        XCTAssertEqual(mediaPlaybackService.listeningStates, [false, true, false])
     }
 
     @MainActor

@@ -51,7 +51,10 @@ final class DictationViewModel: ObservableObject {
         didSet { UserDefaults.standard.set(preserveClipboard, forKey: UserDefaultsKeys.preserveClipboard) }
     }
     @Published var mediaPauseEnabled: Bool {
-        didSet { UserDefaults.standard.set(mediaPauseEnabled, forKey: UserDefaultsKeys.mediaPauseEnabled) }
+        didSet {
+            UserDefaults.standard.set(mediaPauseEnabled, forKey: UserDefaultsKeys.mediaPauseEnabled)
+            mediaPlaybackService.setListeningEnabled(mediaPauseEnabled)
+        }
     }
     @Published var spokenFeedbackEnabled: Bool {
         didSet { speechFeedbackService.spokenFeedbackEnabled = spokenFeedbackEnabled }

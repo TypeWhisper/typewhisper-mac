@@ -74,7 +74,9 @@ final class ServiceContainer: ObservableObject {
         translationService = nil
         #endif
         audioDuckingService = AudioDuckingService()
-        mediaPlaybackService = MediaPlaybackService()
+        mediaPlaybackService = MediaPlaybackService(
+            startListening: UserDefaults.standard.bool(forKey: UserDefaultsKeys.mediaPauseEnabled)
+        )
         dictionaryService = DictionaryService()
         snippetService = SnippetService()
         soundService = SoundService()
