@@ -344,6 +344,24 @@ let result = try await helper.process(
 )
 ```
 
+You can override or omit the output-token parameter for providers that do not use the
+default `max_tokens` field:
+
+```swift
+let result = try await helper.process(
+    apiKey: apiKey,
+    model: "gpt-5.4",
+    systemPrompt: "Fix grammar",
+    userText: inputText,
+    maxOutputTokens: 4096,
+    maxOutputTokenParameter: "max_completion_tokens"
+)
+```
+
+This helper stays provider-agnostic. OpenAI-compatible servers may expect different
+token-limit parameter names, so plugin authors should set the appropriate field for
+their provider when needed.
+
 ### PluginWavEncoder
 
 Encode audio samples to WAV:

@@ -336,22 +336,22 @@ public struct PluginOpenAIChatHelper: Sendable {
         apiKey: String,
         model: String,
         systemPrompt: String,
-        userText: String
+        userText: String,
+        maxOutputTokens: Int? = 4096,
+        maxOutputTokenParameter: String = "max_tokens"
     ) async throws -> String {
         let endpoint = "\(baseURL)\(chatEndpoint)"
         guard let url = URL(string: endpoint) else {
             throw PluginChatError.apiError("Invalid URL: \(endpoint)")
         }
 
-        let requestBody: [String: Any] = [
-            "model": model,
-            "messages": [
-                ["role": "system", "content": systemPrompt],
-                ["role": "user", "content": userText]
-            ],
-            "temperature": 0.3,
-            "max_tokens": 4096
-        ]
+        let requestBody = requestBody(
+            model: model,
+            systemPrompt: systemPrompt,
+            userText: userText,
+            maxOutputTokens: maxOutputTokens,
+            maxOutputTokenParameter: maxOutputTokenParameter
+        )
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -392,6 +392,29 @@ public struct PluginOpenAIChatHelper: Sendable {
         }
 
         return content.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func requestBody(
+        model: String,
+        systemPrompt: String,
+        userText: String,
+        maxOutputTokens: Int?,
+        maxOutputTokenParameter: String
+    ) -> [String: Any] {
+        var requestBody: [String: Any] = [
+            "model": model,
+            "messages": [
+                ["role": "system", "content": systemPrompt],
+                ["role": "user", "content": userText]
+            ],
+            "temperature": 0.3
+        ]
+
+        if let maxOutputTokens {
+            requestBody[maxOutputTokenParameter] = maxOutputTokens
+        }
+
+        return requestBody
     }
 }
 
