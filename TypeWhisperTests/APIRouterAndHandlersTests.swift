@@ -652,7 +652,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let accessibilityAnnouncementService = AccessibilityAnnouncementService()
         let errorLogService = ErrorLogService(appSupportDirectory: appSupportDirectory)
         let settingsViewModel = SettingsViewModel(modelManager: modelManager)
-        let mediaPlaybackService = mediaPlaybackService ?? MediaPlaybackService()
+        let mediaPlaybackService = mediaPlaybackService ?? MediaPlaybackService(startListening: false)
 
         let dictationViewModel = DictationViewModel(
             audioRecordingService: audioRecordingService,
