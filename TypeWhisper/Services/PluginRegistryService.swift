@@ -1,4 +1,5 @@
 import Foundation
+import TypeWhisperPluginSDK
 import os.log
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "PluginRegistry")
@@ -267,26 +268,11 @@ final class PluginRegistryService: ObservableObject {
                 return
             }
 
-            // Unload existing version if present
-            PluginManager.shared.unloadPlugin(plugin.id)
-
-            let destURL = PluginManager.shared.pluginsDirectory
-                .appendingPathComponent(bundleURL.lastPathComponent)
-
-            // Remove existing bundle if present
-            if FileManager.default.fileExists(atPath: destURL.path) {
-                try FileManager.default.removeItem(at: destURL)
-            }
-
-            try FileManager.default.moveItem(at: bundleURL, to: destURL)
-            PluginManager.shared.loadPlugin(at: destURL)
-
-            // Verify plugin actually loaded (e.g. incompatible macOS version fails silently)
-            if !PluginManager.shared.loadedPlugins.contains(where: { $0.manifest.id == plugin.id }) {
-                installStates[plugin.id] = .error(String(localized: "Plugin incompatible with this macOS version"))
-                logger.error("Plugin \(plugin.id) downloaded but failed to load")
-                return
-            }
+            try installBundle(
+                at: bundleURL,
+                expectedPluginId: plugin.id,
+                copyBundle: false
+            )
 
             installStates.removeValue(forKey: plugin.id)
             lastFetchDate = nil // invalidate cache so installInfo refreshes
@@ -322,15 +308,9 @@ final class PluginRegistryService: ObservableObject {
 
     func installFromFile(_ url: URL) async throws {
         let fm = FileManager.default
-        let pluginsDir = PluginManager.shared.pluginsDirectory
 
         if url.pathExtension == "bundle" {
-            let destURL = pluginsDir.appendingPathComponent(url.lastPathComponent)
-            if fm.fileExists(atPath: destURL.path) {
-                try fm.removeItem(at: destURL)
-            }
-            try fm.copyItem(at: url, to: destURL)
-            PluginManager.shared.loadPlugin(at: destURL)
+            try installBundle(at: url, expectedPluginId: nil, copyBundle: true)
         } else if url.pathExtension == "zip" {
             let tempDir = fm.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -354,12 +334,85 @@ final class PluginRegistryService: ObservableObject {
                               userInfo: [NSLocalizedDescriptionKey: "No .bundle found in ZIP"])
             }
 
-            let destURL = pluginsDir.appendingPathComponent(bundleURL.lastPathComponent)
-            if fm.fileExists(atPath: destURL.path) {
-                try fm.removeItem(at: destURL)
+            try installBundle(at: bundleURL, expectedPluginId: nil, copyBundle: false)
+        }
+    }
+
+    private func installBundle(at bundleURL: URL, expectedPluginId: String?, copyBundle: Bool) throws {
+        let fm = FileManager.default
+        let manifest = try readManifest(at: bundleURL)
+        let existingLoadedBundleURL = PluginManager.shared.bundleURL(for: manifest.id)
+
+        if let expectedPluginId, manifest.id != expectedPluginId {
+            throw NSError(
+                domain: "PluginRegistry",
+                code: 3,
+                userInfo: [NSLocalizedDescriptionKey: "Downloaded bundle ID \(manifest.id) does not match expected plugin \(expectedPluginId)"]
+            )
+        }
+
+        let destinationURL: URL
+        if let currentURL = PluginManager.shared.bundleURL(for: manifest.id),
+           !currentURL.path.hasPrefix(Bundle.main.builtInPlugInsURL?.path ?? "/__no_builtin_plugins__") {
+            destinationURL = currentURL
+        } else {
+            destinationURL = PluginManager.shared.pluginsDirectory.appendingPathComponent(bundleURL.lastPathComponent)
+        }
+
+        let backupURL = destinationURL.deletingLastPathComponent()
+            .appendingPathComponent("\(destinationURL.lastPathComponent).backup-\(UUID().uuidString)")
+        let hadExistingBundle = fm.fileExists(atPath: destinationURL.path)
+
+        do {
+            PluginManager.shared.unloadPlugin(manifest.id)
+
+            if hadExistingBundle {
+                try fm.moveItem(at: destinationURL, to: backupURL)
             }
-            try fm.moveItem(at: bundleURL, to: destURL)
-            PluginManager.shared.loadPlugin(at: destURL)
+
+            if copyBundle {
+                try fm.copyItem(at: bundleURL, to: destinationURL)
+            } else {
+                try fm.moveItem(at: bundleURL, to: destinationURL)
+            }
+
+            try PluginManager.shared.loadPlugin(at: destinationURL)
+            try removeDuplicateBundles(for: manifest.id, keeping: destinationURL)
+
+            if hadExistingBundle, fm.fileExists(atPath: backupURL.path) {
+                try fm.removeItem(at: backupURL)
+            }
+        } catch {
+            if fm.fileExists(atPath: destinationURL.path) {
+                try? fm.removeItem(at: destinationURL)
+            }
+            if hadExistingBundle, fm.fileExists(atPath: backupURL.path) {
+                try? fm.moveItem(at: backupURL, to: destinationURL)
+                try? PluginManager.shared.loadPlugin(at: destinationURL)
+            } else if let existingLoadedBundleURL {
+                try? PluginManager.shared.loadPlugin(at: existingLoadedBundleURL)
+            }
+            throw error
+        }
+    }
+
+    private func readManifest(at bundleURL: URL) throws -> PluginManifest {
+        let manifestURL = bundleURL.appendingPathComponent("Contents/Resources/manifest.json")
+        let data = try Data(contentsOf: manifestURL)
+        return try JSONDecoder().decode(PluginManifest.self, from: data)
+    }
+
+    private func removeDuplicateBundles(for pluginId: String, keeping keptURL: URL) throws {
+        let fm = FileManager.default
+        let bundleURLs = try fm.contentsOfDirectory(
+            at: PluginManager.shared.pluginsDirectory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ).filter { $0.pathExtension == "bundle" && $0.standardizedFileURL != keptURL.standardizedFileURL }
+
+        for url in bundleURLs {
+            guard let manifest = try? readManifest(at: url), manifest.id == pluginId else { continue }
+            try fm.removeItem(at: url)
         }
     }
 

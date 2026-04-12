@@ -27,6 +27,14 @@ final class OpenAITranscriptionHelperTests: XCTestCase {
         )
     }
 
+    func testAudioUtilsPadsShortSamplesToMinimumDuration() {
+        let samples = [Float](repeating: 0.1, count: 6_400)
+
+        let paddedSamples = AudioUtils.paddedSamples(samples, minimumDuration: 1.0)
+
+        XCTAssertEqual(paddedSamples.count, 16_000)
+    }
+
     func testPluginAudioUtilsAcceptsHighConfidenceShortClipTranscription() {
         XCTAssertTrue(
             PluginAudioUtils.shouldAcceptShortClipTranscription(

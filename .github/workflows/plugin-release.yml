@@ -4,6 +4,16 @@ on:
   push:
     tags:
       - 'plugin-*-v*'
+  workflow_dispatch:
+    inputs:
+      plugin_name:
+        description: Plugin slug, for example `parakeet`
+        required: true
+        type: string
+      plugin_version:
+        description: Plugin version, for example `1.2.1`
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -17,13 +27,20 @@ jobs:
     steps:
       - name: Parse tag
         run: |
-          TAG="${GITHUB_REF_NAME}"
-          # Extract plugin name and version from tag: plugin-qwen3-v1.0.0
-          PLUGIN_NAME=$(echo "$TAG" | sed 's/^plugin-//' | sed 's/-v[0-9].*//')
-          PLUGIN_VERSION=$(echo "$TAG" | sed 's/.*-v//')
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            PLUGIN_NAME="${{ inputs.plugin_name }}"
+            PLUGIN_VERSION="${{ inputs.plugin_version }}"
+            TAG="plugin-${PLUGIN_NAME}-v${PLUGIN_VERSION}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+            # Extract plugin name and version from tag: plugin-qwen3-v1.0.0
+            PLUGIN_NAME=$(echo "$TAG" | sed 's/^plugin-//' | sed 's/-v[0-9].*//')
+            PLUGIN_VERSION=$(echo "$TAG" | sed 's/.*-v//')
+          fi
+          echo "TAG=$TAG" >> $GITHUB_ENV
           echo "PLUGIN_NAME=$PLUGIN_NAME" >> $GITHUB_ENV
           echo "PLUGIN_VERSION=$PLUGIN_VERSION" >> $GITHUB_ENV
-          echo "Plugin: $PLUGIN_NAME, Version: $PLUGIN_VERSION"
+          echo "Plugin: $PLUGIN_NAME, Version: $PLUGIN_VERSION, Tag: $TAG"
 
       - name: Resolve target name
         run: |
@@ -193,10 +210,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${GITHUB_REF_NAME}"
           ASSET="build/Release/${TARGET}.zip"
 
           gh release create "$TAG" "$ASSET" \
+            --target "$GITHUB_SHA" \
             --title "${TARGET} v${PLUGIN_VERSION}" \
             --notes ""
 
@@ -204,7 +221,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${GITHUB_REF_NAME}"
           DOWNLOAD_URL="https://github.com/TypeWhisper/typewhisper-mac/releases/download/${TAG}/${TARGET}.zip"
           MANIFEST_PATH=$(find Plugins -name manifest.json -path "*${TARGET}*" 2>/dev/null | head -1)
 
