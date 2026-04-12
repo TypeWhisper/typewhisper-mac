@@ -57,7 +57,7 @@ Each plugin receives a `HostServices` object providing:
 - **UserDefaults** (plugin-scoped): `userDefault(forKey:)`, `setUserDefault(_:forKey:)`
 - **Data directory**: `pluginDataDirectory` - persistent storage at `~/Library/Application Support/TypeWhisper/PluginData/<pluginId>/`
 - **App context**: `activeAppBundleId`, `activeAppName`
-- **Profiles**: `availableProfileNames` - list of user-defined profile names
+- **Rules**: `availableRuleNames` - list of user-defined rule names
 - **Event Bus**: `eventBus` for subscribing to events
 - **Capabilities**: `notifyCapabilitiesChanged()` - notify the host when plugin state changes (e.g. model loaded/unloaded)
 - **Streaming display hint**: `setStreamingDisplayActive(_:)` - tell TypeWhisper that your plugin renders its own streaming UI

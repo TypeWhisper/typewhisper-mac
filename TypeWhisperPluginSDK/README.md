@@ -252,8 +252,8 @@ func activate(host: HostServices) {
     let appName = host.activeAppName
     let bundleId = host.activeAppBundleId
 
-    // Profile names
-    let profiles = host.availableProfileNames
+    // Rule names
+    let rules = host.availableRuleNames
 
     // Host UI coordination
     host.notifyCapabilitiesChanged()

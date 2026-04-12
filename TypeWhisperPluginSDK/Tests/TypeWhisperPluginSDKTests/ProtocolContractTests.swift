@@ -32,11 +32,11 @@ private struct MockHostServices: HostServices {
     let activeAppBundleId: String? = "com.apple.Notes"
     let activeAppName: String? = "Notes"
     let eventBus: EventBusProtocol
-    let availableProfileNames: [String]
+    let availableRuleNames: [String]
 
-    init(eventBus: EventBusProtocol, availableProfileNames: [String]) {
+    init(eventBus: EventBusProtocol, availableRuleNames: [String]) {
         self.eventBus = eventBus
-        self.availableProfileNames = availableProfileNames
+        self.availableRuleNames = availableRuleNames
         self.pluginDataDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     }
 
@@ -91,21 +91,22 @@ private final class MockTranscriptionPlugin: NSObject, TranscriptionEnginePlugin
 }
 
 final class ProtocolContractTests: XCTestCase {
-    func testHostServicesExposeProfilesSecretsAndDefaults() throws {
-        let host = MockHostServices(eventBus: MockEventBus(), availableProfileNames: ["Work", "Docs"])
+    func testHostServicesExposeRulesSecretsAndDefaults() throws {
+        let host = MockHostServices(eventBus: MockEventBus(), availableRuleNames: ["Work", "Docs"])
 
         try host.storeSecret(key: "apiKey", value: "secret")
         host.setUserDefault("value", forKey: "sample")
 
         XCTAssertEqual(host.loadSecret(key: "apiKey"), "secret")
         XCTAssertEqual(host.userDefault(forKey: "sample") as? String, "value")
+        XCTAssertEqual(host.availableRuleNames, ["Work", "Docs"])
         XCTAssertEqual(host.availableProfileNames, ["Work", "Docs"])
         XCTAssertEqual(host.activeAppName, "Notes")
     }
 
     func testTranscriptionPluginUsesDefaultStreamingFallback() async throws {
         let plugin = MockTranscriptionPlugin()
-        let host = MockHostServices(eventBus: MockEventBus(), availableProfileNames: ["Work"])
+        let host = MockHostServices(eventBus: MockEventBus(), availableRuleNames: ["Work"])
         plugin.activate(host: host)
 
         let result = try await plugin.transcribe(
@@ -120,7 +121,7 @@ final class ProtocolContractTests: XCTestCase {
         )
 
         XCTAssertEqual(result.text, "transcribed")
-        XCTAssertEqual(plugin.host?.availableProfileNames, ["Work"])
+        XCTAssertEqual(plugin.host?.availableRuleNames, ["Work"])
         XCTAssertNil(plugin.settingsView)
 
         plugin.deactivate()

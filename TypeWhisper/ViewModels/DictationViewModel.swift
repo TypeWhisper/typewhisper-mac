@@ -63,7 +63,9 @@ final class DictationViewModel: ObservableObject {
     var pttHotkeyLabel: String { Self.loadHotkeyLabel(for: .pushToTalk) }
     var toggleHotkeyLabel: String { Self.loadHotkeyLabel(for: .toggle) }
     var promptPaletteHotkeyLabel: String { Self.loadHotkeyLabel(for: .promptPalette) }
-    @Published var activeProfileName: String?
+    @Published var activeRuleName: String?
+    @Published var activeRuleReasonLabel: String?
+    @Published var activeRuleExplanation: String?
     @Published var processingPhase: String?
     @Published var actionFeedbackMessage: String?
     @Published var actionFeedbackIcon: String?
@@ -116,6 +118,7 @@ final class DictationViewModel: ObservableObject {
     private let mediaPlaybackService: MediaPlaybackService
     private let postProcessingPipeline: PostProcessingPipeline
     private var matchedProfile: Profile?
+    private var activeRuleMatch: RuleMatchResult?
     private var forcedProfileId: UUID?
     private var capturedActiveApp: (name: String?, bundleId: String?, url: String?)?
     private var capturedSelectedText: String?
@@ -261,6 +264,9 @@ final class DictationViewModel: ObservableObject {
     var canDictate: Bool {
         modelManager.canTranscribe
     }
+
+    @available(*, deprecated, renamed: "activeRuleName")
+    var activeProfileName: String? { activeRuleName }
 
     nonisolated static func loadIndicatorTranscriptPreviewEnabled(defaults: UserDefaults = .standard) -> Bool {
         defaults.object(forKey: UserDefaultsKeys.indicatorTranscriptPreviewEnabled) as? Bool ?? true
@@ -422,7 +428,7 @@ final class DictationViewModel: ObservableObject {
 
         self.forcedProfileId = forcedProfileId
 
-        // Match profile: forced profile or app-based matching
+        // Match rule: forced manual override or app-based matching
         let activeApp = textInsertionService.captureActiveApp()
         capturedActiveApp = activeApp
         capturedSelectedText = nil
@@ -430,11 +436,9 @@ final class DictationViewModel: ObservableObject {
 
         if let forcedProfileId,
            let forcedProfile = profileService.profiles.first(where: { $0.id == forcedProfileId && $0.isEnabled }) {
-            matchedProfile = forcedProfile
-            activeProfileName = forcedProfile.name
+            applyRuleMatch(profileService.forcedRuleMatch(for: forcedProfile), activeApp: activeApp)
         } else {
-            matchedProfile = profileService.matchProfile(bundleIdentifier: activeApp.bundleId, url: nil)
-            activeProfileName = matchedProfile?.name
+            applyRuleMatch(profileService.matchRule(bundleIdentifier: activeApp.bundleId, url: nil), activeApp: activeApp)
         }
         let immediateContextMs = (CFAbsoluteTimeGetCurrent() - startTimestamp) * 1000
 
@@ -526,8 +530,8 @@ final class DictationViewModel: ObservableObject {
         }
 
         // Resolve browser URL asynchronously after recording has already started.
-        // If a more specific URL profile matches, update the active profile on the fly.
-        // Skip URL resolution when a forced profile is set (profile hotkey overrides app matching).
+        // If a more specific URL rule matches, update the active rule on the fly.
+        // Skip URL resolution when a forced rule is set (manual rule shortcut overrides app matching).
         guard forcedProfileId == nil, let bundleId = activeApp.bundleId else { return }
         urlResolutionTask = Task { [weak self] in
             guard let self else { return }
@@ -549,14 +553,13 @@ final class DictationViewModel: ObservableObject {
                 logger.info("URL resolution: no URL resolved")
                 return
             }
-            guard let refinedProfile = profileService.matchProfile(bundleIdentifier: bundleId, url: resolvedURL) else {
-                logger.info("URL resolution: no profile matched for URL \(resolvedURL)")
+            guard let refinedRule = profileService.matchRule(bundleIdentifier: bundleId, url: resolvedURL) else {
+                logger.info("URL resolution: no rule matched for URL \(resolvedURL)")
                 return
             }
 
-            logger.info("URL resolution: matched profile '\(refinedProfile.name)'")
-            matchedProfile = refinedProfile
-            activeProfileName = refinedProfile.name
+            logger.info("URL resolution: matched rule '\(refinedRule.profile.name)'")
+            applyRuleMatch(refinedRule, activeApp: capturedActiveApp)
         }
     }
 
@@ -737,7 +740,7 @@ final class DictationViewModel: ObservableObject {
                     bundleIdentifier: activeApp.bundleId,
                     url: activeApp.url,
                     language: language,
-                    profileName: self.matchedProfile?.name,
+                    ruleName: self.matchedProfile?.name,
                     selectedText: self.capturedSelectedText
                 )
                 let ppResult = try await postProcessingPipeline.process(
@@ -800,7 +803,7 @@ final class DictationViewModel: ObservableObject {
                     appName: activeApp.name,
                     bundleIdentifier: activeApp.bundleId,
                     url: activeApp.url,
-                    profileName: self.matchedProfile?.name
+                    ruleName: self.matchedProfile?.name
                 )))
 
                 soundService.play(.transcriptionSuccess, enabled: soundFeedbackEnabled)
@@ -829,11 +832,9 @@ final class DictationViewModel: ObservableObject {
                 accessibilityAnnouncementService.announceError(error.localizedDescription)
                 speechFeedbackService.announceEvent(.error(reason: error.localizedDescription))
                 showError(error.localizedDescription, category: "transcription")
-                matchedProfile = nil
-                forcedProfileId = nil
+                clearActiveRuleState()
                 capturedActiveApp = nil
                 activeAppIcon = nil
-                activeProfileName = nil
             }
         }
     }
@@ -864,17 +865,65 @@ final class DictationViewModel: ObservableObject {
         state = .idle
         partialText = ""
         recordingStartTime = nil
-        matchedProfile = nil
-        forcedProfileId = nil
+        clearActiveRuleState()
         capturedActiveApp = nil
         capturedSelectedText = nil
         activeAppIcon = nil
-        activeProfileName = nil
         processingPhase = nil
         actionFeedbackMessage = nil
         actionFeedbackIcon = nil
         actionFeedbackIsError = false
         actionDisplayDuration = 3.5
+    }
+
+    private func applyRuleMatch(
+        _ match: RuleMatchResult?,
+        activeApp: (name: String?, bundleId: String?, url: String?)?
+    ) {
+        activeRuleMatch = match
+        matchedProfile = match?.profile
+        activeRuleName = match?.profile.name
+        activeRuleReasonLabel = match?.kind.label
+        activeRuleExplanation = match.map { ruleExplanation(for: $0, activeApp: activeApp) }
+    }
+
+    private func clearActiveRuleState() {
+        matchedProfile = nil
+        activeRuleMatch = nil
+        forcedProfileId = nil
+        activeRuleName = nil
+        activeRuleReasonLabel = nil
+        activeRuleExplanation = nil
+    }
+
+    private func ruleExplanation(
+        for match: RuleMatchResult,
+        activeApp: (name: String?, bundleId: String?, url: String?)?
+    ) -> String {
+        let appDescriptor = activeApp?.name ?? activeApp?.bundleId ?? "the active app"
+
+        let base: String
+        switch match.kind {
+        case .appAndWebsite:
+            if let domain = match.matchedDomain {
+                base = "Diese Regel greift, weil \(appDescriptor) zusammen mit \(domain) erkannt wurde."
+            } else {
+                base = "Diese Regel greift, weil App und Website zusammen erkannt wurden."
+            }
+        case .websiteOnly:
+            if let domain = match.matchedDomain {
+                base = "Diese Regel greift, weil \(domain) erkannt wurde."
+            } else {
+                base = "Diese Regel greift, weil die aktuelle Website erkannt wurde."
+            }
+        case .appOnly:
+            base = "Diese Regel greift, weil \(appDescriptor) erkannt wurde."
+        case .manualOverride:
+            base = "Diese Regel wurde manuell über ihre Tastenkombination erzwungen."
+        }
+
+        guard match.wonByPriority else { return base }
+        return base + " Unter gleich spezifischen Regeln gewinnt hier die höhere Priorität."
     }
 
     // MARK: - Shared Helpers

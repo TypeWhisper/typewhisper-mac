@@ -48,7 +48,7 @@ final class PluginManager: ObservableObject {
     @Published var loadedPlugins: [LoadedPlugin] = []
 
     let pluginsDirectory: URL
-    private var profileNamesProvider: () -> [String] = { [] }
+    private var ruleNamesProvider: () -> [String] = { [] }
 
     var postProcessors: [PostProcessorPlugin] {
         loadedPlugins
@@ -242,14 +242,19 @@ final class PluginManager: ObservableObject {
         logger.info("Loaded plugin: \(manifest.name) v\(manifest.version)")
     }
 
-    func setProfileNamesProvider(_ provider: @escaping () -> [String]) {
-        self.profileNamesProvider = provider
+    func setRuleNamesProvider(_ provider: @escaping () -> [String]) {
+        self.ruleNamesProvider = provider
     }
 
     private func activatePlugin(_ plugin: LoadedPlugin) {
-        let host = HostServicesImpl(pluginId: plugin.manifest.id, eventBus: EventBus.shared, profileNamesProvider: profileNamesProvider)
+        let host = HostServicesImpl(pluginId: plugin.manifest.id, eventBus: EventBus.shared, ruleNamesProvider: ruleNamesProvider)
         plugin.instance.activate(host: host)
         logger.info("Activated plugin: \(plugin.manifest.id)")
+    }
+
+    @available(*, deprecated, renamed: "setRuleNamesProvider")
+    func setProfileNamesProvider(_ provider: @escaping () -> [String]) {
+        setRuleNamesProvider(provider)
     }
 
     func setPluginEnabled(_ pluginId: String, enabled: Bool) {

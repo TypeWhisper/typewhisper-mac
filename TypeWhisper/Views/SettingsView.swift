@@ -55,7 +55,7 @@ struct SettingsView: View {
                             .tabItem { Label(String(localized: "Snippets"), systemImage: "text.badge.plus") }
                             .tag(SettingsTab.snippets)
                         ProfilesSettingsView()
-                            .tabItem { Label(String(localized: "Profiles"), systemImage: "person.crop.rectangle.stack") }
+                            .tabItem { Label("Regeln", systemImage: "point.3.connected.trianglepath.dotted") }
                             .tag(SettingsTab.profiles)
                         PromptActionsSettingsView()
                             .tabItem { Label(String(localized: "Prompts"), systemImage: "sparkles") }
@@ -144,7 +144,7 @@ private struct SettingsExtraTabs: TabContent {
         Tab(String(localized: "Snippets"), systemImage: "text.badge.plus", value: SettingsTab.snippets) {
             SnippetsSettingsView()
         }
-        Tab(String(localized: "Profiles"), systemImage: "person.crop.rectangle.stack", value: SettingsTab.profiles) {
+        Tab("Regeln", systemImage: "point.3.connected.trianglepath.dotted", value: SettingsTab.profiles) {
             ProfilesSettingsView()
         }
         Tab(String(localized: "Prompts"), systemImage: "sparkles", value: SettingsTab.prompts) {

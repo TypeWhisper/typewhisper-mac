@@ -22,7 +22,7 @@ struct MinimalIndicatorView: View {
         case .timer:
             return 118
         case .profile:
-            guard let name = viewModel.activeProfileName, !name.isEmpty else {
+            guard let name = viewModel.activeRuleName, !name.isEmpty else {
                 return idleWidth
             }
             let estimatedTextWidth = CGFloat(min(name.count, 18)) * 7
