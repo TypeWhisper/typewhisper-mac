@@ -78,13 +78,38 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         init(onPause: @escaping () -> Void) {
             self.onPause = onPause
-            super.init()
+            super.init(startListening: false)
         }
 
         override func pauseIfPlaying() {
             onPause()
         }
     }
+
+    #if !APPSTORE
+    private final class FakeMediaPlaybackController: MediaPlaybackControlling {
+        var returnedSnapshot: (isPlaying: Bool, bundleIdentifier: String?) = (false, nil)
+        var onGetPlaybackSnapshot: ((@escaping (_ isPlaying: Bool, _ bundleIdentifier: String?) -> Void) -> Void)?
+        private(set) var pauseCalls = 0
+        private(set) var playCalls = 0
+
+        func getPlaybackSnapshot(_ onReceive: @escaping (_ isPlaying: Bool, _ bundleIdentifier: String?) -> Void) {
+            if let onGetPlaybackSnapshot {
+                onGetPlaybackSnapshot(onReceive)
+                return
+            }
+            onReceive(returnedSnapshot.isPlaying, returnedSnapshot.bundleIdentifier)
+        }
+
+        func play() {
+            playCalls += 1
+        }
+
+        func pause() {
+            pauseCalls += 1
+        }
+    }
+    #endif
 
     func testRouterHandlesOptionsAndNotFound() async {
         let router = APIRouter()
@@ -332,6 +357,51 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         XCTAssertEqual(Array(events.prefix(3)), ["capture_app", "start_audio", "pause_media"])
     }
+
+    #if !APPSTORE
+    @MainActor
+    func testMediaPlaybackServicePausesAndResumesFromOneShotTrackInfo() {
+        let controller = FakeMediaPlaybackController()
+        controller.returnedSnapshot = (true, "com.apple.Music")
+        let service = MediaPlaybackService(startListening: false) { controller }
+
+        service.pauseIfPlaying()
+        service.resumeIfWePaused()
+
+        XCTAssertEqual(controller.pauseCalls, 1)
+        XCTAssertEqual(controller.playCalls, 1)
+    }
+
+    @MainActor
+    func testMediaPlaybackServiceSkipsPauseWhenPlaybackIsAlreadyStopped() {
+        let controller = FakeMediaPlaybackController()
+        controller.returnedSnapshot = (false, nil)
+        let service = MediaPlaybackService(startListening: false) { controller }
+
+        service.pauseIfPlaying()
+        service.resumeIfWePaused()
+
+        XCTAssertEqual(controller.pauseCalls, 0)
+        XCTAssertEqual(controller.playCalls, 0)
+    }
+
+    @MainActor
+    func testMediaPlaybackServiceIgnoresStalePauseProbeAfterResume() {
+        let controller = FakeMediaPlaybackController()
+        var deferredCallback: ((_ isPlaying: Bool, _ bundleIdentifier: String?) -> Void)?
+        controller.onGetPlaybackSnapshot = { callback in
+            deferredCallback = callback
+        }
+        let service = MediaPlaybackService(startListening: false) { controller }
+
+        service.pauseIfPlaying()
+        service.resumeIfWePaused()
+        deferredCallback?(true, "com.apple.Music")
+
+        XCTAssertEqual(controller.pauseCalls, 0)
+        XCTAssertEqual(controller.playCalls, 0)
+    }
+    #endif
 
     @MainActor
     func testApiStartRecording_showsSelectModelErrorWhenNoProviderIsSelected() async throws {
@@ -657,7 +727,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let accessibilityAnnouncementService = AccessibilityAnnouncementService()
         let errorLogService = ErrorLogService(appSupportDirectory: appSupportDirectory)
         let settingsViewModel = SettingsViewModel(modelManager: modelManager)
-        let mediaPlaybackService = mediaPlaybackService ?? MediaPlaybackService()
+        let mediaPlaybackService = mediaPlaybackService ?? MediaPlaybackService(startListening: false)
 
         let dictationViewModel = DictationViewModel(
             audioRecordingService: audioRecordingService,
