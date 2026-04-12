@@ -1,4 +1,5 @@
 import AppKit
+import CoreAudio
 import Foundation
 import XCTest
 import TypeWhisperPluginSDK
@@ -245,6 +246,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             return ("Notes", nil, nil)
         }
         context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
         context.audioRecordingService.startRecordingOverride = {
             events.append("start_audio")
         }
@@ -281,6 +283,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             ("Docs App", "com.typewhisper.tests", nil)
         }
         context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
         context.audioRecordingService.startRecordingOverride = {}
         context.textInsertionService.selectedTextOverride = { () -> String? in
             selectedTextCaptured.fulfill()
@@ -320,6 +323,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             return ("Music", "com.apple.Music", nil)
         }
         context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
         context.audioRecordingService.startRecordingOverride = {
             events.append("start_audio")
         }
@@ -398,6 +402,48 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual(
             dictationViewModel.actionFeedbackMessage,
             TranscriptionEngineError.modelNotLoaded.localizedDescription
+        )
+    }
+
+    @MainActor
+    func testApiStartRecording_showsNoMicDetectedErrorWhenNoInputAvailable() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in false }
+
+        context.dictationViewModel.apiStartRecording()
+
+        XCTAssertEqual(context.dictationViewModel.state, .inserting)
+        XCTAssertEqual(context.dictationViewModel.actionFeedbackMessage, "No mic detected.")
+    }
+
+    @MainActor
+    func testApiStartRecording_preservesPermissionDeniedError() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        context.audioRecordingService.hasMicrophonePermissionOverride = false
+
+        context.dictationViewModel.apiStartRecording()
+
+        XCTAssertEqual(context.dictationViewModel.state, .inserting)
+        XCTAssertEqual(
+            context.dictationViewModel.actionFeedbackMessage,
+            "Microphone permission required."
         )
     }
 
@@ -675,6 +721,30 @@ final class APIRouterAndHandlersTests: XCTestCase {
     private static func jsonObject(_ response: HTTPResponse) throws -> [String: Any] {
         let object = try JSONSerialization.jsonObject(with: response.body)
         return try XCTUnwrap(object as? [String: Any])
+    }
+}
+
+final class AudioRecordingServiceInputAvailabilityTests: XCTestCase {
+    func testStartRecording_throwsNoMicrophoneDetectedBeforeStartingOverride() {
+        let service = AudioRecordingService()
+        var didReachStartOverride = false
+
+        service.hasMicrophonePermissionOverride = true
+        service.selectedDeviceID = AudioDeviceID(42)
+        service.inputAvailabilityOverride = { selectedDeviceID in
+            XCTAssertEqual(selectedDeviceID, AudioDeviceID(42))
+            return false
+        }
+        service.startRecordingOverride = {
+            didReachStartOverride = true
+        }
+
+        XCTAssertThrowsError(try service.startRecording()) { error in
+            guard case AudioRecordingService.AudioRecordingError.noMicrophoneDetected = error else {
+                return XCTFail("Expected noMicrophoneDetected, got \(error)")
+            }
+        }
+        XCTAssertFalse(didReachStartOverride)
     }
 }
 

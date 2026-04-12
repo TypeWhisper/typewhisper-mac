@@ -66,6 +66,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
     enum AudioRecordingError: LocalizedError {
         case microphonePermissionDenied
+        case noMicrophoneDetected
         case engineStartFailed(String)
         case noAudioData
 
@@ -73,6 +74,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             switch self {
             case .microphonePermissionDenied:
                 "Microphone permission denied. Please grant access in System Settings."
+            case .noMicrophoneDetected:
+                String(localized: "No mic detected.")
             case .engineStartFailed(let detail):
                 "Failed to start audio engine: \(detail)"
             case .noAudioData:
@@ -85,6 +88,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     @Published private(set) var audioLevel: Float = 0
     @Published private(set) var rawAudioLevel: Float = 0
     var hasMicrophonePermissionOverride: Bool?
+    var inputAvailabilityOverride: ((AudioDeviceID?) -> Bool)?
     var startRecordingOverride: (() throws -> Void)?
 
     /// CoreAudio device ID to use for recording. nil = system default input.
@@ -196,6 +200,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         guard hasMicrophonePermission else {
             throw AudioRecordingError.microphonePermissionDenied
         }
+
+        try validateRecordingInputAvailability()
 
         if let startRecordingOverride {
             bufferLock.lock()
@@ -367,7 +373,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         logger.info("\(label, privacy: .public) input format: sampleRate=\(inputFormat.sampleRate), channels=\(inputFormat.channelCount)")
 
         guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
-            throw AudioRecordingError.engineStartFailed("No audio input available")
+            throw AudioRecordingError.noMicrophoneDetected
         }
 
         guard let targetFormat = AVAudioFormat(
@@ -420,6 +426,26 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             self?.isRecording = false
             self?.audioLevel = 0
             self?.rawAudioLevel = 0
+        }
+    }
+
+    private func validateRecordingInputAvailability() throws {
+        if let inputAvailabilityOverride {
+            guard inputAvailabilityOverride(selectedDeviceID) else {
+                throw AudioRecordingError.noMicrophoneDetected
+            }
+            return
+        }
+
+        if let selectedDeviceID {
+            guard AudioDeviceService.isInputDeviceAvailable(selectedDeviceID) else {
+                throw AudioRecordingError.noMicrophoneDetected
+            }
+            return
+        }
+
+        guard AudioDeviceService.hasAvailableInputDevice() else {
+            throw AudioRecordingError.noMicrophoneDetected
         }
     }
 

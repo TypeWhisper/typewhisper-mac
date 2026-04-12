@@ -3612,6 +3612,16 @@
         }
       }
     },
+    "No mic detected." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kein Mikrofon erkannt."
+          }
+        }
+      }
+    },
     "No speech recognized" : {
       "localizations" : {
         "de" : {

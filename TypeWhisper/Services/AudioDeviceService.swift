@@ -283,7 +283,19 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
 
     // MARK: - CoreAudio Device Enumeration
 
+    static func hasAvailableInputDevice() -> Bool {
+        !availableInputDevices().isEmpty
+    }
+
+    static func isInputDeviceAvailable(_ deviceID: AudioDeviceID) -> Bool {
+        inputChannelCount(for: deviceID) > 0 && !isAggregateDevice(deviceID)
+    }
+
     private func listInputDevices() -> [AudioInputDevice] {
+        Self.availableInputDevices()
+    }
+
+    private static func availableInputDevices() -> [AudioInputDevice] {
         var size: UInt32 = 0
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDevices,
@@ -307,8 +319,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
 
         var devices: [AudioInputDevice] = []
         for id in deviceIDs {
-            guard inputChannelCount(for: id) > 0 else { continue }
-            guard !isAggregateDevice(id) else { continue }
+            guard isInputDeviceAvailable(id) else { continue }
             guard let name = deviceName(for: id),
                   let uid = deviceUID(for: id) else { continue }
             // Filter virtual/internal devices by known patterns
@@ -321,7 +332,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         return devices
     }
 
-    private func deviceName(for deviceID: AudioDeviceID) -> String? {
+    private static func deviceName(for deviceID: AudioDeviceID) -> String? {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyDeviceNameCFString,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -330,7 +341,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         return getCFStringProperty(deviceID: deviceID, address: &address)
     }
 
-    private func deviceUID(for deviceID: AudioDeviceID) -> String? {
+    private static func deviceUID(for deviceID: AudioDeviceID) -> String? {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyDeviceUID,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -339,7 +350,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         return getCFStringProperty(deviceID: deviceID, address: &address)
     }
 
-    private func getCFStringProperty(deviceID: AudioDeviceID, address: inout AudioObjectPropertyAddress) -> String? {
+    private static func getCFStringProperty(deviceID: AudioDeviceID, address: inout AudioObjectPropertyAddress) -> String? {
         var value: Unmanaged<CFString>?
         var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
         let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &value)
@@ -347,7 +358,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         return cf.takeUnretainedValue() as String
     }
 
-    private func inputChannelCount(for deviceID: AudioDeviceID) -> Int {
+    private static func inputChannelCount(for deviceID: AudioDeviceID) -> Int {
         var size: UInt32 = 0
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyStreamConfiguration,
@@ -375,7 +386,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         return channels
     }
 
-    private func isAggregateDevice(_ deviceID: AudioDeviceID) -> Bool {
+    private static func isAggregateDevice(_ deviceID: AudioDeviceID) -> Bool {
         var transportType: UInt32 = 0
         var size = UInt32(MemoryLayout<UInt32>.size)
         var address = AudioObjectPropertyAddress(
