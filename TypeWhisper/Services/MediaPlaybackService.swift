@@ -8,13 +8,13 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhis
 
 @MainActor
 class MediaPlaybackService {
-    private var didPause = false
+    var didPause = false
 
     #if !APPSTORE
     private var mediaController: MediaController?
     private var isMediaPlaying = false
     private var nowPlayingBundleID: String?
-    private(set) var isListening = false
+    var isListening = false
 
     init(startListening: Bool = true) {
         guard startListening else { return }
@@ -50,6 +50,7 @@ class MediaPlaybackService {
         guard isListening else { return }
         mediaController?.stopListening()
         mediaController = nil
+        didPause = false
         isListening = false
         isMediaPlaying = false
         nowPlayingBundleID = nil
@@ -74,7 +75,11 @@ class MediaPlaybackService {
     /// Resumes playback only if we previously paused it.
     func resumeIfWePaused() {
         guard didPause else { return }
-        guard let mediaController else { return }
+        guard let mediaController else {
+            didPause = false
+            logger.info("Skipping resume because media listener is unavailable")
+            return
+        }
         mediaController.play()
         didPause = false
         logger.info("Media playback resumed")

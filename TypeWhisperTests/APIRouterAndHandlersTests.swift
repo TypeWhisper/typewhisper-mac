@@ -359,6 +359,18 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    func testDisablingListenerResetsPausedState() {
+        let mediaPlaybackService = MediaPlaybackService(startListening: false)
+        mediaPlaybackService.didPause = true
+        mediaPlaybackService.isListening = true
+
+        mediaPlaybackService.setListeningEnabled(false)
+
+        XCTAssertFalse(mediaPlaybackService.didPause)
+        XCTAssertFalse(mediaPlaybackService.isListening)
+    }
+
+    @MainActor
     func testApiStartRecording_showsSelectModelErrorWhenNoProviderIsSelected() async throws {
         let selectedEngineKey = UserDefaultsKeys.selectedEngine
         let originalSelection = UserDefaults.standard.object(forKey: selectedEngineKey)
