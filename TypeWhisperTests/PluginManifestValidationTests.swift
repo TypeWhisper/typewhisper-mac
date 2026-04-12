@@ -30,3 +30,17 @@ final class PluginManifestValidationTests: XCTestCase {
         }
     }
 }
+
+final class OpenAIPluginTokenParameterTests: XCTestCase {
+    func testLegacyOpenAIModelsKeepMaxTokens() {
+        XCTAssertEqual(OpenAIPlugin.outputTokenParameter(for: "gpt-4o"), "max_tokens")
+    }
+
+    func testGPT5ModelsUseMaxCompletionTokens() {
+        XCTAssertEqual(OpenAIPlugin.outputTokenParameter(for: "gpt-5.4"), "max_completion_tokens")
+    }
+
+    func testO4ModelsUseMaxCompletionTokens() {
+        XCTAssertEqual(OpenAIPlugin.outputTokenParameter(for: "o4-mini"), "max_completion_tokens")
+    }
+}

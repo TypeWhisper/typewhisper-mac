@@ -141,7 +141,8 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, LLMProviderPlugin
             apiKey: apiKey,
             model: modelId,
             systemPrompt: systemPrompt,
-            userText: userText
+            userText: userText,
+            maxOutputTokenParameter: Self.outputTokenParameter(for: modelId)
         )
     }
 
@@ -231,6 +232,17 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, LLMProviderPlugin
         if excludeSuffixes.contains(where: { lowered.hasSuffix($0) }) { return false }
         if excludeContains.contains(where: { lowered.contains($0) }) { return false }
         return true
+    }
+
+    nonisolated static func outputTokenParameter(for modelID: String) -> String {
+        let lowered = modelID.lowercased()
+        if lowered.hasPrefix("gpt-5")
+            || lowered.hasPrefix("o1")
+            || lowered.hasPrefix("o3")
+            || lowered.hasPrefix("o4") {
+            return "max_completion_tokens"
+        }
+        return "max_tokens"
     }
 }
 
