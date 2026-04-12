@@ -90,6 +90,26 @@ final class APIRouterAndHandlersTests: XCTestCase {
         }
     }
 
+    @MainActor
+    private final class SimulatedMediaPlaybackService: MediaPlaybackService {
+        private(set) var pauseCalls = 0
+
+        override func setListeningEnabled(_ enabled: Bool) {
+            if enabled {
+                isListening = true
+                return
+            }
+
+            super.setListeningEnabled(false)
+        }
+
+        override func pauseIfPlaying() {
+            guard !didPause else { return }
+            didPause = true
+            pauseCalls += 1
+        }
+    }
+
     func testRouterHandlesOptionsAndNotFound() async {
         let router = APIRouter()
 
@@ -359,12 +379,34 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
-    func testDisablingListenerResetsPausedState() {
-        let mediaPlaybackService = MediaPlaybackService(startListening: false)
-        mediaPlaybackService.didPause = true
-        mediaPlaybackService.isListening = true
+    func testDisablingMediaPauseAfterPauseResetsPausedState() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let mediaPlaybackService = SimulatedMediaPlaybackService(startListening: false)
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
 
-        mediaPlaybackService.setListeningEnabled(false)
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            mediaPlaybackService: mediaPlaybackService
+        )
+        let context = try XCTUnwrap(dictationContext)
+
+        context.dictationViewModel.mediaPauseEnabled = true
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.startRecordingOverride = {}
+        context.textInsertionService.captureActiveAppOverride = { () -> (name: String?, bundleId: String?, url: String?) in
+            ("Music", "com.apple.Music", nil)
+        }
+
+        context.dictationViewModel.apiStartRecording()
+
+        XCTAssertTrue(mediaPlaybackService.didPause)
+        XCTAssertEqual(mediaPlaybackService.pauseCalls, 1)
+
+        context.dictationViewModel.mediaPauseEnabled = false
 
         XCTAssertFalse(mediaPlaybackService.didPause)
         XCTAssertFalse(mediaPlaybackService.isListening)
