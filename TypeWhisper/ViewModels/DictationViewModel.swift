@@ -484,9 +484,16 @@ final class DictationViewModel: ObservableObject {
             urlResolutionTask = nil
             audioDuckingService.restoreAudio()
             mediaPlaybackService.resumeIfWePaused()
-            accessibilityAnnouncementService.announceError(error.localizedDescription)
-            speechFeedbackService.announceEvent(.error(reason: error.localizedDescription))
-            showError(error.localizedDescription, category: "recording")
+            let errorMessage: String
+            if let recordingError = error as? AudioRecordingService.AudioRecordingError,
+               case .noMicrophoneDetected = recordingError {
+                errorMessage = String(localized: "No mic detected.")
+            } else {
+                errorMessage = error.localizedDescription
+            }
+            accessibilityAnnouncementService.announceError(errorMessage)
+            speechFeedbackService.announceEvent(.error(reason: errorMessage))
+            showError(errorMessage, category: "recording")
             hotkeyService.cancelDictation()
         }
     }
