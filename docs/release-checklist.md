@@ -8,9 +8,9 @@
 - `bash scripts/check_first_party_warnings.sh build.log`
 - Review `README.md`, `SECURITY.md`, `docs/support-matrix.md`, `docs/1.1-readiness.md`, `Plugins/README.md`, and `TypeWhisperPluginSDK/README.md`
 - Confirm `MARKETING_VERSION = 1.2.0` across the app, CLI, and widgets
-- Prepare or refresh `docs/release-notes/1.2.0-rc1.md`
-- If you want to edit the notes directly on GitHub, create or update the draft release for `v1.2.0-rc1` before pushing the tag
-- Otherwise the release workflow will publish `docs/release-notes/1.2.0-rc1.md` automatically when no release already exists
+- Prepare or refresh `docs/release-notes/1.2.0-rc2.md`
+- If you want to edit the notes directly on GitHub, create or update the draft release for `v1.2.0-rc2` before pushing the tag
+- Otherwise the release workflow will publish `docs/release-notes/1.2.0-rc2.md` automatically when no release already exists
 
 ## RC Smoke Checks
 
@@ -52,7 +52,7 @@
 
 ## Before `1.2.0`
 
-- Observe `1.2.0-rc1` on real machines for multiple days
+- Observe `1.2.0-rc2` on real machines for multiple days
 - No open P0/P1 bugs in the core workflow
 - Finalize release notes
 - RC and daily tags must not update Homebrew or trigger stable website messaging

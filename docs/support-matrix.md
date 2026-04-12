@@ -1,6 +1,6 @@
 # TypeWhisper Support Matrix
 
-This matrix describes the officially supported `1.x` direct-download path. For `1.2.0-rc1`, the public runtime support floor remains `macOS 14+`.
+This matrix describes the officially supported `1.x` direct-download path. For the current `1.2.0-rc*` preview line, the public runtime support floor remains `macOS 14+`.
 
 ## Platform
 
