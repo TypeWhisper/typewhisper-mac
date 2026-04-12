@@ -146,6 +146,36 @@ public enum PluginAudioUtils {
     }
 }
 
+// Backward-compatibility shim for older plugins that referenced `AudioUtils`.
+@available(*, deprecated, message: "Use PluginAudioUtils instead")
+public enum AudioUtils {
+    public static func paddedSamples(
+        _ samples: [Float],
+        minimumDuration: TimeInterval,
+        sampleRate: Int = 16_000
+    ) -> [Float] {
+        PluginAudioUtils.paddedSamples(
+            samples,
+            minimumDuration: minimumDuration,
+            sampleRate: sampleRate
+        )
+    }
+
+    public static func shouldAcceptShortClipTranscription(
+        audioDuration: TimeInterval,
+        confidence: Float,
+        minimumDuration: TimeInterval = 1.0,
+        minimumConfidence: Float = 0.55
+    ) -> Bool {
+        PluginAudioUtils.shouldAcceptShortClipTranscription(
+            audioDuration: audioDuration,
+            confidence: confidence,
+            minimumDuration: minimumDuration,
+            minimumConfidence: minimumConfidence
+        )
+    }
+}
+
 public struct PluginTranscriptionSegment: Sendable {
     public let text: String
     public let start: Double

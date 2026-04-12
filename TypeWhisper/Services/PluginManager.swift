@@ -5,6 +5,23 @@ import os.log
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "PluginManager")
 
+private enum PluginLoadError: LocalizedError {
+    case incompatibleHostVersion(pluginName: String, required: String, current: String)
+    case failedToCreateBundle(bundleName: String)
+    case missingPrincipalClass(className: String, bundleName: String)
+
+    var errorDescription: String? {
+        switch self {
+        case .incompatibleHostVersion(let pluginName, let required, let current):
+            return "\(pluginName) requires TypeWhisper \(required) or newer (current: \(current))"
+        case .failedToCreateBundle(let bundleName):
+            return "Failed to create bundle for \(bundleName)"
+        case .missingPrincipalClass(let className, let bundleName):
+            return "Failed to find class \(className) in \(bundleName)"
+        }
+    }
+}
+
 // MARK: - Loaded Plugin
 
 struct LoadedPlugin: Identifiable {
@@ -98,7 +115,11 @@ final class PluginManager: ObservableObject {
         logger.info("Found \(bundles.count) plugin bundle(s)")
 
         for bundleURL in bundles {
-            loadPlugin(at: bundleURL)
+            do {
+                try loadPlugin(at: bundleURL)
+            } catch {
+                logger.error("Failed to load plugin at \(bundleURL.lastPathComponent): \(error.localizedDescription)")
+            }
         }
 
         // Built-in plugins from app bundle
@@ -107,17 +128,31 @@ final class PluginManager: ObservableObject {
             let builtInBundles = builtIn.filter { $0.pathExtension == "bundle" }
             logger.info("Found \(builtInBundles.count) built-in plugin bundle(s)")
             for bundleURL in builtInBundles {
-                loadPlugin(at: bundleURL)
+                do {
+                    try loadPlugin(at: bundleURL)
+                } catch {
+                    logger.error("Failed to load built-in plugin \(bundleURL.lastPathComponent): \(error.localizedDescription)")
+                }
             }
         }
     }
 
-    func loadPlugin(at url: URL) {
+    func loadPlugin(at url: URL) throws {
         let manifestURL = url.appendingPathComponent("Contents/Resources/manifest.json")
-        guard let data = try? Data(contentsOf: manifestURL),
-              let manifest = try? JSONDecoder().decode(PluginManifest.self, from: data) else {
-            logger.error("Failed to read manifest from \(url.lastPathComponent)")
-            return
+        let data: Data
+        do {
+            data = try Data(contentsOf: manifestURL)
+        } catch {
+            logger.error("Failed to read manifest from \(url.lastPathComponent): \(error.localizedDescription)")
+            throw error
+        }
+
+        let manifest: PluginManifest
+        do {
+            manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
+        } catch {
+            logger.error("Invalid manifest in \(url.lastPathComponent): \(error.localizedDescription)")
+            throw error
         }
 
         if let minOS = manifest.minOSVersion {
@@ -133,26 +168,51 @@ final class PluginManager: ObservableObject {
             }
         }
 
-        guard !loadedPlugins.contains(where: { $0.manifest.id == manifest.id }) else {
-            logger.warning("Plugin \(manifest.id) already loaded, skipping")
-            return
+        if let minHostVersion = manifest.minHostVersion {
+            let currentAppVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0"
+            if PluginRegistryService.compareVersions(minHostVersion, currentAppVersion) == .orderedDescending {
+                throw PluginLoadError.incompatibleHostVersion(
+                    pluginName: manifest.name,
+                    required: minHostVersion,
+                    current: currentAppVersion
+                )
+            }
+        }
+
+        if let existingIndex = loadedPlugins.firstIndex(where: { $0.manifest.id == manifest.id }) {
+            let existing = loadedPlugins[existingIndex]
+            guard shouldReplace(existing: existing, with: manifest, from: url) else {
+                logger.warning("Plugin \(manifest.id) already loaded from preferred source, skipping \(url.lastPathComponent)")
+                return
+            }
+
+            if existing.isEnabled {
+                existing.instance.deactivate()
+            }
+            existing.bundle.unload()
+            loadedPlugins.remove(at: existingIndex)
+            logger.info("Replacing plugin \(manifest.id) from \(existing.sourceURL.lastPathComponent) with \(url.lastPathComponent)")
         }
 
         guard let bundle = Bundle(url: url) else {
             logger.error("Failed to create Bundle for \(url.lastPathComponent)")
-            return
+            throw PluginLoadError.failedToCreateBundle(bundleName: url.lastPathComponent)
         }
 
         do {
             try bundle.loadAndReturnError()
         } catch {
             logger.error("Failed to load bundle \(url.lastPathComponent): \(error.localizedDescription)")
-            return
+            throw error
         }
 
         guard let pluginClass = NSClassFromString(manifest.principalClass) as? TypeWhisperPlugin.Type else {
-            logger.error("Failed to find class \(manifest.principalClass) in \(url.lastPathComponent)")
-            return
+            let error = PluginLoadError.missingPrincipalClass(
+                className: manifest.principalClass,
+                bundleName: url.lastPathComponent
+            )
+            logger.error(error.localizedDescription)
+            throw error
         }
 
         let instance = pluginClass.init()
@@ -240,5 +300,19 @@ final class PluginManager: ObservableObject {
 
     func bundleURL(for pluginId: String) -> URL? {
         loadedPlugins.first { $0.manifest.id == pluginId }?.sourceURL
+    }
+
+    private func shouldReplace(existing: LoadedPlugin, with incomingManifest: PluginManifest, from incomingURL: URL) -> Bool {
+        let incomingIsBundled = Bundle.main.builtInPlugInsURL.map { incomingURL.path.hasPrefix($0.path) } ?? false
+        let versionComparison = PluginRegistryService.compareVersions(incomingManifest.version, existing.manifest.version)
+
+        if incomingIsBundled != existing.isBundled {
+            if incomingIsBundled {
+                return versionComparison != .orderedAscending
+            }
+            return versionComparison == .orderedDescending
+        }
+
+        return versionComparison == .orderedDescending
     }
 }
