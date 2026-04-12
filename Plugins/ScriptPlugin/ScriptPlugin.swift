@@ -43,10 +43,10 @@ final class ScriptPlugin: NSObject, PostProcessorPlugin, @unchecked Sendable {
 
         var result = text
         for script in scripts {
-            // Profile filter: empty = all, otherwise match by name
+            // Rule filter: empty = all, otherwise match by name
             if !script.profileFilter.isEmpty {
-                guard let profileName = context.profileName,
-                      script.profileFilter.contains(profileName) else {
+                guard let ruleName = context.ruleName,
+                      script.profileFilter.contains(ruleName) else {
                     continue
                 }
             }
@@ -172,7 +172,10 @@ final class ScriptService: ObservableObject, @unchecked Sendable {
                 if let bundleId = context.bundleIdentifier { env["TYPEWHISPER_BUNDLE_ID"] = bundleId }
                 if let url = context.url { env["TYPEWHISPER_URL"] = url }
                 if let language = context.language { env["TYPEWHISPER_LANGUAGE"] = language }
-                if let profileName = context.profileName { env["TYPEWHISPER_PROFILE"] = profileName }
+                if let ruleName = context.ruleName {
+                    env["TYPEWHISPER_RULE"] = ruleName
+                    env["TYPEWHISPER_PROFILE"] = ruleName
+                }
                 if let selectedText = context.selectedText { env["TYPEWHISPER_SELECTED_TEXT"] = selectedText }
                 process.environment = env
 
@@ -383,7 +386,7 @@ struct ScriptSettingsView: View {
         .sheet(item: $editingScript) { script in
             ScriptEditView(
                 script: script,
-                availableProfiles: service.host.availableProfileNames,
+                availableProfiles: service.host.availableRuleNames,
                 onSave: { updated in
                     service.updateScript(updated)
                     editingScript = nil
@@ -416,7 +419,7 @@ private struct ScriptRow: View {
                         .lineLimit(1)
                 }
                 if !script.profileFilter.isEmpty {
-                    Text("Profiles: \(script.profileFilter.joined(separator: ", "))")
+                    Text("Rules: \(script.profileFilter.joined(separator: ", "))")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
@@ -526,9 +529,9 @@ private struct ScriptEditView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Section(String(localized: "Profiles", bundle: bundle)) {
+                Section("Rules") {
                     if availableProfiles.isEmpty {
-                        Text("No profiles configured.", bundle: bundle)
+                        Text("No rules configured.")
                             .foregroundStyle(.secondary)
                             .font(.caption)
                     } else {
@@ -548,7 +551,7 @@ private struct ScriptEditView: View {
 
                     Text(script.profileFilter.isEmpty
                          ? String(localized: "Active for all transcriptions.", bundle: bundle)
-                         : String(localized: "Only active for selected profiles.", bundle: bundle))
+                         : "Only active for selected rules.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

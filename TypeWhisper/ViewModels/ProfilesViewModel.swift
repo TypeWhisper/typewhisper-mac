@@ -16,6 +16,23 @@ struct InstalledApp: Identifiable, Hashable {
     }
 }
 
+enum RuleEditorStep: Int, CaseIterable {
+    case scope
+    case behavior
+    case review
+
+    var title: String {
+        switch self {
+        case .scope:
+            "Wo gilt diese Regel?"
+        case .behavior:
+            "Wie soll TypeWhisper reagieren?"
+        case .review:
+            "Review & Erweitert"
+        }
+    }
+}
+
 @MainActor
 final class ProfilesViewModel: ObservableObject {
     nonisolated(unsafe) static var _shared: ProfilesViewModel?
@@ -30,6 +47,9 @@ final class ProfilesViewModel: ObservableObject {
 
     // Editor state
     @Published var showingEditor = false
+    @Published var editorStep: RuleEditorStep = .scope
+    @Published var editorIsEnabled = true
+    @Published var showingAdvancedSettings = false
     @Published var editingProfile: Profile?
     @Published var editorName = ""
     @Published var editorBundleIdentifiers: [String] = []
@@ -57,12 +77,19 @@ final class ProfilesViewModel: ObservableObject {
     // Domain autocomplete
     @Published var urlPatternInput = ""
     @Published var domainSuggestions: [String] = []
+    @Published var editorDetectedAppName: String?
+    @Published var editorDetectedBundleIdentifier: String?
+    @Published var editorDetectedURL: String?
+    @Published var editorDetectedDomain: String?
+    @Published var editorDetectedIsSupportedBrowser = false
+    @Published var showingWebsiteScope = false
     var availableDomains: [String] = []
 
     private let profileService: ProfileService
     private let historyService: HistoryService
     let settingsViewModel: SettingsViewModel
     private var cancellables = Set<AnyCancellable>()
+    private var editorNameManuallyEdited = false
 
     init(profileService: ProfileService, historyService: HistoryService, settingsViewModel: SettingsViewModel) {
         self.profileService = profileService
@@ -81,11 +108,45 @@ final class ProfilesViewModel: ObservableObject {
         }
     }
 
+    var suggestedRuleName: String {
+        let appNames = editorBundleIdentifiers.prefix(2).map(appName(for:))
+        let domains = editorUrlPatterns.prefix(2)
+
+        switch (!appNames.isEmpty, !domains.isEmpty) {
+        case (true, true):
+            return "\(appNames.joined(separator: " + ")) @ \(domains.joined(separator: " + "))"
+        case (true, false):
+            return appNames.joined(separator: " + ")
+        case (false, true):
+            return domains.joined(separator: " + ")
+        case (false, false):
+            return "New Rule"
+        }
+    }
+
+    var currentRuleName: String {
+        let trimmed = editorName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if editorNameManuallyEdited, !trimmed.isEmpty {
+            return trimmed
+        }
+        return suggestedRuleName
+    }
+
+    var canAdvanceFromCurrentStep: Bool {
+        switch editorStep {
+        case .scope:
+            return !editorBundleIdentifiers.isEmpty || !editorUrlPatterns.isEmpty
+        case .behavior, .review:
+            return true
+        }
+    }
+
     // MARK: - CRUD
 
     func addProfile() {
         profileService.addProfile(
-            name: editorName,
+            name: currentRuleName,
+            isEnabled: editorIsEnabled,
             bundleIdentifiers: editorBundleIdentifiers,
             urlPatterns: editorUrlPatterns,
             inputLanguage: editorInputLanguage,
@@ -100,13 +161,14 @@ final class ProfilesViewModel: ObservableObject {
             hotkeyData: editorHotkey.flatMap { try? JSONEncoder().encode($0) },
             inlineCommandsEnabled: editorInlineCommandsEnabled,
             autoEnterEnabled: editorAutoEnterEnabled,
-            priority: editorPriority
+            priority: profileService.nextPriority()
         )
     }
 
     func saveProfile() {
         if let profile = editingProfile {
-            profile.name = editorName
+            profile.name = currentRuleName
+            profile.isEnabled = editorIsEnabled
             profile.bundleIdentifiers = editorBundleIdentifiers
             profile.urlPatterns = editorUrlPatterns
             profile.inputLanguage = editorInputLanguage
@@ -133,15 +195,49 @@ final class ProfilesViewModel: ObservableObject {
         profileService.deleteProfile(profile)
     }
 
+    func moveProfile(fromIndex: Int, toIndex: Int) {
+        guard fromIndex != toIndex,
+              profiles.indices.contains(fromIndex),
+              profiles.indices.contains(toIndex) else { return }
+
+        var reorderedProfiles = profiles
+        let movedProfile = reorderedProfiles.remove(at: fromIndex)
+        let insertionIndex = fromIndex < toIndex ? max(toIndex - 1, 0) : toIndex
+        reorderedProfiles.insert(movedProfile, at: insertionIndex)
+        profileService.reorderProfiles(reorderedProfiles)
+    }
+
     func toggleProfile(_ profile: Profile) {
         profileService.toggleProfile(profile)
+    }
+
+    func goToNextStep() {
+        guard canAdvanceFromCurrentStep else { return }
+        if let next = RuleEditorStep(rawValue: editorStep.rawValue + 1) {
+            editorStep = next
+        }
+    }
+
+    func goToPreviousStep() {
+        if let previous = RuleEditorStep(rawValue: editorStep.rawValue - 1) {
+            editorStep = previous
+        }
+    }
+
+    func updateRuleName(_ name: String) {
+        editorName = name
+        editorNameManuallyEdited = true
     }
 
     // MARK: - Editor
 
     func prepareNewProfile() {
         editingProfile = nil
+        editorStep = .scope
+        editorIsEnabled = true
+        showingAdvancedSettings = false
         editorName = ""
+        editorNameManuallyEdited = false
         editorBundleIdentifiers = []
         editorUrlPatterns = []
         editorInputLanguage = nil
@@ -160,13 +256,24 @@ final class ProfilesViewModel: ObservableObject {
         editorPriority = 0
         urlPatternInput = ""
         domainSuggestions = []
+        editorDetectedAppName = nil
+        editorDetectedBundleIdentifier = nil
+        editorDetectedURL = nil
+        editorDetectedDomain = nil
+        editorDetectedIsSupportedBrowser = false
+        showingWebsiteScope = false
         loadAvailableDomains()
+        refreshEditorContext()
         showingEditor = true
     }
 
     func prepareEditProfile(_ profile: Profile) {
         editingProfile = profile
+        editorStep = .scope
+        editorIsEnabled = profile.isEnabled
+        showingAdvancedSettings = false
         editorName = profile.name
+        editorNameManuallyEdited = true
         editorBundleIdentifiers = profile.bundleIdentifiers
         editorUrlPatterns = profile.urlPatterns
         editorInputLanguage = profile.inputLanguage
@@ -193,7 +300,14 @@ final class ProfilesViewModel: ObservableObject {
         editorPriority = profile.priority
         urlPatternInput = ""
         domainSuggestions = []
+        editorDetectedAppName = nil
+        editorDetectedBundleIdentifier = nil
+        editorDetectedURL = nil
+        editorDetectedDomain = nil
+        editorDetectedIsSupportedBrowser = false
+        showingWebsiteScope = !profile.urlPatterns.isEmpty
         loadAvailableDomains()
+        refreshEditorContext()
         showingEditor = true
     }
 
@@ -277,6 +391,7 @@ final class ProfilesViewModel: ObservableObject {
         }
 
         editorUrlPatterns.append(input)
+        showingWebsiteScope = true
         urlPatternInput = ""
         domainSuggestions = []
     }
@@ -286,6 +401,13 @@ final class ProfilesViewModel: ObservableObject {
         editorUrlPatterns.append(domain)
         urlPatternInput = ""
         domainSuggestions = []
+        showingWebsiteScope = true
+    }
+
+    func addDetectedDomainToEditor() {
+        guard let domain = editorDetectedDomain, !editorUrlPatterns.contains(domain) else { return }
+        editorUrlPatterns.append(domain)
+        showingWebsiteScope = true
     }
 
     // MARK: - Helpers
@@ -294,43 +416,244 @@ final class ProfilesViewModel: ObservableObject {
         installedApps.first { $0.id == bundleId }?.name ?? bundleId
     }
 
-    func profileSubtitle(_ profile: Profile) -> String {
-        var parts: [String] = []
-        if let hotkey = profile.hotkey {
-            parts.append("⌨ " + HotkeyService.displayName(for: hotkey))
+    func ruleContextSummary(bundleIdentifiers: [String], urlPatterns: [String]) -> String {
+        let appNames = bundleIdentifiers.prefix(2).map(appName(for:))
+        let domains = urlPatterns.prefix(2)
+
+        switch (!appNames.isEmpty, !domains.isEmpty) {
+        case (true, true):
+            return "\(appNames.joined(separator: " oder ")) aktiv ist und \(domains.joined(separator: " oder ")) erkannt wird"
+        case (true, false):
+            return "\(appNames.joined(separator: " oder ")) aktiv ist"
+        case (false, true):
+            return "\(domains.joined(separator: " oder ")) erkannt wird"
+        case (false, false):
+            return "sie manuell ausgelöst wird"
         }
-        let appNames = profile.bundleIdentifiers.prefix(3).map { appName(for: $0) }
-        if !appNames.isEmpty {
-            parts.append(appNames.joined(separator: ", "))
-            if profile.bundleIdentifiers.count > 3 {
-                parts[parts.count - 1] += " +\(profile.bundleIdentifiers.count - 3)"
+    }
+
+    func ruleBehaviorSummary(
+        inputLanguage: String?,
+        translationEnabled: Bool?,
+        translationTargetLanguage: String?,
+        promptActionId: String?,
+        engineOverride: String?,
+        outputFormat: String?,
+        inlineCommandsEnabled: Bool,
+        autoEnterEnabled: Bool
+    ) -> String {
+        var parts: [String] = []
+
+        if let promptActionId,
+           let action = PromptActionsViewModel.shared.promptActions.first(where: { $0.id.uuidString == promptActionId }) {
+            parts.append("den Prompt „\(action.name)“")
+        }
+
+        if let lang = inputLanguage {
+            let languageName = lang == "auto"
+                ? "auto-detect"
+                : (Locale.current.localizedString(forLanguageCode: lang) ?? lang)
+            parts.append("mit \(languageName)")
+        }
+
+        if translationEnabled == false {
+            parts.append("ohne Übersetzung")
+        } else if let lang = translationTargetLanguage {
+            let languageName = Locale.current.localizedString(forLanguageCode: lang) ?? lang
+            parts.append("mit Übersetzung nach \(languageName)")
+        } else if translationEnabled == true {
+            parts.append("mit Übersetzung")
+        }
+
+        if let engine = engineOverride {
+            let displayName = PluginManager.shared.transcriptionEngine(for: engine)?.providerDisplayName ?? engine
+            parts.append("über \(displayName)")
+        }
+
+        if let outputFormat {
+            switch outputFormat {
+            case "auto":
+                parts.append("mit automatischem Format")
+            case "markdown":
+                parts.append("als Markdown")
+            case "html":
+                parts.append("als HTML")
+            case "plaintext":
+                parts.append("als Plain Text")
+            case "code":
+                parts.append("als Code")
+            default:
+                parts.append("mit \(outputFormat)")
             }
         }
-        if !profile.urlPatterns.isEmpty {
-            let domains = profile.urlPatterns.prefix(2).joined(separator: ", ")
-            let suffix = profile.urlPatterns.count > 2 ? " +\(profile.urlPatterns.count - 2)" : ""
-            parts.append(domains + suffix)
+
+        if inlineCommandsEnabled {
+            parts.append("mit Inline Commands")
         }
-        if let lang = profile.inputLanguage {
-            let name = Locale.current.localizedString(forLanguageCode: lang) ?? lang
-            parts.append(name)
+
+        if autoEnterEnabled {
+            parts.append("mit Auto Enter")
         }
-        if profile.translationEnabled == false {
-            parts.append(String(localized: "Translation Off"))
-        } else if let lang = profile.translationTargetLanguage {
-            let name = Locale.current.localizedString(forLanguageCode: lang) ?? lang
-            parts.append("→ " + name)
-        } else if profile.translationEnabled == true {
-            parts.append(String(localized: "Translation On"))
+
+        return parts.isEmpty ? "die globalen Einstellungen" : parts.prefix(3).joined(separator: ", ")
+    }
+
+    func ruleNarrative(for profile: Profile) -> String {
+        "Wenn \(ruleContextSummary(bundleIdentifiers: profile.bundleIdentifiers, urlPatterns: profile.urlPatterns)), nutzt TypeWhisper \(ruleBehaviorSummary(inputLanguage: profile.inputLanguage, translationEnabled: profile.translationEnabled, translationTargetLanguage: profile.translationTargetLanguage, promptActionId: profile.promptActionId, engineOverride: profile.engineOverride, outputFormat: profile.outputFormat, inlineCommandsEnabled: profile.inlineCommandsEnabled, autoEnterEnabled: profile.autoEnterEnabled))."
+    }
+
+    var editorRuleNarrative: String {
+        "Wenn \(ruleContextSummary(bundleIdentifiers: editorBundleIdentifiers, urlPatterns: editorUrlPatterns)), nutzt TypeWhisper \(ruleBehaviorSummary(inputLanguage: editorInputLanguage, translationEnabled: editorTranslationEnabled, translationTargetLanguage: editorTranslationTargetLanguage, promptActionId: editorPromptActionId, engineOverride: editorEngineOverride, outputFormat: editorOutputFormat, inlineCommandsEnabled: editorInlineCommandsEnabled, autoEnterEnabled: editorAutoEnterEnabled))."
+    }
+
+    func matchingExplanation(bundleIdentifiers: [String], urlPatterns: [String], hasManualOverride: Bool) -> String {
+        let hasApps = !bundleIdentifiers.isEmpty
+        let hasDomains = !urlPatterns.isEmpty
+
+        switch (hasApps, hasDomains) {
+        case (true, true):
+            var text = "Diese Regel ist am stärksten, wenn App und Website gleichzeitig passen. Wenn mehrere gleich spezifische Regeln passen, gewinnt die höhere Priorität."
+            if hasManualOverride {
+                text += " Mit manueller Übersteuerung kann sie jederzeit direkt erzwungen werden."
+            }
+            return text
+        case (false, true):
+            var text = "Diese Regel greift browserübergreifend über die Website. App + Website ist noch spezifischer; gegen andere Website-Regeln entscheidet die Priorität."
+            if hasManualOverride {
+                text += " Mit manueller Übersteuerung kannst du sie trotzdem jederzeit direkt erzwingen."
+            }
+            return text
+        case (true, false):
+            var text = "Diese Regel greift, sobald eine der ausgewählten Apps aktiv ist. Website-Regeln sind spezifischer; gegen andere App-Regeln entscheidet die Priorität."
+            if hasManualOverride {
+                text += " Mit manueller Übersteuerung kannst du sie trotzdem jederzeit direkt erzwingen."
+            }
+            return text
+        case (false, false):
+            return "Ohne App oder Website greift diese Regel nicht automatisch. Nutze dafür eine manuelle Übersteuerung."
         }
-        if let engine = profile.engineOverride {
-            let displayName = PluginManager.shared.transcriptionEngine(for: engine)?.providerDisplayName ?? engine
-            parts.append(displayName)
+    }
+
+    func matchingExplanation(for profile: Profile) -> String {
+        matchingExplanation(
+            bundleIdentifiers: profile.bundleIdentifiers,
+            urlPatterns: profile.urlPatterns,
+            hasManualOverride: profile.hotkey != nil
+        )
+    }
+
+    var editorMatchingExplanation: String {
+        matchingExplanation(
+            bundleIdentifiers: editorBundleIdentifiers,
+            urlPatterns: editorUrlPatterns,
+            hasManualOverride: editorHotkey != nil
+        )
+    }
+
+    func manualOverrideSummary(for profile: Profile) -> String {
+        guard let hotkey = profile.hotkey else { return "Keine manuelle Übersteuerung" }
+        return "Manuelle Übersteuerung: \(HotkeyService.displayName(for: hotkey))"
+    }
+
+    var editorManualOverrideSummary: String {
+        guard let editorHotkey else { return "Keine manuelle Übersteuerung" }
+        return "Manuelle Übersteuerung: \(HotkeyService.displayName(for: editorHotkey))"
+    }
+
+    var editorRelevantBrowserName: String? {
+        if editorDetectedIsSupportedBrowser, let appName = editorDetectedAppName {
+            return appName
         }
-        if profile.inlineCommandsEnabled {
-            parts.append(String(localized: "Inline Commands"))
+
+        guard let bundleId = firstSelectedBrowserBundleIdentifier else { return nil }
+        return appName(for: bundleId)
+    }
+
+    var editorHasSelectedBrowser: Bool {
+        firstSelectedBrowserBundleIdentifier != nil
+    }
+
+    private var firstSelectedBrowserBundleIdentifier: String? {
+        editorBundleIdentifiers.first { bundleId in
+            isSupportedBrowser(bundleIdentifier: bundleId, appName: appName(for: bundleId))
         }
-        return parts.joined(separator: " · ")
+    }
+
+    private func refreshEditorContext() {
+        let activeApp = ServiceContainer.shared.textInsertionService.captureActiveApp()
+        editorDetectedAppName = activeApp.name
+        editorDetectedBundleIdentifier = activeApp.bundleId
+        editorDetectedURL = nil
+        editorDetectedDomain = nil
+        editorDetectedIsSupportedBrowser = isSupportedBrowser(bundleIdentifier: activeApp.bundleId, appName: activeApp.name)
+        showingWebsiteScope = !editorUrlPatterns.isEmpty || editorDetectedIsSupportedBrowser || editorHasSelectedBrowser
+
+        let bundleIdSnapshot = activeApp.bundleId
+
+        guard let bundleId = bundleIdSnapshot else { return }
+
+        Task { [weak self] in
+            let resolvedURL = await ServiceContainer.shared.textInsertionService.resolveBrowserURL(bundleId: bundleId)
+
+            await MainActor.run {
+                guard let self else { return }
+                guard self.editorDetectedBundleIdentifier == bundleIdSnapshot else { return }
+                self.editorDetectedURL = resolvedURL
+                self.editorDetectedDomain = self.normalizedDomain(from: resolvedURL)
+            }
+        }
+    }
+
+    private func normalizedDomain(from urlString: String?) -> String? {
+        guard
+            let urlString,
+            let url = URL(string: urlString),
+            let host = url.host?.lowercased()
+        else {
+            return nil
+        }
+
+        if host.hasPrefix("www.") {
+            return String(host.dropFirst(4))
+        }
+
+        return host
+    }
+
+    private func isSupportedBrowser(bundleIdentifier: String?, appName: String?) -> Bool {
+        let normalizedBundle = bundleIdentifier?.lowercased() ?? ""
+        let normalizedName = appName?.lowercased() ?? ""
+
+        let knownBundleFragments = [
+            "com.apple.safari",
+            "company.thebrowser.browser",
+            "com.google.chrome",
+            "com.brave.browser",
+            "com.microsoft.edgemac",
+            "com.operasoftware.opera",
+            "com.vivaldi.vivaldi",
+            "org.chromium.chromium",
+            "wavebox"
+        ]
+
+        if knownBundleFragments.contains(where: normalizedBundle.contains) {
+            return true
+        }
+
+        let knownNames = [
+            "safari",
+            "arc",
+            "chrome",
+            "brave",
+            "edge",
+            "opera",
+            "vivaldi",
+            "chromium",
+            "wave",
+            "wavebox"
+        ]
+
+        return knownNames.contains(where: normalizedName.contains)
     }
 
     private func setupBindings() {
@@ -348,6 +671,19 @@ final class ProfilesViewModel: ObservableObject {
             .dropFirst()
             .sink { [weak self] _ in
                 self?.editorCloudModelOverride = nil
+            }
+            .store(in: &cancellables)
+
+        $editorBundleIdentifiers
+            .dropFirst()
+            .sink { [weak self] bundleIdentifiers in
+                guard let self else { return }
+                let hasBrowserSelection = bundleIdentifiers.contains { bundleId in
+                    self.isSupportedBrowser(bundleIdentifier: bundleId, appName: self.appName(for: bundleId))
+                }
+                if hasBrowserSelection {
+                    self.showingWebsiteScope = true
+                }
             }
             .store(in: &cancellables)
     }

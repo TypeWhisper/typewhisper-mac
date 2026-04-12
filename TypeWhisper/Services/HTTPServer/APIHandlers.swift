@@ -26,8 +26,10 @@ final class APIHandlers: @unchecked Sendable {
         router.register("GET", "/v1/models", handler: handleModels)
         router.register("GET", "/v1/history", handler: handleGetHistory)
         router.register("DELETE", "/v1/history", handler: handleDeleteHistory)
-        router.register("GET", "/v1/profiles", handler: handleGetProfiles)
-        router.register("PUT", "/v1/profiles/toggle", handler: handleToggleProfile)
+        router.register("GET", "/v1/rules", handler: handleGetRules)
+        router.register("PUT", "/v1/rules/toggle", handler: handleToggleRule)
+        router.register("GET", "/v1/profiles", handler: handleGetRules)
+        router.register("PUT", "/v1/profiles/toggle", handler: handleToggleRule)
         router.register("POST", "/v1/dictation/start", handler: handleStartDictation)
         router.register("POST", "/v1/dictation/stop", handler: handleStopDictation)
         router.register("GET", "/v1/dictation/status", handler: handleDictationStatus)
@@ -355,12 +357,12 @@ final class APIHandlers: @unchecked Sendable {
         }
     }
 
-    // MARK: - GET /v1/profiles
+    // MARK: - GET /v1/rules
 
-    private func handleGetProfiles(_ request: HTTPRequest) async -> HTTPResponse {
+    private func handleGetRules(_ request: HTTPRequest) async -> HTTPResponse {
         let profileService = self.profileService
         return await MainActor.run {
-            struct ProfileEntry: Encodable {
+            struct RuleEntry: Encodable {
                 let id: String
                 let name: String
                 let is_enabled: Bool
@@ -371,12 +373,13 @@ final class APIHandlers: @unchecked Sendable {
                 let translation_target_language: String?
             }
 
-            struct ProfilesResponse: Encodable {
-                let profiles: [ProfileEntry]
+            struct RulesResponse: Encodable {
+                let rules: [RuleEntry]
+                let profiles: [RuleEntry]
             }
 
             let entries = profileService.profiles.map { profile in
-                ProfileEntry(
+                RuleEntry(
                     id: profile.id.uuidString,
                     name: profile.name,
                     is_enabled: profile.isEnabled,
@@ -388,13 +391,13 @@ final class APIHandlers: @unchecked Sendable {
                 )
             }
 
-            return .json(ProfilesResponse(profiles: entries))
+            return .json(RulesResponse(rules: entries, profiles: entries))
         }
     }
 
-    // MARK: - PUT /v1/profiles/toggle
+    // MARK: - PUT /v1/rules/toggle
 
-    private func handleToggleProfile(_ request: HTTPRequest) async -> HTTPResponse {
+    private func handleToggleRule(_ request: HTTPRequest) async -> HTTPResponse {
         guard let idString = request.queryParams["id"],
               let uuid = UUID(uuidString: idString) else {
             return .error(status: 400, message: "Missing or invalid 'id' query parameter")
@@ -403,7 +406,7 @@ final class APIHandlers: @unchecked Sendable {
         let profileService = self.profileService
         return await MainActor.run {
             guard let profile = profileService.profiles.first(where: { $0.id == uuid }) else {
-                return .error(status: 404, message: "Profile not found")
+                return .error(status: 404, message: "Rule not found")
             }
 
             profileService.toggleProfile(profile)
@@ -411,12 +414,16 @@ final class APIHandlers: @unchecked Sendable {
             struct ToggleResponse: Encodable {
                 let id: String
                 let name: String
+                let rule_name: String
+                let profile_name: String
                 let is_enabled: Bool
             }
 
             return .json(ToggleResponse(
                 id: profile.id.uuidString,
                 name: profile.name,
+                rule_name: profile.name,
+                profile_name: profile.name,
                 is_enabled: profile.isEnabled
             ))
         }

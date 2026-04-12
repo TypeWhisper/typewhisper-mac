@@ -192,7 +192,7 @@ final class ServiceContainer: ObservableObject {
             apiServerViewModel.startServer()
         }
 
-        pluginManager.setProfileNamesProvider { [weak self] in
+        pluginManager.setRuleNamesProvider { [weak self] in
             self?.profileService.profiles.map(\.name) ?? []
         }
         pluginManager.scanAndLoadPlugins()

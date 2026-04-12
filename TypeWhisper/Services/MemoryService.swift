@@ -83,9 +83,9 @@ Return ONLY the JSON array, nothing else.
     private func handleTranscription(_ payload: TranscriptionCompletedPayload) {
         guard isEnabled, payload.finalText.count >= minimumTextLength else { return }
 
-        // Per-profile gate
-        if let profileName = payload.profileName,
-           let profile = ServiceContainer.shared.profileService.profiles.first(where: { $0.name == profileName }) {
+        // Per-rule gate
+        if let ruleName = payload.ruleName,
+           let profile = ServiceContainer.shared.profileService.profiles.first(where: { $0.name == ruleName }) {
             guard profile.memoryEnabled else { return }
         } else {
             return
@@ -125,7 +125,7 @@ Return ONLY the JSON array, nothing else.
         let entries = parseExtractedMemories(result, source: MemorySource(
             appName: payload.appName,
             bundleIdentifier: payload.bundleIdentifier,
-            profileName: payload.profileName,
+            ruleName: payload.ruleName,
             timestamp: payload.timestamp
         ))
         guard !entries.isEmpty else { return }
