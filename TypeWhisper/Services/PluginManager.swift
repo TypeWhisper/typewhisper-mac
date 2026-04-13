@@ -6,12 +6,15 @@ import os.log
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "PluginManager")
 
 private enum PluginLoadError: LocalizedError {
+    case incompatibleOSVersion(pluginName: String, required: String, current: String)
     case incompatibleHostVersion(pluginName: String, required: String, current: String)
     case failedToCreateBundle(bundleName: String)
     case missingPrincipalClass(className: String, bundleName: String)
 
     var errorDescription: String? {
         switch self {
+        case .incompatibleOSVersion(let pluginName, let required, let current):
+            return "\(pluginName) requires macOS \(required) or newer (current: \(current))"
         case .incompatibleHostVersion(let pluginName, let required, let current):
             return "\(pluginName) requires TypeWhisper \(required) or newer (current: \(current))"
         case .failedToCreateBundle(let bundleName):
@@ -48,6 +51,7 @@ final class PluginManager: ObservableObject {
     @Published var loadedPlugins: [LoadedPlugin] = []
 
     let pluginsDirectory: URL
+    private let errorLogService: ErrorLogService?
     private var profileNamesProvider: () -> [String] = { [] }
 
     var postProcessors: [PostProcessorPlugin] {
@@ -93,9 +97,13 @@ final class PluginManager: ObservableObject {
         llmProviders.first { $0.providerName.caseInsensitiveCompare(providerName) == .orderedSame }
     }
 
-    init(appSupportDirectory: URL = AppConstants.appSupportDirectory) {
+    init(
+        appSupportDirectory: URL = AppConstants.appSupportDirectory,
+        errorLogService: ErrorLogService? = nil
+    ) {
         self.pluginsDirectory = appSupportDirectory
             .appendingPathComponent("Plugins", isDirectory: true)
+        self.errorLogService = errorLogService
 
         try? FileManager.default.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)
     }
@@ -144,6 +152,7 @@ final class PluginManager: ObservableObject {
             data = try Data(contentsOf: manifestURL)
         } catch {
             logger.error("Failed to read manifest from \(url.lastPathComponent): \(error.localizedDescription)")
+            recordPluginError("Failed to read plugin manifest for \(url.lastPathComponent): \(error.localizedDescription)")
             throw error
         }
 
@@ -152,6 +161,7 @@ final class PluginManager: ObservableObject {
             manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
         } catch {
             logger.error("Invalid manifest in \(url.lastPathComponent): \(error.localizedDescription)")
+            recordPluginError("Invalid plugin manifest in \(url.lastPathComponent): \(error.localizedDescription)")
             throw error
         }
 
@@ -163,19 +173,28 @@ final class PluginManager: ObservableObject {
                 patchVersion: parts.count > 2 ? parts[2] : 0
             )
             if !ProcessInfo.processInfo.isOperatingSystemAtLeast(required) {
-                logger.info("Plugin \(manifest.name) requires macOS \(minOS), skipping")
-                return
+                let error = PluginLoadError.incompatibleOSVersion(
+                    pluginName: manifest.name,
+                    required: minOS,
+                    current: Self.formattedOSVersion(ProcessInfo.processInfo.operatingSystemVersion)
+                )
+                logger.error("\(error.localizedDescription, privacy: .public)")
+                recordPluginError(error.localizedDescription)
+                throw error
             }
         }
 
         if let minHostVersion = manifest.minHostVersion {
             let currentAppVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0"
             if PluginRegistryService.compareVersions(minHostVersion, currentAppVersion) == .orderedDescending {
-                throw PluginLoadError.incompatibleHostVersion(
+                let error = PluginLoadError.incompatibleHostVersion(
                     pluginName: manifest.name,
                     required: minHostVersion,
                     current: currentAppVersion
                 )
+                logger.error("\(error.localizedDescription, privacy: .public)")
+                recordPluginError(error.localizedDescription)
+                throw error
             }
         }
 
@@ -196,6 +215,7 @@ final class PluginManager: ObservableObject {
 
         guard let bundle = Bundle(url: url) else {
             logger.error("Failed to create Bundle for \(url.lastPathComponent)")
+            recordPluginError("Failed to create bundle for \(url.lastPathComponent)")
             throw PluginLoadError.failedToCreateBundle(bundleName: url.lastPathComponent)
         }
 
@@ -203,6 +223,7 @@ final class PluginManager: ObservableObject {
             try bundle.loadAndReturnError()
         } catch {
             logger.error("Failed to load bundle \(url.lastPathComponent): \(error.localizedDescription)")
+            recordPluginError("Failed to load plugin bundle \(url.lastPathComponent): \(error.localizedDescription)")
             throw error
         }
 
@@ -212,6 +233,7 @@ final class PluginManager: ObservableObject {
                 bundleName: url.lastPathComponent
             )
             logger.error("\(error.localizedDescription, privacy: .public)")
+            recordPluginError(error.localizedDescription)
             throw error
         }
 
@@ -314,5 +336,13 @@ final class PluginManager: ObservableObject {
         }
 
         return versionComparison == .orderedDescending
+    }
+
+    private func recordPluginError(_ message: String) {
+        errorLogService?.addEntry(message: message, category: "plugins")
+    }
+
+    private static func formattedOSVersion(_ version: OperatingSystemVersion) -> String {
+        "\(version.majorVersion).\(version.minorVersion).\(version.patchVersion)"
     }
 }

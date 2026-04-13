@@ -332,6 +332,24 @@ public struct PluginOpenAIChatHelper: Sendable {
         self.chatEndpoint = chatEndpoint
     }
 
+    // Binary-compatibility shim for plugins built against the original SDK surface.
+    @available(*, deprecated, message: "Use the overload with maxOutputTokens and maxOutputTokenParameter.")
+    public func process(
+        apiKey: String,
+        model: String,
+        systemPrompt: String,
+        userText: String
+    ) async throws -> String {
+        try await process(
+            apiKey: apiKey,
+            model: model,
+            systemPrompt: systemPrompt,
+            userText: userText,
+            maxOutputTokens: 4096,
+            maxOutputTokenParameter: "max_tokens"
+        )
+    }
+
     public func process(
         apiKey: String,
         model: String,

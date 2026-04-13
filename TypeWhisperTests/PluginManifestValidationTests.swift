@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 import TypeWhisperPluginSDK
 @testable import TypeWhisper
@@ -42,5 +43,81 @@ final class OpenAIPluginTokenParameterTests: XCTestCase {
 
     func testO4ModelsUseMaxCompletionTokens() {
         XCTAssertEqual(OpenAIPlugin.outputTokenParameter(for: "o4-mini"), "max_completion_tokens")
+    }
+}
+
+@MainActor
+final class PluginInstallationErrorLoggingTests: XCTestCase {
+    func testLoadPluginLogsManifestReadFailuresToErrorLog() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let errorLogService = ErrorLogService(appSupportDirectory: appSupportDirectory)
+        let pluginManager = PluginManager(
+            appSupportDirectory: appSupportDirectory,
+            errorLogService: errorLogService
+        )
+        let bundleURL = appSupportDirectory.appendingPathComponent("Broken.bundle", isDirectory: true)
+
+        try FileManager.default.createDirectory(at: bundleURL, withIntermediateDirectories: true)
+
+        XCTAssertThrowsError(try pluginManager.loadPlugin(at: bundleURL))
+        XCTAssertEqual(errorLogService.entries.count, 1)
+        XCTAssertEqual(errorLogService.entries.first?.category, "plugins")
+        XCTAssertTrue(errorLogService.entries.first?.message.contains("Broken.bundle") == true)
+    }
+
+    func testDownloadAndInstallLogsValidationErrorsBeforeLoadPhase() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let errorLogService = ErrorLogService(appSupportDirectory: appSupportDirectory)
+        let pluginManager = PluginManager(
+            appSupportDirectory: appSupportDirectory,
+            errorLogService: errorLogService
+        )
+        let registryService = PluginRegistryService(errorLogService: errorLogService)
+        PluginManager.shared = pluginManager
+        PluginRegistryService.shared = registryService
+
+        let archiveSourceURL = appSupportDirectory.appendingPathComponent("ArchiveSource", isDirectory: true)
+        let archiveURL = appSupportDirectory.appendingPathComponent("BrokenPlugin.zip", isDirectory: false)
+        try FileManager.default.createDirectory(at: archiveSourceURL, withIntermediateDirectories: true)
+        try Self.createZip(from: archiveSourceURL, to: archiveURL)
+
+        let plugin = RegistryPlugin(
+            id: "com.typewhisper.test.broken",
+            name: "Broken Plugin",
+            version: "1.0.0",
+            minHostVersion: "1.0.0",
+            minOSVersion: "14.0",
+            author: "TypeWhisper",
+            description: "Broken test plugin",
+            category: "utility",
+            size: 1,
+            downloadURL: archiveURL.absoluteURL.absoluteString,
+            iconSystemName: nil,
+            requiresAPIKey: nil,
+            descriptions: nil,
+            downloadCount: nil
+        )
+
+        await registryService.downloadAndInstall(plugin)
+
+        XCTAssertEqual(registryService.installStates[plugin.id], .error("No .bundle found in ZIP"))
+        XCTAssertEqual(errorLogService.entries.count, 1)
+        XCTAssertEqual(errorLogService.entries.first?.category, "plugins")
+        XCTAssertTrue(errorLogService.entries.first?.message.contains("Failed to install Broken Plugin") == true)
+        XCTAssertTrue(errorLogService.entries.first?.message.contains("No .bundle found in ZIP") == true)
+    }
+
+    private static func createZip(from sourceURL: URL, to zipURL: URL) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+        process.arguments = ["-ck", "--keepParent", sourceURL.path, zipURL.path]
+        try process.run()
+        process.waitUntilExit()
+
+        XCTAssertEqual(process.terminationStatus, 0)
     }
 }
