@@ -150,6 +150,8 @@ final class DictationViewModel: ObservableObject {
         promptActionService: PromptActionService,
         promptProcessingService: PromptProcessingService,
         appFormatterService: AppFormatterService,
+        punctuationStrategyResolver: PunctuationStrategyResolver,
+        speechPunctuationService: SpeechPunctuationService,
         speechFeedbackService: SpeechFeedbackService,
         accessibilityAnnouncementService: AccessibilityAnnouncementService,
         errorLogService: ErrorLogService,
@@ -177,7 +179,9 @@ final class DictationViewModel: ObservableObject {
         self.postProcessingPipeline = PostProcessingPipeline(
             snippetService: snippetService,
             dictionaryService: dictionaryService,
-            appFormatterService: appFormatterService
+            appFormatterService: appFormatterService,
+            speechPunctuationService: speechPunctuationService,
+            punctuationStrategyResolver: punctuationStrategyResolver
         )
         self.streamingHandler = StreamingHandler(
             modelManager: modelManager,
@@ -740,8 +744,17 @@ final class DictationViewModel: ObservableObject {
                     profileName: self.matchedProfile?.name,
                     selectedText: self.capturedSelectedText
                 )
+                let dictationContext = DictationRuntimeContext(
+                    engineId: result.engineUsed,
+                    modelId: modelManager.resolvedModelId(
+                        engineOverrideId: engineOverride,
+                        cloudModelOverride: cloudModelOverride
+                    ),
+                    configuredLanguage: language,
+                    detectedLanguage: result.detectedLanguage
+                )
                 let ppResult = try await postProcessingPipeline.process(
-                    text: text, context: ppContext, llmHandler: llmHandler,
+                    text: text, context: ppContext, dictationContext: dictationContext, llmHandler: llmHandler,
                     outputFormat: self.matchedProfile?.outputFormat,
                     llmStepName: llmStepName
                 )
