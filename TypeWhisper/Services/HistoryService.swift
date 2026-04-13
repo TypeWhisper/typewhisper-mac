@@ -51,6 +51,7 @@ final class HistoryService: ObservableObject {
     }
 
     func addRecord(
+        id: UUID = UUID(),
         rawText: String,
         finalText: String,
         appName: String?,
@@ -73,7 +74,7 @@ final class HistoryService: ObservableObject {
             logger.warning("Skipping history record: invalid duration \(durationSeconds)")
             return
         }
-        let recordId = UUID()
+        let recordId = id
         var audioFileName: String?
 
         if let samples = audioSamples, !samples.isEmpty {
