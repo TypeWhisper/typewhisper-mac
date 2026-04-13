@@ -680,6 +680,42 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
 final class HotkeyServiceCompatibilityTests: XCTestCase {
     @MainActor
+    func testModifierOnlyHotkeyIsIgnoredWhenKeyboardIsRemote() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(optionHotkey(), for: .toggle)
+        service.setKeyboardLocalForTesting(false)
+
+        var startCount = 0
+        service.onDictationStart = {
+            startCount += 1
+        }
+
+        let optionDown = try makeModifierEvent(keyCode: 0x3A, modifierFlags: [.option])
+        XCTAssertFalse(service.processEventForTesting(optionDown, source: .monitor))
+        XCTAssertEqual(startCount, 0)
+    }
+
+    @MainActor
+    func testKeyWithModifiersStillWorksWhenKeyboardIsRemote() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(spaceHotkey(), for: .toggle)
+        service.setKeyboardLocalForTesting(false)
+
+        var startCount = 0
+        service.onDictationStart = {
+            startCount += 1
+        }
+
+        let keyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+    }
+
+    @MainActor
     func testMonitorFallbackStartsToggleHotkey() throws {
         let service = HotkeyService()
         service.suspendMonitoring()
@@ -751,6 +787,10 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         )
     }
 
+    private func optionHotkey() -> UnifiedHotkey {
+        UnifiedHotkey(keyCode: 0x3A, modifierFlags: 0, isFn: false)
+    }
+
     private func makeKeyboardEvent(keyCode: UInt16, keyDown: Bool) throws -> NSEvent {
         let flags: CGEventFlags = [.maskControl, .maskAlternate, .maskShift, .maskCommand]
         let event = try XCTUnwrap(
@@ -758,5 +798,22 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         )
         event.flags = flags
         return try XCTUnwrap(NSEvent(cgEvent: event))
+    }
+
+    private func makeModifierEvent(keyCode: UInt16, modifierFlags: NSEvent.ModifierFlags) throws -> NSEvent {
+        try XCTUnwrap(
+            NSEvent.keyEvent(
+                with: .flagsChanged,
+                location: .zero,
+                modifierFlags: modifierFlags,
+                timestamp: 0,
+                windowNumber: 0,
+                context: nil,
+                characters: "",
+                charactersIgnoringModifiers: "",
+                isARepeat: false,
+                keyCode: keyCode
+            )
+        )
     }
 }

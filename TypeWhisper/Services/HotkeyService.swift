@@ -4,6 +4,19 @@ import Carbon.HIToolbox
 import Combine
 import os
 
+private typealias NotifyHandler = @convention(block) (Int32) -> Void
+
+@_silgen_name("notify_register_dispatch")
+private func notify_register_dispatch(
+    _ name: UnsafePointer<CChar>,
+    _ outToken: UnsafeMutablePointer<Int32>,
+    _ queue: DispatchQueue,
+    _ handler: @escaping NotifyHandler
+) -> UInt32
+
+@_silgen_name("notify_cancel")
+private func notify_cancel(_ token: Int32) -> UInt32
+
 struct UnifiedHotkey: Equatable, Hashable, Sendable, Codable {
     let keyCode: UInt16
     let modifierFlags: UInt
@@ -167,8 +180,20 @@ final class HotkeyService: ObservableObject {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var recentEventTapDispatches: [HotkeyDispatchKey: Date] = [:]
+    private var keyboardIsLocal = true
+    private var universalControlTransferSourceToken: Int32 = -1
+    private var universalControlTransferDestinationToken: Int32 = -1
 
     private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "HotkeyService")
+
+    deinit {
+        if universalControlTransferSourceToken >= 0 {
+            _ = notify_cancel(universalControlTransferSourceToken)
+        }
+        if universalControlTransferDestinationToken >= 0 {
+            _ = notify_cancel(universalControlTransferDestinationToken)
+        }
+    }
 
     // Modifier keyCodes that generate flagsChanged instead of keyDown/keyUp
     nonisolated static let modifierKeyCodes: Set<UInt16> = [
@@ -184,6 +209,7 @@ final class HotkeyService: ObservableObject {
 
     func setup() {
         loadHotkeys()
+        setupUniversalControlObservers()
         setupMonitor()
     }
 
@@ -338,6 +364,39 @@ final class HotkeyService: ObservableObject {
             runLoopSource = nil
         }
         recentEventTapDispatches.removeAll()
+
+    }
+
+    private func tearDownUniversalControlObservers() {
+        if universalControlTransferSourceToken >= 0 {
+            _ = notify_cancel(universalControlTransferSourceToken)
+            universalControlTransferSourceToken = -1
+        }
+        if universalControlTransferDestinationToken >= 0 {
+            _ = notify_cancel(universalControlTransferDestinationToken)
+            universalControlTransferDestinationToken = -1
+        }
+    }
+
+    private func setupUniversalControlObservers() {
+        guard universalControlTransferSourceToken < 0, universalControlTransferDestinationToken < 0 else {
+            return
+        }
+
+        // Modifier-only hotkeys use flagsChanged events. Under Universal Control those
+        // still reach the source Mac even after keyboard focus moved to another Mac.
+        // These notifications let us suppress modifier-only hotkeys on the source Mac.
+        "com.apple.universalcontrol.transfer-source".withCString { name in
+            _ = notify_register_dispatch(name, &universalControlTransferSourceToken, .main) { [weak self] _ in
+                self?.keyboardIsLocal = false
+            }
+        }
+
+        "com.apple.universalcontrol.transfer-destination".withCString { name in
+            _ = notify_register_dispatch(name, &universalControlTransferDestinationToken, .main) { [weak self] _ in
+                self?.keyboardIsLocal = true
+            }
+        }
     }
 
     func suspendMonitoring() {
@@ -436,6 +495,7 @@ final class HotkeyService: ObservableObject {
         // Global slots
         for slotType in HotkeySlotType.allCases {
             guard var state = slots[slotType], let hotkey = state.hotkey else { continue }
+            if shouldIgnoreNonLocalModifierHotkey(hotkey) { continue }
             let (keyDown, keyUp, isMatch) = processKeyEvent(event, hotkey: hotkey, state: &state)
             slots[slotType] = state
             if isMatch { shouldSuppress = true }
@@ -451,6 +511,7 @@ final class HotkeyService: ObservableObject {
         // Profile slots
         for profileId in Array(profileSlots.keys) {
             guard var pState = profileSlots[profileId] else { continue }
+            if shouldIgnoreNonLocalModifierHotkey(pState.hotkey) { continue }
             var state = SlotState(hotkey: pState.hotkey, fnWasDown: pState.fnWasDown,
                                   fnComboKeyPressed: pState.fnComboKeyPressed,
                                   modifierWasDown: pState.modifierWasDown, keyWasDown: pState.keyWasDown,
@@ -476,6 +537,17 @@ final class HotkeyService: ObservableObject {
         }
 
         return shouldSuppress
+    }
+
+    private func shouldIgnoreNonLocalModifierHotkey(_ hotkey: UnifiedHotkey) -> Bool {
+        guard !keyboardIsLocal else { return false }
+
+        switch hotkey.kind {
+        case .modifierOnly, .modifierCombo, .fn:
+            return true
+        case .keyWithModifiers, .bareKey, .mouseButton:
+            return false
+        }
     }
 
     private func dispatchGlobalMatch(
@@ -572,6 +644,10 @@ final class HotkeyService: ObservableObject {
 #if DEBUG
     func setHotkeyForTesting(_ hotkey: UnifiedHotkey, for slotType: HotkeySlotType) {
         slots[slotType] = SlotState(hotkey: hotkey)
+    }
+
+    func setKeyboardLocalForTesting(_ isLocal: Bool) {
+        keyboardIsLocal = isLocal
     }
 
     @discardableResult
