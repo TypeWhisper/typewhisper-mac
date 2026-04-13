@@ -4,6 +4,23 @@ import os.log
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "PluginRegistry")
 
+enum PluginDownloadError: LocalizedError {
+    case httpStatus(Int)
+    case unexpectedContentType(String?)
+
+    var errorDescription: String? {
+        switch self {
+        case .httpStatus(let statusCode):
+            return "Plugin download failed with HTTP \(statusCode)"
+        case .unexpectedContentType(let mimeType):
+            if let mimeType, !mimeType.isEmpty {
+                return "Plugin download returned \(mimeType) instead of a ZIP archive"
+            }
+            return "Plugin download did not return a ZIP archive"
+        }
+    }
+}
+
 // MARK: - Plugin Category
 
 enum PluginCategory: String, CaseIterable {
@@ -111,6 +128,7 @@ final class PluginRegistryService: ObservableObject {
     @Published var availableUpdatesCount: Int = 0
 
     private var lastFetchDate: Date?
+    private var activeInstallPluginIDs: Set<String> = []
     private let registryURL = URL(string: "https://typewhisper.github.io/typewhisper-mac/plugins.json")!
     private let cacheDuration: TimeInterval = 300 // 5 minutes
     private static let lastUpdateCheckKey = "pluginRegistryLastUpdateCheck"
@@ -226,6 +244,12 @@ final class PluginRegistryService: ObservableObject {
             return
         }
 
+        guard activeInstallPluginIDs.insert(plugin.id).inserted else {
+            logger.warning("Skipping duplicate install request for \(plugin.id)")
+            return
+        }
+        defer { activeInstallPluginIDs.remove(plugin.id) }
+
         installStates[plugin.id] = .downloading(0)
 
         do {
@@ -235,7 +259,8 @@ final class PluginRegistryService: ObservableObject {
                 }
             }
             let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
-            let (tempURL, _) = try await session.download(from: url)
+            let (tempURL, response) = try await session.download(from: url)
+            try Self.validateDownloadedArchiveResponse(response)
 
             installStates[plugin.id] = .extracting
 
@@ -291,6 +316,7 @@ final class PluginRegistryService: ObservableObject {
 
         PluginManager.shared.unloadPlugin(pluginId)
 
+        logger.info("Removing installed plugin bundle at \(bundleURL.path, privacy: .public)")
         try? FileManager.default.removeItem(at: bundleURL)
 
         if deleteData {
@@ -351,13 +377,12 @@ final class PluginRegistryService: ObservableObject {
             )
         }
 
-        let destinationURL: URL
-        if let currentURL = PluginManager.shared.bundleURL(for: manifest.id),
-           !currentURL.path.hasPrefix(Bundle.main.builtInPlugInsURL?.path ?? "/__no_builtin_plugins__") {
-            destinationURL = currentURL
-        } else {
-            destinationURL = PluginManager.shared.pluginsDirectory.appendingPathComponent(bundleURL.lastPathComponent)
-        }
+        let destinationURL = Self.resolveInstallDestinationURL(
+            currentURL: PluginManager.shared.bundleURL(for: manifest.id),
+            builtInPluginsURL: Bundle.main.builtInPlugInsURL,
+            pluginsDirectory: PluginManager.shared.pluginsDirectory,
+            incomingBundleName: bundleURL.lastPathComponent
+        )
 
         let backupURL = destinationURL.deletingLastPathComponent()
             .appendingPathComponent("\(destinationURL.lastPathComponent).backup-\(UUID().uuidString)")
@@ -367,12 +392,15 @@ final class PluginRegistryService: ObservableObject {
             PluginManager.shared.unloadPlugin(manifest.id)
 
             if hadExistingBundle {
+                logger.info("Moving existing plugin bundle to backup: \(destinationURL.path, privacy: .public) -> \(backupURL.path, privacy: .public)")
                 try fm.moveItem(at: destinationURL, to: backupURL)
             }
 
             if copyBundle {
+                logger.info("Copying plugin bundle into install location: \(bundleURL.path, privacy: .public) -> \(destinationURL.path, privacy: .public)")
                 try fm.copyItem(at: bundleURL, to: destinationURL)
             } else {
+                logger.info("Moving plugin bundle into install location: \(bundleURL.path, privacy: .public) -> \(destinationURL.path, privacy: .public)")
                 try fm.moveItem(at: bundleURL, to: destinationURL)
             }
 
@@ -380,20 +408,61 @@ final class PluginRegistryService: ObservableObject {
             try removeDuplicateBundles(for: manifest.id, keeping: destinationURL)
 
             if hadExistingBundle, fm.fileExists(atPath: backupURL.path) {
+                logger.info("Removing plugin backup after successful install: \(backupURL.path, privacy: .public)")
                 try fm.removeItem(at: backupURL)
             }
         } catch {
+            logger.error("Plugin install rollback for \(manifest.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
             if fm.fileExists(atPath: destinationURL.path) {
+                logger.info("Removing failed plugin install at \(destinationURL.path, privacy: .public)")
                 try? fm.removeItem(at: destinationURL)
             }
             if hadExistingBundle, fm.fileExists(atPath: backupURL.path) {
+                logger.info("Restoring plugin backup: \(backupURL.path, privacy: .public) -> \(destinationURL.path, privacy: .public)")
                 try? fm.moveItem(at: backupURL, to: destinationURL)
                 try? PluginManager.shared.loadPlugin(at: destinationURL)
             } else if let existingLoadedBundleURL {
+                logger.info("Reloading previously loaded plugin from \(existingLoadedBundleURL.path, privacy: .public)")
                 try? PluginManager.shared.loadPlugin(at: existingLoadedBundleURL)
             }
             throw error
         }
+    }
+
+    static func validateDownloadedArchiveResponse(_ response: URLResponse) throws {
+        if let http = response as? HTTPURLResponse,
+           !(200 ..< 300).contains(http.statusCode) {
+            throw PluginDownloadError.httpStatus(http.statusCode)
+        }
+
+        let mimeType = response.mimeType?.lowercased()
+        if let mimeType,
+           mimeType.contains("html") || mimeType.contains("text/plain") || mimeType.contains("json") {
+            throw PluginDownloadError.unexpectedContentType(response.mimeType)
+        }
+    }
+
+    static func resolveInstallDestinationURL(
+        currentURL: URL?,
+        builtInPluginsURL: URL?,
+        pluginsDirectory: URL,
+        incomingBundleName: String
+    ) -> URL {
+        let pluginsDirectory = pluginsDirectory.standardizedFileURL
+
+        guard let existingURL = currentURL else {
+            return pluginsDirectory.appendingPathComponent(incomingBundleName)
+        }
+
+        let currentURL = existingURL.standardizedFileURL
+        let isBuiltIn = builtInPluginsURL.map { currentURL.path.hasPrefix($0.standardizedFileURL.path) } ?? false
+        let isInsidePluginsDirectory = currentURL.path.hasPrefix(pluginsDirectory.path + "/") || currentURL == pluginsDirectory
+
+        if !isBuiltIn && isInsidePluginsDirectory {
+            return currentURL
+        }
+
+        return pluginsDirectory.appendingPathComponent(incomingBundleName)
     }
 
     private func readManifest(at bundleURL: URL) throws -> PluginManifest {
@@ -404,14 +473,20 @@ final class PluginRegistryService: ObservableObject {
 
     private func removeDuplicateBundles(for pluginId: String, keeping keptURL: URL) throws {
         let fm = FileManager.default
+        let keptPath = keptURL.resolvingSymlinksInPath().standardizedFileURL.path
         let bundleURLs = try fm.contentsOfDirectory(
             at: PluginManager.shared.pluginsDirectory,
             includingPropertiesForKeys: nil,
             options: [.skipsHiddenFiles]
-        ).filter { $0.pathExtension == "bundle" && $0.standardizedFileURL != keptURL.standardizedFileURL }
+        ).filter {
+            guard $0.pathExtension == "bundle" else { return false }
+            let candidatePath = $0.resolvingSymlinksInPath().standardizedFileURL.path
+            return candidatePath != keptPath
+        }
 
         for url in bundleURLs {
             guard let manifest = try? readManifest(at: url), manifest.id == pluginId else { continue }
+            logger.info("Removing duplicate plugin bundle at \(url.path, privacy: .public), keeping \(keptURL.path, privacy: .public)")
             try fm.removeItem(at: url)
         }
     }
