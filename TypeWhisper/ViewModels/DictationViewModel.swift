@@ -115,6 +115,7 @@ final class DictationViewModel: ObservableObject {
     private let errorLogService: ErrorLogService
     private let mediaPlaybackService: MediaPlaybackService
     private let postProcessingPipeline: PostProcessingPipeline
+    private var previewWasActiveBeforeRecording = false
     private var matchedProfile: Profile?
     private var forcedProfileId: UUID?
     private var capturedActiveApp: (name: String?, bundleId: String?, url: String?)?
@@ -439,9 +440,14 @@ final class DictationViewModel: ObservableObject {
         let immediateContextMs = (CFAbsoluteTimeGetCurrent() - startTimestamp) * 1000
 
         do {
-            // Play start sound BEFORE engine setup - AVAudioEngine reconfigures
-            // audio hardware (aggregate device) which disrupts NSSound playback.
-            soundService.play(.recordingStarted, enabled: soundFeedbackEnabled)
+            previewWasActiveBeforeRecording = audioDeviceService.isPreviewActive
+            if previewWasActiveBeforeRecording {
+                audioDeviceService.stopPreview()
+            }
+
+            if soundFeedbackEnabled && !audioDeviceService.isBluetoothOutputActive {
+                soundService.play(.recordingStarted, enabled: true)
+            }
             audioRecordingService.selectedDeviceID = audioDeviceService.selectedDeviceID
             try audioRecordingService.startRecording()
             if mediaPauseEnabled { mediaPlaybackService.pauseIfPlaying() }
@@ -478,6 +484,7 @@ final class DictationViewModel: ObservableObject {
                 "Recording started: immediateContextMs=\(String(format: "%.1f", immediateContextMs), privacy: .public), totalStartMs=\(String(format: "%.1f", totalStartMs), privacy: .public)"
             )
         } catch {
+            restorePreviewIfNeeded()
             metadataCaptureTask?.cancel()
             metadataCaptureTask = nil
             urlResolutionTask?.cancel()
@@ -846,6 +853,7 @@ final class DictationViewModel: ObservableObject {
     func registerInitialProfileHotkeys() { settingsHandler.registerInitialProfileHotkeys() }
 
     private func resetDictationState() {
+        restorePreviewIfNeeded()
         errorResetTask?.cancel()
         insertingResetTask?.cancel()
         insertingResetTask = nil
@@ -868,6 +876,12 @@ final class DictationViewModel: ObservableObject {
         actionFeedbackIcon = nil
         actionFeedbackIsError = false
         actionDisplayDuration = 3.5
+    }
+
+    private func restorePreviewIfNeeded() {
+        guard previewWasActiveBeforeRecording else { return }
+        previewWasActiveBeforeRecording = false
+        audioDeviceService.startPreview()
     }
 
     // MARK: - Shared Helpers

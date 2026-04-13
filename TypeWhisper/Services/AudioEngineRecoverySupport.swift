@@ -15,6 +15,8 @@ enum AudioEngineRecoveryPolicy {
     private static let retryableOSStatusCodes: Set<OSStatus> = [
         kAudioUnitErr_FormatNotSupported,
         kAudioUnitErr_InvalidElement,
+        // Seen during Bluetooth profile / route churn when CoreAudio asks us to retry.
+        35,
     ]
 
     static func isRetryable(error: Error) -> Bool {
@@ -33,6 +35,7 @@ enum AudioEngineRecoveryPolicy {
             || lowercasedDetail.contains("format mismatch")
             || lowercasedDetail.contains("error -10868")
             || lowercasedDetail.contains("error -10877")
+            || lowercasedDetail.contains("error 35")
     }
 
     static func extractOSStatus(from error: Error) -> OSStatus? {
@@ -44,6 +47,7 @@ enum AudioEngineRecoveryPolicy {
         let detail = nsError.localizedDescription
         if detail.contains("-10868") { return kAudioUnitErr_FormatNotSupported }
         if detail.contains("-10877") { return kAudioUnitErr_InvalidElement }
+        if detail.contains("error 35") { return 35 }
         return nil
     }
 }

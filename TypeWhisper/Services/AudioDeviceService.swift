@@ -35,6 +35,14 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         return audioDeviceID(fromUID: uid)
     }
 
+    /// Used to avoid start-sound playback while macOS is still stabilizing a Bluetooth output route.
+    var isBluetoothOutputActive: Bool {
+        guard let deviceID = defaultOutputDeviceID() else { return false }
+        guard let transportType = transportType(for: deviceID) else { return false }
+        return transportType == kAudioDeviceTransportTypeBluetooth
+            || transportType == kAudioDeviceTransportTypeBluetoothLE
+    }
+
     private var listenerBlock: AudioObjectPropertyListenerBlock?
     private var previewEngine: AVAudioEngine?
     private var previewConfigChangeObserver: NSObjectProtocol?
@@ -43,8 +51,10 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     private var disconnectVerificationTask: Task<Void, Never>?
     private let previewLock = NSLock()
     private let previewRecoveryQueue = DispatchQueue(label: "com.typewhisper.preview-recovery", qos: .userInitiated)
+    private let previewTeardownRetainer = DelayedReleaseRetainer<AVAudioEngine>(label: "com.typewhisper.preview-engine-teardown")
     private let previewRecoveryCoordinator = AudioEngineRecoveryCoordinator()
     private var activePreviewDeviceID: AudioDeviceID?
+    private static let previewTeardownRetentionInterval: TimeInterval = 0.3
 
     init() {
         selectedDeviceUID = UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedInputDeviceUID)
@@ -122,6 +132,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         }
         if let engine {
             teardownPreviewEngine(engine)
+            previewTeardownRetainer.retain(engine, for: Self.previewTeardownRetentionInterval)
         }
         isPreviewActive = false
         previewAudioLevel = 0
@@ -222,8 +233,25 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         preferredDeviceID: AudioDeviceID?,
         label: String
     ) throws {
+        let replacementEngine = AVAudioEngine()
+        let shouldReplace = previewLock.withLock { () -> Bool in
+            guard previewEngine === engine else { return false }
+            previewEngine = replacementEngine
+            activePreviewDeviceID = preferredDeviceID
+            return true
+        }
+        guard shouldReplace else { return }
+
+        installPreviewConfigurationObserver(for: replacementEngine)
         teardownPreviewEngine(engine)
-        try startPreviewEngineWithRecovery(engine, preferredDeviceID: preferredDeviceID, label: label)
+        previewTeardownRetainer.retain(engine, for: Self.previewTeardownRetentionInterval)
+
+        do {
+            try startPreviewEngineWithRecovery(replacementEngine, preferredDeviceID: preferredDeviceID, label: label)
+        } catch {
+            cleanupAfterFailedPreviewStart(replacementEngine)
+            throw error
+        }
     }
 
     private func configureAndStartPreviewEngine(
@@ -276,6 +304,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             }
         }
         teardownPreviewEngine(engine)
+        previewTeardownRetainer.retain(engine, for: Self.previewTeardownRetentionInterval)
         isPreviewActive = false
         previewAudioLevel = 0
         previewRawLevel = 0
@@ -376,6 +405,33 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     }
 
     private func isAggregateDevice(_ deviceID: AudioDeviceID) -> Bool {
+        guard let transportType = transportType(for: deviceID) else { return false }
+        return transportType == kAudioDeviceTransportTypeAggregate
+            || transportType == kAudioDeviceTransportTypeVirtual
+    }
+
+    private func defaultOutputDeviceID() -> AudioDeviceID? {
+        var deviceID = AudioDeviceID(0)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        let status = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            0, nil,
+            &size,
+            &deviceID
+        )
+
+        guard status == noErr, deviceID != 0 else { return nil }
+        return deviceID
+    }
+
+    private func transportType(for deviceID: AudioDeviceID) -> UInt32? {
         var transportType: UInt32 = 0
         var size = UInt32(MemoryLayout<UInt32>.size)
         var address = AudioObjectPropertyAddress(
@@ -384,9 +440,8 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             mElement: kAudioObjectPropertyElementMain
         )
         let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &transportType)
-        guard status == noErr else { return false }
-        return transportType == kAudioDeviceTransportTypeAggregate
-            || transportType == kAudioDeviceTransportTypeVirtual
+        guard status == noErr else { return nil }
+        return transportType
     }
 
     private func audioDeviceID(fromUID uid: String) -> AudioDeviceID? {
@@ -533,6 +588,26 @@ func setInputDevice(_ deviceID: AudioDeviceID, on engine: AVAudioEngine, label: 
 
     deviceHelperLogger.info("[\(label)] Input device set and verified: \(deviceID)")
     return true
+}
+
+func currentInputDeviceID(on engine: AVAudioEngine) -> AudioDeviceID? {
+    guard let audioUnit = engine.inputNode.audioUnit else {
+        return nil
+    }
+
+    var deviceID = AudioDeviceID(0)
+    var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+    let status = AudioUnitGetProperty(
+        audioUnit,
+        kAudioOutputUnitProperty_CurrentDevice,
+        kAudioUnitScope_Global,
+        0,
+        &deviceID,
+        &size
+    )
+
+    guard status == noErr, deviceID != 0 else { return nil }
+    return deviceID
 }
 
 private func audioStatusString(_ status: OSStatus) -> String {

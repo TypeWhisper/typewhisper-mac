@@ -32,6 +32,12 @@ final class DelayedReleaseRetainer<Object: AnyObject>: @unchecked Sendable {
 
 /// Captures microphone audio via AVAudioEngine and converts to 16kHz mono Float32 samples.
 final class AudioRecordingService: ObservableObject, @unchecked Sendable {
+    private struct InputConfigurationSnapshot {
+        let sampleRate: Double
+        let channelCount: AVAudioChannelCount
+        let deviceID: AudioDeviceID?
+    }
+
     enum StopPolicy {
         case immediate
         case finalizeShortSpeech(
@@ -94,6 +100,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private var _selectedDeviceID: AudioDeviceID?
+    private var startedInputConfiguration: InputConfigurationSnapshot?
 
     private var audioEngine: AVAudioEngine?
     private var configChangeObserver: NSObjectProtocol?
@@ -253,6 +260,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
         setLastStopGraceCaptureApplied(graceApplied)
         recoveryCoordinator.transitionToIdle()
+        configLock.withLock {
+            startedInputConfiguration = nil
+        }
 
         removeConfigurationObserver()
         teardownEngine(engine)
@@ -295,6 +305,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
         let engine: AVAudioEngine? = engineLock.withLock { audioEngine }
         guard isRecording, let engine else { return }
+
+        guard shouldRestartForConfigurationChange(using: engine) else {
+            logger.info("Audio engine configuration changed, but input configuration is unchanged. Skipping restart.")
+            return
+        }
 
         logger.warning("Audio engine configuration changed during recording, restarting engine")
 
@@ -350,8 +365,24 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private func restartEngineWithRecovery(_ engine: AVAudioEngine, label: String) throws {
+        let replacementEngine = AVAudioEngine()
+        let shouldReplace = engineLock.withLock { () -> Bool in
+            guard audioEngine === engine else { return false }
+            audioEngine = replacementEngine
+            return true
+        }
+        guard shouldReplace else { return }
+
+        installConfigurationObserver(for: replacementEngine)
         teardownEngine(engine)
-        try startEngineWithRecovery(engine, label: label)
+        engineTeardownRetainer.retain(engine, for: Self.engineTeardownRetentionInterval)
+
+        do {
+            try startEngineWithRecovery(replacementEngine, label: label)
+        } catch {
+            cleanupAfterFailedStart(replacementEngine)
+            throw error
+        }
     }
 
     private func configureAndStartEngine(_ engine: AVAudioEngine, label: String) throws {
@@ -392,6 +423,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let engineStartTime = CFAbsoluteTimeGetCurrent()
         do {
             try engine.start()
+            recordStartedInputConfiguration(for: engine, inputFormat: inputFormat)
             let elapsedMs = (CFAbsoluteTimeGetCurrent() - engineStartTime) * 1000
             logger.info("\(label, privacy: .public) audio engine started in \(String(format: "%.1f", elapsedMs), privacy: .public)ms")
         } catch {
@@ -409,6 +441,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private func cleanupAfterFailedStart(_ engine: AVAudioEngine) {
         recoveryCoordinator.transitionToIdle()
         removeConfigurationObserver()
+        configLock.withLock {
+            startedInputConfiguration = nil
+        }
         engineLock.withLock {
             if audioEngine === engine {
                 audioEngine = nil
@@ -502,5 +537,30 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let samples = sampleBuffer
         sampleBuffer.removeAll()
         return samples
+    }
+
+    private func recordStartedInputConfiguration(for engine: AVAudioEngine, inputFormat: AVAudioFormat) {
+        let actualDeviceID = currentInputDeviceID(on: engine) ?? selectedDeviceID
+        configLock.withLock {
+            startedInputConfiguration = InputConfigurationSnapshot(
+                sampleRate: inputFormat.sampleRate,
+                channelCount: inputFormat.channelCount,
+                deviceID: actualDeviceID
+            )
+        }
+    }
+
+    private func shouldRestartForConfigurationChange(using engine: AVAudioEngine) -> Bool {
+        let snapshot = configLock.withLock { startedInputConfiguration }
+        guard let snapshot else { return true }
+
+        let currentFormat = engine.inputNode.outputFormat(forBus: 0)
+        let currentDeviceID = currentInputDeviceID(on: engine) ?? selectedDeviceID
+
+        let sameSampleRate = currentFormat.sampleRate == snapshot.sampleRate
+        let sameChannelCount = currentFormat.channelCount == snapshot.channelCount
+        let sameDeviceID = currentDeviceID == snapshot.deviceID
+
+        return !(sameSampleRate && sameChannelCount && sameDeviceID)
     }
 }

@@ -6,16 +6,19 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
     func testRetryableErrorClassification_matchesKnownAudioUnitCodes() {
         let formatError = NSError(domain: NSOSStatusErrorDomain, code: Int(kAudioUnitErr_FormatNotSupported))
         let invalidElementError = NSError(domain: NSOSStatusErrorDomain, code: Int(kAudioUnitErr_InvalidElement))
+        let temporarilyUnavailableError = NSError(domain: NSOSStatusErrorDomain, code: 35)
         let permissionError = NSError(domain: NSOSStatusErrorDomain, code: Int(kAudioUnitErr_Unauthorized))
 
         XCTAssertTrue(AudioEngineRecoveryPolicy.isRetryable(error: formatError))
         XCTAssertTrue(AudioEngineRecoveryPolicy.isRetryable(error: invalidElementError))
+        XCTAssertTrue(AudioEngineRecoveryPolicy.isRetryable(error: temporarilyUnavailableError))
         XCTAssertFalse(AudioEngineRecoveryPolicy.isRetryable(error: permissionError))
     }
 
     func testRetryableErrorClassification_matchesKnownLogMessages() {
         XCTAssertTrue(AudioEngineRecoveryPolicy.isRetryable(detail: "Failed to create tap, config change pending!", osStatus: nil))
         XCTAssertTrue(AudioEngineRecoveryPolicy.isRetryable(detail: "Format mismatch: input hw 24000 Hz, client format 48000 Hz", osStatus: nil))
+        XCTAssertTrue(AudioEngineRecoveryPolicy.isRetryable(detail: "StartIO failed with error 35", osStatus: nil))
         XCTAssertFalse(AudioEngineRecoveryPolicy.isRetryable(detail: "Microphone permission denied", osStatus: nil))
     }
 
