@@ -114,6 +114,7 @@ final class PluginRegistryService: ObservableObject {
     private let registryURL = URL(string: "https://typewhisper.github.io/typewhisper-mac/plugins.json")!
     private let cacheDuration: TimeInterval = 300 // 5 minutes
     private static let lastUpdateCheckKey = "pluginRegistryLastUpdateCheck"
+    private let errorLogService: ErrorLogService?
 
     enum FetchState: Equatable {
         case idle
@@ -126,6 +127,17 @@ final class PluginRegistryService: ObservableObject {
         case downloading(Double)
         case extracting
         case error(String)
+    }
+
+    private enum InstallPhase {
+        case download
+        case extract
+        case validate
+        case load
+    }
+
+    init(errorLogService: ErrorLogService? = nil) {
+        self.errorLogService = errorLogService
     }
 
     // MARK: - Version Comparison
@@ -222,11 +234,12 @@ final class PluginRegistryService: ObservableObject {
 
     func downloadAndInstall(_ plugin: RegistryPlugin) async {
         guard let url = URL(string: plugin.downloadURL) else {
-            installStates[plugin.id] = .error("Invalid download URL")
+            recordInstallError("Invalid download URL", for: plugin)
             return
         }
 
         installStates[plugin.id] = .downloading(0)
+        var phase: InstallPhase = .download
 
         do {
             let delegate = DownloadProgressDelegate { [weak self] progress in
@@ -238,6 +251,7 @@ final class PluginRegistryService: ObservableObject {
             let (tempURL, _) = try await session.download(from: url)
 
             installStates[plugin.id] = .extracting
+            phase = .extract
 
             let tempDir = FileManager.default.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -257,29 +271,35 @@ final class PluginRegistryService: ObservableObject {
             process.waitUntilExit()
 
             guard process.terminationStatus == 0 else {
-                installStates[plugin.id] = .error("Failed to extract ZIP")
+                recordInstallError("Failed to extract ZIP", for: plugin)
                 return
             }
 
             // Find .bundle in extracted directory
             let extracted = try FileManager.default.contentsOfDirectory(at: extractDir, includingPropertiesForKeys: nil)
             guard let bundleURL = extracted.first(where: { $0.pathExtension == "bundle" }) else {
-                installStates[plugin.id] = .error("No .bundle found in ZIP")
+                recordInstallError("No .bundle found in ZIP", for: plugin)
                 return
             }
 
-            try installBundle(
+            phase = .validate
+            let installation = try prepareBundleInstallation(
                 at: bundleURL,
-                expectedPluginId: plugin.id,
-                copyBundle: false
+                expectedPluginId: plugin.id
             )
+            phase = .load
+            try installPreparedBundle(installation, from: bundleURL, copyBundle: false)
 
             installStates.removeValue(forKey: plugin.id)
             lastFetchDate = nil // invalidate cache so installInfo refreshes
             updateAvailableUpdatesCount()
             logger.info("Installed plugin \(plugin.id) v\(plugin.version)")
         } catch {
-            installStates[plugin.id] = .error(error.localizedDescription)
+            if phase != .load {
+                recordInstallError(error.localizedDescription, for: plugin)
+            } else {
+                installStates[plugin.id] = .error(error.localizedDescription)
+            }
             logger.error("Failed to install \(plugin.id): \(error.localizedDescription)")
         }
     }
@@ -310,7 +330,8 @@ final class PluginRegistryService: ObservableObject {
         let fm = FileManager.default
 
         if url.pathExtension == "bundle" {
-            try installBundle(at: url, expectedPluginId: nil, copyBundle: true)
+            let installation = try prepareBundleInstallation(at: url, expectedPluginId: nil)
+            try installPreparedBundle(installation, from: url, copyBundle: true)
         } else if url.pathExtension == "zip" {
             let tempDir = fm.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -334,12 +355,18 @@ final class PluginRegistryService: ObservableObject {
                               userInfo: [NSLocalizedDescriptionKey: "No .bundle found in ZIP"])
             }
 
-            try installBundle(at: bundleURL, expectedPluginId: nil, copyBundle: false)
+            let installation = try prepareBundleInstallation(at: bundleURL, expectedPluginId: nil)
+            try installPreparedBundle(installation, from: bundleURL, copyBundle: false)
         }
     }
 
-    private func installBundle(at bundleURL: URL, expectedPluginId: String?, copyBundle: Bool) throws {
-        let fm = FileManager.default
+    private struct BundleInstallation {
+        let manifest: PluginManifest
+        let existingLoadedBundleURL: URL?
+        let destinationURL: URL
+    }
+
+    private func prepareBundleInstallation(at bundleURL: URL, expectedPluginId: String?) throws -> BundleInstallation {
         let manifest = try readManifest(at: bundleURL)
         let existingLoadedBundleURL = PluginManager.shared.bundleURL(for: manifest.id)
 
@@ -358,6 +385,19 @@ final class PluginRegistryService: ObservableObject {
         } else {
             destinationURL = PluginManager.shared.pluginsDirectory.appendingPathComponent(bundleURL.lastPathComponent)
         }
+
+        return BundleInstallation(
+            manifest: manifest,
+            existingLoadedBundleURL: existingLoadedBundleURL,
+            destinationURL: destinationURL
+        )
+    }
+
+    private func installPreparedBundle(_ installation: BundleInstallation, from bundleURL: URL, copyBundle: Bool) throws {
+        let fm = FileManager.default
+        let manifest = installation.manifest
+        let existingLoadedBundleURL = installation.existingLoadedBundleURL
+        let destinationURL = installation.destinationURL
 
         let backupURL = destinationURL.deletingLastPathComponent()
             .appendingPathComponent("\(destinationURL.lastPathComponent).backup-\(UUID().uuidString)")
@@ -434,6 +474,14 @@ final class PluginRegistryService: ObservableObject {
             return String(format: "%.1fK", k)
         }
         return "\(count)"
+    }
+
+    private func recordInstallError(_ message: String, for plugin: RegistryPlugin) {
+        installStates[plugin.id] = .error(message)
+        errorLogService?.addEntry(
+            message: "Failed to install \(plugin.name): \(message)",
+            category: "plugins"
+        )
     }
 }
 
