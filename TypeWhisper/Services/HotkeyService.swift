@@ -79,7 +79,6 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
 
 /// Manages global hotkeys for dictation with three independent slots:
 /// hybrid (short=toggle, long=push-to-talk), push-to-talk, and toggle.
-@MainActor
 final class HotkeyService: ObservableObject {
     enum HotkeyEventSource: Sendable {
         case eventTap
@@ -330,15 +329,11 @@ final class HotkeyService: ObservableObject {
         }
 
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
-            Task { @MainActor [weak self] in
-                _ = self?.handleEvent(event, source: .monitor)
-            }
+            _ = self?.handleEvent(event, source: .monitor)
         }
 
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
-            Task { @MainActor [weak self] in
-                _ = self?.handleEvent(event, source: .monitor)
-            }
+            _ = self?.handleEvent(event, source: .monitor)
             return event
         }
     }
@@ -386,17 +381,13 @@ final class HotkeyService: ObservableObject {
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
 
         // @convention(c) callback - must not capture context. Uses userInfo to access HotkeyService.
-        // Runs on the main thread (tap is added to main run loop), so MainActor.assumeIsolated is safe.
+        // The tap source is attached to the main run loop, but this callback does not execute as a
+        // MainActor task. Avoid MainActor runtime assumptions and route through unsafe main-thread-only helpers.
         let callback: CGEventTapCallBack = { _, type, event, userInfo in
             if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
                 if let userInfo {
-                    MainActor.assumeIsolated {
-                        let service = Unmanaged<HotkeyService>.fromOpaque(userInfo).takeUnretainedValue()
-                        if let tap = service.eventTap {
-                            CGEvent.tapEnable(tap: tap, enable: true)
-                        }
-                        service.logger.warning("CGEventTap was disabled by system, re-enabling")
-                    }
+                    let service = Unmanaged<HotkeyService>.fromOpaque(userInfo).takeUnretainedValue()
+                    service.reenableEventTapAfterSystemDisable()
                 }
                 return Unmanaged.passUnretained(event)
             }
@@ -405,12 +396,8 @@ final class HotkeyService: ObservableObject {
                 return Unmanaged.passUnretained(event)
             }
 
-            let shouldSuppress: Bool = MainActor.assumeIsolated {
-                guard let nsEvent = NSEvent(cgEvent: event) else { return false }
-                let service = Unmanaged<HotkeyService>.fromOpaque(userInfo).takeUnretainedValue()
-                return service.handleEventTapEvent(nsEvent)
-            }
-
+            let service = Unmanaged<HotkeyService>.fromOpaque(userInfo).takeUnretainedValue()
+            let shouldSuppress = service.handleEventTapCallback(event)
             return shouldSuppress ? nil : Unmanaged.passUnretained(event)
         }
 
@@ -433,6 +420,18 @@ final class HotkeyService: ObservableObject {
         return true
     }
 
+    private func reenableEventTapAfterSystemDisable() {
+        if let tap = eventTap {
+            CGEvent.tapEnable(tap: tap, enable: true)
+        }
+        logger.warning("CGEventTap was disabled by system, re-enabling")
+    }
+
+    private func handleEventTapCallback(_ event: CGEvent) -> Bool {
+        guard let nsEvent = NSEvent(cgEvent: event) else { return false }
+        return handleEventTapEvent(nsEvent)
+    }
+
     /// Processes event for CGEventTap: matches hotkeys synchronously, dispatches handling asynchronously.
     /// Returns true if the event should be suppressed (consumed by TypeWhisper).
     private func handleEventTapEvent(_ event: NSEvent) -> Bool {
@@ -445,13 +444,7 @@ final class HotkeyService: ObservableObject {
     private func handleEvent(_ event: NSEvent, source: HotkeyEventSource) -> Bool {
         // Escape key cancels active recording/transcription
         if event.type == .keyDown && event.keyCode == 0x35 {
-            if source == .eventTap {
-                Task { @MainActor [weak self] in
-                    self?.onCancelPressed?()
-                }
-            } else {
-                onCancelPressed?()
-            }
+            onCancelPressed?()
             return false
         }
 
@@ -562,23 +555,17 @@ final class HotkeyService: ObservableObject {
             hotkey: hotkey,
             source: source
         ) {
-            if source == .eventTap {
-                Task { @MainActor [weak self] in self?.handleKeyDown(slotType: slotType) }
-            } else {
+            if source != .eventTap {
                 logFallbackMatchIfNeeded(hotkey: hotkey, source: source)
-                handleKeyDown(slotType: slotType)
             }
+            handleKeyDown(slotType: slotType)
         } else if keyUp, shouldDispatch(
             target: .slot(slotType),
             phase: .up,
             hotkey: hotkey,
             source: source
         ) {
-            if source == .eventTap {
-                Task { @MainActor [weak self] in self?.handleKeyUp(slotType: slotType) }
-            } else {
-                handleKeyUp(slotType: slotType)
-            }
+            handleKeyUp(slotType: slotType)
         }
     }
 
@@ -595,23 +582,17 @@ final class HotkeyService: ObservableObject {
             hotkey: hotkey,
             source: source
         ) {
-            if source == .eventTap {
-                Task { @MainActor [weak self] in self?.handleProfileKeyDown(profileId: profileId) }
-            } else {
+            if source != .eventTap {
                 logFallbackMatchIfNeeded(hotkey: hotkey, source: source)
-                handleProfileKeyDown(profileId: profileId)
             }
+            handleProfileKeyDown(profileId: profileId)
         } else if keyUp, shouldDispatch(
             target: .profile(profileId),
             phase: .up,
             hotkey: hotkey,
             source: source
         ) {
-            if source == .eventTap {
-                Task { @MainActor [weak self] in self?.handleProfileKeyUp(profileId: profileId) }
-            } else {
-                handleProfileKeyUp(profileId: profileId)
-            }
+            handleProfileKeyUp(profileId: profileId)
         }
     }
 
