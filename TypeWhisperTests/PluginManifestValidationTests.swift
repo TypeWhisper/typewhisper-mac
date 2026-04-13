@@ -31,6 +31,65 @@ final class PluginManifestValidationTests: XCTestCase {
     }
 }
 
+@MainActor
+final class PluginRegistryDestinationTests: XCTestCase {
+    func testFreshInstallTargetsPluginsDirectory() {
+        let pluginsDirectory = URL(fileURLWithPath: "/tmp/TypeWhisper-Dev/Plugins", isDirectory: true)
+
+        let destination = PluginRegistryService.resolveInstallDestinationURL(
+            currentURL: nil,
+            builtInPluginsURL: nil,
+            pluginsDirectory: pluginsDirectory,
+            incomingBundleName: "ParakeetPlugin.bundle"
+        )
+
+        XCTAssertEqual(destination, pluginsDirectory.appendingPathComponent("ParakeetPlugin.bundle"))
+    }
+
+    func testExistingBundleInsidePluginsDirectoryKeepsItsPath() {
+        let pluginsDirectory = URL(fileURLWithPath: "/tmp/TypeWhisper-Dev/Plugins", isDirectory: true)
+        let existingURL = pluginsDirectory.appendingPathComponent("CustomParakeet.bundle")
+
+        let destination = PluginRegistryService.resolveInstallDestinationURL(
+            currentURL: existingURL,
+            builtInPluginsURL: nil,
+            pluginsDirectory: pluginsDirectory,
+            incomingBundleName: "ParakeetPlugin.bundle"
+        )
+
+        XCTAssertEqual(destination, existingURL)
+    }
+
+    func testTemporaryLoadedBundleIsRehomedIntoPluginsDirectory() {
+        let pluginsDirectory = URL(fileURLWithPath: "/tmp/TypeWhisper-Dev/Plugins", isDirectory: true)
+        let temporaryURL = URL(fileURLWithPath: "/tmp/typewhisper-install/extracted/ParakeetPlugin.bundle", isDirectory: true)
+
+        let destination = PluginRegistryService.resolveInstallDestinationURL(
+            currentURL: temporaryURL,
+            builtInPluginsURL: nil,
+            pluginsDirectory: pluginsDirectory,
+            incomingBundleName: "ParakeetPlugin.bundle"
+        )
+
+        XCTAssertEqual(destination, pluginsDirectory.appendingPathComponent("ParakeetPlugin.bundle"))
+    }
+
+    func testBuiltInBundleIsRehomedIntoPluginsDirectory() {
+        let pluginsDirectory = URL(fileURLWithPath: "/tmp/TypeWhisper-Dev/Plugins", isDirectory: true)
+        let builtInPluginsURL = URL(fileURLWithPath: "/Applications/TypeWhisper.app/Contents/PlugIns", isDirectory: true)
+        let builtInURL = builtInPluginsURL.appendingPathComponent("ParakeetPlugin.bundle")
+
+        let destination = PluginRegistryService.resolveInstallDestinationURL(
+            currentURL: builtInURL,
+            builtInPluginsURL: builtInPluginsURL,
+            pluginsDirectory: pluginsDirectory,
+            incomingBundleName: "ParakeetPlugin.bundle"
+        )
+
+        XCTAssertEqual(destination, pluginsDirectory.appendingPathComponent("ParakeetPlugin.bundle"))
+    }
+}
+
 final class OpenAIPluginTokenParameterTests: XCTestCase {
     func testLegacyOpenAIModelsKeepMaxTokens() {
         XCTAssertEqual(OpenAIPlugin.outputTokenParameter(for: "gpt-4o"), "max_tokens")

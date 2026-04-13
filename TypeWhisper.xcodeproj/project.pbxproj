@@ -182,8 +182,8 @@
 			AA00000000000000000206 /* OverlayIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000195 /* OverlayIndicatorView.swift */; };
 			AA00000000000000000207 /* IndicatorCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000196 /* IndicatorCoordinator.swift */; };
 			AA00000000000000000208 /* SharedIndicatorComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000197 /* SharedIndicatorComponents.swift */; };
-			AA00000000000000000311 /* MinimalIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000309 /* MinimalIndicatorView.swift */; };
-			AA00000000000000000312 /* MinimalIndicatorPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000310 /* MinimalIndicatorPanel.swift */; };
+			AA00000000000000000321 /* MinimalIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000309 /* MinimalIndicatorView.swift */; };
+			AA00000000000000000322 /* MinimalIndicatorPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000310 /* MinimalIndicatorPanel.swift */; };
 			AA00000000000000000209 /* DeepgramPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000200 /* DeepgramPlugin.swift */; };
 		AA00000000000000000210 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000201 /* manifest.json */; };
 		AA00000000000000000211 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000202 /* Localizable.xcstrings */; };
@@ -2864,8 +2864,8 @@
 					AA00000000000000000125 /* HostServicesImpl.swift in Sources */,
 					AA00000000000000000205 /* OverlayIndicatorPanel.swift in Sources */,
 					AA00000000000000000206 /* OverlayIndicatorView.swift in Sources */,
-					AA00000000000000000312 /* MinimalIndicatorPanel.swift in Sources */,
-					AA00000000000000000311 /* MinimalIndicatorView.swift in Sources */,
+					AA00000000000000000322 /* MinimalIndicatorPanel.swift in Sources */,
+					AA00000000000000000321 /* MinimalIndicatorView.swift in Sources */,
 					AA00000000000000000208 /* SharedIndicatorComponents.swift in Sources */,
 					AA00000000000000000126 /* PostProcessingPipeline.swift in Sources */,
 				AA00000000000000000127 /* PluginSettingsView.swift in Sources */,
