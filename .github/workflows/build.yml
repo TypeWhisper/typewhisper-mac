@@ -30,9 +30,17 @@ jobs:
 
       - name: Resolve Swift packages
         run: |
-          xcodebuild -resolvePackageDependencies \
-            -project $PROJECT \
-            -scheme $SCHEME
+          for attempt in 1 2 3; do
+            echo "Attempt $attempt of 3"
+            if xcodebuild -resolvePackageDependencies \
+              -project $PROJECT \
+              -scheme $SCHEME; then
+              exit 0
+            fi
+            echo "Package resolution failed, retrying in 10s..."
+            sleep 10
+          done
+          exit 1
 
       - name: Build App
         run: |
@@ -94,9 +102,17 @@ jobs:
 
       - name: Resolve Swift packages
         run: |
-          xcodebuild -resolvePackageDependencies \
-            -project $PROJECT \
-            -scheme $SCHEME
+          for attempt in 1 2 3; do
+            echo "Attempt $attempt of 3"
+            if xcodebuild -resolvePackageDependencies \
+              -project $PROJECT \
+              -scheme $SCHEME; then
+              exit 0
+            fi
+            echo "Package resolution failed, retrying in 10s..."
+            sleep 10
+          done
+          exit 1
 
       - name: Run App Tests
         run: |
