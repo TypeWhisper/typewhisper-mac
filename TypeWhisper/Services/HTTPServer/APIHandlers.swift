@@ -31,6 +31,7 @@ final class APIHandlers: @unchecked Sendable {
         router.register("POST", "/v1/dictation/start", handler: handleStartDictation)
         router.register("POST", "/v1/dictation/stop", handler: handleStopDictation)
         router.register("GET", "/v1/dictation/status", handler: handleDictationStatus)
+        router.register("GET", "/v1/dictation/transcription", handler: handleDictationTranscription)
     }
 
     // MARK: - POST /v1/transcribe
@@ -430,10 +431,17 @@ final class APIHandlers: @unchecked Sendable {
             guard !dictationViewModel.isRecording else {
                 return .error(status: 409, message: "Already recording")
             }
-            dictationViewModel.apiStartRecording()
 
-            struct StartResponse: Encodable { let status: String }
-            return .json(StartResponse(status: "recording"))
+            let id = dictationViewModel.apiStartRecording()
+            if let session = dictationViewModel.apiDictationSession(id: id), session.status == .failed {
+                return .error(status: 409, message: session.error ?? "Failed to start dictation")
+            }
+
+            struct StartResponse: Encodable {
+                let id: String
+                let status: String
+            }
+            return .json(StartResponse(id: id.uuidString, status: "recording"))
         }
     }
 
@@ -445,10 +453,15 @@ final class APIHandlers: @unchecked Sendable {
             guard dictationViewModel.isRecording else {
                 return .error(status: 409, message: "Not recording")
             }
-            dictationViewModel.apiStopRecording()
+            guard let id = dictationViewModel.apiStopRecording() else {
+                return .error(status: 500, message: "Missing active dictation session")
+            }
 
-            struct StopResponse: Encodable { let status: String }
-            return .json(StopResponse(status: "stopped"))
+            struct StopResponse: Encodable {
+                let id: String
+                let status: String
+            }
+            return .json(StopResponse(id: id.uuidString, status: "stopped"))
         }
     }
 
@@ -459,6 +472,66 @@ final class APIHandlers: @unchecked Sendable {
         return await MainActor.run {
             struct DictationStatusResponse: Encodable { let is_recording: Bool }
             return .json(DictationStatusResponse(is_recording: dictationViewModel.isRecording))
+        }
+    }
+
+    // MARK: - GET /v1/dictation/transcription
+
+    private func handleDictationTranscription(_ request: HTTPRequest) async -> HTTPResponse {
+        guard let idString = request.queryParams["id"],
+              let uuid = UUID(uuidString: idString) else {
+            return .error(status: 400, message: "Missing or invalid 'id' query parameter")
+        }
+
+        let dictationViewModel = self.dictationViewModel
+        return await MainActor.run {
+            guard let session = dictationViewModel.apiDictationSession(id: uuid) else {
+                return .error(status: 404, message: "Dictation session not found")
+            }
+
+            struct DictationTranscriptionPayload: Encodable {
+                let text: String
+                let raw_text: String
+                let timestamp: Date
+                let app_name: String?
+                let app_bundle_id: String?
+                let app_url: String?
+                let duration: Double
+                let language: String?
+                let engine: String
+                let model: String?
+                let words_count: Int
+            }
+
+            struct DictationTranscriptionResponse: Encodable {
+                let id: String
+                let status: String
+                let transcription: DictationTranscriptionPayload?
+                let error: String?
+            }
+
+            let transcription = session.transcription.map {
+                DictationTranscriptionPayload(
+                    text: $0.text,
+                    raw_text: $0.rawText,
+                    timestamp: $0.timestamp,
+                    app_name: $0.appName,
+                    app_bundle_id: $0.appBundleIdentifier,
+                    app_url: $0.appURL,
+                    duration: $0.duration,
+                    language: $0.language,
+                    engine: $0.engine,
+                    model: $0.model,
+                    words_count: $0.wordsCount
+                )
+            }
+
+            return .json(DictationTranscriptionResponse(
+                id: session.id.uuidString,
+                status: session.status.rawValue,
+                transcription: transcription,
+                error: session.error
+            ))
         }
     }
 

@@ -246,14 +246,17 @@ curl -X PUT "http://localhost:8978/v1/profiles/toggle?id=<uuid>"
 ### Dictation Control
 
 ```bash
-# Start dictation
+# Start dictation (returns session id)
 curl -X POST http://localhost:8978/v1/dictation/start
 
-# Stop dictation
+# Stop dictation (returns same session id)
 curl -X POST http://localhost:8978/v1/dictation/stop
 
-# Check dictation status
+# Check whether dictation is currently recording
 curl http://localhost:8978/v1/dictation/status
+
+# Fetch status/result for a specific dictation session
+curl "http://localhost:8978/v1/dictation/transcription?id=<uuid>"
 ```
 
 ## CLI Tool

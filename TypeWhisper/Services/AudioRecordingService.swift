@@ -90,6 +90,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     var hasMicrophonePermissionOverride: Bool?
     var inputAvailabilityOverride: ((AudioDeviceID?) -> Bool)?
     var startRecordingOverride: (() throws -> Void)?
+    var stopRecordingOverride: ((StopPolicy) async -> [Float])?
 
     /// CoreAudio device ID to use for recording. nil = system default input.
     var selectedDeviceID: AudioDeviceID? {
@@ -236,6 +237,16 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     func stopRecording(policy: StopPolicy) async -> [Float] {
+        if let stopRecordingOverride {
+            let samples = await stopRecordingOverride(policy)
+            setLastStopGraceCaptureApplied(false)
+            DispatchQueue.main.async { [weak self] in
+                self?.isRecording = false
+                self?.audioLevel = 0
+            }
+            return samples
+        }
+
         // Atomically claim the engine - only the first concurrent caller proceeds
         let engine: AVAudioEngine? = engineLock.withLock {
             let e = audioEngine
