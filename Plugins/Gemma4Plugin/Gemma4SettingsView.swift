@@ -6,6 +6,7 @@ struct Gemma4SettingsView: View {
     private let bundle = Bundle(for: Gemma4Plugin.self)
     @State private var modelState: Gemma4ModelState = .notLoaded
     @State private var selectedModelId: String = ""
+    @State private var generationTemperature: Double = Gemma4Plugin.defaultGenerationTemperature
     @State private var isPolling = false
 
     private let pollTimer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
@@ -18,6 +19,36 @@ struct Gemma4SettingsView: View {
             Text("Local LLM powered by Google Gemma 4 on Apple Silicon. No API key required.", bundle: bundle)
                 .font(.callout)
                 .foregroundStyle(.secondary)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Generation", bundle: bundle)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+
+                HStack {
+                    Text("Temperature", bundle: bundle)
+                    Spacer()
+                    Text(generationTemperature, format: .number.precision(.fractionLength(2)))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                .font(.caption)
+
+                Slider(value: $generationTemperature, in: 0...1, step: 0.05)
+                    .onChange(of: generationTemperature) { _, newValue in
+                        plugin.setGenerationTemperature(newValue)
+                    }
+
+                HStack {
+                    Text("Precise", bundle: bundle)
+                    Spacer()
+                    Text("Creative", bundle: bundle)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
 
             Divider()
 
@@ -45,6 +76,7 @@ struct Gemma4SettingsView: View {
         .onAppear {
             modelState = plugin.modelState
             selectedModelId = plugin.selectedLLMModelId ?? Gemma4Plugin.availableModels.first?.id ?? ""
+            generationTemperature = plugin.generationTemperature
         }
         .task {
             if case .notLoaded = plugin.modelState {

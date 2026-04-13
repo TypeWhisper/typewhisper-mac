@@ -280,6 +280,8 @@
 		AA00000000000000000313 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000298 /* Localizable.xcstrings */; };
 		AA00000000000000000304 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000044 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000305 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000045 /* MLXLLM */; };
+		AA00000000000000000313 /* MLXVLM in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000047 /* MLXVLM */; };
+		AA00000000000000000314 /* Transformers in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000048 /* Transformers */; };
 		AA00000000000000000306 /* SpeechmaticsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000291 /* SpeechmaticsPlugin.swift */; };
 		AA00000000000000000307 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000292 /* manifest.json */; };
 		AA00000000000000000308 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000293 /* Localizable.xcstrings */; };
@@ -916,6 +918,8 @@
 			files = (
 				AA00000000000000000304 /* TypeWhisperPluginSDK in Frameworks */,
 				AA00000000000000000305 /* MLXLLM in Frameworks */,
+				AA00000000000000000313 /* MLXVLM in Frameworks */,
+				AA00000000000000000314 /* Transformers in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2313,6 +2317,8 @@
 			packageProductDependencies = (
 				PP00000000000000000044 /* TypeWhisperPluginSDK */,
 				PP00000000000000000045 /* MLXLLM */,
+				PP00000000000000000047 /* MLXVLM */,
+				PP00000000000000000048 /* Transformers */,
 			);
 			productName = Gemma4Plugin;
 			productReference = BB00000000000000000290 /* Gemma4Plugin.bundle */;
@@ -2394,6 +2400,7 @@
 				RR00000000000000000006 /* XCRemoteSwiftPackageReference "mlx-audio-swift" */,
 				RR00000000000000000007 /* XCRemoteSwiftPackageReference "mediaremote-adapter" */,
 				RR00000000000000000008 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
+				RR00000000000000000009 /* XCRemoteSwiftPackageReference "swift-transformers" */,
 			);
 			productRefGroup = CC00000000000000000090 /* Products */;
 			projectDirPath = "";
@@ -5333,8 +5340,16 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm.git";
 			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
+		RR00000000000000000009 /* XCRemoteSwiftPackageReference "swift-transformers" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/huggingface/swift-transformers.git";
+			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 2.30.6;
+				minimumVersion = 1.1.6;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -5519,6 +5534,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = RR00000000000000000008 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
 			productName = MLXLLM;
+		};
+		PP00000000000000000047 /* MLXVLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = RR00000000000000000008 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXVLM;
+		};
+		PP00000000000000000048 /* Transformers */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = RR00000000000000000009 /* XCRemoteSwiftPackageReference "swift-transformers" */;
+			productName = Transformers;
 		};
 		PP00000000000000000046 /* TypeWhisperPluginSDK */ = {
 			isa = XCSwiftPackageProductDependency;

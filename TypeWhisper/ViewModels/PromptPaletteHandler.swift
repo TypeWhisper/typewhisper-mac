@@ -123,6 +123,12 @@ final class PromptPaletteHandler {
                     )
                 } else {
                     logger.info("[PromptPalette] No text available, aborting")
+                    let message = "Please select or copy some text first."
+                    soundService.play(.error, enabled: soundFeedbackEnabled)
+                    self.accessibilityAnnouncementService.announceError(message)
+                    self.speechFeedbackService.announceEvent(.error(reason: message))
+                    self.onShowNotchFeedback?(message, "xmark.circle.fill", 2.5, true, "prompt")
+                    self.onShowError?(message)
                 }
             }
         }
