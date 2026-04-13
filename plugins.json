@@ -104,7 +104,7 @@
     {
       "id": "com.typewhisper.whisperkit",
       "name": "WhisperKit",
-      "version": "1.0.14",
+      "version": "1.0.15",
       "minHostVersion": "0.11",
       "author": "TypeWhisper",
       "description": "Local speech-to-text powered by WhisperKit. 7 model sizes, 99 languages, streaming support.",
@@ -112,8 +112,8 @@
         "de": "Lokale Spracherkennung mit WhisperKit. 7 Modellgr\u00f6ssen, 99 Sprachen, Streaming-Unterst\u00fctzung."
       },
       "category": "transcription",
-      "size": 2956753,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-whisperkit-v1.0.14/WhisperKitPlugin.zip",
+      "size": 2957877,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-whisperkit-v1.0.15/WhisperKitPlugin.zip",
       "iconSystemName": "waveform",
       "downloadCount": 2197
     },
