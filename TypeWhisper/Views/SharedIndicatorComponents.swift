@@ -216,10 +216,11 @@ struct IndicatorExpandableText: View {
             .frame(height: expanded ? sizing.textExpandedHeight : 0)
             .clipped()
             .onChange(of: text) {
-                proxy.scrollTo("bottom", anchor: .bottom)
+                withAnimation(nil) {
+                    proxy.scrollTo("bottom", anchor: .bottom)
+                }
             }
         }
-        .transaction { $0.disablesAnimations = true }
         .accessibilityLabel(String(localized: "Streaming text"))
         .accessibilityValue(text)
     }

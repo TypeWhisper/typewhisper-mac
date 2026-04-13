@@ -13,6 +13,8 @@
 		24FFE19AC026C48AE32BCD7C /* AppFormatterServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5852D6767C5FA955B84C52 /* AppFormatterServiceTests.swift */; };
 		C23000000000000000000001 /* OpenAIPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000139 /* OpenAIPlugin.swift */; };
 		2F4D6A8B0C1E3F5A7B9D2C4E /* DictationViewModelIndicatorSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F4D6A8B0C1E3F5A7B9D2C4F /* DictationViewModelIndicatorSettingsTests.swift */; };
+		E5A1B2C3D4F5061728394A5B /* NotchIndicatorLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5A1B2C3D4F5061728394A5C /* NotchIndicatorLayout.swift */; };
+		E5A1B2C3D4F5061728394A5D /* NotchIndicatorLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5A1B2C3D4F5061728394A5E /* NotchIndicatorLayoutTests.swift */; };
 		3A4B5C6D7E8F901234567890 /* AudioEngineRecoverySupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A4B5C6D7E8F901234567891 /* AudioEngineRecoverySupportTests.swift */; };
 		6A9D1EE0C163693B1A798779 /* HistoryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */; };
 		6C1F7A8B9D2E4F5061728394 /* SoundServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D2E4F50617283946C1F7A8B /* SoundServiceTests.swift */; };
@@ -570,6 +572,8 @@
 		E6D200DCDD6580F443C5CE0A /* APIRouterAndHandlersTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = APIRouterAndHandlersTests.swift; sourceTree = "<group>"; };
 		E6F8E5940EF4832A7B8D735D /* TypeWhisperTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TypeWhisperTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2F4D6A8B0C1E3F5A7B9D2C4F /* DictationViewModelIndicatorSettingsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictationViewModelIndicatorSettingsTests.swift; sourceTree = "<group>"; };
+		E5A1B2C3D4F5061728394A5C /* NotchIndicatorLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchIndicatorLayout.swift; sourceTree = "<group>"; };
+		E5A1B2C3D4F5061728394A5E /* NotchIndicatorLayoutTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotchIndicatorLayoutTests.swift; sourceTree = "<group>"; };
 		E808D246301E36546EEB811F /* TestSupport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
 		F41BD305007A3A158038C75C /* ProfileServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProfileServiceTests.swift; sourceTree = "<group>"; };
 		FD34FDF9D999D85DA1C35375 /* CLISupportTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CLISupportTests.swift; sourceTree = "<group>"; };
@@ -1111,6 +1115,7 @@
 				BB00000000000000000117 /* PromptActionsSettingsView.swift */,
 				BB00000000000000000118 /* PromptPalettePanel.swift */,
 				BB00000000000000000120 /* NotchIndicatorPanel.swift */,
+				E5A1B2C3D4F5061728394A5C /* NotchIndicatorLayout.swift */,
 				BB00000000000000000121 /* NotchIndicatorView.swift */,
 				BB00000000000000000122 /* NotchShape.swift */,
 				BB00000000000000000127 /* PluginSettingsView.swift */,
@@ -1589,6 +1594,7 @@
 				CE5852D6767C5FA955B84C52 /* AppFormatterServiceTests.swift */,
 				FD34FDF9D999D85DA1C35375 /* CLISupportTests.swift */,
 				2F4D6A8B0C1E3F5A7B9D2C4F /* DictationViewModelIndicatorSettingsTests.swift */,
+				E5A1B2C3D4F5061728394A5E /* NotchIndicatorLayoutTests.swift */,
 				AA8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift */,
 				D63A42880A0BA4C84F36E873 /* DictionaryServiceTests.swift */,
 				A8D4F2B6E1C3097B5F8A4E62 /* DictionaryExporterTests.swift */,
@@ -2684,6 +2690,7 @@
 				24FFE19AC026C48AE32BCD7C /* AppFormatterServiceTests.swift in Sources */,
 				7DADCC6E1AEA99CA48F83F50 /* CLISupportTests.swift in Sources */,
 				2F4D6A8B0C1E3F5A7B9D2C4E /* DictationViewModelIndicatorSettingsTests.swift in Sources */,
+				E5A1B2C3D4F5061728394A5D /* NotchIndicatorLayoutTests.swift in Sources */,
 				3A4B5C6D7E8F901234567890 /* AudioEngineRecoverySupportTests.swift in Sources */,
 				BB8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift in Sources */,
 				B4CC04DF94001FF7220789BC /* DictionaryServiceTests.swift in Sources */,
@@ -2769,6 +2776,7 @@
 				AA00000000000000000093 /* main.swift in Sources */,
 				AA00000000000000000119 /* UserDefaultsKeys.swift in Sources */,
 				AA00000000000000000120 /* NotchIndicatorPanel.swift in Sources */,
+				E5A1B2C3D4F5061728394A5B /* NotchIndicatorLayout.swift in Sources */,
 				AA00000000000000000121 /* NotchIndicatorView.swift in Sources */,
 				AA00000000000000000122 /* NotchShape.swift in Sources */,
 				AA00000000000000000095 /* WavEncoder.swift in Sources */,
