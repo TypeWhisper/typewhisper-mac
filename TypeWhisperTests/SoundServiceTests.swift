@@ -2,6 +2,26 @@ import XCTest
 @testable import TypeWhisper
 
 final class SoundServiceTests: XCTestCase {
+    func testSoundEventKeysHaveGermanLocalizationsInCatalog() throws {
+        XCTAssertEqual(SoundEvent.recordingStarted.displayName, "Recording started")
+        XCTAssertEqual(try localizedCatalogValue(for: "Recording started", language: "de"), "Aufnahme gestartet")
+
+        XCTAssertEqual(SoundEvent.transcriptionSuccess.displayName, "Transcription success")
+        XCTAssertEqual(try localizedCatalogValue(for: "Transcription success", language: "de"), "Transkription erfolgreich")
+    }
+
+    func testAccessibilityAndSpeechFeedbackKeysHaveGermanLocalizationsInCatalog() throws {
+        XCTAssertEqual(try localizedCatalogValue(for: "Recording started", language: "de"), "Aufnahme gestartet")
+        XCTAssertEqual(try localizedCatalogValue(for: "Prompt complete", language: "de"), "Prompt abgeschlossen")
+        XCTAssertEqual(try localizedCatalogValue(for: "Processing prompt", language: "de"), "Verarbeite Prompt")
+        XCTAssertEqual(try localizedCatalogValue(for: "Processing prompt: %@", language: "de"), "Verarbeite Prompt: %@")
+        XCTAssertEqual(try localizedCatalogValue(for: "Error: %@", language: "de"), "Fehler: %@")
+        XCTAssertEqual(
+            try localizedCatalogValue(for: "Transcription complete, %lld words", language: "de"),
+            "Transkription abgeschlossen, %lld Wörter"
+        )
+    }
+
     @MainActor
     func testSoundResolutionCachesImportedCustomSounds() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
@@ -71,5 +91,16 @@ final class SoundServiceTests: XCTestCase {
                 UserDefaults.standard.removeObject(forKey: key)
             }
         }
+    }
+
+    private func localizedCatalogValue(for key: String, language: String) throws -> String {
+        let data = try Data(contentsOf: TestSupport.repoRoot.appendingPathComponent("TypeWhisper/Resources/Localizable.xcstrings"))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let strings = try XCTUnwrap(object["strings"] as? [String: Any])
+        let entry = try XCTUnwrap(strings[key] as? [String: Any], "Missing catalog entry for key: \(key)")
+        let localizations = try XCTUnwrap(entry["localizations"] as? [String: Any], "Missing localizations for key: \(key)")
+        let languageEntry = try XCTUnwrap(localizations[language] as? [String: Any], "Missing \(language) localization for key: \(key)")
+        let stringUnit = try XCTUnwrap(languageEntry["stringUnit"] as? [String: Any], "Missing stringUnit for key: \(key)")
+        return try XCTUnwrap(stringUnit["value"] as? String, "Missing localized value for key: \(key)")
     }
 }
