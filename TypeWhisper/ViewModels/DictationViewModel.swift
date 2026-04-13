@@ -50,6 +50,9 @@ final class DictationViewModel: ObservableObject {
     @Published var preserveClipboard: Bool {
         didSet { UserDefaults.standard.set(preserveClipboard, forKey: UserDefaultsKeys.preserveClipboard) }
     }
+    @Published var copyFinalTextToClipboard: Bool {
+        didSet { UserDefaults.standard.set(copyFinalTextToClipboard, forKey: UserDefaultsKeys.copyFinalTextToClipboard) }
+    }
     @Published var mediaPauseEnabled: Bool {
         didSet { UserDefaults.standard.set(mediaPauseEnabled, forKey: UserDefaultsKeys.mediaPauseEnabled) }
     }
@@ -202,6 +205,7 @@ final class DictationViewModel: ObservableObject {
         self.audioDuckingLevel = UserDefaults.standard.object(forKey: UserDefaultsKeys.audioDuckingLevel) as? Double ?? 0.2
         self.soundFeedbackEnabled = UserDefaults.standard.object(forKey: UserDefaultsKeys.soundFeedbackEnabled) as? Bool ?? true
         self.indicatorTranscriptPreviewEnabled = Self.loadIndicatorTranscriptPreviewEnabled()
+        self.copyFinalTextToClipboard = UserDefaults.standard.bool(forKey: UserDefaultsKeys.copyFinalTextToClipboard)
         self.preserveClipboard = UserDefaults.standard.bool(forKey: UserDefaultsKeys.preserveClipboard)
         self.mediaPauseEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.mediaPauseEnabled)
         self.spokenFeedbackEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.spokenFeedbackEnabled)
@@ -750,16 +754,24 @@ final class DictationViewModel: ObservableObject {
                         activeApp: activeApp, language: language, originalText: result.text
                     )
                 } else {
-                    _ = try await textInsertionService.insertText(
+                    let insertionResult = try await textInsertionService.insertText(
                         text,
+                        copyToClipboard: copyFinalTextToClipboard,
                         preserveClipboard: preserveClipboard,
                         autoEnter: self.matchedProfile?.autoEnterEnabled == true
                     )
-                    EventBus.shared.emit(.textInserted(TextInsertedPayload(
-                        text: text,
-                        appName: activeApp.name,
-                        bundleIdentifier: activeApp.bundleId
-                    )))
+                    if insertionResult == .pasted {
+                        EventBus.shared.emit(.textInserted(TextInsertedPayload(
+                            text: text,
+                            appName: activeApp.name,
+                            bundleIdentifier: activeApp.bundleId
+                        )))
+                    } else {
+                        actionFeedbackMessage = String(localized: "Copied to clipboard")
+                        actionFeedbackIcon = "doc.on.clipboard.fill"
+                        actionFeedbackIsError = false
+                        actionDisplayDuration = 2.5
+                    }
                 }
 
                 let modelDisplayName = modelManager.resolvedModelDisplayName(

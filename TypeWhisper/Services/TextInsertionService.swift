@@ -10,16 +10,28 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhis
 /// Inserts transcribed text into the active application via clipboard + simulated Cmd+V.
 @MainActor
 final class TextInsertionService {
+    private let syntheticPastePreferredBundleIdentifiers: Set<String> = [
+        "com.apple.Terminal",
+        "com.googlecode.iterm2",
+        "com.github.wez.wezterm",
+        "dev.warp.Warp-Stable",
+        "dev.warp.WarpPreview",
+        "com.mitchellh.ghostty"
+    ]
+
     var accessibilityGrantedOverride: Bool?
+    var remoteSessionOverride: Bool?
     var pasteboardProvider: () -> NSPasteboard = { .general }
     var focusedTextFieldOverride: (() -> Bool)?
     var pasteSimulatorOverride: (() -> Void)?
     var returnSimulatorOverride: (() -> Void)?
     var captureActiveAppOverride: (() -> (name: String?, bundleId: String?, url: String?))?
     var selectedTextOverride: (() -> String?)?
+    var directInsertOverride: ((String) -> Bool)?
 
-enum InsertionResult {
+    enum InsertionResult {
         case pasted
+        case copiedOnly
     }
 
     enum TextInsertionError: LocalizedError {
@@ -38,6 +50,25 @@ enum InsertionResult {
 
     var isAccessibilityGranted: Bool {
         accessibilityGrantedOverride ?? AXIsProcessTrusted()
+    }
+
+    func isRemoteSession() -> Bool {
+        if let remoteSessionOverride {
+            return remoteSessionOverride
+        }
+
+        if let sessionDictionary = CGSessionCopyCurrentDictionary() as? [String: Any] {
+            let onConsole = (sessionDictionary["kCGSSessionOnConsoleKey"] as? Int ?? 1) != 0
+            if !onConsole {
+                return true
+            }
+        }
+
+        return NSScreen.screens.contains { screen in
+            let name = screen.localizedName.lowercased()
+            return name.contains("screen sharing")
+                || (name.contains("virtual display") && name.contains("sharing"))
+        }
     }
 
     func requestAccessibilityPermission() {
@@ -345,6 +376,7 @@ enum InsertionResult {
 
     func insertText(
         _ text: String,
+        copyToClipboard: Bool = false,
         preserveClipboard: Bool = false,
         autoEnter: Bool = false
     ) async throws -> InsertionResult {
@@ -355,24 +387,61 @@ enum InsertionResult {
         let hadFocusedTextField = autoEnter && hasFocusedTextField()
         let pasteboard = pasteboardProvider()
         let savedItems = preserveClipboard ? saveClipboard(from: pasteboard) : []
+        let remoteSession = isRemoteSession()
+        let preferSyntheticPaste = !remoteSession && shouldPreferSyntheticPasteForFrontmostApp()
+        let insertionResult: InsertionResult
 
-        // Set transcribed text on clipboard and simulate Cmd+V.
-        // Text stays on clipboard as fallback if no text field is focused.
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
-        simulatePaste()
+        if copyToClipboard {
+            copyTextToClipboard(text, to: pasteboard)
+        }
 
-        if preserveClipboard {
+        if !preferSyntheticPaste && insertTextDirectly(text) {
+            insertionResult = .pasted
+        } else if remoteSession {
+            if !copyToClipboard {
+                copyTextToClipboard(text, to: pasteboard)
+            }
+            insertionResult = .copiedOnly
+        } else {
+            // Set transcribed text on clipboard and simulate Cmd+V.
+            // Text stays on clipboard as fallback if no text field is focused.
+            if !copyToClipboard {
+                copyTextToClipboard(text, to: pasteboard)
+            }
+            simulatePaste()
+            insertionResult = .pasted
+        }
+
+        if preserveClipboard && insertionResult == .pasted && !copyToClipboard {
             try? await Task.sleep(for: .milliseconds(200))
             restoreClipboard(savedItems, to: pasteboard)
         }
 
-        if hadFocusedTextField {
+        if hadFocusedTextField && insertionResult == .pasted && !remoteSession {
             try? await Task.sleep(for: .milliseconds(50))
             simulateReturn()
         }
 
-        return .pasted
+        return insertionResult
+    }
+
+    func copyTextToClipboard(_ text: String, to pasteboard: NSPasteboard = .general) {
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+    }
+
+    private func insertTextDirectly(_ text: String) -> Bool {
+        if let directInsertOverride {
+            return directInsertOverride(text)
+        }
+
+        guard let element = getFocusedTextElement() else { return false }
+        return insertTextAt(element: element, text: text)
+    }
+
+    private func shouldPreferSyntheticPasteForFrontmostApp() -> Bool {
+        guard let bundleId = captureActiveApp().bundleId else { return false }
+        return syntheticPastePreferredBundleIdentifiers.contains(bundleId)
     }
 
     func focusedElementPosition() -> CGPoint? {

@@ -314,6 +314,12 @@ struct RecordingSettingsView: View {
             }
 
             Section(String(localized: "Clipboard")) {
+                Toggle(String(localized: "Copy final transcription to clipboard"), isOn: $dictation.copyFinalTextToClipboard)
+
+                Text(String(localized: "Always puts the final transcription on your clipboard before any insertion attempt. Useful for remote sessions like Screen Sharing. Overrides clipboard preservation for the new transcription."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 Toggle(String(localized: "Preserve clipboard content"), isOn: $dictation.preserveClipboard)
 
                 Text(String(localized: "Restores your clipboard after text insertion. Without this, your clipboard contains the transcribed text after dictation."))
