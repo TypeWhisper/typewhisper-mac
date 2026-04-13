@@ -32,7 +32,7 @@ struct SettingsView: View {
             SettingsDestination(tab: .history, title: String(localized: "History"), systemImage: "clock.arrow.circlepath", badge: nil),
             SettingsDestination(tab: .dictionary, title: String(localized: "Dictionary"), systemImage: "book.closed", badge: nil),
             SettingsDestination(tab: .snippets, title: String(localized: "Snippets"), systemImage: "text.badge.plus", badge: nil),
-            SettingsDestination(tab: .profiles, title: "Regeln", systemImage: "point.3.connected.trianglepath.dotted", badge: nil),
+            SettingsDestination(tab: .profiles, title: localizedAppText("Rules", de: "Regeln"), systemImage: "point.3.connected.trianglepath.dotted", badge: nil),
             SettingsDestination(tab: .prompts, title: String(localized: "Prompts"), systemImage: "sparkles", badge: nil),
             SettingsDestination(
                 tab: .integrations,

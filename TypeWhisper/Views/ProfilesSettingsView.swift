@@ -38,11 +38,14 @@ struct ProfilesSettingsView: View {
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Regeln")
+                Text(localizedAppText("Rules", de: "Regeln"))
                     .font(.headline)
-                Text("Wenn Kontext X erkannt wird, nutzt TypeWhisper Verhalten Y.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                Text(localizedAppText(
+                    "When context X is detected, TypeWhisper uses behavior Y.",
+                    de: "Wenn Kontext X erkannt wird, nutzt TypeWhisper Verhalten Y."
+                ))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
             }
 
             Spacer()
@@ -50,7 +53,7 @@ struct ProfilesSettingsView: View {
             Button {
                 viewModel.prepareNewProfile()
             } label: {
-                Label("Neue Regel", systemImage: "plus")
+                Label(localizedAppText("New Rule", de: "Neue Regel"), systemImage: "plus")
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
@@ -61,15 +64,21 @@ struct ProfilesSettingsView: View {
 
     private var emptyState: some View {
         ContentUnavailableView {
-            Label("Noch keine Regeln", systemImage: "point.3.connected.trianglepath.dotted")
+            Label(localizedAppText("No Rules Yet", de: "Noch keine Regeln"), systemImage: "point.3.connected.trianglepath.dotted")
         } description: {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Regeln erklären TypeWhisper, wann welche Sprache, Engine oder Ausgabeform gelten soll.")
-                Text("Beispiele: Slack -> Englisch mit Auto Enter, github.com -> Code-Prompt, Mail -> Deutsch mit Übersetzung.")
+                Text(localizedAppText(
+                    "Rules tell TypeWhisper which language, engine, or output format should apply in which context.",
+                    de: "Regeln erklären TypeWhisper, wann welche Sprache, Engine oder Ausgabeform gelten soll."
+                ))
+                Text(localizedAppText(
+                    "Examples: Slack -> English with Auto Enter, github.com -> code prompt, Mail -> German with translation.",
+                    de: "Beispiele: Slack -> Englisch mit Auto Enter, github.com -> Code-Prompt, Mail -> Deutsch mit Übersetzung."
+                ))
             }
             .frame(maxWidth: 420, alignment: .leading)
         } actions: {
-            Button("Erste Regel erstellen") {
+            Button(localizedAppText("Create First Rule", de: "Erste Regel erstellen")) {
                 viewModel.prepareNewProfile()
             }
             .buttonStyle(.borderedProminent)
@@ -106,7 +115,7 @@ private struct ActiveRuleBanner: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Aktive Regel")
+            Text(localizedAppText("Active Rule", de: "Aktive Regel"))
                 .font(.headline)
 
             HStack(alignment: .top, spacing: 10) {
@@ -230,13 +239,16 @@ private struct RuleRow: View {
         } isTargeted: { targeted in
             isDropTargeted = targeted
         }
-        .alert("Regel löschen?", isPresented: $showingDeleteConfirmation) {
-            Button("Löschen", role: .destructive) {
+        .alert(localizedAppText("Delete rule?", de: "Regel löschen?"), isPresented: $showingDeleteConfirmation) {
+            Button(localizedAppText("Delete", de: "Löschen"), role: .destructive) {
                 viewModel.deleteProfile(profile)
             }
-            Button("Abbrechen", role: .cancel) {}
+            Button(localizedAppText("Cancel", de: "Abbrechen"), role: .cancel) {}
         } message: {
-            Text("Möchtest du „\(profile.name)“ wirklich löschen?")
+            Text(localizedAppText(
+                "Do you really want to delete “\(profile.name)”?",
+                de: "Möchtest du „\(profile.name)“ wirklich löschen?"
+            ))
         }
     }
 
@@ -266,7 +278,7 @@ private struct RuleRow: View {
             .onLongPressGesture(minimumDuration: 0, maximumDistance: .infinity) {} onPressingChanged: { isPressing in
                 isPressingReorderHandle = isPressing
             }
-            .help("Reihenfolge per Drag & Drop ändern")
+            .help(localizedAppText("Change order via drag and drop", de: "Reihenfolge per Drag & Drop ändern"))
     }
 }
 
@@ -310,23 +322,38 @@ private struct RuleEditorSheet: View {
     private var header: some View {
         HStack(alignment: .top, spacing: 16) {
             VStack(alignment: .leading, spacing: 10) {
-                infoChip(viewModel.editingProfile == nil ? "Regel-Wizard" : "Regel anpassen", tint: .accentColor)
+                infoChip(
+                    viewModel.editingProfile == nil
+                        ? localizedAppText("Rule Wizard", de: "Regel-Wizard")
+                        : localizedAppText("Adjust Rule", de: "Regel anpassen"),
+                    tint: .accentColor
+                )
 
-                Text(viewModel.editingProfile == nil ? "Neue Regel" : "Regel bearbeiten")
-                    .font(.title2.weight(.semibold))
+                Text(
+                    viewModel.editingProfile == nil
+                        ? localizedAppText("New Rule", de: "Neue Regel")
+                        : localizedAppText("Edit Rule", de: "Regel bearbeiten")
+                )
+                .font(.title2.weight(.semibold))
 
-                Text("Von Kontext zu Verhalten in drei klaren Schritten.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                Text(localizedAppText(
+                    "From context to behavior in three clear steps.",
+                    de: "Von Kontext zu Verhalten in drei klaren Schritten."
+                ))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
             }
 
             Spacer()
 
             VStack(alignment: .trailing, spacing: 10) {
-                infoChip("Schritt \(currentStepNumber) von \(totalSteps)", tint: .orange)
+                infoChip(
+                    localizedAppText("Step \(currentStepNumber) of \(totalSteps)", de: "Schritt \(currentStepNumber) von \(totalSteps)"),
+                    tint: .orange
+                )
 
                 if viewModel.editorStep == .review {
-                    Toggle("Aktiv", isOn: $viewModel.editorIsEnabled)
+                    Toggle(localizedAppText("Active", de: "Aktiv"), isOn: $viewModel.editorIsEnabled)
                         .toggleStyle(.switch)
                 }
             }
@@ -337,7 +364,7 @@ private struct RuleEditorSheet: View {
     private var footer: some View {
         HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Schritt \(currentStepNumber) von \(totalSteps)")
+                Text(localizedAppText("Step \(currentStepNumber) of \(totalSteps)", de: "Schritt \(currentStepNumber) von \(totalSteps)"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Text(stepGuidance)
@@ -347,28 +374,28 @@ private struct RuleEditorSheet: View {
 
             Spacer()
 
-            Button("Abbrechen") {
+            Button(localizedAppText("Cancel", de: "Abbrechen")) {
                 dismiss()
             }
             .buttonStyle(.plain)
             .keyboardShortcut(.cancelAction)
 
             if viewModel.editorStep != .scope {
-                Button("Zurück") {
+                Button(localizedAppText("Back", de: "Zurück")) {
                     viewModel.goToPreviousStep()
                 }
                 .buttonStyle(.bordered)
             }
 
             if viewModel.editorStep == .review {
-                Button("Regel speichern") {
+                Button(localizedAppText("Save Rule", de: "Regel speichern")) {
                     viewModel.saveProfile()
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
             } else {
-                Button("Weiter") {
+                Button(localizedAppText("Next", de: "Weiter")) {
                     viewModel.goToNextStep()
                 }
                 .buttonStyle(.borderedProminent)
@@ -389,12 +416,12 @@ private struct RuleEditorSheet: View {
         switch viewModel.editorStep {
         case .scope:
             return viewModel.canAdvanceFromCurrentStep
-                ? "Kontext steht. Du kannst jetzt das Verhalten festlegen."
-                : "Wähle mindestens eine App oder Website, damit die Regel automatisch greifen kann."
+                ? localizedAppText("Context is set. You can define the behavior now.", de: "Kontext steht. Du kannst jetzt das Verhalten festlegen.")
+                : localizedAppText("Select at least one app or website so the rule can apply automatically.", de: "Wähle mindestens eine App oder Website, damit die Regel automatisch greifen kann.")
         case .behavior:
-            return "Lege fest, wie TypeWhisper in diesem Kontext reagieren soll."
+            return localizedAppText("Define how TypeWhisper should respond in this context.", de: "Lege fest, wie TypeWhisper in diesem Kontext reagieren soll.")
         case .review:
-            return "Prüfe Name, Matching und fortgeschrittene Optionen vor dem Speichern."
+            return localizedAppText("Review the name, matching, and advanced options before saving.", de: "Prüfe Name, Matching und fortgeschrittene Optionen vor dem Speichern.")
         }
     }
 
@@ -497,22 +524,25 @@ private struct RuleScopeStep: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Wo gilt diese Regel?")
+                Text(localizedAppText("Where should this rule apply?", de: "Wo gilt diese Regel?"))
                     .font(.title3.weight(.semibold))
-                Text("Wähle mindestens eine App oder Website. Beides zusammen ergibt die spezifischste Regel.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                Text(localizedAppText(
+                    "Choose at least one app or website. Combining both creates the most specific rule.",
+                    de: "Wähle mindestens eine App oder Website. Beides zusammen ergibt die spezifischste Regel."
+                ))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
             }
 
             card(
-                title: "Apps",
-                description: "Wähle die Apps, in denen diese Regel automatisch greifen darf.",
+                title: localizedAppText("Apps", de: "Apps"),
+                description: localizedAppText("Choose the apps where this rule may apply automatically.", de: "Wähle die Apps, in denen diese Regel automatisch greifen darf."),
                 icon: "square.stack.3d.up.fill",
                 tint: .blue
             ) {
                 VStack(alignment: .leading, spacing: 14) {
                     if viewModel.editorBundleIdentifiers.isEmpty {
-                        Text("Keine Apps ausgewählt.")
+                        Text(localizedAppText("No apps selected.", de: "Keine Apps ausgewählt."))
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(viewModel.editorBundleIdentifiers, id: \.self) { bundleId in
@@ -542,7 +572,7 @@ private struct RuleScopeStep: View {
                         }
                     }
 
-                    Button("Apps auswählen…") {
+                    Button(localizedAppText("Select Apps…", de: "Apps auswählen…")) {
                         viewModel.appSearchQuery = ""
                         viewModel.showingAppPicker = true
                     }
@@ -555,22 +585,31 @@ private struct RuleScopeStep: View {
 
     private var websiteToggleTitle: String {
         if let appName = viewModel.editorRelevantBrowserName {
-            return "Website in \(appName) eingrenzen"
+            return localizedAppText("Limit website in \(appName)", de: "Website in \(appName) eingrenzen")
         }
 
-        return "Optional: auf eine Website eingrenzen"
+        return localizedAppText("Optional: limit to a website", de: "Optional: auf eine Website eingrenzen")
     }
 
     private var websiteToggleDescription: String {
         if let detectedDomain = viewModel.editorDetectedDomain, viewModel.editorDetectedIsSupportedBrowser {
-            return "Aktuell erkannt: \(detectedDomain). Die Regel kann damit auf eine konkrete Seite oder Domain begrenzt werden."
+            return localizedAppText(
+                "Currently detected: \(detectedDomain). This lets you limit the rule to a specific page or domain.",
+                de: "Aktuell erkannt: \(detectedDomain). Die Regel kann damit auf eine konkrete Seite oder Domain begrenzt werden."
+            )
         }
 
         if let appName = viewModel.editorRelevantBrowserName {
-            return "\(appName) ist als Browser gewählt. Ergänze hier optional eine Domain, wenn die Regel nicht für alle Seiten gelten soll."
+            return localizedAppText(
+                "\(appName) is selected as the browser. Optionally add a domain here if the rule should not apply to every page.",
+                de: "\(appName) ist als Browser gewählt. Ergänze hier optional eine Domain, wenn die Regel nicht für alle Seiten gelten soll."
+            )
         }
 
-        return "Domains sind nur nötig, wenn die Regel nicht für die ganze App, sondern nur für bestimmte Seiten gelten soll."
+        return localizedAppText(
+            "Domains are only needed if the rule should apply to specific pages instead of the entire app.",
+            de: "Domains sind nur nötig, wenn die Regel nicht für die ganze App, sondern nur für bestimmte Seiten gelten soll."
+        )
     }
 
     private var websiteScopeSection: some View {
@@ -632,7 +671,7 @@ private struct RuleScopeStep: View {
             if let detectedDomain = viewModel.editorDetectedDomain, viewModel.editorDetectedIsSupportedBrowser {
                 HStack(alignment: .top, spacing: 12) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Aktuelle Website")
+                        Text(localizedAppText("Current Website", de: "Aktuelle Website"))
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
 
@@ -652,7 +691,7 @@ private struct RuleScopeStep: View {
                     Spacer()
 
                     if !viewModel.editorUrlPatterns.contains(detectedDomain) {
-                        Button("Domain übernehmen") {
+                        Button(localizedAppText("Use Domain", de: "Domain übernehmen")) {
                             viewModel.addDetectedDomainToEditor()
                         }
                         .buttonStyle(.borderedProminent)
@@ -664,7 +703,7 @@ private struct RuleScopeStep: View {
 
             VStack(alignment: .leading, spacing: 14) {
                 if viewModel.editorUrlPatterns.isEmpty {
-                    Text("Keine Websites ausgewählt.")
+                    Text(localizedAppText("No websites selected.", de: "Keine Websites ausgewählt."))
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(viewModel.editorUrlPatterns, id: \.self) { pattern in
@@ -687,7 +726,7 @@ private struct RuleScopeStep: View {
                 }
 
                 HStack {
-                    TextField("z. B. github.com", text: $viewModel.urlPatternInput)
+                    TextField(localizedAppText("e.g. github.com", de: "z. B. github.com"), text: $viewModel.urlPatternInput)
                         .textFieldStyle(.roundedBorder)
                         .onSubmit {
                             viewModel.addUrlPattern()
@@ -696,7 +735,7 @@ private struct RuleScopeStep: View {
                             viewModel.filterDomainSuggestions()
                         }
 
-                    Button("Hinzufügen") {
+                    Button(localizedAppText("Add", de: "Hinzufügen")) {
                         viewModel.addUrlPattern()
                     }
                     .buttonStyle(.borderedProminent)
@@ -725,9 +764,12 @@ private struct RuleScopeStep: View {
                     .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
 
-                Text("Subdomains werden automatisch mit eingeschlossen. `google.com` matcht also auch `docs.google.com`.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(localizedAppText(
+                    "Subdomains are included automatically. `google.com` also matches `docs.google.com`.",
+                    de: "Subdomains werden automatisch mit eingeschlossen. `google.com` matcht also auch `docs.google.com`."
+                ))
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
         }
     }
@@ -739,28 +781,31 @@ private struct RuleBehaviorStep: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Wie soll TypeWhisper reagieren?")
+                Text(localizedAppText("How should TypeWhisper respond?", de: "Wie soll TypeWhisper reagieren?"))
                     .font(.title3.weight(.semibold))
-                Text("Hier legst du Sprache, Prompt, Engine und Ausgabe für diesen Kontext fest. Priorität und manuelle Übersteuerung folgen erst im nächsten Schritt.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                Text(localizedAppText(
+                    "Here you define language, prompt, engine, and output for this context. Priority and manual override come in the next step.",
+                    de: "Hier legst du Sprache, Prompt, Engine und Ausgabe für diesen Kontext fest. Priorität und manuelle Übersteuerung folgen erst im nächsten Schritt."
+                ))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
             }
 
             card(
-                title: "Sprache & Umwandlung",
-                description: "Wie gesprochener Text verstanden und optional weiterverarbeitet wird.",
+                title: localizedAppText("Language & Transformation", de: "Sprache & Umwandlung"),
+                description: localizedAppText("How spoken text is understood and optionally processed further.", de: "Wie gesprochener Text verstanden und optional weiterverarbeitet wird."),
                 icon: "waveform.badge.mic",
                 tint: .accentColor
             ) {
                 VStack(spacing: 0) {
                     settingRow(
-                        title: "Gesprochene Sprache",
-                        description: "Welche Sprache TypeWhisper in diesem Kontext erwarten soll."
+                        title: localizedAppText("Spoken Language", de: "Gesprochene Sprache"),
+                        description: localizedAppText("Which language TypeWhisper should expect in this context.", de: "Welche Sprache TypeWhisper in diesem Kontext erwarten soll.")
                     ) {
-                        Picker("Gesprochene Sprache", selection: $viewModel.editorInputLanguage) {
-                            Text("Globale Einstellung").tag(nil as String?)
+                        Picker(localizedAppText("Spoken Language", de: "Gesprochene Sprache"), selection: $viewModel.editorInputLanguage) {
+                            Text(localizedAppText("Global Setting", de: "Globale Einstellung")).tag(nil as String?)
                             Divider()
-                            Text("Automatisch erkennen").tag("auto" as String?)
+                            Text(localizedAppText("Auto-Detect", de: "Automatisch erkennen")).tag("auto" as String?)
                             Divider()
                             ForEach(viewModel.settingsViewModel.availableLanguages, id: \.code) { lang in
                                 Text(lang.name).tag(lang.code as String?)
@@ -775,14 +820,14 @@ private struct RuleBehaviorStep: View {
                         Divider()
 
                         settingRow(
-                            title: "Übersetzung",
-                            description: "Ob TypeWhisper den Text vor dem Einfügen automatisch übersetzen soll."
+                            title: localizedAppText("Translation", de: "Übersetzung"),
+                            description: localizedAppText("Whether TypeWhisper should translate the text automatically before inserting it.", de: "Ob TypeWhisper den Text vor dem Einfügen automatisch übersetzen soll.")
                         ) {
-                            Picker("Übersetzung", selection: $viewModel.editorTranslationEnabled) {
-                                Text("Globale Einstellung").tag(nil as Bool?)
+                            Picker(localizedAppText("Translation", de: "Übersetzung"), selection: $viewModel.editorTranslationEnabled) {
+                                Text(localizedAppText("Global Setting", de: "Globale Einstellung")).tag(nil as Bool?)
                                 Divider()
-                                Text("Ein").tag(true as Bool?)
-                                Text("Aus").tag(false as Bool?)
+                                Text(localizedAppText("On", de: "Ein")).tag(true as Bool?)
+                                Text(localizedAppText("Off", de: "Aus")).tag(false as Bool?)
                             }
                         }
                         .pickerStyle(.menu)
@@ -792,11 +837,11 @@ private struct RuleBehaviorStep: View {
                             Divider()
 
                             settingRow(
-                                title: "Zielsprache",
-                                description: "Welche Sprache nach der Übersetzung ausgegeben werden soll."
+                                title: localizedAppText("Target Language", de: "Zielsprache"),
+                                description: localizedAppText("Which language should be output after translation.", de: "Welche Sprache nach der Übersetzung ausgegeben werden soll.")
                             ) {
-                                Picker("Zielsprache", selection: $viewModel.editorTranslationTargetLanguage) {
-                                    Text("Globale Einstellung").tag(nil as String?)
+                                Picker(localizedAppText("Target Language", de: "Zielsprache"), selection: $viewModel.editorTranslationTargetLanguage) {
+                                    Text(localizedAppText("Global Setting", de: "Globale Einstellung")).tag(nil as String?)
                                     Divider()
                                     ForEach(TranslationService.availableTargetLanguages, id: \.code) { lang in
                                         Text(lang.name).tag(lang.code as String?)
@@ -812,11 +857,11 @@ private struct RuleBehaviorStep: View {
                     Divider()
 
                     settingRow(
-                        title: "Prompt",
-                        description: "Optionaler Nachbearbeitungsschritt für diese Regel."
+                        title: localizedAppText("Prompt", de: "Prompt"),
+                        description: localizedAppText("Optional post-processing step for this rule.", de: "Optionaler Nachbearbeitungsschritt für diese Regel.")
                     ) {
-                        Picker("Prompt", selection: $viewModel.editorPromptActionId) {
-                            Text("Keiner").tag(nil as String?)
+                        Picker(localizedAppText("Prompt", de: "Prompt"), selection: $viewModel.editorPromptActionId) {
+                            Text(localizedAppText("None", de: "Keiner")).tag(nil as String?)
                             Divider()
                             ForEach(PromptActionsViewModel.shared.promptActions.filter(\.isEnabled)) { action in
                                 Label(action.name, systemImage: action.icon).tag(action.id.uuidString as String?)
@@ -829,18 +874,18 @@ private struct RuleBehaviorStep: View {
             }
 
             card(
-                title: "Engine & Modell",
-                description: "Welche Engine diesen Kontext bevorzugt behandeln soll.",
+                title: localizedAppText("Engine & Model", de: "Engine & Modell"),
+                description: localizedAppText("Which engine should preferably handle this context.", de: "Welche Engine diesen Kontext bevorzugt behandeln soll."),
                 icon: "cpu",
                 tint: .accentColor
             ) {
                 VStack(spacing: 0) {
                     settingRow(
-                        title: "Transkriptions-Engine",
-                        description: "Welche Engine TypeWhisper hier bevorzugt verwenden soll."
+                        title: localizedAppText("Transcription Engine", de: "Transkriptions-Engine"),
+                        description: localizedAppText("Which engine TypeWhisper should prefer here.", de: "Welche Engine TypeWhisper hier bevorzugt verwenden soll.")
                     ) {
-                        Picker("Transkriptions-Engine", selection: $viewModel.editorEngineOverride) {
-                            Text("Globale Einstellung").tag(nil as String?)
+                        Picker(localizedAppText("Transcription Engine", de: "Transkriptions-Engine"), selection: $viewModel.editorEngineOverride) {
+                            Text(localizedAppText("Global Setting", de: "Globale Einstellung")).tag(nil as String?)
                             Divider()
                             ForEach(PluginManager.shared.transcriptionEngines, id: \.providerId) { engine in
                                 Text(engine.providerDisplayName).tag(engine.providerId as String?)
@@ -857,11 +902,11 @@ private struct RuleBehaviorStep: View {
                             Divider()
 
                             settingRow(
-                                title: "Modell",
-                                description: "Optionales Modell innerhalb der gewählten Engine."
+                                title: localizedAppText("Model", de: "Modell"),
+                                description: localizedAppText("Optional model within the selected engine.", de: "Optionales Modell innerhalb der gewählten Engine.")
                             ) {
-                                Picker("Modell", selection: $viewModel.editorCloudModelOverride) {
-                                    Text("Standard").tag(nil as String?)
+                                Picker(localizedAppText("Model", de: "Modell"), selection: $viewModel.editorCloudModelOverride) {
+                                    Text(localizedAppText("Default", de: "Standard")).tag(nil as String?)
                                     Divider()
                                     ForEach(models, id: \.id) { model in
                                         Text(model.displayName).tag(model.id as String?)
@@ -876,20 +921,20 @@ private struct RuleBehaviorStep: View {
             }
 
             card(
-                title: "Ausgabe",
-                description: "Wie das Ergebnis im Zielkontext eingefügt werden soll.",
+                title: localizedAppText("Output", de: "Ausgabe"),
+                description: localizedAppText("How the result should be inserted into the target context.", de: "Wie das Ergebnis im Zielkontext eingefügt werden soll."),
                 icon: "text.badge.checkmark",
                 tint: .accentColor
             ) {
                 VStack(spacing: 0) {
                     settingRow(
-                        title: "Ausgabeformat",
-                        description: "In welchem Format das Ergebnis eingefügt werden soll."
+                        title: localizedAppText("Output Format", de: "Ausgabeformat"),
+                        description: localizedAppText("Which format the result should be inserted in.", de: "In welchem Format das Ergebnis eingefügt werden soll.")
                     ) {
-                        Picker("Ausgabeformat", selection: $viewModel.editorOutputFormat) {
-                            Text("Keins").tag(nil as String?)
+                        Picker(localizedAppText("Output Format", de: "Ausgabeformat"), selection: $viewModel.editorOutputFormat) {
+                            Text(localizedAppText("None", de: "Keins")).tag(nil as String?)
                             Divider()
-                            Text("Automatisch erkennen").tag("auto" as String?)
+                            Text(localizedAppText("Auto-Detect", de: "Automatisch erkennen")).tag("auto" as String?)
                             Text("Markdown").tag("markdown" as String?)
                             Text("HTML").tag("html" as String?)
                             Text("Plain Text").tag("plaintext" as String?)
@@ -902,10 +947,10 @@ private struct RuleBehaviorStep: View {
                     Divider()
 
                     settingRow(
-                        title: "Senden nach dem Einfügen",
-                        description: "Drückt nach dem Einfügen automatisch Enter, wenn der Zielkontext das erwartet."
+                        title: localizedAppText("Send After Inserting", de: "Senden nach dem Einfügen"),
+                        description: localizedAppText("Presses Enter automatically after inserting when the target context expects it.", de: "Drückt nach dem Einfügen automatisch Enter, wenn der Zielkontext das erwartet.")
                     ) {
-                        Toggle("Enter automatisch drücken", isOn: $viewModel.editorAutoEnterEnabled)
+                        Toggle(localizedAppText("Press Enter Automatically", de: "Enter automatisch drücken"), isOn: $viewModel.editorAutoEnterEnabled)
                     }
                 }
             }
@@ -919,22 +964,25 @@ private struct RuleReviewStep: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Review & Erweitert")
+                Text(localizedAppText("Review & Advanced", de: "Review & Erweitert"))
                     .font(.title3.weight(.semibold))
-                Text("Vergib zuerst einen Namen für die Regel. Danach siehst du die Vorschau, und alles Weitere ist optional.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                Text(localizedAppText(
+                    "First give the rule a name. After that you’ll see the preview, and everything else is optional.",
+                    de: "Vergib zuerst einen Namen für die Regel. Danach siehst du die Vorschau, und alles Weitere ist optional."
+                ))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
             }
 
             card(
-                title: "Name",
-                description: "Pflichtfeld für diese Regel.",
+                title: localizedAppText("Name", de: "Name"),
+                description: localizedAppText("Required field for this rule.", de: "Pflichtfeld für diese Regel."),
                 icon: "text.cursor",
                 tint: .accentColor
             ) {
                 VStack(alignment: .leading, spacing: 14) {
                     TextField(
-                        "Regelname",
+                        localizedAppText("Rule Name", de: "Regelname"),
                         text: Binding(
                             get: { viewModel.currentRuleName },
                             set: { viewModel.updateRuleName($0) }
@@ -942,18 +990,18 @@ private struct RuleReviewStep: View {
                     )
                     .textFieldStyle(.roundedBorder)
 
-                    Toggle("Regel aktivieren", isOn: $viewModel.editorIsEnabled)
+                    Toggle(localizedAppText("Enable Rule", de: "Regel aktivieren"), isOn: $viewModel.editorIsEnabled)
                 }
             }
 
             card(
-                title: "Vorschau",
-                description: "So liest sich die Regel vor dem Speichern.",
+                title: localizedAppText("Preview", de: "Vorschau"),
+                description: localizedAppText("This is how the rule reads before saving.", de: "So liest sich die Regel vor dem Speichern."),
                 icon: "sparkles",
                 tint: .accentColor
             ) {
                 RulePreviewCard(
-                    title: "Diese Regel macht Folgendes",
+                    title: localizedAppText("This Rule Does the Following", de: "Diese Regel macht Folgendes"),
                     name: viewModel.currentRuleName,
                     narrative: viewModel.editorRuleNarrative
                 )
@@ -967,11 +1015,11 @@ private struct RuleReviewStep: View {
                 } label: {
                     HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Erweiterte Optionen")
+                            Text(localizedAppText("Advanced Options", de: "Erweiterte Optionen"))
                                 .font(.headline)
                                 .foregroundStyle(.primary)
 
-                            Text("Manuelle Übersteuerung, Priorität, Memory und weitere Details.")
+                            Text(localizedAppText("Manual override, priority, memory, and more details.", de: "Manuelle Übersteuerung, Priorität, Memory und weitere Details."))
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -993,15 +1041,15 @@ private struct RuleReviewStep: View {
                             .padding(.top, 12)
 
                         card(
-                            title: "Manuelle Übersteuerung",
-                            description: "Optional: erzwingt diese Regel unabhängig vom aktuellen Kontext.",
+                            title: localizedAppText("Manual Override", de: "Manuelle Übersteuerung"),
+                            description: localizedAppText("Optional: forces this rule regardless of the current context.", de: "Optional: erzwingt diese Regel unabhängig vom aktuellen Kontext."),
                             icon: "command",
                             tint: .accentColor
                         ) {
                             VStack(alignment: .leading, spacing: 12) {
                                 HotkeyRecorderView(
                                     label: viewModel.editorHotkeyLabel,
-                                    title: "Manuelle Übersteuerung",
+                                    title: localizedAppText("Manual Override", de: "Manuelle Übersteuerung"),
                                     onRecord: { hotkey in
                                         if let conflictId = ServiceContainer.shared.hotkeyService.isHotkeyAssignedToProfile(
                                             hotkey,
@@ -1023,7 +1071,10 @@ private struct RuleReviewStep: View {
                                 if let hotkey = viewModel.editorHotkey,
                                    let globalSlot = ServiceContainer.shared.hotkeyService.isHotkeyAssignedToGlobalSlot(hotkey) {
                                     Label(
-                                        "Dieser Hotkey ist auch dem Slot \(globalSlot.rawValue) zugewiesen.",
+                                        localizedAppText(
+                                            "This hotkey is also assigned to slot \(globalSlot.rawValue).",
+                                            de: "Dieser Hotkey ist auch dem Slot \(globalSlot.rawValue) zugewiesen."
+                                        ),
                                         systemImage: "exclamationmark.triangle"
                                     )
                                     .foregroundStyle(.orange)
@@ -1037,8 +1088,8 @@ private struct RuleReviewStep: View {
                         }
 
                         card(
-                            title: "Erweitertes Verhalten",
-                            description: "Nur für Power User. Diese Optionen ändern nicht das Matching, sondern das Verhalten nach dem Match.",
+                            title: localizedAppText("Advanced Behavior", de: "Erweitertes Verhalten"),
+                            description: localizedAppText("Only for power users. These options do not change the matching, only the behavior after a match.", de: "Nur für Power User. Diese Optionen ändern nicht das Matching, sondern das Verhalten nach dem Match."),
                             icon: "gearshape.2.fill",
                             tint: .teal
                         ) {
@@ -1048,22 +1099,22 @@ private struct RuleReviewStep: View {
 
                                 HStack(spacing: 12) {
                                     VStack(alignment: .leading, spacing: 4) {
-                                        Text("Reihenfolge")
-                                        Text("Zwischen gleich spezifischen Regeln gewinnt die höher einsortierte Regel.")
+                                        Text(localizedAppText("Order", de: "Reihenfolge"))
+                                        Text(localizedAppText("Among equally specific rules, the one ranked higher wins.", de: "Zwischen gleich spezifischen Regeln gewinnt die höher einsortierte Regel."))
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }
 
                                     Spacer()
 
-                                    Text("Per Drag & Drop")
+                                    Text(localizedAppText("Via Drag & Drop", de: "Per Drag & Drop"))
                                         .font(.caption.weight(.semibold))
                                         .padding(.horizontal, 10)
                                         .padding(.vertical, 6)
                                         .background(Color.accentColor.opacity(0.14), in: Capsule())
                                 }
 
-                                Text("Die Reihenfolge änderst du in der Regeln-Liste über die Ziehen-Pille.")
+                                Text(localizedAppText("Change the order in the rules list via the drag handle.", de: "Die Reihenfolge änderst du in der Regeln-Liste über die Ziehen-Pille."))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -1246,7 +1297,7 @@ private struct AppPickerSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Apps auswählen")
+                Text(localizedAppText("Select Apps", de: "Apps auswählen"))
                     .font(.headline)
                 Spacer()
             }
@@ -1257,7 +1308,7 @@ private struct AppPickerSheet: View {
             HStack {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
-                TextField("Apps durchsuchen…", text: $viewModel.appSearchQuery)
+                TextField(localizedAppText("Search Apps…", de: "Apps durchsuchen…"), text: $viewModel.appSearchQuery)
                     .textFieldStyle(.plain)
                 if !viewModel.appSearchQuery.isEmpty {
                     Button {
@@ -1298,7 +1349,7 @@ private struct AppPickerSheet: View {
 
             HStack {
                 Spacer()
-                Button("Fertig") {
+                Button(localizedAppText("Done", de: "Fertig")) {
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)

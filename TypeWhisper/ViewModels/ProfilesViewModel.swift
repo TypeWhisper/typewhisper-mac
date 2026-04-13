@@ -2,6 +2,35 @@ import Foundation
 import Combine
 import AppKit
 
+func preferredAppLanguageCode() -> String {
+    if let language = UserDefaults.standard.string(forKey: UserDefaultsKeys.preferredAppLanguage), !language.isEmpty {
+        return language
+    }
+
+    if let preferred = Bundle.main.preferredLocalizations.first, !preferred.isEmpty {
+        return preferred
+    }
+
+    return Locale.current.language.languageCode?.identifier ?? "en"
+}
+
+func localizedAppText(_ english: String, de german: String) -> String {
+    preferredAppLanguageCode().hasPrefix("de") ? german : english
+}
+
+func localizedAppLanguageName(for code: String) -> String {
+    guard code != "auto" else {
+        return localizedAppText("Auto-Detect", de: "Automatisch erkennen")
+    }
+
+    let locale = Locale(identifier: preferredAppLanguageCode())
+    return locale.localizedString(forLanguageCode: code) ?? code
+}
+
+func localizedAppOrSeparator() -> String {
+    localizedAppText(" or ", de: " oder ")
+}
+
 struct InstalledApp: Identifiable, Hashable {
     let id: String // bundleIdentifier
     let name: String
@@ -24,11 +53,11 @@ enum RuleEditorStep: Int, CaseIterable {
     var title: String {
         switch self {
         case .scope:
-            "Wo gilt diese Regel?"
+            localizedAppText("Where should this rule apply?", de: "Wo gilt diese Regel?")
         case .behavior:
-            "Wie soll TypeWhisper reagieren?"
+            localizedAppText("How should TypeWhisper respond?", de: "Wie soll TypeWhisper reagieren?")
         case .review:
-            "Review & Erweitert"
+            localizedAppText("Review & Advanced", de: "Review & Erweitert")
         }
     }
 }
@@ -419,16 +448,26 @@ final class ProfilesViewModel: ObservableObject {
     func ruleContextSummary(bundleIdentifiers: [String], urlPatterns: [String]) -> String {
         let appNames = bundleIdentifiers.prefix(2).map(appName(for:))
         let domains = urlPatterns.prefix(2)
+        let orSeparator = localizedAppOrSeparator()
 
         switch (!appNames.isEmpty, !domains.isEmpty) {
         case (true, true):
-            return "\(appNames.joined(separator: " oder ")) aktiv ist und \(domains.joined(separator: " oder ")) erkannt wird"
+            return localizedAppText(
+                "\(appNames.joined(separator: orSeparator)) is active and \(domains.joined(separator: orSeparator)) is detected",
+                de: "\(appNames.joined(separator: orSeparator)) aktiv ist und \(domains.joined(separator: orSeparator)) erkannt wird"
+            )
         case (true, false):
-            return "\(appNames.joined(separator: " oder ")) aktiv ist"
+            return localizedAppText(
+                "\(appNames.joined(separator: orSeparator)) is active",
+                de: "\(appNames.joined(separator: orSeparator)) aktiv ist"
+            )
         case (false, true):
-            return "\(domains.joined(separator: " oder ")) erkannt wird"
+            return localizedAppText(
+                "\(domains.joined(separator: orSeparator)) is detected",
+                de: "\(domains.joined(separator: orSeparator)) erkannt wird"
+            )
         case (false, false):
-            return "sie manuell ausgelöst wird"
+            return localizedAppText("it is triggered manually", de: "sie manuell ausgelöst wird")
         }
     }
 
@@ -446,64 +485,70 @@ final class ProfilesViewModel: ObservableObject {
 
         if let promptActionId,
            let action = PromptActionsViewModel.shared.promptActions.first(where: { $0.id.uuidString == promptActionId }) {
-            parts.append("den Prompt „\(action.name)“")
+            parts.append(localizedAppText("the prompt “\(action.name)”", de: "den Prompt „\(action.name)“"))
         }
 
         if let lang = inputLanguage {
-            let languageName = lang == "auto"
-                ? "auto-detect"
-                : (Locale.current.localizedString(forLanguageCode: lang) ?? lang)
-            parts.append("mit \(languageName)")
+            let languageName = localizedAppLanguageName(for: lang)
+            parts.append(localizedAppText("with \(languageName)", de: "mit \(languageName)"))
         }
 
         if translationEnabled == false {
-            parts.append("ohne Übersetzung")
+            parts.append(localizedAppText("without translation", de: "ohne Übersetzung"))
         } else if let lang = translationTargetLanguage {
-            let languageName = Locale.current.localizedString(forLanguageCode: lang) ?? lang
-            parts.append("mit Übersetzung nach \(languageName)")
+            let languageName = localizedAppLanguageName(for: lang)
+            parts.append(localizedAppText("with translation to \(languageName)", de: "mit Übersetzung nach \(languageName)"))
         } else if translationEnabled == true {
-            parts.append("mit Übersetzung")
+            parts.append(localizedAppText("with translation", de: "mit Übersetzung"))
         }
 
         if let engine = engineOverride {
             let displayName = PluginManager.shared.transcriptionEngine(for: engine)?.providerDisplayName ?? engine
-            parts.append("über \(displayName)")
+            parts.append(localizedAppText("via \(displayName)", de: "über \(displayName)"))
         }
 
         if let outputFormat {
             switch outputFormat {
             case "auto":
-                parts.append("mit automatischem Format")
+                parts.append(localizedAppText("with automatic formatting", de: "mit automatischem Format"))
             case "markdown":
-                parts.append("als Markdown")
+                parts.append(localizedAppText("as Markdown", de: "als Markdown"))
             case "html":
-                parts.append("als HTML")
+                parts.append(localizedAppText("as HTML", de: "als HTML"))
             case "plaintext":
-                parts.append("als Plain Text")
+                parts.append(localizedAppText("as Plain Text", de: "als Plain Text"))
             case "code":
-                parts.append("als Code")
+                parts.append(localizedAppText("as Code", de: "als Code"))
             default:
-                parts.append("mit \(outputFormat)")
+                parts.append(localizedAppText("with \(outputFormat)", de: "mit \(outputFormat)"))
             }
         }
 
         if inlineCommandsEnabled {
-            parts.append("mit Inline Commands")
+            parts.append(localizedAppText("with Inline Commands", de: "mit Inline Commands"))
         }
 
         if autoEnterEnabled {
-            parts.append("mit Auto Enter")
+            parts.append(localizedAppText("with Auto Enter", de: "mit Auto Enter"))
         }
 
-        return parts.isEmpty ? "die globalen Einstellungen" : parts.prefix(3).joined(separator: ", ")
+        return parts.isEmpty
+            ? localizedAppText("the global settings", de: "die globalen Einstellungen")
+            : parts.prefix(3).joined(separator: ", ")
     }
 
     func ruleNarrative(for profile: Profile) -> String {
-        "Wenn \(ruleContextSummary(bundleIdentifiers: profile.bundleIdentifiers, urlPatterns: profile.urlPatterns)), nutzt TypeWhisper \(ruleBehaviorSummary(inputLanguage: profile.inputLanguage, translationEnabled: profile.translationEnabled, translationTargetLanguage: profile.translationTargetLanguage, promptActionId: profile.promptActionId, engineOverride: profile.engineOverride, outputFormat: profile.outputFormat, inlineCommandsEnabled: profile.inlineCommandsEnabled, autoEnterEnabled: profile.autoEnterEnabled))."
+        localizedAppText(
+            "When \(ruleContextSummary(bundleIdentifiers: profile.bundleIdentifiers, urlPatterns: profile.urlPatterns)), TypeWhisper uses \(ruleBehaviorSummary(inputLanguage: profile.inputLanguage, translationEnabled: profile.translationEnabled, translationTargetLanguage: profile.translationTargetLanguage, promptActionId: profile.promptActionId, engineOverride: profile.engineOverride, outputFormat: profile.outputFormat, inlineCommandsEnabled: profile.inlineCommandsEnabled, autoEnterEnabled: profile.autoEnterEnabled)).",
+            de: "Wenn \(ruleContextSummary(bundleIdentifiers: profile.bundleIdentifiers, urlPatterns: profile.urlPatterns)), nutzt TypeWhisper \(ruleBehaviorSummary(inputLanguage: profile.inputLanguage, translationEnabled: profile.translationEnabled, translationTargetLanguage: profile.translationTargetLanguage, promptActionId: profile.promptActionId, engineOverride: profile.engineOverride, outputFormat: profile.outputFormat, inlineCommandsEnabled: profile.inlineCommandsEnabled, autoEnterEnabled: profile.autoEnterEnabled))."
+        )
     }
 
     var editorRuleNarrative: String {
-        "Wenn \(ruleContextSummary(bundleIdentifiers: editorBundleIdentifiers, urlPatterns: editorUrlPatterns)), nutzt TypeWhisper \(ruleBehaviorSummary(inputLanguage: editorInputLanguage, translationEnabled: editorTranslationEnabled, translationTargetLanguage: editorTranslationTargetLanguage, promptActionId: editorPromptActionId, engineOverride: editorEngineOverride, outputFormat: editorOutputFormat, inlineCommandsEnabled: editorInlineCommandsEnabled, autoEnterEnabled: editorAutoEnterEnabled))."
+        localizedAppText(
+            "When \(ruleContextSummary(bundleIdentifiers: editorBundleIdentifiers, urlPatterns: editorUrlPatterns)), TypeWhisper uses \(ruleBehaviorSummary(inputLanguage: editorInputLanguage, translationEnabled: editorTranslationEnabled, translationTargetLanguage: editorTranslationTargetLanguage, promptActionId: editorPromptActionId, engineOverride: editorEngineOverride, outputFormat: editorOutputFormat, inlineCommandsEnabled: editorInlineCommandsEnabled, autoEnterEnabled: editorAutoEnterEnabled)).",
+            de: "Wenn \(ruleContextSummary(bundleIdentifiers: editorBundleIdentifiers, urlPatterns: editorUrlPatterns)), nutzt TypeWhisper \(ruleBehaviorSummary(inputLanguage: editorInputLanguage, translationEnabled: editorTranslationEnabled, translationTargetLanguage: editorTranslationTargetLanguage, promptActionId: editorPromptActionId, engineOverride: editorEngineOverride, outputFormat: editorOutputFormat, inlineCommandsEnabled: editorInlineCommandsEnabled, autoEnterEnabled: editorAutoEnterEnabled))."
+        )
     }
 
     func matchingExplanation(bundleIdentifiers: [String], urlPatterns: [String], hasManualOverride: Bool) -> String {
@@ -512,25 +557,46 @@ final class ProfilesViewModel: ObservableObject {
 
         switch (hasApps, hasDomains) {
         case (true, true):
-            var text = "Diese Regel ist am stärksten, wenn App und Website gleichzeitig passen. Wenn mehrere gleich spezifische Regeln passen, gewinnt die höhere Priorität."
+            var text = localizedAppText(
+                "This rule is strongest when the app and website match at the same time. If multiple equally specific rules match, the higher priority wins.",
+                de: "Diese Regel ist am stärksten, wenn App und Website gleichzeitig passen. Wenn mehrere gleich spezifische Regeln passen, gewinnt die höhere Priorität."
+            )
             if hasManualOverride {
-                text += " Mit manueller Übersteuerung kann sie jederzeit direkt erzwungen werden."
+                text += localizedAppText(
+                    " Manual override can force it at any time.",
+                    de: " Mit manueller Übersteuerung kann sie jederzeit direkt erzwungen werden."
+                )
             }
             return text
         case (false, true):
-            var text = "Diese Regel greift browserübergreifend über die Website. App + Website ist noch spezifischer; gegen andere Website-Regeln entscheidet die Priorität."
+            var text = localizedAppText(
+                "This rule applies across browsers based on the website. App + website is even more specific, and against other website rules the priority decides.",
+                de: "Diese Regel greift browserübergreifend über die Website. App + Website ist noch spezifischer; gegen andere Website-Regeln entscheidet die Priorität."
+            )
             if hasManualOverride {
-                text += " Mit manueller Übersteuerung kannst du sie trotzdem jederzeit direkt erzwingen."
+                text += localizedAppText(
+                    " Manual override can still force it at any time.",
+                    de: " Mit manueller Übersteuerung kannst du sie trotzdem jederzeit direkt erzwingen."
+                )
             }
             return text
         case (true, false):
-            var text = "Diese Regel greift, sobald eine der ausgewählten Apps aktiv ist. Website-Regeln sind spezifischer; gegen andere App-Regeln entscheidet die Priorität."
+            var text = localizedAppText(
+                "This rule applies as soon as one of the selected apps is active. Website rules are more specific, and against other app rules the priority decides.",
+                de: "Diese Regel greift, sobald eine der ausgewählten Apps aktiv ist. Website-Regeln sind spezifischer; gegen andere App-Regeln entscheidet die Priorität."
+            )
             if hasManualOverride {
-                text += " Mit manueller Übersteuerung kannst du sie trotzdem jederzeit direkt erzwingen."
+                text += localizedAppText(
+                    " Manual override can still force it at any time.",
+                    de: " Mit manueller Übersteuerung kannst du sie trotzdem jederzeit direkt erzwingen."
+                )
             }
             return text
         case (false, false):
-            return "Ohne App oder Website greift diese Regel nicht automatisch. Nutze dafür eine manuelle Übersteuerung."
+            return localizedAppText(
+                "Without an app or website, this rule does not apply automatically. Use a manual override for that.",
+                de: "Ohne App oder Website greift diese Regel nicht automatisch. Nutze dafür eine manuelle Übersteuerung."
+            )
         }
     }
 
@@ -551,13 +617,23 @@ final class ProfilesViewModel: ObservableObject {
     }
 
     func manualOverrideSummary(for profile: Profile) -> String {
-        guard let hotkey = profile.hotkey else { return "Keine manuelle Übersteuerung" }
-        return "Manuelle Übersteuerung: \(HotkeyService.displayName(for: hotkey))"
+        guard let hotkey = profile.hotkey else {
+            return localizedAppText("No manual override", de: "Keine manuelle Übersteuerung")
+        }
+        return localizedAppText(
+            "Manual override: \(HotkeyService.displayName(for: hotkey))",
+            de: "Manuelle Übersteuerung: \(HotkeyService.displayName(for: hotkey))"
+        )
     }
 
     var editorManualOverrideSummary: String {
-        guard let editorHotkey else { return "Keine manuelle Übersteuerung" }
-        return "Manuelle Übersteuerung: \(HotkeyService.displayName(for: editorHotkey))"
+        guard let editorHotkey else {
+            return localizedAppText("No manual override", de: "Keine manuelle Übersteuerung")
+        }
+        return localizedAppText(
+            "Manual override: \(HotkeyService.displayName(for: editorHotkey))",
+            de: "Manuelle Übersteuerung: \(HotkeyService.displayName(for: editorHotkey))"
+        )
     }
 
     var editorRelevantBrowserName: String? {

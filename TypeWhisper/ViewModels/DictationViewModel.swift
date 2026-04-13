@@ -1061,24 +1061,45 @@ final class DictationViewModel: ObservableObject {
         switch match.kind {
         case .appAndWebsite:
             if let domain = match.matchedDomain {
-                base = "Diese Regel greift, weil \(appDescriptor) zusammen mit \(domain) erkannt wurde."
+                base = localizedAppText(
+                    "This rule applies because \(appDescriptor) was detected together with \(domain).",
+                    de: "Diese Regel greift, weil \(appDescriptor) zusammen mit \(domain) erkannt wurde."
+                )
             } else {
-                base = "Diese Regel greift, weil App und Website zusammen erkannt wurden."
+                base = localizedAppText(
+                    "This rule applies because the app and website were detected together.",
+                    de: "Diese Regel greift, weil App und Website zusammen erkannt wurden."
+                )
             }
         case .websiteOnly:
             if let domain = match.matchedDomain {
-                base = "Diese Regel greift, weil \(domain) erkannt wurde."
+                base = localizedAppText(
+                    "This rule applies because \(domain) was detected.",
+                    de: "Diese Regel greift, weil \(domain) erkannt wurde."
+                )
             } else {
-                base = "Diese Regel greift, weil die aktuelle Website erkannt wurde."
+                base = localizedAppText(
+                    "This rule applies because the current website was detected.",
+                    de: "Diese Regel greift, weil die aktuelle Website erkannt wurde."
+                )
             }
         case .appOnly:
-            base = "Diese Regel greift, weil \(appDescriptor) erkannt wurde."
+            base = localizedAppText(
+                "This rule applies because \(appDescriptor) was detected.",
+                de: "Diese Regel greift, weil \(appDescriptor) erkannt wurde."
+            )
         case .manualOverride:
-            base = "Diese Regel wurde manuell über ihre Tastenkombination erzwungen."
+            base = localizedAppText(
+                "This rule was manually forced via its keyboard shortcut.",
+                de: "Diese Regel wurde manuell über ihre Tastenkombination erzwungen."
+            )
         }
 
         guard match.wonByPriority else { return base }
-        return base + " Unter gleich spezifischen Regeln gewinnt hier die höhere Priorität."
+        return base + localizedAppText(
+            " Among equally specific rules, the higher priority wins here.",
+            de: " Unter gleich spezifischen Regeln gewinnt hier die höhere Priorität."
+        )
     }
 
     // MARK: - Shared Helpers
