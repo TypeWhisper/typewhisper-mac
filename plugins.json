@@ -279,19 +279,22 @@
     {
       "id": "com.typewhisper.granite",
       "name": "Granite Speech",
-      "version": "1.0.1",
-      "minHostVersion": "0.13.0",
+      "version": "1.0.2",
+      "minHostVersion": "1.2.1",
       "author": "TypeWhisper",
       "description": "Local speech-to-text and translation by IBM, powered by MLX on Apple Silicon. 6 languages with bidirectional translation.",
       "descriptions": {
         "de": "Lokale Spracherkennung und Uebersetzung von IBM mit MLX auf Apple Silicon. 6 Sprachen mit bidirektionaler Uebersetzung."
       },
       "category": "transcription",
-      "size": 17576027,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-granite-v1.0.1/GranitePlugin.zip",
+      "size": 17576047,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-granite-v1.0.2/GranitePlugin.zip",
       "minOSVersion": "14.0",
       "iconSystemName": "cpu",
-      "downloadCount": 329
+      "downloadCount": 329,
+      "supportedArchitectures": [
+        "arm64"
+      ]
     },
     {
       "id": "com.typewhisper.cloudflare-asr",
