@@ -22,8 +22,8 @@ public protocol HostServices: Sendable {
     // Event bus
     var eventBus: EventBusProtocol { get }
 
-    // Available profile names
-    var availableProfileNames: [String] { get }
+    // Available rule names
+    var availableRuleNames: [String] { get }
 
     // Notify host that plugin capabilities changed (e.g. model loaded/unloaded)
     func notifyCapabilitiesChanged()
@@ -31,6 +31,11 @@ public protocol HostServices: Sendable {
     // Streaming display: call with true when the plugin provides its own streaming text UI,
     // so the built-in indicator suppresses its streaming text display.
     func setStreamingDisplayActive(_ active: Bool)
+}
+
+public extension HostServices {
+    @available(*, deprecated, renamed: "availableRuleNames")
+    var availableProfileNames: [String] { availableRuleNames }
 }
 
 // MARK: - HTTP Client (Ephemeral Sessions)

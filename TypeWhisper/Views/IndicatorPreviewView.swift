@@ -203,7 +203,7 @@ struct IndicatorPreviewView: View {
             }
             .frame(height: 14)
         case .profile:
-            Text("Profile")
+            Text("Rule")
                 .font(.system(size: size * 0.85, weight: .medium))
                 .foregroundStyle(.white)
                 .lineLimit(1)

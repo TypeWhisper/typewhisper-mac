@@ -205,7 +205,7 @@ struct GeneralSettingsView: View {
         Text(String(localized: "Recording Indicator")).tag(NotchIndicatorContent.indicator)
         Text(String(localized: "Timer")).tag(NotchIndicatorContent.timer)
         Text(String(localized: "Waveform")).tag(NotchIndicatorContent.waveform)
-        Text(String(localized: "Profile")).tag(NotchIndicatorContent.profile)
+        Text("Rule").tag(NotchIndicatorContent.profile)
         Text(String(localized: "None")).tag(NotchIndicatorContent.none)
     }
 

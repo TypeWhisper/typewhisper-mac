@@ -174,7 +174,7 @@ struct IndicatorRecordingContent: View {
                 compact: true
             )
         case .profile:
-            if let name = viewModel.activeProfileName {
+            if let name = viewModel.activeRuleName {
                 Text(name)
                     .font(.system(size: sizing.profileFontSize, weight: .medium))
                     .foregroundStyle(.white)
@@ -183,7 +183,7 @@ struct IndicatorRecordingContent: View {
                     .padding(.horizontal, sizing.profilePaddingH)
                     .padding(.vertical, sizing.profilePaddingV)
                     .background(.white.opacity(0.2), in: Capsule())
-                    .accessibilityLabel(String(localized: "Active profile"))
+                    .accessibilityLabel("Active rule")
                     .accessibilityValue(name)
             } else {
                 Color.clear.frame(width: 0, height: 0)

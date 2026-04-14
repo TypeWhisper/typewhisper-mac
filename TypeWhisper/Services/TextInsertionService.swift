@@ -79,6 +79,11 @@ enum InsertionResult {
     }
 
     nonisolated private static func identifyBrowser(_ bundleId: String) -> BrowserType {
+        let normalized = bundleId.lowercased()
+        if normalized.contains("wavebox") {
+            return .chromiumBased
+        }
+
         switch bundleId {
         case "com.apple.Safari":
             return .safari

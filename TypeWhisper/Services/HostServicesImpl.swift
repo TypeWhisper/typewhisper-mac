@@ -6,12 +6,12 @@ final class HostServicesImpl: HostServices, @unchecked Sendable {
     let pluginId: String
     let pluginDataDirectory: URL
     let eventBus: EventBusProtocol
-    private let profileNamesProvider: () -> [String]
+    private let ruleNamesProvider: () -> [String]
 
-    init(pluginId: String, eventBus: EventBusProtocol, profileNamesProvider: @escaping () -> [String]) {
+    init(pluginId: String, eventBus: EventBusProtocol, ruleNamesProvider: @escaping () -> [String]) {
         self.pluginId = pluginId
         self.eventBus = eventBus
-        self.profileNamesProvider = profileNamesProvider
+        self.ruleNamesProvider = ruleNamesProvider
 
         self.pluginDataDirectory = AppConstants.appSupportDirectory
             .appendingPathComponent("PluginData", isDirectory: true)
@@ -57,10 +57,10 @@ final class HostServicesImpl: HostServices, @unchecked Sendable {
         NSWorkspace.shared.frontmostApplication?.localizedName
     }
 
-    // MARK: - Profiles
+    // MARK: - Rules
 
-    var availableProfileNames: [String] {
-        profileNamesProvider()
+    var availableRuleNames: [String] {
+        ruleNamesProvider()
     }
 
     // MARK: - Capabilities

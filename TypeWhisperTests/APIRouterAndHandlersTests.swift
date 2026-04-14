@@ -139,7 +139,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual(notFoundResponse.status, 404)
     }
 
-    func testAPIHandlersExposeStatusHistoryAndProfiles() async throws {
+    func testAPIHandlersExposeStatusHistoryAndRules() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var context: APIContext?
         defer {
@@ -174,13 +174,17 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let history = try Self.jsonObject(
             await router.route(HTTPRequest(method: "GET", path: "/v1/history", queryParams: [:], headers: [:], body: Data()))
         )
-        let profiles = try Self.jsonObject(
+        let rules = try Self.jsonObject(
+            await router.route(HTTPRequest(method: "GET", path: "/v1/rules", queryParams: [:], headers: [:], body: Data()))
+        )
+        let legacyProfiles = try Self.jsonObject(
             await router.route(HTTPRequest(method: "GET", path: "/v1/profiles", queryParams: [:], headers: [:], body: Data()))
         )
 
         XCTAssertEqual(status["status"] as? String, "no_model")
         XCTAssertEqual((history["entries"] as? [[String: Any]])?.count, 1)
-        XCTAssertEqual((profiles["profiles"] as? [[String: Any]])?.first?["name"] as? String, "Docs")
+        XCTAssertEqual((rules["rules"] as? [[String: Any]])?.first?["name"] as? String, "Docs")
+        XCTAssertEqual((legacyProfiles["profiles"] as? [[String: Any]])?.first?["name"] as? String, "Docs")
     }
 
     func testDictationStartReturnsConflictWhenRecordingCannotStart() async throws {
@@ -433,7 +437,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         _ = context.dictationViewModel.apiStartRecording()
 
         XCTAssertEqual(context.dictationViewModel.state, DictationViewModel.State.recording)
-        XCTAssertEqual(context.dictationViewModel.activeProfileName, "Docs")
+        XCTAssertEqual(context.dictationViewModel.activeRuleName, "Docs")
 
         await fulfillment(of: [selectedTextCaptured], timeout: 1.0)
     }

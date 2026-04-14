@@ -88,17 +88,25 @@ public struct PostProcessingContext: Sendable {
     public let bundleIdentifier: String?
     public let url: String?
     public let language: String?
-    public let profileName: String?
+    public let ruleName: String?
     public let selectedText: String?
 
-    public init(appName: String? = nil, bundleIdentifier: String? = nil, url: String? = nil, language: String? = nil, profileName: String? = nil, selectedText: String? = nil) {
+    public init(appName: String? = nil, bundleIdentifier: String? = nil, url: String? = nil, language: String? = nil, ruleName: String? = nil, selectedText: String? = nil) {
         self.appName = appName
         self.bundleIdentifier = bundleIdentifier
         self.url = url
         self.language = language
-        self.profileName = profileName
+        self.ruleName = ruleName
         self.selectedText = selectedText
     }
+
+    @available(*, deprecated, renamed: "init(appName:bundleIdentifier:url:language:ruleName:selectedText:)")
+    public init(appName: String? = nil, bundleIdentifier: String? = nil, url: String? = nil, language: String? = nil, profileName: String?, selectedText: String? = nil) {
+        self.init(appName: appName, bundleIdentifier: bundleIdentifier, url: url, language: language, ruleName: profileName, selectedText: selectedText)
+    }
+
+    @available(*, deprecated, renamed: "ruleName")
+    public var profileName: String? { ruleName }
 }
 
 public protocol PostProcessorPlugin: TypeWhisperPlugin {
@@ -281,15 +289,50 @@ public enum MemoryType: String, Codable, Sendable, CaseIterable {
 public struct MemorySource: Codable, Sendable {
     public let appName: String?
     public let bundleIdentifier: String?
-    public let profileName: String?
+    public let ruleName: String?
     public let timestamp: Date
 
+    enum CodingKeys: String, CodingKey {
+        case appName
+        case bundleIdentifier
+        case ruleName
+        case profileName
+        case timestamp
+    }
+
     public init(appName: String? = nil, bundleIdentifier: String? = nil,
-                profileName: String? = nil, timestamp: Date = Date()) {
+                ruleName: String? = nil, timestamp: Date = Date()) {
         self.appName = appName
         self.bundleIdentifier = bundleIdentifier
-        self.profileName = profileName
+        self.ruleName = ruleName
         self.timestamp = timestamp
+    }
+
+    @available(*, deprecated, renamed: "init(appName:bundleIdentifier:ruleName:timestamp:)")
+    public init(appName: String? = nil, bundleIdentifier: String? = nil,
+                profileName: String?, timestamp: Date = Date()) {
+        self.init(appName: appName, bundleIdentifier: bundleIdentifier, ruleName: profileName, timestamp: timestamp)
+    }
+
+    @available(*, deprecated, renamed: "ruleName")
+    public var profileName: String? { ruleName }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        appName = try container.decodeIfPresent(String.self, forKey: .appName)
+        bundleIdentifier = try container.decodeIfPresent(String.self, forKey: .bundleIdentifier)
+        ruleName = try container.decodeIfPresent(String.self, forKey: .ruleName)
+            ?? container.decodeIfPresent(String.self, forKey: .profileName)
+        timestamp = try container.decode(Date.self, forKey: .timestamp)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(appName, forKey: .appName)
+        try container.encodeIfPresent(bundleIdentifier, forKey: .bundleIdentifier)
+        try container.encodeIfPresent(ruleName, forKey: .ruleName)
+        try container.encodeIfPresent(ruleName, forKey: .profileName)
+        try container.encode(timestamp, forKey: .timestamp)
     }
 }
 

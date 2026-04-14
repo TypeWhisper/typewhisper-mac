@@ -6,7 +6,7 @@
 
 Speech-to-text and AI text processing for macOS. Transcribe audio using on-device AI models or cloud APIs (Groq, OpenAI), then process the result with custom LLM prompts. Your voice data stays on your Mac with local models - or use cloud APIs for faster processing.
 
-TypeWhisper `1.x` is the direct-download macOS release line. The supported core remains system-wide dictation, file transcription, prompt processing, profiles, history, dictionary, snippets, and bundled integrations. HTTP API, CLI, widgets, watch folders, and the plugin SDK remain supported advanced surfaces.
+TypeWhisper `1.x` is the direct-download macOS release line. The supported core remains system-wide dictation, file transcription, prompt processing, rules, history, dictionary, snippets, and bundled integrations. HTTP API, CLI, widgets, watch folders, and the plugin SDK remain supported advanced surfaces.
 
 See [docs/1.1-readiness.md](docs/1.1-readiness.md), [docs/support-matrix.md](docs/support-matrix.md), and [docs/release-checklist.md](docs/release-checklist.md) for the current release definition and ship gates.
 
@@ -25,7 +25,7 @@ See [docs/1.1-readiness.md](docs/1.1-readiness.md), [docs/support-matrix.md](doc
 <p align="center">
   <a href=".github/screenshots/history.png"><img src=".github/screenshots/history.png" width="270" alt="Transcription History"></a>
   <a href=".github/screenshots/dictionary.png"><img src=".github/screenshots/dictionary.png" width="270" alt="Dictionary"></a>
-  <a href=".github/screenshots/profiles.png"><img src=".github/screenshots/profiles.png" width="270" alt="Profiles"></a>
+  <a href=".github/screenshots/profiles.png"><img src=".github/screenshots/profiles.png" width="270" alt="Rules"></a>
 </p>
 
 <p align="center">
@@ -76,7 +76,7 @@ See [docs/1.1-readiness.md](docs/1.1-readiness.md), [docs/support-matrix.md](doc
 
 ### Personalization
 
-- **Profiles** - Per-app and per-website overrides for language, task, engine, prompt, hotkey, and auto-submit. Match by app (bundle ID) and/or domain with subdomain support
+- **Rules** - Per-app and per-website overrides for language, task, engine, prompt, hotkey, and auto-submit. Match by app (bundle ID) and/or domain with subdomain support
 - **Dictionary** - Terms improve cloud recognition accuracy. Corrections fix common transcription mistakes automatically. Auto-learns from manual corrections. Includes importable term packs
 - **Localized term packs** - Built-in term pack names and descriptions are localized in English and German
 - **Snippets** - Text shortcuts with trigger/replacement. Supports placeholders like `{{DATE}}`, `{{TIME}}`, and `{{CLIPBOARD}}`
@@ -233,14 +233,14 @@ curl "http://localhost:8978/v1/history?q=meeting&limit=10&offset=0"
 curl -X DELETE "http://localhost:8978/v1/history?id=<uuid>"
 ```
 
-### Profiles
+### Rules
 
 ```bash
-# List all profiles
-curl http://localhost:8978/v1/profiles
+# List all rules
+curl http://localhost:8978/v1/rules
 
-# Toggle a profile on/off
-curl -X PUT "http://localhost:8978/v1/profiles/toggle?id=<uuid>"
+# Toggle a rule on/off
+curl -X PUT "http://localhost:8978/v1/rules/toggle?id=<uuid>"
 ```
 
 ### Dictation Control
@@ -300,9 +300,9 @@ typewhisper transcribe meeting.m4a --json | jq -r '.text'
 
 The CLI requires the API server to be running (Settings > Advanced) and follows the documented `1.x` command and flag surface.
 
-## Profiles
+## Rules
 
-Profiles let you configure transcription settings per application or website. For example:
+Rules let you configure transcription settings per application or website. For example:
 
 - **Mail** - German language, Whisper Large v3
 - **Slack** - English language, Parakeet TDT v3
@@ -310,14 +310,14 @@ Profiles let you configure transcription settings per application or website. Fo
 - **github.com** - English language (matches in any browser)
 - **docs.google.com** - German language, translate to English
 
-Create profiles in Settings > Profiles. Assign apps and/or URL patterns, set language/task/engine overrides, assign a custom prompt for automatic post-processing, configure a per-profile hotkey, enable auto-submit (automatically sends text in chat apps), and adjust priority. URL patterns support subdomain matching - e.g. `google.com` also matches `docs.google.com`. The domain autocomplete suggests domains from your transcription history.
+Create rules in Settings > Regeln. Assign apps and/or URL patterns, set language/task/engine overrides, assign a custom prompt for automatic post-processing, optionally configure a manual rule shortcut, enable auto-submit (automatically sends text in chat apps), and adjust priority. URL patterns support subdomain matching - e.g. `google.com` also matches `docs.google.com`. The domain autocomplete suggests domains from your transcription history.
 
-When you start dictating, TypeWhisper matches the active app and browser URL against your profiles with the following priority:
+When you start dictating, TypeWhisper matches the active app and browser URL against your rules with the following priority:
 1. **App + URL match** - highest specificity (e.g. Chrome + github.com)
-2. **URL-only match** - cross-browser profiles (e.g. github.com in any browser)
-3. **App-only match** - generic app profiles (e.g. all of Chrome)
+2. **URL-only match** - cross-browser rules (e.g. github.com in any browser)
+3. **App-only match** - generic app rules (e.g. all of Chrome)
 
-The active profile name is shown as a badge in the notch indicator.
+The active rule name is shown as a badge in the notch indicator, together with a short explanation of why it matched.
 
 Multiple engines can be loaded simultaneously for instant switching between profiles. Note that loading multiple local models increases memory usage. Cloud engines (Groq, OpenAI) have negligible memory overhead.
 

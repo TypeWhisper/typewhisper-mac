@@ -40,4 +40,34 @@ final class ProfileServiceTests: XCTestCase {
         )
         XCTAssertEqual(fallbackMatch?.name, "URL Only")
     }
+
+    @MainActor
+    func testRuleMatchDetailsExplainPriorityWinsWithinSameTier() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = ProfileService(appSupportDirectory: appSupportDirectory)
+
+        service.addProfile(
+            name: "Docs Low",
+            urlPatterns: ["docs.github.com"],
+            priority: 1
+        )
+        service.addProfile(
+            name: "Docs High",
+            urlPatterns: ["docs.github.com"],
+            priority: 9
+        )
+
+        let match = service.matchRule(
+            bundleIdentifier: "com.apple.Safari",
+            url: "https://docs.github.com/en/get-started"
+        )
+
+        XCTAssertEqual(match?.profile.name, "Docs High")
+        XCTAssertEqual(match?.kind, .websiteOnly)
+        XCTAssertTrue(match?.wonByPriority == true)
+        XCTAssertEqual(match?.matchedDomain, "docs.github.com")
+        XCTAssertEqual(match?.competingProfileCount, 1)
+    }
 }
