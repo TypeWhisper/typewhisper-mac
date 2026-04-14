@@ -87,6 +87,7 @@ struct HomeSettingsView: View {
                 .padding(.bottom)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .frame(minWidth: 500, minHeight: 400)
     }
 

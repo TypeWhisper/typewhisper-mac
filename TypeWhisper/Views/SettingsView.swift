@@ -281,12 +281,11 @@ private struct SettingsSidebarShell<DetailContent: View>: View {
                     .tag(destination.tab)
             }
             .listStyle(.sidebar)
-            .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 280)
+            .navigationSplitViewColumnWidth(240)
         } detail: {
             detail(selectedTab)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .navigationSplitViewStyle(.balanced)
     }
 }
 
