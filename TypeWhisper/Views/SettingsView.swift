@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 enum SettingsTab: Hashable {
     case home, general, recording, hotkeys, recorder
@@ -274,8 +275,10 @@ private struct SettingsSidebarShell<DetailContent: View>: View {
     let destinations: [SettingsDestination]
     let detail: (SettingsTab) -> DetailContent
 
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
+
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             List(destinations, selection: $selectedTab) { destination in
                 SettingsSidebarRow(destination: destination)
                     .tag(destination.tab)
@@ -285,6 +288,28 @@ private struct SettingsSidebarShell<DetailContent: View>: View {
         } detail: {
             detail(selectedTab)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        // macOS 14 glitches when the default NavigationSplitView sidebar reveal animates.
+        // Use a custom zero-duration toggle instead.
+        .toolbar(removing: .sidebarToggle)
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button(action: toggleSidebar) {
+                    Image(systemName: "sidebar.leading")
+                }
+                .help(localizedAppText("Toggle Sidebar", de: "Seitenleiste ein-/ausblenden"))
+                .accessibilityLabel(localizedAppText("Toggle Sidebar", de: "Seitenleiste ein-/ausblenden"))
+            }
+        }
+    }
+
+    private func toggleSidebar() {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0
+            context.allowsImplicitAnimation = false
+            withAnimation(nil) {
+                columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
+            }
         }
     }
 }
