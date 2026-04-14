@@ -5,12 +5,12 @@
     <language>en</language>
     <description>Stable, release candidate, and daily updates for TypeWhisper.</description>
     <item>
-      <title>Version 1.2.0</title>
-      <pubDate>Tue, 14 Apr 2026 14:56:22 +0000</pubDate>
-      <sparkle:version>539</sparkle:version>
-      <sparkle:shortVersionString>1.2.0</sparkle:shortVersionString>
+      <title>Version 1.2.1</title>
+      <pubDate>Tue, 14 Apr 2026 20:39:57 +0000</pubDate>
+      <sparkle:version>550</sparkle:version>
+      <sparkle:shortVersionString>1.2.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.2.0/TypeWhisper-v1.2.0.zip" sparkle:edSignature="5mLiFt6yAaWr0K/nIlLSyvJhuhm5QgDe8sYsmwnqzS6ETx45mv3JtdrCP2V5wjeTVp36zKgCc21xsO9J8yMBBQ==" length="9983741" type="application/octet-stream" />
+      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.2.1/TypeWhisper-v1.2.1.zip" sparkle:edSignature="5FPBz+Ow5eJddELANdv17N+cX/7Yw11XVw95lhhC95kGEYyRbCkdqWUnxyS5K6+IVVVcQm1USbEZnBdiVHZlDA==" length="10007575" type="application/octet-stream" />
     </item>
     <item>
       <title>Version 1.2.0-daily.20260414</title>
