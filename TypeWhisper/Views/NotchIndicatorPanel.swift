@@ -19,7 +19,10 @@ final class NotchGeometry: ObservableObject {
         } else {
             notchWidth = 0
         }
-        notchHeight = NotchIndicatorLayout.closedHeight(hasNotch: hasNotch)
+        notchHeight = NotchIndicatorLayout.closedHeight(
+            hasNotch: hasNotch,
+            safeAreaTopInset: screen.safeAreaInsets.top
+        )
     }
 }
 
