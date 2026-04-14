@@ -336,7 +336,7 @@
     {
       "id": "com.typewhisper.fireworks",
       "name": "Fireworks AI",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "minHostVersion": "0.9.0",
       "author": "TypeWhisper",
       "description": "Cloud transcription and LLM via Fireworks AI. Streaming transcription, fast inference, requires API key.",
@@ -344,8 +344,8 @@
         "de": "Cloud-Transkription und LLM ueber Fireworks AI. Streaming-Transkription, schnelle Inferenz, erfordert API-Key."
       },
       "category": "transcription",
-      "size": 180855,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-fireworks-v1.0.0/FireworksPlugin.zip",
+      "size": 181196,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-fireworks-v1.0.1/FireworksPlugin.zip",
       "minOSVersion": "14.0",
       "iconSystemName": "flame.fill",
       "requiresAPIKey": true,
