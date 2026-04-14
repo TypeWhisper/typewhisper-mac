@@ -358,6 +358,7 @@ jobs:
       - name: Create GitHub Release
         run: |
           TAG="$RELEASE_TAG"
+          RAW_VERSION="${TAG#v}"
           ASSET_DMG="build/Build/Products/Release/TypeWhisper-${TAG}.dmg"
           ASSET_ZIP="build/Build/Products/Release/TypeWhisper-${TAG}.zip"
 
