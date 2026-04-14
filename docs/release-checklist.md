@@ -6,7 +6,7 @@
 - `swift test --package-path TypeWhisperPluginSDK`
 - `xcodebuild -project TypeWhisper.xcodeproj -scheme TypeWhisper -configuration Release -derivedDataPath build -destination 'generic/platform=macOS' CODE_SIGN_IDENTITY='-' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO`
 - `bash scripts/check_first_party_warnings.sh build.log`
-- Review `README.md`, `SECURITY.md`, `docs/support-matrix.md`, `docs/1.1-readiness.md`, `Plugins/README.md`, and `TypeWhisperPluginSDK/README.md`
+- Review `README.md`, `SECURITY.md`, `docs/support-matrix.md`, `docs/release-readiness.md`, `Plugins/README.md`, and `TypeWhisperPluginSDK/README.md`
 - Confirm `MARKETING_VERSION = 1.2.0` across the app, CLI, and widgets
 - Prepare or refresh `docs/release-notes/1.2.0.md`
 - If you want to edit the notes directly on GitHub, create or update the draft release for `v1.2.0` before pushing the tag

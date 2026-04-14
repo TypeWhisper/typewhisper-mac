@@ -1,6 +1,6 @@
 # TypeWhisper 1.x Release Readiness
 
-This document remains at `docs/1.1-readiness.md` for the current direct-download release line. It defines the release gates for the current `1.x` product path leading into the stable `1.2.0` release.
+This document defines the release gates for the current `1.x` product path leading into the stable `1.2.0` release.
 
 TypeWhisper `1.x` is a stable direct-download release line for macOS. The Mac App Store remains out of scope. For `1.2`, the focus is reliability, upgrade safety, and power-user polish across indicators, short clips, audio recovery, and plugin setup.
 
