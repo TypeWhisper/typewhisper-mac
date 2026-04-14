@@ -5340,8 +5340,8 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm.git";
 			requirement = {
-				branch = main;
-				kind = branch;
+				kind = exactVersion;
+				version = 2.30.6;
 			};
 		};
 		RR00000000000000000009 /* XCRemoteSwiftPackageReference "swift-transformers" */ = {
