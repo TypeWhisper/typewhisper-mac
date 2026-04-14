@@ -11,6 +11,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
         static var pluginId: String { "com.typewhisper.mock.transcription" }
         static var pluginName: String { "Mock Transcription" }
 
+        var languages: [String] = []
+
         required override init() {}
 
         func activate(host: HostServices) {}
@@ -23,6 +25,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         var selectedModelId: String? { "tiny" }
         func selectModel(_ modelId: String) {}
         var supportsTranslation: Bool { false }
+        var supportedLanguages: [String] { languages }
 
         func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
             PluginTranscriptionResult(text: "transcribed", detectedLanguage: language)
@@ -756,6 +759,52 @@ final class APIRouterAndHandlersTests: XCTestCase {
         await fulfillment(of: [propagation], timeout: 1.0)
 
         XCTAssertEqual(modelManager.selectedProviderId, plugin.providerId)
+    }
+
+    @MainActor
+    func testTranslationTargetLanguagesKeepScriptVariantsDistinct() {
+        guard #available(macOS 15.0, *) else { return }
+
+        let namesByCode = Dictionary(uniqueKeysWithValues: TranslationService.availableTargetLanguages.map { ($0.code, $0.name) })
+
+        XCTAssertNotEqual(namesByCode["zh-Hans"], namesByCode["zh-Hant"])
+    }
+
+    func testLocalizedAppLanguageNameKeepsScriptVariantsDistinct() {
+        XCTAssertNotEqual(localizedAppLanguageName(for: "zh-Hans"), localizedAppLanguageName(for: "zh-Hant"))
+    }
+
+    @MainActor
+    func testSettingsViewModelAvailableLanguagesKeepsRegionalAndScriptVariantsDistinct() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockTranscriptionPlugin()
+        plugin.languages = ["zh-Hans", "zh-Hant", "pt-BR", "pt-PT"]
+        let manifest = PluginManifest(
+            id: "com.typewhisper.mock.transcription",
+            name: "Mock Transcription",
+            version: "1.0.0",
+            principalClass: "APIRouterMockTranscriptionPlugin"
+        )
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: manifest,
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let settingsViewModel = SettingsViewModel(modelManager: ModelManagerService())
+        let namesByCode = Dictionary(uniqueKeysWithValues: settingsViewModel.availableLanguages.map { ($0.code, $0.name) })
+
+        XCTAssertNotEqual(namesByCode["zh-Hans"], namesByCode["zh-Hant"])
+        XCTAssertNotEqual(namesByCode["pt-BR"], namesByCode["pt-PT"])
     }
 
     @MainActor
