@@ -27,8 +27,10 @@ final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, PluginSet
 
     func activate(host: HostServices) {
         self.host = host
-        Task { await populateModels() }
-        Task { await restoreLoadedModel() }
+        Task {
+            await populateModels()
+            await restoreLoadedModel()
+        }
     }
 
     func deactivate() {
@@ -245,6 +247,10 @@ final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, PluginSet
     }
 
     func restoreLoadedModel() async {
+        if cachedModels.isEmpty {
+            await populateModels()
+        }
+
         guard let savedId = host?.userDefault(forKey: "loadedModel") as? String,
               let modelDef = cachedModels.first(where: { $0.id == savedId }) else {
             return
