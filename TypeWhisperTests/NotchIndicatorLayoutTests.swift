@@ -2,8 +2,12 @@ import XCTest
 @testable import TypeWhisper
 
 final class NotchIndicatorLayoutTests: XCTestCase {
-    func testClosedHeightUsesNotchedDefault() {
-        XCTAssertEqual(NotchIndicatorLayout.closedHeight(hasNotch: true), 34)
+    func testClosedHeightUsesScreenSafeAreaWhenAvailable() {
+        XCTAssertEqual(NotchIndicatorLayout.closedHeight(hasNotch: true, safeAreaTopInset: 30), 30)
+    }
+
+    func testClosedHeightFallsBackToDefaultWhenNotchInsetUnavailable() {
+        XCTAssertEqual(NotchIndicatorLayout.closedHeight(hasNotch: true, safeAreaTopInset: 0), 34)
     }
 
     func testClosedHeightUsesFallbackWithoutNotch() {

@@ -13,8 +13,18 @@ enum NotchIndicatorLayout {
     static let fallbackClosedHeight: CGFloat = 32
     static let fallbackClosedWidth: CGFloat = 200
 
-    static func closedHeight(hasNotch: Bool) -> CGFloat {
-        hasNotch ? notchedClosedHeight : fallbackClosedHeight
+    /// Uses the real screen safe-area inset when available so the closed cap matches
+    /// the physical notch across different MacBook models and display scaling modes.
+    static func closedHeight(hasNotch: Bool, safeAreaTopInset: CGFloat? = nil) -> CGFloat {
+        guard hasNotch else {
+            return fallbackClosedHeight
+        }
+
+        if let safeAreaTopInset, safeAreaTopInset > 0 {
+            return safeAreaTopInset
+        }
+
+        return notchedClosedHeight
     }
 
     static func closedWidth(hasNotch: Bool, notchWidth: CGFloat) -> CGFloat {
