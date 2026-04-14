@@ -8448,6 +8448,136 @@
           }
         }
       }
+    },
+    "Dock icon" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dock-Symbol"
+          }
+        }
+      }
+    },
+    "App visibility" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App-Sichtbarkeit"
+          }
+        }
+      }
+    },
+    "Dock icon when menu bar icon is hidden" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dock-Symbol bei ausgeblendetem Menüleistensymbol"
+          }
+        }
+      }
+    },
+    "Keep visible" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sichtbar lassen"
+          }
+        }
+      }
+    },
+    "Only while a window is open" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur solange ein Fenster geöffnet ist"
+          }
+        }
+      }
+    },
+    "Menu bar icon" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menüleistensymbol"
+          }
+        }
+      }
+    },
+    "Dock icon only while a window is open" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dock-Symbol nur bei geöffnetem Fenster"
+          }
+        }
+      }
+    },
+    "When hidden, the app stays accessible via the Dock icon." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wenn ausgeblendet, bleibt die App über das Dock-Symbol erreichbar."
+          }
+        }
+      }
+    },
+    "TypeWhisper stays in the menu bar and hides its Dock icon while no window is open." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper bleibt in der Menüleiste und blendet sein Dock-Symbol aus, solange kein Fenster geöffnet ist."
+          }
+        }
+      }
+    },
+    "TypeWhisper stays accessible via the Dock icon." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper bleibt über das Dock-Symbol erreichbar."
+          }
+        }
+      }
+    },
+    "TypeWhisper hides both icons until a window opens. To reopen Settings later, launch TypeWhisper from Spotlight or the Applications folder." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper blendet beide Symbole aus, bis wieder ein Fenster geöffnet wird. Um die Einstellungen später erneut zu öffnen, starte TypeWhisper über Spotlight oder den Programme-Ordner."
+          }
+        }
+      }
+    },
+    "This setting applies only when the menu bar icon is hidden." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Einstellung gilt nur, wenn das Menüleistensymbol ausgeblendet ist."
+          }
+        }
+      }
+    },
+    "When hidden, the Dock icon only appears while a TypeWhisper window is open. To reopen Settings later, launch TypeWhisper again from Spotlight or the Applications folder." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wenn ausgeblendet, erscheint das Dock-Symbol nur, solange ein TypeWhisper-Fenster geöffnet ist. Um die Einstellungen später erneut zu öffnen, starte TypeWhisper erneut über Spotlight oder den Programme-Ordner."
+          }
+        }
+      }
     }
   },
   "version" : "1.1"

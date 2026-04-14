@@ -2,6 +2,12 @@ import SwiftUI
 import ServiceManagement
 
 struct GeneralSettingsView: View {
+    private enum AppVisibilityMode: String, CaseIterable {
+        case menuBar
+        case dock
+        case dockWhileWindowOpen
+    }
+
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var appLanguage: String = {
         if let lang = UserDefaults.standard.string(forKey: UserDefaultsKeys.preferredAppLanguage) {
@@ -10,8 +16,8 @@ struct GeneralSettingsView: View {
         return Locale.preferredLanguages.first?.hasPrefix("de") == true ? "de" : "en"
     }()
     @State private var showRestartAlert = false
-    @State private var showMenuBarIconHiddenAlert = false
     @AppStorage(UserDefaultsKeys.showMenuBarIcon) private var showMenuBarIcon = true
+    @AppStorage(UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden) private var dockIconBehaviorRawValue = DockIconBehavior.keepVisible.rawValue
     @AppStorage(UserDefaultsKeys.showRecorderTab) private var showRecorderTab = false
     @ObservedObject private var pluginManager = PluginManager.shared
     @ObservedObject private var settings = SettingsViewModel.shared
@@ -23,6 +29,45 @@ struct GeneralSettingsView: View {
 
     private var supportsPositionSelection: Bool {
         dictation.indicatorStyle == .overlay || dictation.indicatorStyle == .minimal
+    }
+
+    private var dockIconBehavior: DockIconBehavior {
+        get { DockIconBehavior(rawValue: dockIconBehaviorRawValue) ?? .keepVisible }
+        nonmutating set { dockIconBehaviorRawValue = newValue.rawValue }
+    }
+
+    private var appVisibilityMode: AppVisibilityMode {
+        get {
+            if showMenuBarIcon {
+                return .menuBar
+            }
+
+            return dockIconBehavior == .keepVisible ? .dock : .dockWhileWindowOpen
+        }
+        nonmutating set {
+            switch newValue {
+            case .menuBar:
+                showMenuBarIcon = true
+                dockIconBehavior = .keepVisible
+            case .dock:
+                showMenuBarIcon = false
+                dockIconBehavior = .keepVisible
+            case .dockWhileWindowOpen:
+                showMenuBarIcon = false
+                dockIconBehavior = .onlyWhileWindowOpen
+            }
+        }
+    }
+
+    private var appVisibilityDescription: LocalizedStringKey {
+        switch appVisibilityMode {
+        case .menuBar:
+            "TypeWhisper stays in the menu bar and hides its Dock icon while no window is open."
+        case .dock:
+            "TypeWhisper stays accessible via the Dock icon."
+        case .dockWhileWindowOpen:
+            "TypeWhisper hides both icons until a window opens. To reopen Settings later, launch TypeWhisper from Spotlight or the Applications folder."
+        }
     }
 
     var body: some View {
@@ -85,18 +130,16 @@ struct GeneralSettingsView: View {
             }
 
             Section(String(localized: "Appearance")) {
-                Toggle(String(localized: "Show menu bar icon"), isOn: $showMenuBarIcon)
-                    .onChange(of: showMenuBarIcon) { _, newValue in
-                        if !newValue {
-                            let alertShown = UserDefaults.standard.bool(forKey: UserDefaultsKeys.menuBarIconHiddenAlertShown)
-                            if !alertShown {
-                                showMenuBarIconHiddenAlert = true
-                                UserDefaults.standard.set(true, forKey: UserDefaultsKeys.menuBarIconHiddenAlertShown)
-                            }
-                        }
-                    }
+                Picker(String(localized: "App visibility"), selection: Binding(
+                    get: { appVisibilityMode },
+                    set: { appVisibilityMode = $0 }
+                )) {
+                    Text(String(localized: "Menu bar icon")).tag(AppVisibilityMode.menuBar)
+                    Text(String(localized: "Dock icon")).tag(AppVisibilityMode.dock)
+                    Text(String(localized: "Dock icon only while a window is open")).tag(AppVisibilityMode.dockWhileWindowOpen)
+                }
 
-                Text(String(localized: "When hidden, the app is accessible via the Dock icon."))
+                Text(appVisibilityDescription)
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -181,11 +224,6 @@ struct GeneralSettingsView: View {
             Button(String(localized: "Later"), role: .cancel) {}
         } message: {
             Text(String(localized: "The language change will take effect after restarting TypeWhisper."))
-        }
-        .alert(String(localized: "Menu bar icon hidden"), isPresented: $showMenuBarIconHiddenAlert) {
-            Button(String(localized: "OK"), role: .cancel) {}
-        } message: {
-            Text(String(localized: "You can access TypeWhisper settings via the Dock icon."))
         }
     }
 

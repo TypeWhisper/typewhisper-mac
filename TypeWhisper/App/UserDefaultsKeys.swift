@@ -65,6 +65,7 @@ enum UserDefaultsKeys {
 
     // MARK: - Appearance
     static let showMenuBarIcon = "showMenuBarIcon"
+    static let dockIconBehaviorWhenMenuBarHidden = "dockIconBehaviorWhenMenuBarHidden"
     static let menuBarIconHiddenAlertShown = "menuBarIconHiddenAlertShown"
 
     // MARK: - Memory

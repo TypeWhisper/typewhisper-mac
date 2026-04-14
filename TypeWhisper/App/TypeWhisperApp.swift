@@ -7,10 +7,36 @@ extension UserDefaults {
     @objc dynamic var showMenuBarIcon: Bool {
         bool(forKey: UserDefaultsKeys.showMenuBarIcon)
     }
+
+    @objc dynamic var dockIconBehaviorWhenMenuBarHidden: String {
+        string(forKey: UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden)
+            ?? DockIconBehavior.keepVisible.rawValue
+    }
 }
 
 extension Notification.Name {
     static let openSettingsFromDock = Notification.Name("openSettingsFromDock")
+}
+
+enum DockIconBehavior: String, CaseIterable {
+    case keepVisible
+    case onlyWhileWindowOpen
+}
+
+enum DockIconVisibility {
+    static func shouldShowDockIcon(
+        showMenuBarIcon: Bool,
+        dockIconBehavior: DockIconBehavior,
+        hasVisibleManagedWindow: Bool,
+        hasInteractiveForegroundContent: Bool = false
+    ) -> Bool {
+        if hasVisibleManagedWindow || hasInteractiveForegroundContent {
+            return true
+        }
+
+        guard !showMenuBarIcon else { return false }
+        return dockIconBehavior == .keepVisible
+    }
 }
 
 struct TypeWhisperApp: App {
@@ -143,19 +169,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     private var indicatorCoordinator: IndicatorCoordinator?
     private var translationHostWindow: NSWindow?
     private var menuBarIconObserver: NSKeyValueObservation?
+    private var dockIconBehaviorObserver: NSKeyValueObservation?
+    private var hasInteractiveForegroundContent = false
     private lazy var updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil)
 
     var updateChecker: UpdateChecker {
         .sparkle(updaterController.updater)
     }
 
-    private var isMenuBarIconHidden: Bool {
-        !UserDefaults.standard.bool(forKey: UserDefaultsKeys.showMenuBarIcon)
+    private var showMenuBarIconPreference: Bool {
+        UserDefaults.standard.object(forKey: UserDefaultsKeys.showMenuBarIcon) as? Bool ?? true
+    }
+
+    private var dockIconBehaviorPreference: DockIconBehavior {
+        DockIconBehavior(rawValue: UserDefaults.standard.dockIconBehaviorWhenMenuBarHidden) ?? .keepVisible
+    }
+
+    private var shouldShowDockIcon: Bool {
+        DockIconVisibility.shouldShowDockIcon(
+            showMenuBarIcon: showMenuBarIconPreference,
+            dockIconBehavior: dockIconBehaviorPreference,
+            hasVisibleManagedWindow: hasVisibleManagedWindow,
+            hasInteractiveForegroundContent: hasInteractiveForegroundContent
+        )
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         UserDefaults.standard.register(defaults: [
             UserDefaultsKeys.showMenuBarIcon: true,
+            UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden: DockIconBehavior.keepVisible.rawValue,
             UserDefaultsKeys.updateChannel: AppConstants.defaultReleaseChannel.rawValue
         ])
 
@@ -164,11 +206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         }
 
         UpdateChecker.shared = updateChecker
-
-        // If menu bar icon is hidden, show dock icon immediately
-        if isMenuBarIconHidden {
-            NSApp.setActivationPolicy(.regular)
-        }
+        applyActivationPolicy()
 
         let coordinator = IndicatorCoordinator()
         coordinator.startObserving()
@@ -178,13 +216,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         if #available(macOS 15, *), let ts = ServiceContainer.shared.translationService as? TranslationService {
             translationHostWindow = TranslationHostWindow(translationService: ts)
             ts.setInteractiveHostMode = { [weak self] enabled in
-                (self?.translationHostWindow as? TranslationHostWindow)?.setInteractiveMode(enabled)
-                if enabled {
-                    NSApp.setActivationPolicy(.regular)
-                    NSApp.activate(ignoringOtherApps: true)
-                } else if self?.shouldRevertToAccessory == true {
-                    NSApp.setActivationPolicy(.accessory)
-                }
+                guard let self else { return }
+                (self.translationHostWindow as? TranslationHostWindow)?.setInteractiveMode(enabled)
+                self.hasInteractiveForegroundContent = enabled
+                self.applyActivationPolicy(activate: enabled)
             }
         }
         #endif
@@ -204,17 +239,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             }
         }
 
-        // Observe menu bar icon visibility changes
-        menuBarIconObserver = UserDefaults.standard.observe(
-            \.showMenuBarIcon, options: [.new]
-        ) { [weak self] _, change in
+        // Observe appearance preference changes
+        menuBarIconObserver = UserDefaults.standard.observe(\.showMenuBarIcon, options: [.new]) { [weak self] _, _ in
             Task { @MainActor in
-                let hidden = change.newValue == false
-                if hidden {
-                    NSApp.setActivationPolicy(.regular)
-                } else if self?.hasVisibleManagedWindow != true {
-                    NSApp.setActivationPolicy(.accessory)
-                }
+                self?.applyActivationPolicy()
+            }
+        }
+        dockIconBehaviorObserver = UserDefaults.standard.observe(\.dockIconBehaviorWhenMenuBarHidden, options: [.new]) { [weak self] _, _ in
+            Task { @MainActor in
+                self?.applyActivationPolicy()
             }
         }
 
@@ -289,27 +322,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         NSApp.windows.contains { isManagedWindow($0) && $0.isVisible }
     }
 
-    private var shouldRevertToAccessory: Bool {
-        !isMenuBarIconHidden && !hasVisibleManagedWindow
+    private func applyActivationPolicy(activate: Bool = false) {
+        let targetPolicy: NSApplication.ActivationPolicy = shouldShowDockIcon ? .regular : .accessory
+        if NSApp.activationPolicy() != targetPolicy {
+            NSApp.setActivationPolicy(targetPolicy)
+        }
+
+        if activate {
+            NSApp.activate(ignoringOtherApps: true)
+        }
     }
 
     @objc nonisolated private func windowDidBecomeKey(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }
-        DispatchQueue.main.async { [self] in
-            guard isManagedWindow(window), window.isVisible else { return }
-            NSApp.setActivationPolicy(.regular)
-            NSApp.activate()
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.isManagedWindow(window), window.isVisible else { return }
+            self.applyActivationPolicy(activate: true)
         }
     }
 
     @objc nonisolated private func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }
-        // Only go back to accessory if menu bar icon is visible and no other managed window is open
         DispatchQueue.main.async { [weak self] in
-            guard self?.isManagedWindow(window) == true else { return }
-            if self?.shouldRevertToAccessory == true {
-                NSApp.setActivationPolicy(.accessory)
-            }
+            guard let self, self.isManagedWindow(window) else { return }
+            self.applyActivationPolicy()
         }
     }
 

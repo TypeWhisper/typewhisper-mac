@@ -61,6 +61,7 @@ private struct DiagnosticsReport: Encodable {
         let soundFeedbackEnabled: Bool
         let spokenFeedbackEnabled: Bool
         let showMenuBarIcon: Bool
+        let dockIconBehaviorWhenMenuBarHidden: String
         let watchFolderAutoStart: Bool
         let setupWizardCompleted: Bool
         let preferredAppLanguage: String?
@@ -194,6 +195,7 @@ final class ErrorLogService: ObservableObject {
                 soundFeedbackEnabled: defaults.object(forKey: UserDefaultsKeys.soundFeedbackEnabled) as? Bool ?? true,
                 spokenFeedbackEnabled: defaults.bool(forKey: UserDefaultsKeys.spokenFeedbackEnabled),
                 showMenuBarIcon: defaults.object(forKey: UserDefaultsKeys.showMenuBarIcon) as? Bool ?? true,
+                dockIconBehaviorWhenMenuBarHidden: defaults.string(forKey: UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden) ?? DockIconBehavior.keepVisible.rawValue,
                 watchFolderAutoStart: defaults.bool(forKey: UserDefaultsKeys.watchFolderAutoStart),
                 setupWizardCompleted: defaults.bool(forKey: UserDefaultsKeys.setupWizardCompleted),
                 preferredAppLanguage: defaults.string(forKey: UserDefaultsKeys.preferredAppLanguage)

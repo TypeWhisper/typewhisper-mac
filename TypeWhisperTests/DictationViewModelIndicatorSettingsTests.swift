@@ -58,3 +58,56 @@ final class DictationViewModelIndicatorSettingsTests: XCTestCase {
         XCTAssertEqual(DictationViewModel.loadIndicatorStyle(defaults: defaults), .notch)
     }
 }
+
+final class DockIconVisibilityTests: XCTestCase {
+    func testDockIconStaysHiddenWhenMenuBarIconIsVisibleAndNoWindowIsOpen() {
+        XCTAssertFalse(
+            DockIconVisibility.shouldShowDockIcon(
+                showMenuBarIcon: true,
+                dockIconBehavior: .keepVisible,
+                hasVisibleManagedWindow: false
+            )
+        )
+    }
+
+    func testDockIconStaysVisibleWhenMenuBarIconIsHiddenAndBehaviorKeepsItVisible() {
+        XCTAssertTrue(
+            DockIconVisibility.shouldShowDockIcon(
+                showMenuBarIcon: false,
+                dockIconBehavior: .keepVisible,
+                hasVisibleManagedWindow: false
+            )
+        )
+    }
+
+    func testDockIconStaysHiddenWhenMenuBarIconIsHiddenAndBehaviorRequiresWindow() {
+        XCTAssertFalse(
+            DockIconVisibility.shouldShowDockIcon(
+                showMenuBarIcon: false,
+                dockIconBehavior: .onlyWhileWindowOpen,
+                hasVisibleManagedWindow: false
+            )
+        )
+    }
+
+    func testDockIconAppearsWhileManagedWindowIsVisibleEvenWhenBehaviorRequiresWindow() {
+        XCTAssertTrue(
+            DockIconVisibility.shouldShowDockIcon(
+                showMenuBarIcon: false,
+                dockIconBehavior: .onlyWhileWindowOpen,
+                hasVisibleManagedWindow: true
+            )
+        )
+    }
+
+    func testDockIconAppearsForInteractiveForegroundContent() {
+        XCTAssertTrue(
+            DockIconVisibility.shouldShowDockIcon(
+                showMenuBarIcon: true,
+                dockIconBehavior: .onlyWhileWindowOpen,
+                hasVisibleManagedWindow: false,
+                hasInteractiveForegroundContent: true
+            )
+        )
+    }
+}
