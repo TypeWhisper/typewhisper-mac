@@ -1,6 +1,6 @@
 # TypeWhisper Support Matrix
 
-This matrix describes the officially supported `1.x` direct-download path. For the `1.2.0` stable line, the public runtime support floor remains `macOS 14+`.
+This matrix describes the officially supported direct-download path for the current stable macOS release. The public runtime support floor remains `macOS 14+`.
 
 ## Platform
 
@@ -15,10 +15,10 @@ This matrix describes the officially supported `1.x` direct-download path. For t
 
 | Feature | macOS 14 | macOS 15 | macOS 26+ | Notes |
 | --- | --- | --- | --- | --- |
-| System-wide dictation | Yes | Yes | Yes | Core workflow for `1.x` |
-| File transcription | Yes | Yes | Yes | Core workflow for `1.x` |
-| Prompt processing | Yes | Yes | Yes | Core workflow for `1.x` |
-| Profiles, History, Dictionary, Snippets | Yes | Yes | Yes | Core workflow for `1.x` |
+| System-wide dictation | Yes | Yes | Yes | Core workflow in the current stable release |
+| File transcription | Yes | Yes | Yes | Core workflow in the current stable release |
+| Prompt processing | Yes | Yes | Yes | Core workflow in the current stable release |
+| Profiles, History, Dictionary, Snippets | Yes | Yes | Yes | Core workflow in the current stable release |
 | Notch, Overlay, and Minimal indicators | Yes | Yes | Yes | User-facing status surfaces in `1.2` |
 | Widgets | Yes | Yes | Yes | Supported advanced surface |
 | HTTP API | Yes | Yes | Yes | Loopback-only, disabled by default |
@@ -29,18 +29,18 @@ This matrix describes the officially supported `1.x` direct-download path. For t
 
 ## Engine Notes
 
-| Surface | Support in `1.x` | Notes |
+| Surface | Support in the current stable release | Notes |
 | --- | --- | --- |
 | Local engines | Yes | Recommended default path |
 | Cloud engines | Yes | Require valid API keys |
 | Bundled MLX engines | Yes | Qwen3, Granite, and Voxtral support an optional HuggingFace token for higher download rate limits |
 | Bundled plugins | Yes | Part of the tested product path |
-| External third-party plugins | Best effort | Not a stable-release blocker for `1.x` |
+| External third-party plugins | Best effort | Not a stable-release blocker for the current stable release |
 
 ## Automation Notes
 
-| Surface | Status in `1.x` |
+| Surface | Status in the current stable release |
 | --- | --- |
-| HTTP API `/v1/*` | Stable for `1.x` |
-| `typewhisper` CLI | Stable for `1.x` |
-| Plugin SDK | Stable for `1.x` |
+| HTTP API `/v1/*` | Stable in the current stable release |
+| `typewhisper` CLI | Stable in the current stable release |
+| Plugin SDK | Stable in the current stable release |

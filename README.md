@@ -298,7 +298,7 @@ cat audio.wav | typewhisper transcribe -
 typewhisper transcribe meeting.m4a --json | jq -r '.text'
 ```
 
-The CLI requires the API server to be running (Settings > Advanced) and follows the documented `1.x` command and flag surface.
+The CLI requires the API server to be running (Settings > Advanced) and follows the documented command and flag surface for the current stable release.
 
 ## Rules
 
