@@ -343,7 +343,8 @@ public struct PluginOpenAIChatHelper: Sendable {
         systemPrompt: String,
         userText: String,
         maxOutputTokens: Int? = 4096,
-        maxOutputTokenParameter: String = "max_tokens"
+        maxOutputTokenParameter: String = "max_tokens",
+        reasoningEffort: String? = nil
     ) async throws -> String {
         let endpoint = "\(baseURL)\(chatEndpoint)"
         guard let url = URL(string: endpoint) else {
@@ -355,7 +356,8 @@ public struct PluginOpenAIChatHelper: Sendable {
             systemPrompt: systemPrompt,
             userText: userText,
             maxOutputTokens: maxOutputTokens,
-            maxOutputTokenParameter: maxOutputTokenParameter
+            maxOutputTokenParameter: maxOutputTokenParameter,
+            reasoningEffort: reasoningEffort
         )
 
         var request = URLRequest(url: url)
@@ -399,12 +401,32 @@ public struct PluginOpenAIChatHelper: Sendable {
         return content.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    public func process(
+        apiKey: String,
+        model: String,
+        systemPrompt: String,
+        userText: String,
+        maxOutputTokens: Int? = 4096,
+        maxOutputTokenParameter: String = "max_tokens"
+    ) async throws -> String {
+        try await process(
+            apiKey: apiKey,
+            model: model,
+            systemPrompt: systemPrompt,
+            userText: userText,
+            maxOutputTokens: maxOutputTokens,
+            maxOutputTokenParameter: maxOutputTokenParameter,
+            reasoningEffort: nil
+        )
+    }
+
     func requestBody(
         model: String,
         systemPrompt: String,
         userText: String,
         maxOutputTokens: Int?,
-        maxOutputTokenParameter: String
+        maxOutputTokenParameter: String,
+        reasoningEffort: String?
     ) -> [String: Any] {
         var requestBody: [String: Any] = [
             "model": model,
@@ -417,6 +439,10 @@ public struct PluginOpenAIChatHelper: Sendable {
 
         if let maxOutputTokens {
             requestBody[maxOutputTokenParameter] = maxOutputTokens
+        }
+
+        if let reasoningEffort, !reasoningEffort.isEmpty {
+            requestBody["reasoning_effort"] = reasoningEffort
         }
 
         return requestBody

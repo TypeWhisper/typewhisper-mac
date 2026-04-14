@@ -10,7 +10,8 @@ final class OpenAIChatHelperTests: XCTestCase {
             systemPrompt: "Fix grammar",
             userText: "hello world",
             maxOutputTokens: 4096,
-            maxOutputTokenParameter: "max_tokens"
+            maxOutputTokenParameter: "max_tokens",
+            reasoningEffort: nil
         )
 
         XCTAssertEqual(requestBody["model"] as? String, "gpt-4o")
@@ -26,7 +27,8 @@ final class OpenAIChatHelperTests: XCTestCase {
             systemPrompt: "Fix grammar",
             userText: "hello world",
             maxOutputTokens: 4096,
-            maxOutputTokenParameter: "max_completion_tokens"
+            maxOutputTokenParameter: "max_completion_tokens",
+            reasoningEffort: nil
         )
 
         XCTAssertEqual(requestBody["max_completion_tokens"] as? Int, 4096)
@@ -41,10 +43,26 @@ final class OpenAIChatHelperTests: XCTestCase {
             systemPrompt: "Fix grammar",
             userText: "hello world",
             maxOutputTokens: nil,
-            maxOutputTokenParameter: "max_completion_tokens"
+            maxOutputTokenParameter: "max_completion_tokens",
+            reasoningEffort: nil
         )
 
         XCTAssertNil(requestBody["max_tokens"])
         XCTAssertNil(requestBody["max_completion_tokens"])
+    }
+
+    func testRequestBodyIncludesReasoningEffortWhenProvided() {
+        let helper = PluginOpenAIChatHelper(baseURL: "https://example.com")
+
+        let requestBody = helper.requestBody(
+            model: "gpt-5.4",
+            systemPrompt: "Fix grammar",
+            userText: "hello world",
+            maxOutputTokens: 4096,
+            maxOutputTokenParameter: "max_completion_tokens",
+            reasoningEffort: "high"
+        )
+
+        XCTAssertEqual(requestBody["reasoning_effort"] as? String, "high")
     }
 }
