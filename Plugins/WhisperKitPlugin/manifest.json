@@ -2,8 +2,9 @@
     "id": "com.typewhisper.whisperkit",
     "name": "WhisperKit",
     "version": "1.0.15",
-    "minHostVersion": "0.12.0",
+    "minHostVersion": "1.2.1",
     "minOSVersion": "14.0",
+    "supportedArchitectures": ["arm64"],
     "author": "TypeWhisper",
     "description": "Local speech-to-text powered by WhisperKit. 7 model sizes, 99 languages, streaming support.",
     "descriptions": {

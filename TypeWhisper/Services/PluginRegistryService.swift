@@ -73,6 +73,7 @@ struct RegistryPlugin: Codable, Identifiable {
     let version: String
     let minHostVersion: String
     let minOSVersion: String?
+    let supportedArchitectures: [String]?
     let author: String
     let description: String
     let category: String
@@ -92,15 +93,11 @@ struct RegistryPlugin: Codable, Identifiable {
         return description
     }
 
-    var isCompatibleWithCurrentOS: Bool {
-        guard let minOS = minOSVersion else { return true }
-        let parts = minOS.split(separator: ".").compactMap { Int($0) }
-        let required = OperatingSystemVersion(
-            majorVersion: parts.count > 0 ? parts[0] : 0,
-            minorVersion: parts.count > 1 ? parts[1] : 0,
-            patchVersion: parts.count > 2 ? parts[2] : 0
+    var isCompatibleWithCurrentEnvironment: Bool {
+        PluginCompatibility.isCompatible(
+            minOSVersion: minOSVersion,
+            supportedArchitectures: supportedArchitectures
         )
-        return ProcessInfo.processInfo.isOperatingSystemAtLeast(required)
     }
 }
 
@@ -179,7 +176,7 @@ final class PluginRegistryService: ObservableObject {
             let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0"
             registry = response.plugins.filter {
                 Self.compareVersions($0.minHostVersion, appVersion) != .orderedDescending
-                    && $0.isCompatibleWithCurrentOS
+                    && $0.isCompatibleWithCurrentEnvironment
             }
             lastFetchDate = Date()
             fetchState = .loaded
@@ -239,6 +236,11 @@ final class PluginRegistryService: ObservableObject {
     // MARK: - Download & Install
 
     func downloadAndInstall(_ plugin: RegistryPlugin) async {
+        guard plugin.isCompatibleWithCurrentEnvironment else {
+            installStates[plugin.id] = .error("Plugin is not compatible with this Mac")
+            return
+        }
+
         guard let url = URL(string: plugin.downloadURL) else {
             installStates[plugin.id] = .error("Invalid download URL")
             return
@@ -368,6 +370,20 @@ final class PluginRegistryService: ObservableObject {
         let fm = FileManager.default
         let manifest = try readManifest(at: bundleURL)
         let existingLoadedBundleURL = PluginManager.shared.bundleURL(for: manifest.id)
+
+        guard manifest.isCompatibleWithCurrentEnvironment else {
+            let architecture = RuntimeArchitecture.current
+            let reason = PluginCompatibility.incompatibilityReason(
+                minOSVersion: manifest.minOSVersion,
+                supportedArchitectures: manifest.supportedArchitectures,
+                architecture: architecture
+            ) ?? "Plugin is not compatible with this Mac"
+            throw NSError(
+                domain: "PluginRegistry",
+                code: 4,
+                userInfo: [NSLocalizedDescriptionKey: "\(manifest.name) \(reason) (current architecture: \(architecture))"]
+            )
+        }
 
         if let expectedPluginId, manifest.id != expectedPluginId {
             throw NSError(

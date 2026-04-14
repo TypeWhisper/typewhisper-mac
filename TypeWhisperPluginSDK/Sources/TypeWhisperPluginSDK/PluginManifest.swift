@@ -6,6 +6,7 @@ public struct PluginManifest: Codable, Equatable, Sendable {
     public let version: String
     public let minHostVersion: String?
     public let minOSVersion: String?
+    public let supportedArchitectures: [String]?
     public let author: String?
     public let principalClass: String
     public let requiresAPIKey: Bool?
@@ -18,6 +19,7 @@ public struct PluginManifest: Codable, Equatable, Sendable {
         version: String,
         minHostVersion: String? = nil,
         minOSVersion: String? = nil,
+        supportedArchitectures: [String]? = nil,
         author: String? = nil,
         principalClass: String,
         requiresAPIKey: Bool? = nil,
@@ -29,6 +31,7 @@ public struct PluginManifest: Codable, Equatable, Sendable {
         self.version = version
         self.minHostVersion = minHostVersion
         self.minOSVersion = minOSVersion
+        self.supportedArchitectures = supportedArchitectures
         self.author = author
         self.principalClass = principalClass
         self.requiresAPIKey = requiresAPIKey

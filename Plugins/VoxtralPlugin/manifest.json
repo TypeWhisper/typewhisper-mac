@@ -2,8 +2,9 @@
     "id": "com.typewhisper.voxtral",
     "name": "Voxtral",
     "version": "1.0.4",
-    "minHostVersion": "0.12.0",
+    "minHostVersion": "1.2.1",
     "minOSVersion": "14.0",
+    "supportedArchitectures": ["arm64"],
     "author": "TypeWhisper",
     "description": "Local speech-to-text powered by Voxtral MLX on Apple Silicon. Fast and accurate.",
     "descriptions": {

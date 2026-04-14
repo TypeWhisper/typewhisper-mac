@@ -33,7 +33,9 @@ final class WatchFolderViewModel: ObservableObject {
             guard isInitialized else { return }
             // Reset model and language when engine changes
             selectedModel = nil
-            let supported = selectedEngineSupportedLanguages
+            guard let selectedEngine,
+                  let engine = PluginManager.shared.transcriptionEngine(for: selectedEngine) else { return }
+            let supported = engine.supportedLanguages.sorted()
             if let lang = language, !supported.isEmpty, !supported.contains(lang) {
                 language = nil
             }
@@ -81,6 +83,16 @@ final class WatchFolderViewModel: ObservableObject {
         watchFolderService.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+    }
+
+    func observePluginManager() {
+        PluginManager.shared.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.reconcileSelectionWithAvailablePlugins()
                 self?.objectWillChange.send()
             }
             .store(in: &cancellables)
@@ -154,6 +166,13 @@ final class WatchFolderViewModel: ObservableObject {
                 outputFolderPath = url.path
             }
         }
+    }
+
+    func reconcileSelectionWithAvailablePlugins() {
+        guard let selectedEngine else { return }
+        guard PluginManager.shared.transcriptionEngine(for: selectedEngine) == nil else { return }
+        self.selectedEngine = nil
+        selectedModel = nil
     }
 
     private func resolveWatchFolderURL() -> URL? {

@@ -244,46 +244,52 @@ jobs:
           size = int("$ZIP_SIZE")
           download_url = "$DOWNLOAD_URL"
           manifest_path = "$MANIFEST_PATH"
+          src_manifest = os.path.join("$GITHUB_WORKSPACE", manifest_path) if manifest_path else ""
+
+          if not src_manifest or not os.path.exists(src_manifest):
+              print(f"Warning: No manifest found at {src_manifest}")
+              sys.exit(0)
+
+          with open(src_manifest) as mf:
+              manifest = json.load(mf)
+
+          def sync_registry_fields(plugin):
+              plugin["id"] = manifest["id"]
+              plugin["name"] = manifest["name"]
+              plugin["version"] = version
+              plugin["minHostVersion"] = manifest.get("minHostVersion", plugin.get("minHostVersion", "0.9.0"))
+              plugin["author"] = manifest.get("author", plugin.get("author", "TypeWhisper"))
+              plugin["description"] = manifest.get("description", plugin.get("description", ""))
+              plugin["descriptions"] = manifest.get("descriptions", plugin.get("descriptions", {}))
+              plugin["category"] = manifest.get("category", plugin.get("category", "utility"))
+              plugin["size"] = size
+              plugin["downloadURL"] = download_url
+
+              optional_fields = [
+                  "minOSVersion",
+                  "supportedArchitectures",
+                  "iconSystemName",
+                  "requiresAPIKey",
+              ]
+              for field in optional_fields:
+                  if field in manifest and manifest[field] is not None:
+                      plugin[field] = manifest[field]
+                  else:
+                      plugin.pop(field, None)
 
           updated = False
           for plugin in registry["plugins"]:
               if plugin_name in plugin["id"]:
-                  plugin["version"] = version
-                  plugin["size"] = size
-                  plugin["downloadURL"] = download_url
+                  sync_registry_fields(plugin)
                   updated = True
                   print(f"Updated {plugin['id']} to v{version}")
                   break
 
           if not updated:
-              # Read manifest.json to create a new registry entry
-              src_manifest = os.path.join("$GITHUB_WORKSPACE", manifest_path) if manifest_path else ""
-              if src_manifest and os.path.exists(src_manifest):
-                  with open(src_manifest) as mf:
-                      manifest = json.load(mf)
-                  new_entry = {
-                      "id": manifest["id"],
-                      "name": manifest["name"],
-                      "version": version,
-                      "minHostVersion": manifest.get("minHostVersion", "0.9.0"),
-                      "author": manifest.get("author", "TypeWhisper"),
-                      "description": manifest.get("description", ""),
-                      "descriptions": manifest.get("descriptions", {}),
-                      "category": manifest.get("category", "utility"),
-                      "size": size,
-                      "downloadURL": download_url
-                  }
-                  if manifest.get("minOSVersion"):
-                      new_entry["minOSVersion"] = manifest["minOSVersion"]
-                  if manifest.get("iconSystemName"):
-                      new_entry["iconSystemName"] = manifest["iconSystemName"]
-                  if manifest.get("requiresAPIKey"):
-                      new_entry["requiresAPIKey"] = manifest["requiresAPIKey"]
-                  registry["plugins"].append(new_entry)
-                  print(f"Added new plugin {manifest['id']} v{version}")
-              else:
-                  print(f"Warning: No manifest found at {src_manifest}")
-                  sys.exit(0)
+              new_entry = {}
+              sync_registry_fields(new_entry)
+              registry["plugins"].append(new_entry)
+              print(f"Added new plugin {manifest['id']} v{version}")
 
           with open("/tmp/gh-pages/plugins.json", "w") as f:
               json.dump(registry, f, indent=2)

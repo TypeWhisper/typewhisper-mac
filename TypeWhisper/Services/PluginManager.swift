@@ -5,6 +5,88 @@ import os.log
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "PluginManager")
 
+enum RuntimeArchitecture {
+    nonisolated(unsafe) static var overrideCurrent: String?
+
+    static var current: String {
+        if let overrideCurrent {
+            return overrideCurrent
+        }
+#if arch(arm64)
+        return "arm64"
+#elseif arch(x86_64)
+        return "x86_64"
+#else
+        return "unknown"
+#endif
+    }
+}
+
+enum PluginCompatibility {
+    static func isCompatible(minOSVersion: String?, supportedArchitectures: [String]?) -> Bool {
+        isCompatible(
+            minOSVersion: minOSVersion,
+            supportedArchitectures: supportedArchitectures,
+            architecture: RuntimeArchitecture.current
+        )
+    }
+
+    static func isCompatible(
+        minOSVersion: String?,
+        supportedArchitectures: [String]?,
+        architecture: String
+    ) -> Bool {
+        if let minOSVersion, !isCompatibleWithCurrentOS(minOSVersion: minOSVersion) {
+            return false
+        }
+
+        guard let supportedArchitectures, !supportedArchitectures.isEmpty else {
+            return true
+        }
+
+        return supportedArchitectures.contains(architecture)
+    }
+
+    static func incompatibilityReason(
+        minOSVersion: String?,
+        supportedArchitectures: [String]?,
+        architecture: String
+    ) -> String? {
+        if let minOSVersion, !isCompatibleWithCurrentOS(minOSVersion: minOSVersion) {
+            return "requires macOS \(minOSVersion)"
+        }
+
+        guard let supportedArchitectures, !supportedArchitectures.isEmpty else {
+            return nil
+        }
+
+        guard !supportedArchitectures.contains(architecture) else {
+            return nil
+        }
+
+        return "supports architectures \(supportedArchitectures.joined(separator: ", "))"
+    }
+
+    private static func isCompatibleWithCurrentOS(minOSVersion: String) -> Bool {
+        let parts = minOSVersion.split(separator: ".").compactMap { Int($0) }
+        let required = OperatingSystemVersion(
+            majorVersion: parts.count > 0 ? parts[0] : 0,
+            minorVersion: parts.count > 1 ? parts[1] : 0,
+            patchVersion: parts.count > 2 ? parts[2] : 0
+        )
+        return ProcessInfo.processInfo.isOperatingSystemAtLeast(required)
+    }
+}
+
+extension PluginManifest {
+    var isCompatibleWithCurrentEnvironment: Bool {
+        PluginCompatibility.isCompatible(
+            minOSVersion: minOSVersion,
+            supportedArchitectures: supportedArchitectures
+        )
+    }
+}
+
 private enum PluginLoadError: LocalizedError {
     case incompatibleHostVersion(pluginName: String, required: String, current: String)
     case failedToCreateBundle(bundleName: String)
@@ -93,6 +175,10 @@ final class PluginManager: ObservableObject {
         llmProviders.first { $0.providerName.caseInsensitiveCompare(providerName) == .orderedSame }
     }
 
+    func isManifestCompatible(_ manifest: PluginManifest) -> Bool {
+        manifest.isCompatibleWithCurrentEnvironment
+    }
+
     init(appSupportDirectory: URL = AppConstants.appSupportDirectory) {
         self.pluginsDirectory = appSupportDirectory
             .appendingPathComponent("Plugins", isDirectory: true)
@@ -155,17 +241,17 @@ final class PluginManager: ObservableObject {
             throw error
         }
 
-        if let minOS = manifest.minOSVersion {
-            let parts = minOS.split(separator: ".").compactMap { Int($0) }
-            let required = OperatingSystemVersion(
-                majorVersion: parts.count > 0 ? parts[0] : 0,
-                minorVersion: parts.count > 1 ? parts[1] : 0,
-                patchVersion: parts.count > 2 ? parts[2] : 0
+        if !isManifestCompatible(manifest) {
+            let architecture = RuntimeArchitecture.current
+            let reason = PluginCompatibility.incompatibilityReason(
+                minOSVersion: manifest.minOSVersion,
+                supportedArchitectures: manifest.supportedArchitectures,
+                architecture: architecture
+            ) ?? "is not compatible with this Mac"
+            logger.info(
+                "Skipping plugin \(manifest.id, privacy: .public) on \(architecture, privacy: .public): \(reason, privacy: .public)"
             )
-            if !ProcessInfo.processInfo.isOperatingSystemAtLeast(required) {
-                logger.info("Plugin \(manifest.name) requires macOS \(minOS), skipping")
-                return
-            }
+            return
         }
 
         if let minHostVersion = manifest.minHostVersion {

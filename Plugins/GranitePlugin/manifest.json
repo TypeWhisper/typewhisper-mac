@@ -2,8 +2,9 @@
     "id": "com.typewhisper.granite",
     "name": "Granite Speech",
     "version": "1.0.1",
-    "minHostVersion": "0.13.0",
+    "minHostVersion": "1.2.1",
     "minOSVersion": "14.0",
+    "supportedArchitectures": ["arm64"],
     "author": "TypeWhisper",
     "description": "Local speech-to-text and translation by IBM, powered by MLX on Apple Silicon. 6 languages with bidirectional translation.",
     "descriptions": {

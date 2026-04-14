@@ -178,6 +178,7 @@ final class ServiceContainer: ObservableObject {
 
         modelManagerService.observePluginManager()
         settingsViewModel.observePluginManager()
+        watchFolderViewModel.observePluginManager()
     }
 
     func initialize() async {
@@ -199,6 +200,7 @@ final class ServiceContainer: ObservableObject {
 
         // Re-restore provider selection now that plugins are loaded
         modelManagerService.restoreProviderSelection()
+        watchFolderViewModel.reconcileSelectionWithAvailablePlugins()
 
         // Validate LLM provider selection against loaded plugins
         promptProcessingService.validateSelectionAfterPluginLoad()

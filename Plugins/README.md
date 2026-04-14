@@ -44,6 +44,7 @@ Plugins can subscribe to events without modifying the transcription pipeline:
     "version": "1.0.0",
     "minHostVersion": "1.0.0",
     "minOSVersion": "14.0",
+    "supportedArchitectures": ["arm64"],
     "author": "Your Name",
     "principalClass": "MyPluginClassName"
 }

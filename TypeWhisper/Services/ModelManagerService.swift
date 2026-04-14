@@ -142,6 +142,9 @@ final class ModelManagerService: ObservableObject {
             selectProvider(fallback.providerId)
         } else if let anyEngine = PluginManager.shared.transcriptionEngines.first {
             selectProvider(anyEngine.providerId)
+        } else {
+            selectedProviderId = nil
+            UserDefaults.standard.removeObject(forKey: providerKey)
         }
     }
 

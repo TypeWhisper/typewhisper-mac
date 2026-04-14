@@ -16,6 +16,7 @@ private struct DiagnosticsReport: Encodable {
         let macOSVersion: String
         let localeIdentifier: String
         let timeZoneIdentifier: String
+        let cpuArchitecture: String
     }
 
     struct PermissionsInfo: Encodable {
@@ -152,7 +153,8 @@ final class ErrorLogService: ObservableObject {
             system: .init(
                 macOSVersion: ProcessInfo.processInfo.operatingSystemVersionString,
                 localeIdentifier: Locale.current.identifier,
-                timeZoneIdentifier: TimeZone.current.identifier
+                timeZoneIdentifier: TimeZone.current.identifier,
+                cpuArchitecture: RuntimeArchitecture.current
             ),
             permissions: .init(
                 microphoneGranted: AVAudioApplication.shared.recordPermission == .granted,

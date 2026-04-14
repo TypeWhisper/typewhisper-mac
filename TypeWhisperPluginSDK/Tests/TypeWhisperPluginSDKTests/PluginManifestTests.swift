@@ -32,4 +32,22 @@ final class PluginManifestTests: XCTestCase {
             )
         )
     }
+
+    func testPluginManifestDecodesSupportedArchitecturesWhenPresent() throws {
+        let data = Data(
+            """
+            {
+              "id": "com.typewhisper.mock",
+              "name": "Mock Plugin",
+              "version": "1.2.3",
+              "supportedArchitectures": ["arm64"],
+              "principalClass": "MockPlugin"
+            }
+            """.utf8
+        )
+
+        let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
+
+        XCTAssertEqual(manifest.supportedArchitectures, ["arm64"])
+    }
 }
