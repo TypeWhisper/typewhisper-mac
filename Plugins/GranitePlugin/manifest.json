@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.granite",
     "name": "Granite Speech",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "minHostVersion": "1.2.1",
     "minOSVersion": "14.0",
     "supportedArchitectures": ["arm64"],
