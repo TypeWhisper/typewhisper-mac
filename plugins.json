@@ -74,16 +74,16 @@
     {
       "id": "com.typewhisper.openai",
       "name": "OpenAI / ChatGPT",
-      "version": "1.1.0",
-      "minHostVersion": "0.9.0",
+      "version": "1.1.1",
+      "minHostVersion": "1.2.2",
       "author": "TypeWhisper",
       "description": "Cloud transcription plus OpenAI/ChatGPT prompts. Use an API key or ChatGPT login.",
       "descriptions": {
         "de": "Cloud-Transkription plus OpenAI-/ChatGPT-Prompts. Nutzbar per API-Key oder ChatGPT-Login."
       },
       "category": "transcription",
-      "size": 367582,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-v1.1.0/OpenAIPlugin.zip",
+      "size": 367574,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-v1.1.1/OpenAIPlugin.zip",
       "iconSystemName": "brain",
       "requiresAPIKey": false,
       "downloadCount": 630,
