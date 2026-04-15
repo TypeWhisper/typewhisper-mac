@@ -517,7 +517,7 @@
     {
       "id": "com.typewhisper.speechmatics",
       "name": "Speechmatics",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "minHostVersion": "0.12.0",
       "author": "TypeWhisper",
       "description": "Cloud transcription via Speechmatics API with real-time WebSocket streaming. Requires API key.",
@@ -525,8 +525,8 @@
         "de": "Cloud-Transkription ueber die Speechmatics-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key."
       },
       "category": "transcription",
-      "size": 181093,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-speechmatics-v1.0.0/SpeechmaticsPlugin.zip",
+      "size": 186428,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-speechmatics-v1.0.1/SpeechmaticsPlugin.zip",
       "minOSVersion": "14.0",
       "iconSystemName": "waveform.badge.mic",
       "requiresAPIKey": true,
