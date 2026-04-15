@@ -272,16 +272,6 @@ jobs:
                   else:
                       plugin.pop(field, None)
 
-              for legacy_field in [
-                  "version",
-                  "minHostVersion",
-                  "minOSVersion",
-                  "supportedArchitectures",
-                  "size",
-                  "downloadURL",
-              ]:
-                  plugin.pop(legacy_field, None)
-
           def build_release():
               release = {
                   "version": version,
@@ -316,6 +306,18 @@ jobs:
                       legacy[field] = plugin[field]
               return [legacy]
 
+          def sync_legacy_fields(plugin, release):
+              plugin["version"] = release["version"]
+              plugin["minHostVersion"] = release["minHostVersion"]
+              plugin["size"] = release["size"]
+              plugin["downloadURL"] = release["downloadURL"]
+
+              for field in ["minOSVersion", "supportedArchitectures"]:
+                  if field in release and release[field] is not None:
+                      plugin[field] = release[field]
+                  else:
+                      plugin.pop(field, None)
+
           updated = False
           for plugin in registry["plugins"]:
               if plugin["id"] == manifest["id"]:
@@ -324,6 +326,7 @@ jobs:
                   releases = [release for release in releases if release.get("version") != version]
                   releases.append(build_release())
                   plugin["releases"] = sorted(releases, key=lambda release: version_key(release["version"]), reverse=True)
+                  sync_legacy_fields(plugin, plugin["releases"][0])
                   updated = True
                   print(f"Updated {plugin['id']} release set with v{version}")
                   break
@@ -332,6 +335,7 @@ jobs:
               new_entry = {}
               sync_plugin_metadata(new_entry)
               new_entry["releases"] = [build_release()]
+              sync_legacy_fields(new_entry, new_entry["releases"][0])
               registry["plugins"].append(new_entry)
               print(f"Added new plugin {manifest['id']} v{version}")
 
