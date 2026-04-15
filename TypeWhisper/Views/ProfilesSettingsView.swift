@@ -415,9 +415,10 @@ private struct RuleEditorSheet: View {
     private var stepGuidance: String {
         switch viewModel.editorStep {
         case .scope:
-            return viewModel.canAdvanceFromCurrentStep
-                ? localizedAppText("Context is set. You can define the behavior now.", de: "Kontext steht. Du kannst jetzt das Verhalten festlegen.")
-                : localizedAppText("Select at least one app or website so the rule can apply automatically.", de: "Wähle mindestens eine App oder Website, damit die Regel automatisch greifen kann.")
+            return localizedAppText(
+                "App and website are optional. Leave both empty to create a global fallback rule.",
+                de: "App und Website sind optional. Lass beides leer, um eine globale Fallback-Regel zu erstellen."
+            )
         case .behavior:
             return localizedAppText("Define how TypeWhisper should respond in this context.", de: "Lege fest, wie TypeWhisper in diesem Kontext reagieren soll.")
         case .review:
@@ -527,8 +528,8 @@ private struct RuleScopeStep: View {
                 Text(localizedAppText("Where should this rule apply?", de: "Wo gilt diese Regel?"))
                     .font(.title3.weight(.semibold))
                 Text(localizedAppText(
-                    "Choose at least one app or website. Combining both creates the most specific rule.",
-                    de: "Wähle mindestens eine App oder Website. Beides zusammen ergibt die spezifischste Regel."
+                    "Apps and websites are optional. Combining both creates the most specific rule. Leave both empty for a global fallback.",
+                    de: "Apps und Websites sind optional. Beides zusammen ergibt die spezifischste Regel. Lass beides leer für einen globalen Fallback."
                 ))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -976,7 +977,7 @@ private struct RuleReviewStep: View {
 
             card(
                 title: localizedAppText("Name", de: "Name"),
-                description: localizedAppText("Required field for this rule.", de: "Pflichtfeld für diese Regel."),
+                description: localizedAppText("Optional: customize how this rule appears in the list.", de: "Optional: Passe an, wie diese Regel in der Liste angezeigt wird."),
                 icon: "text.cursor",
                 tint: .accentColor
             ) {

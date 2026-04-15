@@ -1108,6 +1108,11 @@ final class DictationViewModel: ObservableObject {
                 "This rule applies because \(appDescriptor) was detected.",
                 de: "Diese Regel greift, weil \(appDescriptor) erkannt wurde."
             )
+        case .globalFallback:
+            base = localizedAppText(
+                "This rule applies because no more specific rule matched the current context.",
+                de: "Diese Regel greift, weil keine spezifischere Regel zum aktuellen Kontext gepasst hat."
+            )
         case .manualOverride:
             base = localizedAppText(
                 "This rule was manually forced via its keyboard shortcut.",
