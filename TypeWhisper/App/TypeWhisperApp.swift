@@ -215,7 +215,7 @@ final class ManagedAppWindowOpener {
     }
 
     private func forceActivateCurrentApplication(_ application: NSRunningApplication) {
-        application.activate(options: [.activateIgnoringOtherApps])
+        application.activate()
         NSApp.activate(ignoringOtherApps: true)
     }
 }
