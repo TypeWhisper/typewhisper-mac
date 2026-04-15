@@ -67,7 +67,7 @@ private actor TranscriptCollector {
 // MARK: - Plugin Entry Point
 
 @objc(SonioxPlugin)
-final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.soniox"
     static let pluginName = "Soniox"
 
@@ -118,6 +118,7 @@ final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
 
     var supportsTranslation: Bool { true }
     var supportsStreaming: Bool { true }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
 
     var supportedLanguages: [String] { sonioxSupportedLanguages }
 
@@ -128,7 +129,13 @@ final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
             throw PluginTranscriptionError.notConfigured
         }
 
-        return try await transcribeREST(audio: audio, language: language, translate: translate, apiKey: apiKey)
+        return try await transcribeREST(
+            audio: audio,
+            language: language,
+            translate: translate,
+            apiKey: apiKey,
+            prompt: prompt
+        )
     }
 
     // MARK: - Transcription (WebSocket Streaming)
@@ -150,11 +157,17 @@ final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
         do {
             return try await transcribeWebSocket(
                 audio: audio, language: language, translate: translate,
-                modelId: modelId, apiKey: apiKey, onProgress: onProgress
+                modelId: modelId, prompt: prompt, apiKey: apiKey, onProgress: onProgress
             )
         } catch {
             logger.warning("WebSocket streaming failed, falling back to REST: \(error.localizedDescription)")
-            return try await transcribeREST(audio: audio, language: language, translate: translate, apiKey: apiKey)
+            return try await transcribeREST(
+                audio: audio,
+                language: language,
+                translate: translate,
+                apiKey: apiKey,
+                prompt: prompt
+            )
         }
     }
 
@@ -165,6 +178,7 @@ final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
         language: String?,
         translate: Bool,
         modelId: String,
+        prompt: String?,
         apiKey: String,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
@@ -194,6 +208,9 @@ final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
                 "type": "one_way",
                 "target_language": "en",
             ]
+        }
+        if let context = Self.contextPayload(prompt: prompt) {
+            config["context"] = context
         }
 
         let configData = try JSONSerialization.data(withJSONObject: config)
@@ -317,11 +334,16 @@ final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
         audio: AudioData,
         language: String?,
         translate: Bool,
-        apiKey: String
+        apiKey: String,
+        prompt: String?
     ) async throws -> PluginTranscriptionResult {
         let fileId = try await uploadFile(wavData: audio.wavData, apiKey: apiKey)
         let transcriptionId = try await createTranscription(
-            fileId: fileId, language: language, translate: translate, apiKey: apiKey
+            fileId: fileId,
+            language: language,
+            translate: translate,
+            apiKey: apiKey,
+            prompt: prompt
         )
         try await pollUntilCompleted(id: transcriptionId, apiKey: apiKey)
         return try await fetchTranscript(id: transcriptionId, apiKey: apiKey, language: language)
@@ -375,7 +397,8 @@ final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
         fileId: String,
         language: String?,
         translate: Bool,
-        apiKey: String
+        apiKey: String,
+        prompt: String?
     ) async throws -> String {
         guard let url = URL(string: "https://api.soniox.com/v1/transcriptions") else {
             throw PluginTranscriptionError.apiError("Invalid transcriptions URL")
@@ -395,6 +418,9 @@ final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
                 "type": "one_way",
                 "target_language": "en",
             ]
+        }
+        if let context = Self.contextPayload(prompt: prompt) {
+            body["context"] = context
         }
 
         var request = URLRequest(url: url)
@@ -425,6 +451,12 @@ final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
         }
 
         return id
+    }
+
+    private static func contextPayload(prompt: String?) -> [String: Any]? {
+        let terms = PluginDictionaryTerms.terms(fromPrompt: prompt)
+        guard !terms.isEmpty else { return nil }
+        return ["terms": terms]
     }
 
     private func pollUntilCompleted(id: String, apiKey: String) async throws {

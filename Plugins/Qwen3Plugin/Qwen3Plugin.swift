@@ -8,7 +8,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(Qwen3Plugin)
-final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActivityReporting, @unchecked Sendable {
+final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.qwen3"
     static let pluginName = "Qwen3 ASR"
 
@@ -95,6 +95,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActi
     }
 
     var supportsTranslation: Bool { false }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
 
     func transcribe(
         audio: AudioData,
@@ -108,15 +109,26 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActi
 
         let audioArray = MLXArray(audio.samples)
         let languageName = Self.resolveLanguageName(language)
-        let primaryParams = Self.makeParams(Self.primaryParams, language: languageName)
+        let context = Self.contextBiasString(from: prompt)
 
-        let primaryOutput = model.generate(audio: audioArray, generationParameters: primaryParams)
+        let primaryOutput = Self.generate(
+            model: model,
+            audio: audioArray,
+            params: Self.primaryParams,
+            context: context,
+            language: languageName
+        )
         let primaryText = Self.normalizeTranscript(primaryOutput.text)
         let text: String
 
         if QwenTranscriptGuard.isLikelyLooped(primaryText) {
-            let fallbackParams = Self.makeParams(Self.fallbackParams, language: languageName)
-            let fallbackOutput = model.generate(audio: audioArray, generationParameters: fallbackParams)
+            let fallbackOutput = Self.generate(
+                model: model,
+                audio: audioArray,
+                params: Self.fallbackParams,
+                context: "",
+                language: languageName
+            )
             let fallbackText = Self.normalizeTranscript(fallbackOutput.text)
 
             if fallbackText.isEmpty {
@@ -262,13 +274,25 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActi
         return languageNames[code] ?? "English"
     }
 
-    private static func makeParams(_ base: STTGenerateParameters, language: String) -> STTGenerateParameters {
-        STTGenerateParameters(
-            maxTokens: base.maxTokens,
-            temperature: base.temperature,
+    private static func contextBiasString(from prompt: String?) -> String {
+        PluginDictionaryTerms.terms(fromPrompt: prompt).joined(separator: " ")
+    }
+
+    private static func generate(
+        model: Qwen3ASRModel,
+        audio: MLXArray,
+        params: STTGenerateParameters,
+        context: String,
+        language: String
+    ) -> STTOutput {
+        model.generate(
+            audio: audio,
+            maxTokens: params.maxTokens,
+            temperature: params.temperature,
+            context: context,
             language: language,
-            chunkDuration: base.chunkDuration,
-            minChunkDuration: base.minChunkDuration
+            chunkDuration: params.chunkDuration,
+            minChunkDuration: params.minChunkDuration
         )
     }
 

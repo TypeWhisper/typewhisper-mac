@@ -451,7 +451,7 @@ private func extractOAuthMetadata(from tokens: OpenAIOAuthTokenResponse) -> Open
 // MARK: - Plugin Entry Point
 
 @objc(OpenAIPlugin)
-final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, LLMProviderPlugin, @unchecked Sendable {
+final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, LLMProviderPlugin, @unchecked Sendable {
     static let pluginId = "com.typewhisper.openai"
     static let pluginName = "OpenAI"
 
@@ -578,6 +578,7 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, LLMProviderPlugin
     }
 
     var supportsTranslation: Bool { true }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
 
     var supportedLanguages: [String] {
         [

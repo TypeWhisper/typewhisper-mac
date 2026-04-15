@@ -5,7 +5,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(GroqPlugin)
-final class GroqPlugin: NSObject, TranscriptionEnginePlugin, LLMProviderPlugin, @unchecked Sendable {
+final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, LLMProviderPlugin, @unchecked Sendable {
     static let pluginId = "com.typewhisper.groq"
     static let pluginName = "Groq"
 
@@ -70,6 +70,7 @@ final class GroqPlugin: NSObject, TranscriptionEnginePlugin, LLMProviderPlugin, 
     }
 
     var supportsTranslation: Bool { true }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
 
     var supportedLanguages: [String] {
         [

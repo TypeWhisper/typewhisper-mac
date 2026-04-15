@@ -7,7 +7,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(ParakeetPlugin)
-final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActivityReporting, @unchecked Sendable {
+final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.parakeet"
     static let pluginName = "Parakeet"
     private static let logger = Logger(subsystem: "com.typewhisper.plugin.parakeet", category: "Transcription")
@@ -93,6 +93,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsA
     }
 
     var supportsTranslation: Bool { false }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .requiresPluginSetting }
 
     var supportedLanguages: [String] {
         selectedVersion.supportedLanguages

@@ -9,7 +9,7 @@ import os
 
 @available(macOS 26, *)
 @objc(SpeechAnalyzerPlugin)
-final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, PluginSettingsActivityReporting, @unchecked Sendable {
+final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.speechanalyzer"
     static let pluginName = "Apple Speech"
 
@@ -70,6 +70,7 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Plug
 
     var supportsTranslation: Bool { false }
     var supportsStreaming: Bool { true }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
 
     var supportedLanguages: [String] {
         let codes = Set(cachedModels.compactMap { model -> String? in
@@ -94,6 +95,7 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Plug
 
         let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
         let analyzer = SpeechAnalyzer(modules: [transcriber])
+        try await analyzer.setContext(Self.analysisContext(from: prompt))
 
         let buffer = await Self.prepareBuffer(audio.samples, for: [transcriber])
 
@@ -143,6 +145,7 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Plug
             attributeOptions: []
         )
         let analyzer = SpeechAnalyzer(modules: [transcriber])
+        try await analyzer.setContext(Self.analysisContext(from: prompt))
 
         let buffer = await Self.prepareBuffer(audio.samples, for: [transcriber])
 
@@ -175,6 +178,15 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Plug
         )
     }
 
+    fileprivate static func analysisContext(from prompt: String?) -> AnalysisContext {
+        let context = AnalysisContext()
+        let terms = PluginDictionaryTerms.terms(fromPrompt: prompt)
+        if !terms.isEmpty {
+            context.contextualStrings[.general] = terms
+        }
+        return context
+    }
+
     func createLiveTranscriptionSession(
         language: String?,
         translate: Bool,
@@ -188,7 +200,7 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Plug
             throw PluginTranscriptionError.apiError("Apple Speech does not support translation")
         }
 
-        let session = SpeechAnalyzerLiveSession(locale: locale, onProgress: onProgress)
+        let session = SpeechAnalyzerLiveSession(locale: locale, prompt: prompt, onProgress: onProgress)
         try await session.start()
         return session
     }
@@ -288,7 +300,7 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Plug
         return buffer
     }
 
-    private static func prepareBuffer(
+    fileprivate static func prepareBuffer(
         _ samples: [Float],
         for modules: [SpeechTranscriber]
     ) async -> AVAudioPCMBuffer {
@@ -365,6 +377,7 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Plug
 @available(macOS 26, *)
 private actor SpeechAnalyzerLiveSession: LiveTranscriptionSession {
     private let locale: Locale
+    private let prompt: String?
     private let onProgress: @Sendable (String) -> Bool
     private let transcriber: SpeechTranscriber
     private let analyzer: SpeechAnalyzer
@@ -373,19 +386,22 @@ private actor SpeechAnalyzerLiveSession: LiveTranscriptionSession {
     private let resultTask: Task<String, Error>
     private var didFinish = false
 
-    init(locale: Locale, onProgress: @escaping @Sendable (String) -> Bool) {
+    init(locale: Locale, prompt: String?, onProgress: @escaping @Sendable (String) -> Bool) {
         self.locale = locale
+        self.prompt = prompt
         self.onProgress = onProgress
-        self.transcriber = SpeechTranscriber(
+        let transcriber = SpeechTranscriber(
             locale: locale,
             transcriptionOptions: [],
             reportingOptions: [.volatileResults],
             attributeOptions: []
         )
+        self.transcriber = transcriber
         self.analyzer = SpeechAnalyzer(modules: [transcriber])
         let streamParts = AsyncStream<AnalyzerInput>.makeStream()
         self.stream = streamParts.stream
         self.continuation = streamParts.continuation
+        let progressHandler = onProgress
         self.resultTask = Task<String, Error> {
             var fullText = ""
             for try await result in transcriber.results {
@@ -394,7 +410,7 @@ private actor SpeechAnalyzerLiveSession: LiveTranscriptionSession {
                     fullText += text
                 } else {
                     let combined = fullText + text
-                    if !onProgress(combined) { break }
+                    if !progressHandler(combined) { break }
                 }
             }
             return fullText
@@ -402,6 +418,7 @@ private actor SpeechAnalyzerLiveSession: LiveTranscriptionSession {
     }
 
     func start() async throws {
+        try await analyzer.setContext(SpeechAnalyzerPlugin.analysisContext(from: prompt))
         try await analyzer.start(inputSequence: stream)
     }
 

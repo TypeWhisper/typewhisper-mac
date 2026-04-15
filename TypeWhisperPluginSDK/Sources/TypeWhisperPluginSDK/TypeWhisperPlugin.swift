@@ -208,10 +208,64 @@ public struct PluginTranscriptionResult: Sendable {
     }
 }
 
+public enum DictionaryTermsSupport: String, Sendable, CaseIterable {
+    case supported
+    case requiresPluginSetting
+    case unsupported
+}
+
+public protocol DictionaryTermsCapabilityProviding: TypeWhisperPlugin {
+    var dictionaryTermsSupport: DictionaryTermsSupport { get }
+}
+
 public protocol LiveTranscriptionSession: AnyObject, Sendable {
     func appendAudio(samples: [Float]) async throws
     func finish() async throws -> PluginTranscriptionResult
     func cancel() async
+}
+
+public enum PluginDictionaryTerms {
+    public static func normalizedTerms(from terms: [String]) -> [String] {
+        var seen = Set<String>()
+        var normalized: [String] = []
+
+        for rawTerm in terms {
+            let term = rawTerm.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !term.isEmpty else { continue }
+
+            let dedupeKey = term.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            guard seen.insert(dedupeKey).inserted else { continue }
+            normalized.append(term)
+        }
+
+        return normalized
+    }
+
+    public static func terms(fromPrompt prompt: String?) -> [String] {
+        guard let prompt, !prompt.isEmpty else { return [] }
+        return normalizedTerms(from: prompt.split(separator: ",").map(String.init))
+    }
+
+    public static func prompt(from terms: [String], maxLength: Int = 600) -> String? {
+        let normalized = normalizedTerms(from: terms)
+        guard !normalized.isEmpty else { return nil }
+
+        var result = ""
+        for (index, term) in normalized.enumerated() {
+            let separator = index > 0 ? ", " : ""
+            guard result.count + separator.count + term.count <= maxLength else { break }
+            result += separator + term
+        }
+
+        return result.isEmpty ? nil : result
+    }
+
+    public static func contextBiasTokens(fromPrompt prompt: String?) -> [String] {
+        let tokens = terms(fromPrompt: prompt).flatMap { term in
+            term.split(whereSeparator: { $0.isWhitespace || $0 == "," }).map(String.init)
+        }
+        return normalizedTerms(from: tokens)
+    }
 }
 
 public protocol TranscriptionEnginePlugin: TypeWhisperPlugin {

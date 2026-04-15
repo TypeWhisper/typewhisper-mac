@@ -112,7 +112,7 @@ private struct GoogleCredentialValidationResult {
 }
 
 @objc(GoogleCloudSTTPlugin)
-final class GoogleCloudSTTPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+final class GoogleCloudSTTPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.google-cloud-stt"
     static let pluginName = "Google Cloud Speech-to-Text"
 
@@ -175,6 +175,7 @@ final class GoogleCloudSTTPlugin: NSObject, TranscriptionEnginePlugin, @unchecke
     }
 
     var supportsTranslation: Bool { false }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
     var supportedLanguages: [String] { googleCloudSupportedLanguages }
 
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {

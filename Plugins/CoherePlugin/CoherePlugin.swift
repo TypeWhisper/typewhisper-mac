@@ -12,7 +12,7 @@ private let cohereSupportedLanguages = [
 // MARK: - Plugin Entry Point
 
 @objc(CoherePlugin)
-final class CoherePlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+final class CoherePlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.cohere"
     static let pluginName = "Cohere"
 
@@ -56,6 +56,7 @@ final class CoherePlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
 
     var supportsTranslation: Bool { false }
     var supportsStreaming: Bool { false }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .unsupported }
 
     var supportedLanguages: [String] { cohereSupportedLanguages }
 
