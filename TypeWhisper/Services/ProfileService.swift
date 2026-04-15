@@ -9,6 +9,7 @@ enum RuleMatchKind: String, Sendable {
     case appAndWebsite
     case websiteOnly
     case appOnly
+    case globalFallback
     case manualOverride
 
     var label: String {
@@ -19,6 +20,8 @@ enum RuleMatchKind: String, Sendable {
             "Nur Website"
         case .appOnly:
             "Nur App"
+        case .globalFallback:
+            "Globaler Fallback"
         case .manualOverride:
             "Manuell erzwungen"
         }
@@ -186,6 +189,13 @@ final class ProfileService: ObservableObject {
             if let result = bestMatch(from: matches, kind: .appOnly, matchedDomain: nil) {
                 return result
             }
+        }
+
+        let fallbackMatches = enabled.filter {
+            $0.bundleIdentifiers.isEmpty && $0.urlPatterns.isEmpty
+        }
+        if let result = bestMatch(from: fallbackMatches, kind: .globalFallback, matchedDomain: nil) {
+            return result
         }
 
         return nil

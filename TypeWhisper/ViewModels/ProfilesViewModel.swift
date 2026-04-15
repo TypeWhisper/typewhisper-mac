@@ -149,7 +149,7 @@ final class ProfilesViewModel: ObservableObject {
         case (false, true):
             return domains.joined(separator: " + ")
         case (false, false):
-            return "New Rule"
+            return localizedAppText("Default Rule", de: "Standardregel")
         }
     }
 
@@ -164,7 +164,7 @@ final class ProfilesViewModel: ObservableObject {
     var canAdvanceFromCurrentStep: Bool {
         switch editorStep {
         case .scope:
-            return !editorBundleIdentifiers.isEmpty || !editorUrlPatterns.isEmpty
+            return true
         case .behavior, .review:
             return true
         }
@@ -445,7 +445,7 @@ final class ProfilesViewModel: ObservableObject {
         installedApps.first { $0.id == bundleId }?.name ?? bundleId
     }
 
-    func ruleContextSummary(bundleIdentifiers: [String], urlPatterns: [String]) -> String {
+    func ruleContextSummary(bundleIdentifiers: [String], urlPatterns: [String], hasManualOverride: Bool = false) -> String {
         let appNames = bundleIdentifiers.prefix(2).map(appName(for:))
         let domains = urlPatterns.prefix(2)
         let orSeparator = localizedAppOrSeparator()
@@ -467,7 +467,15 @@ final class ProfilesViewModel: ObservableObject {
                 de: "\(domains.joined(separator: orSeparator)) erkannt wird"
             )
         case (false, false):
-            return localizedAppText("it is triggered manually", de: "sie manuell ausgelöst wird")
+            return hasManualOverride
+                ? localizedAppText(
+                    "no more specific rule matches or it is triggered manually",
+                    de: "keine spezifischere Regel passt oder sie manuell ausgelöst wird"
+                )
+                : localizedAppText(
+                    "no more specific rule matches",
+                    de: "keine spezifischere Regel passt"
+                )
         }
     }
 
@@ -539,15 +547,15 @@ final class ProfilesViewModel: ObservableObject {
 
     func ruleNarrative(for profile: Profile) -> String {
         localizedAppText(
-            "When \(ruleContextSummary(bundleIdentifiers: profile.bundleIdentifiers, urlPatterns: profile.urlPatterns)), TypeWhisper uses \(ruleBehaviorSummary(inputLanguage: profile.inputLanguage, translationEnabled: profile.translationEnabled, translationTargetLanguage: profile.translationTargetLanguage, promptActionId: profile.promptActionId, engineOverride: profile.engineOverride, outputFormat: profile.outputFormat, inlineCommandsEnabled: profile.inlineCommandsEnabled, autoEnterEnabled: profile.autoEnterEnabled)).",
-            de: "Wenn \(ruleContextSummary(bundleIdentifiers: profile.bundleIdentifiers, urlPatterns: profile.urlPatterns)), nutzt TypeWhisper \(ruleBehaviorSummary(inputLanguage: profile.inputLanguage, translationEnabled: profile.translationEnabled, translationTargetLanguage: profile.translationTargetLanguage, promptActionId: profile.promptActionId, engineOverride: profile.engineOverride, outputFormat: profile.outputFormat, inlineCommandsEnabled: profile.inlineCommandsEnabled, autoEnterEnabled: profile.autoEnterEnabled))."
+            "When \(ruleContextSummary(bundleIdentifiers: profile.bundleIdentifiers, urlPatterns: profile.urlPatterns, hasManualOverride: profile.hotkey != nil)), TypeWhisper uses \(ruleBehaviorSummary(inputLanguage: profile.inputLanguage, translationEnabled: profile.translationEnabled, translationTargetLanguage: profile.translationTargetLanguage, promptActionId: profile.promptActionId, engineOverride: profile.engineOverride, outputFormat: profile.outputFormat, inlineCommandsEnabled: profile.inlineCommandsEnabled, autoEnterEnabled: profile.autoEnterEnabled)).",
+            de: "Wenn \(ruleContextSummary(bundleIdentifiers: profile.bundleIdentifiers, urlPatterns: profile.urlPatterns, hasManualOverride: profile.hotkey != nil)), nutzt TypeWhisper \(ruleBehaviorSummary(inputLanguage: profile.inputLanguage, translationEnabled: profile.translationEnabled, translationTargetLanguage: profile.translationTargetLanguage, promptActionId: profile.promptActionId, engineOverride: profile.engineOverride, outputFormat: profile.outputFormat, inlineCommandsEnabled: profile.inlineCommandsEnabled, autoEnterEnabled: profile.autoEnterEnabled))."
         )
     }
 
     var editorRuleNarrative: String {
         localizedAppText(
-            "When \(ruleContextSummary(bundleIdentifiers: editorBundleIdentifiers, urlPatterns: editorUrlPatterns)), TypeWhisper uses \(ruleBehaviorSummary(inputLanguage: editorInputLanguage, translationEnabled: editorTranslationEnabled, translationTargetLanguage: editorTranslationTargetLanguage, promptActionId: editorPromptActionId, engineOverride: editorEngineOverride, outputFormat: editorOutputFormat, inlineCommandsEnabled: editorInlineCommandsEnabled, autoEnterEnabled: editorAutoEnterEnabled)).",
-            de: "Wenn \(ruleContextSummary(bundleIdentifiers: editorBundleIdentifiers, urlPatterns: editorUrlPatterns)), nutzt TypeWhisper \(ruleBehaviorSummary(inputLanguage: editorInputLanguage, translationEnabled: editorTranslationEnabled, translationTargetLanguage: editorTranslationTargetLanguage, promptActionId: editorPromptActionId, engineOverride: editorEngineOverride, outputFormat: editorOutputFormat, inlineCommandsEnabled: editorInlineCommandsEnabled, autoEnterEnabled: editorAutoEnterEnabled))."
+            "When \(ruleContextSummary(bundleIdentifiers: editorBundleIdentifiers, urlPatterns: editorUrlPatterns, hasManualOverride: editorHotkey != nil)), TypeWhisper uses \(ruleBehaviorSummary(inputLanguage: editorInputLanguage, translationEnabled: editorTranslationEnabled, translationTargetLanguage: editorTranslationTargetLanguage, promptActionId: editorPromptActionId, engineOverride: editorEngineOverride, outputFormat: editorOutputFormat, inlineCommandsEnabled: editorInlineCommandsEnabled, autoEnterEnabled: editorAutoEnterEnabled)).",
+            de: "Wenn \(ruleContextSummary(bundleIdentifiers: editorBundleIdentifiers, urlPatterns: editorUrlPatterns, hasManualOverride: editorHotkey != nil)), nutzt TypeWhisper \(ruleBehaviorSummary(inputLanguage: editorInputLanguage, translationEnabled: editorTranslationEnabled, translationTargetLanguage: editorTranslationTargetLanguage, promptActionId: editorPromptActionId, engineOverride: editorEngineOverride, outputFormat: editorOutputFormat, inlineCommandsEnabled: editorInlineCommandsEnabled, autoEnterEnabled: editorAutoEnterEnabled))."
         )
     }
 
@@ -593,10 +601,17 @@ final class ProfilesViewModel: ObservableObject {
             }
             return text
         case (false, false):
-            return localizedAppText(
-                "Without an app or website, this rule does not apply automatically. Use a manual override for that.",
-                de: "Ohne App oder Website greift diese Regel nicht automatisch. Nutze dafür eine manuelle Übersteuerung."
+            var text = localizedAppText(
+                "Without an app or website, this rule becomes the global fallback. It applies only when no more specific rule matches, and among other fallback rules the higher priority wins.",
+                de: "Ohne App oder Website wird diese Regel zum globalen Fallback. Sie greift nur, wenn keine spezifischere Regel passt; unter mehreren Fallback-Regeln gewinnt die höhere Priorität."
             )
+            if hasManualOverride {
+                text += localizedAppText(
+                    " Manual override can still force it at any time.",
+                    de: " Mit manueller Übersteuerung kannst du sie trotzdem jederzeit direkt erzwingen."
+                )
+            }
+            return text
         }
     }
 
