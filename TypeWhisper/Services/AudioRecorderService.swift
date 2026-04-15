@@ -209,6 +209,22 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         }
     }
 
+    /// Returns audio appended since `sampleOffset` and the updated absolute offset.
+    func getBufferDelta(since sampleOffset: Int) -> (samples: [Float], nextOffset: Int) {
+        let micEnabled = self.micEnabled
+        let systemAudioEnabled = self.systemAudioEnabled
+        let micDuckingMode = self.micDuckingMode
+        return transcriptionBufferLock.withLock { state in
+            let buffer = state.mixedBuffer(
+                micEnabled: micEnabled,
+                systemAudioEnabled: systemAudioEnabled,
+                micDuckingMode: micDuckingMode
+            )
+            let clampedOffset = max(0, min(sampleOffset, buffer.count))
+            return (Array(buffer.dropFirst(clampedOffset)), buffer.count)
+        }
+    }
+
     /// Total duration of transcription buffer in seconds.
     var totalBufferDuration: TimeInterval {
         let micEnabled = self.micEnabled

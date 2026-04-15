@@ -181,6 +181,16 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         return Array(sampleBuffer.suffix(maxSamples))
     }
 
+    /// Returns audio appended since `sampleOffset` and the updated absolute offset.
+    func getBufferDelta(since sampleOffset: Int) -> (samples: [Float], nextOffset: Int) {
+        bufferLock.lock()
+        defer { bufferLock.unlock() }
+
+        let clampedOffset = max(0, min(sampleOffset, sampleBuffer.count))
+        let samples = Array(sampleBuffer.dropFirst(clampedOffset))
+        return (samples, sampleBuffer.count)
+    }
+
     /// Total duration of the recorded audio in seconds.
     var totalBufferDuration: TimeInterval {
         bufferLock.lock()

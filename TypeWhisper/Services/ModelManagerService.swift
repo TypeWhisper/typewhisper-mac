@@ -27,6 +27,11 @@ enum TranscriptionEngineError: LocalizedError {
 
 @MainActor
 final class ModelManagerService: ObservableObject {
+    struct LiveTranscriptionSessionHandle: Sendable {
+        let providerId: String
+        let session: any LiveTranscriptionSession
+    }
+
     @Published private(set) var selectedProviderId: String?
 
     @Published var autoUnloadSeconds: Int {
@@ -113,6 +118,22 @@ final class ModelManagerService: ObservableObject {
         return plugin.supportsStreaming
     }
 
+    func supportsLiveTranscriptionSession(engineOverrideId: String? = nil) -> Bool {
+        guard let providerId = engineOverrideId ?? selectedProviderId,
+              let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
+            return false
+        }
+        return plugin is LiveTranscriptionCapablePlugin
+    }
+
+    func usesMeteredStreamingFallback(engineOverrideId: String? = nil) -> Bool {
+        guard let providerId = engineOverrideId ?? selectedProviderId,
+              let loadedPlugin = PluginManager.shared.loadedTranscriptionPlugin(for: providerId) else {
+            return false
+        }
+        return loadedPlugin.manifest.requiresAPIKey == true
+    }
+
     /// Resolve display name for a given engine/model override combination
     func resolvedModelDisplayName(engineOverrideId: String? = nil, cloudModelOverride: String? = nil) -> String? {
         let providerId = engineOverrideId ?? selectedProviderId
@@ -149,6 +170,64 @@ final class ModelManagerService: ObservableObject {
     }
 
     // MARK: - Transcription
+
+    func createLiveTranscriptionSession(
+        language: String?,
+        task: TranscriptionTask,
+        engineOverrideId: String? = nil,
+        cloudModelOverride: String? = nil,
+        prompt: String? = nil,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> LiveTranscriptionSessionHandle? {
+        let providerId = engineOverrideId ?? selectedProviderId
+        guard let providerId,
+              let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
+            throw TranscriptionEngineError.modelNotLoaded
+        }
+
+        if !plugin.isConfigured {
+            await triggerRestoreModel(plugin)
+        }
+        guard plugin.isConfigured else {
+            throw TranscriptionEngineError.modelNotLoaded
+        }
+
+        if let modelId = cloudModelOverride {
+            plugin.selectModel(modelId)
+        }
+
+        guard let livePlugin = plugin as? LiveTranscriptionCapablePlugin else {
+            return nil
+        }
+
+        let session = try await livePlugin.createLiveTranscriptionSession(
+            language: language,
+            translate: task == .translate,
+            prompt: prompt,
+            onProgress: onProgress
+        )
+        return LiveTranscriptionSessionHandle(providerId: providerId, session: session)
+    }
+
+    func finishLiveTranscriptionSession(
+        _ handle: LiveTranscriptionSessionHandle,
+        bufferedDuration: Double
+    ) async throws -> TranscriptionResult {
+        let startTime = CFAbsoluteTimeGetCurrent()
+        let result = try await handle.session.finish()
+        let processingTime = CFAbsoluteTimeGetCurrent() - startTime
+
+        scheduleAutoUnloadIfNeeded()
+
+        return TranscriptionResult(
+            text: result.text,
+            detectedLanguage: result.detectedLanguage,
+            duration: bufferedDuration,
+            processingTime: processingTime,
+            engineUsed: handle.providerId,
+            segments: result.segments.map { TranscriptionSegment(text: $0.text, start: $0.start, end: $0.end) }
+        )
+    }
 
     func transcribe(
         audioSamples: [Float],

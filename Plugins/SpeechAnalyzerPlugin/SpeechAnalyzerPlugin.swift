@@ -9,7 +9,7 @@ import os
 
 @available(macOS 26, *)
 @objc(SpeechAnalyzerPlugin)
-final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActivityReporting, @unchecked Sendable {
+final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.speechanalyzer"
     static let pluginName = "Apple Speech"
 
@@ -173,6 +173,24 @@ final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, PluginSet
             text: text.trimmingCharacters(in: .whitespacesAndNewlines),
             detectedLanguage: locale.language.languageCode?.identifier
         )
+    }
+
+    func createLiveTranscriptionSession(
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        guard let locale = currentLocale else {
+            throw PluginTranscriptionError.notConfigured
+        }
+        if translate {
+            throw PluginTranscriptionError.apiError("Apple Speech does not support translation")
+        }
+
+        let session = SpeechAnalyzerLiveSession(locale: locale, onProgress: onProgress)
+        try await session.start()
+        return session
     }
 
     // MARK: - Model Management
@@ -341,6 +359,82 @@ final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, PluginSet
 
     var settingsView: AnyView? {
         AnyView(SpeechAnalyzerSettingsView(plugin: self))
+    }
+}
+
+@available(macOS 26, *)
+private actor SpeechAnalyzerLiveSession: LiveTranscriptionSession {
+    private let locale: Locale
+    private let onProgress: @Sendable (String) -> Bool
+    private let transcriber: SpeechTranscriber
+    private let analyzer: SpeechAnalyzer
+    private let stream: AsyncStream<AnalyzerInput>
+    private let continuation: AsyncStream<AnalyzerInput>.Continuation
+    private let resultTask: Task<String, Error>
+    private var didFinish = false
+
+    init(locale: Locale, onProgress: @escaping @Sendable (String) -> Bool) {
+        self.locale = locale
+        self.onProgress = onProgress
+        self.transcriber = SpeechTranscriber(
+            locale: locale,
+            transcriptionOptions: [],
+            reportingOptions: [.volatileResults],
+            attributeOptions: []
+        )
+        self.analyzer = SpeechAnalyzer(modules: [transcriber])
+        let streamParts = AsyncStream<AnalyzerInput>.makeStream()
+        self.stream = streamParts.stream
+        self.continuation = streamParts.continuation
+        self.resultTask = Task<String, Error> {
+            var fullText = ""
+            for try await result in transcriber.results {
+                let text = String(result.text.characters)
+                if result.isFinal {
+                    fullText += text
+                } else {
+                    let combined = fullText + text
+                    if !onProgress(combined) { break }
+                }
+            }
+            return fullText
+        }
+    }
+
+    func start() async throws {
+        try await analyzer.start(inputSequence: stream)
+    }
+
+    func appendAudio(samples: [Float]) async throws {
+        guard !didFinish, !samples.isEmpty else { return }
+        let buffer = await SpeechAnalyzerPlugin.prepareBuffer(samples, for: [transcriber])
+        continuation.yield(AnalyzerInput(buffer: buffer))
+    }
+
+    func finish() async throws -> PluginTranscriptionResult {
+        guard !didFinish else {
+            let text = try await resultTask.value
+            return PluginTranscriptionResult(
+                text: text.trimmingCharacters(in: .whitespacesAndNewlines),
+                detectedLanguage: locale.language.languageCode?.identifier
+            )
+        }
+
+        didFinish = true
+        continuation.finish()
+        try await analyzer.finalizeAndFinishThroughEndOfInput()
+        let text = try await resultTask.value
+
+        return PluginTranscriptionResult(
+            text: text.trimmingCharacters(in: .whitespacesAndNewlines),
+            detectedLanguage: locale.language.languageCode?.identifier
+        )
+    }
+
+    func cancel() async {
+        didFinish = true
+        continuation.finish()
+        resultTask.cancel()
     }
 }
 
