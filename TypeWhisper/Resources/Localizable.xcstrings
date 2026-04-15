@@ -1062,6 +1062,16 @@
         }
       }
     },
+    "App visibility" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App-Sichtbarkeit"
+          }
+        }
+      }
+    },
     "App-aware formatting" : {
       "localizations" : {
         "de" : {
@@ -2212,6 +2222,37 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Anzeige"
+          }
+        }
+      }
+    },
+    "Dock icon" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dock-Symbol"
+          }
+        }
+      }
+    },
+    "Dock icon only while a window is open" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dock-Symbol nur bei geöffnetem Fenster"
+          }
+        }
+      }
+    },
+    "Dock icon when menu bar icon is hidden" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dock-Symbol bei ausgeblendetem Menüleistensymbol"
           }
         }
       }
@@ -3447,6 +3488,17 @@
         }
       }
     },
+    "Keep visible" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sichtbar lassen"
+          }
+        }
+      }
+    },
     "Language" : {
       "localizations" : {
         "de" : {
@@ -3779,7 +3831,18 @@
         }
       }
     },
+    "Menu bar icon" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menüleistensymbol"
+          }
+        }
+      }
+    },
     "Menu bar icon hidden" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -4525,6 +4588,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nur bei Aktivität"
+          }
+        }
+      }
+    },
+    "Only while a window is open" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur solange ein Fenster geöffnet ist"
           }
         }
       }
@@ -6503,6 +6577,7 @@
       }
     },
     "Show menu bar icon" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -7082,6 +7157,17 @@
         }
       }
     },
+    "This setting applies only when the menu bar icon is hidden." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Einstellung gilt nur, wenn das Menüleistensymbol ausgeblendet ist."
+          }
+        }
+      }
+    },
     "This Week" : {
       "localizations" : {
         "de" : {
@@ -7497,6 +7583,16 @@
         }
       }
     },
+    "TypeWhisper hides both icons until a window opens. To reopen Settings later, launch TypeWhisper from Spotlight or the Applications folder." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper blendet beide Symbole aus, bis wieder ein Fenster geöffnet wird. Um die Einstellungen später erneut zu öffnen, starte TypeWhisper über Spotlight oder den Programme-Ordner."
+          }
+        }
+      }
+    },
     "TypeWhisper is free for personal use. If you'd like to support development, grab a supporter license for a Discord role and an in-app badge." : {
       "localizations" : {
         "de" : {
@@ -7525,6 +7621,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "TypeWhisper kann jetzt in jeder App verwendet werden."
+          }
+        }
+      }
+    },
+    "TypeWhisper stays accessible via the Dock icon." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper bleibt über das Dock-Symbol erreichbar."
+          }
+        }
+      }
+    },
+    "TypeWhisper stays in the menu bar and hides its Dock icon while no window is open." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper bleibt in der Menüleiste und blendet sein Dock-Symbol aus, solange kein Fenster geöffnet ist."
           }
         }
       }
@@ -8284,11 +8400,34 @@
       }
     },
     "When hidden, the app is accessible via the Dock icon." : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Wenn ausgeblendet, ist die App über das Dock-Symbol erreichbar."
+          }
+        }
+      }
+    },
+    "When hidden, the app stays accessible via the Dock icon." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wenn ausgeblendet, bleibt die App über das Dock-Symbol erreichbar."
+          }
+        }
+      }
+    },
+    "When hidden, the Dock icon only appears while a TypeWhisper window is open. To reopen Settings later, launch TypeWhisper again from Spotlight or the Applications folder." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wenn ausgeblendet, erscheint das Dock-Symbol nur, solange ein TypeWhisper-Fenster geöffnet ist. Um die Einstellungen später erneut zu öffnen, starte TypeWhisper erneut über Spotlight oder den Programme-Ordner."
           }
         }
       }
@@ -8362,6 +8501,7 @@
       }
     },
     "You can access TypeWhisper settings via the Dock icon." : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -8445,136 +8585,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Deine Worte erscheinen sofort als Text."
-          }
-        }
-      }
-    },
-    "Dock icon" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dock-Symbol"
-          }
-        }
-      }
-    },
-    "App visibility" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "App-Sichtbarkeit"
-          }
-        }
-      }
-    },
-    "Dock icon when menu bar icon is hidden" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dock-Symbol bei ausgeblendetem Menüleistensymbol"
-          }
-        }
-      }
-    },
-    "Keep visible" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sichtbar lassen"
-          }
-        }
-      }
-    },
-    "Only while a window is open" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nur solange ein Fenster geöffnet ist"
-          }
-        }
-      }
-    },
-    "Menu bar icon" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Menüleistensymbol"
-          }
-        }
-      }
-    },
-    "Dock icon only while a window is open" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dock-Symbol nur bei geöffnetem Fenster"
-          }
-        }
-      }
-    },
-    "When hidden, the app stays accessible via the Dock icon." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wenn ausgeblendet, bleibt die App über das Dock-Symbol erreichbar."
-          }
-        }
-      }
-    },
-    "TypeWhisper stays in the menu bar and hides its Dock icon while no window is open." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TypeWhisper bleibt in der Menüleiste und blendet sein Dock-Symbol aus, solange kein Fenster geöffnet ist."
-          }
-        }
-      }
-    },
-    "TypeWhisper stays accessible via the Dock icon." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TypeWhisper bleibt über das Dock-Symbol erreichbar."
-          }
-        }
-      }
-    },
-    "TypeWhisper hides both icons until a window opens. To reopen Settings later, launch TypeWhisper from Spotlight or the Applications folder." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TypeWhisper blendet beide Symbole aus, bis wieder ein Fenster geöffnet wird. Um die Einstellungen später erneut zu öffnen, starte TypeWhisper über Spotlight oder den Programme-Ordner."
-          }
-        }
-      }
-    },
-    "This setting applies only when the menu bar icon is hidden." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Diese Einstellung gilt nur, wenn das Menüleistensymbol ausgeblendet ist."
-          }
-        }
-      }
-    },
-    "When hidden, the Dock icon only appears while a TypeWhisper window is open. To reopen Settings later, launch TypeWhisper again from Spotlight or the Applications folder." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wenn ausgeblendet, erscheint das Dock-Symbol nur, solange ein TypeWhisper-Fenster geöffnet ist. Um die Einstellungen später erneut zu öffnen, starte TypeWhisper erneut über Spotlight oder den Programme-Ordner."
           }
         }
       }
