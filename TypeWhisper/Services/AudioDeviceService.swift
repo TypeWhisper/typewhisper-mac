@@ -7,10 +7,54 @@ import os
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhisper-mac", category: "AudioDeviceService")
 
+enum AudioInputDeviceCompatibilityIssue: Sendable, Equatable {
+    case cannotSetDevice
+    case invalidInputFormat
+    case engineStartFailed
+
+    var badgeText: String {
+        localizedAppText("Not compatible", de: "Nicht kompatibel")
+    }
+
+    var detailText: String {
+        switch self {
+        case .cannotSetDevice, .invalidInputFormat, .engineStartFailed:
+            return localizedAppText(
+                "This microphone can't be used by TypeWhisper for preview or recording.",
+                de: "Dieses Mikrofon kann von TypeWhisper nicht für Test oder Aufnahme verwendet werden."
+            )
+        }
+    }
+}
+
+enum AudioInputDeviceCompatibility: Sendable, Equatable {
+    case unknown
+    case compatible
+    case incompatible(AudioInputDeviceCompatibilityIssue)
+}
+
+enum SelectedInputDeviceError: LocalizedError, Sendable, Equatable {
+    case unavailable
+    case incompatible(AudioInputDeviceCompatibilityIssue)
+
+    var errorDescription: String? {
+        switch self {
+        case .unavailable:
+            return localizedAppText(
+                "Selected input device is no longer available.",
+                de: "Das ausgewählte Eingabegerät ist nicht mehr verfügbar."
+            )
+        case .incompatible(let issue):
+            return issue.detailText
+        }
+    }
+}
+
 struct AudioInputDevice: Identifiable, Equatable {
     let deviceID: AudioDeviceID
     let name: String
     let uid: String
+    var compatibility: AudioInputDeviceCompatibility = .unknown
 
     var id: String { uid }
 }
@@ -20,18 +64,26 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     @Published var inputDevices: [AudioInputDevice] = []
     @Published var selectedDeviceUID: String? {
         didSet {
-            if selectedDeviceUID != oldValue {
-                UserDefaults.standard.set(selectedDeviceUID, forKey: UserDefaultsKeys.selectedInputDeviceUID)
-            }
+            guard selectedDeviceUID != oldValue else { return }
+            handleSelectedDeviceSelectionChange(from: oldValue, to: selectedDeviceUID)
         }
     }
     @Published var disconnectedDeviceName: String?
     @Published var isPreviewActive: Bool = false
     @Published var previewAudioLevel: Float = 0
     @Published var previewRawLevel: Float = 0
+    @Published private(set) var previewError: SelectedInputDeviceError?
+
+    var hasMicrophonePermissionOverride: Bool?
+    var audioDeviceIDResolverOverride: ((String) -> AudioDeviceID?)?
+    var selectionValidationOverride: ((AudioDeviceID?) throws -> Void)?
+    var startPreviewOverride: ((AudioDeviceID?) throws -> Void)?
 
     var selectedDeviceID: AudioDeviceID? {
         guard let uid = selectedDeviceUID else { return nil }
+        if let audioDeviceIDResolverOverride {
+            return audioDeviceIDResolverOverride(uid)
+        }
         return audioDeviceID(fromUID: uid)
     }
 
@@ -45,29 +97,56 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     private let previewRecoveryQueue = DispatchQueue(label: "com.typewhisper.preview-recovery", qos: .userInitiated)
     private let previewRecoveryCoordinator = AudioEngineRecoveryCoordinator()
     private var activePreviewDeviceID: AudioDeviceID?
+    private var compatibilityCache: [String: AudioInputDeviceCompatibility] = [:]
+    private var isApplyingValidatedSelection = false
+    private var isInitializingSelection = false
 
-    init() {
+    private var hasMicrophonePermission: Bool {
+        if let hasMicrophonePermissionOverride {
+            return hasMicrophonePermissionOverride
+        }
+        return AVAudioApplication.shared.recordPermission == .granted
+    }
+
+    var selectedDevice: AudioInputDevice? {
+        guard let selectedDeviceUID else { return nil }
+        return inputDevices.first(where: { $0.uid == selectedDeviceUID })
+    }
+
+    var selectedDeviceCompatibility: AudioInputDeviceCompatibility? {
+        selectedDevice?.compatibility
+    }
+
+    var selectedDeviceStatusMessage: String? {
+        guard let selectedDevice else { return nil }
+        switch selectedDevice.compatibility {
+        case .incompatible(let issue):
+            return "\(selectedDevice.name): \(issue.detailText)"
+        case .unknown, .compatible:
+            return nil
+        }
+    }
+
+    init(initialInputDevices: [AudioInputDevice]? = nil, monitorDeviceChanges: Bool = true, probeCompatibilities: Bool = false) {
+        isInitializingSelection = true
         selectedDeviceUID = UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedInputDeviceUID)
-        inputDevices = listInputDevices()
-        installDeviceListener()
+        inputDevices = applyCompatibilityCache(to: initialInputDevices ?? listInputDevices())
+        if monitorDeviceChanges {
+            installDeviceListener()
+        }
+        if probeCompatibilities, let selectedDeviceUID {
+            compatibilityCache[selectedDeviceUID] = .unknown
+        }
 
-        deviceChangeSubject
-            .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
-            .sink { [weak self] in
-                self?.handleDeviceChange()
-            }
-            .store(in: &cancellables)
-
-        $selectedDeviceUID
-            .removeDuplicates()
-            .dropFirst()
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                guard let self, self.isPreviewActive else { return }
-                self.stopPreview()
-                self.startPreview()
-            }
-            .store(in: &cancellables)
+        if monitorDeviceChanges {
+            deviceChangeSubject
+                .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
+                .sink { [weak self] in
+                    self?.handleDeviceChange()
+                }
+                .store(in: &cancellables)
+        }
+        isInitializingSelection = false
     }
 
     deinit {
@@ -80,14 +159,33 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
 
     func startPreview() {
         guard !isPreviewActive else { return }
-        guard AVAudioApplication.shared.recordPermission == .granted else {
+        previewError = nil
+        guard hasMicrophonePermission else {
             logger.warning("Microphone permission not granted, cannot start preview")
             return
         }
 
-        let engine = AVAudioEngine()
         let preferredDeviceID = selectedDeviceID
+        if let selectionError = selectedInputDeviceError(for: preferredDeviceID) {
+            previewError = selectionError
+            return
+        }
 
+        if let startPreviewOverride {
+            do {
+                try startPreviewOverride(preferredDeviceID)
+                isPreviewActive = true
+            } catch let error as SelectedInputDeviceError {
+                previewError = error
+                isPreviewActive = false
+            } catch {
+                previewError = selectedDeviceUID == nil ? nil : .incompatible(.engineStartFailed)
+                isPreviewActive = false
+            }
+            return
+        }
+
+        let engine = AVAudioEngine()
         previewLock.withLock {
             previewEngine = engine
             activePreviewDeviceID = preferredDeviceID
@@ -97,6 +195,9 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
 
         do {
             try startPreviewEngineWithRecovery(engine, preferredDeviceID: preferredDeviceID, label: "preview")
+            if selectedDeviceUID != nil {
+                markSelectedDeviceCompatibility(.compatible)
+            }
 
             if previewRecoveryCoordinator.finishStartingSuccessfully() == .performImmediateRecovery {
                 logger.warning("Preview engine configuration changed while starting, restarting with fresh input format")
@@ -105,8 +206,18 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             }
 
             isPreviewActive = true
+        } catch let error as SelectedInputDeviceError {
+            if case .incompatible(let issue) = error {
+                markSelectedDeviceCompatibility(.incompatible(issue))
+            }
+            previewError = error
+            cleanupAfterFailedPreviewStart(engine)
         } catch {
             logger.error("Failed to start preview engine: \(error.localizedDescription)")
+            if selectedDeviceUID != nil {
+                markSelectedDeviceCompatibility(.incompatible(.engineStartFailed))
+                previewError = .incompatible(.engineStartFailed)
+            }
             cleanupAfterFailedPreviewStart(engine)
         }
     }
@@ -126,6 +237,15 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         isPreviewActive = false
         previewAudioLevel = 0
         previewRawLevel = 0
+    }
+
+    func displayName(for device: AudioInputDevice) -> String {
+        switch device.compatibility {
+        case .incompatible(let issue):
+            return "\(device.name) (\(issue.badgeText))"
+        case .unknown, .compatible:
+            return device.name
+        }
     }
 
     private func processPreviewBuffer(_ buffer: AVAudioPCMBuffer) {
@@ -206,6 +326,9 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
                 return
             } catch {
                 guard AudioEngineRecoveryPolicy.isRetryable(error: error) else {
+                    if preferredDeviceID != nil {
+                        throw SelectedInputDeviceError.incompatible(.engineStartFailed)
+                    }
                     throw error
                 }
 
@@ -214,7 +337,16 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             }
         }
 
-        try configureAndStartPreviewEngine(engine, preferredDeviceID: preferredDeviceID, label: label)
+        do {
+            try configureAndStartPreviewEngine(engine, preferredDeviceID: preferredDeviceID, label: label)
+        } catch let error as SelectedInputDeviceError {
+            throw error
+        } catch {
+            if preferredDeviceID != nil {
+                throw SelectedInputDeviceError.incompatible(.engineStartFailed)
+            }
+            throw error
+        }
     }
 
     private func restartPreviewEngineWithRecovery(
@@ -232,21 +364,13 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         label: String
     ) throws {
         if let preferredDeviceID {
-            if !setInputDevice(preferredDeviceID, on: engine, label: label) {
-                logger.error("Failed to set \(label, privacy: .public) input device (\(preferredDeviceID)), falling back to system default")
-            }
+            try configureExplicitInputDevice(preferredDeviceID, on: engine, label: label)
         }
 
         let inputNode = engine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
         logger.info("\(label, privacy: .public) input format: sampleRate=\(format.sampleRate), channels=\(format.channelCount)")
-        guard format.sampleRate > 0, format.channelCount > 0 else {
-            throw NSError(
-                domain: "AudioDeviceService",
-                code: 0,
-                userInfo: [NSLocalizedDescriptionKey: "No audio input available for preview"]
-            )
-        }
+        try validateInputFormat(format, for: preferredDeviceID)
 
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
             self?.processPreviewBuffer(buffer)
@@ -459,8 +583,12 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
 
     private func handleDeviceChange() {
         let oldDevices = inputDevices
-        let newDevices = listInputDevices()
+        let newDevices = applyCompatibilityCache(to: listInputDevices())
         inputDevices = newDevices
+        compatibilityCache = compatibilityCache.filter { uid, _ in
+            newDevices.contains(where: { $0.uid == uid })
+        }
+        inputDevices = applyCompatibilityCache(to: newDevices)
 
         if let uid = selectedDeviceUID,
            !newDevices.contains(where: { $0.uid == uid }) {
@@ -477,7 +605,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
 
                 guard let currentUID = self.selectedDeviceUID, currentUID == uid else { return }
 
-                let refreshedDevices = self.listInputDevices()
+                let refreshedDevices = self.applyCompatibilityCache(to: self.listInputDevices())
                 if refreshedDevices.contains(where: { $0.uid == uid }) {
                     logger.info("Device reappeared after reconfiguration: \(deviceName ?? uid)")
                     self.inputDevices = refreshedDevices
@@ -493,6 +621,120 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             // Selected device still present - cancel any pending disconnect verification
             disconnectVerificationTask?.cancel()
             disconnectVerificationTask = nil
+        }
+    }
+
+    private func applyCompatibilityCache(to devices: [AudioInputDevice]) -> [AudioInputDevice] {
+        devices.map { device in
+            var device = device
+            device.compatibility = compatibilityCache[device.uid] ?? device.compatibility
+            return device
+        }
+    }
+
+    func markSelectedDeviceCompatibility(_ compatibility: AudioInputDeviceCompatibility) {
+        guard let selectedDeviceUID else { return }
+        compatibilityCache[selectedDeviceUID] = compatibility
+        inputDevices = applyCompatibilityCache(to: inputDevices)
+    }
+
+    private func handleSelectedDeviceSelectionChange(from oldValue: String?, to newValue: String?) {
+        if isInitializingSelection {
+            return
+        }
+
+        if isApplyingValidatedSelection {
+            persistSelectedDeviceUID()
+            return
+        }
+
+        previewError = nil
+
+        guard let newValue else {
+            persistSelectedDeviceUID()
+            if isPreviewActive {
+                stopPreview()
+                startPreview()
+            }
+            return
+        }
+
+        do {
+            try validateDeviceSelection(uid: newValue)
+            compatibilityCache[newValue] = .compatible
+            inputDevices = applyCompatibilityCache(to: inputDevices)
+            persistSelectedDeviceUID()
+
+            if isPreviewActive {
+                stopPreview()
+                startPreview()
+            }
+        } catch let error as SelectedInputDeviceError {
+            if case .incompatible(let issue) = error {
+                compatibilityCache[newValue] = .incompatible(issue)
+                inputDevices = applyCompatibilityCache(to: inputDevices)
+            }
+            previewError = error
+            revertSelectedDeviceUID(to: oldValue)
+        } catch {
+            compatibilityCache[newValue] = .incompatible(.engineStartFailed)
+            inputDevices = applyCompatibilityCache(to: inputDevices)
+            previewError = .incompatible(.engineStartFailed)
+            revertSelectedDeviceUID(to: oldValue)
+        }
+    }
+
+    private func validateDeviceSelection(uid: String) throws {
+        guard let deviceID = audioDeviceIDResolverOverride?(uid) ?? audioDeviceID(fromUID: uid) else {
+            throw SelectedInputDeviceError.unavailable
+        }
+
+        if let selectionValidationOverride {
+            try selectionValidationOverride(deviceID)
+            return
+        }
+
+        let engine = AVAudioEngine()
+        let inputNode = engine.inputNode
+
+        do {
+            try configureExplicitInputDevice(deviceID, on: engine, label: "selection")
+            let format = inputNode.outputFormat(forBus: 0)
+            try validateInputFormat(format, for: deviceID)
+            inputNode.installTap(onBus: 0, bufferSize: 256, format: format) { _, _ in }
+            defer {
+                inputNode.removeTap(onBus: 0)
+                engine.stop()
+            }
+            try engine.start()
+        } catch let error as SelectedInputDeviceError {
+            throw error
+        } catch {
+            inputNode.removeTap(onBus: 0)
+            engine.stop()
+            throw SelectedInputDeviceError.incompatible(.engineStartFailed)
+        }
+    }
+
+    private func revertSelectedDeviceUID(to value: String?) {
+        isApplyingValidatedSelection = true
+        selectedDeviceUID = value
+        isApplyingValidatedSelection = false
+    }
+
+    private func persistSelectedDeviceUID() {
+        UserDefaults.standard.set(selectedDeviceUID, forKey: UserDefaultsKeys.selectedInputDeviceUID)
+    }
+
+    private func selectedInputDeviceError(for preferredDeviceID: AudioDeviceID?) -> SelectedInputDeviceError? {
+        guard let selectedDeviceUID else { return nil }
+        guard preferredDeviceID != nil else { return .unavailable }
+
+        switch compatibilityCache[selectedDeviceUID] ?? selectedDevice?.compatibility ?? .unknown {
+        case .incompatible(let issue):
+            return .incompatible(issue)
+        case .unknown, .compatible:
+            return nil
         }
     }
 }
@@ -544,6 +786,29 @@ func setInputDevice(_ deviceID: AudioDeviceID, on engine: AVAudioEngine, label: 
 
     deviceHelperLogger.info("[\(label)] Input device set and verified: \(deviceID)")
     return true
+}
+
+func configureExplicitInputDevice(_ deviceID: AudioDeviceID, on engine: AVAudioEngine, label: String) throws {
+    guard AudioDeviceService.isInputDeviceAvailable(deviceID) else {
+        throw SelectedInputDeviceError.unavailable
+    }
+
+    guard setInputDevice(deviceID, on: engine, label: label) else {
+        throw SelectedInputDeviceError.incompatible(.cannotSetDevice)
+    }
+}
+
+func validateInputFormat(_ format: AVAudioFormat, for preferredDeviceID: AudioDeviceID?) throws {
+    guard format.sampleRate > 0, format.channelCount > 0 else {
+        if preferredDeviceID != nil {
+            throw SelectedInputDeviceError.incompatible(.invalidInputFormat)
+        }
+        throw NSError(
+            domain: "AudioDeviceService",
+            code: 0,
+            userInfo: [NSLocalizedDescriptionKey: "No audio input available for preview"]
+        )
+    }
 }
 
 private func audioStatusString(_ status: OSStatus) -> String {

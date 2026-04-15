@@ -404,8 +404,14 @@ struct RecordingSettingsView: View {
                     Text(String(localized: "System Default")).tag(nil as String?)
                     Divider()
                     ForEach(audioDevice.inputDevices) { device in
-                        Text(device.name).tag(device.uid as String?)
+                        Text(audioDevice.displayName(for: device)).tag(device.uid as String?)
                     }
+                }
+
+                if let message = audioDevice.selectedDeviceStatusMessage {
+                    Label(message, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                        .font(.caption)
                 }
 
                 if audioDevice.isPreviewActive {
@@ -444,6 +450,12 @@ struct RecordingSettingsView: View {
                     }
                 }
                 .disabled(!audioDevice.isPreviewActive && dictation.needsMicPermission)
+
+                if let error = audioDevice.previewError {
+                    Label(error.localizedDescription, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                }
 
                 if let name = audioDevice.disconnectedDeviceName {
                     Label(

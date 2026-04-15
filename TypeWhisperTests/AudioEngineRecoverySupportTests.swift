@@ -69,3 +69,177 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         XCTAssertEqual(delay, AudioEngineRecoveryPolicy.configurationDebounce)
     }
 }
+
+final class AudioDeviceServiceCompatibilityTests: XCTestCase {
+    private var originalSelectedDeviceUID: Any?
+
+    override func setUp() {
+        super.setUp()
+        originalSelectedDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+    }
+
+    override func tearDown() {
+        if let originalSelectedDeviceUID {
+            UserDefaults.standard.set(originalSelectedDeviceUID, forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        } else {
+            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        }
+        super.tearDown()
+    }
+
+    func testStartPreview_selectedIncompatibleDeviceDoesNotActivatePreview() {
+        UserDefaults.standard.set("display-mic", forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let device = AudioInputDevice(
+            deviceID: AudioDeviceID(42),
+            name: "LG Ultrafine",
+            uid: "display-mic",
+            compatibility: .incompatible(.cannotSetDevice)
+        )
+        let service = AudioDeviceService(
+            initialInputDevices: [device],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false
+        )
+        service.hasMicrophonePermissionOverride = true
+        service.audioDeviceIDResolverOverride = { uid in
+            XCTAssertEqual(uid, "display-mic")
+            return AudioDeviceID(42)
+        }
+
+        service.startPreview()
+
+        XCTAssertFalse(service.isPreviewActive)
+        XCTAssertEqual(service.previewError, .incompatible(.cannotSetDevice))
+    }
+
+    func testSelectingIncompatibleDeviceRevertsToPreviousSelection() {
+        UserDefaults.standard.set("built-in", forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let devices = [
+            AudioInputDevice(deviceID: AudioDeviceID(1), name: "MacBook Pro Mic", uid: "built-in"),
+            AudioInputDevice(deviceID: AudioDeviceID(42), name: "LG Ultrafine", uid: "display-mic")
+        ]
+        let service = AudioDeviceService(
+            initialInputDevices: devices,
+            monitorDeviceChanges: false,
+            probeCompatibilities: false
+        )
+        service.audioDeviceIDResolverOverride = { uid in
+            switch uid {
+            case "built-in": return AudioDeviceID(1)
+            case "display-mic": return AudioDeviceID(42)
+            default: return nil
+            }
+        }
+        service.selectionValidationOverride = { deviceID in
+            XCTAssertEqual(deviceID, AudioDeviceID(42))
+            throw SelectedInputDeviceError.incompatible(.cannotSetDevice)
+        }
+
+        service.selectedDeviceUID = "display-mic"
+
+        XCTAssertEqual(service.selectedDeviceUID, "built-in")
+        XCTAssertEqual(service.previewError, .incompatible(.cannotSetDevice))
+        let attemptedDevice = service.inputDevices.first(where: { $0.uid == "display-mic" })
+        XCTAssertEqual(attemptedDevice?.compatibility, .incompatible(.cannotSetDevice))
+    }
+
+    func testDisplayName_marksIncompatibleDevicesWithoutRemovingThem() {
+        let device = AudioInputDevice(
+            deviceID: AudioDeviceID(42),
+            name: "LG Ultrafine",
+            uid: "display-mic",
+            compatibility: .incompatible(.engineStartFailed)
+        )
+        let service = AudioDeviceService(
+            initialInputDevices: [device],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false
+        )
+
+        XCTAssertEqual(service.inputDevices.count, 1)
+        XCTAssertEqual(
+            service.displayName(for: device),
+            "LG Ultrafine (\(AudioInputDeviceCompatibilityIssue.engineStartFailed.badgeText))"
+        )
+    }
+
+    func testSavedSelectedIncompatibleDeviceRemainsSelected() {
+        UserDefaults.standard.set("display-mic", forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let device = AudioInputDevice(
+            deviceID: AudioDeviceID(42),
+            name: "LG Ultrafine",
+            uid: "display-mic",
+            compatibility: .incompatible(.invalidInputFormat)
+        )
+        let service = AudioDeviceService(
+            initialInputDevices: [device],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false
+        )
+
+        XCTAssertEqual(service.selectedDeviceUID, "display-mic")
+        XCTAssertEqual(service.selectedDevice?.uid, "display-mic")
+        XCTAssertNotNil(service.selectedDeviceStatusMessage)
+    }
+}
+
+final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
+    func testStartRecording_selectedUnavailableDeviceThrowsTypedError() {
+        let service = AudioRecordingService()
+        service.hasMicrophonePermissionOverride = true
+        service.hasExplicitDeviceSelection = true
+        service.selectedDeviceID = nil
+
+        XCTAssertThrowsError(try service.startRecording()) { error in
+            guard case AudioRecordingService.AudioRecordingError.selectedInputDeviceUnavailable = error else {
+                return XCTFail("Expected selectedInputDeviceUnavailable, got \(error)")
+            }
+        }
+    }
+
+    func testStartRecording_explicitIncompatibleDeviceDoesNotFallbackToDefault() {
+        let service = AudioRecordingService()
+        var didReachStartOverride = false
+
+        service.hasMicrophonePermissionOverride = true
+        service.hasExplicitDeviceSelection = true
+        service.selectedDeviceID = AudioDeviceID(42)
+        service.inputAvailabilityOverride = { selectedDeviceID in
+            XCTAssertEqual(selectedDeviceID, AudioDeviceID(42))
+            return true
+        }
+        service.startRecordingOverride = {
+            didReachStartOverride = true
+            throw AudioRecordingService.AudioRecordingError.selectedInputDeviceIncompatible(.cannotSetDevice)
+        }
+
+        XCTAssertThrowsError(try service.startRecording()) { error in
+            guard case AudioRecordingService.AudioRecordingError.selectedInputDeviceIncompatible(.cannotSetDevice) = error else {
+                return XCTFail("Expected selectedInputDeviceIncompatible(.cannotSetDevice), got \(error)")
+            }
+        }
+        XCTAssertTrue(didReachStartOverride)
+        XCTAssertFalse(service.isRecording)
+    }
+
+    func testStartRecording_withoutExplicitSelectionStillAllowsDefaultInput() {
+        let service = AudioRecordingService()
+        var didReachStartOverride = false
+
+        service.hasMicrophonePermissionOverride = true
+        service.hasExplicitDeviceSelection = false
+        service.selectedDeviceID = nil
+        service.inputAvailabilityOverride = { selectedDeviceID in
+            XCTAssertNil(selectedDeviceID)
+            return true
+        }
+        service.startRecordingOverride = {
+            didReachStartOverride = true
+        }
+
+        XCTAssertNoThrow(try service.startRecording())
+        XCTAssertTrue(didReachStartOverride)
+        XCTAssertTrue(service.isRecording)
+    }
+}

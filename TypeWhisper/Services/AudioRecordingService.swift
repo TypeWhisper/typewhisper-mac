@@ -67,6 +67,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     enum AudioRecordingError: LocalizedError {
         case microphonePermissionDenied
         case noMicrophoneDetected
+        case selectedInputDeviceUnavailable
+        case selectedInputDeviceIncompatible(AudioInputDeviceCompatibilityIssue)
         case engineStartFailed(String)
         case noAudioData
 
@@ -76,6 +78,10 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 "Microphone permission denied. Please grant access in System Settings."
             case .noMicrophoneDetected:
                 String(localized: "No mic detected.")
+            case .selectedInputDeviceUnavailable:
+                SelectedInputDeviceError.unavailable.errorDescription
+            case .selectedInputDeviceIncompatible(let issue):
+                SelectedInputDeviceError.incompatible(issue).errorDescription
             case .engineStartFailed(let detail):
                 "Failed to start audio engine: \(detail)"
             case .noAudioData:
@@ -97,8 +103,13 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         get { configLock.withLock { _selectedDeviceID } }
         set { configLock.withLock { _selectedDeviceID = newValue } }
     }
+    var hasExplicitDeviceSelection: Bool {
+        get { configLock.withLock { _hasExplicitDeviceSelection } }
+        set { configLock.withLock { _hasExplicitDeviceSelection = newValue } }
+    }
 
     private var _selectedDeviceID: AudioDeviceID?
+    private var _hasExplicitDeviceSelection = false
 
     private var audioEngine: AVAudioEngine?
     private var configChangeObserver: NSObjectProtocol?
@@ -341,14 +352,20 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private func startEngineWithRecovery(_ engine: AVAudioEngine, label: String) throws {
+        let explicitDeviceSelected = hasExplicitDeviceSelection
         for (attempt, delay) in AudioEngineRecoveryPolicy.retryBackoff.enumerated() {
             do {
                 try configureAndStartEngine(engine, label: label)
                 return
+            } catch let error as SelectedInputDeviceError {
+                throw mapSelectedInputDeviceError(error)
             } catch let error as AudioRecordingError {
                 throw error
             } catch {
                 guard AudioEngineRecoveryPolicy.isRetryable(error: error) else {
+                    if explicitDeviceSelected {
+                        throw AudioRecordingError.selectedInputDeviceIncompatible(.engineStartFailed)
+                    }
                     throw AudioRecordingError.engineStartFailed(error.localizedDescription)
                 }
 
@@ -359,9 +376,14 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
         do {
             try configureAndStartEngine(engine, label: label)
+        } catch let error as SelectedInputDeviceError {
+            throw mapSelectedInputDeviceError(error)
         } catch let error as AudioRecordingError {
             throw error
         } catch {
+            if explicitDeviceSelected {
+                throw AudioRecordingError.selectedInputDeviceIncompatible(.engineStartFailed)
+            }
             throw AudioRecordingError.engineStartFailed(error.localizedDescription)
         }
     }
@@ -374,18 +396,14 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private func configureAndStartEngine(_ engine: AVAudioEngine, label: String) throws {
         // Set the input device before reading the format so each retry sees fresh hardware state.
         if let deviceID = selectedDeviceID {
-            if !setInputDevice(deviceID, on: engine, label: label) {
-                logger.error("Failed to set \(label, privacy: .public) input device (\(deviceID)), falling back to system default")
-            }
+            try configureExplicitInputDevice(deviceID, on: engine, label: label)
         }
 
         let inputNode = engine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)
         logger.info("\(label, privacy: .public) input format: sampleRate=\(inputFormat.sampleRate), channels=\(inputFormat.channelCount)")
 
-        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
-            throw AudioRecordingError.noMicrophoneDetected
-        }
+        try validateRecordingInputFormat(inputFormat)
 
         guard let targetFormat = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
@@ -448,9 +466,12 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             return
         }
 
-        if let selectedDeviceID {
+        if hasExplicitDeviceSelection {
+            guard let selectedDeviceID else {
+                throw AudioRecordingError.selectedInputDeviceUnavailable
+            }
             guard AudioDeviceService.isInputDeviceAvailable(selectedDeviceID) else {
-                throw AudioRecordingError.noMicrophoneDetected
+                throw AudioRecordingError.selectedInputDeviceUnavailable
             }
             return
         }
@@ -539,5 +560,24 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let samples = sampleBuffer
         sampleBuffer.removeAll()
         return samples
+    }
+
+    private func validateRecordingInputFormat(_ format: AVAudioFormat) throws {
+        do {
+            try validateInputFormat(format, for: hasExplicitDeviceSelection ? selectedDeviceID : nil)
+        } catch let error as SelectedInputDeviceError {
+            throw mapSelectedInputDeviceError(error)
+        } catch {
+            throw AudioRecordingError.noMicrophoneDetected
+        }
+    }
+
+    private func mapSelectedInputDeviceError(_ error: SelectedInputDeviceError) -> AudioRecordingError {
+        switch error {
+        case .unavailable:
+            return .selectedInputDeviceUnavailable
+        case .incompatible(let issue):
+            return .selectedInputDeviceIncompatible(issue)
+        }
     }
 }
