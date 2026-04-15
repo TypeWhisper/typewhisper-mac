@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Block non-allowlisted bots and multiple open PRs from external authors
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           # Repo variable, optional: comma-separated GitHub logins.
           # Example: SeoFood,dependabot[bot],trusted-contributor
@@ -31,7 +31,8 @@ jobs:
             const marker = '<!-- pr-guard -->';
 
             const defaultAllowlist = new Set([
-              'SeoFood'
+              'SeoFood',
+              'dependabot[bot]'
             ]);
 
             const parseCsv = (value) =>
@@ -49,33 +50,42 @@ jobs:
             const isAllowlisted = defaultAllowlist.has(author);
 
             const upsertComment = async (body) => {
-              const { data: comments } = await github.rest.issues.listComments({
-                owner,
-                repo,
-                issue_number: issueNumber,
-                per_page: 100
-              });
-
-              const existing = comments.find((comment) =>
-                comment.user?.type === 'Bot' && comment.body?.includes(marker)
-              );
-
-              if (existing) {
-                await github.rest.issues.updateComment({
+              try {
+                const { data: comments } = await github.rest.issues.listComments({
                   owner,
                   repo,
-                  comment_id: existing.id,
+                  issue_number: issueNumber,
+                  per_page: 100
+                });
+
+                const existing = comments.find((comment) =>
+                  comment.user?.type === 'Bot' && comment.body?.includes(marker)
+                );
+
+                if (existing) {
+                  await github.rest.issues.updateComment({
+                    owner,
+                    repo,
+                    comment_id: existing.id,
+                    body
+                  });
+                  return;
+                }
+
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
                   body
                 });
-                return;
-              }
+              } catch (error) {
+                if (error.status === 403) {
+                  core.warning(`PR Guard: unable to write comment for #${issueNumber}: ${error.message}`);
+                  return;
+                }
 
-              await github.rest.issues.createComment({
-                owner,
-                repo,
-                issue_number: issueNumber,
-                body
-              });
+                throw error;
+              }
             };
 
             if (isAllowlisted || isInternal) {
