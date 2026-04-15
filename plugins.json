@@ -214,7 +214,7 @@
     {
       "id": "com.typewhisper.deepgram",
       "name": "Deepgram",
-      "version": "1.0.4",
+      "version": "1.0.5",
       "minHostVersion": "0.12.0",
       "minOSVersion": "14.0",
       "author": "TypeWhisper",
@@ -223,8 +223,8 @@
         "de": "Cloud-Transkription ueber die Deepgram-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key."
       },
       "category": "transcription",
-      "size": 212211,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-deepgram-v1.0.4/DeepgramPlugin.zip",
+      "size": 214663,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-deepgram-v1.0.5/DeepgramPlugin.zip",
       "iconSystemName": "waveform.badge.mic",
       "requiresAPIKey": true,
       "downloadCount": 41
