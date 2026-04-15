@@ -70,6 +70,7 @@ jobs:
             fireworks) TARGET="FireworksPlugin" ;;
             gladia) TARGET="GladiaPlugin" ;;
             elevenlabs) TARGET="ElevenLabsPlugin" ;;
+            google-cloud-stt) TARGET="GoogleCloudSTTPlugin" ;;
             claude) TARGET="ClaudePlugin" ;;
             cerebras) TARGET="CerebrasPlugin" ;;
             openrouter) TARGET="OpenRouterPlugin" ;;
