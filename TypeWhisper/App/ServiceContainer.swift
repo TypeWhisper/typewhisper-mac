@@ -29,6 +29,10 @@ final class ServiceContainer: ObservableObject {
     let widgetDataService: WidgetDataService
     let memoryService: MemoryService
     let appFormatterService: AppFormatterService
+    let dictationPunctuationProfileStore: DictationPunctuationProfileStore
+    let punctuationRulesLoader: PunctuationRulesLoader
+    let punctuationStrategyResolver: PunctuationStrategyResolver
+    let punctuationVerificationService: PunctuationVerificationService
     let audioRecorderService: AudioRecorderService
     let watchFolderService: WatchFolderService
     let accessibilityAnnouncementService: AccessibilityAnnouncementService
@@ -87,6 +91,10 @@ final class ServiceContainer: ObservableObject {
         widgetDataService = WidgetDataService(historyService: historyService)
         memoryService = MemoryService(promptProcessingService: promptProcessingService)
         appFormatterService = AppFormatterService()
+        dictationPunctuationProfileStore = DictationPunctuationProfileStore()
+        punctuationRulesLoader = PunctuationRulesLoader()
+        punctuationStrategyResolver = PunctuationStrategyResolver(profileStore: dictationPunctuationProfileStore)
+        punctuationVerificationService = PunctuationVerificationService(rulesLoader: punctuationRulesLoader)
         audioRecorderService = AudioRecorderService()
         promptProcessingService.memoryService = memoryService
         watchFolderService = WatchFolderService(audioFileService: audioFileService, modelManagerService: modelManagerService)
@@ -119,6 +127,8 @@ final class ServiceContainer: ObservableObject {
             promptActionService: promptActionService,
             promptProcessingService: promptProcessingService,
             appFormatterService: appFormatterService,
+            punctuationStrategyResolver: punctuationStrategyResolver,
+            speechPunctuationService: SpeechPunctuationService(rulesLoader: punctuationRulesLoader),
             speechFeedbackService: speechFeedbackService,
             accessibilityAnnouncementService: accessibilityAnnouncementService,
             errorLogService: errorLogService,

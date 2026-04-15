@@ -19,7 +19,6 @@ struct GeneralSettingsView: View {
     @AppStorage(UserDefaultsKeys.showMenuBarIcon) private var showMenuBarIcon = true
     @AppStorage(UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden) private var dockIconBehaviorRawValue = DockIconBehavior.keepVisible.rawValue
     @AppStorage(UserDefaultsKeys.showRecorderTab) private var showRecorderTab = false
-    @ObservedObject private var pluginManager = PluginManager.shared
     @ObservedObject private var settings = SettingsViewModel.shared
     @ObservedObject private var dictation = DictationViewModel.shared
 

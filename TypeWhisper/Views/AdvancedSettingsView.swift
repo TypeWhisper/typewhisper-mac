@@ -134,6 +134,8 @@ struct AdvancedSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            SpokenPunctuationSettingsSection()
+
             // MARK: - History
             Section(String(localized: "History")) {
                 Toggle(String(localized: "Save history"), isOn: $historyEnabled)
