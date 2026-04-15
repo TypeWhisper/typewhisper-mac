@@ -15,7 +15,7 @@ extension UserDefaults {
 }
 
 extension Notification.Name {
-    static let openSettingsFromDock = Notification.Name("openSettingsFromDock")
+    static let openManagedAppWindow = Notification.Name("openManagedAppWindow")
 }
 
 enum DockIconBehavior: String, CaseIterable {
@@ -88,7 +88,6 @@ struct TypeWhisperApp: App {
             EmptyView()
         } else {
             SettingsView()
-                .background(SettingsWindowBridge())
                 .sheet(isPresented: $showWelcomeSheet) {
                     WelcomeSheet()
                 }
@@ -130,35 +129,94 @@ struct TypeWhisperApp: App {
     }
 }
 
-// MARK: - Settings Window Bridge
+@MainActor
+final class ActivationSourceTracker {
+    static let shared = ActivationSourceTracker()
 
-/// Captures the `openWindow` environment action from the SwiftUI scene context
-/// and stores it statically so AppDelegate can open the settings window from Dock clicks.
-private struct SettingsWindowBridge: View {
-    @Environment(\.openWindow) private var openWindow
+    private(set) var lastExternalApplication: NSRunningApplication?
 
-    var body: some View {
-        Color.clear
-            .frame(width: 0, height: 0)
-            .onAppear {
-                SettingsWindowOpener.shared.openWindow = openWindow
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .openSettingsFromDock)) { _ in
-                openWindow(id: "settings")
-            }
+    func recordActivation(_ application: NSRunningApplication?) {
+        guard let application else { return }
+        if application.processIdentifier == NSRunningApplication.current.processIdentifier {
+            return
+        }
+        lastExternalApplication = application
     }
 }
 
-/// Stores the `openWindow` action captured from SwiftUI scene context.
 @MainActor
-final class SettingsWindowOpener {
-    static let shared = SettingsWindowOpener()
+final class ManagedAppWindowOpener {
+    static let shared = ManagedAppWindowOpener()
+
     var openWindow: OpenWindowAction?
 
-    func openSettings() {
+    func open(id: String) {
+        let sourceApplication = sourceApplicationForActivation()
         NSApp.setActivationPolicy(.regular)
-        NSApp.activate()
-        openWindow?(id: "settings")
+
+        if let existingWindow = managedWindow(id: id) {
+            reopenExistingWindow(existingWindow, sourceApplication: sourceApplication)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                self.reopenExistingWindow(existingWindow, sourceApplication: sourceApplication)
+            }
+            return
+        }
+
+        if let openWindow {
+            openWindow(id: id)
+        } else {
+            NotificationCenter.default.post(
+                name: .openManagedAppWindow,
+                object: nil,
+                userInfo: ["id": id]
+            )
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            guard let window = self.managedWindow(id: id) else { return }
+            self.reopenExistingWindow(window, sourceApplication: sourceApplication)
+        }
+    }
+
+    private func sourceApplicationForActivation() -> NSRunningApplication? {
+        ActivationSourceTracker.shared.lastExternalApplication
+            ?? NSWorkspace.shared.frontmostApplication
+    }
+
+    private func managedWindow(id: String) -> NSWindow? {
+        NSApp.windows.first(where: {
+            $0.identifier?.rawValue.localizedCaseInsensitiveContains(id) == true
+        })
+    }
+
+    private func reopenExistingWindow(_ window: NSWindow, sourceApplication: NSRunningApplication?) {
+        NSApp.unhide(nil)
+        if window.isMiniaturized {
+            window.deminiaturize(nil)
+        }
+        window.orderFrontRegardless()
+        window.makeKeyAndOrderFront(nil)
+        requestActivation(from: sourceApplication)
+    }
+
+    private func requestActivation(from sourceApplication: NSRunningApplication?) {
+        let currentApplication = NSRunningApplication.current
+
+        guard let sourceApplication,
+              sourceApplication.processIdentifier != currentApplication.processIdentifier else {
+            forceActivateCurrentApplication(currentApplication)
+            return
+        }
+
+        let activated = currentApplication.activate(from: sourceApplication)
+        if !activated {
+            forceActivateCurrentApplication(currentApplication)
+        }
+    }
+
+    private func forceActivateCurrentApplication(_ application: NSRunningApplication) {
+        application.activate(options: [.activateIgnoringOtherApps])
+        NSApp.activate(ignoringOtherApps: true)
     }
 }
 
@@ -170,6 +228,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     private var translationHostWindow: NSWindow?
     private var menuBarIconObserver: NSKeyValueObservation?
     private var dockIconBehaviorObserver: NSKeyValueObservation?
+    private var appActivationObserver: NSObjectProtocol?
     private var hasInteractiveForegroundContent = false
     private lazy var updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil)
 
@@ -251,6 +310,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             }
         }
 
+        appActivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { notification in
+            let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            Task { @MainActor in
+                ActivationSourceTracker.shared.recordActivation(application)
+            }
+        }
+
         // Observe settings window lifecycle
         NotificationCenter.default.addObserver(
             self,
@@ -280,25 +350,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     }
 
     private func openSettingsWindow() {
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate()
-
-        // Try existing window first (SwiftUI keeps it after close)
-        if let window = NSApp.windows.first(where: {
-            $0.identifier?.rawValue.localizedCaseInsensitiveContains("settings") == true
-        }) {
-            window.makeKeyAndOrderFront(nil)
-            return
-        }
-
-        // Fall back to stored openWindow action from SwiftUI scene
-        if SettingsWindowOpener.shared.openWindow != nil {
-            SettingsWindowOpener.shared.openSettings()
-            return
-        }
-
-        // Last resort: post notification for bridge view
-        NotificationCenter.default.post(name: .openSettingsFromDock, object: nil)
+        ManagedAppWindowOpener.shared.open(id: "settings")
     }
 
     private func handleIncomingURL(_ url: URL) {
@@ -312,10 +364,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     }
 
     private func isManagedWindow(_ window: NSWindow) -> Bool {
-        guard let id = window.identifier?.rawValue else { return false }
-        return id.localizedCaseInsensitiveContains("settings")
-            || id.localizedCaseInsensitiveContains("history")
-            || id.localizedCaseInsensitiveContains("errors")
+        if let identifier = window.identifier?.rawValue.lowercased() {
+            if identifier.contains("settings") || identifier.contains("history") || identifier.contains("errors") {
+                return true
+            }
+        }
+
+        let title = window.title
+        return title == String(localized: "Settings")
+            || title == String(localized: "History")
+            || title == String(localized: "Error Log")
     }
 
     private var hasVisibleManagedWindow: Bool {
@@ -329,7 +387,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         }
 
         if activate {
-            NSApp.activate(ignoringOtherApps: true)
+            NSApp.activate()
         }
     }
 

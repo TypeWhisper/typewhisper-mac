@@ -76,75 +76,69 @@ struct MenuBarView: View {
     @StateObject private var status = MenuBarState()
 
     var body: some View {
-        let _ = { SettingsWindowOpener.shared.openWindow = openWindow }()
+        Group {
+            let _ = { ManagedAppWindowOpener.shared.openWindow = openWindow }()
 
-        Label(status.statusText, systemImage: status.statusImage)
+            Label(status.statusText, systemImage: status.statusImage)
 
-        Divider()
+            Divider()
 
-        Button {
-            openWindow(id: "settings")
-            activateAppWindow("settings")
-        } label: {
-            Label(String(localized: "Settings..."), systemImage: "gear")
-        }
-        .keyboardShortcut(",")
-
-        Button {
-            openWindow(id: "history")
-            activateAppWindow("history")
-        } label: {
-            Label(String(localized: "History"), systemImage: "clock.arrow.circlepath")
-        }
-
-        Button {
-            openWindow(id: "errors")
-            activateAppWindow("errors")
-        } label: {
-            Label(String(localized: "Error Log"), systemImage: "exclamationmark.triangle")
-        }
-
-        Button {
-            openWindow(id: "settings")
-            activateAppWindow("settings")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                FileTranscriptionViewModel.shared.showFilePickerFromMenu = true
+            Button {
+                openManagedWindow("settings")
+            } label: {
+                Label(String(localized: "Settings..."), systemImage: "gear")
             }
-        } label: {
-            Label(String(localized: "Transcribe File..."), systemImage: "doc.text")
-        }
-        .disabled(!status.isModelReady)
+            .keyboardShortcut(",")
 
-        Button {
-            DictationViewModel.shared.readBackLastTranscription()
-        } label: {
-            Label(String(localized: "Read Back Last Transcription"), systemImage: "speaker.wave.2")
-        }
-        .keyboardShortcut("r", modifiers: [.command, .shift])
-        .disabled(DictationViewModel.shared.lastTranscribedText == nil)
+            Button {
+                openManagedWindow("history")
+            } label: {
+                Label(String(localized: "History"), systemImage: "clock.arrow.circlepath")
+            }
 
-        Button(String(localized: "Check for Updates...")) {
-            UpdateChecker.shared?.checkForUpdates()
-        }
-        .disabled(UpdateChecker.shared?.canCheckForUpdates() != true)
+            Button {
+                openManagedWindow("errors")
+            } label: {
+                Label(String(localized: "Error Log"), systemImage: "exclamationmark.triangle")
+            }
 
-        Divider()
+            Button {
+                openManagedWindow("settings")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    FileTranscriptionViewModel.shared.showFilePickerFromMenu = true
+                }
+            } label: {
+                Label(String(localized: "Transcribe File..."), systemImage: "doc.text")
+            }
+            .disabled(!status.isModelReady)
 
-        Button(String(localized: "Quit")) {
-            NSApplication.shared.terminate(nil)
+            Button {
+                DictationViewModel.shared.readBackLastTranscription()
+            } label: {
+                Label(String(localized: "Read Back Last Transcription"), systemImage: "speaker.wave.2")
+            }
+            .keyboardShortcut("r", modifiers: [.command, .shift])
+            .disabled(DictationViewModel.shared.lastTranscribedText == nil)
+
+            Button(String(localized: "Check for Updates...")) {
+                UpdateChecker.shared?.checkForUpdates()
+            }
+            .disabled(UpdateChecker.shared?.canCheckForUpdates() != true)
+
+            Divider()
+
+            Button(String(localized: "Quit")) {
+                NSApplication.shared.terminate(nil)
+            }
+            .keyboardShortcut("q")
         }
-        .keyboardShortcut("q")
+        .onReceive(NotificationCenter.default.publisher(for: .openManagedAppWindow)) { notification in
+            guard let id = notification.userInfo?["id"] as? String else { return }
+            openWindow(id: id)
+        }
     }
 
-    private func activateAppWindow(_ id: String) {
-        NSApp.setActivationPolicy(.regular)
-        DispatchQueue.main.async {
-            if let window = NSApp.windows.first(where: {
-                $0.identifier?.rawValue.localizedCaseInsensitiveContains(id) == true
-            }) {
-                window.makeKeyAndOrderFront(nil)
-            }
-            NSApp.activate()
-        }
+    private func openManagedWindow(_ id: String) {
+        ManagedAppWindowOpener.shared.open(id: id)
     }
 }
