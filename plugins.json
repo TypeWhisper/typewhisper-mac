@@ -57,19 +57,35 @@
     {
       "id": "com.typewhisper.groq",
       "name": "Groq",
-      "version": "1.0.15",
+      "version": "1.0.16",
       "minHostVersion": "0.9.0",
       "author": "TypeWhisper",
       "description": "Cloud transcription and LLM via Groq API. Fast inference, requires API key.",
       "descriptions": {
-        "de": "Cloud-Transkription und LLM \u00fcber die Groq-API. Schnelle Inferenz, erfordert API-Key."
+        "de": "Cloud-Transkription und LLM ueber die Groq-API. Schnelle Inferenz, erfordert API-Key."
       },
       "category": "transcription",
-      "size": 161412,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-groq-v1.0.15/GroqPlugin.zip",
+      "size": 161783,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-groq-v1.0.16/GroqPlugin.zip",
       "iconSystemName": "bolt.fill",
       "requiresAPIKey": true,
-      "downloadCount": 2629
+      "downloadCount": 2629,
+      "releases": [
+        {
+          "version": "1.0.16",
+          "minHostVersion": "0.9.0",
+          "size": 161783,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-groq-v1.0.16/GroqPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
+          "version": "1.0.15",
+          "minHostVersion": "0.9.0",
+          "size": 161412,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-groq-v1.0.15/GroqPlugin.zip"
+        }
+      ],
+      "minOSVersion": "14.0"
     },
     {
       "id": "com.typewhisper.openai",
