@@ -138,21 +138,10 @@ final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
             throw PluginTranscriptionError.noModelSelected
         }
 
-        if !PluginDictionaryTerms.terms(fromPrompt: prompt).isEmpty {
-            let result = try await transcribeREST(
-                audio: audio,
-                language: language,
-                modelId: modelId,
-                apiKey: apiKey,
-                prompt: prompt
-            )
-            _ = onProgress(result.text)
-            return result
-        }
-
         do {
             return try await transcribeWebSocket(
                 audio: audio, language: language, modelId: modelId,
+                prompt: prompt,
                 apiKey: apiKey, onProgress: onProgress
             )
         } catch {
@@ -332,16 +321,27 @@ final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
         audio: AudioData,
         language: String?,
         modelId: String,
+        prompt: String?,
         apiKey: String,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
-        var urlString = "wss://streaming.assemblyai.com/v3/ws?sample_rate=16000&format_turns=true"
+        var queryItems = [
+            URLQueryItem(name: "sample_rate", value: "16000"),
+            URLQueryItem(name: "format_turns", value: "true"),
+        ]
 
         if let lang = language, !lang.isEmpty, lang != "en" {
-            urlString += "&speech_model=universal-streaming-multilingual"
+            queryItems.append(URLQueryItem(name: "speech_model", value: "universal-streaming-multilingual"))
         }
 
-        guard let url = URL(string: urlString) else {
+        if let keytermsPrompt = streamingKeytermsPromptJSON(from: prompt, modelId: modelId) {
+            queryItems.append(URLQueryItem(name: "keyterms_prompt", value: keytermsPrompt))
+        }
+
+        var components = URLComponents(string: "wss://streaming.assemblyai.com/v3/ws")
+        components?.queryItems = queryItems
+
+        guard let url = components?.url else {
             throw PluginTranscriptionError.apiError("Invalid streaming URL")
         }
 
@@ -413,6 +413,36 @@ final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
 
         let finalText = await collector.finalResult()
         return PluginTranscriptionResult(text: finalText, detectedLanguage: language)
+    }
+
+    private func streamingKeytermsPromptJSON(from prompt: String?, modelId: String) -> String? {
+        let rawTerms = PluginDictionaryTerms.terms(fromPrompt: prompt)
+        guard !rawTerms.isEmpty else { return nil }
+
+        let maxTerms = 100
+        let maxCharactersPerTerm = 50
+        let filteredTerms = rawTerms.filter { $0.count <= maxCharactersPerTerm }
+        let limitedTerms = Array(filteredTerms.prefix(maxTerms))
+
+        if filteredTerms.count < rawTerms.count {
+            logger.warning(
+                "AssemblyAI streaming dropped \(rawTerms.count - filteredTerms.count) dictionary term(s) longer than \(maxCharactersPerTerm) characters"
+            )
+        }
+
+        if limitedTerms.count < filteredTerms.count {
+            logger.warning(
+                "AssemblyAI streaming limited dictionary terms to \(maxTerms) entries for model \(modelId, privacy: .public)"
+            )
+        }
+
+        guard !limitedTerms.isEmpty,
+              let data = try? JSONSerialization.data(withJSONObject: limitedTerms),
+              let json = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+
+        return json
     }
 
     // MARK: - Audio Conversion
