@@ -319,8 +319,8 @@ jobs:
           updated = False
           for plugin in registry["plugins"]:
               if plugin["id"] == manifest["id"]:
-                  sync_plugin_metadata(plugin)
                   releases = migrate_legacy_release(plugin)
+                  sync_plugin_metadata(plugin)
                   releases = [release for release in releases if release.get("version") != version]
                   releases.append(build_release())
                   plugin["releases"] = sorted(releases, key=lambda release: version_key(release["version"]), reverse=True)
