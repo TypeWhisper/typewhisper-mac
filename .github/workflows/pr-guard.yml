@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Block non-allowlisted bots and multiple open PRs from external authors
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           # Repo variable, optional: comma-separated GitHub logins.
           # Example: SeoFood,dependabot[bot],trusted-contributor
