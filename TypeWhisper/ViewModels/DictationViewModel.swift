@@ -216,8 +216,18 @@ final class DictationViewModel: ObservableObject {
         )
         self.streamingHandler = StreamingHandler(
             modelManager: modelManager,
-            audioRecordingService: audioRecordingService,
-            dictionaryService: dictionaryService
+            streamPromptProvider: { [weak dictionaryService] in
+                dictionaryService?.getTermsForPrompt() ?? ""
+            },
+            bufferProvider: { [weak audioRecordingService] in
+                audioRecordingService?.getCurrentBuffer() ?? []
+            },
+            bufferDeltaProvider: { [weak audioRecordingService] offset in
+                audioRecordingService?.getBufferDelta(since: offset) ?? ([], offset)
+            },
+            bufferedDurationProvider: { [weak audioRecordingService] in
+                audioRecordingService?.totalBufferDuration ?? 0
+            }
         )
         self.promptPaletteHandler = PromptPaletteHandler(
             textInsertionService: textInsertionService,
@@ -587,7 +597,8 @@ final class DictationViewModel: ObservableObject {
                 language: effectiveLanguage,
                 task: effectiveTask,
                 cloudModelOverride: effectiveCloudModelOverride,
-                stateCheck: { @MainActor [weak self] in self?.state ?? .idle }
+                allowLiveTranscription: indicatorTranscriptPreviewEnabled || externalStreamingDisplayCount > 0,
+                stateCheck: { [weak self] in self?.state == .recording }
             )
             EventBus.shared.emit(.recordingStarted(RecordingStartedPayload(
                 appName: capturedActiveApp?.name,
@@ -745,7 +756,7 @@ final class DictationViewModel: ObservableObject {
 
         audioDuckingService.restoreAudio()
         mediaPlaybackService.resumeIfWePaused()
-        streamingHandler.stop()
+        let liveSessionResult = await streamingHandler.finish()
         stopRecordingTimer()
         let previewText = partialText.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasPreviewText = !previewText.isEmpty
@@ -829,14 +840,18 @@ final class DictationViewModel: ObservableObject {
                 let translationTarget = effectiveTranslationTarget
                 let termsPrompt = dictionaryService.getTermsForPrompt()
 
-                let result = try await modelManager.transcribe(
-                    audioSamples: samples,
-                    language: language,
-                    task: task,
-                    engineOverrideId: engineOverride,
-                    cloudModelOverride: cloudModelOverride,
-                    prompt: termsPrompt
-                )
+                let result = if let liveSessionResult {
+                    liveSessionResult
+                } else {
+                    try await modelManager.transcribe(
+                        audioSamples: samples,
+                        language: language,
+                        task: task,
+                        engineOverrideId: engineOverride,
+                        cloudModelOverride: cloudModelOverride,
+                        prompt: termsPrompt
+                    )
+                }
 
                 // Bail out if a new recording started while we were transcribing
                 guard !Task.isCancelled else { return }

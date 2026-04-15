@@ -239,7 +239,6 @@ jobs:
           with open("/tmp/gh-pages/plugins.json", "r") as f:
               registry = json.load(f)
 
-          plugin_name = "$PLUGIN_NAME"
           version = "$PLUGIN_VERSION"
           size = int("$ZIP_SIZE")
           download_url = "$DOWNLOAD_URL"
@@ -253,41 +252,86 @@ jobs:
           with open(src_manifest) as mf:
               manifest = json.load(mf)
 
-          def sync_registry_fields(plugin):
+          registry["schemaVersion"] = max(int(registry.get("schemaVersion", 1)), 2)
+
+          def version_key(value):
+              return tuple(int(part) for part in value.split("."))
+
+          def sync_plugin_metadata(plugin):
               plugin["id"] = manifest["id"]
               plugin["name"] = manifest["name"]
-              plugin["version"] = version
-              plugin["minHostVersion"] = manifest.get("minHostVersion", plugin.get("minHostVersion", "0.9.0"))
               plugin["author"] = manifest.get("author", plugin.get("author", "TypeWhisper"))
               plugin["description"] = manifest.get("description", plugin.get("description", ""))
               plugin["descriptions"] = manifest.get("descriptions", plugin.get("descriptions", {}))
               plugin["category"] = manifest.get("category", plugin.get("category", "utility"))
-              plugin["size"] = size
-              plugin["downloadURL"] = download_url
+              plugin["downloadCount"] = plugin.get("downloadCount", 0)
 
-              optional_fields = [
-                  "minOSVersion",
-                  "supportedArchitectures",
-                  "iconSystemName",
-                  "requiresAPIKey",
-              ]
-              for field in optional_fields:
+              for field in ["iconSystemName", "requiresAPIKey"]:
                   if field in manifest and manifest[field] is not None:
                       plugin[field] = manifest[field]
                   else:
                       plugin.pop(field, None)
 
+              for legacy_field in [
+                  "version",
+                  "minHostVersion",
+                  "minOSVersion",
+                  "supportedArchitectures",
+                  "size",
+                  "downloadURL",
+              ]:
+                  plugin.pop(legacy_field, None)
+
+          def build_release():
+              release = {
+                  "version": version,
+                  "minHostVersion": manifest.get("minHostVersion", "0.9.0"),
+                  "size": size,
+                  "downloadURL": download_url,
+              }
+              for field in ["minOSVersion", "supportedArchitectures"]:
+                  if field in manifest and manifest[field] is not None:
+                      release[field] = manifest[field]
+              return release
+
+          def migrate_legacy_release(plugin):
+              if plugin.get("releases"):
+                  return plugin["releases"]
+
+              version_value = plugin.get("version")
+              min_host = plugin.get("minHostVersion")
+              size_value = plugin.get("size")
+              download_value = plugin.get("downloadURL")
+              if not all([version_value, min_host, size_value, download_value]):
+                  return []
+
+              legacy = {
+                  "version": version_value,
+                  "minHostVersion": min_host,
+                  "size": size_value,
+                  "downloadURL": download_value,
+              }
+              for field in ["minOSVersion", "supportedArchitectures"]:
+                  if field in plugin and plugin[field] is not None:
+                      legacy[field] = plugin[field]
+              return [legacy]
+
           updated = False
           for plugin in registry["plugins"]:
-              if plugin_name in plugin["id"]:
-                  sync_registry_fields(plugin)
+              if plugin["id"] == manifest["id"]:
+                  sync_plugin_metadata(plugin)
+                  releases = migrate_legacy_release(plugin)
+                  releases = [release for release in releases if release.get("version") != version]
+                  releases.append(build_release())
+                  plugin["releases"] = sorted(releases, key=lambda release: version_key(release["version"]), reverse=True)
                   updated = True
-                  print(f"Updated {plugin['id']} to v{version}")
+                  print(f"Updated {plugin['id']} release set with v{version}")
                   break
 
           if not updated:
               new_entry = {}
-              sync_registry_fields(new_entry)
+              sync_plugin_metadata(new_entry)
+              new_entry["releases"] = [build_release()]
               registry["plugins"].append(new_entry)
               print(f"Added new plugin {manifest['id']} v{version}")
 
