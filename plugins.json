@@ -308,7 +308,7 @@
     {
       "id": "com.typewhisper.assemblyai",
       "name": "AssemblyAI",
-      "version": "1.0.5",
+      "version": "1.0.6",
       "minHostVersion": "0.12.0",
       "minOSVersion": "14.0",
       "author": "TypeWhisper",
@@ -317,11 +317,27 @@
         "de": "Cloud-Transkription ueber die AssemblyAI-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key."
       },
       "category": "transcription",
-      "size": 163465,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-assemblyai-v1.0.5/AssemblyAIPlugin.zip",
+      "size": 168114,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-assemblyai-v1.0.6/AssemblyAIPlugin.zip",
       "iconSystemName": "waveform.badge.mic",
       "requiresAPIKey": true,
-      "downloadCount": 37
+      "downloadCount": 37,
+      "releases": [
+        {
+          "version": "1.0.6",
+          "minHostVersion": "0.12.0",
+          "size": 168114,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-assemblyai-v1.0.6/AssemblyAIPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
+          "version": "1.0.5",
+          "minHostVersion": "0.12.0",
+          "size": 163465,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-assemblyai-v1.0.5/AssemblyAIPlugin.zip",
+          "minOSVersion": "14.0"
+        }
+      ]
     },
     {
       "id": "com.typewhisper.voxtral",
