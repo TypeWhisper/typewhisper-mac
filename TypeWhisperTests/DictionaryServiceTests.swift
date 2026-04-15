@@ -38,6 +38,27 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testEmptyCorrectionReplacementPersistsAndRemovesText() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "¿", replacement: "")
+
+        XCTAssertEqual(service.correctionsCount, 1)
+        XCTAssertEqual(service.corrections.first?.replacement, "")
+        XCTAssertEqual(service.applyCorrections(to: "¿Como estas?"), "Como estas?")
+        XCTAssertEqual(service.corrections.first?.usageCount, 1)
+
+        let reloadedService = DictionaryService(appSupportDirectory: appSupportDirectory)
+        XCTAssertEqual(reloadedService.correctionsCount, 1)
+        XCTAssertEqual(reloadedService.corrections.first?.replacement, "")
+        XCTAssertEqual(reloadedService.applyCorrections(to: "¿Como estas?"), "Como estas?")
+        reloadedService.loadEntries()
+        XCTAssertEqual(reloadedService.corrections.first?.usageCount, 2)
+    }
+
+    @MainActor
     func testTermPackActivationPreservesManualEntriesAndDeactivationRemovesOnlyPackEntries() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

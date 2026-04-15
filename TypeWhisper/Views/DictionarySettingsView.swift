@@ -1,5 +1,9 @@
 import SwiftUI
 
+private func dictionaryReplacementDisplayText(_ replacement: String) -> String {
+    replacement.isEmpty ? "\"\"" : replacement
+}
+
 struct DictionarySettingsView: View {
     @ObservedObject private var viewModel = DictionaryViewModel.shared
     @ObservedObject private var termPackRegistryService: TermPackRegistryService
@@ -366,7 +370,7 @@ private struct TermPackCardView: View {
                                     Image(systemName: "arrow.right")
                                         .font(.caption2)
                                         .foregroundStyle(.tertiary)
-                                    Text(correction.replacement)
+                                    Text(dictionaryReplacementDisplayText(correction.replacement))
                                 }
                                 .font(.caption)
                                 .padding(.horizontal, 8)
@@ -422,7 +426,7 @@ private struct DictionaryCardView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
 
-                Text(replacement)
+                Text(dictionaryReplacementDisplayText(replacement))
                     .font(.callout)
                     .fontWeight(.medium)
             } else {
@@ -567,7 +571,7 @@ private struct DictionaryEditorSheet: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
-                .disabled(viewModel.editOriginal.isEmpty || (viewModel.editType == .correction && viewModel.editReplacement.isEmpty))
+                .disabled(viewModel.editOriginal.isEmpty)
             }
             .padding()
             .background(Color(NSColor.windowBackgroundColor))

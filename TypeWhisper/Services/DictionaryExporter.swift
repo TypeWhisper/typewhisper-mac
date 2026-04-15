@@ -71,8 +71,7 @@ enum DictionaryExporter {
             let replacement: String?
 
             if type == .correction {
-                guard let correctionReplacement = dict["replacement"] as? String,
-                      !correctionReplacement.isEmpty else {
+                guard let correctionReplacement = dict["replacement"] as? String else {
                     throw DictionaryImportError.missingRequiredField("replacement")
                 }
                 replacement = correctionReplacement

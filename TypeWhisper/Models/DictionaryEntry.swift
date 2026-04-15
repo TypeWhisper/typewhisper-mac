@@ -58,7 +58,8 @@ final class DictionaryEntry {
 
     var displayText: String {
         if type == .correction, let replacement = replacement {
-            return "\(original) → \(replacement)"
+            let displayReplacement = replacement.isEmpty ? "\"\"" : replacement
+            return "\(original) → \(displayReplacement)"
         }
         return original
     }
