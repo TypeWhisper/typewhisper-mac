@@ -9,7 +9,9 @@ struct HotkeyRecorderView: View {
 
     @State private var isRecording = false
     @State private var pendingModifiers: NSEvent.ModifierFlags = []
+    @State private var pendingDeviceModifierFlags: UInt = 0
     @State private var peakModifiers: NSEvent.ModifierFlags = []
+    @State private var peakDeviceModifierFlags: UInt = 0
     @State private var localMonitor: Any?
     @State private var globalMonitor: Any?
     @State private var modifierReleaseTimer: DispatchWorkItem?
@@ -83,13 +85,15 @@ struct HotkeyRecorderView: View {
     }
 
     private var pendingModifierString: String {
-        var parts: [String] = []
-        if pendingModifiers.contains(.function) { parts.append("Fn") }
-        if pendingModifiers.contains(.control) { parts.append("⌃") }
-        if pendingModifiers.contains(.option) { parts.append("⌥") }
-        if pendingModifiers.contains(.shift) { parts.append("⇧") }
-        if pendingModifiers.contains(.command) { parts.append("⌘") }
-        return parts.joined()
+        guard !pendingModifiers.isEmpty else { return "" }
+        return HotkeyService.displayName(
+            for: UnifiedHotkey(
+                keyCode: UnifiedHotkey.modifierComboKeyCode,
+                modifierFlags: pendingModifiers.rawValue,
+                deviceModifierFlags: pendingDeviceModifierFlags,
+                isFn: false
+            )
+        )
     }
 
     private func startRecording() {
@@ -99,7 +103,9 @@ struct HotkeyRecorderView: View {
         Self.activeRecorder = id
         isRecording = true
         pendingModifiers = []
+        pendingDeviceModifierFlags = 0
         peakModifiers = []
+        peakDeviceModifierFlags = 0
         ServiceContainer.shared.hotkeyService.suspendMonitoring()
 
         // Local monitor - can swallow events (return nil)
@@ -123,10 +129,12 @@ struct HotkeyRecorderView: View {
         if event.type == .flagsChanged {
             let relevantMask: NSEvent.ModifierFlags = [.command, .option, .control, .shift, .function]
             let current = event.modifierFlags.intersection(relevantMask)
+            let currentDeviceModifierFlags = HotkeyService.deviceSpecificModifierFlags(from: event.modifierFlags)
 
             // Track peak modifier set (most modifiers held simultaneously)
             if current.isSuperset(of: peakModifiers) {
                 peakModifiers = current
+                peakDeviceModifierFlags = currentDeviceModifierFlags
             }
 
             if current.isEmpty, !pendingModifiers.isEmpty {
@@ -136,7 +144,12 @@ struct HotkeyRecorderView: View {
                 // Build the candidate single-tap hotkey for this release
                 let candidateHotkey: UnifiedHotkey?
                 if peakCount > 1 {
-                    candidateHotkey = UnifiedHotkey(keyCode: UnifiedHotkey.modifierComboKeyCode, modifierFlags: peakModifiers.rawValue, isFn: false)
+                    candidateHotkey = UnifiedHotkey(
+                        keyCode: UnifiedHotkey.modifierComboKeyCode,
+                        modifierFlags: peakModifiers.rawValue,
+                        deviceModifierFlags: peakDeviceModifierFlags,
+                        isFn: false
+                    )
                 } else if peakModifiers.contains(.function) {
                     candidateHotkey = UnifiedHotkey(keyCode: 0, modifierFlags: 0, isFn: true)
                 } else if HotkeyService.modifierKeyCodes.contains(event.keyCode) {
@@ -151,7 +164,13 @@ struct HotkeyRecorderView: View {
                         // Second tap - finish as double-tap
                         doubleTapTimer?.cancel()
                         doubleTapTimer = nil
-                        let doubleTapHotkey = UnifiedHotkey(keyCode: candidate.keyCode, modifierFlags: candidate.modifierFlags, isFn: candidate.isFn, isDoubleTap: true)
+                        let doubleTapHotkey = UnifiedHotkey(
+                            keyCode: candidate.keyCode,
+                            modifierFlags: candidate.modifierFlags,
+                            deviceModifierFlags: candidate.deviceModifierFlags,
+                            isFn: candidate.isFn,
+                            isDoubleTap: true
+                        )
                         let work = DispatchWorkItem { [self] in
                             finishRecording(doubleTapHotkey)
                         }
@@ -173,12 +192,15 @@ struct HotkeyRecorderView: View {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
                     }
                     pendingModifiers = []
+                    pendingDeviceModifierFlags = 0
                     peakModifiers = []
+                    peakDeviceModifierFlags = 0
                     return true
                 }
             }
 
             pendingModifiers = current
+            pendingDeviceModifierFlags = currentDeviceModifierFlags
             return true
         }
 
@@ -226,8 +248,16 @@ struct HotkeyRecorderView: View {
 
             let relevantMask: NSEvent.ModifierFlags = [.command, .option, .control, .shift, .function]
             let modifiers = event.modifierFlags.intersection(relevantMask).rawValue
+            let deviceModifierFlags = HotkeyService.deviceSpecificModifierFlags(from: event.modifierFlags)
 
-            finishRecording(UnifiedHotkey(keyCode: event.keyCode, modifierFlags: modifiers, isFn: false))
+            finishRecording(
+                UnifiedHotkey(
+                    keyCode: event.keyCode,
+                    modifierFlags: modifiers,
+                    deviceModifierFlags: deviceModifierFlags,
+                    isFn: false
+                )
+            )
             return true
         }
 
@@ -246,7 +276,9 @@ struct HotkeyRecorderView: View {
         }
         isRecording = false
         pendingModifiers = []
+        pendingDeviceModifierFlags = 0
         peakModifiers = []
+        peakDeviceModifierFlags = 0
         removeMonitors()
         ServiceContainer.shared.hotkeyService.resumeMonitoring()
         onRecord(hotkey)
@@ -264,7 +296,9 @@ struct HotkeyRecorderView: View {
         }
         isRecording = false
         pendingModifiers = []
+        pendingDeviceModifierFlags = 0
         peakModifiers = []
+        peakDeviceModifierFlags = 0
         removeMonitors()
         ServiceContainer.shared.hotkeyService.resumeMonitoring()
     }

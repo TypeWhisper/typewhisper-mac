@@ -7,6 +7,7 @@ import os
 struct UnifiedHotkey: Equatable, Hashable, Sendable, Codable {
     let keyCode: UInt16
     let modifierFlags: UInt
+    let deviceModifierFlags: UInt
     let isFn: Bool
     let isDoubleTap: Bool
     /// nil = keyboard hotkey; 0..N = mouse button number (macOS convention: 2=middle, 3=back, 4=forward)
@@ -34,9 +35,16 @@ struct UnifiedHotkey: Equatable, Hashable, Sendable, Codable {
         return .bareKey
     }
 
-    init(keyCode: UInt16, modifierFlags: UInt, isFn: Bool, isDoubleTap: Bool = false) {
+    init(
+        keyCode: UInt16,
+        modifierFlags: UInt,
+        deviceModifierFlags: UInt = 0,
+        isFn: Bool,
+        isDoubleTap: Bool = false
+    ) {
         self.keyCode = keyCode
         self.modifierFlags = modifierFlags
+        self.deviceModifierFlags = deviceModifierFlags
         self.isFn = isFn
         self.isDoubleTap = isDoubleTap
         self.mouseButton = nil
@@ -45,6 +53,7 @@ struct UnifiedHotkey: Equatable, Hashable, Sendable, Codable {
     init(mouseButton: UInt16, isDoubleTap: Bool = false) {
         self.keyCode = 0
         self.modifierFlags = 0
+        self.deviceModifierFlags = 0
         self.isFn = false
         self.isDoubleTap = isDoubleTap
         self.mouseButton = mouseButton
@@ -55,6 +64,7 @@ struct UnifiedHotkey: Equatable, Hashable, Sendable, Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         keyCode = try container.decode(UInt16.self, forKey: .keyCode)
         modifierFlags = try container.decode(UInt.self, forKey: .modifierFlags)
+        deviceModifierFlags = try container.decodeIfPresent(UInt.self, forKey: .deviceModifierFlags) ?? 0
         isFn = try container.decode(Bool.self, forKey: .isFn)
         isDoubleTap = try container.decodeIfPresent(Bool.self, forKey: .isDoubleTap) ?? false
         mouseButton = try container.decodeIfPresent(UInt16.self, forKey: .mouseButton)
@@ -80,6 +90,16 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
 /// Manages global hotkeys for dictation with three independent slots:
 /// hybrid (short=toggle, long=push-to-talk), push-to-talk, and toggle.
 final class HotkeyService: ObservableObject {
+    private struct DeviceModifierFamily {
+        let genericFlag: NSEvent.ModifierFlags
+        let mask: UInt
+        let leftFlag: UInt
+        let rightFlag: UInt
+        let genericSymbol: String
+        let leftSymbol: String
+        let rightSymbol: String
+    }
+
     enum HotkeyEventSource: Sendable {
         case eventTap
         case monitor
@@ -204,6 +224,58 @@ final class HotkeyService: ObservableObject {
         0x3E, // Right Control
     ]
 
+    nonisolated private static let leftControlDeviceModifierFlag: UInt = 0x00000001
+    nonisolated private static let leftShiftDeviceModifierFlag: UInt = 0x00000002
+    nonisolated private static let rightShiftDeviceModifierFlag: UInt = 0x00000004
+    nonisolated private static let leftCommandDeviceModifierFlag: UInt = 0x00000008
+    nonisolated private static let rightCommandDeviceModifierFlag: UInt = 0x00000010
+    nonisolated private static let leftOptionDeviceModifierFlag: UInt = 0x00000020
+    nonisolated private static let rightOptionDeviceModifierFlag: UInt = 0x00000040
+    nonisolated private static let rightControlDeviceModifierFlag: UInt = 0x00002000
+
+    nonisolated private static let deviceModifierFamilies: [DeviceModifierFamily] = [
+        DeviceModifierFamily(
+            genericFlag: .control,
+            mask: leftControlDeviceModifierFlag | rightControlDeviceModifierFlag,
+            leftFlag: leftControlDeviceModifierFlag,
+            rightFlag: rightControlDeviceModifierFlag,
+            genericSymbol: "⌃",
+            leftSymbol: "L⌃",
+            rightSymbol: "R⌃"
+        ),
+        DeviceModifierFamily(
+            genericFlag: .option,
+            mask: leftOptionDeviceModifierFlag | rightOptionDeviceModifierFlag,
+            leftFlag: leftOptionDeviceModifierFlag,
+            rightFlag: rightOptionDeviceModifierFlag,
+            genericSymbol: "⌥",
+            leftSymbol: "L⌥",
+            rightSymbol: "R⌥"
+        ),
+        DeviceModifierFamily(
+            genericFlag: .shift,
+            mask: leftShiftDeviceModifierFlag | rightShiftDeviceModifierFlag,
+            leftFlag: leftShiftDeviceModifierFlag,
+            rightFlag: rightShiftDeviceModifierFlag,
+            genericSymbol: "⇧",
+            leftSymbol: "L⇧",
+            rightSymbol: "R⇧"
+        ),
+        DeviceModifierFamily(
+            genericFlag: .command,
+            mask: leftCommandDeviceModifierFlag | rightCommandDeviceModifierFlag,
+            leftFlag: leftCommandDeviceModifierFlag,
+            rightFlag: rightCommandDeviceModifierFlag,
+            genericSymbol: "⌘",
+            leftSymbol: "L⌘",
+            rightSymbol: "R⌘"
+        ),
+    ]
+
+    nonisolated private static let supportedDeviceModifierFlags: UInt = deviceModifierFamilies.reduce(0) { partialResult, family in
+        partialResult | family.mask
+    }
+
     func setup() {
         loadHotkeys()
         setupMonitor()
@@ -228,12 +300,7 @@ final class HotkeyService: ObservableObject {
     func isHotkeyAssigned(_ hotkey: UnifiedHotkey, excluding: HotkeySlotType) -> HotkeySlotType? {
         for slotType in HotkeySlotType.allCases where slotType != excluding {
             guard let existing = slots[slotType]?.hotkey else { continue }
-            if existing == hotkey { return slotType }
-            if existing.keyCode == hotkey.keyCode
-                && existing.modifierFlags == hotkey.modifierFlags
-                && existing.isFn == hotkey.isFn
-                && existing.mouseButton == hotkey.mouseButton
-                && existing.isDoubleTap != hotkey.isDoubleTap {
+            if Self.hotkeysConflict(existing, hotkey) {
                 return slotType
             }
         }
@@ -267,12 +334,7 @@ final class HotkeyService: ObservableObject {
 
     func isHotkeyAssignedToProfile(_ hotkey: UnifiedHotkey, excludingProfileId: UUID?) -> UUID? {
         for (id, state) in profileSlots where id != excludingProfileId {
-            if state.hotkey == hotkey { return id }
-            if state.hotkey.keyCode == hotkey.keyCode
-                && state.hotkey.modifierFlags == hotkey.modifierFlags
-                && state.hotkey.isFn == hotkey.isFn
-                && state.hotkey.mouseButton == hotkey.mouseButton
-                && state.hotkey.isDoubleTap != hotkey.isDoubleTap {
+            if Self.hotkeysConflict(state.hotkey, hotkey) {
                 return id
             }
         }
@@ -282,12 +344,7 @@ final class HotkeyService: ObservableObject {
     func isHotkeyAssignedToGlobalSlot(_ hotkey: UnifiedHotkey) -> HotkeySlotType? {
         for slotType in HotkeySlotType.allCases {
             guard let existing = slots[slotType]?.hotkey else { continue }
-            if existing == hotkey { return slotType }
-            if existing.keyCode == hotkey.keyCode
-                && existing.modifierFlags == hotkey.modifierFlags
-                && existing.isFn == hotkey.isFn
-                && existing.mouseButton == hotkey.mouseButton
-                && existing.isDoubleTap != hotkey.isDoubleTap {
+            if Self.hotkeysConflict(existing, hotkey) {
                 return slotType
             }
         }
@@ -811,25 +868,36 @@ final class HotkeyService: ObservableObject {
         case .modifierCombo:
             guard event.type == .flagsChanged else { return .none }
             let requiredFlags = NSEvent.ModifierFlags(rawValue: hotkey.modifierFlags)
-            let relevantMask: NSEvent.ModifierFlags = [.command, .option, .control, .shift, .function]
-            let current = event.modifierFlags.intersection(relevantMask)
+            let current = Self.relevantModifierFlags(from: event.modifierFlags)
+            let currentDeviceFlags = Self.deviceSpecificModifierFlags(from: event.modifierFlags)
             let allDown = current.contains(requiredFlags)
-            if allDown, !modifierWasDown { return .down }
-            if !allDown, modifierWasDown {
+            let deviceMatch = Self.deviceModifierFlagsMatch(
+                requiredFlags: requiredFlags,
+                requiredDeviceFlags: hotkey.deviceModifierFlags,
+                currentDeviceFlags: currentDeviceFlags
+            )
+            let isActive = allDown && deviceMatch
+            if isActive, !modifierWasDown { return .down }
+            if !isActive, modifierWasDown {
                 // If the sentinel keyCode (0xFFFF) is used, we have no physical key to track.
                 // Otherwise, we'd need to track which modifiers are still down.
                 // For now, modifier-only combos don't have a 'base key'.
                 return .up
             }
-            if allDown, modifierWasDown { return .repeatDown }
+            if isActive, modifierWasDown { return .repeatDown }
 
         case .keyWithModifiers:
             let requiredFlags = NSEvent.ModifierFlags(rawValue: hotkey.modifierFlags)
-            let relevantMask: NSEvent.ModifierFlags = [.command, .option, .control, .shift, .function]
-            let currentRelevant = event.modifierFlags.intersection(relevantMask)
+            let currentRelevant = Self.relevantModifierFlags(from: event.modifierFlags)
+            let currentDeviceFlags = Self.deviceSpecificModifierFlags(from: event.modifierFlags)
+            let deviceMatch = Self.deviceModifierFlagsMatch(
+                requiredFlags: requiredFlags,
+                requiredDeviceFlags: hotkey.deviceModifierFlags,
+                currentDeviceFlags: currentDeviceFlags
+            )
 
             if event.type == .keyDown, event.keyCode == hotkey.keyCode {
-                if currentRelevant == requiredFlags {
+                if currentRelevant == requiredFlags && deviceMatch {
                     return keyWasDown ? .repeatDown : .down
                 } else if keyWasDown {
                     return .repeatDown // Modifiers released but key held -> still ours
@@ -837,7 +905,7 @@ final class HotkeyService: ObservableObject {
             } else if event.type == .keyUp, event.keyCode == hotkey.keyCode {
                 if keyWasDown { return .up }
             } else if event.type == .flagsChanged, keyWasDown {
-                if !currentRelevant.contains(requiredFlags) {
+                if !currentRelevant.contains(requiredFlags) || !deviceMatch {
                     return .modifierRelease
                 }
             }
@@ -964,11 +1032,7 @@ final class HotkeyService: ObservableObject {
         var parts: [String] = []
 
         let flags = NSEvent.ModifierFlags(rawValue: hotkey.modifierFlags)
-        if flags.contains(.function) { parts.append("Fn") }
-        if flags.contains(.control) { parts.append("⌃") }
-        if flags.contains(.option) { parts.append("⌥") }
-        if flags.contains(.shift) { parts.append("⇧") }
-        if flags.contains(.command) { parts.append("⌘") }
+        parts.append(contentsOf: modifierDisplayParts(flags: flags, deviceFlags: hotkey.deviceModifierFlags))
 
         if hotkey.kind != .modifierCombo {
             parts.append(keyName(for: hotkey.keyCode))
@@ -991,10 +1055,10 @@ final class HotkeyService: ObservableObject {
         if let name = specialKeys[keyCode] { return name }
 
         let modifierNames: [UInt16: String] = [
-            0x37: "Left Command", 0x36: "Right Command",
-            0x38: "Left Shift", 0x3C: "Right Shift",
-            0x3A: "Left Option", 0x3D: "Right Option",
-            0x3B: "Left Control", 0x3E: "Right Control",
+            0x37: "L⌘", 0x36: "R⌘",
+            0x38: "L⇧", 0x3C: "R⇧",
+            0x3A: "L⌥", 0x3D: "R⌥",
+            0x3B: "L⌃", 0x3E: "R⌃",
         ]
         if let name = modifierNames[keyCode] { return name }
 
@@ -1066,6 +1130,77 @@ final class HotkeyService: ObservableObject {
     }
 
     // MARK: - Helpers
+
+    nonisolated static func deviceSpecificModifierFlags(from modifierFlags: NSEvent.ModifierFlags) -> UInt {
+        modifierFlags.rawValue & supportedDeviceModifierFlags
+    }
+
+    private nonisolated static func relevantModifierFlags(from modifierFlags: NSEvent.ModifierFlags) -> NSEvent.ModifierFlags {
+        modifierFlags.intersection([.command, .option, .control, .shift, .function])
+    }
+
+    private nonisolated static func modifierDisplayParts(flags: NSEvent.ModifierFlags, deviceFlags: UInt) -> [String] {
+        var parts: [String] = []
+        if flags.contains(.function) {
+            parts.append("Fn")
+        }
+        for family in deviceModifierFamilies where flags.contains(family.genericFlag) {
+            let specificFlags = deviceFlags & family.mask
+            switch specificFlags {
+            case family.leftFlag:
+                parts.append(family.leftSymbol)
+            case family.rightFlag:
+                parts.append(family.rightSymbol)
+            default:
+                parts.append(family.genericSymbol)
+            }
+        }
+        return parts
+    }
+
+    private nonisolated static func deviceModifierFlagsMatch(
+        requiredFlags: NSEvent.ModifierFlags,
+        requiredDeviceFlags: UInt,
+        currentDeviceFlags: UInt
+    ) -> Bool {
+        guard requiredDeviceFlags != 0 else { return true }
+
+        for family in deviceModifierFamilies where requiredFlags.contains(family.genericFlag) {
+            let requiredSpecificFlags = requiredDeviceFlags & family.mask
+            if requiredSpecificFlags == 0 {
+                continue
+            }
+            if currentDeviceFlags & family.mask != requiredSpecificFlags {
+                return false
+            }
+        }
+
+        return true
+    }
+
+    private nonisolated static func hotkeysConflict(_ lhs: UnifiedHotkey, _ rhs: UnifiedHotkey) -> Bool {
+        guard lhs.isFn == rhs.isFn else { return false }
+        guard lhs.mouseButton == rhs.mouseButton else { return false }
+
+        if lhs.mouseButton != nil || lhs.isFn {
+            return true
+        }
+
+        guard lhs.keyCode == rhs.keyCode, lhs.modifierFlags == rhs.modifierFlags else {
+            return false
+        }
+
+        let genericFlags = NSEvent.ModifierFlags(rawValue: lhs.modifierFlags)
+        for family in deviceModifierFamilies where genericFlags.contains(family.genericFlag) {
+            let lhsSpecificFlags = lhs.deviceModifierFlags & family.mask
+            let rhsSpecificFlags = rhs.deviceModifierFlags & family.mask
+            if lhsSpecificFlags != 0, rhsSpecificFlags != 0, lhsSpecificFlags != rhsSpecificFlags {
+                return false
+            }
+        }
+
+        return true
+    }
 
     private static func modifierFlagForKeyCode(_ keyCode: UInt16) -> NSEvent.ModifierFlags? {
         switch keyCode {
