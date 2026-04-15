@@ -6102,6 +6102,7 @@
       }
     },
     "Replacement text cannot be empty for corrections" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {

@@ -103,6 +103,20 @@ final class DictionaryExporterTests: XCTestCase {
     }
 
     @MainActor
+    func testParseAcceptsCorrectionWithEmptyReplacement() throws {
+        let json = """
+        [{"type": "correction", "original": "¿", "replacement": ""}]
+        """
+
+        let items = try DictionaryExporter.parseJSON(Data(json.utf8))
+
+        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(items[0].type, .correction)
+        XCTAssertEqual(items[0].original, "¿")
+        XCTAssertEqual(items[0].replacement, "")
+    }
+
+    @MainActor
     func testRoundTrip() throws {
         let appDir = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appDir) }
@@ -121,6 +135,24 @@ final class DictionaryExporterTests: XCTestCase {
         let term = try XCTUnwrap(parsed.first { $0.type == .term })
         XCTAssertEqual(term.original, "TypeWhisper")
         XCTAssertTrue(term.caseSensitive)
+    }
+
+    @MainActor
+    func testRoundTripPreservesEmptyCorrectionReplacement() throws {
+        let appDir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appDir) }
+        let service = DictionaryService(appSupportDirectory: appDir)
+
+        service.addEntry(type: .correction, original: "¿", replacement: "", caseSensitive: false)
+
+        let json = DictionaryExporter.exportJSON(service.entries)
+        let parsed = try DictionaryExporter.parseJSON(Data(json.utf8))
+
+        XCTAssertEqual(parsed.count, 1)
+        let correction = try XCTUnwrap(parsed.first)
+        XCTAssertEqual(correction.type, .correction)
+        XCTAssertEqual(correction.original, "¿")
+        XCTAssertEqual(correction.replacement, "")
     }
 
     @MainActor
