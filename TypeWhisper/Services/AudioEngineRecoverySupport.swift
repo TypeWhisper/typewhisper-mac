@@ -19,6 +19,11 @@ enum AudioEngineRecoveryPolicy {
 
     static func isRetryable(error: Error) -> Bool {
         let nsError = error as NSError
+        if nsError.domain == AudioEngineRecoveryErrorDomains.avfException
+            || nsError.domain == AudioEngineRecoveryErrorDomains.transientFormatMismatch {
+            return true
+        }
+
         let detail = nsError.localizedDescription
         return isRetryable(detail: detail, osStatus: extractOSStatus(from: error))
     }
@@ -46,6 +51,16 @@ enum AudioEngineRecoveryPolicy {
         if detail.contains("-10877") { return kAudioUnitErr_InvalidElement }
         return nil
     }
+}
+
+enum AudioEngineRecoveryErrorDomains {
+    static let avfException = "com.typewhisper.AVFException"
+    static let transientFormatMismatch = "com.typewhisper.AudioRecordingRecovery"
+}
+
+enum AudioEngineRecoveryErrorUserInfoKeys {
+    static let exceptionName = "NSExceptionName"
+    static let exceptionUserInfo = "NSExceptionUserInfo"
 }
 
 final class AudioEngineRecoveryCoordinator: @unchecked Sendable {
