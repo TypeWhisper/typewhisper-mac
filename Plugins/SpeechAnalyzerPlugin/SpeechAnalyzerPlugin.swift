@@ -9,7 +9,7 @@ import os
 
 @available(macOS 26, *)
 @objc(SpeechAnalyzerPlugin)
-final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, @unchecked Sendable {
+final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.speechanalyzer"
     static let pluginName = "Apple Speech"
 
@@ -178,13 +178,31 @@ final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, Dictionar
         )
     }
 
-    private static func analysisContext(from prompt: String?) -> AnalysisContext {
+    fileprivate static func analysisContext(from prompt: String?) -> AnalysisContext {
         let context = AnalysisContext()
         let terms = PluginDictionaryTerms.terms(fromPrompt: prompt)
         if !terms.isEmpty {
             context.contextualStrings[.general] = terms
         }
         return context
+    }
+
+    func createLiveTranscriptionSession(
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        guard let locale = currentLocale else {
+            throw PluginTranscriptionError.notConfigured
+        }
+        if translate {
+            throw PluginTranscriptionError.apiError("Apple Speech does not support translation")
+        }
+
+        let session = SpeechAnalyzerLiveSession(locale: locale, prompt: prompt, onProgress: onProgress)
+        try await session.start()
+        return session
     }
 
     // MARK: - Model Management
@@ -282,7 +300,7 @@ final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, Dictionar
         return buffer
     }
 
-    private static func prepareBuffer(
+    fileprivate static func prepareBuffer(
         _ samples: [Float],
         for modules: [SpeechTranscriber]
     ) async -> AVAudioPCMBuffer {
@@ -353,6 +371,87 @@ final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, Dictionar
 
     var settingsView: AnyView? {
         AnyView(SpeechAnalyzerSettingsView(plugin: self))
+    }
+}
+
+@available(macOS 26, *)
+private actor SpeechAnalyzerLiveSession: LiveTranscriptionSession {
+    private let locale: Locale
+    private let prompt: String?
+    private let onProgress: @Sendable (String) -> Bool
+    private let transcriber: SpeechTranscriber
+    private let analyzer: SpeechAnalyzer
+    private let stream: AsyncStream<AnalyzerInput>
+    private let continuation: AsyncStream<AnalyzerInput>.Continuation
+    private let resultTask: Task<String, Error>
+    private var didFinish = false
+
+    init(locale: Locale, prompt: String?, onProgress: @escaping @Sendable (String) -> Bool) {
+        self.locale = locale
+        self.prompt = prompt
+        self.onProgress = onProgress
+        let transcriber = SpeechTranscriber(
+            locale: locale,
+            transcriptionOptions: [],
+            reportingOptions: [.volatileResults],
+            attributeOptions: []
+        )
+        self.transcriber = transcriber
+        self.analyzer = SpeechAnalyzer(modules: [transcriber])
+        let streamParts = AsyncStream<AnalyzerInput>.makeStream()
+        self.stream = streamParts.stream
+        self.continuation = streamParts.continuation
+        let progressHandler = onProgress
+        self.resultTask = Task<String, Error> {
+            var fullText = ""
+            for try await result in transcriber.results {
+                let text = String(result.text.characters)
+                if result.isFinal {
+                    fullText += text
+                } else {
+                    let combined = fullText + text
+                    if !progressHandler(combined) { break }
+                }
+            }
+            return fullText
+        }
+    }
+
+    func start() async throws {
+        try await analyzer.setContext(SpeechAnalyzerPlugin.analysisContext(from: prompt))
+        try await analyzer.start(inputSequence: stream)
+    }
+
+    func appendAudio(samples: [Float]) async throws {
+        guard !didFinish, !samples.isEmpty else { return }
+        let buffer = await SpeechAnalyzerPlugin.prepareBuffer(samples, for: [transcriber])
+        continuation.yield(AnalyzerInput(buffer: buffer))
+    }
+
+    func finish() async throws -> PluginTranscriptionResult {
+        guard !didFinish else {
+            let text = try await resultTask.value
+            return PluginTranscriptionResult(
+                text: text.trimmingCharacters(in: .whitespacesAndNewlines),
+                detectedLanguage: locale.language.languageCode?.identifier
+            )
+        }
+
+        didFinish = true
+        continuation.finish()
+        try await analyzer.finalizeAndFinishThroughEndOfInput()
+        let text = try await resultTask.value
+
+        return PluginTranscriptionResult(
+            text: text.trimmingCharacters(in: .whitespacesAndNewlines),
+            detectedLanguage: locale.language.languageCode?.identifier
+        )
+    }
+
+    func cancel() async {
+        didFinish = true
+        continuation.finish()
+        resultTask.cancel()
     }
 }
 

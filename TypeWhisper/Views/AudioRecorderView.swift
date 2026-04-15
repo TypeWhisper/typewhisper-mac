@@ -177,6 +177,16 @@ struct AudioRecorderView: View {
                             }
                             .disabled(isEditingLocked)
                         }
+
+                        if !modelManager.supportsLiveTranscriptionSession(engineOverrideId: providerId),
+                           modelManager.usesMeteredStreamingFallback(engineOverrideId: providerId) {
+                            Label(
+                                String(localized: "This engine avoids repeated live API calls and transcribes the full recording after you stop."),
+                                systemImage: "info.circle"
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        }
                     }
 
                     // Language picker

@@ -29,6 +29,7 @@ final class AudioRecorderViewModel: ObservableObject {
         let providerId: String?
         let modelId: String?
         let prompt: String?
+        let liveSessionResult: TranscriptionResult?
     }
 
     struct RecordingItem: Identifiable {
@@ -84,15 +85,29 @@ final class AudioRecorderViewModel: ObservableObject {
     private let recorderService: AudioRecorderService
     private let modelManager: ModelManagerService
     private let dictionaryService: DictionaryService
+    private let streamingHandler: StreamingHandler
     private var cancellables = Set<AnyCancellable>()
     private var currentOutputURL: URL?
-    private var streamingTask: Task<Void, Never>?
-    private var confirmedStreamingText = ""
 
     init(recorderService: AudioRecorderService, modelManager: ModelManagerService, dictionaryService: DictionaryService) {
         self.recorderService = recorderService
         self.modelManager = modelManager
         self.dictionaryService = dictionaryService
+        self.streamingHandler = StreamingHandler(
+            modelManager: modelManager,
+            streamPromptProvider: { [weak dictionaryService] in
+                dictionaryService?.getTermsForPrompt() ?? ""
+            },
+            bufferProvider: { [weak recorderService] in
+                recorderService?.getCurrentBuffer() ?? []
+            },
+            bufferDeltaProvider: { [weak recorderService] offset in
+                recorderService?.getBufferDelta(since: offset) ?? ([], offset)
+            },
+            bufferedDurationProvider: { [weak recorderService] in
+                recorderService?.totalBufferDuration ?? 0
+            }
+        )
 
         // Load saved preferences with defaults
         let defaults = UserDefaults.standard
@@ -135,6 +150,18 @@ final class AudioRecorderViewModel: ObservableObject {
 
         setupBindings()
         loadRecordings()
+
+        streamingHandler.onPartialTextUpdate = { [weak self] text in
+            guard let self else { return }
+            self.partialText = text
+            EventBus.shared.emit(.partialTranscriptionUpdate(PartialTranscriptionPayload(
+                text: text,
+                elapsedSeconds: self.duration
+            )))
+        }
+        streamingHandler.onStreamingStateChange = { [weak self] streaming in
+            self?.isTranscribing = streaming
+        }
     }
 
     private func setupBindings() {
@@ -158,7 +185,6 @@ final class AudioRecorderViewModel: ObservableObject {
         guard state == .idle else { return }
         errorMessage = nil
         partialText = ""
-        confirmedStreamingText = ""
         Task {
             do {
                 let url = try await recorderService.startRecording(
@@ -173,6 +199,8 @@ final class AudioRecorderViewModel: ObservableObject {
 
                 if transcriptionEnabled {
                     startStreamingTranscription()
+                } else {
+                    isTranscribing = false
                 }
             } catch {
                 errorMessage = error.localizedDescription
@@ -181,15 +209,14 @@ final class AudioRecorderViewModel: ObservableObject {
     }
 
     func stopRecording() {
-        let wasTranscribing = streamingTask != nil
         let recordingDuration = duration
-        stopStreamingTranscription()
 
         Task {
+            let liveSessionResult = await streamingHandler.finish()
             let url = await recorderService.stopRecording()
 
             let finalTranscriptionRequest: FinalTranscriptionRequest?
-            if wasTranscribing, let url {
+            if transcriptionEnabled, let url {
                 finalTranscriptionRequest = FinalTranscriptionRequest(
                     outputURL: url,
                     buffer: recorderService.getCurrentBuffer(),
@@ -197,7 +224,8 @@ final class AudioRecorderViewModel: ObservableObject {
                     task: selectedTask,
                     providerId: modelManager.selectedProviderId,
                     modelId: modelManager.selectedModelId,
-                    prompt: dictionaryService.getTermsForPrompt()
+                    prompt: dictionaryService.getTermsForPrompt(),
+                    liveSessionResult: liveSessionResult
                 )
                 state = .finalizing
             } else {
@@ -322,66 +350,16 @@ final class AudioRecorderViewModel: ObservableObject {
             return
         }
 
-        isTranscribing = true
-        let pollInterval: Double = plugin.supportsStreaming ? 1.5 : 3.0
-        let streamPrompt = dictionaryService.getTermsForPrompt()
-        let language = selectedLanguage
-        // Fall back to transcribe if engine doesn't support translation
         let task = (selectedTask == .translate && !plugin.supportsTranslation) ? .transcribe : selectedTask
-
-        streamingTask = Task { [weak self] in
-            guard let self else { return }
-            try? await Task.sleep(for: .seconds(pollInterval))
-
-            while !Task.isCancelled, self.state == .recording {
-                let buffer = self.recorderService.getRecentBuffer(maxDuration: 3600)
-                let bufferDuration = Double(buffer.count) / 16000.0
-
-                if bufferDuration > 0.5 {
-                    do {
-                        let confirmed = self.confirmedStreamingText
-                        let result = try await self.modelManager.transcribe(
-                            audioSamples: buffer,
-                            language: language,
-                            task: task,
-                            engineOverrideId: nil,
-                            cloudModelOverride: nil,
-                            prompt: streamPrompt,
-                            onProgress: { [weak self] text in
-                                guard let self, !Task.isCancelled else { return false }
-                                let stable = StreamingHandler.stabilizeText(confirmed: confirmed, new: text)
-                                Task { @MainActor [weak self] in
-                                    guard let self else { return }
-                                    self.partialText = stable
-                                    EventBus.shared.emit(.partialTranscriptionUpdate(PartialTranscriptionPayload(
-                                        text: stable, elapsedSeconds: self.duration
-                                    )))
-                                }
-                                return true
-                            }
-                        )
-                        let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !text.isEmpty {
-                            let stable = StreamingHandler.stabilizeText(confirmed: confirmed, new: text)
-                            self.partialText = stable
-                            self.confirmedStreamingText = stable
-                            EventBus.shared.emit(.partialTranscriptionUpdate(PartialTranscriptionPayload(
-                                text: stable, elapsedSeconds: self.duration
-                            )))
-                        }
-                    } catch {
-                        logger.warning("Streaming transcription error: \(error.localizedDescription)")
-                    }
-                }
-
-                try? await Task.sleep(for: .seconds(pollInterval))
-            }
-        }
-    }
-
-    private func stopStreamingTranscription() {
-        streamingTask?.cancel()
-        streamingTask = nil
+        streamingHandler.start(
+            engineOverrideId: providerId,
+            selectedProviderId: modelManager.selectedProviderId,
+            language: selectedLanguage,
+            task: task,
+            cloudModelOverride: nil,
+            allowLiveTranscription: true,
+            stateCheck: { [weak self] in self?.state == .recording }
+        )
     }
 
     private func runFinalTranscription(_ request: FinalTranscriptionRequest) async {
@@ -393,6 +371,12 @@ final class AudioRecorderViewModel: ObservableObject {
             // Use streaming result as final if buffer too short
             if !partialText.isEmpty {
                 saveTranscript(partialText, for: request.outputURL)
+            } else if let liveSessionResult = request.liveSessionResult {
+                let text = liveSessionResult.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !text.isEmpty {
+                    partialText = text
+                    saveTranscript(text, for: request.outputURL)
+                }
             }
             return
         }
@@ -409,14 +393,18 @@ final class AudioRecorderViewModel: ObservableObject {
         }
 
         do {
-            let result = try await modelManager.transcribe(
-                audioSamples: buffer,
-                language: request.language,
-                task: effectiveTask,
-                engineOverrideId: request.providerId,
-                cloudModelOverride: request.modelId,
-                prompt: request.prompt
-            )
+            let result = if let liveSessionResult = request.liveSessionResult {
+                liveSessionResult
+            } else {
+                try await modelManager.transcribe(
+                    audioSamples: buffer,
+                    language: request.language,
+                    task: effectiveTask,
+                    engineOverrideId: request.providerId,
+                    cloudModelOverride: request.modelId,
+                    prompt: request.prompt
+                )
+            }
             let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
             if !text.isEmpty {
                 partialText = text

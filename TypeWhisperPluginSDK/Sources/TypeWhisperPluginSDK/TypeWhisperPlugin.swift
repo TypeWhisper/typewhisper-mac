@@ -218,6 +218,12 @@ public protocol DictionaryTermsCapabilityProviding: TypeWhisperPlugin {
     var dictionaryTermsSupport: DictionaryTermsSupport { get }
 }
 
+public protocol LiveTranscriptionSession: AnyObject, Sendable {
+    func appendAudio(samples: [Float]) async throws
+    func finish() async throws -> PluginTranscriptionResult
+    func cancel() async
+}
+
 public enum PluginDictionaryTerms {
     public static func normalizedTerms(from terms: [String]) -> [String] {
         var seen = Set<String>()
@@ -276,6 +282,15 @@ public protocol TranscriptionEnginePlugin: TypeWhisperPlugin {
     var supportedLanguages: [String] { get }
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?,
                     onProgress: @Sendable @escaping (String) -> Bool) async throws -> PluginTranscriptionResult
+}
+
+public protocol LiveTranscriptionCapablePlugin: TranscriptionEnginePlugin {
+    func createLiveTranscriptionSession(
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession
 }
 
 public extension TranscriptionEnginePlugin {

@@ -101,9 +101,172 @@ struct RegistryPlugin: Codable, Identifiable {
     }
 }
 
-struct PluginRegistryResponse: Codable {
+struct RegistryPluginRelease: Decodable, Equatable {
+    let version: String
+    let minHostVersion: String
+    let minOSVersion: String?
+    let supportedArchitectures: [String]?
+    let size: Int64
+    let downloadURL: String
+    let publishedAt: String?
+    let downloadCount: Int?
+
+    func isCompatible(
+        withAppVersion appVersion: String,
+        currentOSVersion: OperatingSystemVersion,
+        architecture: String
+    ) -> Bool {
+        PluginRegistryService.compareVersions(minHostVersion, appVersion) != .orderedDescending
+            && PluginCompatibility.isCompatible(
+                minOSVersion: minOSVersion,
+                supportedArchitectures: supportedArchitectures,
+                currentOSVersion: currentOSVersion,
+                architecture: architecture
+            )
+    }
+}
+
+private struct LegacyRegistryRelease: Decodable {
+    let version: String?
+    let minHostVersion: String?
+    let minOSVersion: String?
+    let supportedArchitectures: [String]?
+    let size: Int64?
+    let downloadURL: String?
+    let downloadCount: Int?
+}
+
+struct RegistryPluginEntry: Decodable {
+    let id: String
+    let name: String
+    let author: String
+    let description: String
+    let category: String
+    let iconSystemName: String?
+    let requiresAPIKey: Bool?
+    let descriptions: [String: String]?
+    let downloadCount: Int?
+    let releases: [RegistryPluginRelease]
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case author
+        case description
+        case category
+        case iconSystemName
+        case requiresAPIKey
+        case descriptions
+        case downloadCount
+        case releases
+        case version
+        case minHostVersion
+        case minOSVersion
+        case supportedArchitectures
+        case size
+        case downloadURL
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        author = try container.decode(String.self, forKey: .author)
+        description = try container.decode(String.self, forKey: .description)
+        category = try container.decode(String.self, forKey: .category)
+        iconSystemName = try container.decodeIfPresent(String.self, forKey: .iconSystemName)
+        requiresAPIKey = try container.decodeIfPresent(Bool.self, forKey: .requiresAPIKey)
+        descriptions = try container.decodeIfPresent([String: String].self, forKey: .descriptions)
+        downloadCount = try container.decodeIfPresent(Int.self, forKey: .downloadCount)
+
+        let decodedReleases = try container.decodeIfPresent([RegistryPluginRelease].self, forKey: .releases) ?? []
+        if !decodedReleases.isEmpty {
+            releases = decodedReleases
+            return
+        }
+
+        let legacy = try LegacyRegistryRelease(from: decoder)
+        guard
+            let version = legacy.version,
+            let minHostVersion = legacy.minHostVersion,
+            let size = legacy.size,
+            let downloadURL = legacy.downloadURL
+        else {
+            releases = []
+            return
+        }
+
+        releases = [
+            RegistryPluginRelease(
+                version: version,
+                minHostVersion: minHostVersion,
+                minOSVersion: legacy.minOSVersion,
+                supportedArchitectures: legacy.supportedArchitectures,
+                size: size,
+                downloadURL: downloadURL,
+                publishedAt: nil,
+                downloadCount: legacy.downloadCount
+            )
+        ]
+    }
+
+    func resolvedPlugin(
+        appVersion: String,
+        currentOSVersion: OperatingSystemVersion = ProcessInfo.processInfo.operatingSystemVersion,
+        architecture: String = RuntimeArchitecture.current
+    ) -> RegistryPlugin? {
+        let compatibleRelease = releases
+            .filter {
+                $0.isCompatible(
+                    withAppVersion: appVersion,
+                    currentOSVersion: currentOSVersion,
+                    architecture: architecture
+                )
+            }
+            .max { first, second in
+                PluginRegistryService.compareVersions(first.version, second.version) == .orderedAscending
+            }
+
+        guard let compatibleRelease else { return nil }
+
+        return RegistryPlugin(
+            id: id,
+            name: name,
+            version: compatibleRelease.version,
+            minHostVersion: compatibleRelease.minHostVersion,
+            minOSVersion: compatibleRelease.minOSVersion,
+            supportedArchitectures: compatibleRelease.supportedArchitectures,
+            author: author,
+            description: description,
+            category: category,
+            size: compatibleRelease.size,
+            downloadURL: compatibleRelease.downloadURL,
+            iconSystemName: iconSystemName,
+            requiresAPIKey: requiresAPIKey,
+            descriptions: descriptions,
+            downloadCount: compatibleRelease.downloadCount ?? downloadCount
+        )
+    }
+}
+
+struct PluginRegistryResponse: Decodable {
     let schemaVersion: Int
-    let plugins: [RegistryPlugin]
+    let plugins: [RegistryPluginEntry]
+
+    func resolvedPlugins(
+        appVersion: String,
+        currentOSVersion: OperatingSystemVersion = ProcessInfo.processInfo.operatingSystemVersion,
+        architecture: String = RuntimeArchitecture.current
+    ) -> [RegistryPlugin] {
+        plugins.compactMap {
+            $0.resolvedPlugin(
+                appVersion: appVersion,
+                currentOSVersion: currentOSVersion,
+                architecture: architecture
+            )
+        }
+    }
 }
 
 enum PluginInstallInfo {
@@ -145,7 +308,7 @@ final class PluginRegistryService: ObservableObject {
 
     // MARK: - Version Comparison
 
-    static func compareVersions(_ a: String, _ b: String) -> ComparisonResult {
+    nonisolated static func compareVersions(_ a: String, _ b: String) -> ComparisonResult {
         let partsA = a.split(separator: ".").compactMap { Int($0) }
         let partsB = b.split(separator: ".").compactMap { Int($0) }
         let count = max(partsA.count, partsB.count)
@@ -174,10 +337,7 @@ final class PluginRegistryService: ObservableObject {
             let response = try JSONDecoder().decode(PluginRegistryResponse.self, from: data)
 
             let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0"
-            registry = response.plugins.filter {
-                Self.compareVersions($0.minHostVersion, appVersion) != .orderedDescending
-                    && $0.isCompatibleWithCurrentEnvironment
-            }
+            registry = response.resolvedPlugins(appVersion: appVersion)
             lastFetchDate = Date()
             fetchState = .loaded
             logger.info("Fetched \(self.registry.count) plugin(s) from registry")

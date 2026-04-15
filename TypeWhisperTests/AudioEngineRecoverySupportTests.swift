@@ -1,4 +1,5 @@
 import AudioToolbox
+import AVFoundation
 import XCTest
 @testable import TypeWhisper
 
@@ -13,10 +14,37 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         XCTAssertFalse(AudioEngineRecoveryPolicy.isRetryable(error: permissionError))
     }
 
+    func testRetryableErrorClassification_matchesObjCExceptionAndFormatMismatchDomains() {
+        let avfException = NSError(
+            domain: AudioEngineRecoveryErrorDomains.avfException,
+            code: 0,
+            userInfo: [NSLocalizedDescriptionKey: "required condition is false"]
+        )
+        let transientFormatMismatch = NSError(
+            domain: AudioEngineRecoveryErrorDomains.transientFormatMismatch,
+            code: 0,
+            userInfo: [NSLocalizedDescriptionKey: "Format mismatch before installTap"]
+        )
+
+        XCTAssertTrue(AudioEngineRecoveryPolicy.isRetryable(error: avfException))
+        XCTAssertTrue(AudioEngineRecoveryPolicy.isRetryable(error: transientFormatMismatch))
+    }
+
     func testRetryableErrorClassification_matchesKnownLogMessages() {
         XCTAssertTrue(AudioEngineRecoveryPolicy.isRetryable(detail: "Failed to create tap, config change pending!", osStatus: nil))
         XCTAssertTrue(AudioEngineRecoveryPolicy.isRetryable(detail: "Format mismatch: input hw 24000 Hz, client format 48000 Hz", osStatus: nil))
         XCTAssertFalse(AudioEngineRecoveryPolicy.isRetryable(detail: "Microphone permission denied", osStatus: nil))
+    }
+
+    func testObjCExceptionCatcher_convertsNSExceptionIntoNSError() {
+        XCTAssertThrowsError(try ObjCExceptionCatcher.catching {
+            _ = NSArray().object(at: 1)
+        }) { error in
+            let nsError = error as NSError
+            XCTAssertEqual(nsError.domain, AudioEngineRecoveryErrorDomains.avfException)
+            XCTAssertEqual(nsError.userInfo[AudioEngineRecoveryErrorUserInfoKeys.exceptionName] as? String, NSExceptionName.rangeException.rawValue)
+            XCTAssertFalse(nsError.localizedDescription.isEmpty)
+        }
     }
 
     func testConfigurationChangeDuringStart_triggersImmediateRecoveryOnceStartSucceeds() {
@@ -67,6 +95,17 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
 
         XCTAssertNotEqual(generation, followUpGeneration)
         XCTAssertEqual(delay, AudioEngineRecoveryPolicy.configurationDebounce)
+    }
+
+    func testTransientFormatMismatchError_describesMismatch() throws {
+        let expected = try XCTUnwrap(AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48_000, channels: 1, interleaved: false))
+        let current = try XCTUnwrap(AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 0, channels: 0, interleaved: false))
+
+        let error = AudioRecordingService.makeTransientFormatMismatchError(expected: expected, current: current)
+
+        XCTAssertEqual(error.domain, AudioEngineRecoveryErrorDomains.transientFormatMismatch)
+        XCTAssertTrue(error.localizedDescription.contains("expected 48000.0 Hz/1 ch"))
+        XCTAssertTrue(error.localizedDescription.contains("got 0.0 Hz/0 ch"))
     }
 }
 
@@ -241,5 +280,29 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         XCTAssertNoThrow(try service.startRecording())
         XCTAssertTrue(didReachStartOverride)
         XCTAssertTrue(service.isRecording)
+    }
+
+    func testRecoveryEngineSwap_replacesStoredEngineInstance() {
+        let service = AudioRecordingService()
+        let originalEngine = AVAudioEngine()
+
+        service.testingSetAudioEngine(originalEngine)
+        let replacementEngine = service.testingReplaceAudioEngineForRecoveryIfNeeded(originalEngine)
+
+        XCTAssertNotNil(replacementEngine)
+        XCTAssertTrue(service.testingCurrentAudioEngine() === replacementEngine)
+        XCTAssertFalse(service.testingCurrentAudioEngine() === originalEngine)
+    }
+
+    func testTapPreconditions_throwRetryableMismatchWhenFormatChangesImmediately() throws {
+        let service = AudioRecordingService()
+        let expected = try XCTUnwrap(AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48_000, channels: 1, interleaved: false))
+        let current = try XCTUnwrap(AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 24_000, channels: 1, interleaved: false))
+
+        XCTAssertThrowsError(try service.testingValidateTapInstallationPreconditions(expected: expected, current: current)) { error in
+            let nsError = error as NSError
+            XCTAssertEqual(nsError.domain, AudioEngineRecoveryErrorDomains.transientFormatMismatch)
+            XCTAssertTrue(AudioEngineRecoveryPolicy.isRetryable(error: nsError))
+        }
     }
 }

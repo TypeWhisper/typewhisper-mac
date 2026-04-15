@@ -35,14 +35,18 @@ jobs:
           with open("/tmp/releases.json") as f:
               releases = json.load(f)
 
-          # Sum download counts per plugin across all versions
+          # Sum download counts per plugin across all versions and track per-release counts.
           counts = {}
+          release_counts = {}
           for release in releases:
               tag = release.get("tag_name", "")
-              m = re.match(r"^plugin-(.+)-v\d", tag)
+              m = re.match(r"^plugin-(.+)-v(\d+(?:\.\d+)+)$", tag)
               if not m:
                   continue
               plugin_name = m.group(1)
+              version = m.group(2)
+              total = sum(asset.get("download_count", 0) for asset in release.get("assets", []))
+              release_counts[(plugin_name, version)] = total
               for asset in release.get("assets", []):
                   counts[plugin_name] = counts.get(plugin_name, 0) + asset.get("download_count", 0)
 
@@ -59,6 +63,17 @@ jobs:
                           plugin["downloadCount"] = count
                           changed = True
                           print(f"{pid}: {old} -> {count}")
+
+                      for release in plugin.get("releases", []):
+                          version = release.get("version")
+                          if not version:
+                              continue
+                          release_old = release.get("downloadCount", 0)
+                          release_new = release_counts.get((name, version), 0)
+                          if release_old != release_new:
+                              release["downloadCount"] = release_new
+                              changed = True
+                              print(f"{pid}@{version}: {release_old} -> {release_new}")
                       break
 
           if changed:

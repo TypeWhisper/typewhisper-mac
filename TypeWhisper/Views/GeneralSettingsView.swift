@@ -163,7 +163,7 @@ struct GeneralSettingsView: View {
                     Toggle(String(localized: "Show live transcript preview"), isOn: $dictation.indicatorTranscriptPreviewEnabled)
 
                     if !dictation.indicatorTranscriptPreviewEnabled {
-                        Text(String(localized: "When disabled, the indicator only shows recording status while transcription continues in the background."))
+                        Text(String(localized: "When disabled, TypeWhisper skips live transcript requests for the indicator and only runs the final transcription after you stop recording."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

@@ -27,6 +27,7 @@ enum PluginCompatibility {
         isCompatible(
             minOSVersion: minOSVersion,
             supportedArchitectures: supportedArchitectures,
+            currentOSVersion: ProcessInfo.processInfo.operatingSystemVersion,
             architecture: RuntimeArchitecture.current
         )
     }
@@ -34,9 +35,10 @@ enum PluginCompatibility {
     static func isCompatible(
         minOSVersion: String?,
         supportedArchitectures: [String]?,
+        currentOSVersion: OperatingSystemVersion,
         architecture: String
     ) -> Bool {
-        if let minOSVersion, !isCompatibleWithCurrentOS(minOSVersion: minOSVersion) {
+        if let minOSVersion, !isCompatibleWithCurrentOS(minOSVersion: minOSVersion, currentOSVersion: currentOSVersion) {
             return false
         }
 
@@ -52,7 +54,10 @@ enum PluginCompatibility {
         supportedArchitectures: [String]?,
         architecture: String
     ) -> String? {
-        if let minOSVersion, !isCompatibleWithCurrentOS(minOSVersion: minOSVersion) {
+        if let minOSVersion, !isCompatibleWithCurrentOS(
+            minOSVersion: minOSVersion,
+            currentOSVersion: ProcessInfo.processInfo.operatingSystemVersion
+        ) {
             return "requires macOS \(minOSVersion)"
         }
 
@@ -67,14 +72,23 @@ enum PluginCompatibility {
         return "supports architectures \(supportedArchitectures.joined(separator: ", "))"
     }
 
-    private static func isCompatibleWithCurrentOS(minOSVersion: String) -> Bool {
+    private static func isCompatibleWithCurrentOS(
+        minOSVersion: String,
+        currentOSVersion: OperatingSystemVersion
+    ) -> Bool {
         let parts = minOSVersion.split(separator: ".").compactMap { Int($0) }
         let required = OperatingSystemVersion(
             majorVersion: parts.count > 0 ? parts[0] : 0,
             minorVersion: parts.count > 1 ? parts[1] : 0,
             patchVersion: parts.count > 2 ? parts[2] : 0
         )
-        return ProcessInfo.processInfo.isOperatingSystemAtLeast(required)
+        if currentOSVersion.majorVersion != required.majorVersion {
+            return currentOSVersion.majorVersion > required.majorVersion
+        }
+        if currentOSVersion.minorVersion != required.minorVersion {
+            return currentOSVersion.minorVersion > required.minorVersion
+        }
+        return currentOSVersion.patchVersion >= required.patchVersion
     }
 }
 
@@ -165,6 +179,13 @@ final class PluginManager: ObservableObject {
 
     func transcriptionEngine(for providerId: String) -> TranscriptionEnginePlugin? {
         transcriptionEngines.first { $0.providerId == providerId }
+    }
+
+    func loadedTranscriptionPlugin(for providerId: String) -> LoadedPlugin? {
+        loadedPlugins.first {
+            guard let engine = $0.instance as? TranscriptionEnginePlugin else { return false }
+            return $0.isEnabled && engine.providerId == providerId
+        }
     }
 
     func actionPlugin(for actionId: String) -> ActionPlugin? {
