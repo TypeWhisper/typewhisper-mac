@@ -32,6 +32,13 @@ final class DelayedReleaseRetainer<Object: AnyObject>: @unchecked Sendable {
 
 /// Captures microphone audio via AVAudioEngine and converts to 16kHz mono Float32 samples.
 final class AudioRecordingService: ObservableObject, @unchecked Sendable {
+    private let recoveryNotificationQueue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.name = "com.typewhisper.audio-recovery.notifications"
+        queue.maxConcurrentOperationCount = 1
+        return queue
+    }()
+
     enum StopPolicy {
         case immediate
         case finalizeShortSpeech(
@@ -128,6 +135,10 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     static let targetSampleRate: Double = 16000
     private static let captureTapFrames: AVAudioFrameCount = 1024
     private static let engineTeardownRetentionInterval: TimeInterval = 0.3
+
+    init() {
+        recoveryNotificationQueue.underlyingQueue = recoveryQueue
+    }
 
     var peakRawAudioLevel: Float {
         bufferLock.lock()
@@ -236,7 +247,10 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
             if recoveryCoordinator.finishStartingSuccessfully() == .performImmediateRecovery {
                 logger.warning("Audio engine configuration changed while recording was starting, restarting with fresh input format")
-                try restartEngineWithRecovery(engine, label: "recording-startup")
+                guard let currentEngine = engineLock.withLock({ audioEngine }) else {
+                    throw AudioRecordingError.engineStartFailed("Recording engine disappeared during startup recovery")
+                }
+                try restartEngineWithRecovery(currentEngine, label: "recording-startup")
                 scheduleRecoveryIfNeeded(recoveryCoordinator.finishRecovery())
             }
 
@@ -338,7 +352,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         configChangeObserver = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange,
             object: engine,
-            queue: nil
+            queue: recoveryNotificationQueue
         ) { [weak self] _ in
             self?.handleConfigurationChangeNotification()
         }
@@ -389,8 +403,18 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private func restartEngineWithRecovery(_ engine: AVAudioEngine, label: String) throws {
+        guard let replacementEngine = replaceAudioEngineForRecoveryIfNeeded(engine) else { return }
+
+        installConfigurationObserver(for: replacementEngine)
         teardownEngine(engine)
-        try startEngineWithRecovery(engine, label: label)
+        engineTeardownRetainer.retain(engine, for: Self.engineTeardownRetentionInterval)
+
+        do {
+            try startEngineWithRecovery(replacementEngine, label: label)
+        } catch {
+            cleanupAfterFailedStart(replacementEngine)
+            throw error
+        }
     }
 
     private func configureAndStartEngine(_ engine: AVAudioEngine, label: String) throws {
@@ -414,14 +438,32 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             throw AudioRecordingError.engineStartFailed("Cannot create target audio format")
         }
 
-        let tapFormat = Self.monoTapFormat(for: inputFormat)
+        let currentInputFormat = inputNode.outputFormat(forBus: 0)
+        try validateTapInstallationPreconditions(expected: inputFormat, current: currentInputFormat)
+
+        let tapFormat = Self.monoTapFormat(for: currentInputFormat)
 
         guard let converter = AVAudioConverter(from: tapFormat, to: targetFormat) else {
             throw AudioRecordingError.engineStartFailed("Cannot create audio converter")
         }
 
-        inputNode.installTap(onBus: 0, bufferSize: Self.captureTapFrames, format: tapFormat) { [weak self] buffer, _ in
-            self?.processAudioBuffer(buffer, converter: converter, targetFormat: targetFormat)
+        inputNode.removeTap(onBus: 0)
+
+        do {
+            _ = try ObjCExceptionCatcher.catching {
+                inputNode.installTap(onBus: 0, bufferSize: Self.captureTapFrames, format: tapFormat) { [weak self] buffer, _ in
+                    self?.processAudioBuffer(buffer, converter: converter, targetFormat: targetFormat)
+                }
+            }
+        } catch {
+            let tapError = error as NSError? ?? NSError(
+                domain: AudioEngineRecoveryErrorDomains.avfException,
+                code: 0,
+                userInfo: [NSLocalizedDescriptionKey: "installTap raised NSException"]
+            )
+            let exceptionName = tapError.userInfo[AudioEngineRecoveryErrorUserInfoKeys.exceptionName] as? String ?? "NSException"
+            logger.error("\(label, privacy: .public) installTap raised \(exceptionName, privacy: .public): \(tapError.localizedDescription, privacy: .public)")
+            throw tapError
         }
 
         let engineStartTime = CFAbsoluteTimeGetCurrent()
@@ -439,6 +481,17 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private func teardownEngine(_ engine: AVAudioEngine) {
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
+    }
+
+    @discardableResult
+    private func replaceAudioEngineForRecoveryIfNeeded(_ engine: AVAudioEngine) -> AVAudioEngine? {
+        let replacementEngine = AVAudioEngine()
+        let didReplace = engineLock.withLock { () -> Bool in
+            guard audioEngine === engine else { return false }
+            audioEngine = replacementEngine
+            return true
+        }
+        return didReplace ? replacementEngine : nil
     }
 
     private func cleanupAfterFailedStart(_ engine: AVAudioEngine) {
@@ -580,4 +633,47 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             return .selectedInputDeviceIncompatible(issue)
         }
     }
+
+    private func validateTapInstallationPreconditions(expected: AVAudioFormat, current: AVAudioFormat) throws {
+        let currentSampleRate = current.sampleRate
+        let currentChannelCount = current.channelCount
+        let matchesExpected = currentSampleRate == expected.sampleRate && currentChannelCount == expected.channelCount
+
+        guard currentSampleRate > 0, currentChannelCount > 0, matchesExpected else {
+            throw Self.makeTransientFormatMismatchError(expected: expected, current: current)
+        }
+    }
+
+    static func makeTransientFormatMismatchError(expected: AVAudioFormat, current: AVAudioFormat) -> NSError {
+        NSError(
+            domain: AudioEngineRecoveryErrorDomains.transientFormatMismatch,
+            code: 0,
+            userInfo: [
+                NSLocalizedDescriptionKey: "Format mismatch before installTap: expected \(expected.sampleRate) Hz/\(expected.channelCount) ch, got \(current.sampleRate) Hz/\(current.channelCount) ch"
+            ]
+        )
+    }
 }
+
+#if DEBUG
+extension AudioRecordingService {
+    @discardableResult
+    func testingReplaceAudioEngineForRecoveryIfNeeded(_ engine: AVAudioEngine) -> AVAudioEngine? {
+        replaceAudioEngineForRecoveryIfNeeded(engine)
+    }
+
+    func testingSetAudioEngine(_ engine: AVAudioEngine?) {
+        engineLock.withLock {
+            audioEngine = engine
+        }
+    }
+
+    func testingCurrentAudioEngine() -> AVAudioEngine? {
+        engineLock.withLock { audioEngine }
+    }
+
+    func testingValidateTapInstallationPreconditions(expected: AVAudioFormat, current: AVAudioFormat) throws {
+        try validateTapInstallationPreconditions(expected: expected, current: current)
+    }
+}
+#endif
