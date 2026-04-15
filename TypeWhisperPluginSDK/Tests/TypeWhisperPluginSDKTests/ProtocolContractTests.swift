@@ -90,6 +90,30 @@ private final class MockTranscriptionPlugin: NSObject, TranscriptionEnginePlugin
     }
 }
 
+@objc(MockDictionaryTermsPlugin)
+private final class MockDictionaryTermsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.dictionary-terms"
+    static let pluginName = "Mock Dictionary Terms"
+
+    required override init() {}
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    var providerId: String { "mock-dictionary-terms" }
+    var providerDisplayName: String { "Mock Dictionary Terms" }
+    var isConfigured: Bool { true }
+    var transcriptionModels: [PluginModelInfo] { [] }
+    var selectedModelId: String? { nil }
+    func selectModel(_ modelId: String) {}
+    var supportsTranslation: Bool { false }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .requiresPluginSetting }
+
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "ok", detectedLanguage: language)
+    }
+}
+
 final class ProtocolContractTests: XCTestCase {
     func testHostServicesExposeRulesSecretsAndDefaults() throws {
         let host = MockHostServices(eventBus: MockEventBus(), availableRuleNames: ["Work", "Docs"])
@@ -137,5 +161,32 @@ final class ProtocolContractTests: XCTestCase {
         XCTAssertEqual(decoded.content, entry.content)
         XCTAssertEqual(decoded.type, entry.type)
         XCTAssertEqual(String(data: wav.prefix(4), encoding: .utf8), "RIFF")
+    }
+
+    func testDictionaryTermsCapabilityProtocolIsOptional() {
+        let legacyPlugin = MockTranscriptionPlugin()
+        let capabilityPlugin = MockDictionaryTermsPlugin()
+
+        XCTAssertFalse(legacyPlugin is any DictionaryTermsCapabilityProviding)
+        XCTAssertEqual(capabilityPlugin.dictionaryTermsSupport, .requiresPluginSetting)
+    }
+
+    func testPluginDictionaryTermsNormalizesPromptAndContextTokens() {
+        XCTAssertEqual(
+            PluginDictionaryTerms.normalizedTerms(from: [" Kubernetes ", "kubernetes", "", "MLX"]),
+            ["Kubernetes", "MLX"]
+        )
+        XCTAssertEqual(
+            PluginDictionaryTerms.terms(fromPrompt: " Kubernetes, MLX, Kubernetes "),
+            ["Kubernetes", "MLX"]
+        )
+        XCTAssertEqual(
+            PluginDictionaryTerms.contextBiasTokens(fromPrompt: "TypeWhisper, Apple Silicon MLX"),
+            ["TypeWhisper", "Apple", "Silicon", "MLX"]
+        )
+        XCTAssertEqual(
+            PluginDictionaryTerms.prompt(from: ["TypeWhisper", "MLX"], maxLength: 100),
+            "TypeWhisper, MLX"
+        )
     }
 }

@@ -9,14 +9,24 @@ final class APIHandlers: @unchecked Sendable {
     private let translationService: AnyObject? // TranslationService (macOS 15+)
     private let historyService: HistoryService
     private let profileService: ProfileService
+    private let dictionaryService: DictionaryService
     private let dictationViewModel: DictationViewModel
 
-    init(modelManager: ModelManagerService, audioFileService: AudioFileService, translationService: AnyObject?, historyService: HistoryService, profileService: ProfileService, dictationViewModel: DictationViewModel) {
+    init(
+        modelManager: ModelManagerService,
+        audioFileService: AudioFileService,
+        translationService: AnyObject?,
+        historyService: HistoryService,
+        profileService: ProfileService,
+        dictionaryService: DictionaryService,
+        dictationViewModel: DictationViewModel
+    ) {
         self.modelManager = modelManager
         self.audioFileService = audioFileService
         self.translationService = translationService
         self.historyService = historyService
         self.profileService = profileService
+        self.dictionaryService = dictionaryService
         self.dictationViewModel = dictationViewModel
     }
 
@@ -34,6 +44,9 @@ final class APIHandlers: @unchecked Sendable {
         router.register("POST", "/v1/dictation/stop", handler: handleStopDictation)
         router.register("GET", "/v1/dictation/status", handler: handleDictationStatus)
         router.register("GET", "/v1/dictation/transcription", handler: handleDictationTranscription)
+        router.register("GET", "/v1/dictionary/terms", handler: handleGetDictionaryTerms)
+        router.register("PUT", "/v1/dictionary/terms", handler: handlePutDictionaryTerms)
+        router.register("DELETE", "/v1/dictionary/terms", handler: handleDeleteDictionaryTerms)
     }
 
     // MARK: - POST /v1/transcribe
@@ -52,6 +65,7 @@ final class APIHandlers: @unchecked Sendable {
         var task: TranscriptionTask = .transcribe
         var targetLanguage: String?
         var responseFormat = "json"
+        var requestPrompt: String?
 
         let contentType = request.headers["content-type"] ?? ""
 
@@ -94,6 +108,12 @@ final class APIHandlers: @unchecked Sendable {
                !val.isEmpty {
                 responseFormat = val
             }
+
+            if let promptPart = parts.first(where: { $0.name == "prompt" }),
+               let val = String(data: promptPart.data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !val.isEmpty {
+                requestPrompt = val
+            }
         } else if !request.body.isEmpty {
             audioData = request.body
             fileExtension = extensionFromMIME(contentType)
@@ -104,6 +124,10 @@ final class APIHandlers: @unchecked Sendable {
             targetLanguage = request.headers["x-target-language"]
             if let format = request.headers["x-response-format"], !format.isEmpty {
                 responseFormat = format
+            }
+            if let prompt = request.headers["x-prompt"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !prompt.isEmpty {
+                requestPrompt = prompt
             }
         } else {
             return .error(status: 400, message: "No audio data provided")
@@ -120,7 +144,14 @@ final class APIHandlers: @unchecked Sendable {
             defer { try? FileManager.default.removeItem(at: tempURL) }
 
             let samples = try await audioFileService.loadAudioSamples(from: tempURL)
-            let result = try await modelManager.transcribe(audioSamples: samples, language: language, task: task)
+            let dictionaryPrompt = await MainActor.run { dictionaryService.getTermsForPrompt() }
+            let prompt = mergedPrompt(requestPrompt: requestPrompt, dictionaryPrompt: dictionaryPrompt)
+            let result = try await modelManager.transcribe(
+                audioSamples: samples,
+                language: language,
+                task: task,
+                prompt: prompt
+            )
 
             var finalText = result.text
             if let targetCode = targetLanguage {
@@ -213,6 +244,14 @@ final class APIHandlers: @unchecked Sendable {
         } catch {
             return .error(status: 500, message: "Transcription failed: \(error.localizedDescription)")
         }
+    }
+
+    private func mergedPrompt(requestPrompt: String?, dictionaryPrompt: String?) -> String? {
+        let components = [requestPrompt, dictionaryPrompt]
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !components.isEmpty else { return nil }
+        return components.joined(separator: "\n")
     }
 
     // MARK: - GET /v1/status
@@ -355,6 +394,61 @@ final class APIHandlers: @unchecked Sendable {
 
             historyService.deleteRecord(record)
             return .json(["deleted": true])
+        }
+    }
+
+    // MARK: - /v1/dictionary/terms
+
+    private func handleGetDictionaryTerms(_ request: HTTPRequest) async -> HTTPResponse {
+        struct DictionaryTermsResponse: Encodable {
+            let terms: [String]
+            let count: Int
+        }
+
+        return await MainActor.run {
+            let terms = dictionaryService.enabledTerms()
+            return .json(DictionaryTermsResponse(terms: terms, count: terms.count))
+        }
+    }
+
+    private func handlePutDictionaryTerms(_ request: HTTPRequest) async -> HTTPResponse {
+        struct DictionaryTermsRequest: Decodable {
+            let terms: [String]
+            let replace: Bool?
+        }
+
+        guard !request.body.isEmpty else {
+            return .error(status: 400, message: "Missing JSON body")
+        }
+
+        let payload: DictionaryTermsRequest
+        do {
+            payload = try JSONDecoder().decode(DictionaryTermsRequest.self, from: request.body)
+        } catch {
+            return .error(status: 400, message: "Invalid JSON body")
+        }
+
+        struct DictionaryTermsResponse: Encodable {
+            let terms: [String]
+            let count: Int
+        }
+
+        return await MainActor.run {
+            dictionaryService.setTerms(payload.terms, replaceExisting: payload.replace ?? false)
+            let terms = dictionaryService.enabledTerms()
+            return .json(DictionaryTermsResponse(terms: terms, count: terms.count))
+        }
+    }
+
+    private func handleDeleteDictionaryTerms(_ request: HTTPRequest) async -> HTTPResponse {
+        struct DeleteResponse: Encodable {
+            let deleted: Bool
+            let count: Int
+        }
+
+        return await MainActor.run {
+            dictionaryService.removeAllTerms()
+            return .json(DeleteResponse(deleted: true, count: 0))
         }
     }
 

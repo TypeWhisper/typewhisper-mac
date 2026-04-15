@@ -10,6 +10,16 @@ final class APIRouterAndHandlersTests: XCTestCase {
     private final class MockTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.transcription" }
         static var pluginName: String { "Mock Transcription" }
+        private static let promptLock = NSLock()
+        nonisolated(unsafe) private static var _lastPrompt: String?
+
+        static var lastPrompt: String? {
+            promptLock.withLock { _lastPrompt }
+        }
+
+        static func reset() {
+            promptLock.withLock { _lastPrompt = nil }
+        }
 
         var languages: [String] = []
 
@@ -28,7 +38,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
         var supportedLanguages: [String] { languages }
 
         func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
-            PluginTranscriptionResult(text: "transcribed", detectedLanguage: language)
+            Self.promptLock.withLock { Self._lastPrompt = prompt }
+            return PluginTranscriptionResult(text: "transcribed", detectedLanguage: language)
         }
     }
 
@@ -65,6 +76,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let router: APIRouter
         let historyService: HistoryService
         let profileService: ProfileService
+        let dictionaryService: DictionaryService
         let dictationViewModel: DictationViewModel
         let audioRecordingService: AudioRecordingService
         let textInsertionService: TextInsertionService
@@ -74,6 +86,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             router: APIRouter,
             historyService: HistoryService,
             profileService: ProfileService,
+            dictionaryService: DictionaryService,
             dictationViewModel: DictationViewModel,
             audioRecordingService: AudioRecordingService,
             textInsertionService: TextInsertionService,
@@ -82,6 +95,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             self.router = router
             self.historyService = historyService
             self.profileService = profileService
+            self.dictionaryService = dictionaryService
             self.dictationViewModel = dictationViewModel
             self.audioRecordingService = audioRecordingService
             self.textInsertionService = textInsertionService
@@ -188,6 +202,97 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual((history["entries"] as? [[String: Any]])?.count, 1)
         XCTAssertEqual((rules["rules"] as? [[String: Any]])?.first?["name"] as? String, "Docs")
         XCTAssertEqual((legacyProfiles["profiles"] as? [[String: Any]])?.first?["name"] as? String, "Docs")
+    }
+
+    func testDictionaryTermsEndpointsReplaceNormalizeAndClearTerms() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+        let router = apiContext.router
+
+        let putBody = try JSONSerialization.data(withJSONObject: [
+            "terms": [" TypeWhisper ", "WhisperKit", "typewhisper", "", "Qwen3 "],
+            "replace": true
+        ])
+        let putResponse = try Self.jsonObject(await router.route(
+            HTTPRequest(
+                method: "PUT",
+                path: "/v1/dictionary/terms",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: putBody
+            )
+        ))
+        let expectedTerms = ["Qwen3", "TypeWhisper", "WhisperKit"]
+        XCTAssertEqual(putResponse["count"] as? Int, 3)
+        XCTAssertEqual(putResponse["terms"] as? [String], expectedTerms)
+
+        let getResponse = try Self.jsonObject(await router.route(
+            HTTPRequest(method: "GET", path: "/v1/dictionary/terms", queryParams: [:], headers: [:], body: Data())
+        ))
+        XCTAssertEqual(getResponse["terms"] as? [String], expectedTerms)
+        let enabledTerms = await MainActor.run { apiContext.dictionaryService.enabledTerms() }
+        XCTAssertEqual(enabledTerms, expectedTerms)
+
+        let deleteResponse = try Self.jsonObject(await router.route(
+            HTTPRequest(method: "DELETE", path: "/v1/dictionary/terms", queryParams: [:], headers: [:], body: Data())
+        ))
+        XCTAssertEqual(deleteResponse["deleted"] as? Bool, true)
+        XCTAssertEqual(deleteResponse["count"] as? Int, 0)
+
+        let finalGet = try Self.jsonObject(await router.route(
+            HTTPRequest(method: "GET", path: "/v1/dictionary/terms", queryParams: [:], headers: [:], body: Data())
+        ))
+        XCTAssertEqual(finalGet["terms"] as? [String], [])
+    }
+
+    func testTranscribeEndpointPassesDictionaryTermsAsPrompt() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        context = await MainActor.run {
+            let context = Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+            context.dictionaryService.setTerms([" TypeWhisper ", "WhisperKit", "typewhisper"], replaceExisting: true)
+            return context
+        }
+
+        let router = try XCTUnwrap(context?.router)
+        let wavData = WavEncoder.encode(Array(repeating: Float(0), count: 1600))
+        let boundary = "TestBoundary-\(UUID().uuidString)"
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"test.wav\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
+        body.append(wavData)
+        body.append("\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"language\"\r\n\r\n".data(using: .utf8)!)
+        body.append("en\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+
+        let response = try Self.jsonObject(await router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: ["content-type": "multipart/form-data; boundary=\(boundary)"],
+                body: body
+            )
+        ))
+
+        XCTAssertEqual(response["text"] as? String, "transcribed")
+        XCTAssertEqual(MockTranscriptionPlugin.lastPrompt, "TypeWhisper, WhisperKit")
     }
 
     func testDictationStartReturnsConflictWhenRecordingCannotStart() async throws {
@@ -881,6 +986,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             translationService: nil,
             historyService: historyService,
             profileService: profileService,
+            dictionaryService: dictionaryService,
             dictationViewModel: dictationViewModel
         )
         handlers.register(on: router)
@@ -889,6 +995,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             router: router,
             historyService: historyService,
             profileService: profileService,
+            dictionaryService: dictionaryService,
             dictationViewModel: dictationViewModel,
             audioRecordingService: audioRecordingService,
             textInsertionService: textInsertionService,

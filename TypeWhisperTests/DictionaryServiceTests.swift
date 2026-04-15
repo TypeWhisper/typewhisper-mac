@@ -1,4 +1,5 @@
 import XCTest
+import TypeWhisperPluginSDK
 @testable import TypeWhisper
 
 final class DictionaryServiceTests: XCTestCase {
@@ -35,6 +36,24 @@ final class DictionaryServiceTests: XCTestCase {
 
         service.learnCorrection(original: "langauge", replacement: "language")
         XCTAssertEqual(service.correctionsCount, 2)
+    }
+
+    @MainActor
+    func testEnabledTermsAreNormalizedAndPromptRendererStaysBackwardCompatible() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .term, original: " Kubernetes ")
+        service.addEntry(type: .term, original: "MLX")
+        service.addEntry(type: .term, original: "mlx")
+        service.addEntry(type: .term, original: "TypeWhisper")
+
+        XCTAssertEqual(service.enabledTerms(), ["Kubernetes", "MLX", "TypeWhisper"])
+        XCTAssertEqual(
+            service.getTermsForPrompt(),
+            PluginDictionaryTerms.prompt(from: ["Kubernetes", "MLX", "TypeWhisper"])
+        )
     }
 
     @MainActor

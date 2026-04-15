@@ -37,7 +37,7 @@ private actor TranscriptCollector {
 // MARK: - Plugin Entry Point
 
 @objc(SpeechmaticsPlugin)
-final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.speechmatics"
     static let pluginName = "Speechmatics"
 
@@ -90,6 +90,7 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked 
 
     var supportsTranslation: Bool { false }
     var supportsStreaming: Bool { true }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
 
     var supportedLanguages: [String] {
         [
@@ -128,7 +129,13 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked 
             throw PluginTranscriptionError.noModelSelected
         }
 
-        return try await transcribeREST(audio: audio, language: language, modelId: modelId, apiKey: apiKey)
+        return try await transcribeREST(
+            audio: audio,
+            language: language,
+            modelId: modelId,
+            apiKey: apiKey,
+            prompt: prompt
+        )
     }
 
     // MARK: - Transcription (WebSocket Streaming)
@@ -150,22 +157,46 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked 
         do {
             return try await transcribeWebSocket(
                 audio: audio, language: language, modelId: modelId,
-                apiKey: apiKey, onProgress: onProgress
+                prompt: prompt, apiKey: apiKey, onProgress: onProgress
             )
         } catch {
             logger.warning("WebSocket streaming failed, falling back to REST: \(error.localizedDescription)")
-            return try await transcribeREST(audio: audio, language: language, modelId: modelId, apiKey: apiKey)
+            return try await transcribeREST(
+                audio: audio,
+                language: language,
+                modelId: modelId,
+                apiKey: apiKey,
+                prompt: prompt
+            )
         }
     }
 
     // MARK: - REST Implementation (Batch API)
 
-    private func transcribeREST(audio: AudioData, language: String?, modelId: String, apiKey: String) async throws -> PluginTranscriptionResult {
-        let jobId = try await submitJob(wavData: audio.wavData, language: language, modelId: modelId, apiKey: apiKey)
+    private func transcribeREST(
+        audio: AudioData,
+        language: String?,
+        modelId: String,
+        apiKey: String,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        let jobId = try await submitJob(
+            wavData: audio.wavData,
+            language: language,
+            modelId: modelId,
+            apiKey: apiKey,
+            prompt: prompt
+        )
         return try await pollJob(jobId: jobId, apiKey: apiKey)
     }
 
-    private func submitJob(wavData: Data, language: String?, modelId: String, apiKey: String) async throws -> String {
+    private func submitJob(
+        wavData: Data,
+        language: String?,
+        modelId: String,
+        apiKey: String,
+        prompt: String?
+    ) async throws -> String {
         guard let url = URL(string: "https://\(batchHost)/v2/jobs") else {
             throw PluginTranscriptionError.apiError("Invalid jobs URL")
         }
@@ -173,12 +204,17 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked 
         let boundary = UUID().uuidString
 
         let lang = (language?.isEmpty == false) ? language! : "auto"
+        var transcriptionConfig: [String: Any] = [
+            "language": lang,
+            "operating_point": modelId,
+        ]
+        let additionalVocab = Self.additionalVocabulary(prompt: prompt)
+        if !additionalVocab.isEmpty {
+            transcriptionConfig["additional_vocab"] = additionalVocab
+        }
         let config: [String: Any] = [
             "type": "transcription",
-            "transcription_config": [
-                "language": lang,
-                "operating_point": modelId,
-            ] as [String: Any],
+            "transcription_config": transcriptionConfig,
         ]
 
         let configData = try JSONSerialization.data(withJSONObject: config)
@@ -307,6 +343,7 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked 
         audio: AudioData,
         language: String?,
         modelId: String,
+        prompt: String?,
         apiKey: String,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
@@ -324,6 +361,16 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked 
 
         // Send StartRecognition message
         let lang = (language?.isEmpty == false) ? language! : "auto"
+        var transcriptionConfig: [String: Any] = [
+            "language": lang,
+            "operating_point": modelId,
+            "enable_partials": true,
+            "max_delay": 2.0,
+        ]
+        let additionalVocab = Self.additionalVocabulary(prompt: prompt)
+        if !additionalVocab.isEmpty {
+            transcriptionConfig["additional_vocab"] = additionalVocab
+        }
         let startMessage: [String: Any] = [
             "message": "StartRecognition",
             "audio_format": [
@@ -331,12 +378,7 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked 
                 "encoding": "pcm_s16le",
                 "sample_rate": 16000,
             ] as [String: Any],
-            "transcription_config": [
-                "language": lang,
-                "operating_point": modelId,
-                "enable_partials": true,
-                "max_delay": 2.0,
-            ] as [String: Any],
+            "transcription_config": transcriptionConfig,
         ]
 
         let startData = try JSONSerialization.data(withJSONObject: startMessage)
@@ -441,6 +483,10 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked 
 
         let finalText = await collector.finalResult()
         return PluginTranscriptionResult(text: finalText, detectedLanguage: language)
+    }
+
+    private static func additionalVocabulary(prompt: String?) -> [String] {
+        PluginDictionaryTerms.terms(fromPrompt: prompt)
     }
 
     // MARK: - Audio Conversion

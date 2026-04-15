@@ -9,7 +9,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(VoxtralPlugin)
-final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.voxtral"
     static let pluginName = "Voxtral"
 
@@ -89,6 +89,7 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Senda
 
     var supportsTranslation: Bool { false }
     var supportsStreaming: Bool { true }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .unsupported }
 
     func transcribe(
         audio: AudioData,

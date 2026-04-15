@@ -5,7 +5,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(FireworksPlugin)
-final class FireworksPlugin: NSObject, TranscriptionEnginePlugin, LLMProviderPlugin, @unchecked Sendable {
+final class FireworksPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, LLMProviderPlugin, @unchecked Sendable {
     static let pluginId = "com.typewhisper.fireworks"
     static let pluginName = "Fireworks AI"
 
@@ -66,6 +66,7 @@ final class FireworksPlugin: NSObject, TranscriptionEnginePlugin, LLMProviderPlu
 
     var supportsTranslation: Bool { true }
     var supportsStreaming: Bool { true }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
 
     var supportedLanguages: [String] {
         [

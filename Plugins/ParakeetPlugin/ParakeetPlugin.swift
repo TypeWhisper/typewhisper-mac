@@ -7,7 +7,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(ParakeetPlugin)
-final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActivityReporting, @unchecked Sendable {
+final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.parakeet"
     static let pluginName = "Parakeet"
     private static let logger = Logger(subsystem: "com.typewhisper.plugin.parakeet", category: "Transcription")
@@ -93,6 +93,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsA
     }
 
     var supportsTranslation: Bool { false }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .requiresPluginSetting }
 
     var supportedLanguages: [String] {
         selectedVersion.supportedLanguages
@@ -112,8 +113,11 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsA
             throw PluginTranscriptionError.apiError("Parakeet does not support translation")
         }
 
+        logPromptState(prompt, language: language, mode: "batch")
         if vocabularyBoostingEnabled {
             await configureBoostingIfNeeded(prompt: prompt)
+        } else {
+            appendDebugLog("boosting mode=batch enabled=false")
         }
 
         let normalizedSamples = PluginAudioUtils.paddedSamples(
@@ -252,6 +256,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsA
         guard let prompt, !prompt.isEmpty else {
             await asrManager.disableVocabularyBoosting()
             lastBoostingTermCount = 0
+            appendDebugLog("boosting_config prompt=empty disabled=true loaded_terms=0")
             return
         }
 
@@ -260,6 +265,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsA
         }
         guard let ctcModels, let ctcTokenizer else {
             lastConfiguredPrompt = nil
+            appendDebugLog("boosting_config ctc_ready=false")
             return
         }
 
@@ -276,6 +282,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsA
         guard !terms.isEmpty else {
             await asrManager.disableVocabularyBoosting()
             lastBoostingTermCount = 0
+            appendDebugLog("boosting_config parsed_terms=0 disabled=true")
             return
         }
 
@@ -284,15 +291,19 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsA
         do {
             try await asrManager.configureVocabularyBoosting(vocabulary: vocab, ctcModels: ctcModels)
             lastBoostingTermCount = cappedTerms.count
+            let preview = cappedTerms.prefix(8).map(\.text).joined(separator: ", ")
+            appendDebugLog("boosting_config parsed_terms=\(termStrings.count) loaded_terms=\(cappedTerms.count) preview=\(preview)")
         } catch {
             lastBoostingTermCount = 0
             lastConfiguredPrompt = nil
+            appendDebugLog("boosting_config failed=true error=\(error.localizedDescription)")
         }
     }
 
     fileprivate func setBoostingEnabled(_ enabled: Bool) {
         vocabularyBoostingEnabled = enabled
         host?.setUserDefault(enabled, forKey: "vocabularyBoostingEnabled")
+        appendDebugLog("boosting_toggle enabled=\(enabled)")
         if !enabled {
             if let manager = asrManager {
                 Task { await manager.disableVocabularyBoosting() }
@@ -307,6 +318,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsA
     fileprivate func loadModel() async {
         modelState = .downloading
         downloadProgress = 0.1
+        appendDebugLog("model_load start version=\(selectedVersion.rawValue)")
 
         do {
             let models = try await AsrModels.downloadAndLoad(version: selectedVersion.asrModelVersion)
@@ -323,6 +335,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsA
             host?.setUserDefault(selectedVersion.modelDef.id, forKey: "loadedModel")
             host?.setUserDefault(selectedVersion.rawValue, forKey: "selectedVersion")
             host?.notifyCapabilitiesChanged()
+            appendDebugLog("model_load ready model_id=\(selectedVersion.modelDef.id)")
 
             if vocabularyBoostingEnabled {
                 let cacheDir = CtcModels.defaultCacheDirectory(for: .ctc110m)
@@ -333,6 +346,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsA
         } catch {
             modelState = .error(error.localizedDescription)
             downloadProgress = 0
+            appendDebugLog("model_load failed error=\(error.localizedDescription)")
         }
     }
 
@@ -366,7 +380,37 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsA
         if let version = ParakeetVersion.from(modelId: savedModelId) {
             selectedVersion = version
         }
+        appendDebugLog("model_restore saved_model=\(savedModelId) selected_version=\(selectedVersion.rawValue) boosting_enabled=\(vocabularyBoostingEnabled)")
         await loadModel()
+    }
+
+    private func logPromptState(_ prompt: String?, language: String?, mode: String) {
+        let trimmed = prompt?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let terms = PluginDictionaryTerms.terms(fromPrompt: trimmed)
+        let preview = terms.prefix(8).joined(separator: ", ")
+        appendDebugLog("prompt mode=\(mode) language=\(language ?? "nil") chars=\(trimmed.count) parsed_terms=\(terms.count) preview=\(preview)")
+    }
+
+    private var debugLogURL: URL? {
+        host?.pluginDataDirectory.appendingPathComponent("parakeet-debug.log")
+    }
+
+    private func appendDebugLog(_ message: String) {
+        guard let debugLogURL else { return }
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let line = "[\(timestamp)] \(message)\n"
+        let data = Data(line.utf8)
+        let directory = debugLogURL.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        if FileManager.default.fileExists(atPath: debugLogURL.path),
+           let handle = try? FileHandle(forWritingTo: debugLogURL) {
+            defer { try? handle.close() }
+            try? handle.seekToEnd()
+            try? handle.write(contentsOf: data)
+        } else {
+            try? data.write(to: debugLogURL, options: .atomic)
+        }
     }
 
     // MARK: - Settings View

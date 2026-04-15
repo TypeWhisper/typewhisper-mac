@@ -5,7 +5,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(OpenAICompatiblePlugin)
-final class OpenAICompatiblePlugin: NSObject, TranscriptionEnginePlugin, LLMProviderPlugin, @unchecked Sendable {
+final class OpenAICompatiblePlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, LLMProviderPlugin, @unchecked Sendable {
     static let pluginId = "com.typewhisper.openai-compatible"
     static let pluginName = "OpenAI Compatible"
 
@@ -74,6 +74,7 @@ final class OpenAICompatiblePlugin: NSObject, TranscriptionEnginePlugin, LLMProv
     }
 
     var supportsTranslation: Bool { true }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
 
     var supportedLanguages: [String] {
         [

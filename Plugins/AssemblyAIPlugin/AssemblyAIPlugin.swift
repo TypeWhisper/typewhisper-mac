@@ -37,7 +37,7 @@ private actor TranscriptCollector {
 // MARK: - Plugin Entry Point
 
 @objc(AssemblyAIPlugin)
-final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.assemblyai"
     static let pluginName = "AssemblyAI"
 
@@ -88,6 +88,7 @@ final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Se
 
     var supportsTranslation: Bool { false }
     var supportsStreaming: Bool { true }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
 
     var supportedLanguages: [String] {
         if _selectedModelId == "universal-2" {
@@ -112,7 +113,13 @@ final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Se
             throw PluginTranscriptionError.noModelSelected
         }
 
-        return try await transcribeREST(audio: audio, language: language, modelId: modelId, apiKey: apiKey)
+        return try await transcribeREST(
+            audio: audio,
+            language: language,
+            modelId: modelId,
+            apiKey: apiKey,
+            prompt: prompt
+        )
     }
 
     // MARK: - Transcription (WebSocket Streaming)
@@ -131,6 +138,18 @@ final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Se
             throw PluginTranscriptionError.noModelSelected
         }
 
+        if !PluginDictionaryTerms.terms(fromPrompt: prompt).isEmpty {
+            let result = try await transcribeREST(
+                audio: audio,
+                language: language,
+                modelId: modelId,
+                apiKey: apiKey,
+                prompt: prompt
+            )
+            _ = onProgress(result.text)
+            return result
+        }
+
         do {
             return try await transcribeWebSocket(
                 audio: audio, language: language, modelId: modelId,
@@ -138,16 +157,32 @@ final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Se
             )
         } catch {
             logger.warning("WebSocket streaming failed, falling back to REST: \(error.localizedDescription)")
-            return try await transcribeREST(audio: audio, language: language, modelId: modelId, apiKey: apiKey)
+            return try await transcribeREST(
+                audio: audio,
+                language: language,
+                modelId: modelId,
+                apiKey: apiKey,
+                prompt: prompt
+            )
         }
     }
 
     // MARK: - REST Implementation (3-Step Async)
 
-    private func transcribeREST(audio: AudioData, language: String?, modelId: String, apiKey: String) async throws -> PluginTranscriptionResult {
+    private func transcribeREST(
+        audio: AudioData,
+        language: String?,
+        modelId: String,
+        apiKey: String,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
         let uploadURL = try await uploadAudio(wavData: audio.wavData, apiKey: apiKey)
         let transcriptId = try await submitTranscription(
-            audioURL: uploadURL, modelId: modelId, language: language, apiKey: apiKey
+            audioURL: uploadURL,
+            modelId: modelId,
+            language: language,
+            apiKey: apiKey,
+            prompt: prompt
         )
         return try await pollTranscription(transcriptId: transcriptId, apiKey: apiKey)
     }
@@ -186,7 +221,13 @@ final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Se
         return uploadUrl
     }
 
-    private func submitTranscription(audioURL: String, modelId: String, language: String?, apiKey: String) async throws -> String {
+    private func submitTranscription(
+        audioURL: String,
+        modelId: String,
+        language: String?,
+        apiKey: String,
+        prompt: String?
+    ) async throws -> String {
         guard let url = URL(string: "https://api.assemblyai.com/v2/transcript") else {
             throw PluginTranscriptionError.apiError("Invalid transcript URL")
         }
@@ -201,6 +242,7 @@ final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Se
         } else {
             body["language_detection"] = true
         }
+        Self.applyDictionaryTerms(prompt: prompt, modelId: modelId, to: &body)
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -230,6 +272,18 @@ final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Se
         }
 
         return transcriptId
+    }
+
+    private static func applyDictionaryTerms(prompt: String?, modelId: String, to body: inout [String: Any]) {
+        let terms = PluginDictionaryTerms.terms(fromPrompt: prompt)
+        guard !terms.isEmpty else { return }
+
+        if modelId == "universal-3-pro" {
+            body["keyterms_prompt"] = terms
+        } else {
+            body["word_boost"] = terms
+            body["boost_param"] = "high"
+        }
     }
 
     private func pollTranscription(transcriptId: String, apiKey: String) async throws -> PluginTranscriptionResult {

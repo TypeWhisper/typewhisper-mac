@@ -6,7 +6,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(WhisperKitPlugin)
-final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActivityReporting, @unchecked Sendable {
+final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.whisperkit"
     static let pluginName = "WhisperKit"
 
@@ -59,6 +59,7 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, PluginSetting
 
     var supportsTranslation: Bool { true }
     var supportsStreaming: Bool { true }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
 
     var supportedLanguages: [String] {
         [
@@ -86,7 +87,7 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, PluginSetting
             throw PluginTranscriptionError.notConfigured
         }
 
-        let options = DecodingOptions(
+        var options = DecodingOptions(
             verbose: false,
             task: translate ? .translate : .transcribe,
             language: language,
@@ -99,6 +100,16 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, PluginSetting
             withoutTimestamps: false,
             chunkingStrategy: .vad
         )
+        let effectivePrompt = Self.conditioningPrompt(from: prompt)
+        logPromptState(rawPrompt: prompt, effectivePrompt: effectivePrompt, language: language, translate: translate, mode: "batch")
+        if let tokenizer = whisperKit.tokenizer,
+           let promptTokens = Self.promptTokens(from: effectivePrompt, tokenizer: tokenizer) {
+            options.promptTokens = promptTokens
+            options.usePrefillPrompt = true
+            logPromptTokens(promptTokens, mode: "batch")
+        } else {
+            appendDebugLog("prompt_tokens mode=batch count=0")
+        }
 
         let results = try await whisperKit.transcribe(
             audioArray: audio.samples,
@@ -125,7 +136,7 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, PluginSetting
             throw PluginTranscriptionError.notConfigured
         }
 
-        let options = DecodingOptions(
+        var options = DecodingOptions(
             verbose: false,
             task: translate ? .translate : .transcribe,
             language: language,
@@ -138,6 +149,16 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, PluginSetting
             withoutTimestamps: false,
             chunkingStrategy: .vad
         )
+        let effectivePrompt = Self.conditioningPrompt(from: prompt)
+        logPromptState(rawPrompt: prompt, effectivePrompt: effectivePrompt, language: language, translate: translate, mode: "streaming")
+        if let tokenizer = whisperKit.tokenizer,
+           let promptTokens = Self.promptTokens(from: effectivePrompt, tokenizer: tokenizer) {
+            options.promptTokens = promptTokens
+            options.usePrefillPrompt = true
+            logPromptTokens(promptTokens, mode: "streaming")
+        } else {
+            appendDebugLog("prompt_tokens mode=streaming count=0")
+        }
 
         let results = try await whisperKit.transcribe(
             audioArray: audio.samples,
@@ -157,11 +178,110 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, PluginSetting
         return PluginTranscriptionResult(text: text, detectedLanguage: detectedLanguage, segments: segments)
     }
 
+    private static func promptTokens(from prompt: String?, tokenizer: WhisperTokenizer) -> [Int]? {
+        guard let prompt, !prompt.isEmpty else { return nil }
+        let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPrompt.isEmpty else { return nil }
+
+        let encoded = tokenizer.encode(text: " " + trimmedPrompt)
+            .filter { $0 < tokenizer.specialTokens.specialTokenBegin }
+        return encoded.isEmpty ? nil : encoded
+    }
+
+    private static func conditioningPrompt(from prompt: String?) -> String? {
+        guard let prompt else { return nil }
+
+        let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPrompt.isEmpty else { return nil }
+
+        // WhisperKit reacts badly to a bare comma-separated term list as decoder prompt.
+        // Convert the legacy transport format into a softer natural-language context line.
+        let terms = PluginDictionaryTerms.terms(fromPrompt: trimmedPrompt)
+        if !terms.isEmpty && Self.looksLikePlainTermList(trimmedPrompt, terms: terms) {
+            return "The audio may contain these names or technical terms: \(terms.joined(separator: ", "))."
+        }
+
+        return trimmedPrompt
+    }
+
+    private static func looksLikePlainTermList(_ prompt: String, terms: [String]) -> Bool {
+        let normalizedPrompt = prompt
+            .replacingOccurrences(of: "\n", with: ",")
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        guard !normalizedPrompt.isEmpty, normalizedPrompt.count == terms.count else { return false }
+
+        return zip(normalizedPrompt, terms).allSatisfy { raw, parsed in
+            raw.compare(parsed, options: [.caseInsensitive, .diacriticInsensitive], range: nil, locale: .current) == .orderedSame
+        }
+    }
+
+    private func logPromptState(rawPrompt: String?, effectivePrompt: String?, language: String?, translate: Bool, mode: String) {
+        let rawTrimmed = rawPrompt?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let effectiveTrimmed = effectivePrompt?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let rawPreview = rawTrimmed.replacingOccurrences(of: "\n", with: " ").prefix(160)
+        let effectivePreview = effectiveTrimmed.replacingOccurrences(of: "\n", with: " ").prefix(160)
+        appendDebugLog("prompt mode=\(mode) language=\(language ?? "nil") translate=\(translate) raw_chars=\(rawTrimmed.count) effective_chars=\(effectiveTrimmed.count) raw_preview=\(String(rawPreview)) effective_preview=\(String(effectivePreview))")
+    }
+
+    private func logPromptTokens(_ tokens: [Int], mode: String) {
+        let preview = tokens.prefix(12).map(String.init).joined(separator: ",")
+        appendDebugLog("prompt_tokens mode=\(mode) count=\(tokens.count) preview=[\(preview)]")
+    }
+
+    private var debugLogURL: URL? {
+        host?.pluginDataDirectory.appendingPathComponent("whisperkit-prompt-debug.log")
+    }
+
+    private func appendDebugLog(_ message: String) {
+        guard let debugLogURL else { return }
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let line = "[\(timestamp)] \(message)\n"
+        let data = Data(line.utf8)
+
+        let directory = debugLogURL.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        if FileManager.default.fileExists(atPath: debugLogURL.path),
+           let handle = try? FileHandle(forWritingTo: debugLogURL) {
+            defer { try? handle.close() }
+            try? handle.seekToEnd()
+            try? handle.write(contentsOf: data)
+        } else {
+            try? data.write(to: debugLogURL, options: .atomic)
+        }
+    }
+
     // MARK: - Model Management
 
     fileprivate var downloadBase: URL {
         host?.pluginDataDirectory.appendingPathComponent("models")
             ?? FileManager.default.temporaryDirectory
+    }
+
+    private var modelStorageRoots: [URL] {
+        [
+            downloadBase
+                .appendingPathComponent("models")
+                .appendingPathComponent("argmaxinc")
+                .appendingPathComponent("whisperkit-coreml"),
+            downloadBase
+                .appendingPathComponent("argmaxinc")
+                .appendingPathComponent("whisperkit-coreml"),
+        ]
+    }
+
+    private func resolvedModelPath(for modelDef: WhisperModelDef) -> URL {
+        let fileManager = FileManager.default
+        for root in modelStorageRoots {
+            let candidate = root.appendingPathComponent(modelDef.id)
+            if fileManager.fileExists(atPath: candidate.path) {
+                return candidate
+            }
+        }
+        return modelStorageRoots[0].appendingPathComponent(modelDef.id)
     }
 
     fileprivate func loadModel(_ modelDef: WhisperModelDef) async {
@@ -246,10 +366,7 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, PluginSetting
     }
 
     fileprivate func deleteModelFiles(_ modelDef: WhisperModelDef) {
-        let modelPath = downloadBase
-            .appendingPathComponent("argmaxinc")
-            .appendingPathComponent("whisperkit-coreml")
-            .appendingPathComponent(modelDef.id)
+        let modelPath = resolvedModelPath(for: modelDef)
         try? FileManager.default.removeItem(at: modelPath)
     }
 
@@ -262,10 +379,7 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, PluginSetting
     }
 
     fileprivate func isModelDownloaded(_ modelDef: WhisperModelDef) -> Bool {
-        let modelPath = downloadBase
-            .appendingPathComponent("argmaxinc")
-            .appendingPathComponent("whisperkit-coreml")
-            .appendingPathComponent(modelDef.id)
+        let modelPath = resolvedModelPath(for: modelDef)
         return FileManager.default.fileExists(atPath: modelPath.path)
     }
 
@@ -274,26 +388,36 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, PluginSetting
         let fm = FileManager.default
         let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
 
+        let destination = resolvedModelPath(for: modelDef)
+        if fm.fileExists(atPath: destination.path) {
+            return
+        }
+
         // Check both production and dev paths
         for dirName in ["TypeWhisper", "TypeWhisper-Dev"] {
-            let oldPath = appSupport
-                .appendingPathComponent(dirName)
-                .appendingPathComponent("models")
-                .appendingPathComponent("argmaxinc")
-                .appendingPathComponent("whisperkit-coreml")
-                .appendingPathComponent(modelDef.id)
+            let legacyRoots = [
+                appSupport
+                    .appendingPathComponent(dirName)
+                    .appendingPathComponent("models")
+                    .appendingPathComponent("argmaxinc")
+                    .appendingPathComponent("whisperkit-coreml"),
+                appSupport
+                    .appendingPathComponent(dirName)
+                    .appendingPathComponent("models")
+                    .appendingPathComponent("models")
+                    .appendingPathComponent("argmaxinc")
+                    .appendingPathComponent("whisperkit-coreml"),
+            ]
 
-            guard fm.fileExists(atPath: oldPath.path) else { continue }
-
-            let newPath = downloadBase
-                .appendingPathComponent("argmaxinc")
-                .appendingPathComponent("whisperkit-coreml")
-                .appendingPathComponent(modelDef.id)
-
-            guard !fm.fileExists(atPath: newPath.path) else { continue }
-
-            try? fm.createDirectory(at: newPath.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try? fm.moveItem(at: oldPath, to: newPath)
+            for legacyRoot in legacyRoots {
+                let oldPath = legacyRoot.appendingPathComponent(modelDef.id)
+                guard fm.fileExists(atPath: oldPath.path) else { continue }
+                try? fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try? fm.moveItem(at: oldPath, to: destination)
+                if fm.fileExists(atPath: destination.path) {
+                    return
+                }
+            }
         }
     }
 

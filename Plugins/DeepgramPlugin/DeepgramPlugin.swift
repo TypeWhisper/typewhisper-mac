@@ -300,7 +300,7 @@ private actor TranscriptCollector {
 // MARK: - Plugin Entry Point
 
 @objc(DeepgramPlugin)
-final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.deepgram"
     static let pluginName = "Deepgram"
 
@@ -355,6 +355,7 @@ final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Send
 
     var supportsTranslation: Bool { false }
     var supportsStreaming: Bool { true }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
 
     var supportedLanguages: [String] {
         [
@@ -407,7 +408,13 @@ final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Send
             throw PluginTranscriptionError.noModelSelected
         }
 
-        return try await transcribeREST(audio: audio, language: language, modelId: modelId, apiKey: apiKey)
+        return try await transcribeREST(
+            audio: audio,
+            language: language,
+            modelId: modelId,
+            apiKey: apiKey,
+            prompt: prompt
+        )
     }
 
     // MARK: - Transcription (WebSocket Streaming)
@@ -429,17 +436,30 @@ final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Send
         do {
             return try await transcribeWebSocket(
                 audio: audio, language: language, modelId: modelId,
+                prompt: prompt,
                 apiKey: apiKey, onProgress: onProgress
             )
         } catch {
             // Fallback to REST on WebSocket failure
-            return try await transcribeREST(audio: audio, language: language, modelId: modelId, apiKey: apiKey)
+            return try await transcribeREST(
+                audio: audio,
+                language: language,
+                modelId: modelId,
+                apiKey: apiKey,
+                prompt: prompt
+            )
         }
     }
 
     // MARK: - REST Implementation
 
-    private func transcribeREST(audio: AudioData, language: String?, modelId: String, apiKey: String) async throws -> PluginTranscriptionResult {
+    private func transcribeREST(
+        audio: AudioData,
+        language: String?,
+        modelId: String,
+        apiKey: String,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
         var components = URLComponents(string: "\(effectiveBaseURL)/v1/listen")!
         var queryItems = [
             URLQueryItem(name: "model", value: modelId),
@@ -449,6 +469,7 @@ final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Send
         if let lang = language, !lang.isEmpty {
             queryItems.append(URLQueryItem(name: "language", value: lang))
         }
+        queryItems.append(contentsOf: Self.dictionaryQueryItems(prompt: prompt, modelId: modelId))
         components.queryItems = queryItems
 
         var request = URLRequest(url: components.url!)
@@ -485,6 +506,7 @@ final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Send
         audio: AudioData,
         language: String?,
         modelId: String,
+        prompt: String?,
         apiKey: String,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
@@ -504,6 +526,7 @@ final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Send
         } else {
             queryItems.append(URLQueryItem(name: "detect_language", value: "true"))
         }
+        queryItems.append(contentsOf: Self.dictionaryQueryItems(prompt: prompt, modelId: modelId))
 
         let baseURL = effectiveBaseURL
         guard let urlComponents = URLComponents(string: baseURL),
@@ -593,6 +616,14 @@ final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Send
 
         let finalText = await collector.finalResult()
         return PluginTranscriptionResult(text: finalText, detectedLanguage: language)
+    }
+
+    private static func dictionaryQueryItems(prompt: String?, modelId: String) -> [URLQueryItem] {
+        let terms = PluginDictionaryTerms.terms(fromPrompt: prompt)
+        guard !terms.isEmpty else { return [] }
+
+        let parameterName = modelId.lowercased().hasPrefix("nova-3") ? "keyterm" : "keywords"
+        return terms.map { URLQueryItem(name: parameterName, value: $0) }
     }
 
     // MARK: - JSON Parsing Helpers

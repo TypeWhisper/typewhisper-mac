@@ -2,6 +2,7 @@ import Foundation
 import SwiftData
 import Combine
 import os.log
+import TypeWhisperPluginSDK
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "DictionaryService")
 
@@ -234,17 +235,65 @@ final class DictionaryService: ObservableObject {
 
     /// Get all enabled terms as a comma-separated string for Whisper prompt.
     /// Truncates at 600 characters to stay within the API's 224-token limit.
-    func getTermsForPrompt() -> String? {
-        let enabledTerms = terms.map { $0.original }
-        guard !enabledTerms.isEmpty else { return nil }
-        let maxLength = 600
-        var result = ""
-        for (i, term) in enabledTerms.enumerated() {
-            let separator = i > 0 ? ", " : ""
-            if result.count + separator.count + term.count > maxLength { break }
-            result += separator + term
+    func enabledTerms() -> [String] {
+        PluginDictionaryTerms.normalizedTerms(from: terms.map(\.original))
+    }
+
+    func setTerms(_ rawTerms: [String], replaceExisting: Bool) {
+        guard let context = modelContext else { return }
+
+        let normalized = PluginDictionaryTerms.normalizedTerms(from: rawTerms)
+        let normalizedByKey = Dictionary(uniqueKeysWithValues: normalized.map {
+            ($0.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current), $0)
+        })
+        let desiredKeys = Set(normalizedByKey.keys)
+        let existingTerms = entries.filter { $0.type == .term }
+
+        for entry in existingTerms {
+            let key = entry.original.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            if let desiredTerm = normalizedByKey[key] {
+                entry.original = desiredTerm
+                entry.isEnabled = true
+            } else if replaceExisting {
+                context.delete(entry)
+            }
         }
-        return result.isEmpty ? nil : result
+
+        let existingKeys = Set(existingTerms.map {
+            $0.original.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        })
+
+        for term in normalized where !existingKeys.contains(term.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)) {
+            context.insert(DictionaryEntry(type: .term, original: term, replacement: nil, caseSensitive: false, isEnabled: true))
+        }
+
+        if replaceExisting || !desiredKeys.isEmpty {
+            do {
+                try context.save()
+                loadEntries()
+            } catch {
+                logger.error("Failed to set terms: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func removeAllTerms() {
+        guard let context = modelContext else { return }
+
+        for entry in entries where entry.type == .term {
+            context.delete(entry)
+        }
+
+        do {
+            try context.save()
+            loadEntries()
+        } catch {
+            logger.error("Failed to remove all terms: \(error.localizedDescription)")
+        }
+    }
+
+    func getTermsForPrompt() -> String? {
+        PluginDictionaryTerms.prompt(from: enabledTerms())
     }
 
     /// Apply all enabled corrections to the given text

@@ -73,7 +73,7 @@ private struct GladiaLiveSession: Sendable {
 }
 
 @objc(GladiaPlugin)
-final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.gladia"
     static let pluginName = "Gladia"
 
@@ -121,6 +121,7 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
 
     var supportsTranslation: Bool { false }
     var supportsStreaming: Bool { true }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
     var supportedLanguages: [String] { gladiaSupportedLanguages }
 
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
@@ -131,7 +132,13 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
             throw PluginTranscriptionError.noModelSelected
         }
 
-        return try await transcribeREST(audio: audio, language: language, modelId: modelId, apiKey: apiKey)
+        return try await transcribeREST(
+            audio: audio,
+            language: language,
+            modelId: modelId,
+            apiKey: apiKey,
+            prompt: prompt
+        )
     }
 
     func transcribe(
@@ -153,12 +160,19 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
                 audio: audio,
                 language: language,
                 modelId: modelId,
+                prompt: prompt,
                 apiKey: apiKey,
                 onProgress: onProgress
             )
         } catch {
             logger.warning("Live transcription failed, falling back to REST: \(error.localizedDescription)")
-            return try await transcribeREST(audio: audio, language: language, modelId: modelId, apiKey: apiKey)
+            return try await transcribeREST(
+                audio: audio,
+                language: language,
+                modelId: modelId,
+                apiKey: apiKey,
+                prompt: prompt
+            )
         }
     }
 
@@ -166,10 +180,17 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
         audio: AudioData,
         language: String?,
         modelId: String,
-        apiKey: String
+        apiKey: String,
+        prompt: String?
     ) async throws -> PluginTranscriptionResult {
         let audioURL = try await uploadAudio(audio.wavData, apiKey: apiKey)
-        let resultURL = try await submitPreRecorded(audioURL: audioURL, language: language, modelId: modelId, apiKey: apiKey)
+        let resultURL = try await submitPreRecorded(
+            audioURL: audioURL,
+            language: language,
+            modelId: modelId,
+            apiKey: apiKey,
+            prompt: prompt
+        )
         return try await pollResult(url: resultURL, apiKey: apiKey, fallbackLanguage: language)
     }
 
@@ -226,7 +247,8 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
         audioURL: String,
         language: String?,
         modelId: String,
-        apiKey: String
+        apiKey: String,
+        prompt: String?
     ) async throws -> URL {
         guard let url = URL(string: "https://api.gladia.io/v2/pre-recorded") else {
             throw PluginTranscriptionError.apiError("Invalid Gladia pre-recorded URL")
@@ -245,6 +267,10 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
                 "languages": [language],
                 "code_switching": false,
             ]
+        }
+        if let customVocabulary = Self.customVocabularyConfig(prompt: prompt) {
+            body["custom_vocabulary"] = true
+            body["custom_vocabulary_config"] = customVocabulary
         }
 
         var request = URLRequest(url: url)
@@ -328,10 +354,16 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
         audio: AudioData,
         language: String?,
         modelId: String,
+        prompt: String?,
         apiKey: String,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
-        let liveSession = try await createLiveSession(language: language, modelId: modelId, apiKey: apiKey)
+        let liveSession = try await createLiveSession(
+            language: language,
+            modelId: modelId,
+            apiKey: apiKey,
+            prompt: prompt
+        )
         let wsTask = URLSession.shared.webSocketTask(with: liveSession.url)
         wsTask.resume()
 
@@ -438,7 +470,8 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
     private func createLiveSession(
         language: String?,
         modelId: String,
-        apiKey: String
+        apiKey: String,
+        prompt: String?
     ) async throws -> GladiaLiveSession {
         guard let url = URL(string: "https://api.gladia.io/v2/live") else {
             throw PluginTranscriptionError.apiError("Invalid Gladia live URL")
@@ -461,6 +494,12 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
             body["language_config"] = [
                 "languages": [language],
                 "code_switching": false,
+            ]
+        }
+        if let customVocabulary = Self.customVocabularyConfig(prompt: prompt) {
+            body["realtime_processing"] = [
+                "custom_vocabulary": true,
+                "custom_vocabulary_config": customVocabulary,
             ]
         }
 
@@ -644,6 +683,15 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
             }
         }
         return nil
+    }
+
+    private static func customVocabularyConfig(prompt: String?) -> [String: Any]? {
+        let vocabulary = PluginDictionaryTerms.terms(fromPrompt: prompt)
+        guard !vocabulary.isEmpty else { return nil }
+        return [
+            "vocabulary": vocabulary,
+            "default_intensity": 0.7,
+        ]
     }
 
     fileprivate func validateApiKey(_ key: String) async -> Bool {

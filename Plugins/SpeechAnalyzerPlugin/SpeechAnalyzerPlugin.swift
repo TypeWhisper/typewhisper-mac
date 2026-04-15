@@ -9,7 +9,7 @@ import os
 
 @available(macOS 26, *)
 @objc(SpeechAnalyzerPlugin)
-final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActivityReporting, @unchecked Sendable {
+final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.speechanalyzer"
     static let pluginName = "Apple Speech"
 
@@ -70,6 +70,7 @@ final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, PluginSet
 
     var supportsTranslation: Bool { false }
     var supportsStreaming: Bool { true }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
 
     var supportedLanguages: [String] {
         let codes = Set(cachedModels.compactMap { model -> String? in
@@ -94,6 +95,7 @@ final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, PluginSet
 
         let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
         let analyzer = SpeechAnalyzer(modules: [transcriber])
+        try await analyzer.setContext(Self.analysisContext(from: prompt))
 
         let buffer = await Self.prepareBuffer(audio.samples, for: [transcriber])
 
@@ -143,6 +145,7 @@ final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, PluginSet
             attributeOptions: []
         )
         let analyzer = SpeechAnalyzer(modules: [transcriber])
+        try await analyzer.setContext(Self.analysisContext(from: prompt))
 
         let buffer = await Self.prepareBuffer(audio.samples, for: [transcriber])
 
@@ -173,6 +176,15 @@ final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, PluginSet
             text: text.trimmingCharacters(in: .whitespacesAndNewlines),
             detectedLanguage: locale.language.languageCode?.identifier
         )
+    }
+
+    private static func analysisContext(from prompt: String?) -> AnalysisContext {
+        let context = AnalysisContext()
+        let terms = PluginDictionaryTerms.terms(fromPrompt: prompt)
+        if !terms.isEmpty {
+            context.contextualStrings[.general] = terms
+        }
+        return context
     }
 
     // MARK: - Model Management
