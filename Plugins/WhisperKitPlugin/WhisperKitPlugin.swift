@@ -101,14 +101,10 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
             chunkingStrategy: .vad
         )
         let effectivePrompt = Self.conditioningPrompt(from: prompt)
-        logPromptState(rawPrompt: prompt, effectivePrompt: effectivePrompt, language: language, translate: translate, mode: "batch")
         if let tokenizer = whisperKit.tokenizer,
            let promptTokens = Self.promptTokens(from: effectivePrompt, tokenizer: tokenizer) {
             options.promptTokens = promptTokens
             options.usePrefillPrompt = true
-            logPromptTokens(promptTokens, mode: "batch")
-        } else {
-            appendDebugLog("prompt_tokens mode=batch count=0")
         }
 
         let results = try await whisperKit.transcribe(
@@ -150,14 +146,10 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
             chunkingStrategy: .vad
         )
         let effectivePrompt = Self.conditioningPrompt(from: prompt)
-        logPromptState(rawPrompt: prompt, effectivePrompt: effectivePrompt, language: language, translate: translate, mode: "streaming")
         if let tokenizer = whisperKit.tokenizer,
            let promptTokens = Self.promptTokens(from: effectivePrompt, tokenizer: tokenizer) {
             options.promptTokens = promptTokens
             options.usePrefillPrompt = true
-            logPromptTokens(promptTokens, mode: "streaming")
-        } else {
-            appendDebugLog("prompt_tokens mode=streaming count=0")
         }
 
         let results = try await whisperKit.transcribe(
@@ -215,42 +207,6 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
 
         return zip(normalizedPrompt, terms).allSatisfy { raw, parsed in
             raw.compare(parsed, options: [.caseInsensitive, .diacriticInsensitive], range: nil, locale: .current) == .orderedSame
-        }
-    }
-
-    private func logPromptState(rawPrompt: String?, effectivePrompt: String?, language: String?, translate: Bool, mode: String) {
-        let rawTrimmed = rawPrompt?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let effectiveTrimmed = effectivePrompt?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let rawPreview = rawTrimmed.replacingOccurrences(of: "\n", with: " ").prefix(160)
-        let effectivePreview = effectiveTrimmed.replacingOccurrences(of: "\n", with: " ").prefix(160)
-        appendDebugLog("prompt mode=\(mode) language=\(language ?? "nil") translate=\(translate) raw_chars=\(rawTrimmed.count) effective_chars=\(effectiveTrimmed.count) raw_preview=\(String(rawPreview)) effective_preview=\(String(effectivePreview))")
-    }
-
-    private func logPromptTokens(_ tokens: [Int], mode: String) {
-        let preview = tokens.prefix(12).map(String.init).joined(separator: ",")
-        appendDebugLog("prompt_tokens mode=\(mode) count=\(tokens.count) preview=[\(preview)]")
-    }
-
-    private var debugLogURL: URL? {
-        host?.pluginDataDirectory.appendingPathComponent("whisperkit-prompt-debug.log")
-    }
-
-    private func appendDebugLog(_ message: String) {
-        guard let debugLogURL else { return }
-        let timestamp = ISO8601DateFormatter().string(from: Date())
-        let line = "[\(timestamp)] \(message)\n"
-        let data = Data(line.utf8)
-
-        let directory = debugLogURL.deletingLastPathComponent()
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-
-        if FileManager.default.fileExists(atPath: debugLogURL.path),
-           let handle = try? FileHandle(forWritingTo: debugLogURL) {
-            defer { try? handle.close() }
-            try? handle.seekToEnd()
-            try? handle.write(contentsOf: data)
-        } else {
-            try? data.write(to: debugLogURL, options: .atomic)
         }
     }
 
