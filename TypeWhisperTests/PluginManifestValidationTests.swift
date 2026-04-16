@@ -48,6 +48,34 @@ final class PluginManifestValidationTests: XCTestCase {
     }
 }
 
+final class Qwen3PluginContextFormattingTests: XCTestCase {
+    func testQwen3ContextFormatterReturnsEmptyStringForNilPrompt() throws {
+        XCTAssertEqual(Qwen3ContextBiasFormatter.format(prompt: nil), "")
+    }
+
+    func testQwen3ContextFormatterWrapsSingleTerm() throws {
+        XCTAssertEqual(
+            Qwen3ContextBiasFormatter.format(prompt: "Qwen3"),
+            "Technical terms: Qwen3."
+        )
+    }
+
+    func testQwen3ContextFormatterWrapsMultipleTermsAsCommaSeparatedSentence() throws {
+        XCTAssertEqual(
+            Qwen3ContextBiasFormatter.format(prompt: "Qwen3, MLX, LoRA"),
+            "Technical terms: Qwen3, MLX, LoRA."
+        )
+    }
+
+    func testQwen3ContextFormatterPreservesNormalizedAndDeduplicatedTerms() throws {
+        let prompt = PluginDictionaryTerms.prompt(from: [" Kubernetes ", "MLX", "mlx", "TypeWhisper"])
+        XCTAssertEqual(
+            Qwen3ContextBiasFormatter.format(prompt: prompt),
+            "Technical terms: Kubernetes, MLX, TypeWhisper."
+        )
+    }
+}
+
 @MainActor
 final class PluginArchitectureCompatibilityTests: XCTestCase {
     private final class MockTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
