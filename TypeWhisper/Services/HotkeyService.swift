@@ -106,6 +106,11 @@ final class HotkeyService: ObservableObject {
         case toggle
     }
 
+    private enum FnTriggerMode {
+        case pressThenRelease
+        case releaseOnly
+    }
+
     @Published private(set) var currentMode: HotkeyMode?
 
     var onDictationStart: (() -> Void)?
@@ -454,12 +459,18 @@ final class HotkeyService: ObservableObject {
         // Global slots
         for slotType in HotkeySlotType.allCases {
             guard var state = slots[slotType], let hotkey = state.hotkey else { continue }
+            let fnTriggerMode: FnTriggerMode = slotType == .toggle ? .releaseOnly : .pressThenRelease
             if shouldSuppressForCapsLockOrigin(event, hotkey: hotkey, keyWasDown: state.keyWasDown) {
                 state.resetTransientState()
                 slots[slotType] = state
                 continue
             }
-            let (keyDown, keyUp, isMatch) = processKeyEvent(event, hotkey: hotkey, state: &state)
+            let (keyDown, keyUp, isMatch) = processKeyEvent(
+                event,
+                hotkey: hotkey,
+                state: &state,
+                fnTriggerMode: fnTriggerMode
+            )
             slots[slotType] = state
             if isMatch { shouldSuppress = true }
             dispatchGlobalMatch(
@@ -484,7 +495,12 @@ final class HotkeyService: ObservableObject {
                                   modifierWasDown: pState.modifierWasDown, keyWasDown: pState.keyWasDown,
                                   mouseButtonWasDown: pState.mouseButtonWasDown,
                                   lastTapUpTime: pState.lastTapUpTime, tapCount: pState.tapCount)
-            let (keyDown, keyUp, isMatch) = processKeyEvent(event, hotkey: pState.hotkey, state: &state)
+            let (keyDown, keyUp, isMatch) = processKeyEvent(
+                event,
+                hotkey: pState.hotkey,
+                state: &state,
+                fnTriggerMode: .pressThenRelease
+            )
             pState.fnWasDown = state.fnWasDown
             pState.fnComboKeyPressed = state.fnComboKeyPressed
             pState.modifierWasDown = state.modifierWasDown
@@ -640,9 +656,12 @@ final class HotkeyService: ObservableObject {
         case modifierRelease // Modifiers no longer match, but key is still physically down
     }
 
-    /// Processes a key event against a hotkey, updating state booleans.
-    /// Returns (keyDown, keyUp, shouldSuppress) flags.
-    private func processKeyEvent(_ event: NSEvent, hotkey: UnifiedHotkey, state: inout SlotState) -> (keyDown: Bool, keyUp: Bool, shouldSuppress: Bool) {
+    private func processKeyEvent(
+        _ event: NSEvent,
+        hotkey: UnifiedHotkey,
+        state: inout SlotState,
+        fnTriggerMode: FnTriggerMode
+    ) -> (keyDown: Bool, keyUp: Bool, shouldSuppress: Bool) {
         // Mouse button hotkeys - self-contained path (no modifier interplay)
         if hotkey.kind == .mouseButton {
             guard event.type == .otherMouseDown || event.type == .otherMouseUp else {
@@ -684,33 +703,68 @@ final class HotkeyService: ObservableObject {
             return (false, false, false)
         }
 
-        // Fn hotkeys fire on release to avoid conflicts with Fn+key combos
-        // (e.g. Fn+Backspace = forward delete, Fn+Arrow = page navigation)
+        // Fn hotkeys can run in two modes:
+        // - releaseOnly: keep current toggle behavior (start on release)
+        // - pressThenRelease: Hybrid/PTT/profiles should start on press and stop on release
         if hotkey.kind == .fn {
-            if state.fnWasDown && event.type == .keyDown {
-                state.fnComboKeyPressed = true
-                return (false, false, false)
-            }
-            guard event.type == .flagsChanged else { return (false, false, false) }
-            let fnDown = event.modifierFlags.contains(.function)
-            if fnDown, !state.fnWasDown {
-                state.fnWasDown = true
+            switch fnTriggerMode {
+            case .pressThenRelease:
+                if state.fnWasDown && event.type == .keyDown {
+                    state.fnComboKeyPressed = true
+                    return (false, false, false)
+                }
+
+                guard event.type == .flagsChanged else {
+                    return (false, false, false)
+                }
+
+                let fnDown = event.modifierFlags.contains(.function)
+                if fnDown, !state.fnWasDown {
+                    state.fnWasDown = true
+                    state.fnComboKeyPressed = false
+                    return (true, false, true)
+                }
+                guard !fnDown, state.fnWasDown else {
+                    return (false, false, false)
+                }
+                state.fnWasDown = false
+                let wasComboed = state.fnComboKeyPressed
                 state.fnComboKeyPressed = false
-                return (false, false, false)
+                if wasComboed { return (false, false, false) }
+                if hotkey.isDoubleTap {
+                    return (false, false, true)
+                }
+                return (false, true, true)
+
+            case .releaseOnly:
+                if state.fnWasDown && event.type == .keyDown {
+                    state.fnComboKeyPressed = true
+                    return (false, false, false)
+                }
+                guard event.type == .flagsChanged else { return (false, false, false) }
+                let fnDown = event.modifierFlags.contains(.function)
+                if fnDown, !state.fnWasDown {
+                    state.fnWasDown = true
+                    state.fnComboKeyPressed = false
+                    return (false, false, false)
+                }
+                guard !fnDown, state.fnWasDown else { return (false, false, false) }
+                state.fnWasDown = false
+                let wasComboed = state.fnComboKeyPressed
+                state.fnComboKeyPressed = false
+                if wasComboed { return (false, false, false) }
+                guard hotkey.isDoubleTap else { return (true, false, true) }
+                if state.tapCount == 1,
+                   let lastUp = state.lastTapUpTime,
+                   Date().timeIntervalSince(lastUp) < Self.doubleTapThreshold {
+                    state.tapCount = 0
+                    state.lastTapUpTime = nil
+                    return (true, false, true)
+                }
+                state.tapCount = 1
+                state.lastTapUpTime = Date()
+                return (false, false, true)
             }
-            guard !fnDown, state.fnWasDown else { return (false, false, false) }
-            state.fnWasDown = false
-            let wasComboed = state.fnComboKeyPressed
-            state.fnComboKeyPressed = false
-            if wasComboed { return (false, false, false) }
-            guard hotkey.isDoubleTap else { return (true, false, true) }
-            if state.tapCount == 1, let lastUp = state.lastTapUpTime,
-               Date().timeIntervalSince(lastUp) < Self.doubleTapThreshold {
-                state.tapCount = 0; state.lastTapUpTime = nil
-                return (true, false, true)
-            }
-            state.tapCount = 1; state.lastTapUpTime = Date()
-            return (false, false, true)
         }
 
         let result = detectKeyEvent(
