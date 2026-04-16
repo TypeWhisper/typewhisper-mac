@@ -131,7 +131,7 @@ struct AdvancedSettingsView: View {
 
                 Toggle(String(localized: "Spoken feedback"), isOn: $dictation.spokenFeedbackEnabled)
 
-                Text(String(localized: "Speaks transcribed text and spoken status feedback through the selected speech provider."))
+                Text(String(localized: "Reads back the final transcribed text after each dictation using the selected speech provider. Recording, error, and prompt announcements are only spoken through VoiceOver accessibility announcements."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 

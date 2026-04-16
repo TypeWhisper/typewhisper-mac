@@ -72,7 +72,7 @@ final class SpeechFeedbackServiceTests: XCTestCase {
     }
 
     @MainActor
-    func testAnnounceEventUsesSelectedProvider() async {
+    func testAutomaticTranscriptionUsesSelectedProvider() async {
         let provider = MockTTSProvider()
         let speakExpectation = expectation(description: "provider speak called")
         provider.onSpeak = { _ in speakExpectation.fulfill() }
@@ -80,12 +80,12 @@ final class SpeechFeedbackServiceTests: XCTestCase {
 
         service.spokenFeedbackEnabled = true
         service.selectedProviderId = provider.providerId
-        service.announceEvent(.promptComplete)
+        service.speakAutomaticTranscription(text: "transcribed text", language: "en")
         await fulfillment(of: [speakExpectation], timeout: 1.0)
 
         XCTAssertEqual(provider.requests.count, 1)
-        XCTAssertEqual(provider.requests.first?.purpose, .status)
-        XCTAssertEqual(provider.requests.first?.text, String(localized: "Prompt complete"))
+        XCTAssertEqual(provider.requests.first?.purpose, .transcription)
+        XCTAssertEqual(provider.requests.first?.text, "transcribed text")
         XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.spokenFeedbackProviderId), provider.providerId)
     }
 
@@ -120,12 +120,38 @@ final class SpeechFeedbackServiceTests: XCTestCase {
 
         service.spokenFeedbackEnabled = true
         service.selectedProviderId = "missing"
-        service.announceEvent(.recordingStarted)
+        service.speakAutomaticTranscription(text: "transcribed text", language: "en")
         await fulfillment(of: [speakExpectation], timeout: 1.0)
 
         XCTAssertEqual(provider.requests.count, 1)
         XCTAssertEqual(service.effectiveProviderId, provider.providerId)
         XCTAssertEqual(service.selectedProviderDisplayName, provider.providerDisplayName)
         XCTAssertEqual(service.currentSettingsSummary, provider.settingsSummary)
+    }
+
+    @MainActor
+    func testAutomaticTranscriptionSkipsVoiceOver() async {
+        let provider = MockTTSProvider()
+        let service = SpeechFeedbackService(
+            defaults: defaults,
+            providerResolver: { [provider] in [provider] },
+            isVoiceOverEnabled: { true }
+        )
+
+        service.spokenFeedbackEnabled = true
+        service.speakAutomaticTranscription(text: "transcribed text", language: "en")
+
+        XCTAssertTrue(provider.requests.isEmpty)
+    }
+
+    @MainActor
+    func testAutomaticTranscriptionSkipsEmptyText() async {
+        let provider = MockTTSProvider()
+        let service = SpeechFeedbackService(defaults: defaults) { [provider] in [provider] }
+
+        service.spokenFeedbackEnabled = true
+        service.speakAutomaticTranscription(text: "", language: "en")
+
+        XCTAssertTrue(provider.requests.isEmpty)
     }
 }

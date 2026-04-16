@@ -5476,12 +5476,12 @@
         }
       }
     },
-    "Reads back the transcribed text via speech synthesis after each dictation." : {
+    "Reads back the final transcribed text after each dictation using the selected speech provider. Recording, error, and prompt announcements are only spoken through VoiceOver accessibility announcements." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Liest den transkribierten Text nach jeder Diktation per Sprachsynthese vor."
+            "value" : "Liest den finalen transkribierten Text nach jeder Diktation über den ausgewählten Sprachprovider vor. Aufnahme-, Fehler- und Prompt-Ansagen werden nur über die VoiceOver-Bedienungshilfen gesprochen."
           }
         }
       }
