@@ -53,7 +53,6 @@ private final class MockTTSProvider: NSObject, TTSProviderPlugin, @unchecked Sen
     }
 }
 
-@MainActor
 final class SpeechFeedbackServiceTests: XCTestCase {
     private var defaults: UserDefaults!
     private var suiteName: String!
@@ -72,6 +71,7 @@ final class SpeechFeedbackServiceTests: XCTestCase {
         super.tearDown()
     }
 
+    @MainActor
     func testAnnounceEventUsesSelectedProvider() async {
         let provider = MockTTSProvider()
         let speakExpectation = expectation(description: "provider speak called")
@@ -89,6 +89,7 @@ final class SpeechFeedbackServiceTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.spokenFeedbackProviderId), provider.providerId)
     }
 
+    @MainActor
     func testReadBackStopsActiveSessionOnSecondInvocation() async {
         let provider = MockTTSProvider()
         let speakExpectation = expectation(description: "provider speak called")
@@ -110,6 +111,7 @@ final class SpeechFeedbackServiceTests: XCTestCase {
         XCTAssertFalse(service.isSpeaking)
     }
 
+    @MainActor
     func testMissingSelectionFallsBackToAvailableProvider() async {
         let provider = MockTTSProvider()
         let speakExpectation = expectation(description: "fallback provider speak called")
