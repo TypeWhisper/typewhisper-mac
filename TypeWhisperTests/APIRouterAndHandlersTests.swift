@@ -99,6 +99,52 @@ final class APIRouterAndHandlersTests: XCTestCase {
         }
     }
 
+    @objc(APIRouterMockTTSPlugin)
+    private final class MockTTSProviderPlugin: NSObject, TTSProviderPlugin, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.tts" }
+        static var pluginName: String { "Mock TTS" }
+
+        private let requestsLock = NSLock()
+        private var requests: [TTSSpeakRequest] = []
+        var onSpeak: ((TTSSpeakRequest) -> Void)?
+
+        required override init() {}
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+
+        var providerId: String { "mock-tts" }
+        var providerDisplayName: String { "Mock TTS" }
+        var isConfigured: Bool { true }
+        var availableVoices: [PluginVoiceInfo] { [] }
+        var selectedVoiceId: String? { nil }
+        var settingsSummary: String? { "Mock Summary" }
+        var recordedRequests: [TTSSpeakRequest] {
+            requestsLock.withLock { requests }
+        }
+
+        func selectVoice(_ voiceId: String?) {}
+
+        func speak(_ request: TTSSpeakRequest) async throws -> any TTSPlaybackSession {
+            requestsLock.withLock {
+                requests.append(request)
+            }
+            onSpeak?(request)
+            return MockTTSPlaybackSession()
+        }
+    }
+
+    private final class MockTTSPlaybackSession: TTSPlaybackSession, @unchecked Sendable {
+        var isActive: Bool = true
+        var onFinish: (@Sendable () -> Void)?
+
+        func stop() {
+            guard isActive else { return }
+            isActive = false
+            onFinish?()
+        }
+    }
+
     private final class APIContext: @unchecked Sendable {
         let router: APIRouter
         let historyService: HistoryService
@@ -107,6 +153,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let dictationViewModel: DictationViewModel
         let audioRecordingService: AudioRecordingService
         let textInsertionService: TextInsertionService
+        let ttsProvider: MockTTSProviderPlugin
         private let retainedObjects: [AnyObject]
 
         init(
@@ -117,6 +164,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             dictationViewModel: DictationViewModel,
             audioRecordingService: AudioRecordingService,
             textInsertionService: TextInsertionService,
+            ttsProvider: MockTTSProviderPlugin,
             retainedObjects: [AnyObject]
         ) {
             self.router = router
@@ -126,6 +174,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             self.dictationViewModel = dictationViewModel
             self.audioRecordingService = audioRecordingService
             self.textInsertionService = textInsertionService
+            self.ttsProvider = ttsProvider
             self.retainedObjects = retainedObjects
         }
     }
@@ -501,6 +550,86 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         let recordID = await MainActor.run { apiContext.historyService.records.first?.id.uuidString }
         XCTAssertEqual(recordID, startID)
+    }
+
+    func testDictationEndpointsSpeakCompletedTranscriptionOnly() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        context = await MainActor.run {
+            Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+        }
+        let apiContext = try XCTUnwrap(context)
+        let router = apiContext.router
+        let ttsExpectation = expectation(description: "tts speak called")
+
+        await MainActor.run {
+            apiContext.ttsProvider.onSpeak = { request in
+                if request.purpose == .transcription {
+                    ttsExpectation.fulfill()
+                }
+            }
+            apiContext.dictationViewModel.spokenFeedbackEnabled = true
+            apiContext.audioRecordingService.hasMicrophonePermissionOverride = true
+            apiContext.audioRecordingService.inputAvailabilityOverride = { _ in true }
+            apiContext.audioRecordingService.startRecordingOverride = {}
+            apiContext.audioRecordingService.stopRecordingOverride = { _ in
+                Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+            }
+            apiContext.textInsertionService.accessibilityGrantedOverride = true
+            apiContext.textInsertionService.captureActiveAppOverride = {
+                ("Notes", "com.apple.Notes", nil)
+            }
+            apiContext.textInsertionService.selectedTextOverride = { nil }
+            apiContext.textInsertionService.pasteSimulatorOverride = {}
+        }
+
+        let start = try Self.jsonObject(
+            await router.route(HTTPRequest(method: "POST", path: "/v1/dictation/start", queryParams: [:], headers: [:], body: Data()))
+        )
+        let startID = try XCTUnwrap(start["id"] as? String)
+        let initialRequestsAreEmpty = await MainActor.run { apiContext.ttsProvider.recordedRequests.isEmpty }
+        XCTAssertTrue(initialRequestsAreEmpty)
+
+        await MainActor.run {
+            apiContext.dictationViewModel.partialText = "transcribed"
+        }
+
+        _ = try Self.jsonObject(
+            await router.route(HTTPRequest(method: "POST", path: "/v1/dictation/stop", queryParams: [:], headers: [:], body: Data()))
+        )
+
+        var completedResponse: [String: Any]?
+        for _ in 0..<40 {
+            let response = try Self.jsonObject(
+                await router.route(
+                    HTTPRequest(
+                        method: "GET",
+                        path: "/v1/dictation/transcription",
+                        queryParams: ["id": startID],
+                        headers: [:],
+                        body: Data()
+                    )
+                )
+            )
+            if response["status"] as? String == "completed" {
+                completedResponse = response
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+
+        _ = try XCTUnwrap(completedResponse)
+        await fulfillment(of: [ttsExpectation], timeout: 1.0)
+
+        let requests = await MainActor.run { apiContext.ttsProvider.recordedRequests }
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(requests.first?.purpose, .transcription)
+        XCTAssertEqual(requests.first?.text, "transcribed")
     }
 
     @MainActor
@@ -896,6 +1025,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             context.dictationViewModel.actionFeedbackMessage,
             try TestSupport.localizedCatalogValueForCurrentLocale(for: "No mic detected.")
         )
+        XCTAssertTrue(context.ttsProvider.recordedRequests.isEmpty)
     }
 
     @MainActor
@@ -918,6 +1048,51 @@ final class APIRouterAndHandlersTests: XCTestCase {
             context.dictationViewModel.actionFeedbackMessage,
             "Microphone permission required."
         )
+        XCTAssertTrue(context.ttsProvider.recordedRequests.isEmpty)
+    }
+
+    @MainActor
+    func testApiStartRecording_doesNotSpeakStatusFeedback() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.spokenFeedbackEnabled = true
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.textInsertionService.captureActiveAppOverride = { ("Notes", nil, nil) }
+        context.textInsertionService.selectedTextOverride = { nil }
+
+        _ = context.dictationViewModel.apiStartRecording()
+
+        XCTAssertEqual(context.dictationViewModel.state, .recording)
+        XCTAssertTrue(context.ttsProvider.recordedRequests.isEmpty)
+    }
+
+    @MainActor
+    func testApiStartRecordingError_doesNotSpeakStatusFeedback() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.spokenFeedbackEnabled = true
+        context.audioRecordingService.hasMicrophonePermissionOverride = false
+
+        _ = context.dictationViewModel.apiStartRecording()
+
+        XCTAssertEqual(context.dictationViewModel.state, .inserting)
+        XCTAssertTrue(context.ttsProvider.recordedRequests.isEmpty)
     }
 
     @MainActor
@@ -1074,6 +1249,24 @@ final class APIRouterAndHandlersTests: XCTestCase {
     private static func makeAPIContext(appSupportDirectory: URL, withMockTranscriptionPlugin: Bool = false) -> APIContext {
         EventBus.shared = EventBus()
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        let ttsProvider = MockTTSProviderPlugin()
+        let ttsManifest = PluginManifest(
+            id: "com.typewhisper.mock.tts",
+            name: "Mock TTS",
+            version: "1.0.0",
+            principalClass: "APIRouterMockTTSPlugin",
+            category: "tts"
+        )
+
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: ttsManifest,
+                instance: ttsProvider,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
 
         let modelManager = ModelManagerService()
         if withMockTranscriptionPlugin {
@@ -1084,7 +1277,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
                 version: "1.0.0",
                 principalClass: "APIRouterMockTranscriptionPlugin"
             )
-            PluginManager.shared.loadedPlugins = [
+            PluginManager.shared.loadedPlugins.append(
                 LoadedPlugin(
                     manifest: manifest,
                     instance: mockPlugin,
@@ -1092,7 +1285,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
                     sourceURL: appSupportDirectory,
                     isEnabled: true
                 )
-            ]
+            )
             modelManager.selectProvider(mockPlugin.providerId)
         }
         let audioFileService = AudioFileService()
@@ -1157,8 +1350,10 @@ final class APIRouterAndHandlersTests: XCTestCase {
             dictationViewModel: dictationViewModel,
             audioRecordingService: audioRecordingService,
             textInsertionService: textInsertionService,
+            ttsProvider: ttsProvider,
             retainedObjects: [
                 PluginManager.shared,
+                ttsProvider,
                 modelManager,
                 audioFileService,
                 audioRecordingService,
@@ -1190,6 +1385,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let audioRecordingService: AudioRecordingService
         let textInsertionService: TextInsertionService
         let profileService: ProfileService
+        let ttsProvider: MockTTSProviderPlugin
         private let retainedObjects: [AnyObject]
 
         init(
@@ -1197,12 +1393,14 @@ final class APIRouterAndHandlersTests: XCTestCase {
             audioRecordingService: AudioRecordingService,
             textInsertionService: TextInsertionService,
             profileService: ProfileService,
+            ttsProvider: MockTTSProviderPlugin,
             retainedObjects: [AnyObject]
         ) {
             self.dictationViewModel = dictationViewModel
             self.audioRecordingService = audioRecordingService
             self.textInsertionService = textInsertionService
             self.profileService = profileService
+            self.ttsProvider = ttsProvider
             self.retainedObjects = retainedObjects
         }
     }
@@ -1216,13 +1414,28 @@ final class APIRouterAndHandlersTests: XCTestCase {
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
 
         let mockPlugin = MockTranscriptionPlugin()
+        let ttsProvider = MockTTSProviderPlugin()
         let manifest = PluginManifest(
             id: "com.typewhisper.mock.transcription",
             name: "Mock Transcription",
             version: "1.0.0",
             principalClass: "APIRouterMockTranscriptionPlugin"
         )
+        let ttsManifest = PluginManifest(
+            id: "com.typewhisper.mock.tts",
+            name: "Mock TTS",
+            version: "1.0.0",
+            principalClass: "APIRouterMockTTSPlugin",
+            category: "tts"
+        )
         PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: ttsManifest,
+                instance: ttsProvider,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            ),
             LoadedPlugin(
                 manifest: manifest,
                 instance: mockPlugin,
@@ -1286,6 +1499,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             audioRecordingService: audioRecordingService,
             textInsertionService: textInsertionService,
             profileService: profileService,
+            ttsProvider: ttsProvider,
             retainedObjects: [
                 EventBus.shared,
                 PluginManager.shared,
@@ -1304,6 +1518,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
                 promptProcessingService,
                 appFormatterService,
                 speechFeedbackService,
+                ttsProvider,
                 accessibilityAnnouncementService,
                 errorLogService,
                 settingsViewModel,

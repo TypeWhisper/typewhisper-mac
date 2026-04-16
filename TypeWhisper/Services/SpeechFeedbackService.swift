@@ -39,34 +39,11 @@ private final class PendingTTSPlaybackSession: TTSPlaybackSession, @unchecked Se
     }
 }
 
-enum SpeechFeedbackEvent {
-    case recordingStarted
-    case transcriptionComplete(text: String, language: String?)
-    case error(reason: String)
-    case promptProcessing
-    case promptComplete
-
-    var request: TTSSpeakRequest? {
-        switch self {
-        case .recordingStarted:
-            return TTSSpeakRequest(text: String(localized: "Recording"), purpose: .status)
-        case .transcriptionComplete(let text, let language):
-            guard !text.isEmpty else { return nil }
-            return TTSSpeakRequest(text: text, language: language, purpose: .transcription)
-        case .error(let reason):
-            return TTSSpeakRequest(text: String(localized: "Error: \(reason)"), purpose: .status)
-        case .promptProcessing:
-            return TTSSpeakRequest(text: String(localized: "Processing prompt"), purpose: .status)
-        case .promptComplete:
-            return TTSSpeakRequest(text: String(localized: "Prompt complete"), purpose: .status)
-        }
-    }
-}
-
 @MainActor
 final class SpeechFeedbackService: ObservableObject {
     private let defaults: UserDefaults
     private let providerResolver: @MainActor () -> [any TTSProviderPlugin]
+    private let isVoiceOverEnabled: @MainActor () -> Bool
 
     private var playbackSession: (any TTSPlaybackSession)?
     private var speakTask: Task<Void, Never>?
@@ -105,19 +82,21 @@ final class SpeechFeedbackService: ObservableObject {
 
     init(
         defaults: UserDefaults = .standard,
-        providerResolver: @escaping @MainActor () -> [any TTSProviderPlugin] = { PluginManager.shared.ttsProviders }
+        providerResolver: @escaping @MainActor () -> [any TTSProviderPlugin] = { PluginManager.shared.ttsProviders },
+        isVoiceOverEnabled: @escaping @MainActor () -> Bool = { NSWorkspace.shared.isVoiceOverEnabled }
     ) {
         self.defaults = defaults
         self.providerResolver = providerResolver
+        self.isVoiceOverEnabled = isVoiceOverEnabled
         self.spokenFeedbackEnabled = defaults.bool(forKey: UserDefaultsKeys.spokenFeedbackEnabled)
         self.selectedProviderId = defaults.string(forKey: UserDefaultsKeys.spokenFeedbackProviderId) ?? ""
     }
 
-    func announceEvent(_ event: SpeechFeedbackEvent) {
+    func speakAutomaticTranscription(text: String, language: String?) {
         guard spokenFeedbackEnabled else { return }
-        guard !NSWorkspace.shared.isVoiceOverEnabled else { return }
-        guard let request = event.request else { return }
-        speak(request)
+        guard !isVoiceOverEnabled() else { return }
+        guard !text.isEmpty else { return }
+        speak(TTSSpeakRequest(text: text, language: language, purpose: .transcription))
     }
 
     func readBack(text: String, language: String?) {

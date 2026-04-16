@@ -247,8 +247,7 @@ final class DictationViewModel: ObservableObject {
             promptActionService: promptActionService,
             promptProcessingService: promptProcessingService,
             soundService: soundService,
-            accessibilityAnnouncementService: accessibilityAnnouncementService,
-            speechFeedbackService: speechFeedbackService
+            accessibilityAnnouncementService: accessibilityAnnouncementService
         )
         self.settingsHandler = DictationSettingsHandler(
             hotkeyService: hotkeyService,
@@ -599,7 +598,6 @@ final class DictationViewModel: ObservableObject {
             // would otherwise make the hold appear as "long press" → PTT stop.
             hotkeyService.resetKeyDownTime()
             accessibilityAnnouncementService.announceRecordingStarted()
-            speechFeedbackService.announceEvent(.recordingStarted)
             partialText = ""
             isStopInFlight = false
             recordingStartTime = Date()
@@ -635,7 +633,6 @@ final class DictationViewModel: ObservableObject {
                 errorMessage = error.localizedDescription
             }
             accessibilityAnnouncementService.announceError(errorMessage)
-            speechFeedbackService.announceEvent(.error(reason: errorMessage))
             failDictationSession(id: sessionID, error: errorMessage)
             showError(errorMessage, category: "recording")
             hotkeyService.cancelDictation()
@@ -999,7 +996,7 @@ final class DictationViewModel: ObservableObject {
                     completeDictationSession(id: sessionID, transcription: completedTranscription)
                 }
                 accessibilityAnnouncementService.announceTranscriptionComplete(wordCount: wordCount)
-                speechFeedbackService.announceEvent(.transcriptionComplete(text: text, language: detectedLang))
+                speechFeedbackService.speakAutomaticTranscription(text: text, language: detectedLang)
                 lastTranscribedText = text
                 lastTranscriptionLanguage = detectedLang
 
@@ -1022,7 +1019,6 @@ final class DictationViewModel: ObservableObject {
                     failDictationSession(id: sessionID, error: error.localizedDescription)
                 }
                 accessibilityAnnouncementService.announceError(error.localizedDescription)
-                speechFeedbackService.announceEvent(.error(reason: error.localizedDescription))
                 showError(error.localizedDescription, category: "transcription")
                 clearActiveRuleState()
                 capturedActiveApp = nil
