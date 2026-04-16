@@ -1930,7 +1930,10 @@ final class APIRouterAndHandlersTests: XCTestCase {
             context.dictationViewModel.recordingCancelWarningMessage,
             try TestSupport.localizedCatalogValueForCurrentLocale(for: "Press Esc again to cancel recording")
         )
-        XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
+        XCTAssertEqual(
+            context.dictationViewModel.actionFeedbackMessage,
+            try TestSupport.localizedCatalogValueForCurrentLocale(for: "Press Esc again to cancel recording")
+        )
     }
 
     @MainActor
@@ -1980,7 +1983,10 @@ final class APIRouterAndHandlersTests: XCTestCase {
             context.dictationViewModel.recordingCancelWarningMessage,
             try TestSupport.localizedCatalogValueForCurrentLocale(for: "Press Esc again to cancel recording")
         )
-        XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
+        XCTAssertEqual(
+            context.dictationViewModel.actionFeedbackMessage,
+            try TestSupport.localizedCatalogValueForCurrentLocale(for: "Press Esc again to cancel recording")
+        )
     }
 
     @MainActor

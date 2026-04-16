@@ -6,6 +6,7 @@ import os
 import TypeWhisperPluginSDK
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhisper-mac", category: "DictationViewModel")
+private let recordingCancelWarningIcon = "exclamationmark.triangle.fill"
 
 struct DictationSessionTranscription: Sendable, Equatable {
     let text: String
@@ -104,7 +105,6 @@ final class DictationViewModel: ObservableObject {
     @Published var actionFeedbackMessage: String?
     @Published var actionFeedbackIcon: String?
     @Published var actionFeedbackIsError: Bool = false
-    @Published var recordingCancelWarningMessage: String?
     @Published var activeAppIcon: NSImage?
     private var actionDisplayDuration: TimeInterval = 3.5
 
@@ -168,6 +168,7 @@ final class DictationViewModel: ObservableObject {
     private var errorResetTask: Task<Void, Never>?
     private var insertingResetTask: Task<Void, Never>?
     private var recordingCancelWarningResetTimer: Timer?
+    private var isAwaitingRecordingCancelConfirmation = false
     private var urlResolutionTask: Task<Void, Never>?
     private var metadataCaptureTask: Task<Void, Never>?
     /// Snapshot of the streaming params used in the most recent `streamingHandler.start(...)`.
@@ -189,6 +190,11 @@ final class DictationViewModel: ObservableObject {
     private var dictationSessionOrder: [UUID] = []
     private let maxTrackedDictationSessions = 100
     private var recordingCancelWarningDuration: TimeInterval = 2
+
+    var recordingCancelWarningMessage: String? {
+        guard state == .recording, actionFeedbackIcon == recordingCancelWarningIcon else { return nil }
+        return actionFeedbackMessage
+    }
 
     init(
         audioRecordingService: AudioRecordingService,
@@ -516,7 +522,7 @@ final class DictationViewModel: ObservableObject {
     func handleCancelHotkey() {
         switch state {
         case .recording:
-            if recordingCancelWarningMessage == nil {
+            if !isAwaitingRecordingCancelConfirmation {
                 showRecordingCancelWarning()
             } else {
                 clearRecordingCancelWarning()
@@ -530,20 +536,28 @@ final class DictationViewModel: ObservableObject {
     }
 
     private func showRecordingCancelWarning() {
-        recordingCancelWarningMessage = String(localized: "Press Esc again to cancel recording")
+        isAwaitingRecordingCancelConfirmation = true
+        actionFeedbackMessage = String(localized: "Press Esc again to cancel recording")
+        actionFeedbackIcon = recordingCancelWarningIcon
+        actionFeedbackIsError = false
+        actionDisplayDuration = recordingCancelWarningDuration
         recordingCancelWarningResetTimer?.invalidate()
         recordingCancelWarningResetTimer = Timer.scheduledTimer(withTimeInterval: recordingCancelWarningDuration, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.recordingCancelWarningMessage = nil
-                self?.recordingCancelWarningResetTimer = nil
+                self?.clearRecordingCancelWarning()
             }
         }
     }
 
     private func clearRecordingCancelWarning() {
+        isAwaitingRecordingCancelConfirmation = false
         recordingCancelWarningResetTimer?.invalidate()
         recordingCancelWarningResetTimer = nil
-        recordingCancelWarningMessage = nil
+        guard actionFeedbackIcon == recordingCancelWarningIcon else { return }
+        actionFeedbackMessage = nil
+        actionFeedbackIcon = nil
+        actionFeedbackIsError = false
+        actionDisplayDuration = 3.5
     }
 
     private func cancelCurrentOperation() {
