@@ -1348,6 +1348,101 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testMonitorFallbackStartsPushToTalkOnFnPress() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(fnHotkey(), for: .pushToTalk)
+
+        var startCount = 0
+        var stopCount = 0
+        service.onDictationStart = { startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+
+        let keyDown = try makeFnEvent(isDown: true)
+        let keyUp = try makeFnEvent(isDown: false)
+
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(stopCount, 0)
+
+        XCTAssertTrue(service.processEventForTesting(keyUp, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(stopCount, 1)
+    }
+
+    @MainActor
+    func testMonitorFallbackStartsHybridOnFnPress() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(fnHotkey(), for: .hybrid)
+
+        var startCount = 0
+        var stopCount = 0
+        service.onDictationStart = { startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+
+        let keyDown = try makeFnEvent(isDown: true)
+        let keyUp = try makeFnEvent(isDown: false)
+
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(stopCount, 0)
+
+        XCTAssertTrue(service.processEventForTesting(keyUp, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(stopCount, 0)
+        XCTAssertEqual(service.currentMode, .toggle)
+    }
+
+    @MainActor
+    func testMonitorFallbackStartsHybridLongPressAndStopsAfterRelease() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(fnHotkey(), for: .hybrid)
+
+        var startCount = 0
+        var stopCount = 0
+        service.onDictationStart = { startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+
+        let keyDown = try makeFnEvent(isDown: true)
+        let keyUp = try makeFnEvent(isDown: false)
+
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+
+        try await Task.sleep(nanoseconds: 1_150_000_000)
+
+        XCTAssertTrue(service.processEventForTesting(keyUp, source: .monitor))
+        XCTAssertEqual(stopCount, 1)
+        XCTAssertEqual(startCount, 1)
+        XCTAssertNil(service.currentMode)
+    }
+
+    @MainActor
+    func testMonitorFallbackToggleFnStillWorksOnRelease() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(fnHotkey(), for: .toggle)
+
+        var startCount = 0
+        service.onDictationStart = { startCount += 1 }
+
+        let keyDown = try makeFnEvent(isDown: true)
+        let keyUp = try makeFnEvent(isDown: false)
+
+        XCTAssertFalse(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertEqual(startCount, 0)
+
+        XCTAssertTrue(service.processEventForTesting(keyUp, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+    }
+
+    @MainActor
     private func spaceHotkey() -> UnifiedHotkey {
         UnifiedHotkey(
             keyCode: 0x31,
@@ -1383,6 +1478,15 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         )
     }
 
+    @MainActor
+    private func fnHotkey() -> UnifiedHotkey {
+        UnifiedHotkey(
+            keyCode: 0x00,
+            modifierFlags: 0,
+            isFn: true
+        )
+    }
+
     private func makeKeyboardEvent(
         keyCode: UInt16,
         keyDown: Bool,
@@ -1412,6 +1516,13 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
                 isARepeat: false,
                 keyCode: keyCode
             )
+        )
+    }
+
+    private func makeFnEvent(isDown: Bool) throws -> NSEvent {
+        try makeFlagsChangedEvent(
+            keyCode: 0x3F,
+            modifierFlags: isDown ? [.function] : []
         )
     }
 }
