@@ -52,13 +52,6 @@ final class APIHandlers: @unchecked Sendable {
     // MARK: - POST /v1/transcribe
 
     private func handleTranscribe(_ request: HTTPRequest) async -> HTTPResponse {
-        // Note: Don't pre-check isModelReady here - let transcribe() handle auto-restore
-        // for models that were auto-unloaded but can be re-loaded.
-        let hasEngine = await modelManager.selectedProviderId != nil
-        guard hasEngine else {
-            return .error(status: 503, message: "No engine selected. Select an engine in TypeWhisper first.")
-        }
-
         let audioData: Data
         var fileExtension = "wav"
         var language: String?
@@ -67,6 +60,8 @@ final class APIHandlers: @unchecked Sendable {
         var targetLanguage: String?
         var responseFormat = "json"
         var requestPrompt: String?
+        var engineOverride: String?
+        var modelOverride: String?
 
         let contentType = request.headers["content-type"] ?? ""
 
@@ -120,6 +115,18 @@ final class APIHandlers: @unchecked Sendable {
                !val.isEmpty {
                 requestPrompt = val
             }
+
+            if let enginePart = parts.first(where: { $0.name == "engine" }),
+               let val = String(data: enginePart.data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !val.isEmpty {
+                engineOverride = val
+            }
+
+            if let modelPart = parts.first(where: { $0.name == "model" }),
+               let val = String(data: modelPart.data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !val.isEmpty {
+                modelOverride = val
+            }
         } else if !request.body.isEmpty {
             audioData = request.body
             fileExtension = extensionFromMIME(contentType)
@@ -139,6 +146,14 @@ final class APIHandlers: @unchecked Sendable {
                !prompt.isEmpty {
                 requestPrompt = prompt
             }
+            if let engine = request.headers["x-engine"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !engine.isEmpty {
+                engineOverride = engine
+            }
+            if let model = request.headers["x-model"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !model.isEmpty {
+                modelOverride = model
+            }
         } else {
             return .error(status: 400, message: "No audio data provided")
         }
@@ -149,6 +164,23 @@ final class APIHandlers: @unchecked Sendable {
 
         if language != nil, !languageHints.isEmpty {
             return .error(status: 400, message: "Use either 'language' or 'language_hint', not both")
+        }
+
+        let awaitDownload = (request.queryParams["await_download"] == "1")
+
+        let resolvedOverride: ResolvedOverride
+        switch await resolveEngineModelOverride(engine: engineOverride, model: modelOverride, awaitDownload: awaitDownload) {
+        case .use(let value):
+            resolvedOverride = value
+        case .reject(let response):
+            return response
+        }
+
+        if resolvedOverride.engineId == nil {
+            let hasEngine = await modelManager.selectedProviderId != nil
+            guard hasEngine else {
+                return .error(status: 503, message: "No engine selected. Select an engine in TypeWhisper first.")
+            }
         }
 
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".\(fileExtension)")
@@ -172,6 +204,8 @@ final class APIHandlers: @unchecked Sendable {
                 audioSamples: samples,
                 languageSelection: languageSelection,
                 task: task,
+                engineOverrideId: resolvedOverride.engineId,
+                cloudModelOverride: resolvedOverride.modelId,
                 prompt: prompt
             )
 
@@ -212,7 +246,10 @@ final class APIHandlers: @unchecked Sendable {
                 #endif
             }
 
-            let modelId = await modelManager.selectedModelId
+            let modelId = await resolveResponseModelId(
+                override: resolvedOverride,
+                engineUsed: result.engineUsed
+            )
 
             if responseFormat == "verbose_json" {
                 struct SegmentEntry: Encodable {
@@ -266,6 +303,104 @@ final class APIHandlers: @unchecked Sendable {
         } catch {
             return .error(status: 500, message: "Transcription failed: \(error.localizedDescription)")
         }
+    }
+
+    // MARK: - Engine/Model Override Resolution
+
+    private struct ResolvedOverride {
+        let engineId: String?
+        let modelId: String?
+    }
+
+    private enum OverrideResolution {
+        case use(ResolvedOverride)
+        case reject(HTTPResponse)
+    }
+
+    /// Resolve per-request `engine` / `model` overrides against the full set of loaded
+    /// transcription plugins. Implements the matrix from issue #317:
+    ///
+    /// - both nil -> use GUI selection
+    /// - engine only -> use that engine's default model
+    /// - model only -> infer engine by scanning `availableModels` across all engines
+    /// - both set   -> use as-is
+    ///
+    /// Also enforces configuration: an unconfigured engine returns 409 by default (to
+    /// distinguish "typo" from "needs setup") unless the caller passed `?await_download=1`,
+    /// in which case the usual `triggerRestoreModel` retry path is allowed to run.
+    @MainActor
+    private func resolveEngineModelOverride(
+        engine: String?,
+        model: String?,
+        awaitDownload: Bool
+    ) -> OverrideResolution {
+        if engine == nil, model == nil {
+            return .use(ResolvedOverride(engineId: nil, modelId: nil))
+        }
+
+        let engines = PluginManager.shared.transcriptionEngines
+
+        let resolvedEngineId: String?
+        if let engine {
+            guard let match = engines.first(where: { $0.providerId == engine }) else {
+                return .reject(.error(status: 400, message: "Unknown engine '\(engine)'"))
+            }
+            resolvedEngineId = match.providerId
+        } else if let model {
+            let matches = engines.filter { engine in
+                engine.availableModels.contains(where: { $0.id == model })
+            }
+            if matches.isEmpty {
+                return .reject(.error(status: 400, message: "Unknown model '\(model)'"))
+            }
+            if matches.count > 1 {
+                let engineIds = matches.map { $0.providerId }.joined(separator: ", ")
+                return .reject(.error(
+                    status: 400,
+                    message: "Ambiguous model id '\(model)' -- matches engines: \(engineIds). Specify 'engine' too."
+                ))
+            }
+            resolvedEngineId = matches[0].providerId
+        } else {
+            resolvedEngineId = nil
+        }
+
+        if let engineId = resolvedEngineId,
+           let model,
+           let plugin = engines.first(where: { $0.providerId == engineId }) {
+            let ids = Set(plugin.availableModels.map { $0.id })
+            if !ids.isEmpty, !ids.contains(model) {
+                return .reject(.error(
+                    status: 400,
+                    message: "Model '\(model)' is not offered by engine '\(engineId)'"
+                ))
+            }
+        }
+
+        if let engineId = resolvedEngineId,
+           let plugin = engines.first(where: { $0.providerId == engineId }),
+           !plugin.isConfigured,
+           !awaitDownload {
+            return .reject(.error(
+                status: 409,
+                message: "Engine '\(engineId)' is not configured (missing API key or downloaded weights). Pass ?await_download=1 to wait for restore."
+            ))
+        }
+
+        return .use(ResolvedOverride(engineId: resolvedEngineId, modelId: model))
+    }
+
+    @MainActor
+    private func resolveResponseModelId(override: ResolvedOverride, engineUsed: String) -> String? {
+        if let modelId = override.modelId { return modelId }
+        if let engineId = override.engineId,
+           let plugin = PluginManager.shared.transcriptionEngine(for: engineId) {
+            return plugin.selectedModelId
+        }
+        if let plugin = PluginManager.shared.transcriptionEngine(for: engineUsed) {
+            return plugin.selectedModelId
+        }
+        return nil
     }
 
     private func mergedPrompt(requestPrompt: String?, dictionaryPrompt: String?) -> String? {
