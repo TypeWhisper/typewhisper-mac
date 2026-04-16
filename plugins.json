@@ -445,7 +445,7 @@
     {
       "id": "com.typewhisper.script",
       "name": "Script Runner",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "minHostVersion": "0.9.0",
       "minOSVersion": "14.0",
       "author": "TypeWhisper",
@@ -454,11 +454,18 @@
         "de": "Transkribierten Text durch eigene Shell-Skripte nachbearbeiten. Text wird per stdin uebergeben, Ergebnis per stdout zurueckgegeben."
       },
       "category": "post-processor",
-      "size": 227434,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-script-v1.1.1/ScriptPlugin.zip",
+      "size": 227431,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-script-v1.1.2/ScriptPlugin.zip",
       "iconSystemName": "terminal",
       "downloadCount": 206,
       "releases": [
+        {
+          "version": "1.1.2",
+          "minHostVersion": "0.9.0",
+          "size": 227431,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-script-v1.1.2/ScriptPlugin.zip",
+          "minOSVersion": "14.0"
+        },
         {
           "version": "1.1.1",
           "minHostVersion": "0.9.0",
