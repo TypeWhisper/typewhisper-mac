@@ -280,6 +280,7 @@ final class APIHandlers: @unchecked Sendable {
 
     private func handleStatus(_ request: HTTPRequest) async -> HTTPResponse {
         let providerId = await modelManager.selectedProviderId
+        let modelId = await modelManager.selectedModelId
         let isReady = await modelManager.isModelReady
         let supportsStreaming = await modelManager.supportsStreaming
         let supportsTranslation = await modelManager.supportsTranslation
@@ -287,6 +288,7 @@ final class APIHandlers: @unchecked Sendable {
         struct StatusResponse: Encodable {
             let status: String
             let engine: String?
+            let model: String?
             let supports_streaming: Bool
             let supports_translation: Bool
         }
@@ -294,6 +296,7 @@ final class APIHandlers: @unchecked Sendable {
         let response = StatusResponse(
             status: isReady ? "ready" : "no_model",
             engine: providerId,
+            model: modelId,
             supports_streaming: supportsStreaming,
             supports_translation: supportsTranslation
         )
