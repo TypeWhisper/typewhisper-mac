@@ -167,8 +167,7 @@ final class DictationViewModel: ObservableObject {
     private var transcriptionTask: Task<Void, Never>?
     private var errorResetTask: Task<Void, Never>?
     private var insertingResetTask: Task<Void, Never>?
-    private var recordingCancelWarningResetWorkItem: DispatchWorkItem?
-    private var recordingCancelWarningResetToken = UUID()
+    private var recordingCancelWarningResetTimer: Timer?
     private var urlResolutionTask: Task<Void, Never>?
     private var metadataCaptureTask: Task<Void, Never>?
     /// Snapshot of the streaming params used in the most recent `streamingHandler.start(...)`.
@@ -404,7 +403,7 @@ final class DictationViewModel: ObservableObject {
 
     isolated deinit {
         recordingTimer?.invalidate()
-        recordingCancelWarningResetWorkItem?.cancel()
+        recordingCancelWarningResetTimer?.invalidate()
     }
 
     private func beginDictationSession(id: UUID) {
@@ -532,28 +531,18 @@ final class DictationViewModel: ObservableObject {
 
     private func showRecordingCancelWarning() {
         recordingCancelWarningMessage = String(localized: "Press Esc again to cancel recording")
-        recordingCancelWarningResetWorkItem?.cancel()
-
-        let resetToken = UUID()
-        recordingCancelWarningResetToken = resetToken
-
-        let workItem = DispatchWorkItem { [weak self] in
-            guard let self, self.recordingCancelWarningResetToken == resetToken else { return }
-            self.recordingCancelWarningMessage = nil
-            self.recordingCancelWarningResetWorkItem = nil
+        recordingCancelWarningResetTimer?.invalidate()
+        recordingCancelWarningResetTimer = Timer.scheduledTimer(withTimeInterval: recordingCancelWarningDuration, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.recordingCancelWarningMessage = nil
+                self?.recordingCancelWarningResetTimer = nil
+            }
         }
-
-        recordingCancelWarningResetWorkItem = workItem
-        DispatchQueue.main.asyncAfter(
-            deadline: .now() + recordingCancelWarningDuration,
-            execute: workItem
-        )
     }
 
     private func clearRecordingCancelWarning() {
-        recordingCancelWarningResetToken = UUID()
-        recordingCancelWarningResetWorkItem?.cancel()
-        recordingCancelWarningResetWorkItem = nil
+        recordingCancelWarningResetTimer?.invalidate()
+        recordingCancelWarningResetTimer = nil
         recordingCancelWarningMessage = nil
     }
 
