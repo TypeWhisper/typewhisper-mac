@@ -594,7 +594,7 @@ final class DictationViewModel: ObservableObject {
             streamingHandler.start(
                 engineOverrideId: effectiveEngineOverrideId,
                 selectedProviderId: modelManager.selectedProviderId,
-                language: effectiveLanguage,
+                languageSelection: effectiveLanguageSelection,
                 task: effectiveTask,
                 cloudModelOverride: effectiveCloudModelOverride,
                 allowLiveTranscription: indicatorTranscriptPreviewEnabled || externalStreamingDisplayCount > 0,
@@ -697,11 +697,21 @@ final class DictationViewModel: ObservableObject {
         }
     }
 
-    private var effectiveLanguage: String? {
+    private var effectiveLanguageSelection: LanguageSelection {
         if let profileLang = matchedProfile?.inputLanguage {
-            return profileLang == "auto" ? nil : profileLang
+            let profileSelection = LanguageSelection(
+                storedValue: profileLang,
+                nilBehavior: .inheritGlobal
+            )
+            if profileSelection != .inheritGlobal {
+                return profileSelection
+            }
         }
-        return settingsViewModel.selectedLanguage
+        return settingsViewModel.languageSelection
+    }
+
+    private var effectiveLanguage: String? {
+        effectiveLanguageSelection.requestedLanguage
     }
 
     private var effectiveTask: TranscriptionTask {
@@ -833,7 +843,8 @@ final class DictationViewModel: ObservableObject {
                 await urlResolutionTask?.value
 
                 let activeApp = capturedActiveApp ?? textInsertionService.captureActiveApp()
-                let language = effectiveLanguage
+                let languageSelection = effectiveLanguageSelection
+                let language = languageSelection.requestedLanguage
                 let task = effectiveTask
                 let engineOverride = effectiveEngineOverrideId
                 let cloudModelOverride = effectiveCloudModelOverride
@@ -845,7 +856,7 @@ final class DictationViewModel: ObservableObject {
                 } else {
                     try await modelManager.transcribe(
                         audioSamples: samples,
-                        language: language,
+                        languageSelection: languageSelection,
                         task: task,
                         engineOverrideId: engineOverride,
                         cloudModelOverride: cloudModelOverride,

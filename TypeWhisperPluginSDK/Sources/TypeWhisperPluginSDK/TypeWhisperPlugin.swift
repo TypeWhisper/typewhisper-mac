@@ -208,6 +208,16 @@ public struct PluginTranscriptionResult: Sendable {
     }
 }
 
+public struct PluginLanguageSelection: Sendable, Equatable {
+    public let requestedLanguage: String?
+    public let languageHints: [String]
+
+    public init(requestedLanguage: String? = nil, languageHints: [String] = []) {
+        self.requestedLanguage = requestedLanguage
+        self.languageHints = languageHints
+    }
+}
+
 public enum DictionaryTermsSupport: String, Sendable, CaseIterable {
     case supported
     case requiresPluginSetting
@@ -291,6 +301,49 @@ public protocol LiveTranscriptionCapablePlugin: TranscriptionEnginePlugin {
         prompt: String?,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> any LiveTranscriptionSession
+}
+
+public protocol LanguageHintTranscriptionEnginePlugin: TranscriptionEnginePlugin {
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult
+
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult
+}
+
+public protocol LiveLanguageHintTranscriptionCapablePlugin: LiveTranscriptionCapablePlugin {
+    func createLiveTranscriptionSession(
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession
+}
+
+public extension LanguageHintTranscriptionEnginePlugin {
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        try await transcribe(
+            audio: audio,
+            languageSelection: languageSelection,
+            translate: translate,
+            prompt: prompt
+        )
+    }
 }
 
 public extension TranscriptionEnginePlugin {

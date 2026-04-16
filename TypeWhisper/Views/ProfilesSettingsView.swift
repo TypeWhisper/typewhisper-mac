@@ -803,18 +803,21 @@ private struct RuleBehaviorStep: View {
                         title: localizedAppText("Spoken Language", de: "Gesprochene Sprache"),
                         description: localizedAppText("Which language TypeWhisper should expect in this context.", de: "Welche Sprache TypeWhisper in diesem Kontext erwarten soll.")
                     ) {
-                        Picker(localizedAppText("Spoken Language", de: "Gesprochene Sprache"), selection: $viewModel.editorInputLanguage) {
-                            Text(localizedAppText("Global Setting", de: "Globale Einstellung")).tag(nil as String?)
-                            Divider()
-                            Text(localizedAppText("Auto-Detect", de: "Automatisch erkennen")).tag("auto" as String?)
-                            Divider()
-                            ForEach(viewModel.settingsViewModel.availableLanguages, id: \.code) { lang in
-                                Text(lang.name).tag(lang.code as String?)
-                            }
-                        }
+                        LanguageSelectionEditor(
+                            selection: Binding(
+                                get: {
+                                    LanguageSelection(
+                                        storedValue: viewModel.editorInputLanguage,
+                                        nilBehavior: .inheritGlobal
+                                    )
+                                },
+                                set: { viewModel.editorInputLanguage = $0.storedValue(nilBehavior: .inheritGlobal) }
+                            ),
+                            availableLanguages: viewModel.settingsViewModel.availableLanguages,
+                            nilBehavior: .inheritGlobal,
+                            inheritTitle: localizedAppText("Global Setting", de: "Globale Einstellung")
+                        )
                     }
-                    .pickerStyle(.menu)
-                    .labelsHidden()
 
                     #if canImport(Translation)
                     if #available(macOS 15, *) {

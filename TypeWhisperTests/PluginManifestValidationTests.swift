@@ -200,7 +200,10 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
             audioFileService: AudioFileService(),
             modelManagerService: ModelManagerService()
         )
-        let viewModel = WatchFolderViewModel(watchFolderService: watchFolderService)
+        let viewModel = WatchFolderViewModel(
+            watchFolderService: watchFolderService,
+            modelManager: ModelManagerService()
+        )
         viewModel.reconcileSelectionWithAvailablePlugins()
 
         XCTAssertNil(viewModel.selectedEngine)

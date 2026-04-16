@@ -7,18 +7,26 @@ import TypeWhisperPluginSDK
 
 final class APIRouterAndHandlersTests: XCTestCase {
     @objc(APIRouterMockTranscriptionPlugin)
-    private final class MockTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+    private final class MockTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTranscriptionEnginePlugin, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.transcription" }
         static var pluginName: String { "Mock Transcription" }
         private static let promptLock = NSLock()
         nonisolated(unsafe) private static var _lastPrompt: String?
+        nonisolated(unsafe) private static var _lastLanguageSelection = PluginLanguageSelection()
 
         static var lastPrompt: String? {
             promptLock.withLock { _lastPrompt }
         }
 
+        static var lastLanguageSelection: PluginLanguageSelection {
+            promptLock.withLock { _lastLanguageSelection }
+        }
+
         static func reset() {
-            promptLock.withLock { _lastPrompt = nil }
+            promptLock.withLock {
+                _lastPrompt = nil
+                _lastLanguageSelection = PluginLanguageSelection()
+            }
         }
 
         var languages: [String] = []
@@ -38,8 +46,27 @@ final class APIRouterAndHandlersTests: XCTestCase {
         var supportedLanguages: [String] { languages }
 
         func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
-            Self.promptLock.withLock { Self._lastPrompt = prompt }
+            Self.promptLock.withLock {
+                Self._lastPrompt = prompt
+                Self._lastLanguageSelection = PluginLanguageSelection(requestedLanguage: language)
+            }
             return PluginTranscriptionResult(text: "transcribed", detectedLanguage: language)
+        }
+
+        func transcribe(
+            audio: AudioData,
+            languageSelection: PluginLanguageSelection,
+            translate: Bool,
+            prompt: String?
+        ) async throws -> PluginTranscriptionResult {
+            Self.promptLock.withLock {
+                Self._lastPrompt = prompt
+                Self._lastLanguageSelection = languageSelection
+            }
+            return PluginTranscriptionResult(
+                text: "transcribed",
+                detectedLanguage: languageSelection.requestedLanguage ?? languageSelection.languageHints.first
+            )
         }
     }
 
@@ -178,6 +205,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             context.profileService.addProfile(
                 name: "Docs",
                 urlPatterns: ["docs.github.com"],
+                inputLanguage: #"["de","en"]"#,
                 priority: 1
             )
             return context
@@ -201,6 +229,9 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual(status["status"] as? String, "no_model")
         XCTAssertEqual((history["entries"] as? [[String: Any]])?.count, 1)
         XCTAssertEqual((rules["rules"] as? [[String: Any]])?.first?["name"] as? String, "Docs")
+        XCTAssertEqual((rules["rules"] as? [[String: Any]])?.first?["language_mode"] as? String, "multiple")
+        XCTAssertEqual((rules["rules"] as? [[String: Any]])?.first?["language_hints"] as? [String], ["de", "en"])
+        XCTAssertNil((rules["rules"] as? [[String: Any]])?.first?["input_language"] as? String)
         XCTAssertEqual((legacyProfiles["profiles"] as? [[String: Any]])?.first?["name"] as? String, "Docs")
     }
 
@@ -293,6 +324,82 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         XCTAssertEqual(response["text"] as? String, "transcribed")
         XCTAssertEqual(MockTranscriptionPlugin.lastPrompt, "TypeWhisper, WhisperKit")
+    }
+
+    func testTranscribeEndpointAcceptsRepeatedLanguageHints() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        context = await MainActor.run {
+            Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+        }
+
+        let router = try XCTUnwrap(context?.router)
+        let wavData = WavEncoder.encode(Array(repeating: Float(0), count: 1600))
+        let boundary = "TestBoundary-\(UUID().uuidString)"
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"test.wav\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
+        body.append(wavData)
+        body.append("\r\n".data(using: .utf8)!)
+        for hint in ["de", "en"] {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"language_hint\"\r\n\r\n".data(using: .utf8)!)
+            body.append("\(hint)\r\n".data(using: .utf8)!)
+        }
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+
+        let response = try Self.jsonObject(await router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: ["content-type": "multipart/form-data; boundary=\(boundary)"],
+                body: body
+            )
+        ))
+
+        XCTAssertEqual(response["text"] as? String, "transcribed")
+        XCTAssertEqual(MockTranscriptionPlugin.lastLanguageSelection.languageHints, ["de", "en"])
+        XCTAssertNil(MockTranscriptionPlugin.lastLanguageSelection.requestedLanguage)
+    }
+
+    func testTranscribeEndpointRejectsMixedLanguageAndHints() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        context = await MainActor.run {
+            Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+        }
+
+        let router = try XCTUnwrap(context?.router)
+        let response = await router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: [
+                    "content-type": "audio/wav",
+                    "x-language": "de",
+                    "x-language-hints": "en,nl"
+                ],
+                body: WavEncoder.encode(Array(repeating: Float(0), count: 1600))
+            )
+        )
+        let json = try Self.jsonObject(response)
+
+        XCTAssertEqual(response.status, 400)
+        XCTAssertEqual((json["error"] as? [String: Any])?["message"] as? String, "Use either 'language' or 'language_hint', not both")
     }
 
     func testDictationStartReturnsConflictWhenRecordingCannotStart() async throws {
@@ -877,6 +984,57 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
     func testLocalizedAppLanguageNameKeepsScriptVariantsDistinct() {
         XCTAssertNotEqual(localizedAppLanguageName(for: "zh-Hans"), localizedAppLanguageName(for: "zh-Hant"))
+    }
+
+    func testLocalizedAppLanguageFlagUsesDefaultsAndRegionOverrides() {
+        XCTAssertEqual(localizedAppLanguageFlag(for: "en"), "🇺🇸")
+        XCTAssertEqual(localizedAppLanguageFlag(for: "en-GB"), "🇬🇧")
+        XCTAssertEqual(localizedAppLanguageFlag(for: "en-US"), "🇺🇸")
+        XCTAssertEqual(localizedAppLanguageFlag(for: "zh"), "🇨🇳")
+        XCTAssertNil(localizedAppLanguageFlag(for: "zh-Hans"))
+    }
+
+    func testFeaturedAppLanguageRankPromotesCommonLanguages() {
+        XCTAssertEqual(featuredAppLanguageRank(for: "de"), 0)
+        XCTAssertEqual(featuredAppLanguageRank(for: "en"), 1)
+        XCTAssertEqual(featuredAppLanguageRank(for: "fr"), 2)
+        XCTAssertEqual(featuredAppLanguageRank(for: "es"), 3)
+        XCTAssertEqual(featuredAppLanguageRank(for: "zh-Hans"), 4)
+        XCTAssertNil(featuredAppLanguageRank(for: "cs"))
+    }
+
+    func testLanguageSelectionCodecSupportsLegacyAndHintValues() {
+        XCTAssertEqual(LanguageSelection(storedValue: nil, nilBehavior: .auto), .auto)
+        XCTAssertEqual(LanguageSelection(storedValue: nil, nilBehavior: .inheritGlobal), .inheritGlobal)
+        XCTAssertEqual(LanguageSelection(storedValue: "auto", nilBehavior: .auto), .auto)
+        XCTAssertEqual(LanguageSelection(storedValue: "de", nilBehavior: .auto), .exact("de"))
+        XCTAssertEqual(
+            LanguageSelection(storedValue: #"["de","en"]"#, nilBehavior: .auto),
+            .hints(["de", "en"])
+        )
+    }
+
+    func testProfileLanguageSelectionPersistsHintListsWithoutSchemaChanges() {
+        let profile = Profile(name: "Hints")
+        profile.inputLanguageSelection = .hints(["de", "en"])
+
+        XCTAssertEqual(profile.inputLanguage, #"["de","en"]"#)
+        XCTAssertEqual(profile.inputLanguageSelection, .hints(["de", "en"]))
+    }
+
+    func testLanguageSelectionNormalizesAgainstSupportedLanguages() {
+        XCTAssertEqual(
+            LanguageSelection.hints(["de", "en", "nl"]).normalizedForSupportedLanguages(["de", "nl"]),
+            .hints(["de", "nl"])
+        )
+        XCTAssertEqual(
+            LanguageSelection.hints(["de", "en"]).normalizedForSupportedLanguages(["de"]),
+            .exact("de")
+        )
+        XCTAssertEqual(
+            LanguageSelection.hints(["de", "en"]).normalizedForSupportedLanguages(["fr"]),
+            .auto
+        )
     }
 
     @MainActor

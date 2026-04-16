@@ -179,6 +179,24 @@ final class ModelManagerService: ObservableObject {
         prompt: String? = nil,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> LiveTranscriptionSessionHandle? {
+        try await createLiveTranscriptionSession(
+            languageSelection: language.map(LanguageSelection.exact) ?? .auto,
+            task: task,
+            engineOverrideId: engineOverrideId,
+            cloudModelOverride: cloudModelOverride,
+            prompt: prompt,
+            onProgress: onProgress
+        )
+    }
+
+    func createLiveTranscriptionSession(
+        languageSelection: LanguageSelection,
+        task: TranscriptionTask,
+        engineOverrideId: String? = nil,
+        cloudModelOverride: String? = nil,
+        prompt: String? = nil,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> LiveTranscriptionSessionHandle? {
         let providerId = engineOverrideId ?? selectedProviderId
         guard let providerId,
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
@@ -200,12 +218,24 @@ final class ModelManagerService: ObservableObject {
             return nil
         }
 
-        let session = try await livePlugin.createLiveTranscriptionSession(
-            language: language,
-            translate: task == .translate,
-            prompt: prompt,
-            onProgress: onProgress
-        )
+        let runtimeSelection = runtimeLanguageSelection(for: languageSelection, plugin: plugin)
+        let session: any LiveTranscriptionSession
+        if !runtimeSelection.languageHints.isEmpty,
+           let hintPlugin = livePlugin as? LiveLanguageHintTranscriptionCapablePlugin {
+            session = try await hintPlugin.createLiveTranscriptionSession(
+                languageSelection: runtimeSelection,
+                translate: task == .translate,
+                prompt: prompt,
+                onProgress: onProgress
+            )
+        } else {
+            session = try await livePlugin.createLiveTranscriptionSession(
+                language: runtimeSelection.requestedLanguage,
+                translate: task == .translate,
+                prompt: prompt,
+                onProgress: onProgress
+            )
+        }
         return LiveTranscriptionSessionHandle(providerId: providerId, session: session)
     }
 
@@ -232,6 +262,24 @@ final class ModelManagerService: ObservableObject {
     func transcribe(
         audioSamples: [Float],
         language: String?,
+        task: TranscriptionTask,
+        engineOverrideId: String? = nil,
+        cloudModelOverride: String? = nil,
+        prompt: String? = nil
+    ) async throws -> TranscriptionResult {
+        try await transcribe(
+            audioSamples: audioSamples,
+            languageSelection: language.map(LanguageSelection.exact) ?? .auto,
+            task: task,
+            engineOverrideId: engineOverrideId,
+            cloudModelOverride: cloudModelOverride,
+            prompt: prompt
+        )
+    }
+
+    func transcribe(
+        audioSamples: [Float],
+        languageSelection: LanguageSelection,
         task: TranscriptionTask,
         engineOverrideId: String? = nil,
         cloudModelOverride: String? = nil,
@@ -264,10 +312,11 @@ final class ModelManagerService: ObservableObject {
             duration: audioDuration
         )
 
-        let result = try await plugin.transcribe(
+        let result = try await transcribeWithResolvedLanguageSelection(
+            plugin: plugin,
             audio: audio,
-            language: language,
-            translate: task == .translate,
+            languageSelection: runtimeLanguageSelection(for: languageSelection, plugin: plugin),
+            task: task,
             prompt: prompt
         )
 
@@ -288,6 +337,26 @@ final class ModelManagerService: ObservableObject {
     func transcribe(
         audioSamples: [Float],
         language: String?,
+        task: TranscriptionTask,
+        engineOverrideId: String? = nil,
+        cloudModelOverride: String? = nil,
+        prompt: String? = nil,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> TranscriptionResult {
+        try await transcribe(
+            audioSamples: audioSamples,
+            languageSelection: language.map(LanguageSelection.exact) ?? .auto,
+            task: task,
+            engineOverrideId: engineOverrideId,
+            cloudModelOverride: cloudModelOverride,
+            prompt: prompt,
+            onProgress: onProgress
+        )
+    }
+
+    func transcribe(
+        audioSamples: [Float],
+        languageSelection: LanguageSelection,
         task: TranscriptionTask,
         engineOverrideId: String? = nil,
         cloudModelOverride: String? = nil,
@@ -321,24 +390,14 @@ final class ModelManagerService: ObservableObject {
             duration: audioDuration
         )
 
-        let result: PluginTranscriptionResult
-        if plugin.supportsStreaming {
-            result = try await plugin.transcribe(
-                audio: audio,
-                language: language,
-                translate: task == .translate,
-                prompt: prompt,
-                onProgress: onProgress
-            )
-        } else {
-            result = try await plugin.transcribe(
-                audio: audio,
-                language: language,
-                translate: task == .translate,
-                prompt: prompt
-            )
-            let _ = onProgress(result.text)
-        }
+        let result = try await transcribeWithResolvedLanguageSelection(
+            plugin: plugin,
+            audio: audio,
+            languageSelection: runtimeLanguageSelection(for: languageSelection, plugin: plugin),
+            task: task,
+            prompt: prompt,
+            onProgress: onProgress
+        )
 
         let processingTime = CFAbsoluteTimeGetCurrent() - startTime
 
@@ -389,6 +448,95 @@ final class ModelManagerService: ObservableObject {
         let sel = NSSelectorFromString("triggerAutoUnload")
         guard nsPlugin.responds(to: sel) else { return }
         nsPlugin.perform(sel)
+    }
+
+    private func runtimeLanguageSelection(
+        for languageSelection: LanguageSelection,
+        plugin: TranscriptionEnginePlugin
+    ) -> PluginLanguageSelection {
+        if case .hints(let requestedCodes) = languageSelection,
+           requestedCodes.count > 1,
+           !pluginSupportsLanguageHints(plugin) {
+            return PluginLanguageSelection()
+        }
+
+        let normalizedSelection = languageSelection.normalizedForSupportedLanguages(plugin.supportedLanguages)
+        switch normalizedSelection {
+        case .exact(let code):
+            return PluginLanguageSelection(requestedLanguage: code)
+        case .hints(let codes):
+            return PluginLanguageSelection(languageHints: codes)
+        case .inheritGlobal, .auto:
+            return PluginLanguageSelection()
+        }
+    }
+
+    private func pluginSupportsLanguageHints(_ plugin: TranscriptionEnginePlugin) -> Bool {
+        plugin is LanguageHintTranscriptionEnginePlugin || plugin is LiveLanguageHintTranscriptionCapablePlugin
+    }
+
+    private func transcribeWithResolvedLanguageSelection(
+        plugin: TranscriptionEnginePlugin,
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        task: TranscriptionTask,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        if !languageSelection.languageHints.isEmpty,
+           let hintPlugin = plugin as? LanguageHintTranscriptionEnginePlugin {
+            return try await hintPlugin.transcribe(
+                audio: audio,
+                languageSelection: languageSelection,
+                translate: task == .translate,
+                prompt: prompt
+            )
+        }
+
+        return try await plugin.transcribe(
+            audio: audio,
+            language: languageSelection.requestedLanguage,
+            translate: task == .translate,
+            prompt: prompt
+        )
+    }
+
+    private func transcribeWithResolvedLanguageSelection(
+        plugin: TranscriptionEnginePlugin,
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        task: TranscriptionTask,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        if !languageSelection.languageHints.isEmpty,
+           let hintPlugin = plugin as? LanguageHintTranscriptionEnginePlugin {
+            return try await hintPlugin.transcribe(
+                audio: audio,
+                languageSelection: languageSelection,
+                translate: task == .translate,
+                prompt: prompt,
+                onProgress: onProgress
+            )
+        }
+
+        if plugin.supportsStreaming {
+            return try await plugin.transcribe(
+                audio: audio,
+                language: languageSelection.requestedLanguage,
+                translate: task == .translate,
+                prompt: prompt,
+                onProgress: onProgress
+            )
+        }
+
+        let result = try await plugin.transcribe(
+            audio: audio,
+            language: languageSelection.requestedLanguage,
+            translate: task == .translate,
+            prompt: prompt
+        )
+        let _ = onProgress(result.text)
+        return result
     }
 
     /// Trigger model restore via ObjC dispatch (avoids Swift protocol witness table issues

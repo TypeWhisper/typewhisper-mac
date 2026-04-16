@@ -234,6 +234,11 @@ curl http://localhost:8978/v1/status
 curl -X POST http://localhost:8978/v1/transcribe \
   -F "file=@recording.wav" \
   -F "language=en"
+
+curl -X POST http://localhost:8978/v1/transcribe \
+  -F "file=@recording.wav" \
+  -F "language_hint=de" \
+  -F "language_hint=en"
 ```
 
 ```json
@@ -248,7 +253,8 @@ curl -X POST http://localhost:8978/v1/transcribe \
 ```
 
 Optional parameters:
-- `language` - ISO 639-1 code (e.g., `en`, `de`). Omit for auto-detection.
+- `language` - ISO 639-1 code (e.g., `en`, `de`). Omit for full auto-detection.
+- `language_hint` - Repeatable language hint for restricted auto-detection. Do not combine with `language`.
 - `task` - `transcribe` (default) or `translate` (translates to English, WhisperKit only).
 - `target_language` - ISO 639-1 code for translation target language (e.g., `es`, `fr`). Uses Apple Translate.
 
@@ -329,6 +335,7 @@ typewhisper transcribe file.wav # Transcribe an audio file
 | `--port <N>` | Server port (default: auto-detect) |
 | `--json` | Output as JSON |
 | `--language <code>` | Source language (e.g. `en`, `de`) |
+| `--language-hint <code>` | Repeatable language hint for restricted auto-detection |
 | `--task <task>` | `transcribe` (default) or `translate` |
 | `--translate-to <code>` | Target language for translation |
 
@@ -337,6 +344,9 @@ typewhisper transcribe file.wav # Transcribe an audio file
 ```bash
 # Transcribe with language and JSON output
 typewhisper transcribe recording.wav --language de --json
+
+# Restrict auto-detection to a shortlist
+typewhisper transcribe recording.wav --language-hint de --language-hint en
 
 # Pipe audio from stdin
 cat audio.wav | typewhisper transcribe -
@@ -357,7 +367,7 @@ Rules let you configure transcription settings per application or website. For e
 - **github.com** - English language (matches in any browser)
 - **docs.google.com** - German language, translate to English
 
-Create rules in Settings > Regeln. Assign apps and/or URL patterns, set language/task/engine overrides, assign a custom prompt for automatic post-processing, optionally configure a manual rule shortcut, enable auto-submit (automatically sends text in chat apps), and adjust priority. URL patterns support subdomain matching - e.g. `google.com` also matches `docs.google.com`. The domain autocomplete suggests domains from your transcription history.
+Create rules in Settings > Regeln. Assign apps and/or URL patterns, set language/task/engine overrides, assign a custom prompt for automatic post-processing, optionally configure a manual rule shortcut, enable auto-submit (automatically sends text in chat apps), and adjust priority. Spoken language can be left on full auto-detect, fixed to one exact language, or restricted to a shortlist of likely languages for better detection accuracy. URL patterns support subdomain matching - e.g. `google.com` also matches `docs.google.com`. The domain autocomplete suggests domains from your transcription history.
 
 When you start dictating, TypeWhisper matches the active app and browser URL against your rules with the following priority:
 1. **App + URL match** - highest specificity (e.g. Chrome + github.com)
