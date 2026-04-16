@@ -685,18 +685,25 @@
     {
       "id": "com.typewhisper.cloudflare-asr",
       "name": "Cloudflare ASR",
-      "version": "1.0.0",
+      "version": "1.0.2",
       "minHostVersion": "0.9.0",
       "author": "yunluyl",
       "description": "OpenAI-compatible transcription through a Cloudflare tunnel with service token authentication. Credentials stored in macOS Keychain.",
       "descriptions": {},
       "category": "transcription",
-      "size": 193067,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cloudflare-asr-v1.0.0/CloudflareASRPlugin.zip",
+      "size": 193591,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cloudflare-asr-v1.0.2/CloudflareASRPlugin.zip",
       "minOSVersion": "14.0",
       "iconSystemName": "shield.lefthalf.filled",
       "downloadCount": 85,
       "releases": [
+        {
+          "version": "1.0.2",
+          "minHostVersion": "0.9.0",
+          "size": 193591,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cloudflare-asr-v1.0.2/CloudflareASRPlugin.zip",
+          "minOSVersion": "14.0"
+        },
         {
           "version": "1.0.1",
           "minHostVersion": "0.9.0",
