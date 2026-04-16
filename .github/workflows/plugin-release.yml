@@ -235,7 +235,7 @@ jobs:
             git reset --hard origin/gh-pages
 
             python3 << PYEOF
-          import json, sys, os
+          import json, os, re, sys, tempfile
 
           with open("/tmp/gh-pages/plugins.json", "r") as f:
               registry = json.load(f)
@@ -255,8 +255,25 @@ jobs:
 
           registry["schemaVersion"] = max(int(registry.get("schemaVersion", 1)), 2)
 
+          # Semver-tolerant version sort key. Accepts "1.2.3", "1.2.3-beta.4",
+          # "1.2.3+build.5" etc. Pre-release tags sort before matching release
+          # versions (1.2.3-rc < 1.2.3). See release review M8.
+          _numeric_part = re.compile(r"(\d+)")
           def version_key(value):
-              return tuple(int(part) for part in value.split("."))
+              core, _, pre = str(value).partition("-")
+              core = core.split("+", 1)[0]
+              core_tuple = tuple(int(p) if p.isdigit() else 0 for p in core.split("."))
+              if not pre:
+                  # No pre-release: rank higher than any pre-release of same core.
+                  return (core_tuple, 1, ())
+              # Pre-release: split tokens; numeric tokens sort before alpha.
+              pre_tokens = []
+              for token in pre.replace("+", ".").split("."):
+                  if token.isdigit():
+                      pre_tokens.append((0, int(token)))
+                  else:
+                      pre_tokens.append((1, token))
+              return (core_tuple, 0, tuple(pre_tokens))
 
           def sync_plugin_metadata(plugin):
               plugin["id"] = manifest["id"]
@@ -340,9 +357,26 @@ jobs:
               registry["plugins"].append(new_entry)
               print(f"Added new plugin {manifest['id']} v{version}")
 
-          with open("/tmp/gh-pages/plugins.json", "w") as f:
-              json.dump(registry, f, indent=2)
-              f.write("\n")
+          # Atomic write: write to a temp file in the same directory, fsync,
+          # then rename into place. Prevents a half-written plugins.json from
+          # ending up on gh-pages if the job is killed mid-write and keeps
+          # concurrent readers consistent. See release review M7.
+          target_path = "/tmp/gh-pages/plugins.json"
+          target_dir = os.path.dirname(target_path)
+          fd, tmp_path = tempfile.mkstemp(prefix="plugins.json.", dir=target_dir)
+          try:
+              with os.fdopen(fd, "w") as f:
+                  json.dump(registry, f, indent=2)
+                  f.write("\n")
+                  f.flush()
+                  os.fsync(f.fileno())
+              os.replace(tmp_path, target_path)
+          except Exception:
+              try:
+                  os.unlink(tmp_path)
+              except OSError:
+                  pass
+              raise
           PYEOF
 
             git add plugins.json

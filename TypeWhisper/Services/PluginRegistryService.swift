@@ -254,6 +254,48 @@ struct PluginRegistryResponse: Decodable {
     let schemaVersion: Int
     let plugins: [RegistryPluginEntry]
 
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case plugins
+    }
+
+    init(schemaVersion: Int, plugins: [RegistryPluginEntry]) {
+        self.schemaVersion = schemaVersion
+        self.plugins = plugins
+    }
+
+    /// Decodes the registry tolerantly: a single malformed plugin entry is
+    /// logged and skipped instead of aborting the entire fetch. Without this,
+    /// one bad entry on the gh-pages `plugins.json` would empty the marketplace
+    /// for every installed app until a fix is deployed (release review K4).
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+
+        var pluginsContainer = try container.nestedUnkeyedContainer(forKey: .plugins)
+        var collected: [RegistryPluginEntry] = []
+        if let count = pluginsContainer.count {
+            collected.reserveCapacity(count)
+        }
+
+        var index = 0
+        while !pluginsContainer.isAtEnd {
+            do {
+                let entry = try pluginsContainer.decode(RegistryPluginEntry.self)
+                collected.append(entry)
+            } catch {
+                // Advance past the malformed element so decoding can continue.
+                // JSONDecoder advances the cursor on a thrown decode, but we
+                // defend against that assumption with an explicit skip decode.
+                _ = try? pluginsContainer.decode(AnyDecodableSkip.self)
+                logger.error("Skipping malformed plugin entry at index \(index): \(error.localizedDescription)")
+            }
+            index += 1
+        }
+
+        self.plugins = collected
+    }
+
     func resolvedPlugins(
         appVersion: String,
         currentOSVersion: OperatingSystemVersion = ProcessInfo.processInfo.operatingSystemVersion,
@@ -266,6 +308,13 @@ struct PluginRegistryResponse: Decodable {
                 architecture: architecture
             )
         }
+    }
+}
+
+/// Placeholder used to skip a malformed element in an unkeyed container.
+private struct AnyDecodableSkip: Decodable {
+    init(from decoder: Decoder) throws {
+        _ = try? decoder.singleValueContainer()
     }
 }
 

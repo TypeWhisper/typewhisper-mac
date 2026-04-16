@@ -30,7 +30,7 @@ jobs:
             git reset --hard origin/gh-pages
 
             python3 << 'PYEOF'
-          import json, re
+          import json, os, re, tempfile
 
           with open("/tmp/releases.json") as f:
               releases = json.load(f)
@@ -77,9 +77,25 @@ jobs:
                       break
 
           if changed:
-              with open("/tmp/gh-pages/plugins.json", "w") as f:
-                  json.dump(registry, f, indent=2)
-                  f.write("\n")
+              # Atomic write: temp file + fsync + rename. Prevents a
+              # half-written plugins.json from reaching gh-pages if the
+              # job is killed mid-write. See release review M7.
+              target_path = "/tmp/gh-pages/plugins.json"
+              target_dir = os.path.dirname(target_path)
+              fd, tmp_path = tempfile.mkstemp(prefix="plugins.json.", dir=target_dir)
+              try:
+                  with os.fdopen(fd, "w") as f:
+                      json.dump(registry, f, indent=2)
+                      f.write("\n")
+                      f.flush()
+                      os.fsync(f.fileno())
+                  os.replace(tmp_path, target_path)
+              except Exception:
+                  try:
+                      os.unlink(tmp_path)
+                  except OSError:
+                      pass
+                  raise
               print("plugins.json updated")
           else:
               print("No changes needed")

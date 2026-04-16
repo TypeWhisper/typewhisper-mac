@@ -10,7 +10,23 @@ enum AudioEngineRecoveryAction: Equatable {
 
 enum AudioEngineRecoveryPolicy {
     static let configurationDebounce: TimeInterval = 0.15
+
+    /// Backoff schedule used by the asynchronous observer-based recovery path,
+    /// which runs on a dedicated dispatch queue. Blocking sleeps here are
+    /// safe because they do not stall the main thread.
     static let retryBackoff: [TimeInterval] = [0.15, 0.30, 0.50]
+
+    /// Bounded backoff used when the retry loop executes on the main thread
+    /// (e.g. from `AudioRecordingService.startRecording()` or the selected
+    /// input device validation). A single short wait keeps UI responsive;
+    /// longer recovery is delegated to the observer path on the recovery
+    /// queue. See release review M1.
+    static let mainThreadRetryBackoff: [TimeInterval] = [0.05]
+
+    /// Returns the appropriate backoff schedule for the current thread.
+    static func retryBackoffForCurrentThread() -> [TimeInterval] {
+        Thread.isMainThread ? mainThreadRetryBackoff : retryBackoff
+    }
 
     private static let retryableOSStatusCodes: Set<OSStatus> = [
         kAudioUnitErr_FormatNotSupported,

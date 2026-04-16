@@ -162,6 +162,18 @@ final class DictationViewModel: ObservableObject {
     private var insertingResetTask: Task<Void, Never>?
     private var urlResolutionTask: Task<Void, Never>?
     private var metadataCaptureTask: Task<Void, Never>?
+    /// Snapshot of the streaming params used in the most recent `streamingHandler.start(...)`.
+    /// Used to detect when an on-the-fly rule refinement (e.g. browser URL resolution)
+    /// changes the effective engine/language/task/cloud-model so the live session can be
+    /// restarted and stay consistent with the final transcription (release review K3).
+    private struct StreamingParamsSnapshot: Equatable {
+        let engineOverrideId: String?
+        let providerId: String?
+        let language: String?
+        let task: TranscriptionTask
+        let cloudModelOverride: String?
+    }
+    private var lastStreamingParams: StreamingParamsSnapshot?
     private var isStopInFlight = false
     private var activeDictationSessionID: UUID?
     private var dictationSessions: [UUID: DictationSessionSnapshot] = [:]
@@ -591,15 +603,7 @@ final class DictationViewModel: ObservableObject {
             isStopInFlight = false
             recordingStartTime = Date()
             startRecordingTimer()
-            streamingHandler.start(
-                engineOverrideId: effectiveEngineOverrideId,
-                selectedProviderId: modelManager.selectedProviderId,
-                language: effectiveLanguage,
-                task: effectiveTask,
-                cloudModelOverride: effectiveCloudModelOverride,
-                allowLiveTranscription: indicatorTranscriptPreviewEnabled || externalStreamingDisplayCount > 0,
-                stateCheck: { [weak self] in self?.state == .recording }
-            )
+            startLiveStreaming(allowLiveTranscription: indicatorTranscriptPreviewEnabled || externalStreamingDisplayCount > 0)
             EventBus.shared.emit(.recordingStarted(RecordingStartedPayload(
                 appName: capturedActiveApp?.name,
                 bundleIdentifier: capturedActiveApp?.bundleId
@@ -615,6 +619,7 @@ final class DictationViewModel: ObservableObject {
             metadataCaptureTask = nil
             urlResolutionTask?.cancel()
             urlResolutionTask = nil
+            lastStreamingParams = nil
             audioDuckingService.restoreAudio()
             mediaPlaybackService.resumeIfWePaused()
             let errorMessage: String
@@ -694,6 +699,7 @@ final class DictationViewModel: ObservableObject {
 
             logger.info("URL resolution: matched rule '\(refinedRule.profile.name)'")
             applyRuleMatch(refinedRule, activeApp: capturedActiveApp)
+            refreshLiveStreamingIfParamsChanged()
         }
     }
 
@@ -757,6 +763,7 @@ final class DictationViewModel: ObservableObject {
         audioDuckingService.restoreAudio()
         mediaPlaybackService.resumeIfWePaused()
         let liveSessionResult = await streamingHandler.finish()
+        lastStreamingParams = nil
         stopRecordingTimer()
         let previewText = partialText.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasPreviewText = !previewText.isEmpty
@@ -1035,6 +1042,7 @@ final class DictationViewModel: ObservableObject {
         urlResolutionTask = nil
         metadataCaptureTask?.cancel()
         metadataCaptureTask = nil
+        lastStreamingParams = nil
         isStopInFlight = false
         activeDictationSessionID = nil
         state = .idle
@@ -1060,6 +1068,49 @@ final class DictationViewModel: ObservableObject {
         activeRuleName = match?.profile.name
         activeRuleReasonLabel = match?.kind.label
         activeRuleExplanation = match.map { ruleExplanation(for: $0, activeApp: activeApp) }
+    }
+
+    /// Starts the live streaming handler with the currently effective profile params
+    /// and records a snapshot for later change detection (release review K3).
+    private func startLiveStreaming(allowLiveTranscription: Bool) {
+        let params = StreamingParamsSnapshot(
+            engineOverrideId: effectiveEngineOverrideId,
+            providerId: modelManager.selectedProviderId,
+            language: effectiveLanguage,
+            task: effectiveTask,
+            cloudModelOverride: effectiveCloudModelOverride
+        )
+        lastStreamingParams = allowLiveTranscription ? params : nil
+        streamingHandler.start(
+            engineOverrideId: params.engineOverrideId,
+            selectedProviderId: params.providerId,
+            language: params.language,
+            task: params.task,
+            cloudModelOverride: params.cloudModelOverride,
+            allowLiveTranscription: allowLiveTranscription,
+            stateCheck: { [weak self] in self?.state == .recording }
+        )
+    }
+
+    /// Restart live streaming if the currently effective params differ from the ones
+    /// used when `streamingHandler.start(...)` was last called. Called after URL
+    /// resolution refines the rule, to keep live preview consistent with the final
+    /// transcription. No-op when recording already stopped, when live streaming was
+    /// disabled, or when no meaningful param changed.
+    private func refreshLiveStreamingIfParamsChanged() {
+        guard state == .recording else { return }
+        guard let previous = lastStreamingParams else { return }
+        let newParams = StreamingParamsSnapshot(
+            engineOverrideId: effectiveEngineOverrideId,
+            providerId: modelManager.selectedProviderId,
+            language: effectiveLanguage,
+            task: effectiveTask,
+            cloudModelOverride: effectiveCloudModelOverride
+        )
+        guard newParams != previous else { return }
+        logger.info("Streaming params changed after URL resolution, restarting live session")
+        let allowLive = indicatorTranscriptPreviewEnabled || externalStreamingDisplayCount > 0
+        startLiveStreaming(allowLiveTranscription: allowLive)
     }
 
     private func clearActiveRuleState() {

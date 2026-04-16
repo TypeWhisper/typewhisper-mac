@@ -320,7 +320,10 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         preferredDeviceID: AudioDeviceID?,
         label: String
     ) throws {
-        for (attempt, delay) in AudioEngineRecoveryPolicy.retryBackoff.enumerated() {
+        // Main-thread callers get a bounded backoff to keep UI responsive; the
+        // observer path uses the full schedule. See M1 in the release review.
+        let backoff = AudioEngineRecoveryPolicy.retryBackoffForCurrentThread()
+        for (attempt, delay) in backoff.enumerated() {
             do {
                 try configureAndStartPreviewEngine(engine, preferredDeviceID: preferredDeviceID, label: label)
                 return
@@ -372,8 +375,23 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         logger.info("\(label, privacy: .public) input format: sampleRate=\(format.sampleRate), channels=\(format.channelCount)")
         try validateInputFormat(format, for: preferredDeviceID)
 
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
-            self?.processPreviewBuffer(buffer)
+        // Wrap installTap so NSException (e.g. AVAudioSession incompatible format)
+        // is converted into a Swift error instead of crashing the app. See K2.
+        do {
+            _ = try ObjCExceptionCatcher.catching {
+                inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+                    self?.processPreviewBuffer(buffer)
+                }
+            }
+        } catch {
+            let tapError = error as NSError? ?? NSError(
+                domain: AudioEngineRecoveryErrorDomains.avfException,
+                code: 0,
+                userInfo: [NSLocalizedDescriptionKey: "installTap raised NSException"]
+            )
+            let exceptionName = tapError.userInfo[AudioEngineRecoveryErrorUserInfoKeys.exceptionName] as? String ?? "NSException"
+            logger.error("\(label, privacy: .public) preview installTap raised \(exceptionName, privacy: .public): \(tapError.localizedDescription, privacy: .public)")
+            throw tapError
         }
 
         do {
@@ -697,21 +715,42 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
 
+        // Single cleanup path guarded by a flag to avoid the double-teardown that
+        // used to happen when engine.start() threw after the defer was already armed
+        // (release review K1). Tap installation is also wrapped in
+        // ObjCExceptionCatcher so NSException crashes on incompatible devices are
+        // converted into throws (K2).
+        var tapInstalled = false
+        defer {
+            if tapInstalled {
+                inputNode.removeTap(onBus: 0)
+            }
+            engine.stop()
+        }
+
         do {
             try configureExplicitInputDevice(deviceID, on: engine, label: "selection")
             let format = inputNode.outputFormat(forBus: 0)
             try validateInputFormat(format, for: deviceID)
-            inputNode.installTap(onBus: 0, bufferSize: 256, format: format) { _, _ in }
-            defer {
-                inputNode.removeTap(onBus: 0)
-                engine.stop()
+            do {
+                _ = try ObjCExceptionCatcher.catching {
+                    inputNode.installTap(onBus: 0, bufferSize: 256, format: format) { _, _ in }
+                }
+                tapInstalled = true
+            } catch {
+                let tapError = error as NSError? ?? NSError(
+                    domain: AudioEngineRecoveryErrorDomains.avfException,
+                    code: 0,
+                    userInfo: [NSLocalizedDescriptionKey: "installTap raised NSException"]
+                )
+                let exceptionName = tapError.userInfo[AudioEngineRecoveryErrorUserInfoKeys.exceptionName] as? String ?? "NSException"
+                logger.error("selection installTap raised \(exceptionName, privacy: .public): \(tapError.localizedDescription, privacy: .public)")
+                throw SelectedInputDeviceError.incompatible(.engineStartFailed)
             }
             try engine.start()
         } catch let error as SelectedInputDeviceError {
             throw error
         } catch {
-            inputNode.removeTap(onBus: 0)
-            engine.stop()
             throw SelectedInputDeviceError.incompatible(.engineStartFailed)
         }
     }
