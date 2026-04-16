@@ -345,7 +345,7 @@ let result = try await helper.process(
 ```
 
 You can override or omit the output-token parameter for providers that do not use the
-default `max_tokens` field:
+default `max_tokens` field, and optionally control whether `temperature` is sent:
 
 ```swift
 let result = try await helper.process(
@@ -355,6 +355,21 @@ let result = try await helper.process(
     userText: inputText,
     maxOutputTokens: 4096,
     maxOutputTokenParameter: "max_completion_tokens"
+)
+```
+
+For GPT-5 chat-completions requests with reasoning enabled, omit `temperature` entirely:
+
+```swift
+let result = try await helper.process(
+    apiKey: apiKey,
+    model: "gpt-5.4",
+    systemPrompt: "Fix grammar",
+    userText: inputText,
+    maxOutputTokens: 4096,
+    maxOutputTokenParameter: "max_completion_tokens",
+    reasoningEffort: "medium",
+    temperature: nil
 )
 ```
 

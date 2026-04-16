@@ -642,6 +642,7 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
 
     func process(systemPrompt: String, userText: String, model: String?) async throws -> String {
         let modelId = model ?? _selectedLLMModelId ?? supportedModels.first!.id
+        let reasoningEffort = Self.supportsReasoningEffort(for: modelId) ? _reasoningEffort.rawValue : nil
 
         switch _authMode {
         case .apiKey:
@@ -654,7 +655,8 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
                 systemPrompt: systemPrompt,
                 userText: userText,
                 maxOutputTokenParameter: Self.outputTokenParameter(for: modelId),
-                reasoningEffort: Self.supportsReasoningEffort(for: modelId) ? _reasoningEffort.rawValue : nil
+                reasoningEffort: reasoningEffort,
+                temperature: Self.chatCompletionTemperature(for: modelId, reasoningEffort: reasoningEffort)
             )
         case .chatGPT:
             return try await processWithChatGPT(systemPrompt: systemPrompt, userText: userText, model: modelId)
@@ -1094,6 +1096,14 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
             || lowered.hasPrefix("o3")
             || lowered.hasPrefix("o4")
             || lowered.contains("codex")
+    }
+
+    nonisolated static func chatCompletionTemperature(for modelID: String, reasoningEffort: String?) -> Double? {
+        let lowered = modelID.lowercased()
+        if lowered.hasPrefix("gpt-5"), reasoningEffort?.isEmpty == false {
+            return nil
+        }
+        return 0.3
     }
 }
 
