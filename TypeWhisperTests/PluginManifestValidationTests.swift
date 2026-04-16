@@ -279,4 +279,12 @@ final class OpenAIPluginTokenParameterTests: XCTestCase {
     func testO4ModelsUseMaxCompletionTokens() {
         XCTAssertEqual(OpenAIPlugin.outputTokenParameter(for: "o4-mini"), "max_completion_tokens")
     }
+
+    func testGPT5ChatCompletionsOmitTemperatureWhenReasoningIsEnabled() {
+        XCTAssertNil(OpenAIPlugin.chatCompletionTemperature(for: "gpt-5.4", reasoningEffort: "medium"))
+    }
+
+    func testLegacyChatCompletionsKeepTemperature() {
+        XCTAssertEqual(OpenAIPlugin.chatCompletionTemperature(for: "gpt-4o", reasoningEffort: nil), 0.3)
+    }
 }

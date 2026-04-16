@@ -11,11 +11,13 @@ final class OpenAIChatHelperTests: XCTestCase {
             userText: "hello world",
             maxOutputTokens: 4096,
             maxOutputTokenParameter: "max_tokens",
-            reasoningEffort: nil
+            reasoningEffort: nil,
+            temperature: 0.3
         )
 
         XCTAssertEqual(requestBody["model"] as? String, "gpt-4o")
         XCTAssertEqual(requestBody["max_tokens"] as? Int, 4096)
+        XCTAssertEqual(requestBody["temperature"] as? Double, 0.3)
         XCTAssertNil(requestBody["max_completion_tokens"])
     }
 
@@ -28,7 +30,8 @@ final class OpenAIChatHelperTests: XCTestCase {
             userText: "hello world",
             maxOutputTokens: 4096,
             maxOutputTokenParameter: "max_completion_tokens",
-            reasoningEffort: nil
+            reasoningEffort: nil,
+            temperature: 0.3
         )
 
         XCTAssertEqual(requestBody["max_completion_tokens"] as? Int, 4096)
@@ -44,7 +47,8 @@ final class OpenAIChatHelperTests: XCTestCase {
             userText: "hello world",
             maxOutputTokens: nil,
             maxOutputTokenParameter: "max_completion_tokens",
-            reasoningEffort: nil
+            reasoningEffort: nil,
+            temperature: 0.3
         )
 
         XCTAssertNil(requestBody["max_tokens"])
@@ -60,9 +64,26 @@ final class OpenAIChatHelperTests: XCTestCase {
             userText: "hello world",
             maxOutputTokens: 4096,
             maxOutputTokenParameter: "max_completion_tokens",
-            reasoningEffort: "high"
+            reasoningEffort: "high",
+            temperature: 0.3
         )
 
         XCTAssertEqual(requestBody["reasoning_effort"] as? String, "high")
+    }
+
+    func testRequestBodyOmitsTemperatureWhenRequested() {
+        let helper = PluginOpenAIChatHelper(baseURL: "https://example.com")
+
+        let requestBody = helper.requestBody(
+            model: "gpt-5.4",
+            systemPrompt: "Fix grammar",
+            userText: "hello world",
+            maxOutputTokens: 4096,
+            maxOutputTokenParameter: "max_completion_tokens",
+            reasoningEffort: "high",
+            temperature: nil
+        )
+
+        XCTAssertNil(requestBody["temperature"])
     }
 }
