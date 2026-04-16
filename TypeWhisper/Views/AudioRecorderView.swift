@@ -189,14 +189,21 @@ struct AudioRecorderView: View {
                         }
                     }
 
-                    // Language picker
-                    Picker(String(localized: "recorder.language"), selection: $viewModel.selectedLanguage) {
-                        Text(String(localized: "Auto-detect")).tag(nil as String?)
-                        Divider()
-                        ForEach(SettingsViewModel.shared.availableLanguages, id: \.code) { lang in
-                            Text(lang.name).tag(lang.code as String?)
+                    let languageOptions: [(code: String, name: String)] = {
+                        guard let providerId = selectedProvider,
+                              let engine = pluginManager.transcriptionEngine(for: providerId),
+                              !engine.supportedLanguages.isEmpty else {
+                            return SettingsViewModel.shared.availableLanguages
                         }
-                    }
+                        return engine.supportedLanguages
+                            .map { ($0, Locale.current.localizedString(forIdentifier: $0) ?? $0) }
+                            .sorted { $0.1.localizedCaseInsensitiveCompare($1.1) == .orderedAscending }
+                    }()
+
+                    LanguageSelectionEditor(
+                        selection: $viewModel.languageSelection,
+                        availableLanguages: languageOptions
+                    )
                     .disabled(isEditingLocked)
 
                     // Task picker (transcribe/translate)

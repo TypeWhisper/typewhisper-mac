@@ -27,8 +27,135 @@ func localizedAppLanguageName(for code: String) -> String {
     return locale.localizedString(forIdentifier: code) ?? code
 }
 
+func localizedAppLanguageFlag(for code: String) -> String? {
+    guard code != "auto" else { return nil }
+
+    let components = NSLocale.components(fromLocaleIdentifier: code)
+    let regionKey = NSLocale.Key.countryCode.rawValue
+    let scriptKey = NSLocale.Key.scriptCode.rawValue
+    let languageKey = NSLocale.Key.languageCode.rawValue
+
+    if let region = components[regionKey]?.uppercased(),
+       region.count == 2 {
+        return emojiFlag(forRegionCode: region)
+    }
+
+    // Script-only variants like zh-Hans / zh-Hant should not get a country flag.
+    if components[scriptKey] != nil {
+        return nil
+    }
+
+    guard let languageCode = components[languageKey]?.lowercased() else {
+        return nil
+    }
+
+    let inferredRegionByLanguage = [
+        "ar": "SA",
+        "cs": "CZ",
+        "da": "DK",
+        "de": "DE",
+        "en": "US",
+        "el": "GR",
+        "es": "ES",
+        "fi": "FI",
+        "fr": "FR",
+        "he": "IL",
+        "hi": "IN",
+        "hu": "HU",
+        "id": "ID",
+        "it": "IT",
+        "ja": "JP",
+        "ko": "KR",
+        "nl": "NL",
+        "no": "NO",
+        "pl": "PL",
+        "ro": "RO",
+        "ru": "RU",
+        "sv": "SE",
+        "th": "TH",
+        "tr": "TR",
+        "uk": "UA",
+        "vi": "VN",
+        "zh": "CN"
+    ]
+
+    guard let inferredRegion = inferredRegionByLanguage[languageCode] else {
+        return nil
+    }
+
+    return emojiFlag(forRegionCode: inferredRegion)
+}
+
+func localizedAppLanguageBadgeText(for code: String) -> String {
+    let components = NSLocale.components(fromLocaleIdentifier: code)
+    let languageKey = NSLocale.Key.languageCode.rawValue
+    guard let languageCode = components[languageKey], !languageCode.isEmpty else {
+        return code.uppercased()
+    }
+
+    if code.contains("-") {
+        return code.uppercased()
+    }
+
+    return languageCode.uppercased()
+}
+
+private func emojiFlag(forRegionCode regionCode: String) -> String? {
+    let normalized = regionCode.uppercased()
+    guard normalized.count == 2 else { return nil }
+
+    let base: UInt32 = 127397
+    var scalars = String.UnicodeScalarView()
+
+    for scalar in normalized.unicodeScalars {
+        guard let regionalIndicator = UnicodeScalar(base + scalar.value) else {
+            return nil
+        }
+        scalars.append(regionalIndicator)
+    }
+
+    return String(scalars)
+}
+
+func localizedAppLanguageNames(for codes: [String]) -> [String] {
+    codes.map(localizedAppLanguageName(for:))
+}
+
+func localizedAppLanguageList(_ codes: [String]) -> String {
+    let names = localizedAppLanguageNames(for: codes)
+    guard let first = names.first else { return "" }
+    if names.count == 1 { return first }
+    if names.count == 2 {
+        return "\(first)\(localizedAppOrSeparator())\(names[1])"
+    }
+    let allButLast = names.dropLast().joined(separator: ", ")
+    return "\(allButLast),\(localizedAppText(" and ", de: " und "))\(names[names.count - 1])"
+}
+
 func localizedAppOrSeparator() -> String {
     localizedAppText(" or ", de: " oder ")
+}
+
+func featuredAppLanguageRank(for code: String) -> Int? {
+    let components = NSLocale.components(fromLocaleIdentifier: code)
+    let languageKey = NSLocale.Key.languageCode.rawValue
+    guard let languageCode = components[languageKey]?.lowercased() else {
+        return nil
+    }
+
+    let featuredLanguageOrder = [
+        "de",
+        "en",
+        "fr",
+        "es",
+        "zh",
+        "hi",
+        "ar",
+        "pt",
+        "ja"
+    ]
+
+    return featuredLanguageOrder.firstIndex(of: languageCode)
 }
 
 struct InstalledApp: Identifiable, Hashable {
@@ -496,9 +623,23 @@ final class ProfilesViewModel: ObservableObject {
             parts.append(localizedAppText("the prompt “\(action.name)”", de: "den Prompt „\(action.name)“"))
         }
 
-        if let lang = inputLanguage {
-            let languageName = localizedAppLanguageName(for: lang)
+        let languageSelection = LanguageSelection(storedValue: inputLanguage, nilBehavior: .inheritGlobal)
+        switch languageSelection {
+        case .inheritGlobal:
+            break
+        case .auto:
+            parts.append(localizedAppText("with auto-detect", de: "mit automatischer Erkennung"))
+        case .exact(let code):
+            let languageName = localizedAppLanguageName(for: code)
             parts.append(localizedAppText("with \(languageName)", de: "mit \(languageName)"))
+        case .hints(let codes):
+            let languageList = localizedAppLanguageList(codes)
+            parts.append(
+                localizedAppText(
+                    "with auto-detect between \(languageList)",
+                    de: "mit automatischer Erkennung zwischen \(languageList)"
+                )
+            )
         }
 
         if translationEnabled == false {

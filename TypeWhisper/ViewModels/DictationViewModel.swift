@@ -164,12 +164,13 @@ final class DictationViewModel: ObservableObject {
     private var metadataCaptureTask: Task<Void, Never>?
     /// Snapshot of the streaming params used in the most recent `streamingHandler.start(...)`.
     /// Used to detect when an on-the-fly rule refinement (e.g. browser URL resolution)
-    /// changes the effective engine/language/task/cloud-model so the live session can be
-    /// restarted and stay consistent with the final transcription (release review K3).
+    /// changes the effective engine/language selection/task/cloud-model so the live
+    /// session can be restarted and stay consistent with the final transcription
+    /// (release review K3).
     private struct StreamingParamsSnapshot: Equatable {
         let engineOverrideId: String?
         let providerId: String?
-        let language: String?
+        let languageSelection: LanguageSelection
         let task: TranscriptionTask
         let cloudModelOverride: String?
     }
@@ -703,11 +704,21 @@ final class DictationViewModel: ObservableObject {
         }
     }
 
-    private var effectiveLanguage: String? {
+    private var effectiveLanguageSelection: LanguageSelection {
         if let profileLang = matchedProfile?.inputLanguage {
-            return profileLang == "auto" ? nil : profileLang
+            let profileSelection = LanguageSelection(
+                storedValue: profileLang,
+                nilBehavior: .inheritGlobal
+            )
+            if profileSelection != .inheritGlobal {
+                return profileSelection
+            }
         }
-        return settingsViewModel.selectedLanguage
+        return settingsViewModel.languageSelection
+    }
+
+    private var effectiveLanguage: String? {
+        effectiveLanguageSelection.requestedLanguage
     }
 
     private var effectiveTask: TranscriptionTask {
@@ -840,7 +851,8 @@ final class DictationViewModel: ObservableObject {
                 await urlResolutionTask?.value
 
                 let activeApp = capturedActiveApp ?? textInsertionService.captureActiveApp()
-                let language = effectiveLanguage
+                let languageSelection = effectiveLanguageSelection
+                let language = languageSelection.requestedLanguage
                 let task = effectiveTask
                 let engineOverride = effectiveEngineOverrideId
                 let cloudModelOverride = effectiveCloudModelOverride
@@ -852,7 +864,7 @@ final class DictationViewModel: ObservableObject {
                 } else {
                     try await modelManager.transcribe(
                         audioSamples: samples,
-                        language: language,
+                        languageSelection: languageSelection,
                         task: task,
                         engineOverrideId: engineOverride,
                         cloudModelOverride: cloudModelOverride,
@@ -1076,7 +1088,7 @@ final class DictationViewModel: ObservableObject {
         let params = StreamingParamsSnapshot(
             engineOverrideId: effectiveEngineOverrideId,
             providerId: modelManager.selectedProviderId,
-            language: effectiveLanguage,
+            languageSelection: effectiveLanguageSelection,
             task: effectiveTask,
             cloudModelOverride: effectiveCloudModelOverride
         )
@@ -1084,7 +1096,7 @@ final class DictationViewModel: ObservableObject {
         streamingHandler.start(
             engineOverrideId: params.engineOverrideId,
             selectedProviderId: params.providerId,
-            language: params.language,
+            languageSelection: params.languageSelection,
             task: params.task,
             cloudModelOverride: params.cloudModelOverride,
             allowLiveTranscription: allowLiveTranscription,
@@ -1103,7 +1115,7 @@ final class DictationViewModel: ObservableObject {
         let newParams = StreamingParamsSnapshot(
             engineOverrideId: effectiveEngineOverrideId,
             providerId: modelManager.selectedProviderId,
-            language: effectiveLanguage,
+            languageSelection: effectiveLanguageSelection,
             task: effectiveTask,
             cloudModelOverride: effectiveCloudModelOverride
         )

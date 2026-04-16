@@ -67,7 +67,7 @@ private actor TranscriptCollector {
 // MARK: - Plugin Entry Point
 
 @objc(SonioxPlugin)
-final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, @unchecked Sendable {
+final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.soniox"
     static let pluginName = "Soniox"
 
@@ -138,6 +138,31 @@ final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
         )
     }
 
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        guard let apiKey = _apiKey, !apiKey.isEmpty else {
+            throw PluginTranscriptionError.notConfigured
+        }
+
+        let effectiveHints = resolvedLanguageHints(
+            requestedLanguage: languageSelection.requestedLanguage,
+            languageHints: languageSelection.languageHints
+        )
+
+        return try await transcribeREST(
+            audio: audio,
+            language: languageSelection.requestedLanguage,
+            languageHints: effectiveHints,
+            translate: translate,
+            apiKey: apiKey,
+            prompt: prompt
+        )
+    }
+
     // MARK: - Transcription (WebSocket Streaming)
 
     func transcribe(
@@ -171,11 +196,55 @@ final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
         }
     }
 
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        guard let apiKey = _apiKey, !apiKey.isEmpty else {
+            throw PluginTranscriptionError.notConfigured
+        }
+        guard let modelId = _selectedModelId else {
+            throw PluginTranscriptionError.noModelSelected
+        }
+
+        let effectiveHints = resolvedLanguageHints(
+            requestedLanguage: languageSelection.requestedLanguage,
+            languageHints: languageSelection.languageHints
+        )
+
+        do {
+            return try await transcribeWebSocket(
+                audio: audio,
+                language: languageSelection.requestedLanguage,
+                languageHints: effectiveHints,
+                translate: translate,
+                modelId: modelId,
+                prompt: prompt,
+                apiKey: apiKey,
+                onProgress: onProgress
+            )
+        } catch {
+            logger.warning("WebSocket streaming failed, falling back to REST: \(error.localizedDescription)")
+            return try await transcribeREST(
+                audio: audio,
+                language: languageSelection.requestedLanguage,
+                languageHints: effectiveHints,
+                translate: translate,
+                apiKey: apiKey,
+                prompt: prompt
+            )
+        }
+    }
+
     // MARK: - WebSocket Implementation
 
     private func transcribeWebSocket(
         audio: AudioData,
         language: String?,
+        languageHints: [String] = [],
         translate: Bool,
         modelId: String,
         prompt: String?,
@@ -199,8 +268,9 @@ final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
             "enable_endpoint_detection": true,
         ]
 
-        if let language, !language.isEmpty {
-            config["language_hints"] = [language]
+        let effectiveHints = resolvedLanguageHints(requestedLanguage: language, languageHints: languageHints)
+        if !effectiveHints.isEmpty {
+            config["language_hints"] = effectiveHints
         }
 
         if translate {
@@ -333,6 +403,7 @@ final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
     private func transcribeREST(
         audio: AudioData,
         language: String?,
+        languageHints: [String] = [],
         translate: Bool,
         apiKey: String,
         prompt: String?
@@ -341,6 +412,7 @@ final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
         let transcriptionId = try await createTranscription(
             fileId: fileId,
             language: language,
+            languageHints: languageHints,
             translate: translate,
             apiKey: apiKey,
             prompt: prompt
@@ -396,6 +468,7 @@ final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
     private func createTranscription(
         fileId: String,
         language: String?,
+        languageHints: [String] = [],
         translate: Bool,
         apiKey: String,
         prompt: String?
@@ -409,8 +482,9 @@ final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
             "model": "stt-async-v4",
         ]
 
-        if let language, !language.isEmpty {
-            body["language_hints"] = [language]
+        let effectiveHints = resolvedLanguageHints(requestedLanguage: language, languageHints: languageHints)
+        if !effectiveHints.isEmpty {
+            body["language_hints"] = effectiveHints
         }
 
         if translate {
@@ -457,6 +531,16 @@ final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
         let terms = PluginDictionaryTerms.terms(fromPrompt: prompt)
         guard !terms.isEmpty else { return nil }
         return ["terms": terms]
+    }
+
+    private func resolvedLanguageHints(requestedLanguage: String?, languageHints: [String]) -> [String] {
+        if !languageHints.isEmpty {
+            return languageHints
+        }
+        if let requestedLanguage, !requestedLanguage.isEmpty {
+            return [requestedLanguage]
+        }
+        return []
     }
 
     private func pollUntilCompleted(id: String, apiKey: String) async throws {
