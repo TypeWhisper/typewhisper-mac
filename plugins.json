@@ -1118,7 +1118,7 @@
     {
       "id": "com.typewhisper.cohere",
       "name": "Cohere",
-      "version": "1.0.0",
+      "version": "1.0.2",
       "minHostVersion": "0.12.0",
       "author": "TypeWhisper",
       "description": "Cloud transcription via Cohere Transcribe API. State-of-the-art accuracy across 14 languages. Requires API key.",
@@ -1126,13 +1126,20 @@
         "de": "Cloud-Transkription ueber die Cohere Transcribe API. Beste Genauigkeit fuer 14 Sprachen. Erfordert API-Key."
       },
       "category": "transcription",
-      "size": 102795,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cohere-v1.0.0/CoherePlugin.zip",
+      "size": 103271,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cohere-v1.0.2/CoherePlugin.zip",
       "minOSVersion": "14.0",
       "iconSystemName": "waveform.badge.mic",
       "requiresAPIKey": true,
       "downloadCount": 62,
       "releases": [
+        {
+          "version": "1.0.2",
+          "minHostVersion": "0.12.0",
+          "size": 103271,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cohere-v1.0.2/CoherePlugin.zip",
+          "minOSVersion": "14.0"
+        },
         {
           "version": "1.0.1",
           "minHostVersion": "0.12.0",
