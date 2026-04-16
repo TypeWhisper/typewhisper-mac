@@ -275,7 +275,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCap
     }
 
     private static func contextBiasString(from prompt: String?) -> String {
-        PluginDictionaryTerms.terms(fromPrompt: prompt).joined(separator: " ")
+        Qwen3ContextBiasFormatter.format(prompt: prompt)
     }
 
     private static func generate(
