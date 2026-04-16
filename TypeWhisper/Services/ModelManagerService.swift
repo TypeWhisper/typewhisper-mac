@@ -141,11 +141,13 @@ final class ModelManagerService: ObservableObject {
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else { return nil }
 
         if let modelId = cloudModelOverride,
-           let model = plugin.transcriptionModels.first(where: { $0.id == modelId }) {
+           let model = plugin.availableModels.first(where: { $0.id == modelId })
+            ?? plugin.transcriptionModels.first(where: { $0.id == modelId }) {
             return model.displayName
         }
         if let selectedId = plugin.selectedModelId,
-           let model = plugin.transcriptionModels.first(where: { $0.id == selectedId }) {
+           let model = plugin.availableModels.first(where: { $0.id == selectedId })
+            ?? plugin.transcriptionModels.first(where: { $0.id == selectedId }) {
             return model.displayName
         }
         return plugin.providerDisplayName

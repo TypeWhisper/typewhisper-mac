@@ -312,6 +312,8 @@ final class APIHandlers: @unchecked Sendable {
             let language_count: Int
             let status: String
             let selected: Bool
+            let downloaded: Bool?
+            let loaded: Bool?
         }
 
         let selectedProviderId = modelManager.selectedProviderId
@@ -319,7 +321,7 @@ final class APIHandlers: @unchecked Sendable {
 
         for engine in PluginManager.shared.transcriptionEngines {
             let isSelected = engine.providerId == selectedProviderId
-            for model in engine.transcriptionModels {
+            for model in engine.availableModels {
                 models.append(ModelEntry(
                     id: model.id,
                     engine: engine.providerId,
@@ -327,7 +329,9 @@ final class APIHandlers: @unchecked Sendable {
                     size_description: model.sizeDescription,
                     language_count: model.languageCount,
                     status: engine.isConfigured ? "ready" : "not_configured",
-                    selected: isSelected && engine.selectedModelId == model.id
+                    selected: isSelected && engine.selectedModelId == model.id,
+                    downloaded: model.downloaded,
+                    loaded: model.loaded
                 ))
             }
         }

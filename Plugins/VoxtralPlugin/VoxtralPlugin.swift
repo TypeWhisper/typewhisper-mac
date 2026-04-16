@@ -73,6 +73,17 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsC
             .map { PluginModelInfo(id: $0.id, displayName: $0.displayName) }
     }
 
+    var availableModels: [PluginModelInfo] {
+        Self.availableModels.map { def in
+            PluginModelInfo(
+                id: def.id,
+                displayName: def.displayName,
+                sizeDescription: def.sizeDescription,
+                loaded: def.id == loadedModelId
+            )
+        }
+    }
+
     var supportedLanguages: [String] {
         [
             "en", "fr", "es", "pt", "de", "nl", "it", "hi",

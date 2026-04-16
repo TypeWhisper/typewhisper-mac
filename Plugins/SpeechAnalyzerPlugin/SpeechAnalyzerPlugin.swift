@@ -59,6 +59,18 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Dict
             .map { PluginModelInfo(id: $0.id, displayName: $0.displayName, sizeDescription: "System-managed", languageCount: 1) }
     }
 
+    var availableModels: [PluginModelInfo] {
+        cachedModels.map { def in
+            PluginModelInfo(
+                id: def.id,
+                displayName: def.displayName,
+                sizeDescription: "System-managed",
+                languageCount: 1,
+                loaded: def.id == loadedModelId
+            )
+        }
+    }
+
     var selectedModelId: String? { loadedModelId }
 
     func selectModel(_ modelId: String) {

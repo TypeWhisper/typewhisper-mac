@@ -59,12 +59,25 @@ public final class PluginModelInfo: @unchecked Sendable {
     public let displayName: String
     public let sizeDescription: String
     public let languageCount: Int
+    /// Whether the model's weights are available locally (nil when the plugin does not report this).
+    public let downloaded: Bool?
+    /// Whether the model is currently loaded into memory (nil when the plugin does not report this).
+    public let loaded: Bool?
 
-    public init(id: String, displayName: String, sizeDescription: String = "", languageCount: Int = 0) {
+    public init(
+        id: String,
+        displayName: String,
+        sizeDescription: String = "",
+        languageCount: Int = 0,
+        downloaded: Bool? = nil,
+        loaded: Bool? = nil
+    ) {
         self.id = id
         self.displayName = displayName
         self.sizeDescription = sizeDescription
         self.languageCount = languageCount
+        self.downloaded = downloaded
+        self.loaded = loaded
     }
 }
 
@@ -283,6 +296,12 @@ public protocol TranscriptionEnginePlugin: TypeWhisperPlugin {
     var providerDisplayName: String { get }
     var isConfigured: Bool { get }
     var transcriptionModels: [PluginModelInfo] { get }
+    /// Full catalogue this engine can select from, including variants not currently
+    /// downloaded or loaded. Default implementation returns `transcriptionModels`, so
+    /// existing plugins keep their current behaviour. Plugins that hide un-loaded
+    /// variants from `transcriptionModels` (to keep the GUI model picker quiet) should
+    /// override this to surface the full catalogue to API consumers like /v1/models.
+    var availableModels: [PluginModelInfo] { get }
     var selectedModelId: String? { get }
     func selectModel(_ modelId: String)
     var supportsTranslation: Bool { get }
@@ -292,6 +311,10 @@ public protocol TranscriptionEnginePlugin: TypeWhisperPlugin {
     var supportedLanguages: [String] { get }
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?,
                     onProgress: @Sendable @escaping (String) -> Bool) async throws -> PluginTranscriptionResult
+}
+
+public extension TranscriptionEnginePlugin {
+    var availableModels: [PluginModelInfo] { transcriptionModels }
 }
 
 public protocol LiveTranscriptionCapablePlugin: TranscriptionEnginePlugin {

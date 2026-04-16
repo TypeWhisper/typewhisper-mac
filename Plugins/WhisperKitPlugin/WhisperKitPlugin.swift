@@ -50,6 +50,18 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
             .map { PluginModelInfo(id: $0.id, displayName: $0.displayName, sizeDescription: $0.sizeDescription, languageCount: 99) }
     }
 
+    var availableModels: [PluginModelInfo] {
+        Self.availableModels.map { def in
+            PluginModelInfo(
+                id: def.id,
+                displayName: def.displayName,
+                sizeDescription: def.sizeDescription,
+                languageCount: 99,
+                loaded: def.id == loadedModelId
+            )
+        }
+    }
+
     var selectedModelId: String? { _selectedModelId }
 
     func selectModel(_ modelId: String) {
