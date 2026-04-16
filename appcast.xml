@@ -5,21 +5,21 @@
     <language>en</language>
     <description>Stable, release candidate, and daily updates for TypeWhisper.</description>
     <item>
+      <title>Version 1.2.2-daily.20260416</title>
+      <pubDate>Thu, 16 Apr 2026 14:09:48 +0000</pubDate>
+      <sparkle:version>580</sparkle:version>
+      <sparkle:shortVersionString>1.2.2-daily.20260416</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:channel>daily</sparkle:channel>
+      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.2.2-daily.20260416/TypeWhisper-v1.2.2-daily.20260416.zip" sparkle:edSignature="Z3RS3UEpR+Vl68ZI0Va/+Wwl4i1oAY12zduyBFGrwuaxy0eJumWBCNBSVtOISjK7QLfGW9moofszhb5dRil6Cw==" length="10223396" type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.2.2</title>
       <pubDate>Tue, 14 Apr 2026 23:51:26 +0000</pubDate>
       <sparkle:version>555</sparkle:version>
       <sparkle:shortVersionString>1.2.2</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.2.2/TypeWhisper-v1.2.2.zip" sparkle:edSignature="8S+kxBFiPa7TQUuGRGtCRY6Vu7cnpyX43sx/8HvaxmP+9YqiSTB5Z1YrnwRP8yXaPkElk2Grz0SF+g1uLvImDg==" length="10008974" type="application/octet-stream" />
-    </item>
-    <item>
-      <title>Version 1.2.0-daily.20260414</title>
-      <pubDate>Tue, 14 Apr 2026 06:13:46 +0000</pubDate>
-      <sparkle:version>519</sparkle:version>
-      <sparkle:shortVersionString>1.2.0-daily.20260414</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:channel>daily</sparkle:channel>
-      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.2.0-daily.20260414/TypeWhisper-v1.2.0-daily.20260414.zip" sparkle:edSignature="i513SLqV0PX4pvfO8jvfB792eUOxU9iEWz/r9bhCSKeuzauLG4yIIm9Ix53caYmWxWuuIgMkxzZAyt/ObLhtBQ==" length="9576835" type="application/octet-stream" />
     </item>
     <item>
       <title>Version 1.2.0-rc5</title>
