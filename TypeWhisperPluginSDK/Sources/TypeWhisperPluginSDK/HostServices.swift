@@ -346,6 +346,28 @@ public struct PluginOpenAIChatHelper: Sendable {
         maxOutputTokenParameter: String = "max_tokens",
         reasoningEffort: String? = nil
     ) async throws -> String {
+        try await process(
+            apiKey: apiKey,
+            model: model,
+            systemPrompt: systemPrompt,
+            userText: userText,
+            maxOutputTokens: maxOutputTokens,
+            maxOutputTokenParameter: maxOutputTokenParameter,
+            reasoningEffort: reasoningEffort,
+            temperature: 0.3
+        )
+    }
+
+    public func process(
+        apiKey: String,
+        model: String,
+        systemPrompt: String,
+        userText: String,
+        maxOutputTokens: Int? = 4096,
+        maxOutputTokenParameter: String = "max_tokens",
+        reasoningEffort: String? = nil,
+        temperature: Double?
+    ) async throws -> String {
         let endpoint = "\(baseURL)\(chatEndpoint)"
         guard let url = URL(string: endpoint) else {
             throw PluginChatError.apiError("Invalid URL: \(endpoint)")
@@ -357,7 +379,8 @@ public struct PluginOpenAIChatHelper: Sendable {
             userText: userText,
             maxOutputTokens: maxOutputTokens,
             maxOutputTokenParameter: maxOutputTokenParameter,
-            reasoningEffort: reasoningEffort
+            reasoningEffort: reasoningEffort,
+            temperature: temperature
         )
 
         var request = URLRequest(url: url)
@@ -420,22 +443,47 @@ public struct PluginOpenAIChatHelper: Sendable {
         )
     }
 
+    public func process(
+        apiKey: String,
+        model: String,
+        systemPrompt: String,
+        userText: String,
+        maxOutputTokens: Int? = 4096,
+        maxOutputTokenParameter: String = "max_tokens",
+        temperature: Double?
+    ) async throws -> String {
+        try await process(
+            apiKey: apiKey,
+            model: model,
+            systemPrompt: systemPrompt,
+            userText: userText,
+            maxOutputTokens: maxOutputTokens,
+            maxOutputTokenParameter: maxOutputTokenParameter,
+            reasoningEffort: nil,
+            temperature: temperature
+        )
+    }
+
     func requestBody(
         model: String,
         systemPrompt: String,
         userText: String,
         maxOutputTokens: Int?,
         maxOutputTokenParameter: String,
-        reasoningEffort: String?
+        reasoningEffort: String?,
+        temperature: Double?
     ) -> [String: Any] {
         var requestBody: [String: Any] = [
             "model": model,
             "messages": [
                 ["role": "system", "content": systemPrompt],
                 ["role": "user", "content": userText]
-            ],
-            "temperature": 0.3
+            ]
         ]
+
+        if let temperature {
+            requestBody["temperature"] = temperature
+        }
 
         if let maxOutputTokens {
             requestBody[maxOutputTokenParameter] = maxOutputTokens
