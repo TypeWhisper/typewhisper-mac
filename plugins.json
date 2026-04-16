@@ -758,7 +758,7 @@
     {
       "id": "com.typewhisper.memory.file",
       "name": "File Memory",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "minHostVersion": "0.14.0",
       "author": "TypeWhisper",
       "description": "Store memories as local JSON files with text-based search. Fully offline, no API key required.",
@@ -766,10 +766,27 @@
         "de": "Speichert Erinnerungen als lokale JSON-Dateien mit textbasierter Suche. Komplett offline, kein API-Key noetig."
       },
       "category": "memory",
-      "size": 107195,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-file-memory-v1.0.0/FileMemoryPlugin.zip",
+      "size": 107206,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-file-memory-v1.0.1/FileMemoryPlugin.zip",
       "minOSVersion": "14.0",
-      "iconSystemName": "doc.text"
+      "iconSystemName": "doc.text",
+      "downloadCount": 0,
+      "releases": [
+        {
+          "version": "1.0.1",
+          "minHostVersion": "0.14.0",
+          "size": 107206,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-file-memory-v1.0.1/FileMemoryPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
+          "version": "1.0.0",
+          "minHostVersion": "0.14.0",
+          "size": 107195,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-file-memory-v1.0.0/FileMemoryPlugin.zip",
+          "minOSVersion": "14.0"
+        }
+      ]
     },
     {
       "id": "com.typewhisper.fireworks",
