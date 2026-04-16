@@ -232,12 +232,13 @@ struct IndicatorActionFeedback: View {
     let message: String
     let icon: String?
     let isError: Bool
+    let iconColor: Color?
     let contentPadding: CGFloat
 
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: icon ?? (isError ? "xmark.circle.fill" : "checkmark.circle.fill"))
-                .foregroundStyle(isError ? .red : .green)
+                .foregroundStyle(iconColor ?? (isError ? .red : .green))
                 .font(.system(size: 16))
                 .accessibilityHidden(true)
             Text(message)

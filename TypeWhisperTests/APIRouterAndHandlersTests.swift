@@ -1909,6 +1909,121 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         XCTAssertEqual(plugin.selectedModelId, "alpha")
     }
+
+    @MainActor
+    func testHandleCancelHotkey_firstEscapeDuringRecordingShowsWarningWithoutCancelling() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.state = .recording
+
+        context.dictationViewModel.handleCancelHotkey()
+
+        XCTAssertEqual(context.dictationViewModel.state, .recording)
+        XCTAssertEqual(
+            context.dictationViewModel.recordingCancelWarningMessage,
+            try TestSupport.localizedCatalogValueForCurrentLocale(for: "Press Esc again to cancel recording")
+        )
+        XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
+    }
+
+    @MainActor
+    func testHandleCancelHotkey_secondEscapeDuringRecordingCancels() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.state = .recording
+
+        context.dictationViewModel.handleCancelHotkey()
+        context.dictationViewModel.handleCancelHotkey()
+
+        XCTAssertEqual(context.dictationViewModel.state, .inserting)
+        XCTAssertNil(context.dictationViewModel.recordingCancelWarningMessage)
+        XCTAssertEqual(
+            context.dictationViewModel.actionFeedbackMessage,
+            try TestSupport.localizedCatalogValueForCurrentLocale(for: "Cancelled")
+        )
+    }
+
+    @MainActor
+    func testHandleCancelHotkey_secondEscapeAfterExpiryRequiresConfirmationAgain() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.state = .recording
+        context.dictationViewModel.setRecordingCancelWarningDurationForTesting(.milliseconds(50))
+
+        context.dictationViewModel.handleCancelHotkey()
+        try await Task.sleep(for: .milliseconds(120))
+        context.dictationViewModel.handleCancelHotkey()
+
+        XCTAssertEqual(context.dictationViewModel.state, .recording)
+        XCTAssertEqual(
+            context.dictationViewModel.recordingCancelWarningMessage,
+            try TestSupport.localizedCatalogValueForCurrentLocale(for: "Press Esc again to cancel recording")
+        )
+        XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
+    }
+
+    @MainActor
+    func testHandleCancelHotkey_processingStillCancelsImmediately() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.state = .processing
+
+        context.dictationViewModel.handleCancelHotkey()
+
+        XCTAssertEqual(context.dictationViewModel.state, .inserting)
+        XCTAssertNil(context.dictationViewModel.recordingCancelWarningMessage)
+        XCTAssertEqual(
+            context.dictationViewModel.actionFeedbackMessage,
+            try TestSupport.localizedCatalogValueForCurrentLocale(for: "Cancelled")
+        )
+    }
+
+    @MainActor
+    func testRecordingCancelWarningClearsWhenStateLeavesRecording() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.state = .recording
+
+        context.dictationViewModel.handleCancelHotkey()
+        context.dictationViewModel.state = .processing
+
+        XCTAssertNil(context.dictationViewModel.recordingCancelWarningMessage)
+    }
 }
 
 final class AudioRecordingServiceInputAvailabilityTests: XCTestCase {
@@ -1936,6 +2051,22 @@ final class AudioRecordingServiceInputAvailabilityTests: XCTestCase {
 }
 
 final class HotkeyServiceCompatibilityTests: XCTestCase {
+    @MainActor
+    func testEscapeKeyStillInvokesCancelHandlerWithoutSuppression() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        var cancelCount = 0
+        service.onCancelPressed = {
+            cancelCount += 1
+        }
+
+        let escape = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [])
+
+        XCTAssertFalse(service.processEventForTesting(escape, source: .monitor))
+        XCTAssertEqual(cancelCount, 1)
+    }
+
     @MainActor
     func testMonitorFallbackStartsToggleHotkey() throws {
         let service = HotkeyService()

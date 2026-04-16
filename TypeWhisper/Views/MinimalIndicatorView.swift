@@ -39,13 +39,18 @@ struct MinimalIndicatorView: View {
         return viewModel.actionFeedbackMessage
     }
 
+    private var recordingCancelWarningMessage: String? {
+        guard viewModel.state == .recording else { return nil }
+        return viewModel.recordingCancelWarningMessage
+    }
+
     private var errorMessage: String? {
         guard case let .error(message) = viewModel.state else { return nil }
         return message
     }
 
     private var showsExpandedMessage: Bool {
-        actionFeedbackMessage != nil || errorMessage != nil
+        recordingCancelWarningMessage != nil || actionFeedbackMessage != nil || errorMessage != nil
     }
 
     private var currentWidth: CGFloat {
@@ -97,6 +102,10 @@ struct MinimalIndicatorView: View {
         }
 
     private var accessibilityLabel: String {
+        if let message = recordingCancelWarningMessage {
+            return message
+        }
+
         if let message = actionFeedbackMessage {
             return message
         }
@@ -122,6 +131,12 @@ struct MinimalIndicatorView: View {
                     text: message,
                     icon: "xmark.circle.fill",
                     iconColor: .red
+                )
+            } else if let message = recordingCancelWarningMessage {
+                compactMessage(
+                    text: message,
+                    icon: "exclamationmark.triangle.fill",
+                    iconColor: .yellow
                 )
             } else if let message = actionFeedbackMessage {
                 compactMessage(

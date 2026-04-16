@@ -56,7 +56,13 @@ final class DictationViewModel: ObservableObject {
         case error(String)
     }
 
-    @Published var state: State = .idle
+    @Published var state: State = .idle {
+        didSet {
+            if state != .recording {
+                clearRecordingCancelWarning()
+            }
+        }
+    }
     @Published var audioLevel: Float = 0
     @Published var recordingDuration: TimeInterval = 0
     @Published var hotkeyMode: HotkeyService.HotkeyMode?
@@ -98,6 +104,7 @@ final class DictationViewModel: ObservableObject {
     @Published var actionFeedbackMessage: String?
     @Published var actionFeedbackIcon: String?
     @Published var actionFeedbackIsError: Bool = false
+    @Published var recordingCancelWarningMessage: String?
     @Published var activeAppIcon: NSImage?
     private var actionDisplayDuration: TimeInterval = 3.5
 
@@ -160,6 +167,7 @@ final class DictationViewModel: ObservableObject {
     private var transcriptionTask: Task<Void, Never>?
     private var errorResetTask: Task<Void, Never>?
     private var insertingResetTask: Task<Void, Never>?
+    private var recordingCancelWarningResetTask: Task<Void, Never>?
     private var urlResolutionTask: Task<Void, Never>?
     private var metadataCaptureTask: Task<Void, Never>?
     /// Snapshot of the streaming params used in the most recent `streamingHandler.start(...)`.
@@ -180,6 +188,7 @@ final class DictationViewModel: ObservableObject {
     private var dictationSessions: [UUID: DictationSessionSnapshot] = [:]
     private var dictationSessionOrder: [UUID] = []
     private let maxTrackedDictationSessions = 100
+    private var recordingCancelWarningDuration: Duration = .seconds(2)
 
     init(
         audioRecordingService: AudioRecordingService,
@@ -450,7 +459,7 @@ final class DictationViewModel: ObservableObject {
         }
 
         hotkeyService.onCancelPressed = { [weak self] in
-            self?.cancelCurrentOperation()
+            self?.handleCancelHotkey()
         }
 
         // Sync profile hotkeys whenever profiles change
@@ -503,6 +512,40 @@ final class DictationViewModel: ObservableObject {
             .store(in: &cancellables)
     }
 
+    func handleCancelHotkey() {
+        switch state {
+        case .recording:
+            if recordingCancelWarningMessage == nil {
+                showRecordingCancelWarning()
+            } else {
+                clearRecordingCancelWarning()
+                cancelCurrentOperation()
+            }
+        case .processing:
+            cancelCurrentOperation()
+        default:
+            break
+        }
+    }
+
+    private func showRecordingCancelWarning() {
+        recordingCancelWarningMessage = String(localized: "Press Esc again to cancel recording")
+        recordingCancelWarningResetTask?.cancel()
+        let duration = recordingCancelWarningDuration
+        recordingCancelWarningResetTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: duration)
+            guard let self, !Task.isCancelled else { return }
+            self.recordingCancelWarningMessage = nil
+            self.recordingCancelWarningResetTask = nil
+        }
+    }
+
+    private func clearRecordingCancelWarning() {
+        recordingCancelWarningResetTask?.cancel()
+        recordingCancelWarningResetTask = nil
+        recordingCancelWarningMessage = nil
+    }
+
     private func cancelCurrentOperation() {
         let cancelledMessage = String(localized: "Cancelled")
 
@@ -545,6 +588,7 @@ final class DictationViewModel: ObservableObject {
         transcriptionTask = nil
         insertingResetTask?.cancel()
         insertingResetTask = nil
+        clearRecordingCancelWarning()
         metadataCaptureTask?.cancel()
         metadataCaptureTask = nil
         urlResolutionTask?.cancel()
@@ -759,6 +803,7 @@ final class DictationViewModel: ObservableObject {
 
     private func stopDictation() {
         guard state == .recording, !isStopInFlight else { return }
+        clearRecordingCancelWarning()
         isStopInFlight = true
         Task {
             await finalizeStopDictation()
@@ -1053,6 +1098,7 @@ final class DictationViewModel: ObservableObject {
         lastStreamingParams = nil
         isStopInFlight = false
         activeDictationSessionID = nil
+        clearRecordingCancelWarning()
         state = .idle
         partialText = ""
         recordingStartTime = nil
@@ -1066,6 +1112,12 @@ final class DictationViewModel: ObservableObject {
         actionFeedbackIsError = false
         actionDisplayDuration = 3.5
     }
+
+#if DEBUG
+    func setRecordingCancelWarningDurationForTesting(_ duration: Duration) {
+        recordingCancelWarningDuration = duration
+    }
+#endif
 
     private func applyRuleMatch(
         _ match: RuleMatchResult?,
