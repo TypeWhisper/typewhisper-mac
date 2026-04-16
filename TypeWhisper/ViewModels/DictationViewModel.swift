@@ -167,7 +167,8 @@ final class DictationViewModel: ObservableObject {
     private var transcriptionTask: Task<Void, Never>?
     private var errorResetTask: Task<Void, Never>?
     private var insertingResetTask: Task<Void, Never>?
-    private var recordingCancelWarningResetTask: Task<Void, Never>?
+    private var recordingCancelWarningResetWorkItem: DispatchWorkItem?
+    private var recordingCancelWarningResetToken = UUID()
     private var urlResolutionTask: Task<Void, Never>?
     private var metadataCaptureTask: Task<Void, Never>?
     /// Snapshot of the streaming params used in the most recent `streamingHandler.start(...)`.
@@ -188,7 +189,7 @@ final class DictationViewModel: ObservableObject {
     private var dictationSessions: [UUID: DictationSessionSnapshot] = [:]
     private var dictationSessionOrder: [UUID] = []
     private let maxTrackedDictationSessions = 100
-    private var recordingCancelWarningDuration: Duration = .seconds(2)
+    private var recordingCancelWarningDuration: TimeInterval = 2
 
     init(
         audioRecordingService: AudioRecordingService,
@@ -403,6 +404,7 @@ final class DictationViewModel: ObservableObject {
 
     isolated deinit {
         recordingTimer?.invalidate()
+        recordingCancelWarningResetWorkItem?.cancel()
     }
 
     private func beginDictationSession(id: UUID) {
@@ -530,19 +532,28 @@ final class DictationViewModel: ObservableObject {
 
     private func showRecordingCancelWarning() {
         recordingCancelWarningMessage = String(localized: "Press Esc again to cancel recording")
-        recordingCancelWarningResetTask?.cancel()
-        let duration = recordingCancelWarningDuration
-        recordingCancelWarningResetTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: duration)
-            guard let self, !Task.isCancelled else { return }
+        recordingCancelWarningResetWorkItem?.cancel()
+
+        let resetToken = UUID()
+        recordingCancelWarningResetToken = resetToken
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, self.recordingCancelWarningResetToken == resetToken else { return }
             self.recordingCancelWarningMessage = nil
-            self.recordingCancelWarningResetTask = nil
+            self.recordingCancelWarningResetWorkItem = nil
         }
+
+        recordingCancelWarningResetWorkItem = workItem
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + recordingCancelWarningDuration,
+            execute: workItem
+        )
     }
 
     private func clearRecordingCancelWarning() {
-        recordingCancelWarningResetTask?.cancel()
-        recordingCancelWarningResetTask = nil
+        recordingCancelWarningResetToken = UUID()
+        recordingCancelWarningResetWorkItem?.cancel()
+        recordingCancelWarningResetWorkItem = nil
         recordingCancelWarningMessage = nil
     }
 
@@ -1114,7 +1125,7 @@ final class DictationViewModel: ObservableObject {
     }
 
 #if DEBUG
-    func setRecordingCancelWarningDurationForTesting(_ duration: Duration) {
+    func setRecordingCancelWarningDurationForTesting(_ duration: TimeInterval) {
         recordingCancelWarningDuration = duration
     }
 #endif

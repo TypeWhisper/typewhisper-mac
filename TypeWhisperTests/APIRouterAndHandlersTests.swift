@@ -1969,7 +1969,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
         let context = try XCTUnwrap(dictationContext)
         context.dictationViewModel.state = .recording
-        context.dictationViewModel.setRecordingCancelWarningDurationForTesting(.milliseconds(50))
+        context.dictationViewModel.setRecordingCancelWarningDurationForTesting(0.05)
 
         context.dictationViewModel.handleCancelHotkey()
         try await Task.sleep(for: .milliseconds(120))
