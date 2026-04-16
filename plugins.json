@@ -404,7 +404,7 @@
     {
       "id": "com.typewhisper.obsidian",
       "name": "Obsidian",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "minHostVersion": "0.9.0",
       "author": "TypeWhisper",
       "description": "Save transcriptions to your Obsidian vault as Markdown notes. Supports daily notes, frontmatter, and auto-export.",
@@ -412,11 +412,18 @@
         "de": "Transkriptionen als Markdown-Notizen in deinem Obsidian-Vault speichern. Unterstuetzt Tagesnotizen, Frontmatter und Auto-Export."
       },
       "category": "action",
-      "size": 161981,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-obsidian-v1.0.1/ObsidianPlugin.zip",
+      "size": 161978,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-obsidian-v1.0.2/ObsidianPlugin.zip",
       "iconSystemName": "doc.text",
       "downloadCount": 441,
       "releases": [
+        {
+          "version": "1.0.2",
+          "minHostVersion": "0.9.0",
+          "size": 161978,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-obsidian-v1.0.2/ObsidianPlugin.zip",
+          "minOSVersion": "14.0"
+        },
         {
           "version": "1.0.1",
           "minHostVersion": "0.9.0",
