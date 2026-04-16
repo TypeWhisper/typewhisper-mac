@@ -9,7 +9,7 @@ var command: String?
 var positionalArgs = [String]()
 
 // Transcribe options
-var language: String?
+var languageOptions = CLITranscribeLanguageOptions()
 var task: String?
 var translateTo: String?
 
@@ -37,7 +37,13 @@ while let arg = argIterator.next() {
             printError("Error: --language requires a value.")
             exit(1)
         }
-        language = next
+        languageOptions.language = next
+    case "--language-hint":
+        guard let next = argIterator.next() else {
+            printError("Error: --language-hint requires a value.")
+            exit(1)
+        }
+        languageOptions.languageHints.append(next)
     case "--task":
         guard let next = argIterator.next() else {
             printError("Error: --task requires a value.")
@@ -68,6 +74,11 @@ while let arg = argIterator.next() {
     }
 }
 
+if let validationError = languageOptions.validationError() {
+    printError(validationError)
+    exit(1)
+}
+
 guard let command else {
     printUsage()
     exit(1)
@@ -95,7 +106,8 @@ do {
         }
         let data = try await client.transcribe(
             fileURL: fileURL,
-            language: language,
+            language: languageOptions.language,
+            languageHints: languageOptions.languageHints,
             task: task,
             targetLanguage: translateTo
         )
@@ -136,6 +148,7 @@ func printUsage() {
 
         Transcribe options:
           --language <code>    Source language (e.g. en, de)
+          --language-hint <code>  Repeatable language hint for auto-detection
           --task <task>        transcribe (default) or translate
           --translate-to <code>  Target language for translation
 
@@ -143,6 +156,7 @@ func printUsage() {
           typewhisper status
           typewhisper transcribe recording.wav
           typewhisper transcribe recording.wav --language de --json
+          typewhisper transcribe recording.wav --language-hint de --language-hint en
           typewhisper transcribe - < audio.wav
           cat audio.wav | typewhisper transcribe -
         """

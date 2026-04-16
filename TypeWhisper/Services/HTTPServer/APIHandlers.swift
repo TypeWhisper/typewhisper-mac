@@ -62,6 +62,7 @@ final class APIHandlers: @unchecked Sendable {
         let audioData: Data
         var fileExtension = "wav"
         var language: String?
+        var languageHints: [String] = []
         var task: TranscriptionTask = .transcribe
         var targetLanguage: String?
         var responseFormat = "json"
@@ -91,6 +92,11 @@ final class APIHandlers: @unchecked Sendable {
                 language = val
             }
 
+            languageHints = parts
+                .filter { $0.name == "language_hint" }
+                .compactMap { String(data: $0.data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+
             if let taskPart = parts.first(where: { $0.name == "task" }),
                let val = String(data: taskPart.data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
                let parsed = TranscriptionTask(rawValue: val) {
@@ -118,6 +124,10 @@ final class APIHandlers: @unchecked Sendable {
             audioData = request.body
             fileExtension = extensionFromMIME(contentType)
             language = request.headers["x-language"]
+            languageHints = request.headers["x-language-hints"]?
+                .split(separator: ",")
+                .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty } ?? []
             if let taskStr = request.headers["x-task"], let parsed = TranscriptionTask(rawValue: taskStr) {
                 task = parsed
             }
@@ -137,6 +147,10 @@ final class APIHandlers: @unchecked Sendable {
             return .error(status: 400, message: "Empty audio data")
         }
 
+        if language != nil, !languageHints.isEmpty {
+            return .error(status: 400, message: "Use either 'language' or 'language_hint', not both")
+        }
+
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".\(fileExtension)")
 
         do {
@@ -146,9 +160,17 @@ final class APIHandlers: @unchecked Sendable {
             let samples = try await audioFileService.loadAudioSamples(from: tempURL)
             let dictionaryPrompt = await MainActor.run { dictionaryService.getTermsForPrompt() }
             let prompt = mergedPrompt(requestPrompt: requestPrompt, dictionaryPrompt: dictionaryPrompt)
+            let languageSelection: LanguageSelection
+            if !languageHints.isEmpty {
+                languageSelection = LanguageSelection.auto.withSelectedCodes(languageHints, nilBehavior: .auto)
+            } else if let language {
+                languageSelection = .exact(language)
+            } else {
+                languageSelection = .auto
+            }
             let result = try await modelManager.transcribe(
                 audioSamples: samples,
-                language: language,
+                languageSelection: languageSelection,
                 task: task,
                 prompt: prompt
             )
@@ -465,6 +487,8 @@ final class APIHandlers: @unchecked Sendable {
                 let bundle_identifiers: [String]
                 let url_patterns: [String]
                 let input_language: String?
+                let language_mode: String
+                let language_hints: [String]
                 let translation_target_language: String?
             }
 
@@ -474,14 +498,27 @@ final class APIHandlers: @unchecked Sendable {
             }
 
             let entries = profileService.profiles.map { profile in
-                RuleEntry(
+                let selection = profile.inputLanguageSelection
+                let legacyInputLanguage: String?
+                switch selection {
+                case .auto:
+                    legacyInputLanguage = "auto"
+                case .exact(let code):
+                    legacyInputLanguage = code
+                case .inheritGlobal, .hints:
+                    legacyInputLanguage = nil
+                }
+
+                return RuleEntry(
                     id: profile.id.uuidString,
                     name: profile.name,
                     is_enabled: profile.isEnabled,
                     priority: profile.priority,
                     bundle_identifiers: profile.bundleIdentifiers,
                     url_patterns: profile.urlPatterns,
-                    input_language: profile.inputLanguage,
+                    input_language: legacyInputLanguage,
+                    language_mode: selection.mode.rawValue,
+                    language_hints: selection.selectedCodes,
                     translation_target_language: profile.translationTargetLanguage
                 )
             }

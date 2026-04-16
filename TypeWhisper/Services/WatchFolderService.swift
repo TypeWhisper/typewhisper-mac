@@ -187,7 +187,7 @@ final class WatchFolderService: ObservableObject {
             let samples = try await audioFileService.loadAudioSamples(from: url)
             let result = try await modelManagerService.transcribe(
                 audioSamples: samples,
-                language: overrides.language,
+                languageSelection: overrides.languageSelection,
                 task: .transcribe,
                 engineOverrideId: overrides.engineId,
                 cloudModelOverride: overrides.modelId

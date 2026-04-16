@@ -37,7 +37,7 @@ final class StreamingHandler {
     func start(
         engineOverrideId: String?,
         selectedProviderId: String?,
-        language: String?,
+        languageSelection: LanguageSelection,
         task: TranscriptionTask,
         cloudModelOverride: String?,
         allowLiveTranscription: Bool,
@@ -65,7 +65,7 @@ final class StreamingHandler {
             let progressText = self.progressText
 
             if let handle = try? await self.modelManager.createLiveTranscriptionSession(
-                language: language,
+                languageSelection: languageSelection,
                 task: task,
                 engineOverrideId: engineOverrideId,
                 cloudModelOverride: cloudModelOverride,
@@ -118,7 +118,7 @@ final class StreamingHandler {
                         let confirmed = self.confirmedStreamingText
                         let result = try await self.modelManager.transcribe(
                             audioSamples: buffer,
-                            language: language,
+                            languageSelection: languageSelection,
                             task: task,
                             engineOverrideId: engineOverrideId,
                             cloudModelOverride: cloudModelOverride,

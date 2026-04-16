@@ -57,7 +57,7 @@ struct CLIClient {
         try await get("/v1/models")
     }
 
-    func transcribe(fileURL: URL?, language: String?, task: String?, targetLanguage: String?) async throws -> Data {
+    func transcribe(fileURL: URL?, language: String?, languageHints: [String], task: String?, targetLanguage: String?) async throws -> Data {
         let audioData: Data
         let filename: String
 
@@ -90,6 +90,9 @@ struct CLIClient {
         // Optional fields
         if let language {
             body.appendFormField("language", value: language, boundary: boundary)
+        }
+        for languageHint in languageHints {
+            body.appendFormField("language_hint", value: languageHint, boundary: boundary)
         }
         if let task {
             body.appendFormField("task", value: task, boundary: boundary)

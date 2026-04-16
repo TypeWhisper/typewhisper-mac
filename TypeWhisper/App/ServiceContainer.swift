@@ -158,7 +158,10 @@ final class ServiceContainer: ObservableObject {
             promptProcessingService: promptProcessingService
         )
         audioRecorderViewModel = AudioRecorderViewModel(recorderService: audioRecorderService, modelManager: modelManagerService, dictionaryService: dictionaryService)
-        watchFolderViewModel = WatchFolderViewModel(watchFolderService: watchFolderService)
+        watchFolderViewModel = WatchFolderViewModel(
+            watchFolderService: watchFolderService,
+            modelManager: modelManagerService
+        )
 
         // Set shared references
         FileTranscriptionViewModel._shared = fileTranscriptionViewModel

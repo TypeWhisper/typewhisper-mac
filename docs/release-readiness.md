@@ -53,7 +53,7 @@ These surfaces remain part of `1.x`, but they are positioned as advanced or auto
 - `typewhisper status`
 - `typewhisper models`
 - `typewhisper transcribe`
-- Flags: `--port`, `--json`, `--language`, `--task`, `--translate-to`
+- Flags: `--port`, `--json`, `--language`, `--language-hint`, `--task`, `--translate-to`
 
 ### Plugin SDK
 

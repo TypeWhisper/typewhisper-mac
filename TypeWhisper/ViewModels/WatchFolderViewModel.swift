@@ -24,8 +24,13 @@ final class WatchFolderViewModel: ObservableObject {
     @Published var autoStartOnLaunch: Bool = false {
         didSet { UserDefaults.standard.set(autoStartOnLaunch, forKey: UserDefaultsKeys.watchFolderAutoStart) }
     }
-    @Published var language: String? {
-        didSet { UserDefaults.standard.set(language, forKey: UserDefaultsKeys.watchFolderLanguage) }
+    @Published var languageSelection: LanguageSelection = .auto {
+        didSet {
+            UserDefaults.standard.set(
+                languageSelection.storedValue(nilBehavior: .auto),
+                forKey: UserDefaultsKeys.watchFolderLanguage
+            )
+        }
     }
     @Published var selectedEngine: String? {
         didSet {
@@ -35,9 +40,9 @@ final class WatchFolderViewModel: ObservableObject {
             selectedModel = nil
             guard let selectedEngine,
                   let engine = PluginManager.shared.transcriptionEngine(for: selectedEngine) else { return }
-            let supported = engine.supportedLanguages.sorted()
-            if let lang = language, !supported.isEmpty, !supported.contains(lang) {
-                language = nil
+            let normalized = languageSelection.normalizedForSupportedLanguages(engine.supportedLanguages)
+            if normalized != languageSelection {
+                languageSelection = normalized
             }
         }
     }
@@ -50,11 +55,11 @@ final class WatchFolderViewModel: ObservableObject {
     struct TranscriptionOverrides {
         let engineId: String?
         let modelId: String?
-        let language: String?
+        let languageSelection: LanguageSelection
     }
 
     var transcriptionOverrides: TranscriptionOverrides {
-        TranscriptionOverrides(engineId: selectedEngine, modelId: selectedModel, language: language)
+        TranscriptionOverrides(engineId: selectedEngine, modelId: selectedModel, languageSelection: languageSelection)
     }
 
     var availableEngines: [TranscriptionEnginePlugin] {
@@ -62,7 +67,7 @@ final class WatchFolderViewModel: ObservableObject {
     }
 
     var resolvedEngine: TranscriptionEnginePlugin? {
-        let engineId = selectedEngine ?? ServiceContainer.shared.modelManagerService.selectedProviderId
+        let engineId = selectedEngine ?? modelManager.selectedProviderId
         guard let engineId else { return nil }
         return PluginManager.shared.transcriptionEngine(for: engineId)
     }
@@ -73,10 +78,15 @@ final class WatchFolderViewModel: ObservableObject {
     }
 
     let watchFolderService: WatchFolderService
+    private let modelManager: ModelManagerService
     private var cancellables = Set<AnyCancellable>()
 
-    init(watchFolderService: WatchFolderService) {
+    init(
+        watchFolderService: WatchFolderService,
+        modelManager: ModelManagerService
+    ) {
         self.watchFolderService = watchFolderService
+        self.modelManager = modelManager
         loadSettings()
         isInitialized = true
 
@@ -147,7 +157,10 @@ final class WatchFolderViewModel: ObservableObject {
         outputFormat = UserDefaults.standard.string(forKey: UserDefaultsKeys.watchFolderOutputFormat) ?? "md"
         deleteSourceFiles = UserDefaults.standard.bool(forKey: UserDefaultsKeys.watchFolderDeleteSource)
         autoStartOnLaunch = UserDefaults.standard.bool(forKey: UserDefaultsKeys.watchFolderAutoStart)
-        language = UserDefaults.standard.string(forKey: UserDefaultsKeys.watchFolderLanguage)
+        languageSelection = LanguageSelection(
+            storedValue: UserDefaults.standard.string(forKey: UserDefaultsKeys.watchFolderLanguage),
+            nilBehavior: .auto
+        )
         selectedEngine = UserDefaults.standard.string(forKey: UserDefaultsKeys.watchFolderEngine)
         selectedModel = UserDefaults.standard.string(forKey: UserDefaultsKeys.watchFolderModel)
 
@@ -169,10 +182,25 @@ final class WatchFolderViewModel: ObservableObject {
     }
 
     func reconcileSelectionWithAvailablePlugins() {
-        guard let selectedEngine else { return }
-        guard PluginManager.shared.transcriptionEngine(for: selectedEngine) == nil else { return }
-        self.selectedEngine = nil
-        selectedModel = nil
+        if let selectedEngine {
+            guard let engine = PluginManager.shared.transcriptionEngine(for: selectedEngine) else {
+                self.selectedEngine = nil
+                selectedModel = nil
+                return
+            }
+            let normalized = languageSelection.normalizedForSupportedLanguages(engine.supportedLanguages)
+            if normalized != languageSelection {
+                languageSelection = normalized
+            }
+            return
+        }
+
+        if let engine = resolvedEngine {
+            let normalized = languageSelection.normalizedForSupportedLanguages(engine.supportedLanguages)
+            if normalized != languageSelection {
+                languageSelection = normalized
+            }
+        }
     }
 
     private func resolveWatchFolderURL() -> URL? {

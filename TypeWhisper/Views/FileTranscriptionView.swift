@@ -110,20 +110,11 @@ struct FileTranscriptionView: View {
                         }
                     }
 
-                    Picker(String(localized: "watchFolder.language"), selection: Binding(
-                        get: { watchFolder.language ?? "__auto__" },
-                        set: { watchFolder.language = $0 == "__auto__" ? nil : $0 }
-                    )) {
-                        Text(String(localized: "watchFolder.language.auto")).tag("__auto__")
-                        let languages = watchFolder.selectedEngineSupportedLanguages
-                        if !languages.isEmpty {
-                            Divider()
-                            ForEach(languages, id: \.self) { code in
-                                Text(Locale.current.localizedString(forIdentifier: code) ?? code)
-                                    .tag(code)
-                            }
-                        }
-                    }
+                    LanguageSelectionEditor(
+                        selection: $watchFolder.languageSelection,
+                        availableLanguages: watchFolder.selectedEngineSupportedLanguages
+                            .map { ($0, Locale.current.localizedString(forIdentifier: $0) ?? $0) }
+                    )
                 }
 
                 Section(String(localized: "watchFolder.settings")) {
@@ -394,65 +385,72 @@ struct FileTranscriptionView: View {
 
     @ViewBuilder
     private var controls: some View {
-        HStack {
-            Button(String(localized: "Add Files...")) {
-                showFilePicker = true
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .disabled(viewModel.batchState == .processing)
+        VStack(alignment: .leading, spacing: 12) {
+            LanguageSelectionEditor(
+                selection: $viewModel.languageSelection,
+                availableLanguages: SettingsViewModel.shared.availableLanguages
+            )
 
-            if viewModel.supportsTranslation {
-                Picker(String(localized: "Task"), selection: $viewModel.selectedTask) {
-                    ForEach(TranscriptionTask.allCases) { task in
-                        Text(task.displayName).tag(task)
+            HStack {
+                Button(String(localized: "Add Files...")) {
+                    showFilePicker = true
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(viewModel.batchState == .processing)
+
+                if viewModel.supportsTranslation {
+                    Picker(String(localized: "Task"), selection: $viewModel.selectedTask) {
+                        ForEach(TranscriptionTask.allCases) { task in
+                            Text(task.displayName).tag(task)
+                        }
                     }
+                    .frame(width: 180)
+                    .controlSize(.small)
                 }
-                .frame(width: 180)
-                .controlSize(.small)
-            }
 
-            Spacer()
+                Spacer()
 
-            if viewModel.hasResults {
-                Menu(String(localized: "Export All")) {
-                    Button(String(localized: "Copy All Text")) { viewModel.copyAllText() }
-                    Divider()
-                    Button(String(localized: "Export All as SRT")) { viewModel.exportAllSubtitles(format: .srt) }
-                    Button(String(localized: "Export All as VTT")) { viewModel.exportAllSubtitles(format: .vtt) }
+                if viewModel.hasResults {
+                    Menu(String(localized: "Export All")) {
+                        Button(String(localized: "Copy All Text")) { viewModel.copyAllText() }
+                        Divider()
+                        Button(String(localized: "Export All as SRT")) { viewModel.exportAllSubtitles(format: .srt) }
+                        Button(String(localized: "Export All as VTT")) { viewModel.exportAllSubtitles(format: .vtt) }
+                    }
+                    .controlSize(.small)
                 }
-                .controlSize(.small)
-            }
 
-            if viewModel.batchState == .processing {
-                HStack(spacing: 6) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text(String(localized: "\(viewModel.completedFiles)/\(viewModel.totalFiles)"))
-                        .font(.caption)
-                        .monospacedDigit()
+                if viewModel.batchState == .processing {
+                    HStack(spacing: 6) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text(String(localized: "\(viewModel.completedFiles)/\(viewModel.totalFiles)"))
+                            .font(.caption)
+                            .monospacedDigit()
+                    }
+                } else {
+                    Button {
+                        viewModel.transcribeAll()
+                    } label: {
+                        Label(String(localized: "Transcribe All"), systemImage: "waveform")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(!viewModel.canTranscribe)
                 }
-            } else {
+
                 Button {
-                    viewModel.transcribeAll()
+                    viewModel.reset()
                 } label: {
-                    Label(String(localized: "Transcribe All"), systemImage: "waveform")
+                    Image(systemName: "trash")
+                        .foregroundStyle(.red)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .disabled(!viewModel.canTranscribe)
+                .buttonStyle(.plain)
+                .disabled(viewModel.batchState == .processing)
+                .help(String(localized: "Clear All"))
+                .accessibilityLabel(String(localized: "Clear All"))
             }
-
-            Button {
-                viewModel.reset()
-            } label: {
-                Image(systemName: "trash")
-                    .foregroundStyle(.red)
-            }
-            .buttonStyle(.plain)
-            .disabled(viewModel.batchState == .processing)
-            .help(String(localized: "Clear All"))
-            .accessibilityLabel(String(localized: "Clear All"))
         }
     }
 

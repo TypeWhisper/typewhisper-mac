@@ -73,7 +73,7 @@ private struct GladiaLiveSession: Sendable {
 }
 
 @objc(GladiaPlugin)
-final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, @unchecked Sendable {
+final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.gladia"
     static let pluginName = "Gladia"
 
@@ -143,6 +143,32 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
 
     func transcribe(
         audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        guard let apiKey = _apiKey, !apiKey.isEmpty else {
+            throw PluginTranscriptionError.notConfigured
+        }
+        guard let modelId = _selectedModelId else {
+            throw PluginTranscriptionError.noModelSelected
+        }
+
+        return try await transcribeREST(
+            audio: audio,
+            language: languageSelection.requestedLanguage,
+            languageHints: resolvedLanguageHints(
+                requestedLanguage: languageSelection.requestedLanguage,
+                languageHints: languageSelection.languageHints
+            ),
+            modelId: modelId,
+            apiKey: apiKey,
+            prompt: prompt
+        )
+    }
+
+    func transcribe(
+        audio: AudioData,
         language: String?,
         translate: Bool,
         prompt: String?,
@@ -176,9 +202,52 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
         }
     }
 
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        guard let apiKey = _apiKey, !apiKey.isEmpty else {
+            throw PluginTranscriptionError.notConfigured
+        }
+        guard let modelId = _selectedModelId else {
+            throw PluginTranscriptionError.noModelSelected
+        }
+
+        let effectiveHints = resolvedLanguageHints(
+            requestedLanguage: languageSelection.requestedLanguage,
+            languageHints: languageSelection.languageHints
+        )
+
+        do {
+            return try await transcribeWebSocket(
+                audio: audio,
+                language: languageSelection.requestedLanguage,
+                languageHints: effectiveHints,
+                modelId: modelId,
+                prompt: prompt,
+                apiKey: apiKey,
+                onProgress: onProgress
+            )
+        } catch {
+            logger.warning("Live transcription failed, falling back to REST: \(error.localizedDescription)")
+            return try await transcribeREST(
+                audio: audio,
+                language: languageSelection.requestedLanguage,
+                languageHints: effectiveHints,
+                modelId: modelId,
+                apiKey: apiKey,
+                prompt: prompt
+            )
+        }
+    }
+
     private func transcribeREST(
         audio: AudioData,
         language: String?,
+        languageHints: [String] = [],
         modelId: String,
         apiKey: String,
         prompt: String?
@@ -187,6 +256,7 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
         let resultURL = try await submitPreRecorded(
             audioURL: audioURL,
             language: language,
+            languageHints: languageHints,
             modelId: modelId,
             apiKey: apiKey,
             prompt: prompt
@@ -246,6 +316,7 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
     private func submitPreRecorded(
         audioURL: String,
         language: String?,
+        languageHints: [String] = [],
         modelId: String,
         apiKey: String,
         prompt: String?
@@ -262,10 +333,11 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
             body["model"] = modelId
         }
 
-        if let language, !language.isEmpty {
+        let effectiveHints = resolvedLanguageHints(requestedLanguage: language, languageHints: languageHints)
+        if !effectiveHints.isEmpty {
             body["language_config"] = [
-                "languages": [language],
-                "code_switching": false,
+                "languages": effectiveHints,
+                "code_switching": effectiveHints.count > 1,
             ]
         }
         if let customVocabulary = Self.customVocabularyConfig(prompt: prompt) {
@@ -353,6 +425,7 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
     private func transcribeWebSocket(
         audio: AudioData,
         language: String?,
+        languageHints: [String] = [],
         modelId: String,
         prompt: String?,
         apiKey: String,
@@ -360,6 +433,7 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
     ) async throws -> PluginTranscriptionResult {
         let liveSession = try await createLiveSession(
             language: language,
+            languageHints: languageHints,
             modelId: modelId,
             apiKey: apiKey,
             prompt: prompt
@@ -469,6 +543,7 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
 
     private func createLiveSession(
         language: String?,
+        languageHints: [String] = [],
         modelId: String,
         apiKey: String,
         prompt: String?
@@ -490,10 +565,11 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
             ],
         ]
 
-        if let language, !language.isEmpty {
+        let effectiveHints = resolvedLanguageHints(requestedLanguage: language, languageHints: languageHints)
+        if !effectiveHints.isEmpty {
             body["language_config"] = [
-                "languages": [language],
-                "code_switching": false,
+                "languages": effectiveHints,
+                "code_switching": effectiveHints.count > 1,
             ]
         }
         if let customVocabulary = Self.customVocabularyConfig(prompt: prompt) {
@@ -692,6 +768,16 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
             "vocabulary": vocabulary,
             "default_intensity": 0.7,
         ]
+    }
+
+    private func resolvedLanguageHints(requestedLanguage: String?, languageHints: [String]) -> [String] {
+        if !languageHints.isEmpty {
+            return languageHints
+        }
+        if let requestedLanguage, !requestedLanguage.isEmpty {
+            return [requestedLanguage]
+        }
+        return []
     }
 
     fileprivate func validateApiKey(_ key: String) async -> Bool {

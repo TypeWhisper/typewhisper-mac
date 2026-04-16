@@ -41,7 +41,7 @@ final class FileTranscriptionViewModel: ObservableObject {
     @Published var showFilePickerFromMenu = false
     @Published var batchState: BatchState = .idle
     @Published var currentIndex: Int = 0
-    @Published var selectedLanguage: String? = nil
+    @Published var languageSelection: LanguageSelection = .auto
     @Published var selectedTask: TranscriptionTask = .transcribe
 
     private let modelManager: ModelManagerService
@@ -131,7 +131,7 @@ final class FileTranscriptionViewModel: ObservableObject {
 
             let result = try await modelManager.transcribe(
                 audioSamples: samples,
-                language: selectedLanguage,
+                languageSelection: languageSelection,
                 task: selectedTask,
                 engineOverrideId: nil,
                 cloudModelOverride: nil

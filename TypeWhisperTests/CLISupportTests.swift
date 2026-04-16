@@ -24,6 +24,14 @@ final class CLISupportTests: XCTestCase {
         XCTAssertEqual(PortDiscovery.discoverPort(dev: true, applicationSupportDirectory: applicationSupportRoot), PortDiscovery.defaultPort)
     }
 
+    func testCLITranscribeLanguageOptionsRejectMixedExactAndHintFlags() {
+        let options = CLITranscribeLanguageOptions(language: "de", languageHints: ["en", "nl"])
+        XCTAssertEqual(
+            options.validationError(),
+            "Error: --language and --language-hint cannot be used together."
+        )
+    }
+
     @MainActor
     func testSupporterDiscordCreateClaimSessionPersistsPendingStatus() async throws {
         let (defaults, suiteName) = try makeIsolatedDefaults()

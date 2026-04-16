@@ -24,7 +24,7 @@ final class AudioRecorderViewModel: ObservableObject {
     private struct FinalTranscriptionRequest {
         let outputURL: URL
         let buffer: [Float]
-        let language: String?
+        let languageSelection: LanguageSelection
         let task: TranscriptionTask
         let providerId: String?
         let modelId: String?
@@ -70,7 +70,7 @@ final class AudioRecorderViewModel: ObservableObject {
     @Published var transcriptionEnabled: Bool {
         didSet { UserDefaults.standard.set(transcriptionEnabled, forKey: UserDefaultsKeys.recorderTranscriptionEnabled) }
     }
-    @Published var selectedLanguage: String? = nil
+    @Published var languageSelection: LanguageSelection = .auto
     @Published var selectedTask: TranscriptionTask = .transcribe
     @Published var recordings: [RecordingItem] = []
     @Published var errorMessage: String?
@@ -81,6 +81,7 @@ final class AudioRecorderViewModel: ObservableObject {
     var activeModelName: String? { modelManager.activeModelName }
     var isModelReady: Bool { modelManager.isModelReady }
     var supportsTranslation: Bool { modelManager.supportsTranslation }
+    var selectedLanguage: String? { languageSelection.requestedLanguage }
 
     private let recorderService: AudioRecorderService
     private let modelManager: ModelManagerService
@@ -220,7 +221,7 @@ final class AudioRecorderViewModel: ObservableObject {
                 finalTranscriptionRequest = FinalTranscriptionRequest(
                     outputURL: url,
                     buffer: recorderService.getCurrentBuffer(),
-                    language: selectedLanguage,
+                    languageSelection: languageSelection,
                     task: selectedTask,
                     providerId: modelManager.selectedProviderId,
                     modelId: modelManager.selectedModelId,
@@ -354,7 +355,7 @@ final class AudioRecorderViewModel: ObservableObject {
         streamingHandler.start(
             engineOverrideId: providerId,
             selectedProviderId: modelManager.selectedProviderId,
-            language: selectedLanguage,
+            languageSelection: languageSelection,
             task: task,
             cloudModelOverride: nil,
             allowLiveTranscription: true,
@@ -398,7 +399,7 @@ final class AudioRecorderViewModel: ObservableObject {
             } else {
                 try await modelManager.transcribe(
                     audioSamples: buffer,
-                    language: request.language,
+                    languageSelection: request.languageSelection,
                     task: effectiveTask,
                     engineOverrideId: request.providerId,
                     cloudModelOverride: request.modelId,

@@ -28,6 +28,40 @@ final class StreamingHandlerTests: XCTestCase {
         }
     }
 
+    private final class MockHintPlugin: NSObject, LanguageHintTranscriptionEnginePlugin, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.hints" }
+        static var pluginName: String { "Mock Hints" }
+
+        var providerId: String { "mock-hints" }
+        var providerDisplayName: String { "Mock Hints" }
+        var isConfigured: Bool { true }
+        var transcriptionModels: [PluginModelInfo] { [] }
+        var selectedModelId: String? { nil }
+        var supportsTranslation: Bool { false }
+        var supportsStreaming: Bool { false }
+        var supportedLanguages: [String] { ["de", "en", "nl"] }
+        private(set) var lastSelection = PluginLanguageSelection()
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+        func selectModel(_ modelId: String) {}
+
+        func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+            XCTFail("Legacy language API should not be used when hints are available")
+            return PluginTranscriptionResult(text: "", detectedLanguage: language)
+        }
+
+        func transcribe(
+            audio: AudioData,
+            languageSelection: PluginLanguageSelection,
+            translate: Bool,
+            prompt: String?
+        ) async throws -> PluginTranscriptionResult {
+            lastSelection = languageSelection
+            return PluginTranscriptionResult(text: "hinted", detectedLanguage: languageSelection.languageHints.first)
+        }
+    }
+
     private final class MockLivePlugin: NSObject, LiveTranscriptionCapablePlugin, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.live" }
         static var pluginName: String { "Mock Live" }
@@ -68,6 +102,63 @@ final class StreamingHandlerTests: XCTestCase {
             prompt: String?,
             onProgress: @Sendable @escaping (String) -> Bool
         ) async throws -> any LiveTranscriptionSession {
+            await session.setOnProgress(onProgress)
+            return session
+        }
+    }
+
+    private final class MockHintLivePlugin: NSObject, LiveLanguageHintTranscriptionCapablePlugin, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.live-hints" }
+        static var pluginName: String { "Mock Live Hints" }
+
+        var providerId: String { "mock-live-hints" }
+        var providerDisplayName: String { "Mock Live Hints" }
+        var isConfigured: Bool { true }
+        var transcriptionModels: [PluginModelInfo] { [] }
+        var selectedModelId: String? { nil }
+        var supportsTranslation: Bool { false }
+        var supportsStreaming: Bool { true }
+        var supportedLanguages: [String] { ["de", "en"] }
+        let session = MockLiveSession()
+        private(set) var lastSelection = PluginLanguageSelection()
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+        func selectModel(_ modelId: String) {}
+
+        func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+            XCTFail("Batch transcribe should not be used for the live-session path")
+            return PluginTranscriptionResult(text: "", detectedLanguage: language)
+        }
+
+        func transcribe(
+            audio: AudioData,
+            language: String?,
+            translate: Bool,
+            prompt: String?,
+            onProgress: @Sendable @escaping (String) -> Bool
+        ) async throws -> PluginTranscriptionResult {
+            XCTFail("Legacy streaming should not be used for the hint-aware live-session path")
+            return PluginTranscriptionResult(text: "", detectedLanguage: language)
+        }
+
+        func createLiveTranscriptionSession(
+            language: String?,
+            translate: Bool,
+            prompt: String?,
+            onProgress: @Sendable @escaping (String) -> Bool
+        ) async throws -> any LiveTranscriptionSession {
+            XCTFail("Legacy live-session API should not be used when hint-aware API exists")
+            return session
+        }
+
+        func createLiveTranscriptionSession(
+            languageSelection: PluginLanguageSelection,
+            translate: Bool,
+            prompt: String?,
+            onProgress: @Sendable @escaping (String) -> Bool
+        ) async throws -> any LiveTranscriptionSession {
+            lastSelection = languageSelection
             await session.setOnProgress(onProgress)
             return session
         }
@@ -138,7 +229,7 @@ final class StreamingHandlerTests: XCTestCase {
         handler.start(
             engineOverrideId: plugin.providerId,
             selectedProviderId: plugin.providerId,
-            language: "en",
+            languageSelection: .exact("en"),
             task: .transcribe,
             cloudModelOverride: nil,
             allowLiveTranscription: true,
@@ -187,7 +278,7 @@ final class StreamingHandlerTests: XCTestCase {
         handler.start(
             engineOverrideId: plugin.providerId,
             selectedProviderId: plugin.providerId,
-            language: "en",
+            languageSelection: .exact("en"),
             task: .transcribe,
             cloudModelOverride: nil,
             allowLiveTranscription: false,
@@ -254,7 +345,7 @@ final class StreamingHandlerTests: XCTestCase {
         handler.start(
             engineOverrideId: plugin.providerId,
             selectedProviderId: plugin.providerId,
-            language: "en",
+            languageSelection: .exact("en"),
             task: .transcribe,
             cloudModelOverride: nil,
             allowLiveTranscription: true,
@@ -270,5 +361,121 @@ final class StreamingHandlerTests: XCTestCase {
         XCTAssertEqual(result?.text, "finished")
         let recorded = await plugin.session.recordedChunks()
         XCTAssertEqual(recorded, chunks.map(\.count))
+    }
+
+    func testModelManagerUsesHintAwarePluginWhenMultipleHintsAreSelected() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockHintPlugin()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.hints",
+                    name: "Mock Hints",
+                    version: "1.0.0",
+                    principalClass: "MockHintPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+
+        _ = try await modelManager.transcribe(
+            audioSamples: Array(repeating: 0.25, count: 16_000),
+            languageSelection: .hints(["de", "en"]),
+            task: .transcribe
+        )
+
+        XCTAssertEqual(plugin.lastSelection.languageHints, ["de", "en"])
+        XCTAssertNil(plugin.lastSelection.requestedLanguage)
+    }
+
+    func testModelManagerFallsBackToAutoDetectForLegacyPluginsWithMultipleHints() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockBatchPlugin()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.batch",
+                    name: "Mock Batch",
+                    version: "1.0.0",
+                    principalClass: "MockBatchPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+
+        let result = try await modelManager.transcribe(
+            audioSamples: Array(repeating: 0.25, count: 16_000),
+            languageSelection: .hints(["de", "en"]),
+            task: .transcribe
+        )
+
+        XCTAssertNil(result.detectedLanguage)
+    }
+
+    func testStreamingHandlerUsesHintAwareLiveSessionWhenAvailable() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockHintLivePlugin()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.live-hints",
+                    name: "Mock Live Hints",
+                    version: "1.0.0",
+                    principalClass: "MockHintLivePlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+
+        let handler = StreamingHandler(
+            modelManager: modelManager,
+            streamPromptProvider: { "" },
+            bufferProvider: { [] },
+            bufferDeltaProvider: { _ in (Array(repeating: 0.1, count: 4000), 4000) },
+            bufferedDurationProvider: { 0.25 }
+        )
+
+        handler.start(
+            engineOverrideId: plugin.providerId,
+            selectedProviderId: plugin.providerId,
+            languageSelection: .hints(["de", "en"]),
+            task: .transcribe,
+            cloudModelOverride: nil,
+            allowLiveTranscription: true,
+            stateCheck: { false }
+        )
+
+        try await Task.sleep(for: .milliseconds(150))
+        _ = await handler.finish()
+
+        XCTAssertEqual(plugin.lastSelection.languageHints, ["de", "en"])
+        XCTAssertNil(plugin.lastSelection.requestedLanguage)
     }
 }
