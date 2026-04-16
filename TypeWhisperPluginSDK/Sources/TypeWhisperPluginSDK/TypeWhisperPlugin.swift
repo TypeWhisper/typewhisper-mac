@@ -355,6 +355,59 @@ public extension TranscriptionEnginePlugin {
     }
 }
 
+// MARK: - Text-to-Speech Provider Plugin
+
+public enum TTSPurpose: String, Sendable, Codable, CaseIterable {
+    case status
+    case transcription
+    case manualReadback
+}
+
+public struct TTSSpeakRequest: Sendable, Equatable {
+    public let text: String
+    public let language: String?
+    public let purpose: TTSPurpose
+
+    public init(text: String, language: String? = nil, purpose: TTSPurpose) {
+        self.text = text
+        self.language = language
+        self.purpose = purpose
+    }
+}
+
+public struct PluginVoiceInfo: Sendable, Equatable, Hashable {
+    public let id: String
+    public let displayName: String
+    public let localeIdentifier: String?
+
+    public init(id: String, displayName: String, localeIdentifier: String? = nil) {
+        self.id = id
+        self.displayName = displayName
+        self.localeIdentifier = localeIdentifier
+    }
+}
+
+public protocol TTSPlaybackSession: AnyObject, Sendable {
+    var isActive: Bool { get }
+    var onFinish: (@Sendable () -> Void)? { get set }
+    func stop()
+}
+
+public protocol TTSProviderPlugin: TypeWhisperPlugin {
+    var providerId: String { get }
+    var providerDisplayName: String { get }
+    var isConfigured: Bool { get }
+    var availableVoices: [PluginVoiceInfo] { get }
+    var selectedVoiceId: String? { get }
+    var settingsSummary: String? { get }
+    func selectVoice(_ voiceId: String?)
+    func speak(_ request: TTSSpeakRequest) async throws -> any TTSPlaybackSession
+}
+
+public extension TTSProviderPlugin {
+    var settingsSummary: String? { nil }
+}
+
 // MARK: - Action Plugin
 
 public struct ActionContext: Sendable {
