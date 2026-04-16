@@ -95,7 +95,7 @@
 		AA00000000000000000096 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000096 /* KeychainService.swift */; };
 		AA00000000000000000102 /* AudioDeviceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000102 /* AudioDeviceService.swift */; };
 		AA00000000000000000320 /* AudioEngineRecoverySupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000320 /* AudioEngineRecoverySupport.swift */; };
-		AA00000000000000000321 /* Qwen3ContextBiasFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000321 /* Qwen3ContextBiasFormatter.swift */; };
+		AA00000000000000000323 /* Qwen3ContextBiasFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000321 /* Qwen3ContextBiasFormatter.swift */; };
 		AA00000000000000000103 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000103 /* main.swift */; };
 		AA00000000000000000104 /* CLIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000104 /* CLIClient.swift */; };
 		AA00000000000000000105 /* PortDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000105 /* PortDiscovery.swift */; };
@@ -3068,7 +3068,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AA00000000000000000321 /* Qwen3ContextBiasFormatter.swift in Sources */,
+				AA00000000000000000323 /* Qwen3ContextBiasFormatter.swift in Sources */,
 				AA00000000000000000154 /* Qwen3Plugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
