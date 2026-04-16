@@ -123,4 +123,44 @@ final class PluginRegistryServiceTests: XCTestCase {
         XCTAssertEqual(plugins.first?.version, "1.1.0")
         XCTAssertEqual(plugins.first?.downloadURL, "https://example.com/intel-compatible.zip")
     }
+
+    func testMalformedPluginEntryIsSkippedInsteadOfFailingEntireRegistry() throws {
+        // A single bad entry (wrong type on a required field) must not empty
+        // the marketplace: the decoder reports the error and keeps the rest.
+        let data = Data(
+            """
+            {
+              "schemaVersion": 2,
+              "plugins": [
+                {
+                  "id": 42,
+                  "name": "Malformed plugin id",
+                  "author": "Test",
+                  "description": "Bad entry",
+                  "category": "utility",
+                  "releases": []
+                },
+                {
+                  "id": "com.typewhisper.ok",
+                  "name": "Good Plugin",
+                  "version": "1.0.0",
+                  "minHostVersion": "1.0.0",
+                  "author": "TypeWhisper",
+                  "description": "Legacy good entry",
+                  "category": "utility",
+                  "size": 10,
+                  "downloadURL": "https://example.com/ok.zip"
+                }
+              ]
+            }
+            """.utf8
+        )
+
+        let response = try JSONDecoder().decode(PluginRegistryResponse.self, from: data)
+        let plugins = response.resolvedPlugins(appVersion: "1.2.3")
+
+        XCTAssertEqual(response.plugins.count, 1)
+        XCTAssertEqual(plugins.count, 1)
+        XCTAssertEqual(plugins.first?.id, "com.typewhisper.ok")
+    }
 }

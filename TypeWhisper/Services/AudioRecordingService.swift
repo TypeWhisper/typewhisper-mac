@@ -377,7 +377,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
     private func startEngineWithRecovery(_ engine: AVAudioEngine, label: String) throws {
         let explicitDeviceSelected = hasExplicitDeviceSelection
-        for (attempt, delay) in AudioEngineRecoveryPolicy.retryBackoff.enumerated() {
+        // Main-thread callers (e.g. startRecording from hotkey) get a bounded
+        // backoff to keep UI responsive; the observer-based recovery queue
+        // uses the full schedule. See AudioEngineRecoveryPolicy.
+        let backoff = AudioEngineRecoveryPolicy.retryBackoffForCurrentThread()
+        for (attempt, delay) in backoff.enumerated() {
             do {
                 try configureAndStartEngine(engine, label: label)
                 return
