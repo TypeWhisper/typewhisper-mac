@@ -909,6 +909,33 @@
       "minOSVersion": "14.0",
       "iconSystemName": "cpu",
       "downloadCount": 587
+    },
+    {
+      "id": "com.typewhisper.tts.system",
+      "name": "System Voice",
+      "author": "TypeWhisper",
+      "description": "Text-to-speech via the built-in macOS AVSpeechSynthesizer voices for spoken feedback.",
+      "descriptions": {
+        "de": "Text-zu-Sprache ueber die integrierten macOS-AVSpeechSynthesizer-Stimmen fuer gesprochenes Feedback."
+      },
+      "category": "tts",
+      "downloadCount": 0,
+      "iconSystemName": "speaker.wave.2.fill",
+      "requiresAPIKey": false,
+      "releases": [
+        {
+          "version": "1.0.0",
+          "minHostVersion": "1.3.0",
+          "size": 111677,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-system-tts-v1.0.0/SystemTTSPlugin.zip",
+          "minOSVersion": "14.0"
+        }
+      ],
+      "version": "1.0.0",
+      "minHostVersion": "1.3.0",
+      "size": 111677,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-system-tts-v1.0.0/SystemTTSPlugin.zip",
+      "minOSVersion": "14.0"
     }
   ]
 }
