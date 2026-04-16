@@ -12,6 +12,9 @@ var positionalArgs = [String]()
 var languageOptions = CLITranscribeLanguageOptions()
 var task: String?
 var translateTo: String?
+var engineOverride: String?
+var modelOverride: String?
+var awaitDownload = false
 
 var argIterator = args.makeIterator()
 while let arg = argIterator.next() {
@@ -56,6 +59,20 @@ while let arg = argIterator.next() {
             exit(1)
         }
         translateTo = next
+    case "--engine":
+        guard let next = argIterator.next() else {
+            printError("Error: --engine requires a value.")
+            exit(1)
+        }
+        engineOverride = next
+    case "--model":
+        guard let next = argIterator.next() else {
+            printError("Error: --model requires a value.")
+            exit(1)
+        }
+        modelOverride = next
+    case "--await-download":
+        awaitDownload = true
     default:
         // Ignore Apple/Xcode internal flags (e.g. -NSDocumentRevisionsDebugMode)
         if arg.hasPrefix("-NS") || arg.hasPrefix("-Apple") {
@@ -109,7 +126,10 @@ do {
             language: languageOptions.language,
             languageHints: languageOptions.languageHints,
             task: task,
-            targetLanguage: translateTo
+            targetLanguage: translateTo,
+            engine: engineOverride,
+            model: modelOverride,
+            awaitDownload: awaitDownload
         )
         print(OutputFormatter.formatTranscription(data, json: jsonOutput))
 
@@ -151,12 +171,18 @@ func printUsage() {
           --language-hint <code>  Repeatable language hint for auto-detection
           --task <task>        transcribe (default) or translate
           --translate-to <code>  Target language for translation
+          --engine <id>        Override the engine for this request (e.g. groq, qwen3)
+          --model <id>         Override the model for this request (e.g. whisper-large-v3-turbo)
+          --await-download     Wait for an engine to restore/download its model instead of failing with 409
 
         Examples:
           typewhisper status
           typewhisper transcribe recording.wav
           typewhisper transcribe recording.wav --language de --json
           typewhisper transcribe recording.wav --language-hint de --language-hint en
+          typewhisper transcribe recording.wav --model whisper-large-v3-turbo
+          typewhisper transcribe recording.wav --engine groq
+          typewhisper transcribe recording.wav --engine groq --model whisper-large-v3-turbo
           typewhisper transcribe - < audio.wav
           cat audio.wav | typewhisper transcribe -
         """

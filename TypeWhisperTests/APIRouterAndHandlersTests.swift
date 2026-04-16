@@ -1532,6 +1532,383 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let object = try JSONSerialization.jsonObject(with: response.body)
         return try XCTUnwrap(object as? [String: Any])
     }
+
+    @MainActor
+    func testCloudModelOverrideDoesNotPersistPluginDefault() async throws {
+        let selectedEngineKey = UserDefaultsKeys.selectedEngine
+        let originalSelection = UserDefaults.standard.object(forKey: selectedEngineKey)
+        UserDefaults.standard.removeObject(forKey: selectedEngineKey)
+        defer {
+            if let originalSelection {
+                UserDefaults.standard.set(originalSelection, forKey: selectedEngineKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: selectedEngineKey)
+            }
+        }
+
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = ConfigurableTranscriptionPlugin()
+        plugin.currentModelId = "alpha"
+        plugin.configured = true
+
+        let manifest = PluginManifest(
+            id: "com.typewhisper.mock.configurable-transcription",
+            name: "Configurable Mock Transcription",
+            version: "1.0.0",
+            principalClass: "APIRouterConfigurableTranscriptionPlugin"
+        )
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: manifest,
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+
+        XCTAssertEqual(plugin.selectedModelId, "alpha")
+
+        _ = try await modelManager.transcribe(
+            audioSamples: [Float](repeating: 0, count: 16_000),
+            language: nil,
+            task: .transcribe,
+            engineOverrideId: nil,
+            cloudModelOverride: "beta",
+            prompt: nil
+        )
+
+        XCTAssertEqual(plugin.selectedModelId, "alpha", "cloudModelOverride must not persist the plugin's default model")
+    }
+
+    @MainActor
+    func testTranscribeRejectsUnknownEngineOverride() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        MockTranscriptionPlugin.reset()
+        let context = Self.makeAPIContext(
+            appSupportDirectory: appSupportDirectory,
+            withMockTranscriptionPlugin: true
+        )
+
+        let wavData = WavEncoder.encode(Array(repeating: Float(0), count: 1600))
+        let boundary = "TestBoundary-\(UUID().uuidString)"
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"test.wav\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
+        body.append(wavData)
+        body.append("\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"engine\"\r\n\r\n".data(using: .utf8)!)
+        body.append("nonexistent-engine\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+
+        let response = await context.router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: ["content-type": "multipart/form-data; boundary=\(boundary)"],
+                body: body
+            )
+        )
+
+        XCTAssertEqual(response.status, 400)
+        let json = try Self.jsonObject(response)
+        let message = (json["error"] as? [String: Any])?["message"] as? String ?? ""
+        XCTAssertTrue(message.contains("Unknown engine"), "Expected 'Unknown engine' in message, got: \(message)")
+    }
+
+    @MainActor
+    func testTranscribeRejectsUnknownModelOverride() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        MockTranscriptionPlugin.reset()
+        let context = Self.makeAPIContext(
+            appSupportDirectory: appSupportDirectory,
+            withMockTranscriptionPlugin: true
+        )
+
+        let wavData = WavEncoder.encode(Array(repeating: Float(0), count: 1600))
+        let boundary = "TestBoundary-\(UUID().uuidString)"
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"test.wav\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
+        body.append(wavData)
+        body.append("\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"model\"\r\n\r\n".data(using: .utf8)!)
+        body.append("definitely-not-a-real-model\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+
+        let response = await context.router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: ["content-type": "multipart/form-data; boundary=\(boundary)"],
+                body: body
+            )
+        )
+
+        XCTAssertEqual(response.status, 400)
+        let json = try Self.jsonObject(response)
+        let message = (json["error"] as? [String: Any])?["message"] as? String ?? ""
+        XCTAssertTrue(message.contains("Unknown model"), "Expected 'Unknown model' in message, got: \(message)")
+    }
+
+    @MainActor
+    func testTranscribeRejectsAmbiguousModelOverride() async throws {
+        let selectedEngineKey = UserDefaultsKeys.selectedEngine
+        let originalSelection = UserDefaults.standard.object(forKey: selectedEngineKey)
+        UserDefaults.standard.removeObject(forKey: selectedEngineKey)
+        defer {
+            if let originalSelection {
+                UserDefaults.standard.set(originalSelection, forKey: selectedEngineKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: selectedEngineKey)
+            }
+        }
+
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        MockTranscriptionPlugin.reset()
+        let context = Self.makeAPIContext(
+            appSupportDirectory: appSupportDirectory,
+            withMockTranscriptionPlugin: true
+        )
+
+        // Add a second plugin that advertises the same model id "tiny", making it ambiguous.
+        let configurable = ConfigurableTranscriptionPlugin()
+        configurable.currentModelId = "tiny"
+        configurable.configured = true
+        let configurableManifest = PluginManifest(
+            id: "com.typewhisper.mock.configurable-transcription",
+            name: "Configurable Mock Transcription",
+            version: "1.0.0",
+            principalClass: "APIRouterConfigurableTranscriptionPlugin"
+        )
+        PluginManager.shared.loadedPlugins.append(
+            LoadedPlugin(
+                manifest: configurableManifest,
+                instance: configurable,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        )
+
+        let wavData = WavEncoder.encode(Array(repeating: Float(0), count: 1600))
+        let boundary = "TestBoundary-\(UUID().uuidString)"
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"test.wav\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
+        body.append(wavData)
+        body.append("\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"model\"\r\n\r\n".data(using: .utf8)!)
+        body.append("tiny\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+
+        let response = await context.router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: ["content-type": "multipart/form-data; boundary=\(boundary)"],
+                body: body
+            )
+        )
+
+        XCTAssertEqual(response.status, 400)
+        let json = try Self.jsonObject(response)
+        let message = (json["error"] as? [String: Any])?["message"] as? String ?? ""
+        XCTAssertTrue(message.contains("Ambiguous"), "Expected 'Ambiguous' in message, got: \(message)")
+    }
+
+    @MainActor
+    func testTranscribeRejectsUnconfiguredEngineOverrideWithConflict() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        MockTranscriptionPlugin.reset()
+        let context = Self.makeAPIContext(
+            appSupportDirectory: appSupportDirectory,
+            withMockTranscriptionPlugin: true
+        )
+
+        let configurable = ConfigurableTranscriptionPlugin()
+        configurable.configured = false
+        let configurableManifest = PluginManifest(
+            id: "com.typewhisper.mock.configurable-transcription",
+            name: "Configurable Mock Transcription",
+            version: "1.0.0",
+            principalClass: "APIRouterConfigurableTranscriptionPlugin"
+        )
+        PluginManager.shared.loadedPlugins.append(
+            LoadedPlugin(
+                manifest: configurableManifest,
+                instance: configurable,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        )
+
+        let wavData = WavEncoder.encode(Array(repeating: Float(0), count: 1600))
+        let boundary = "TestBoundary-\(UUID().uuidString)"
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"test.wav\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
+        body.append(wavData)
+        body.append("\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"engine\"\r\n\r\n".data(using: .utf8)!)
+        body.append("configurable-mock\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+
+        let response = await context.router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: ["content-type": "multipart/form-data; boundary=\(boundary)"],
+                body: body
+            )
+        )
+
+        XCTAssertEqual(response.status, 409)
+        let json = try Self.jsonObject(response)
+        let message = (json["error"] as? [String: Any])?["message"] as? String ?? ""
+        XCTAssertTrue(message.contains("not configured"), "Expected 'not configured' in message, got: \(message)")
+    }
+
+    @MainActor
+    func testTranscribeWithEngineOverrideRoutesToOverrideEngine() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        MockTranscriptionPlugin.reset()
+        let context = Self.makeAPIContext(
+            appSupportDirectory: appSupportDirectory,
+            withMockTranscriptionPlugin: true
+        )
+
+        let configurable = ConfigurableTranscriptionPlugin()
+        configurable.configured = true
+        configurable.currentModelId = "alpha"
+        let configurableManifest = PluginManifest(
+            id: "com.typewhisper.mock.configurable-transcription",
+            name: "Configurable Mock Transcription",
+            version: "1.0.0",
+            principalClass: "APIRouterConfigurableTranscriptionPlugin"
+        )
+        PluginManager.shared.loadedPlugins.append(
+            LoadedPlugin(
+                manifest: configurableManifest,
+                instance: configurable,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        )
+
+        let wavData = WavEncoder.encode(Array(repeating: Float(0), count: 1600))
+        let boundary = "TestBoundary-\(UUID().uuidString)"
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"test.wav\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
+        body.append(wavData)
+        body.append("\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"engine\"\r\n\r\n".data(using: .utf8)!)
+        body.append("configurable-mock\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+
+        let response = try Self.jsonObject(await context.router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: ["content-type": "multipart/form-data; boundary=\(boundary)"],
+                body: body
+            )
+        ))
+
+        XCTAssertEqual(response["engine"] as? String, "configurable-mock")
+        XCTAssertEqual(response["model"] as? String, "alpha")
+        XCTAssertEqual(response["text"] as? String, "transcribed")
+    }
+
+    @MainActor
+    func testTranscribeWithoutOverrideLeavesSelectionUntouched() async throws {
+        let selectedEngineKey = UserDefaultsKeys.selectedEngine
+        let originalSelection = UserDefaults.standard.object(forKey: selectedEngineKey)
+        UserDefaults.standard.removeObject(forKey: selectedEngineKey)
+        defer {
+            if let originalSelection {
+                UserDefaults.standard.set(originalSelection, forKey: selectedEngineKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: selectedEngineKey)
+            }
+        }
+
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = ConfigurableTranscriptionPlugin()
+        plugin.currentModelId = "alpha"
+        plugin.configured = true
+
+        let manifest = PluginManifest(
+            id: "com.typewhisper.mock.configurable-transcription",
+            name: "Configurable Mock Transcription",
+            version: "1.0.0",
+            principalClass: "APIRouterConfigurableTranscriptionPlugin"
+        )
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: manifest,
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+
+        _ = try await modelManager.transcribe(
+            audioSamples: [Float](repeating: 0, count: 16_000),
+            language: nil,
+            task: .transcribe,
+            engineOverrideId: nil,
+            cloudModelOverride: nil,
+            prompt: nil
+        )
+
+        XCTAssertEqual(plugin.selectedModelId, "alpha")
+    }
 }
 
 final class AudioRecordingServiceInputAvailabilityTests: XCTestCase {

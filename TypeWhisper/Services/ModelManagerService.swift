@@ -141,11 +141,13 @@ final class ModelManagerService: ObservableObject {
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else { return nil }
 
         if let modelId = cloudModelOverride,
-           let model = plugin.transcriptionModels.first(where: { $0.id == modelId }) {
+           let model = plugin.availableModels.first(where: { $0.id == modelId })
+            ?? plugin.transcriptionModels.first(where: { $0.id == modelId }) {
             return model.displayName
         }
         if let selectedId = plugin.selectedModelId,
-           let model = plugin.transcriptionModels.first(where: { $0.id == selectedId }) {
+           let model = plugin.availableModels.first(where: { $0.id == selectedId })
+            ?? plugin.transcriptionModels.first(where: { $0.id == selectedId }) {
             return model.displayName
         }
         return plugin.providerDisplayName
@@ -170,6 +172,36 @@ final class ModelManagerService: ObservableObject {
     }
 
     // MARK: - Transcription
+
+    /// Apply a one-shot cloud model override without persisting the default.
+    ///
+    /// Returns the model id that should be restored after the transcription call completes
+    /// (nil means "no restore needed" -- either no override was applied or the plugin had no
+    /// previous selection to restore to). Callers must pair this with `restoreCloudModelOverride`
+    /// inside a `defer` so the original selection is restored even on throw.
+    private func applyCloudModelOverride(
+        plugin: any TranscriptionEnginePlugin,
+        override: String?
+    ) -> String? {
+        guard let override else { return nil }
+        let previousId = plugin.selectedModelId
+        // If the plugin had no previous selection we can't express "unselect" through the SDK,
+        // so the override stays in place. For configured plugins selectedModelId is normally set.
+        guard let previousId, previousId != override else {
+            if previousId != override { plugin.selectModel(override) }
+            return nil
+        }
+        plugin.selectModel(override)
+        return previousId
+    }
+
+    private func restoreCloudModelOverride(
+        plugin: any TranscriptionEnginePlugin,
+        previousId: String?
+    ) {
+        guard let previousId else { return }
+        plugin.selectModel(previousId)
+    }
 
     func createLiveTranscriptionSession(
         language: String?,
@@ -210,9 +242,8 @@ final class ModelManagerService: ObservableObject {
             throw TranscriptionEngineError.modelNotLoaded
         }
 
-        if let modelId = cloudModelOverride {
-            plugin.selectModel(modelId)
-        }
+        let overrideRestoreId = applyCloudModelOverride(plugin: plugin, override: cloudModelOverride)
+        defer { restoreCloudModelOverride(plugin: plugin, previousId: overrideRestoreId) }
 
         guard let livePlugin = plugin as? LiveTranscriptionCapablePlugin else {
             return nil
@@ -298,9 +329,8 @@ final class ModelManagerService: ObservableObject {
             throw TranscriptionEngineError.modelNotLoaded
         }
 
-        if let modelId = cloudModelOverride {
-            plugin.selectModel(modelId)
-        }
+        let overrideRestoreId = applyCloudModelOverride(plugin: plugin, override: cloudModelOverride)
+        defer { restoreCloudModelOverride(plugin: plugin, previousId: overrideRestoreId) }
 
         let startTime = CFAbsoluteTimeGetCurrent()
         let wavData = WavEncoder.encode(audioSamples)
@@ -376,9 +406,8 @@ final class ModelManagerService: ObservableObject {
             throw TranscriptionEngineError.modelNotLoaded
         }
 
-        if let modelId = cloudModelOverride {
-            plugin.selectModel(modelId)
-        }
+        let overrideRestoreId = applyCloudModelOverride(plugin: plugin, override: cloudModelOverride)
+        defer { restoreCloudModelOverride(plugin: plugin, previousId: overrideRestoreId) }
 
         let startTime = CFAbsoluteTimeGetCurrent()
         let wavData = WavEncoder.encode(audioSamples)
