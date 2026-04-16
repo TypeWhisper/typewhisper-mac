@@ -921,7 +921,7 @@
     {
       "id": "com.typewhisper.elevenlabs",
       "name": "ElevenLabs",
-      "version": "1.0.1",
+      "version": "1.0.3",
       "minHostVersion": "0.12.0",
       "author": "TypeWhisper",
       "description": "Cloud transcription via ElevenLabs Scribe API with real-time WebSocket streaming.",
@@ -929,13 +929,20 @@
         "de": "Cloud-Transkription ueber die ElevenLabs-Scribe-API mit Echtzeit-WebSocket-Streaming."
       },
       "category": "transcription",
-      "size": 175246,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-elevenlabs-v1.0.1/ElevenLabsPlugin.zip",
+      "size": 179469,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-elevenlabs-v1.0.3/ElevenLabsPlugin.zip",
       "minOSVersion": "14.0",
       "iconSystemName": "waveform.badge.mic",
       "requiresAPIKey": true,
       "downloadCount": 98,
       "releases": [
+        {
+          "version": "1.0.3",
+          "minHostVersion": "0.12.0",
+          "size": 179469,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-elevenlabs-v1.0.3/ElevenLabsPlugin.zip",
+          "minOSVersion": "14.0"
+        },
         {
           "version": "1.0.2",
           "minHostVersion": "0.12.0",
