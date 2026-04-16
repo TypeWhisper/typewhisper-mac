@@ -1,0 +1,11 @@
+{
+  "id": "com.typewhisper.tts.system",
+  "name": "System Voice",
+  "version": "1.0.0",
+  "minHostVersion": "1.0.0",
+  "minOSVersion": "14.0",
+  "author": "TypeWhisper",
+  "principalClass": "SystemTTSPlugin",
+  "iconSystemName": "speaker.wave.2.fill",
+  "category": "tts"
+}

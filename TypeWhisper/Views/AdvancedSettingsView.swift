@@ -6,6 +6,8 @@ struct AdvancedSettingsView: View {
     @ObservedObject private var promptProcessingService = ServiceContainer.shared.promptProcessingService
     @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
     @ObservedObject private var dictation = DictationViewModel.shared
+    @ObservedObject private var speechFeedbackService = ServiceContainer.shared.speechFeedbackService
+    @ObservedObject private var pluginManager = PluginManager.shared
     @State private var cliInstalled = false
     @State private var cliSymlinkTarget = ""
     @State private var raycastInstalled = false
@@ -129,9 +131,36 @@ struct AdvancedSettingsView: View {
 
                 Toggle(String(localized: "Spoken feedback"), isOn: $dictation.spokenFeedbackEnabled)
 
-                Text(String(localized: "Reads back the transcribed text via speech synthesis after each dictation."))
+                Text(String(localized: "Speaks transcribed text and spoken status feedback through the selected speech provider."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                if dictation.spokenFeedbackEnabled, !speechFeedbackService.availableProviders.isEmpty {
+                    let providerSelection = Binding(
+                        get: { speechFeedbackService.effectiveProviderId ?? speechFeedbackService.selectedProviderId },
+                        set: { speechFeedbackService.selectedProviderId = $0 }
+                    )
+
+                    Picker(String(localized: "Speech Provider"), selection: providerSelection) {
+                        ForEach(speechFeedbackService.availableProviders, id: \.id) { provider in
+                            Text(provider.displayName).tag(provider.id)
+                        }
+                    }
+
+                    if let summary = speechFeedbackService.currentSettingsSummary {
+                        Text(summary)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if let activeProviderId = speechFeedbackService.effectiveProviderId,
+                       let plugin = pluginManager.loadedTTSPlugin(for: activeProviderId),
+                       plugin.instance.settingsView != nil {
+                        Button(String(localized: "Configure Voice & Speed…")) {
+                            PluginSettingsWindowManager.shared.present(plugin)
+                        }
+                    }
+                }
             }
 
             // MARK: - History

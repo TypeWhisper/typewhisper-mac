@@ -13,6 +13,7 @@ TypeWhisper supports external plugins as macOS `.bundle` files. Place compiled b
 | `TypeWhisperPlugin` | Base protocol, event observation | No |
 | `PostProcessorPlugin` | Transform text in the pipeline | Yes (processed text) |
 | `LLMProviderPlugin` | Add custom LLM providers | Yes (LLM response) |
+| `TTSProviderPlugin` | Add text-to-speech providers for spoken feedback and readback | Yes (playback session) |
 | `TranscriptionEnginePlugin` | Custom transcription engines | Yes (transcription result) |
 | `ActionPlugin` | Route LLM output to custom actions (e.g. create Linear issues) | Yes (action result) |
 
@@ -49,6 +50,8 @@ Plugins can subscribe to events without modifying the transcription pipeline:
     "principalClass": "MyPluginClassName"
 }
 ```
+
+`category` may be one of `transcription`, `tts`, `llm`, `post-processor`, `action`, `memory`, or `utility`.
 
 ### Host Services
 

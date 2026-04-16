@@ -1,6 +1,6 @@
 # TypeWhisper Plugin SDK
 
-Build plugins for [TypeWhisper](https://github.com/TypeWhisper/typewhisper-mac) to add transcription engines, LLM providers, post-processors, and custom actions.
+Build plugins for [TypeWhisper](https://github.com/TypeWhisper/typewhisper-mac) to add transcription engines, text-to-speech providers, LLM providers, post-processors, and custom actions.
 
 ## Quick Start
 
@@ -162,6 +162,54 @@ let result = try await helper.process(
     apiKey: apiKey, model: "my-model",
     systemPrompt: systemPrompt, userText: userText
 )
+```
+
+### TTSProviderPlugin
+
+Add a text-to-speech provider for spoken feedback and manual readback.
+
+```swift
+@objc(MyTTSProvider)
+final class MyTTSProvider: NSObject, TTSProviderPlugin, @unchecked Sendable {
+    static let pluginId = "com.yourname.mytts"
+    static let pluginName = "My TTS"
+
+    private var host: HostServices?
+
+    required override init() { super.init() }
+    func activate(host: HostServices) { self.host = host }
+    func deactivate() { host = nil }
+
+    var providerId: String { "my-tts" }
+    var providerDisplayName: String { "My TTS" }
+    var isConfigured: Bool { true }
+    var availableVoices: [PluginVoiceInfo] {
+        [PluginVoiceInfo(id: "default", displayName: "Default Voice")]
+    }
+    var selectedVoiceId: String? { nil }
+    func selectVoice(_ voiceId: String?) {}
+
+    func speak(_ request: TTSSpeakRequest) async throws -> any TTSPlaybackSession {
+        // request.text     - text to speak
+        // request.language - optional language hint
+        // request.purpose  - .status, .transcription, or .manualReadback
+        MyPlaybackSession()
+    }
+}
+```
+
+`TTSPlaybackSession` must keep track of active playback so TypeWhisper can stop or replace it:
+
+```swift
+final class MyPlaybackSession: TTSPlaybackSession, @unchecked Sendable {
+    var isActive: Bool = true
+    var onFinish: (@Sendable () -> Void)?
+
+    func stop() {
+        isActive = false
+        onFinish?()
+    }
+}
 ```
 
 ### PostProcessorPlugin
@@ -421,7 +469,7 @@ Registry entry format:
   "minOSVersion": "14.0",
   "author": "Your Name",
   "description": "What your plugin does.",
-  "category": "transcription|llm|postprocessor|action",
+  "category": "transcription|tts|llm|post-processor|action|memory|utility",
   "size": 12345678,
   "downloadURL": "https://example.com/MyPlugin.zip",
   "iconSystemName": "star.fill"

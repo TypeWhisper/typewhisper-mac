@@ -114,6 +114,51 @@ private final class MockDictionaryTermsPlugin: NSObject, TranscriptionEnginePlug
     }
 }
 
+private final class MockTTSPlaybackSession: TTSPlaybackSession, @unchecked Sendable {
+    var isActive = true
+    var onFinish: (@Sendable () -> Void)?
+
+    func stop() {
+        isActive = false
+        onFinish?()
+    }
+}
+
+@objc(MockTTSPlugin)
+private final class MockTTSPlugin: NSObject, TTSProviderPlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.tts"
+    static let pluginName = "Mock TTS"
+
+    private(set) var host: HostServices?
+
+    required override init() {}
+
+    func activate(host: HostServices) {
+        self.host = host
+    }
+
+    func deactivate() {
+        host = nil
+    }
+
+    var providerId: String { "mock-tts" }
+    var providerDisplayName: String { "Mock TTS" }
+    var isConfigured: Bool { true }
+    var availableVoices: [PluginVoiceInfo] { [PluginVoiceInfo(id: "default", displayName: "Default")] }
+    var selectedVoiceId: String? { host?.userDefault(forKey: "voice") as? String }
+    var settingsSummary: String? { "Default voice" }
+
+    func selectVoice(_ voiceId: String?) {
+        host?.setUserDefault(voiceId, forKey: "voice")
+    }
+
+    func speak(_ request: TTSSpeakRequest) async throws -> any TTSPlaybackSession {
+        let session = MockTTSPlaybackSession()
+        host?.setUserDefault(request.text, forKey: "lastSpokenText")
+        return session
+    }
+}
+
 final class ProtocolContractTests: XCTestCase {
     func testHostServicesExposeRulesSecretsAndDefaults() throws {
         let host = MockHostServices(eventBus: MockEventBus(), availableRuleNames: ["Work", "Docs"])
@@ -169,6 +214,25 @@ final class ProtocolContractTests: XCTestCase {
 
         XCTAssertFalse(legacyPlugin is any DictionaryTermsCapabilityProviding)
         XCTAssertEqual(capabilityPlugin.dictionaryTermsSupport, .requiresPluginSetting)
+    }
+
+    func testTTSPluginCanPersistVoiceAndReceiveSpeakRequest() async throws {
+        let plugin = MockTTSPlugin()
+        let host = MockHostServices(eventBus: MockEventBus(), availableRuleNames: ["Work"])
+        plugin.activate(host: host)
+
+        plugin.selectVoice("default")
+        let session = try await plugin.speak(
+            TTSSpeakRequest(text: "Hello", language: "en", purpose: .manualReadback)
+        )
+
+        XCTAssertEqual(plugin.selectedVoiceId, "default")
+        XCTAssertEqual(plugin.settingsSummary, "Default voice")
+        XCTAssertEqual(host.userDefault(forKey: "lastSpokenText") as? String, "Hello")
+        XCTAssertTrue(session.isActive)
+
+        session.stop()
+        XCTAssertFalse(session.isActive)
     }
 
     func testPluginDictionaryTermsNormalizesPromptAndContextTokens() {

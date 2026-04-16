@@ -25,6 +25,7 @@ enum PluginDownloadError: LocalizedError {
 
 enum PluginCategory: String, CaseIterable {
     case transcription
+    case tts
     case llm
     case postProcessor = "post-processor"
     case action
@@ -34,6 +35,7 @@ enum PluginCategory: String, CaseIterable {
     var displayName: String {
         switch self {
         case .transcription: String(localized: "Transcription Engines")
+        case .tts: String(localized: "Text-to-Speech")
         case .llm: String(localized: "LLM Providers")
         case .postProcessor: String(localized: "Post-Processors")
         case .action: String(localized: "Actions")
@@ -45,6 +47,7 @@ enum PluginCategory: String, CaseIterable {
     var iconSystemName: String {
         switch self {
         case .transcription: "waveform"
+        case .tts: "speaker.wave.2.fill"
         case .llm: "brain"
         case .postProcessor: "arrow.triangle.2.circlepath"
         case .action: "bolt.fill"
@@ -56,11 +59,12 @@ enum PluginCategory: String, CaseIterable {
     var sortOrder: Int {
         switch self {
         case .transcription: 0
-        case .llm: 1
-        case .postProcessor: 2
-        case .action: 3
-        case .memory: 4
-        case .utility: 5
+        case .tts: 1
+        case .llm: 2
+        case .postProcessor: 3
+        case .action: 4
+        case .memory: 5
+        case .utility: 6
         }
     }
 }

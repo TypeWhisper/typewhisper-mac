@@ -127,9 +127,11 @@ struct PluginSettingsView: View {
             return PluginCategory(rawValue: regPlugin.category) ?? .utility
         }
         if plugin.instance is TranscriptionEnginePlugin { return .transcription }
+        if plugin.instance is TTSProviderPlugin { return .tts }
         if plugin.instance is LLMProviderPlugin { return .llm }
         if plugin.instance is PostProcessorPlugin { return .postProcessor }
         if plugin.instance is ActionPlugin { return .action }
+        if plugin.instance is MemoryStoragePlugin { return .memory }
         return .utility
     }
 

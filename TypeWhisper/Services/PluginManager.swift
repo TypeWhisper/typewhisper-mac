@@ -159,6 +159,12 @@ final class PluginManager: ObservableObject {
             .compactMap { $0.instance as? LLMProviderPlugin }
     }
 
+    var ttsProviders: [TTSProviderPlugin] {
+        loadedPlugins
+            .filter { $0.isEnabled }
+            .compactMap { $0.instance as? TTSProviderPlugin }
+    }
+
     var transcriptionEngines: [TranscriptionEnginePlugin] {
         loadedPlugins
             .filter { $0.isEnabled }
@@ -185,6 +191,17 @@ final class PluginManager: ObservableObject {
         loadedPlugins.first {
             guard let engine = $0.instance as? TranscriptionEnginePlugin else { return false }
             return $0.isEnabled && engine.providerId == providerId
+        }
+    }
+
+    func ttsProvider(for providerId: String) -> TTSProviderPlugin? {
+        ttsProviders.first { $0.providerId == providerId }
+    }
+
+    func loadedTTSPlugin(for providerId: String) -> LoadedPlugin? {
+        loadedPlugins.first {
+            guard let provider = $0.instance as? TTSProviderPlugin else { return false }
+            return $0.isEnabled && provider.providerId == providerId
         }
     }
 
