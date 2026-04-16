@@ -725,7 +725,7 @@
     {
       "id": "com.typewhisper.memory.openai-vector",
       "name": "OpenAI Vector Memory",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "minHostVersion": "0.14.0",
       "author": "TypeWhisper",
       "description": "Store and search memories using the OpenAI Vector Store API with semantic embeddings.",
@@ -733,11 +733,27 @@
         "de": "Speichert und durchsucht Erinnerungen ueber die OpenAI Vector Store API mit semantischen Embeddings."
       },
       "category": "memory",
-      "size": 198014,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-vector-memory-v1.0.0/OpenAIVectorMemoryPlugin.zip",
+      "size": 198015,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-vector-memory-v1.0.1/OpenAIVectorMemoryPlugin.zip",
       "minOSVersion": "14.0",
       "iconSystemName": "brain",
-      "downloadCount": 751
+      "downloadCount": 751,
+      "releases": [
+        {
+          "version": "1.0.1",
+          "minHostVersion": "0.14.0",
+          "size": 198015,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-vector-memory-v1.0.1/OpenAIVectorMemoryPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
+          "version": "1.0.0",
+          "minHostVersion": "0.14.0",
+          "size": 198014,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-vector-memory-v1.0.0/OpenAIVectorMemoryPlugin.zip",
+          "minOSVersion": "14.0"
+        }
+      ]
     },
     {
       "id": "com.typewhisper.memory.file",
