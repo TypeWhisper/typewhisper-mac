@@ -182,6 +182,40 @@
       "size": 183891,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-compatible-v1.0.13/OpenAICompatiblePlugin.zip",
       "minOSVersion": "14.0"
+    },
+    {
+      "id": "com.typewhisper.qwen3",
+      "name": "Qwen3 ASR",
+      "author": "TypeWhisper",
+      "description": "Local speech-to-text powered by MLX on Apple Silicon. 30 languages, no API key required.",
+      "descriptions": {
+        "de": "Lokale Spracherkennung mit MLX auf Apple Silicon. 30 Sprachen, kein API-Key noetig."
+      },
+      "category": "transcription",
+      "downloadCount": 0,
+      "iconSystemName": "cpu",
+      "releases": [
+        {
+          "version": "1.0.20",
+          "minHostVersion": "1.2.1",
+          "sdkCompatibilityVersion": "v1",
+          "size": 18444283,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-qwen3-v1.0.20/Qwen3Plugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        }
+      ],
+      "version": "1.0.20",
+      "minHostVersion": "1.2.1",
+      "sdkCompatibilityVersion": "v1",
+      "size": 18444283,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-qwen3-v1.0.20/Qwen3Plugin.zip",
+      "minOSVersion": "14.0",
+      "supportedArchitectures": [
+        "arm64"
+      ]
     }
   ]
 }
