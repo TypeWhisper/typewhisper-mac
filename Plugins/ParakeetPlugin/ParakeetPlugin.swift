@@ -40,7 +40,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
            let version = ParakeetVersion(rawValue: versionString) {
             selectedVersion = version
         }
-        Task { await restoreLoadedModel() }
+        Task { await restoreLoadedModel(allowDownloads: false) }
     }
 
     func deactivate() {
@@ -338,7 +338,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
     }
 
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
-    @objc func triggerRestoreModel() { Task { await restoreLoadedModel() } }
+    @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: true) } }
 
     func unloadModel(clearPersistence: Bool = true) {
         if let manager = asrManager {
@@ -359,7 +359,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
         host?.notifyCapabilitiesChanged()
     }
 
-    func restoreLoadedModel() async {
+    func restoreLoadedModel(allowDownloads: Bool = true) async {
         guard let savedModelId = host?.userDefault(forKey: "loadedModel") as? String else {
             return
         }
@@ -367,7 +367,13 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
         if let version = ParakeetVersion.from(modelId: savedModelId) {
             selectedVersion = version
         }
+        guard allowDownloads || isModelDownloaded(version: selectedVersion) else { return }
         await loadModel()
+    }
+
+    private func isModelDownloaded(version: ParakeetVersion) -> Bool {
+        let cacheDir = AsrModels.defaultCacheDirectory(for: version.asrModelVersion)
+        return AsrModels.modelsExist(at: cacheDir, version: version.asrModelVersion)
     }
 
     // MARK: - Settings View
