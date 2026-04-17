@@ -28,6 +28,10 @@ struct NotchIndicatorView: View {
         viewModel.state == .inserting && viewModel.actionFeedbackMessage != nil
     }
 
+    private var hasRecordingCancelWarning: Bool {
+        viewModel.state == .recording && viewModel.recordingCancelWarningMessage != nil
+    }
+
     private var hasProcessingPhase: Bool {
         viewModel.state == .processing && viewModel.processingPhase != nil
     }
@@ -45,6 +49,7 @@ struct NotchIndicatorView: View {
     }
 
     private var expansionMode: NotchExpansionMode {
+        if hasRecordingCancelWarning { return .feedback }
         if transcriptBodyVisible { return .transcript }
         if hasActionFeedback { return .feedback }
         if hasProcessingPhase { return .processing }
@@ -71,6 +76,9 @@ struct NotchIndicatorView: View {
     }
 
     private var expandedBodyHeight: CGFloat {
+        if hasRecordingCancelWarning {
+            return feedbackBodyHeight
+        }
         if hasTranscriptSection {
             return transcriptBodyHeight
         }
@@ -156,6 +164,9 @@ struct NotchIndicatorView: View {
         case .idle, .promptSelection, .promptProcessing:
             return String(localized: "Idle")
         case .recording:
+            if let warning = viewModel.recordingCancelWarningMessage {
+                return warning
+            }
             return String(localized: "Recording")
         case .processing:
             return String(localized: "Processing transcription")
@@ -188,7 +199,15 @@ struct NotchIndicatorView: View {
 
     @ViewBuilder
     private var expandedBodyContent: some View {
-        if hasTranscriptSection {
+        if hasRecordingCancelWarning {
+            IndicatorActionFeedback(
+                message: viewModel.recordingCancelWarningMessage ?? "",
+                icon: "exclamationmark.triangle.fill",
+                isError: false,
+                iconColor: .yellow,
+                contentPadding: contentPadding
+            )
+        } else if hasTranscriptSection {
             IndicatorExpandableText(
                 text: viewModel.partialText,
                 sizing: sizing,
@@ -207,6 +226,7 @@ struct NotchIndicatorView: View {
                 message: viewModel.actionFeedbackMessage ?? "",
                 icon: viewModel.actionFeedbackIcon,
                 isError: viewModel.actionFeedbackIsError,
+                iconColor: nil,
                 contentPadding: contentPadding
             )
         } else {

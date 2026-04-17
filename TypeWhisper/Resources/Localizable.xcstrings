@@ -5291,6 +5291,16 @@
         }
       }
     },
+    "Press Esc again to cancel recording" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drücke Esc erneut, um die Aufnahme abzubrechen"
+          }
+        }
+      }
+    },
     "Processing..." : {
       "localizations" : {
         "de" : {
