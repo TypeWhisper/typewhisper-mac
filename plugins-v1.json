@@ -948,6 +948,40 @@
       "supportedArchitectures": [
         "arm64"
       ]
+    },
+    {
+      "id": "com.typewhisper.voxtral",
+      "name": "Voxtral",
+      "author": "TypeWhisper",
+      "description": "Local speech-to-text powered by Voxtral MLX on Apple Silicon. Fast and accurate.",
+      "descriptions": {
+        "de": "Lokale Spracherkennung mit Voxtral MLX auf Apple Silicon. Schnell und praezise."
+      },
+      "category": "transcription",
+      "downloadCount": 0,
+      "iconSystemName": "cpu",
+      "releases": [
+        {
+          "version": "1.0.9",
+          "minHostVersion": "1.2.1",
+          "sdkCompatibilityVersion": "v1",
+          "size": 18435253,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-voxtral-v1.0.9/VoxtralPlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        }
+      ],
+      "version": "1.0.9",
+      "minHostVersion": "1.2.1",
+      "sdkCompatibilityVersion": "v1",
+      "size": 18435253,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-voxtral-v1.0.9/VoxtralPlugin.zip",
+      "minOSVersion": "14.0",
+      "supportedArchitectures": [
+        "arm64"
+      ]
     }
   ]
 }
