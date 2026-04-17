@@ -58,7 +58,6 @@ final class StreamingHandler {
 
         let streamPrompt = streamPromptProvider()
         let pollInterval: Duration = plugin.supportsStreaming ? .milliseconds(350) : .seconds(3)
-        let shouldUseLegacyPolling = !modelManager.usesMeteredStreamingFallback(engineOverrideId: engineOverrideId)
 
         streamingTask = Task { [weak self] in
             guard let self else { return }
@@ -99,11 +98,6 @@ final class StreamingHandler {
 
                     try? await Task.sleep(for: pollInterval)
                 }
-                return
-            }
-
-            guard shouldUseLegacyPolling else {
-                self.onStreamingStateChange?(false)
                 return
             }
 

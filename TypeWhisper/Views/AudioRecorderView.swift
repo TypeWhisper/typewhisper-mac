@@ -181,7 +181,10 @@ struct AudioRecorderView: View {
                         if !modelManager.supportsLiveTranscriptionSession(engineOverrideId: providerId),
                            modelManager.usesMeteredStreamingFallback(engineOverrideId: providerId) {
                             Label(
-                                String(localized: "This engine avoids repeated live API calls and transcribes the full recording after you stop."),
+                                localizedAppText(
+                                    "This engine updates the live preview every few seconds and may use additional API calls while recording.",
+                                    de: "Diese Engine aktualisiert die Live-Vorschau nur alle paar Sekunden und kann waehrend der Aufnahme zusaetzliche API-Aufrufe ausloesen."
+                                ),
                                 systemImage: "info.circle"
                             )
                             .font(.caption)

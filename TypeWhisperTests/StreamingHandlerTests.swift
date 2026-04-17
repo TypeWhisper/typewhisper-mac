@@ -193,7 +193,7 @@ final class StreamingHandlerTests: XCTestCase {
         super.tearDown()
     }
 
-    func testMeteredBatchPluginSkipsIntermediateCalls() async throws {
+    func testMeteredBatchPluginStillUsesIntermediatePreviewCalls() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
 
@@ -236,10 +236,10 @@ final class StreamingHandlerTests: XCTestCase {
             stateCheck: { true }
         )
 
-        try await Task.sleep(for: .milliseconds(700))
+        try await Task.sleep(for: .milliseconds(3400))
         handler.stop()
 
-        XCTAssertEqual(plugin.transcribeCallCount, 0)
+        XCTAssertEqual(plugin.transcribeCallCount, 1)
     }
 
     func testDisabledLiveTranscriptionPreventsAnyIntermediateWork() async throws {
