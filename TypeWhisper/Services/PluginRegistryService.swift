@@ -76,6 +76,7 @@ struct RegistryPlugin: Codable, Identifiable {
     let name: String
     let version: String
     let minHostVersion: String
+    let sdkCompatibilityVersion: String?
     let minOSVersion: String?
     let supportedArchitectures: [String]?
     let author: String
@@ -108,6 +109,7 @@ struct RegistryPlugin: Codable, Identifiable {
 struct RegistryPluginRelease: Decodable, Equatable {
     let version: String
     let minHostVersion: String
+    let sdkCompatibilityVersion: String?
     let minOSVersion: String?
     let supportedArchitectures: [String]?
     let size: Int64
@@ -117,10 +119,12 @@ struct RegistryPluginRelease: Decodable, Equatable {
 
     func isCompatible(
         withAppVersion appVersion: String,
+        sdkCompatibilityVersion: String,
         currentOSVersion: OperatingSystemVersion,
         architecture: String
     ) -> Bool {
         PluginRegistryService.compareVersions(minHostVersion, appVersion) != .orderedDescending
+            && self.sdkCompatibilityVersion == sdkCompatibilityVersion
             && PluginCompatibility.isCompatible(
                 minOSVersion: minOSVersion,
                 supportedArchitectures: supportedArchitectures,
@@ -133,6 +137,7 @@ struct RegistryPluginRelease: Decodable, Equatable {
 private struct LegacyRegistryRelease: Decodable {
     let version: String?
     let minHostVersion: String?
+    let sdkCompatibilityVersion: String?
     let minOSVersion: String?
     let supportedArchitectures: [String]?
     let size: Int64?
@@ -165,6 +170,7 @@ struct RegistryPluginEntry: Decodable {
         case releases
         case version
         case minHostVersion
+        case sdkCompatibilityVersion
         case minOSVersion
         case supportedArchitectures
         case size
@@ -201,10 +207,11 @@ struct RegistryPluginEntry: Decodable {
             return
         }
 
-        releases = [
+            releases = [
             RegistryPluginRelease(
                 version: version,
                 minHostVersion: minHostVersion,
+                sdkCompatibilityVersion: legacy.sdkCompatibilityVersion,
                 minOSVersion: legacy.minOSVersion,
                 supportedArchitectures: legacy.supportedArchitectures,
                 size: size,
@@ -217,6 +224,7 @@ struct RegistryPluginEntry: Decodable {
 
     func resolvedPlugin(
         appVersion: String,
+        sdkCompatibilityVersion: String,
         currentOSVersion: OperatingSystemVersion = ProcessInfo.processInfo.operatingSystemVersion,
         architecture: String = RuntimeArchitecture.current
     ) -> RegistryPlugin? {
@@ -224,6 +232,7 @@ struct RegistryPluginEntry: Decodable {
             .filter {
                 $0.isCompatible(
                     withAppVersion: appVersion,
+                    sdkCompatibilityVersion: sdkCompatibilityVersion,
                     currentOSVersion: currentOSVersion,
                     architecture: architecture
                 )
@@ -239,6 +248,7 @@ struct RegistryPluginEntry: Decodable {
             name: name,
             version: compatibleRelease.version,
             minHostVersion: compatibleRelease.minHostVersion,
+            sdkCompatibilityVersion: compatibleRelease.sdkCompatibilityVersion,
             minOSVersion: compatibleRelease.minOSVersion,
             supportedArchitectures: compatibleRelease.supportedArchitectures,
             author: author,
@@ -302,12 +312,14 @@ struct PluginRegistryResponse: Decodable {
 
     func resolvedPlugins(
         appVersion: String,
+        sdkCompatibilityVersion: String,
         currentOSVersion: OperatingSystemVersion = ProcessInfo.processInfo.operatingSystemVersion,
         architecture: String = RuntimeArchitecture.current
     ) -> [RegistryPlugin] {
         plugins.compactMap {
             $0.resolvedPlugin(
                 appVersion: appVersion,
+                sdkCompatibilityVersion: sdkCompatibilityVersion,
                 currentOSVersion: currentOSVersion,
                 architecture: architecture
             )
@@ -390,7 +402,10 @@ final class PluginRegistryService: ObservableObject {
             let response = try JSONDecoder().decode(PluginRegistryResponse.self, from: data)
 
             let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0"
-            registry = response.resolvedPlugins(appVersion: appVersion)
+            registry = response.resolvedPlugins(
+                appVersion: appVersion,
+                sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion
+            )
             lastFetchDate = Date()
             fetchState = .loaded
             logger.info("Fetched \(self.registry.count) plugin(s) from registry")

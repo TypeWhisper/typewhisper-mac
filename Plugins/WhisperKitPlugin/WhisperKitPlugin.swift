@@ -6,7 +6,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(WhisperKitPlugin)
-final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, @unchecked Sendable {
+final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.whisperkit"
     static let pluginName = "WhisperKit"
 

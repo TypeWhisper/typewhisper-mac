@@ -217,6 +217,13 @@ final class PluginManager: ObservableObject {
         manifest.isCompatibleWithCurrentEnvironment
     }
 
+    func isManifestSDKCompatible(_ manifest: PluginManifest, isBundled: Bool) -> Bool {
+        PluginSDKCompatibility.isCompatible(
+            manifestVersion: manifest.sdkCompatibilityVersion,
+            isBundled: isBundled
+        )
+    }
+
     init(appSupportDirectory: URL = AppConstants.appSupportDirectory) {
         self.pluginsDirectory = appSupportDirectory
             .appendingPathComponent("Plugins", isDirectory: true)
@@ -263,6 +270,7 @@ final class PluginManager: ObservableObject {
 
     func loadPlugin(at url: URL) throws {
         let manifestURL = url.appendingPathComponent("Contents/Resources/manifest.json")
+        let isBundledSource = Bundle.main.builtInPlugInsURL.map { url.path.hasPrefix($0.path) } ?? false
         let data: Data
         do {
             data = try Data(contentsOf: manifestURL)
@@ -288,6 +296,17 @@ final class PluginManager: ObservableObject {
             ) ?? "is not compatible with this Mac"
             logger.info(
                 "Skipping plugin \(manifest.id, privacy: .public) on \(architecture, privacy: .public): \(reason, privacy: .public)"
+            )
+            return
+        }
+
+        if !isManifestSDKCompatible(manifest, isBundled: isBundledSource) {
+            let reason = PluginSDKCompatibility.incompatibilityReason(
+                manifestVersion: manifest.sdkCompatibilityVersion,
+                isBundled: isBundledSource
+            ) ?? "is not compatible with this TypeWhisper build"
+            logger.info(
+                "Skipping plugin \(manifest.id, privacy: .public): \(reason, privacy: .public)"
             )
             return
         }
@@ -347,9 +366,8 @@ final class PluginManager: ObservableObject {
             isEnabled = stored
         } else {
             // Auto-enable bundled plugins on first encounter
-            let isBundled = Bundle.main.builtInPlugInsURL.map { url.path.hasPrefix($0.path) } ?? false
-            isEnabled = isBundled
-            if isBundled {
+            isEnabled = isBundledSource
+            if isBundledSource {
                 UserDefaults.standard.set(true, forKey: enabledKey)
             }
         }

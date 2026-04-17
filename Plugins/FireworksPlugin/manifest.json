@@ -3,6 +3,7 @@
     "name": "Fireworks AI",
     "version": "1.0.1",
     "minHostVersion": "0.9.0",
+    "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
     "description": "Cloud transcription and LLM via Fireworks AI. Streaming transcription, fast inference, requires API key.",
@@ -11,6 +12,6 @@
     },
     "category": "transcription",
     "iconSystemName": "flame.fill",
-    "requiresAPIKey": true,
-    "principalClass": "FireworksPlugin"
+    "principalClass": "FireworksPlugin",
+    "requiresAPIKey": true
 }

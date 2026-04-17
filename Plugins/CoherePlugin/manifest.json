@@ -3,6 +3,7 @@
     "name": "Cohere",
     "version": "1.0.0",
     "minHostVersion": "0.12.0",
+    "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
     "description": "Cloud transcription via Cohere Transcribe API. State-of-the-art accuracy across 14 languages. Requires API key.",
@@ -11,6 +12,6 @@
     },
     "category": "transcription",
     "iconSystemName": "waveform.badge.mic",
-    "requiresAPIKey": true,
-    "principalClass": "CoherePlugin"
+    "principalClass": "CoherePlugin",
+    "requiresAPIKey": true
 }

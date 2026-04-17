@@ -114,6 +114,35 @@ private final class MockDictionaryTermsPlugin: NSObject, TranscriptionEnginePlug
     }
 }
 
+@objc(MockCatalogTranscriptionPlugin)
+private final class MockCatalogTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.catalog"
+    static let pluginName = "Mock Catalog"
+
+    required override init() {}
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    var providerId: String { "mock-catalog" }
+    var providerDisplayName: String { "Mock Catalog" }
+    var isConfigured: Bool { true }
+    var transcriptionModels: [PluginModelInfo] { [PluginModelInfo(id: "tiny", displayName: "Tiny")] }
+    var availableModels: [PluginModelInfo] {
+        [
+            PluginModelInfo(id: "tiny", displayName: "Tiny"),
+            PluginModelInfo(id: "large", displayName: "Large")
+        ]
+    }
+    var selectedModelId: String? { "tiny" }
+    func selectModel(_ modelId: String) {}
+    var supportsTranslation: Bool { false }
+
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "ok", detectedLanguage: language)
+    }
+}
+
 private final class MockTTSPlaybackSession: TTSPlaybackSession, @unchecked Sendable {
     var isActive = true
     var onFinish: (@Sendable () -> Void)?
@@ -214,6 +243,15 @@ final class ProtocolContractTests: XCTestCase {
 
         XCTAssertFalse(legacyPlugin is any DictionaryTermsCapabilityProviding)
         XCTAssertEqual(capabilityPlugin.dictionaryTermsSupport, .requiresPluginSetting)
+    }
+
+    func testTranscriptionModelCatalogProtocolIsOptional() {
+        let legacyPlugin = MockTranscriptionPlugin()
+        let catalogPlugin = MockCatalogTranscriptionPlugin()
+
+        XCTAssertFalse(legacyPlugin is any TranscriptionModelCatalogProviding)
+        XCTAssertEqual(legacyPlugin.modelCatalog.map(\.id), ["tiny"])
+        XCTAssertEqual(catalogPlugin.modelCatalog.map(\.id), ["tiny", "large"])
     }
 
     func testTTSPluginCanPersistVoiceAndReceiveSpeakRequest() async throws {

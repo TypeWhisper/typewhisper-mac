@@ -322,7 +322,7 @@ final class APIHandlers: @unchecked Sendable {
     ///
     /// - both nil -> use GUI selection
     /// - engine only -> use that engine's default model
-    /// - model only -> infer engine by scanning `availableModels` across all engines
+    /// - model only -> infer engine by scanning the model catalog across all engines
     /// - both set   -> use as-is
     ///
     /// Also enforces configuration: an unconfigured engine returns 409 by default (to
@@ -348,7 +348,7 @@ final class APIHandlers: @unchecked Sendable {
             resolvedEngineId = match.providerId
         } else if let model {
             let matches = engines.filter { engine in
-                engine.availableModels.contains(where: { $0.id == model })
+                engine.modelCatalog.contains(where: { $0.id == model })
             }
             if matches.isEmpty {
                 return .reject(.error(status: 400, message: "Unknown model '\(model)'"))
@@ -368,7 +368,7 @@ final class APIHandlers: @unchecked Sendable {
         if let engineId = resolvedEngineId,
            let model,
            let plugin = engines.first(where: { $0.providerId == engineId }) {
-            let ids = Set(plugin.availableModels.map { $0.id })
+            let ids = Set(plugin.modelCatalog.map { $0.id })
             if !ids.isEmpty, !ids.contains(model) {
                 return .reject(.error(
                     status: 400,
@@ -459,7 +459,7 @@ final class APIHandlers: @unchecked Sendable {
 
         for engine in PluginManager.shared.transcriptionEngines {
             let isSelected = engine.providerId == selectedProviderId
-            for model in engine.availableModels {
+            for model in engine.modelCatalog {
                 models.append(ModelEntry(
                     id: model.id,
                     engine: engine.providerId,

@@ -3,6 +3,7 @@
     "name": "Linear",
     "version": "1.0.10",
     "minHostVersion": "0.9.0",
+    "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
     "description": "Create Linear issues from transcribed or processed text. Requires a Linear API key.",
@@ -11,6 +12,6 @@
     },
     "category": "action",
     "iconSystemName": "list.bullet.rectangle",
-    "requiresAPIKey": true,
-    "principalClass": "LinearPlugin"
+    "principalClass": "LinearPlugin",
+    "requiresAPIKey": true
 }

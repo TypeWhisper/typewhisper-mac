@@ -3,6 +3,7 @@
     "name": "System Voice",
     "version": "1.0.0",
     "minHostVersion": "1.3.0",
+    "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
     "description": "Text-to-speech via the built-in macOS AVSpeechSynthesizer voices for spoken feedback.",
@@ -11,6 +12,6 @@
     },
     "category": "tts",
     "iconSystemName": "speaker.wave.2.fill",
-    "requiresAPIKey": false,
-    "principalClass": "SystemTTSPlugin"
+    "principalClass": "SystemTTSPlugin",
+    "requiresAPIKey": false
 }

@@ -3,6 +3,7 @@
     "name": "Cerebras",
     "version": "1.0.1",
     "minHostVersion": "0.9.0",
+    "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
     "description": "Ultra-fast LLM inference via Cerebras API. Up to 3,000 tokens/sec. Requires API key.",
@@ -11,6 +12,6 @@
     },
     "category": "llm",
     "iconSystemName": "bolt.fill",
-    "requiresAPIKey": true,
-    "principalClass": "CerebrasPlugin"
+    "principalClass": "CerebrasPlugin",
+    "requiresAPIKey": true
 }
