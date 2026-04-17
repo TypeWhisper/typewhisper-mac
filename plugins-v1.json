@@ -14,6 +14,14 @@
       "iconSystemName": "apple.logo",
       "releases": [
         {
+          "version": "1.0.13",
+          "minHostVersion": "0.12.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 203606,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-speechanalyzer-v1.0.13/SpeechAnalyzerPlugin.zip",
+          "minOSVersion": "26.0"
+        },
+        {
           "version": "1.0.12",
           "minHostVersion": "0.12.0",
           "sdkCompatibilityVersion": "v1",
@@ -22,11 +30,11 @@
           "minOSVersion": "26.0"
         }
       ],
-      "version": "1.0.12",
+      "version": "1.0.13",
       "minHostVersion": "0.12.0",
       "sdkCompatibilityVersion": "v1",
-      "size": 201939,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-speechanalyzer-v1.0.12/SpeechAnalyzerPlugin.zip",
+      "size": 203606,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-speechanalyzer-v1.0.13/SpeechAnalyzerPlugin.zip",
       "minOSVersion": "26.0"
     },
     {
