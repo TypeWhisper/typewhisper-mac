@@ -543,6 +543,35 @@
       "size": 181870,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-fireworks-v1.0.4/FireworksPlugin.zip",
       "minOSVersion": "14.0"
+    },
+    {
+      "id": "com.typewhisper.gladia",
+      "name": "Gladia",
+      "author": "TypeWhisper",
+      "description": "Cloud transcription via Gladia Solaria API with real-time WebSocket streaming.",
+      "descriptions": {
+        "de": "Cloud-Transkription ueber die Gladia-Solaria-API mit Echtzeit-WebSocket-Streaming."
+      },
+      "category": "transcription",
+      "downloadCount": 0,
+      "iconSystemName": "waveform.badge.mic",
+      "requiresAPIKey": true,
+      "releases": [
+        {
+          "version": "1.0.4",
+          "minHostVersion": "0.12.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 207928,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gladia-v1.0.4/GladiaPlugin.zip",
+          "minOSVersion": "14.0"
+        }
+      ],
+      "version": "1.0.4",
+      "minHostVersion": "0.12.0",
+      "sdkCompatibilityVersion": "v1",
+      "size": 207928,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gladia-v1.0.4/GladiaPlugin.zip",
+      "minOSVersion": "14.0"
     }
   ]
 }
