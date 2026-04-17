@@ -401,7 +401,7 @@ struct SetupWizardView: View {
                         .foregroundStyle(.red)
                     Spacer()
                     Button(String(localized: "Retry")) {
-                        Task { await registryService.fetchRegistry() }
+                        Task { await registryService.fetchRegistry(force: true) }
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
@@ -704,7 +704,7 @@ struct SetupWizardView: View {
                         .foregroundStyle(.red)
                     Spacer()
                     Button(String(localized: "Retry")) {
-                        Task { await registryService.fetchRegistry() }
+                        Task { await registryService.fetchRegistry(force: true) }
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)

@@ -159,6 +159,79 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
         XCTAssertTrue(manager.isManifestSDKCompatible(missingManifest, isBundled: true))
     }
 
+    func testExternalBundleNoticeShowsBundledFallbackWhenLegacyBundleIsSkipped() throws {
+        let builtInURL = (Bundle.main.builtInPlugInsURL ?? URL(fileURLWithPath: "/Applications/TypeWhisper.app/Contents/PlugIns"))
+            .appendingPathComponent("Mock.bundle")
+        let bundledPlugin = LoadedPlugin(
+            manifest: PluginManifest(
+                id: "com.typewhisper.mock.sdk-missing",
+                name: "Bundled Replacement",
+                version: "1.3.0",
+                principalClass: "MockTranscriptionPlugin"
+            ),
+            instance: MockTranscriptionPlugin(),
+            bundle: Bundle.main,
+            sourceURL: builtInURL,
+            isEnabled: true
+        )
+
+        let notice = PluginManager.externalBundleNotice(
+            loadedPlugin: bundledPlugin,
+            registryPlugin: nil,
+            incompatibleExternalBundle: IncompatibleExternalBundle(
+                pluginId: "com.typewhisper.mock.sdk-missing",
+                pluginName: "Legacy External",
+                version: "1.2.2",
+                bundleURL: URL(fileURLWithPath: "/tmp/TypeWhisper/Plugins/Legacy.bundle"),
+                reason: .sdkCompatibility(
+                    expected: PluginSDKCompatibility.currentVersion,
+                    actual: nil
+                )
+            )
+        )
+
+        XCTAssertEqual(notice, .bundledFallbackActive(version: "1.2.2"))
+    }
+
+    func testExternalBundleNoticeEscalatesToBoundaryUpgradeWhenMarketplaceReplacementExists() {
+        let notice = PluginManager.externalBundleNotice(
+            loadedPlugin: nil,
+            registryPlugin: RegistryPlugin(
+                id: "com.typewhisper.mock.sdk-missing",
+                name: "Marketplace Replacement",
+                version: "1.3.1",
+                minHostVersion: "1.3.0",
+                sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+                minOSVersion: nil,
+                supportedArchitectures: nil,
+                author: "TypeWhisper",
+                description: "Replacement",
+                category: "utility",
+                size: 1,
+                downloadURL: "https://example.com/replacement.zip",
+                iconSystemName: nil,
+                requiresAPIKey: nil,
+                descriptions: nil,
+                downloadCount: nil
+            ),
+            incompatibleExternalBundle: IncompatibleExternalBundle(
+                pluginId: "com.typewhisper.mock.sdk-missing",
+                pluginName: "Legacy External",
+                version: "1.2.2",
+                bundleURL: URL(fileURLWithPath: "/tmp/TypeWhisper/Plugins/Legacy.bundle"),
+                reason: .sdkCompatibility(
+                    expected: PluginSDKCompatibility.currentVersion,
+                    actual: nil
+                )
+            )
+        )
+
+        XCTAssertEqual(
+            notice,
+            .boundaryUpgradeRequired(installedVersion: "1.2.2", availableVersion: "1.3.1")
+        )
+    }
+
     func testRegistryPluginRejectsArm64OnlyEntryOnIntel() {
         let plugin = RegistryPlugin(
             id: "com.typewhisper.mock.arm64-only",

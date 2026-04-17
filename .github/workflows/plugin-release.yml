@@ -220,12 +220,34 @@ jobs:
             --title "${TARGET} v${PLUGIN_VERSION}" \
             --notes ""
 
-      - name: Update plugins.json
+      - name: Update Plugin Registry
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           DOWNLOAD_URL="https://github.com/TypeWhisper/typewhisper-mac/releases/download/${TAG}/${TARGET}.zip"
           MANIFEST_PATH=$(find Plugins -name manifest.json -path "*${TARGET}*" 2>/dev/null | head -1)
+          TARGET_REGISTRY=$(python3 << PYEOF
+          import json, os
+
+          manifest_path = "$MANIFEST_PATH"
+          src_manifest = os.path.join("$GITHUB_WORKSPACE", manifest_path) if manifest_path else ""
+          if not src_manifest or not os.path.exists(src_manifest):
+              print("")
+          else:
+              with open(src_manifest) as mf:
+                  manifest = json.load(mf)
+              sdk_compat = manifest.get("sdkCompatibilityVersion")
+              print(f"plugins-{sdk_compat}.json" if sdk_compat else "plugins.json")
+          PYEOF
+          )
+
+          if [ -z "$TARGET_REGISTRY" ]; then
+            echo "Warning: No manifest found for ${TARGET}; skipping registry update"
+            exit 0
+          fi
+
+          export TARGET_REGISTRY
+          echo "Updating registry file: $TARGET_REGISTRY"
 
           git fetch origin gh-pages
           git worktree add -B gh-pages /tmp/gh-pages origin/gh-pages
@@ -238,8 +260,16 @@ jobs:
             python3 << PYEOF
           import json, os, re, sys, tempfile
 
-          with open("/tmp/gh-pages/plugins.json", "r") as f:
-              registry = json.load(f)
+          target_registry = os.environ["TARGET_REGISTRY"]
+          target_path = os.path.join("/tmp/gh-pages", target_registry)
+          if os.path.exists(target_path):
+              with open(target_path, "r") as f:
+                  registry = json.load(f)
+          else:
+              registry = {
+                  "schemaVersion": 1,
+                  "plugins": []
+              }
 
           version = "$PLUGIN_VERSION"
           size = int("$ZIP_SIZE")
@@ -254,7 +284,7 @@ jobs:
           with open(src_manifest) as mf:
               manifest = json.load(mf)
 
-          registry["schemaVersion"] = max(int(registry.get("schemaVersion", 1)), 2)
+          registry.setdefault("schemaVersion", 1)
 
           # Semver-tolerant version sort key. Accepts "1.2.3", "1.2.3-beta.4",
           # "1.2.3+build.5" etc. Pre-release tags sort before matching release
@@ -366,12 +396,11 @@ jobs:
               print(f"Added new plugin {manifest['id']} v{version}")
 
           # Atomic write: write to a temp file in the same directory, fsync,
-          # then rename into place. Prevents a half-written plugins.json from
+          # then rename into place. Prevents a half-written registry file from
           # ending up on gh-pages if the job is killed mid-write and keeps
-          # concurrent readers consistent. See release review M7.
-          target_path = "/tmp/gh-pages/plugins.json"
+          # concurrent readers consistent.
           target_dir = os.path.dirname(target_path)
-          fd, tmp_path = tempfile.mkstemp(prefix="plugins.json.", dir=target_dir)
+          fd, tmp_path = tempfile.mkstemp(prefix=f"{target_registry}.", dir=target_dir)
           try:
               with os.fdopen(fd, "w") as f:
                   json.dump(registry, f, indent=2)
@@ -387,17 +416,17 @@ jobs:
               raise
           PYEOF
 
-            git add plugins.json
+            git add "$TARGET_REGISTRY"
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git diff --cached --quiet || git commit -m "Update ${TARGET} to v${PLUGIN_VERSION}"
+            git diff --cached --quiet || git commit -m "Update ${TARGET} to v${PLUGIN_VERSION} in ${TARGET_REGISTRY}"
             git push origin gh-pages
           }
 
           # Retry up to 5 times to handle concurrent pushes
           for i in 1 2 3 4 5; do
             if update_registry; then
-              echo "Successfully updated plugins.json (attempt $i)"
+              echo "Successfully updated ${TARGET_REGISTRY} (attempt $i)"
               break
             fi
             echo "Push failed (attempt $i), retrying in ${i}s..."

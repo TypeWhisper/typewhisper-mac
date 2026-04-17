@@ -1322,6 +1322,9 @@
         }
       }
     },
+    "Boundary Upgrade" : {
+
+    },
     "Bronze Supporter" : {
       "localizations" : {
         "de" : {
@@ -1375,6 +1378,9 @@
           }
         }
       }
+    },
+    "Built-in Fallback" : {
+
     },
     "Built-in prompts for common tasks like translation, email drafting, and formatting." : {
       "localizations" : {
@@ -2726,6 +2732,15 @@
         }
       }
     },
+    "External plugin bundle %@ is incompatible with this runtime." : {
+
+    },
+    "External plugin bundle %@ was kept for an older TypeWhisper line." : {
+
+    },
+    "External plugin bundle %@ was skipped; the built-in plugin is active instead." : {
+
+    },
     "Extraction Model" : {
       "localizations" : {
         "de" : {
@@ -3244,6 +3259,9 @@
         }
       }
     },
+    "Incompatible Bundle" : {
+
+    },
     "Indicator" : {
       "localizations" : {
         "de" : {
@@ -3412,6 +3430,16 @@
         }
       }
     },
+    "Installing %@ %@ will replace an older external plugin bundle (%@) that was kept for another TypeWhisper runtime. Older app versions may stop using that bundle after this replacement." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Installing %1$@ %2$@ will replace an older external plugin bundle (%3$@) that was kept for another TypeWhisper runtime. Older app versions may stop using that bundle after this replacement."
+          }
+        }
+      }
+    },
     "Installing plugins..." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -3422,6 +3450,9 @@
           }
         }
       }
+    },
+    "Installing this plugin will replace an older external bundle that was kept for another TypeWhisper runtime. Older app versions may stop using that bundle after this replacement." : {
+
     },
     "Installing..." : {
       "localizations" : {
@@ -3604,6 +3635,9 @@
           }
         }
       }
+    },
+    "Legacy Bundle" : {
+
     },
     "License" : {
       "localizations" : {
@@ -3823,6 +3857,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Markdown (.md)"
+          }
+        }
+      }
+    },
+    "Marketplace replacement %@ is available, but replacing external bundle %@ requires confirmation." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Marketplace replacement %1$@ is available, but replacing external bundle %2$@ requires confirmation."
           }
         }
       }
@@ -5209,6 +5253,16 @@
         }
       }
     },
+    "Press Esc again to cancel recording" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drücke Esc erneut, um die Aufnahme abzubrechen"
+          }
+        }
+      }
+    },
     "Press to start, press again to stop." : {
       "localizations" : {
         "de" : {
@@ -5287,16 +5341,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Transkription wird verarbeitet"
-          }
-        }
-      }
-    },
-    "Press Esc again to cancel recording" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Drücke Esc erneut, um die Aufnahme abzubrechen"
           }
         }
       }
@@ -6110,6 +6154,12 @@
           }
         }
       }
+    },
+    "Replace" : {
+
+    },
+    "Replace Legacy Plugin Bundle" : {
+
     },
     "Replacement" : {
       "localizations" : {

@@ -75,6 +75,8 @@ struct PluginSettingsView: View {
     @State private var selectedTab = 0
     @State private var showUninstallAlert = false
     @State private var pluginToUninstall: LoadedPlugin?
+    @State private var pendingBoundaryUpgradePlugin: RegistryPlugin?
+    @State private var pendingBoundaryUpgradeNotice: ExternalBundleNotice?
     @State private var installFromFileError: String?
     @State private var hostingFilter: Int = 0 // 0=All, 1=Local, 2=Cloud
     @State private var expandedCategories: Set<String> = Set(PluginCategory.allCases.map(\.rawValue))
@@ -107,6 +109,34 @@ struct PluginSettingsView: View {
             }
         } message: { plugin in
             Text(String(localized: "Are you sure you want to uninstall \(plugin.manifest.name)? This will remove the plugin and its data."))
+        }
+        .alert(
+            String(localized: "Replace Legacy Plugin Bundle"),
+            isPresented: .init(
+                get: { pendingBoundaryUpgradePlugin != nil },
+                set: {
+                    if !$0 {
+                        pendingBoundaryUpgradePlugin = nil
+                        pendingBoundaryUpgradeNotice = nil
+                    }
+                }
+            ),
+            presenting: pendingBoundaryUpgradePlugin
+        ) { plugin in
+            Button(String(localized: "Replace"), role: .destructive) {
+                pendingBoundaryUpgradePlugin = nil
+                pendingBoundaryUpgradeNotice = nil
+                Task {
+                    await registryService.downloadAndInstall(plugin)
+                    PluginManager.shared.setPluginEnabled(plugin.id, enabled: true)
+                }
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {
+                pendingBoundaryUpgradePlugin = nil
+                pendingBoundaryUpgradeNotice = nil
+            }
+        } message: { plugin in
+            Text(boundaryUpgradeMessage(for: plugin, notice: pendingBoundaryUpgradeNotice))
         }
         .alert(String(localized: "Install Failed"), isPresented: .init(
             get: { installFromFileError != nil },
@@ -179,10 +209,14 @@ struct PluginSettingsView: View {
                                     plugin: plugin,
                                     installInfo: registryService.installInfo(for: plugin.id),
                                     installState: registryService.installStates[plugin.id],
+                                    externalNotice: pluginManager.externalBundleNotice(
+                                        for: plugin.id,
+                                        registryPlugin: registryService.registry.first(where: { $0.id == plugin.id })
+                                    ),
                                     registryPlugin: registryService.registry.first(where: { $0.id == plugin.id }),
                                     onUpdate: {
                                         if let registryPlugin = registryService.registry.first(where: { $0.id == plugin.id }) {
-                                            Task { await registryService.downloadAndInstall(registryPlugin) }
+                                            startInstall(registryPlugin)
                                         }
                                     },
                                     onUninstall: {
@@ -266,7 +300,7 @@ struct PluginSettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                         Button(String(localized: "Retry")) {
-                            Task { await registryService.fetchRegistry() }
+                            Task { await registryService.fetchRegistry(force: true) }
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .center)
@@ -315,10 +349,7 @@ struct PluginSettingsView: View {
                                         plugin: plugin,
                                         installState: registryService.installStates[plugin.id],
                                         onInstall: {
-                                            Task {
-                                                await registryService.downloadAndInstall(plugin)
-                                                PluginManager.shared.setPluginEnabled(plugin.id, enabled: true)
-                                            }
+                                            startInstall(plugin)
                                         }
                                     )
                                     .padding(.vertical, 4)
@@ -353,6 +384,33 @@ struct PluginSettingsView: View {
             } catch {
                 installFromFileError = error.localizedDescription
             }
+        }
+    }
+
+    private func startInstall(_ plugin: RegistryPlugin) {
+        if let notice = pluginManager.externalBundleNotice(for: plugin.id, registryPlugin: plugin),
+           notice.requiresConfirmation {
+            pendingBoundaryUpgradePlugin = plugin
+            pendingBoundaryUpgradeNotice = notice
+            return
+        }
+
+        Task {
+            await registryService.downloadAndInstall(plugin)
+            PluginManager.shared.setPluginEnabled(plugin.id, enabled: true)
+        }
+    }
+
+    private func boundaryUpgradeMessage(for plugin: RegistryPlugin, notice: ExternalBundleNotice?) -> String {
+        switch notice {
+        case .boundaryUpgradeRequired(let installedVersion, let availableVersion):
+            return String(
+                localized: "Installing \(plugin.name) \(availableVersion) will replace an older external plugin bundle (\(installedVersion)) that was kept for another TypeWhisper runtime. Older app versions may stop using that bundle after this replacement."
+            )
+        default:
+            return String(
+                localized: "Installing this plugin will replace an older external bundle that was kept for another TypeWhisper runtime. Older app versions may stop using that bundle after this replacement."
+            )
         }
     }
 }
@@ -431,6 +489,7 @@ private struct InstalledPluginRow: View {
     let plugin: LoadedPlugin
     let installInfo: PluginInstallInfo
     let installState: PluginRegistryService.InstallState?
+    let externalNotice: ExternalBundleNotice?
     let registryPlugin: RegistryPlugin?
     let onUpdate: () -> Void
     let onUninstall: () -> Void
@@ -475,6 +534,16 @@ private struct InstalledPluginRow: View {
                             .foregroundStyle(.secondary)
                             .clipShape(Capsule())
                     }
+                    if let externalNotice {
+                        Text(externalNotice.badgeTitle)
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(externalNotice.badgeColor.opacity(0.15))
+                            .foregroundStyle(externalNotice.badgeColor)
+                            .clipShape(Capsule())
+                    }
                 }
                 HStack(spacing: 8) {
                     Text("v\(plugin.manifest.version)")
@@ -484,6 +553,12 @@ private struct InstalledPluginRow: View {
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                if let externalNotice {
+                    Text(externalNotice.detailText)
+                        .font(.caption2)
+                        .foregroundStyle(externalNotice.badgeColor)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             Spacer()
@@ -571,6 +646,43 @@ private struct InstalledPluginRow: View {
 
     private func refreshPluginActivity() {
         pluginActivity = (plugin.instance as? any PluginSettingsActivityReporting)?.currentSettingsActivity
+    }
+}
+
+private extension ExternalBundleNotice {
+    var badgeTitle: String {
+        switch self {
+        case .legacyBundlePresent:
+            return String(localized: "Legacy Bundle")
+        case .incompatibleWithCurrentRuntime:
+            return String(localized: "Incompatible Bundle")
+        case .bundledFallbackActive:
+            return String(localized: "Built-in Fallback")
+        case .boundaryUpgradeRequired:
+            return String(localized: "Boundary Upgrade")
+        }
+    }
+
+    var detailText: String {
+        switch self {
+        case .legacyBundlePresent(let version):
+            return String(localized: "External plugin bundle \(version) was kept for an older TypeWhisper line.")
+        case .incompatibleWithCurrentRuntime(let version):
+            return String(localized: "External plugin bundle \(version) is incompatible with this runtime.")
+        case .bundledFallbackActive(let version):
+            return String(localized: "External plugin bundle \(version) was skipped; the built-in plugin is active instead.")
+        case .boundaryUpgradeRequired(let installedVersion, let availableVersion):
+            return String(localized: "Marketplace replacement \(availableVersion) is available, but replacing external bundle \(installedVersion) requires confirmation.")
+        }
+    }
+
+    var badgeColor: Color {
+        switch self {
+        case .legacyBundlePresent:
+            return .secondary
+        case .incompatibleWithCurrentRuntime, .bundledFallbackActive, .boundaryUpgradeRequired:
+            return .orange
+        }
     }
 }
 

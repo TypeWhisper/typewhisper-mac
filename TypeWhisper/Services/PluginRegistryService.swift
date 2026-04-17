@@ -347,6 +347,13 @@ enum PluginInstallInfo {
 final class PluginRegistryService: ObservableObject {
     nonisolated(unsafe) static var shared: PluginRegistryService!
 
+    enum RegistryFeed: String, Equatable {
+        case legacy = "plugins.json"
+        case v1 = "plugins-v1.json"
+
+        var pathComponent: String { rawValue }
+    }
+
     @Published var registry: [RegistryPlugin] = []
     @Published var fetchState: FetchState = .idle
     @Published var installStates: [String: InstallState] = [:]
@@ -354,8 +361,12 @@ final class PluginRegistryService: ObservableObject {
 
     private var lastFetchDate: Date?
     private var activeInstallPluginIDs: Set<String> = []
-    private let registryURL = URL(string: "https://typewhisper.github.io/typewhisper-mac/plugins.json")!
-    private let cacheDuration: TimeInterval = 300 // 5 minutes
+    private let registryBaseURL: URL
+    private let cacheDuration: TimeInterval
+    private let userDefaults: UserDefaults
+    private let infoDictionary: [String: Any]?
+    private let fetchData: (URLRequest) async throws -> (Data, URLResponse)
+    private let cacheDirectory: URL
     private static let lastUpdateCheckKey = "pluginRegistryLastUpdateCheck"
 
     enum FetchState: Equatable {
@@ -386,32 +397,70 @@ final class PluginRegistryService: ObservableObject {
         return .orderedSame
     }
 
+    nonisolated static func registryFeed(
+        appVersion: String,
+        releaseChannel: AppConstants.ReleaseChannel
+    ) -> RegistryFeed {
+        _ = releaseChannel
+        return compareVersions(appVersion, "1.3.0") == .orderedAscending ? .legacy : .v1
+    }
+
+    init(
+        registryBaseURL: URL = URL(string: "https://typewhisper.github.io/typewhisper-mac")!,
+        cacheDirectory: URL = AppConstants.appSupportDirectory.appendingPathComponent("MarketplaceCache", isDirectory: true),
+        cacheDuration: TimeInterval = 300,
+        userDefaults: UserDefaults = .standard,
+        infoDictionary: [String: Any]? = Bundle.main.infoDictionary,
+        fetchData: @escaping (URLRequest) async throws -> (Data, URLResponse) = { request in
+            try await URLSession.shared.data(for: request)
+        }
+    ) {
+        self.registryBaseURL = registryBaseURL
+        self.cacheDirectory = cacheDirectory
+        self.cacheDuration = cacheDuration
+        self.userDefaults = userDefaults
+        self.infoDictionary = infoDictionary
+        self.fetchData = fetchData
+
+        try? FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+    }
+
     // MARK: - Fetch Registry
 
-    func fetchRegistry() async {
-        if let lastFetch = lastFetchDate, Date().timeIntervalSince(lastFetch) < cacheDuration, !registry.isEmpty {
+    func fetchRegistry(force: Bool = false) async {
+        if !force,
+           let lastFetch = lastFetchDate,
+           Date().timeIntervalSince(lastFetch) < cacheDuration,
+           !registry.isEmpty {
             return
         }
 
         fetchState = .loading
+        let feed = Self.registryFeed(
+            appVersion: resolvedAppVersion,
+            releaseChannel: resolvedReleaseChannel
+        )
+        let registryURL = registryBaseURL.appendingPathComponent(feed.pathComponent)
 
         do {
             var request = URLRequest(url: registryURL)
             request.cachePolicy = .reloadIgnoringLocalCacheData
-            let (data, _) = try await URLSession.shared.data(for: request)
-            let response = try JSONDecoder().decode(PluginRegistryResponse.self, from: data)
+            let (data, _) = try await fetchData(request)
 
-            let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0"
-            registry = response.resolvedPlugins(
-                appVersion: appVersion,
-                sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion
-            )
-            lastFetchDate = Date()
-            fetchState = .loaded
-            logger.info("Fetched \(self.registry.count) plugin(s) from registry")
+            try applyRegistryData(data, feed: feed)
+            try cacheRegistryData(data, feed: feed)
+            logger.info("Fetched \(self.registry.count) plugin(s) from registry feed \(feed.rawValue, privacy: .public)")
         } catch {
-            fetchState = .error(error.localizedDescription)
-            logger.error("Failed to fetch registry: \(error.localizedDescription)")
+            do {
+                let cachedData = try Data(contentsOf: cacheURL(for: feed))
+                try applyRegistryData(cachedData, feed: feed)
+                logger.warning(
+                    "Using cached plugin registry feed \(feed.rawValue, privacy: .public) after fetch failure: \(error.localizedDescription, privacy: .public)"
+                )
+            } catch {
+                fetchState = .error(error.localizedDescription)
+                logger.error("Failed to fetch registry: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -419,20 +468,25 @@ final class PluginRegistryService: ObservableObject {
 
     /// Check for plugin updates on app launch (at most once per 24h).
     func checkForUpdatesInBackground() {
-        let lastCheck = UserDefaults.standard.double(forKey: Self.lastUpdateCheckKey)
+        let lastCheck = userDefaults.double(forKey: Self.lastUpdateCheckKey)
         let hoursSinceLastCheck = (Date().timeIntervalSince1970 - lastCheck) / 3600
         guard hoursSinceLastCheck >= 24 || lastCheck == 0 else { return }
 
         Task {
             lastFetchDate = nil
-            await fetchRegistry()
+            await fetchRegistry(force: true)
             updateAvailableUpdatesCount()
-            UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Self.lastUpdateCheckKey)
+            userDefaults.set(Date().timeIntervalSince1970, forKey: Self.lastUpdateCheckKey)
         }
     }
 
     func updateAvailableUpdatesCount() {
-        let count = PluginManager.shared.loadedPlugins.count(where: { plugin in
+        guard let pluginManager = PluginManager.shared else {
+            availableUpdatesCount = 0
+            return
+        }
+
+        let count = pluginManager.loadedPlugins.count(where: { plugin in
             if case .updateAvailable = installInfo(for: plugin.manifest.id) { return true }
             return false
         })
@@ -545,6 +599,7 @@ final class PluginRegistryService: ObservableObject {
         guard let bundleURL = PluginManager.shared.bundleURL(for: pluginId) else { return }
 
         PluginManager.shared.unloadPlugin(pluginId)
+        PluginManager.shared.clearIncompatibleExternalBundle(pluginId)
 
         logger.info("Removing installed plugin bundle at \(bundleURL.path, privacy: .public)")
         try? FileManager.default.removeItem(at: bundleURL)
@@ -753,6 +808,39 @@ final class PluginRegistryService: ObservableObject {
             return String(format: "%.1fK", k)
         }
         return "\(count)"
+    }
+
+    private var resolvedAppVersion: String {
+        infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0"
+    }
+
+    private var resolvedReleaseChannel: AppConstants.ReleaseChannel {
+        AppConstants.bundledReleaseChannel(infoDictionary: infoDictionary)
+    }
+
+    private func cacheURL(for feed: RegistryFeed) -> URL {
+        cacheDirectory.appendingPathComponent(feed.pathComponent)
+    }
+
+    private func applyRegistryData(_ data: Data, feed: RegistryFeed) throws {
+        let response = try JSONDecoder().decode(PluginRegistryResponse.self, from: data)
+        registry = response.resolvedPlugins(
+            appVersion: resolvedAppVersion,
+            sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion
+        )
+        lastFetchDate = Date()
+        fetchState = .loaded
+        updateAvailableUpdatesCount()
+        logger.info("Resolved \(self.registry.count) compatible plugin(s) from \(feed.rawValue, privacy: .public)")
+    }
+
+    private func cacheRegistryData(_ data: Data, feed: RegistryFeed) throws {
+        let targetURL = cacheURL(for: feed)
+        try FileManager.default.createDirectory(
+            at: targetURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try data.write(to: targetURL, options: .atomic)
     }
 }
 

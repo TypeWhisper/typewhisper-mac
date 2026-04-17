@@ -135,6 +135,32 @@ struct LoadedPlugin: Identifiable {
     }
 }
 
+struct IncompatibleExternalBundle: Equatable, Sendable {
+    enum Reason: Equatable, Sendable {
+        case sdkCompatibility(expected: String, actual: String?)
+    }
+
+    let pluginId: String
+    let pluginName: String
+    let version: String
+    let bundleURL: URL
+    let reason: Reason
+}
+
+enum ExternalBundleNotice: Equatable {
+    case legacyBundlePresent(version: String)
+    case incompatibleWithCurrentRuntime(version: String)
+    case bundledFallbackActive(version: String)
+    case boundaryUpgradeRequired(installedVersion: String, availableVersion: String)
+
+    var requiresConfirmation: Bool {
+        if case .boundaryUpgradeRequired = self {
+            return true
+        }
+        return false
+    }
+}
+
 // MARK: - Plugin Manager
 
 @MainActor
@@ -142,6 +168,7 @@ final class PluginManager: ObservableObject {
     nonisolated(unsafe) static var shared: PluginManager!
 
     @Published var loadedPlugins: [LoadedPlugin] = []
+    @Published private(set) var incompatibleExternalBundles: [String: IncompatibleExternalBundle] = [:]
 
     let pluginsDirectory: URL
     private var ruleNamesProvider: () -> [String] = { [] }
@@ -224,6 +251,49 @@ final class PluginManager: ObservableObject {
         )
     }
 
+    static func externalBundleNotice(
+        loadedPlugin: LoadedPlugin?,
+        registryPlugin: RegistryPlugin?,
+        incompatibleExternalBundle: IncompatibleExternalBundle?
+    ) -> ExternalBundleNotice? {
+        guard let incompatibleExternalBundle else { return nil }
+
+        if let registryPlugin {
+            return .boundaryUpgradeRequired(
+                installedVersion: incompatibleExternalBundle.version,
+                availableVersion: registryPlugin.version
+            )
+        }
+
+        if let loadedPlugin, loadedPlugin.isBundled {
+            return .bundledFallbackActive(version: incompatibleExternalBundle.version)
+        }
+
+        switch incompatibleExternalBundle.reason {
+        case .sdkCompatibility(_, let actual):
+            if actual == nil {
+                return .legacyBundlePresent(version: incompatibleExternalBundle.version)
+            }
+            return .incompatibleWithCurrentRuntime(version: incompatibleExternalBundle.version)
+        }
+    }
+
+    func incompatibleExternalBundle(for pluginId: String) -> IncompatibleExternalBundle? {
+        incompatibleExternalBundles[pluginId]
+    }
+
+    func externalBundleNotice(for pluginId: String, registryPlugin: RegistryPlugin? = nil) -> ExternalBundleNotice? {
+        Self.externalBundleNotice(
+            loadedPlugin: loadedPlugins.first(where: { $0.manifest.id == pluginId }),
+            registryPlugin: registryPlugin,
+            incompatibleExternalBundle: incompatibleExternalBundles[pluginId]
+        )
+    }
+
+    func clearIncompatibleExternalBundle(_ pluginId: String) {
+        incompatibleExternalBundles.removeValue(forKey: pluginId)
+    }
+
     init(appSupportDirectory: URL = AppConstants.appSupportDirectory) {
         self.pluginsDirectory = appSupportDirectory
             .appendingPathComponent("Plugins", isDirectory: true)
@@ -235,6 +305,7 @@ final class PluginManager: ObservableObject {
 
     func scanAndLoadPlugins() {
         logger.info("Scanning plugins directory: \(self.pluginsDirectory.path)")
+        incompatibleExternalBundles = [:]
 
         let fm = FileManager.default
         guard let contents = try? fm.contentsOfDirectory(at: pluginsDirectory, includingPropertiesForKeys: nil) else {
@@ -301,6 +372,18 @@ final class PluginManager: ObservableObject {
         }
 
         if !isManifestSDKCompatible(manifest, isBundled: isBundledSource) {
+            if !isBundledSource {
+                incompatibleExternalBundles[manifest.id] = IncompatibleExternalBundle(
+                    pluginId: manifest.id,
+                    pluginName: manifest.name,
+                    version: manifest.version,
+                    bundleURL: url,
+                    reason: .sdkCompatibility(
+                        expected: PluginSDKCompatibility.currentVersion,
+                        actual: manifest.sdkCompatibilityVersion
+                    )
+                )
+            }
             let reason = PluginSDKCompatibility.incompatibilityReason(
                 manifestVersion: manifest.sdkCompatibilityVersion,
                 isBundled: isBundledSource
@@ -309,6 +392,10 @@ final class PluginManager: ObservableObject {
                 "Skipping plugin \(manifest.id, privacy: .public): \(reason, privacy: .public)"
             )
             return
+        }
+
+        if !isBundledSource {
+            incompatibleExternalBundles.removeValue(forKey: manifest.id)
         }
 
         if let minHostVersion = manifest.minHostVersion {

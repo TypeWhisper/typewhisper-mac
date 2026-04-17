@@ -216,12 +216,6 @@ final class ServiceContainer: ObservableObject {
         // Validate LLM provider selection against loaded plugins
         promptProcessingService.validateSelectionAfterPluginLoad()
 
-        // Check for plugin updates in background
-        pluginRegistryService.checkForUpdatesInBackground()
-
-        // Check for term pack updates in background
-        termPackRegistryService.checkForUpdatesInBackground()
-
         // Start memory service
         memoryService.startListening()
 

@@ -474,7 +474,7 @@ To distribute via the TypeWhisper plugin marketplace:
 1. Build your plugin in Release configuration
 2. ZIP the `.bundle`: `ditto -ck --sequesterRsrc MyPlugin.bundle MyPlugin.zip`
 3. Host the ZIP (GitHub Releases, your own server, etc.)
-4. Submit a PR to add your plugin to the [plugin registry](https://github.com/TypeWhisper/typewhisper-mac/blob/gh-pages/plugins.json)
+4. Submit a PR to add your plugin to the appropriate gh-pages registry feed (`plugins.json` for legacy plugins without `sdkCompatibilityVersion`, `plugins-v1.json` for the current `v1` SDK line)
 
 Registry entry format:
 
