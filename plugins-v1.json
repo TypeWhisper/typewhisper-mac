@@ -28,6 +28,40 @@
       "size": 201939,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-speechanalyzer-v1.0.12/SpeechAnalyzerPlugin.zip",
       "minOSVersion": "26.0"
+    },
+    {
+      "id": "com.typewhisper.whisperkit",
+      "name": "WhisperKit",
+      "author": "TypeWhisper",
+      "description": "Local speech-to-text powered by WhisperKit. 7 model sizes, 99 languages, streaming support.",
+      "descriptions": {
+        "de": "Lokale Spracherkennung mit WhisperKit. 7 Modellgroessen, 99 Sprachen, Streaming-Unterstuetzung."
+      },
+      "category": "transcription",
+      "downloadCount": 0,
+      "iconSystemName": "waveform",
+      "releases": [
+        {
+          "version": "1.0.19",
+          "minHostVersion": "1.2.1",
+          "sdkCompatibilityVersion": "v1",
+          "size": 2970209,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-whisperkit-v1.0.19/WhisperKitPlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        }
+      ],
+      "version": "1.0.19",
+      "minHostVersion": "1.2.1",
+      "sdkCompatibilityVersion": "v1",
+      "size": 2970209,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-whisperkit-v1.0.19/WhisperKitPlugin.zip",
+      "minOSVersion": "14.0",
+      "supportedArchitectures": [
+        "arm64"
+      ]
     }
   ]
 }
