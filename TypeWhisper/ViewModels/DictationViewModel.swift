@@ -56,13 +56,7 @@ final class DictationViewModel: ObservableObject {
         case error(String)
     }
 
-    @Published var state: State = .idle {
-        didSet {
-            if state != .recording {
-                clearRecordingCancelWarning()
-            }
-        }
-    }
+    @Published var state: State = .idle
     @Published var audioLevel: Float = 0
     @Published var recordingDuration: TimeInterval = 0
     @Published var hotkeyMode: HotkeyService.HotkeyMode?
@@ -166,7 +160,7 @@ final class DictationViewModel: ObservableObject {
     private var transcriptionTask: Task<Void, Never>?
     private var errorResetTask: Task<Void, Never>?
     private var insertingResetTask: Task<Void, Never>?
-    private var recordingCancelWarningShownAt: Date?
+    @Published private var recordingCancelWarningShownAt: Date?
     private var urlResolutionTask: Task<Void, Never>?
     private var metadataCaptureTask: Task<Void, Never>?
     /// Snapshot of the streaming params used in the most recent `streamingHandler.start(...)`.
@@ -450,6 +444,14 @@ final class DictationViewModel: ObservableObject {
     }
 
     private func setupBindings() {
+        $state
+            .removeDuplicates()
+            .sink { [weak self] newState in
+                guard let self, newState != .recording else { return }
+                self.clearRecordingCancelWarning()
+            }
+            .store(in: &cancellables)
+
         hotkeyService.onDictationStart = { [weak self] in
             self?.startRecording()
         }
@@ -535,7 +537,6 @@ final class DictationViewModel: ObservableObject {
 
     private func showRecordingCancelWarning(at date: Date) {
         recordingCancelWarningShownAt = date
-        objectWillChange.send()
     }
 
     private func isRecordingCancelWarningActive(referenceDate: Date) -> Bool {
@@ -546,7 +547,6 @@ final class DictationViewModel: ObservableObject {
     private func clearRecordingCancelWarning() {
         guard recordingCancelWarningShownAt != nil else { return }
         recordingCancelWarningShownAt = nil
-        objectWillChange.send()
     }
 
     private func cancelCurrentOperation() {
