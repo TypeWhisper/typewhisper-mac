@@ -398,10 +398,6 @@ final class DictationViewModel: ObservableObject {
         return nil
     }
 
-    isolated deinit {
-        recordingTimer?.invalidate()
-    }
-
     private func beginDictationSession(id: UUID) {
         activeDictationSessionID = id
         storeDictationSession(DictationSessionSnapshot(id: id, status: .recording, transcription: nil, error: nil))
