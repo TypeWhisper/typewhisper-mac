@@ -828,6 +828,35 @@
       "size": 183639,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-soniox-v1.0.3/SonioxPlugin.zip",
       "minOSVersion": "14.0"
+    },
+    {
+      "id": "com.typewhisper.speechmatics",
+      "name": "Speechmatics",
+      "author": "TypeWhisper",
+      "description": "Cloud transcription via Speechmatics API with real-time WebSocket streaming. Requires API key.",
+      "descriptions": {
+        "de": "Cloud-Transkription ueber die Speechmatics-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key."
+      },
+      "category": "transcription",
+      "downloadCount": 0,
+      "iconSystemName": "waveform.badge.mic",
+      "requiresAPIKey": true,
+      "releases": [
+        {
+          "version": "1.0.3",
+          "minHostVersion": "0.12.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 186451,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-speechmatics-v1.0.3/SpeechmaticsPlugin.zip",
+          "minOSVersion": "14.0"
+        }
+      ],
+      "version": "1.0.3",
+      "minHostVersion": "0.12.0",
+      "sdkCompatibilityVersion": "v1",
+      "size": 186451,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-speechmatics-v1.0.3/SpeechmaticsPlugin.zip",
+      "minOSVersion": "14.0"
     }
   ]
 }
