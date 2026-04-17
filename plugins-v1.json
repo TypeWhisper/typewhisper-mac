@@ -457,6 +457,35 @@
       "size": 214654,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-deepgram-v1.0.7/DeepgramPlugin.zip",
       "minOSVersion": "14.0"
+    },
+    {
+      "id": "com.typewhisper.gemini",
+      "name": "Gemini",
+      "author": "TypeWhisper",
+      "description": "LLM provider via Google Gemini API. Requires API key.",
+      "descriptions": {
+        "de": "LLM-Anbieter ueber die Google Gemini API. Erfordert API-Key."
+      },
+      "category": "llm",
+      "downloadCount": 0,
+      "iconSystemName": "sparkles",
+      "requiresAPIKey": true,
+      "releases": [
+        {
+          "version": "1.0.14",
+          "minHostVersion": "0.9.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 157103,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gemini-v1.0.14/GeminiPlugin.zip",
+          "minOSVersion": "14.0"
+        }
+      ],
+      "version": "1.0.14",
+      "minHostVersion": "0.9.0",
+      "sdkCompatibilityVersion": "v1",
+      "size": 157103,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gemini-v1.0.14/GeminiPlugin.zip",
+      "minOSVersion": "14.0"
     }
   ]
 }
