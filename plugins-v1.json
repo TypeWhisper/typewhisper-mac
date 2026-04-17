@@ -799,6 +799,35 @@
       "size": 227446,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-script-v1.1.3/ScriptPlugin.zip",
       "minOSVersion": "14.0"
+    },
+    {
+      "id": "com.typewhisper.soniox",
+      "name": "Soniox",
+      "author": "TypeWhisper",
+      "description": "Cloud transcription via Soniox API with real-time WebSocket streaming and translation support. Requires API key.",
+      "descriptions": {
+        "de": "Cloud-Transkription ueber die Soniox-API mit Echtzeit-WebSocket-Streaming und Uebersetzungsunterstuetzung. Erfordert API-Key."
+      },
+      "category": "transcription",
+      "downloadCount": 0,
+      "iconSystemName": "waveform.badge.mic",
+      "requiresAPIKey": true,
+      "releases": [
+        {
+          "version": "1.0.3",
+          "minHostVersion": "0.12.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 183639,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-soniox-v1.0.3/SonioxPlugin.zip",
+          "minOSVersion": "14.0"
+        }
+      ],
+      "version": "1.0.3",
+      "minHostVersion": "0.12.0",
+      "sdkCompatibilityVersion": "v1",
+      "size": 183639,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-soniox-v1.0.3/SonioxPlugin.zip",
+      "minOSVersion": "14.0"
     }
   ]
 }
