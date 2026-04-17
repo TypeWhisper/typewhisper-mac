@@ -428,6 +428,35 @@
       "size": 179534,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-elevenlabs-v1.0.4/ElevenLabsPlugin.zip",
       "minOSVersion": "14.0"
+    },
+    {
+      "id": "com.typewhisper.deepgram",
+      "name": "Deepgram",
+      "author": "TypeWhisper",
+      "description": "Cloud transcription via Deepgram API with real-time WebSocket streaming. Requires API key.",
+      "descriptions": {
+        "de": "Cloud-Transkription ueber die Deepgram-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key."
+      },
+      "category": "transcription",
+      "downloadCount": 0,
+      "iconSystemName": "waveform.badge.mic",
+      "requiresAPIKey": true,
+      "releases": [
+        {
+          "version": "1.0.7",
+          "minHostVersion": "0.12.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 214654,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-deepgram-v1.0.7/DeepgramPlugin.zip",
+          "minOSVersion": "14.0"
+        }
+      ],
+      "version": "1.0.7",
+      "minHostVersion": "0.12.0",
+      "sdkCompatibilityVersion": "v1",
+      "size": 214654,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-deepgram-v1.0.7/DeepgramPlugin.zip",
+      "minOSVersion": "14.0"
     }
   ]
 }
