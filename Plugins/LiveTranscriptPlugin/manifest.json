@@ -3,6 +3,7 @@
     "name": "Live Transcript",
     "version": "1.0.3",
     "minHostVersion": "1.1.0",
+    "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
     "description": "Show a floating live transcript window during recording.",

@@ -3,8 +3,11 @@
     "name": "WhisperKit",
     "version": "1.0.16",
     "minHostVersion": "1.2.1",
+    "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
-    "supportedArchitectures": ["arm64"],
+    "supportedArchitectures": [
+        "arm64"
+    ],
     "author": "TypeWhisper",
     "description": "Local speech-to-text powered by WhisperKit. 7 model sizes, 99 languages, streaming support.",
     "descriptions": {

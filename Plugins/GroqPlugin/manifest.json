@@ -3,6 +3,7 @@
     "name": "Groq",
     "version": "1.0.15",
     "minHostVersion": "0.9.0",
+    "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
     "description": "Cloud transcription and LLM via Groq API. Fast inference, requires API key.",
@@ -11,6 +12,6 @@
     },
     "category": "transcription",
     "iconSystemName": "bolt.fill",
-    "requiresAPIKey": true,
-    "principalClass": "GroqPlugin"
+    "principalClass": "GroqPlugin",
+    "requiresAPIKey": true
 }

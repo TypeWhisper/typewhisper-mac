@@ -1,8 +1,11 @@
 import XCTest
+import TypeWhisperPluginSDK
 @testable import TypeWhisper
 
 final class PluginRegistryServiceTests: XCTestCase {
-    func testLegacyRegistryEntryDecodesIntoSingleRelease() throws {
+    private let sdkCompatibilityVersion = "v1"
+
+    func testLegacyRegistryEntryDoesNotResolveWithoutSDKCompatibilityVersion() throws {
         let data = Data(
             """
             {
@@ -25,15 +28,15 @@ final class PluginRegistryServiceTests: XCTestCase {
         )
 
         let response = try JSONDecoder().decode(PluginRegistryResponse.self, from: data)
-        let plugins = response.resolvedPlugins(appVersion: "1.2.3")
+        let plugins = response.resolvedPlugins(
+            appVersion: "1.2.3",
+            sdkCompatibilityVersion: sdkCompatibilityVersion
+        )
 
-        XCTAssertEqual(plugins.count, 1)
-        XCTAssertEqual(plugins.first?.id, "com.typewhisper.legacy")
-        XCTAssertEqual(plugins.first?.version, "1.0.5")
-        XCTAssertEqual(plugins.first?.downloadURL, "https://example.com/legacy.zip")
+        XCTAssertTrue(plugins.isEmpty)
     }
 
-    func testMultiReleaseRegistryChoosesNewestCompatibleRelease() throws {
+    func testMultiReleaseRegistryChoosesNewestCompatibleReleaseWithMatchingSDKCompatibilityVersion() throws {
         let data = Data(
             """
             {
@@ -50,12 +53,14 @@ final class PluginRegistryServiceTests: XCTestCase {
                     {
                       "version": "1.1.0",
                       "minHostVersion": "1.3.0",
+                      "sdkCompatibilityVersion": "v1",
                       "size": 20,
                       "downloadURL": "https://example.com/new.zip"
                     },
                     {
                       "version": "1.0.5",
                       "minHostVersion": "1.2.0",
+                      "sdkCompatibilityVersion": "v1",
                       "size": 10,
                       "downloadURL": "https://example.com/compatible.zip"
                     }
@@ -67,12 +72,60 @@ final class PluginRegistryServiceTests: XCTestCase {
         )
 
         let response = try JSONDecoder().decode(PluginRegistryResponse.self, from: data)
-        let plugins = response.resolvedPlugins(appVersion: "1.2.4")
+        let plugins = response.resolvedPlugins(
+            appVersion: "1.2.4",
+            sdkCompatibilityVersion: sdkCompatibilityVersion
+        )
 
         XCTAssertEqual(plugins.count, 1)
         XCTAssertEqual(plugins.first?.version, "1.0.5")
         XCTAssertEqual(plugins.first?.downloadURL, "https://example.com/compatible.zip")
         XCTAssertEqual(plugins.first?.downloadCount, 100)
+    }
+
+    func testMultiReleaseRegistryRejectsReleaseWithMismatchedSDKCompatibilityVersionAtSameHostVersion() throws {
+        let data = Data(
+            """
+            {
+              "schemaVersion": 2,
+              "plugins": [
+                {
+                  "id": "com.typewhisper.multi",
+                  "name": "Multi Plugin",
+                  "author": "TypeWhisper",
+                  "description": "Multi-release entry",
+                  "category": "transcription",
+                  "releases": [
+                    {
+                      "version": "1.0.6",
+                      "minHostVersion": "1.2.2",
+                      "sdkCompatibilityVersion": "v2",
+                      "size": 12,
+                      "downloadURL": "https://example.com/mismatched.zip"
+                    },
+                    {
+                      "version": "1.0.5",
+                      "minHostVersion": "1.2.2",
+                      "sdkCompatibilityVersion": "v1",
+                      "size": 10,
+                      "downloadURL": "https://example.com/matching.zip"
+                    }
+                  ]
+                }
+              ]
+            }
+            """.utf8
+        )
+
+        let response = try JSONDecoder().decode(PluginRegistryResponse.self, from: data)
+        let plugins = response.resolvedPlugins(
+            appVersion: "1.2.2",
+            sdkCompatibilityVersion: sdkCompatibilityVersion
+        )
+
+        XCTAssertEqual(plugins.count, 1)
+        XCTAssertEqual(plugins.first?.version, "1.0.5")
+        XCTAssertEqual(plugins.first?.downloadURL, "https://example.com/matching.zip")
     }
 
     func testMultiReleaseRegistryFiltersIncompatibleReleasesByArchitectureAndOS() throws {
@@ -91,6 +144,7 @@ final class PluginRegistryServiceTests: XCTestCase {
                     {
                       "version": "1.2.0",
                       "minHostVersion": "1.0.0",
+                      "sdkCompatibilityVersion": "v1",
                       "minOSVersion": "15.0",
                       "supportedArchitectures": ["arm64"],
                       "size": 20,
@@ -99,6 +153,7 @@ final class PluginRegistryServiceTests: XCTestCase {
                     {
                       "version": "1.1.0",
                       "minHostVersion": "1.0.0",
+                      "sdkCompatibilityVersion": "v1",
                       "minOSVersion": "14.0",
                       "supportedArchitectures": ["x86_64"],
                       "size": 10,
@@ -115,6 +170,7 @@ final class PluginRegistryServiceTests: XCTestCase {
         let osVersion = OperatingSystemVersion(majorVersion: 14, minorVersion: 6, patchVersion: 0)
         let plugins = response.resolvedPlugins(
             appVersion: "1.2.4",
+            sdkCompatibilityVersion: sdkCompatibilityVersion,
             currentOSVersion: osVersion,
             architecture: "x86_64"
         )
@@ -157,10 +213,12 @@ final class PluginRegistryServiceTests: XCTestCase {
         )
 
         let response = try JSONDecoder().decode(PluginRegistryResponse.self, from: data)
-        let plugins = response.resolvedPlugins(appVersion: "1.2.3")
+        let plugins = response.resolvedPlugins(
+            appVersion: "1.2.3",
+            sdkCompatibilityVersion: sdkCompatibilityVersion
+        )
 
         XCTAssertEqual(response.plugins.count, 1)
-        XCTAssertEqual(plugins.count, 1)
-        XCTAssertEqual(plugins.first?.id, "com.typewhisper.ok")
+        XCTAssertTrue(plugins.isEmpty)
     }
 }

@@ -296,12 +296,6 @@ public protocol TranscriptionEnginePlugin: TypeWhisperPlugin {
     var providerDisplayName: String { get }
     var isConfigured: Bool { get }
     var transcriptionModels: [PluginModelInfo] { get }
-    /// Full catalogue this engine can select from, including variants not currently
-    /// downloaded or loaded. Default implementation returns `transcriptionModels`, so
-    /// existing plugins keep their current behaviour. Plugins that hide un-loaded
-    /// variants from `transcriptionModels` (to keep the GUI model picker quiet) should
-    /// override this to surface the full catalogue to API consumers like /v1/models.
-    var availableModels: [PluginModelInfo] { get }
     var selectedModelId: String? { get }
     func selectModel(_ modelId: String)
     var supportsTranslation: Bool { get }
@@ -313,8 +307,39 @@ public protocol TranscriptionEnginePlugin: TypeWhisperPlugin {
                     onProgress: @Sendable @escaping (String) -> Bool) async throws -> PluginTranscriptionResult
 }
 
+/// Optional model-catalog extension for engines that expose a broader model list than
+/// their currently active `transcriptionModels`. Kept separate to preserve binary
+/// compatibility with existing transcription plugins.
+public protocol TranscriptionModelCatalogProviding: TranscriptionEnginePlugin {
+    var availableModels: [PluginModelInfo] { get }
+}
+
 public extension TranscriptionEnginePlugin {
-    var availableModels: [PluginModelInfo] { transcriptionModels }
+    var modelCatalog: [PluginModelInfo] {
+        (self as? any TranscriptionModelCatalogProviding)?.availableModels ?? transcriptionModels
+    }
+}
+
+public enum PluginSDKCompatibility {
+    /// Opaque compatibility line for plugin ABI/protocol contracts. Bump only when the
+    /// host and marketplace plugins must be rebuilt together against a new SDK contract.
+    public static let currentVersion = "v1"
+
+    public static func isCompatible(manifestVersion: String?, isBundled: Bool) -> Bool {
+        guard !isBundled else { return true }
+        return manifestVersion == currentVersion
+    }
+
+    public static func incompatibilityReason(manifestVersion: String?, isBundled: Bool) -> String? {
+        guard !isBundled else { return nil }
+        guard let manifestVersion else {
+            return "missing sdkCompatibilityVersion (expected \(currentVersion))"
+        }
+        guard manifestVersion == currentVersion else {
+            return "requires sdkCompatibilityVersion \(currentVersion) (found \(manifestVersion))"
+        }
+        return nil
+    }
 }
 
 public protocol LiveTranscriptionCapablePlugin: TranscriptionEnginePlugin {

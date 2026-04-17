@@ -22,6 +22,7 @@ Create `Contents/Resources/manifest.json` in your bundle:
   "name": "My Plugin",
   "version": "1.0.0",
   "minHostVersion": "1.0.0",
+  "sdkCompatibilityVersion": "v1",
   "minOSVersion": "14.0",
   "author": "Your Name",
   "principalClass": "MyPlugin"
@@ -31,6 +32,7 @@ Create `Contents/Resources/manifest.json` in your bundle:
 - `id` - Unique reverse-domain identifier
 - `principalClass` - Must match `@objc(ClassName)` on your plugin class
 - `minHostVersion` - Minimum TypeWhisper version required
+- `sdkCompatibilityVersion` - Must match `PluginSDKCompatibility.currentVersion` for marketplace/external plugins
 - `minOSVersion` - Minimum macOS version required (plugin is skipped on older systems)
 
 ### 3. Implement the Plugin
@@ -120,6 +122,21 @@ final class MyTranscriptionEngine: NSObject, TranscriptionEnginePlugin, @uncheck
         // audio.duration  - TimeInterval
         let text = "transcribed text"
         return PluginTranscriptionResult(text: text)
+    }
+}
+```
+
+If your engine exposes a wider selectable catalog than its currently loaded
+`transcriptionModels`, add the optional `TranscriptionModelCatalogProviding`
+conformance:
+
+```swift
+extension MyTranscriptionEngine: TranscriptionModelCatalogProviding {
+    var availableModels: [PluginModelInfo] {
+        [
+            PluginModelInfo(id: "small", displayName: "Small"),
+            PluginModelInfo(id: "large", displayName: "Large")
+        ]
     }
 }
 ```
@@ -443,6 +460,7 @@ let wavData = PluginWavEncoder.encode(samples, sampleRate: 16000)
 | `name` | Yes | Display name |
 | `version` | Yes | Semver string (e.g. `1.0.0`) |
 | `minHostVersion` | No | Minimum TypeWhisper version (e.g. `1.0.0`) |
+| `sdkCompatibilityVersion` | No | Exact plugin SDK compatibility line. Marketplace/external plugins must match `PluginSDKCompatibility.currentVersion`. |
 | `minOSVersion` | No | Minimum macOS version (e.g. `14.0`, `26.0`). Plugin is skipped on older systems. |
 | `author` | No | Author name |
 | `principalClass` | Yes | Objective-C class name, must match `@objc(Name)` |
@@ -466,6 +484,7 @@ Registry entry format:
   "name": "My Plugin",
   "version": "1.0.0",
   "minHostVersion": "1.0.0",
+  "sdkCompatibilityVersion": "v1",
   "minOSVersion": "14.0",
   "author": "Your Name",
   "description": "What your plugin does.",

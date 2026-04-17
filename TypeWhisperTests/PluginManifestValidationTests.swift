@@ -24,6 +24,11 @@ final class PluginManifestValidationTests: XCTestCase {
             XCTAssertFalse(manifest.name.isEmpty, manifestURL.lastPathComponent)
             XCTAssertFalse(manifest.principalClass.isEmpty, manifestURL.lastPathComponent)
             XCTAssertNotNil(manifest.minHostVersion, manifestURL.lastPathComponent)
+            XCTAssertEqual(
+                manifest.sdkCompatibilityVersion,
+                PluginSDKCompatibility.currentVersion,
+                manifestURL.lastPathComponent
+            )
 
             let range = NSRange(location: 0, length: manifest.version.utf16.count)
             XCTAssertEqual(versionPattern.firstMatch(in: manifest.version, range: range)?.range, range, manifest.version)
@@ -122,12 +127,45 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
         XCTAssertTrue(manager.isManifestCompatible(manifest))
     }
 
+    func testExternalPluginsRequireExactSDKCompatibilityVersionWhileBundledPluginsAreExempt() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let manager = PluginManager(appSupportDirectory: appSupportDirectory)
+        let matchingManifest = PluginManifest(
+            id: "com.typewhisper.mock.sdk-match",
+            name: "SDK Match",
+            version: "1.0.0",
+            sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+            principalClass: "MockPlugin"
+        )
+        let missingManifest = PluginManifest(
+            id: "com.typewhisper.mock.sdk-missing",
+            name: "SDK Missing",
+            version: "1.0.0",
+            principalClass: "MockPlugin"
+        )
+        let mismatchedManifest = PluginManifest(
+            id: "com.typewhisper.mock.sdk-mismatch",
+            name: "SDK Mismatch",
+            version: "1.0.0",
+            sdkCompatibilityVersion: "v999",
+            principalClass: "MockPlugin"
+        )
+
+        XCTAssertTrue(manager.isManifestSDKCompatible(matchingManifest, isBundled: false))
+        XCTAssertFalse(manager.isManifestSDKCompatible(missingManifest, isBundled: false))
+        XCTAssertFalse(manager.isManifestSDKCompatible(mismatchedManifest, isBundled: false))
+        XCTAssertTrue(manager.isManifestSDKCompatible(missingManifest, isBundled: true))
+    }
+
     func testRegistryPluginRejectsArm64OnlyEntryOnIntel() {
         let plugin = RegistryPlugin(
             id: "com.typewhisper.mock.arm64-only",
             name: "ARM64 Only",
             version: "1.0.0",
             minHostVersion: "1.0.0",
+            sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
             minOSVersion: "14.0",
             supportedArchitectures: ["arm64"],
             author: "TypeWhisper",

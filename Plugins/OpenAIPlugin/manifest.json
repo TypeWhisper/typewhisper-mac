@@ -3,6 +3,7 @@
     "name": "OpenAI / ChatGPT",
     "version": "1.1.1",
     "minHostVersion": "1.2.2",
+    "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
     "description": "Cloud transcription plus OpenAI/ChatGPT prompts. Use an API key or ChatGPT login.",
@@ -11,6 +12,6 @@
     },
     "category": "transcription",
     "iconSystemName": "brain",
-    "requiresAPIKey": false,
-    "principalClass": "OpenAIPlugin"
+    "principalClass": "OpenAIPlugin",
+    "requiresAPIKey": false
 }

@@ -27,6 +27,7 @@ These surfaces remain part of `1.x`, but they are positioned as advanced or auto
 - Local HTTP API under `/v1/*` with per-request engine and model selection
 - `typewhisper` CLI with `--engine` and `--model` flags
 - Plugin SDK and plugin manifests, including TTS and streaming-dictionary hooks
+- Plugin SDK compatibility lines (`sdkCompatibilityVersion`) for marketplace releases
 - Widgets
 - Watch Folder
 

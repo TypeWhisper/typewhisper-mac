@@ -295,6 +295,7 @@ jobs:
               release = {
                   "version": version,
                   "minHostVersion": manifest.get("minHostVersion", "0.9.0"),
+                  "sdkCompatibilityVersion": manifest.get("sdkCompatibilityVersion"),
                   "size": size,
                   "downloadURL": download_url,
               }
@@ -309,6 +310,7 @@ jobs:
 
               version_value = plugin.get("version")
               min_host = plugin.get("minHostVersion")
+              sdk_compat = plugin.get("sdkCompatibilityVersion")
               size_value = plugin.get("size")
               download_value = plugin.get("downloadURL")
               if not all([version_value, min_host, size_value, download_value]):
@@ -317,6 +319,7 @@ jobs:
               legacy = {
                   "version": version_value,
                   "minHostVersion": min_host,
+                  "sdkCompatibilityVersion": sdk_compat,
                   "size": size_value,
                   "downloadURL": download_value,
               }
@@ -328,6 +331,10 @@ jobs:
           def sync_legacy_fields(plugin, release):
               plugin["version"] = release["version"]
               plugin["minHostVersion"] = release["minHostVersion"]
+              if release.get("sdkCompatibilityVersion") is not None:
+                  plugin["sdkCompatibilityVersion"] = release["sdkCompatibilityVersion"]
+              else:
+                  plugin.pop("sdkCompatibilityVersion", None)
               plugin["size"] = release["size"]
               plugin["downloadURL"] = release["downloadURL"]
 

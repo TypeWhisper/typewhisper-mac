@@ -3,6 +3,7 @@
     "name": "Gladia",
     "version": "1.0.0",
     "minHostVersion": "0.12.0",
+    "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
     "description": "Cloud transcription via Gladia Solaria API with real-time WebSocket streaming.",
@@ -11,6 +12,6 @@
     },
     "category": "transcription",
     "iconSystemName": "waveform.badge.mic",
-    "requiresAPIKey": true,
-    "principalClass": "GladiaPlugin"
+    "principalClass": "GladiaPlugin",
+    "requiresAPIKey": true
 }

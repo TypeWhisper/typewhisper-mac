@@ -99,6 +99,37 @@ final class APIRouterAndHandlersTests: XCTestCase {
         }
     }
 
+    @objc(APIRouterCatalogTranscriptionPlugin)
+    private final class CatalogTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.catalog-transcription" }
+        static var pluginName: String { "Catalog Mock Transcription" }
+
+        required override init() {}
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+
+        var providerId: String { "catalog-mock" }
+        var providerDisplayName: String { "Catalog Mock" }
+        var isConfigured: Bool { true }
+        var transcriptionModels: [PluginModelInfo] {
+            [PluginModelInfo(id: "tiny", displayName: "Tiny")]
+        }
+        var availableModels: [PluginModelInfo] {
+            [
+                PluginModelInfo(id: "tiny", displayName: "Tiny"),
+                PluginModelInfo(id: "large", displayName: "Large")
+            ]
+        }
+        var selectedModelId: String? { "tiny" }
+        func selectModel(_ modelId: String) {}
+        var supportsTranslation: Bool { false }
+
+        func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+            PluginTranscriptionResult(text: "transcribed", detectedLanguage: language)
+        }
+    }
+
     @objc(APIRouterMockTTSPlugin)
     private final class MockTTSProviderPlugin: NSObject, TTSProviderPlugin, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.tts" }
@@ -1796,6 +1827,63 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let json = try Self.jsonObject(response)
         let message = (json["error"] as? [String: Any])?["message"] as? String ?? ""
         XCTAssertTrue(message.contains("not configured"), "Expected 'not configured' in message, got: \(message)")
+    }
+
+    @MainActor
+    func testModelsEndpointUsesExpandedCatalogOnlyForCatalogProvidingPlugins() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let context = Self.makeAPIContext(
+            appSupportDirectory: appSupportDirectory,
+            withMockTranscriptionPlugin: false
+        )
+        let legacyPlugin = MockTranscriptionPlugin()
+        let catalogPlugin = CatalogTranscriptionPlugin()
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.transcription",
+                    name: "Mock Transcription",
+                    version: "1.0.0",
+                    sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+                    principalClass: "APIRouterMockTranscriptionPlugin"
+                ),
+                instance: legacyPlugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            ),
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.catalog-transcription",
+                    name: "Catalog Mock Transcription",
+                    version: "1.0.0",
+                    sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+                    principalClass: "APIRouterCatalogTranscriptionPlugin"
+                ),
+                instance: catalogPlugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let response = await context.router.route(
+            HTTPRequest(method: "GET", path: "/v1/models", queryParams: [:], headers: [:], body: Data())
+        )
+        let json = try Self.jsonObject(response)
+        let models = try XCTUnwrap(json["models"] as? [[String: Any]])
+
+        let legacyIds = models
+            .filter { ($0["engine"] as? String) == legacyPlugin.providerId }
+            .compactMap { $0["id"] as? String }
+        let catalogIds = models
+            .filter { ($0["engine"] as? String) == catalogPlugin.providerId }
+            .compactMap { $0["id"] as? String }
+
+        XCTAssertEqual(legacyIds, ["tiny"])
+        XCTAssertEqual(catalogIds.sorted(), ["large", "tiny"])
     }
 
     @MainActor

@@ -3,8 +3,11 @@
     "name": "Parakeet",
     "version": "1.2.4",
     "minHostVersion": "1.2.1",
+    "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
-    "supportedArchitectures": ["arm64"],
+    "supportedArchitectures": [
+        "arm64"
+    ],
     "author": "TypeWhisper",
     "description": "Local speech-to-text powered by NVIDIA Parakeet TDT. Fast and accurate, 25 languages.",
     "descriptions": {
