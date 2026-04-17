@@ -125,6 +125,35 @@
       "size": 161982,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-groq-v1.0.18/GroqPlugin.zip",
       "minOSVersion": "14.0"
+    },
+    {
+      "id": "com.typewhisper.openai",
+      "name": "OpenAI / ChatGPT",
+      "author": "TypeWhisper",
+      "description": "Cloud transcription plus OpenAI/ChatGPT prompts. Use an API key or ChatGPT login.",
+      "descriptions": {
+        "de": "Cloud-Transkription plus OpenAI-/ChatGPT-Prompts. Nutzbar per API-Key oder ChatGPT-Login."
+      },
+      "category": "transcription",
+      "downloadCount": 0,
+      "iconSystemName": "brain",
+      "requiresAPIKey": false,
+      "releases": [
+        {
+          "version": "1.1.4",
+          "minHostVersion": "1.2.2",
+          "sdkCompatibilityVersion": "v1",
+          "size": 367918,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-v1.1.4/OpenAIPlugin.zip",
+          "minOSVersion": "14.0"
+        }
+      ],
+      "version": "1.1.4",
+      "minHostVersion": "1.2.2",
+      "sdkCompatibilityVersion": "v1",
+      "size": 367918,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-v1.1.4/OpenAIPlugin.zip",
+      "minOSVersion": "14.0"
     }
   ]
 }
