@@ -572,6 +572,35 @@
       "size": 207928,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gladia-v1.0.4/GladiaPlugin.zip",
       "minOSVersion": "14.0"
+    },
+    {
+      "id": "com.typewhisper.google-cloud-stt",
+      "name": "Google Cloud Speech-to-Text",
+      "author": "TypeWhisper",
+      "description": "Cloud transcription via Google Cloud Speech-to-Text using a service-account JSON key. Handles long recordings by chunking audio into multiple recognize requests.",
+      "descriptions": {
+        "de": "Cloud-Transkription ueber Google Cloud Speech-to-Text mit einem Service-Account-JSON-Schluessel. Zerlegt laengere Aufnahmen automatisch in mehrere Recognize-Requests."
+      },
+      "category": "transcription",
+      "downloadCount": 0,
+      "iconSystemName": "globe.badge.chevron.backward",
+      "requiresAPIKey": true,
+      "releases": [
+        {
+          "version": "1.0.3",
+          "minHostVersion": "0.12.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 242014,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-google-cloud-stt-v1.0.3/GoogleCloudSTTPlugin.zip",
+          "minOSVersion": "14.0"
+        }
+      ],
+      "version": "1.0.3",
+      "minHostVersion": "0.12.0",
+      "sdkCompatibilityVersion": "v1",
+      "size": 242014,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-google-cloud-stt-v1.0.3/GoogleCloudSTTPlugin.zip",
+      "minOSVersion": "14.0"
     }
   ]
 }
