@@ -914,6 +914,40 @@
       "size": 111679,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-system-tts-v1.0.1/SystemTTSPlugin.zip",
       "minOSVersion": "14.0"
+    },
+    {
+      "id": "com.typewhisper.granite",
+      "name": "Granite Speech",
+      "author": "TypeWhisper",
+      "description": "Local speech-to-text and translation by IBM, powered by MLX on Apple Silicon. 6 languages with bidirectional translation.",
+      "descriptions": {
+        "de": "Lokale Spracherkennung und Uebersetzung von IBM mit MLX auf Apple Silicon. 6 Sprachen mit bidirektionaler Uebersetzung."
+      },
+      "category": "transcription",
+      "downloadCount": 0,
+      "iconSystemName": "cpu",
+      "releases": [
+        {
+          "version": "1.0.5",
+          "minHostVersion": "1.2.1",
+          "sdkCompatibilityVersion": "v1",
+          "size": 18431772,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-granite-v1.0.5/GranitePlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        }
+      ],
+      "version": "1.0.5",
+      "minHostVersion": "1.2.1",
+      "sdkCompatibilityVersion": "v1",
+      "size": 18431772,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-granite-v1.0.5/GranitePlugin.zip",
+      "minOSVersion": "14.0",
+      "supportedArchitectures": [
+        "arm64"
+      ]
     }
   ]
 }
