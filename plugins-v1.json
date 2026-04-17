@@ -486,6 +486,34 @@
       "size": 157103,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gemini-v1.0.14/GeminiPlugin.zip",
       "minOSVersion": "14.0"
+    },
+    {
+      "id": "com.typewhisper.memory.file",
+      "name": "File Memory",
+      "author": "TypeWhisper",
+      "description": "Store memories as local JSON files with text-based search. Fully offline, no API key required.",
+      "descriptions": {
+        "de": "Speichert Erinnerungen als lokale JSON-Dateien mit textbasierter Suche. Komplett offline, kein API-Key noetig."
+      },
+      "category": "memory",
+      "downloadCount": 0,
+      "iconSystemName": "doc.text",
+      "releases": [
+        {
+          "version": "1.0.2",
+          "minHostVersion": "0.14.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 107212,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-file-memory-v1.0.2/FileMemoryPlugin.zip",
+          "minOSVersion": "14.0"
+        }
+      ],
+      "version": "1.0.2",
+      "minHostVersion": "0.14.0",
+      "sdkCompatibilityVersion": "v1",
+      "size": 107212,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-file-memory-v1.0.2/FileMemoryPlugin.zip",
+      "minOSVersion": "14.0"
     }
   ]
 }
