@@ -154,4 +154,25 @@ final class SpeechFeedbackServiceTests: XCTestCase {
 
         XCTAssertTrue(provider.requests.isEmpty)
     }
+
+    @MainActor
+    func testDisableIfNoProvidersAvailableTurnsOffFeedbackAndPersists() async {
+        defaults.set(true, forKey: UserDefaultsKeys.spokenFeedbackEnabled)
+        let service = SpeechFeedbackService(defaults: defaults) { [] }
+
+        XCTAssertTrue(service.spokenFeedbackEnabled)
+        XCTAssertTrue(service.disableIfNoProvidersAvailable())
+        XCTAssertFalse(service.spokenFeedbackEnabled)
+        XCTAssertFalse(defaults.bool(forKey: UserDefaultsKeys.spokenFeedbackEnabled))
+    }
+
+    @MainActor
+    func testDisableIfNoProvidersAvailableKeepsFeedbackWhenProviderExists() async {
+        defaults.set(true, forKey: UserDefaultsKeys.spokenFeedbackEnabled)
+        let provider = MockTTSProvider()
+        let service = SpeechFeedbackService(defaults: defaults) { [provider] in [provider] }
+
+        XCTAssertFalse(service.disableIfNoProvidersAvailable())
+        XCTAssertTrue(service.spokenFeedbackEnabled)
+    }
 }

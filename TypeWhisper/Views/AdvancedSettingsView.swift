@@ -129,35 +129,37 @@ struct AdvancedSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Toggle(String(localized: "Spoken feedback"), isOn: $dictation.spokenFeedbackEnabled)
+                if speechFeedbackService.hasAvailableProviders {
+                    Toggle(String(localized: "Spoken feedback"), isOn: $dictation.spokenFeedbackEnabled)
 
-                Text(String(localized: "Reads back the final transcribed text after each dictation using the selected speech provider. Recording, error, and prompt announcements are only spoken through VoiceOver accessibility announcements."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    Text(String(localized: "Reads back the final transcribed text after each dictation using the selected speech provider. Recording, error, and prompt announcements are only spoken through VoiceOver accessibility announcements."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
 
-                if dictation.spokenFeedbackEnabled, !speechFeedbackService.availableProviders.isEmpty {
-                    let providerSelection = Binding(
-                        get: { speechFeedbackService.effectiveProviderId ?? speechFeedbackService.selectedProviderId },
-                        set: { speechFeedbackService.selectedProviderId = $0 }
-                    )
+                    if dictation.spokenFeedbackEnabled {
+                        let providerSelection = Binding(
+                            get: { speechFeedbackService.effectiveProviderId ?? speechFeedbackService.selectedProviderId },
+                            set: { speechFeedbackService.selectedProviderId = $0 }
+                        )
 
-                    Picker(String(localized: "Speech Provider"), selection: providerSelection) {
-                        ForEach(speechFeedbackService.availableProviders, id: \.id) { provider in
-                            Text(provider.displayName).tag(provider.id)
+                        Picker(String(localized: "Speech Provider"), selection: providerSelection) {
+                            ForEach(speechFeedbackService.availableProviders, id: \.id) { provider in
+                                Text(provider.displayName).tag(provider.id)
+                            }
                         }
-                    }
 
-                    if let summary = speechFeedbackService.currentSettingsSummary {
-                        Text(summary)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                        if let summary = speechFeedbackService.currentSettingsSummary {
+                            Text(summary)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
 
-                    if let activeProviderId = speechFeedbackService.effectiveProviderId,
-                       let plugin = pluginManager.loadedTTSPlugin(for: activeProviderId),
-                       plugin.instance.settingsView != nil {
-                        Button(String(localized: "Configure Voice & Speed…")) {
-                            PluginSettingsWindowManager.shared.present(plugin)
+                        if let activeProviderId = speechFeedbackService.effectiveProviderId,
+                           let plugin = pluginManager.loadedTTSPlugin(for: activeProviderId),
+                           plugin.instance.settingsView != nil {
+                            Button(String(localized: "Configure Voice & Speed…")) {
+                                PluginSettingsWindowManager.shared.present(plugin)
+                            }
                         }
                     }
                 }
@@ -316,6 +318,10 @@ struct AdvancedSettingsView: View {
                 withBundleIdentifier: "com.raycast.macos"
             ) != nil
             checkCLIInstallation()
+            syncSpeechFeedbackAvailability()
+        }
+        .onReceive(pluginManager.$loadedPlugins) { _ in
+            syncSpeechFeedbackAvailability()
         }
     }
 
@@ -419,5 +425,14 @@ struct AdvancedSettingsView: View {
             Task { @MainActor in completion() }
         }
         try? process.run()
+    }
+
+    private func syncSpeechFeedbackAvailability() {
+        guard !speechFeedbackService.hasAvailableProviders else { return }
+        if dictation.spokenFeedbackEnabled {
+            dictation.spokenFeedbackEnabled = false
+        } else {
+            _ = speechFeedbackService.disableIfNoProvidersAvailable()
+        }
     }
 }

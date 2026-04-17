@@ -68,6 +68,10 @@ final class SpeechFeedbackService: ObservableObject {
         providerResolver().map { ($0.providerId, $0.providerDisplayName) }
     }
 
+    var hasAvailableProviders: Bool {
+        !providerResolver().isEmpty
+    }
+
     var effectiveProviderId: String? {
         selectedProvider?.providerId
     }
@@ -112,6 +116,13 @@ final class SpeechFeedbackService: ObservableObject {
         speakTask = nil
         playbackSession?.stop()
         playbackSession = nil
+    }
+
+    @discardableResult
+    func disableIfNoProvidersAvailable() -> Bool {
+        guard !hasAvailableProviders, spokenFeedbackEnabled else { return false }
+        spokenFeedbackEnabled = false
+        return true
     }
 
     private var selectedProvider: TTSProviderPlugin? {
