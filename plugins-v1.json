@@ -629,6 +629,35 @@
       "size": 198536,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-livetranscript-v1.0.5/LiveTranscriptPlugin.zip",
       "minOSVersion": "14.0"
+    },
+    {
+      "id": "com.typewhisper.linear",
+      "name": "Linear",
+      "author": "TypeWhisper",
+      "description": "Create Linear issues from transcribed or processed text. Requires a Linear API key.",
+      "descriptions": {
+        "de": "Linear-Issues aus transkribiertem oder verarbeitetem Text erstellen. Erfordert einen Linear-API-Key."
+      },
+      "category": "action",
+      "downloadCount": 0,
+      "iconSystemName": "list.bullet.rectangle",
+      "requiresAPIKey": true,
+      "releases": [
+        {
+          "version": "1.0.12",
+          "minHostVersion": "0.9.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 227190,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-linear-v1.0.12/LinearPlugin.zip",
+          "minOSVersion": "14.0"
+        }
+      ],
+      "version": "1.0.12",
+      "minHostVersion": "0.9.0",
+      "sdkCompatibilityVersion": "v1",
+      "size": 227190,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-linear-v1.0.12/LinearPlugin.zip",
+      "minOSVersion": "14.0"
     }
   ]
 }
