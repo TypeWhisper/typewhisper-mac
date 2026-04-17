@@ -14,7 +14,6 @@
 		A10000000000000000000001 /* SystemTTSPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000001 /* SystemTTSPlugin.swift */; };
 		A10000000000000000000002 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000002 /* manifest.json */; };
 		A10000000000000000000003 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000044 /* TypeWhisperPluginSDK */; };
-		A10000000000000000000004 /* SystemTTSPlugin.bundle in Embed Built-in Plugins */ = {isa = PBXBuildFile; fileRef = B10000000000000000000003 /* SystemTTSPlugin.bundle */; };
 		A10000000000000000000005 /* SpeechFeedbackServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* SpeechFeedbackServiceTests.swift */; };
 		AA00000000000000000350 /* ObjCExceptionCatcher.m in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000351 /* ObjCExceptionCatcher.m */; };
 		C23000000000000000000001 /* OpenAIPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000139 /* OpenAIPlugin.swift */; };
@@ -331,13 +330,6 @@
 			remoteGlobalIDString = DD00000000000000000014;
 			remoteInfo = TypeWhisperWidgetExtension;
 		};
-		H10000000000000000000001 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = EE00000000000000000001 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = D10000000000000000000001;
-			remoteInfo = SystemTTSPlugin;
-		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -372,17 +364,6 @@
 				AA00000000000000000198 /* TypeWhisperWidgetExtension.appex in Embed App Extensions */,
 			);
 			name = "Embed App Extensions";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		F10000000000000000000004 /* Embed Built-in Plugins */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 13;
-			files = (
-				A10000000000000000000004 /* SystemTTSPlugin.bundle in Embed Built-in Plugins */,
-			);
-			name = "Embed Built-in Plugins";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -1748,14 +1729,12 @@
 				FF00000000000000000004 /* CopyFiles */,
 				FF00000000000000000036 /* Embed Frameworks */,
 				FF00000000000000000081 /* Embed App Extensions */,
-				F10000000000000000000004 /* Embed Built-in Plugins */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				GG00000000000000000001 /* PBXTargetDependency */,
 				GG00000000000000000009 /* PBXTargetDependency */,
-				G10000000000000000000001 /* PBXTargetDependency */,
 			);
 			name = TypeWhisper;
 			packageProductDependencies = (
@@ -3305,11 +3284,6 @@
 			isa = PBXTargetDependency;
 			target = DD00000000000000000014 /* TypeWhisperWidgetExtension */;
 			targetProxy = HH00000000000000000009 /* PBXContainerItemProxy */;
-		};
-		G10000000000000000000001 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = D10000000000000000000001 /* SystemTTSPlugin */;
-			targetProxy = H10000000000000000000001 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 

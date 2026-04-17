@@ -24,7 +24,7 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
     func activate(host: HostServices) {
         self.host = host
         _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
-        Task { await restoreLoadedModel() }
+        Task { await restoreLoadedModel(allowDownloads: false) }
     }
 
     func deactivate() {
@@ -253,24 +253,30 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
     }
 
     fileprivate func loadModel(_ modelDef: WhisperModelDef) async {
-        modelState = .downloading
-        downloadProgress = 0.05
-
         do {
             // Migrate old models if they exist
             migrateOldModels(for: modelDef)
 
-            // Download
-            var lastProgress = 0.0
-            let modelFolder = try await WhisperKit.download(
-                variant: modelDef.id,
-                downloadBase: downloadBase
-            ) { progress in
-                let fraction = progress.fractionCompleted
-                let mapped = 0.05 + fraction * 0.75
-                guard mapped - lastProgress >= 0.01 else { return }
-                lastProgress = mapped
-                self.downloadProgress = mapped
+            let modelFolder: URL
+            if isModelDownloaded(modelDef) {
+                modelState = .loading(phase: "loading")
+                downloadProgress = 0.80
+                modelFolder = resolvedModelPath(for: modelDef)
+            } else {
+                modelState = .downloading
+                downloadProgress = 0.05
+
+                var lastProgress = 0.0
+                modelFolder = try await WhisperKit.download(
+                    variant: modelDef.id,
+                    downloadBase: downloadBase
+                ) { progress in
+                    let fraction = progress.fractionCompleted
+                    let mapped = 0.05 + fraction * 0.75
+                    guard mapped - lastProgress >= 0.01 else { return }
+                    lastProgress = mapped
+                    self.downloadProgress = mapped
+                }
             }
 
             // Load
@@ -320,7 +326,7 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
     }
 
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
-    @objc func triggerRestoreModel() { Task { await restoreLoadedModel() } }
+    @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: true) } }
 
     func unloadModel(clearPersistence: Bool = true) {
         whisperKit = nil
@@ -338,11 +344,12 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
         try? FileManager.default.removeItem(at: modelPath)
     }
 
-    func restoreLoadedModel() async {
+    func restoreLoadedModel(allowDownloads: Bool = true) async {
         guard let savedId = host?.userDefault(forKey: "loadedModel") as? String,
               let modelDef = Self.availableModels.first(where: { $0.id == savedId }) else {
             return
         }
+        guard allowDownloads || isModelDownloaded(modelDef) else { return }
         await loadModel(modelDef)
     }
 

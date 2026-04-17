@@ -29,7 +29,7 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Tran
         self.host = host
         Task {
             await populateModels()
-            await restoreLoadedModel()
+            await restoreLoadedModel(allowDownloads: false)
         }
     }
 
@@ -272,7 +272,7 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Tran
     }
 
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
-    @objc func triggerRestoreModel() { Task { await restoreLoadedModel() } }
+    @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: true) } }
 
     func unloadModel(clearPersistence: Bool = true) {
         if let locale = currentLocale {
@@ -288,7 +288,7 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Tran
         host?.notifyCapabilitiesChanged()
     }
 
-    func restoreLoadedModel() async {
+    func restoreLoadedModel(allowDownloads: Bool = true) async {
         if cachedModels.isEmpty {
             await populateModels()
         }
@@ -297,7 +297,20 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Tran
               let modelDef = cachedModels.first(where: { $0.id == savedId }) else {
             return
         }
+        if !allowDownloads {
+            let hasInstalledAssets = await self.hasInstalledAssets(for: modelDef)
+            guard hasInstalledAssets else { return }
+        }
         await loadModel(modelDef)
+    }
+
+    private func hasInstalledAssets(for modelDef: SpeechModelDef) async -> Bool {
+        let transcriber = SpeechTranscriber(locale: modelDef.locale, preset: .transcription)
+        do {
+            return try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) == nil
+        } catch {
+            return false
+        }
     }
 
     // MARK: - Audio Helpers
