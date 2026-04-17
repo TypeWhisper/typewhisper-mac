@@ -154,6 +154,34 @@
       "size": 367918,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-v1.1.4/OpenAIPlugin.zip",
       "minOSVersion": "14.0"
+    },
+    {
+      "id": "com.typewhisper.openai-compatible",
+      "name": "OpenAI Compatible",
+      "author": "TypeWhisper",
+      "description": "Connect to any OpenAI-compatible API server for transcription and LLM. Works with Ollama, LM Studio, vLLM, and more.",
+      "descriptions": {
+        "de": "Verbindung zu jedem OpenAI-kompatiblen API-Server fuer Transkription und LLM. Funktioniert mit Ollama, LM Studio, vLLM und mehr."
+      },
+      "category": "transcription",
+      "downloadCount": 0,
+      "iconSystemName": "server.rack",
+      "releases": [
+        {
+          "version": "1.0.13",
+          "minHostVersion": "0.9.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 183891,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-compatible-v1.0.13/OpenAICompatiblePlugin.zip",
+          "minOSVersion": "14.0"
+        }
+      ],
+      "version": "1.0.13",
+      "minHostVersion": "0.9.0",
+      "sdkCompatibilityVersion": "v1",
+      "size": 183891,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-compatible-v1.0.13/OpenAICompatiblePlugin.zip",
+      "minOSVersion": "14.0"
     }
   ]
 }
