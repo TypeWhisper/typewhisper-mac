@@ -743,6 +743,34 @@
       "size": 198037,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-vector-memory-v1.0.2/OpenAIVectorMemoryPlugin.zip",
       "minOSVersion": "14.0"
+    },
+    {
+      "id": "com.typewhisper.gemma4",
+      "name": "Gemma 4",
+      "author": "TypeWhisper",
+      "description": "Local LLM powered by Google Gemma 4 on Apple Silicon via MLX. No API key required.",
+      "descriptions": {
+        "de": "Lokales LLM mit Google Gemma 4 auf Apple Silicon via MLX. Kein API-Key erforderlich."
+      },
+      "category": "llm",
+      "downloadCount": 0,
+      "iconSystemName": "cpu",
+      "releases": [
+        {
+          "version": "1.0.2",
+          "minHostVersion": "0.11.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 15130453,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gemma4-v1.0.2/Gemma4Plugin.zip",
+          "minOSVersion": "14.0"
+        }
+      ],
+      "version": "1.0.2",
+      "minHostVersion": "0.11.0",
+      "sdkCompatibilityVersion": "v1",
+      "size": 15130453,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gemma4-v1.0.2/Gemma4Plugin.zip",
+      "minOSVersion": "14.0"
     }
   ]
 }
