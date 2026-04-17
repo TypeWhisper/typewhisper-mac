@@ -160,7 +160,7 @@ final class DictationViewModel: ObservableObject {
     private var transcriptionTask: Task<Void, Never>?
     private var errorResetTask: Task<Void, Never>?
     private var insertingResetTask: Task<Void, Never>?
-    @Published private var recordingCancelWarningShownAt: Date?
+    @Published private(set) var recordingCancelWarningActive: Bool = false
     private var urlResolutionTask: Task<Void, Never>?
     private var metadataCaptureTask: Task<Void, Never>?
     /// Snapshot of the streaming params used in the most recent `streamingHandler.start(...)`.
@@ -181,10 +181,9 @@ final class DictationViewModel: ObservableObject {
     private var dictationSessions: [UUID: DictationSessionSnapshot] = [:]
     private var dictationSessionOrder: [UUID] = []
     private let maxTrackedDictationSessions = 100
-    private var recordingCancelWarningDuration: TimeInterval = 2
 
     var recordingCancelWarningMessage: String? {
-        guard state == .recording, isRecordingCancelWarningActive(referenceDate: Date()) else { return nil }
+        guard state == .recording, recordingCancelWarningActive else { return nil }
         return String(localized: "Press Esc again to cancel recording")
     }
 
@@ -444,14 +443,6 @@ final class DictationViewModel: ObservableObject {
     }
 
     private func setupBindings() {
-        $state
-            .removeDuplicates()
-            .sink { [weak self] newState in
-                guard let self, newState != .recording else { return }
-                self.clearRecordingCancelWarning()
-            }
-            .store(in: &cancellables)
-
         hotkeyService.onDictationStart = { [weak self] in
             self?.startRecording()
         }
@@ -521,12 +512,11 @@ final class DictationViewModel: ObservableObject {
     func handleCancelHotkey() {
         switch state {
         case .recording:
-            let now = Date()
-            if isRecordingCancelWarningActive(referenceDate: now) {
-                clearRecordingCancelWarning()
+            if recordingCancelWarningActive {
+                recordingCancelWarningActive = false
                 cancelCurrentOperation()
             } else {
-                showRecordingCancelWarning(at: now)
+                recordingCancelWarningActive = true
             }
         case .processing:
             cancelCurrentOperation()
@@ -535,18 +525,8 @@ final class DictationViewModel: ObservableObject {
         }
     }
 
-    private func showRecordingCancelWarning(at date: Date) {
-        recordingCancelWarningShownAt = date
-    }
-
-    private func isRecordingCancelWarningActive(referenceDate: Date) -> Bool {
-        guard let shownAt = recordingCancelWarningShownAt else { return false }
-        return referenceDate.timeIntervalSince(shownAt) < recordingCancelWarningDuration
-    }
-
     private func clearRecordingCancelWarning() {
-        guard recordingCancelWarningShownAt != nil else { return }
-        recordingCancelWarningShownAt = nil
+        recordingCancelWarningActive = false
     }
 
     private func cancelCurrentOperation() {
@@ -1115,12 +1095,6 @@ final class DictationViewModel: ObservableObject {
         actionFeedbackIsError = false
         actionDisplayDuration = 3.5
     }
-
-#if DEBUG
-    func setRecordingCancelWarningDurationForTesting(_ duration: TimeInterval) {
-        recordingCancelWarningDuration = duration
-    }
-#endif
 
     private func applyRuleMatch(
         _ match: RuleMatchResult?,

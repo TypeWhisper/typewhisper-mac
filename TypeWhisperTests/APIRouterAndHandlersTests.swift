@@ -1958,32 +1958,6 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
-    func testHandleCancelHotkey_secondEscapeAfterExpiryRequiresConfirmationAgain() async throws {
-        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-        var dictationContext: DictationContext?
-        defer {
-            dictationContext = nil
-            TestSupport.remove(appSupportDirectory)
-        }
-
-        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
-        let context = try XCTUnwrap(dictationContext)
-        context.dictationViewModel.state = .recording
-        context.dictationViewModel.setRecordingCancelWarningDurationForTesting(0.05)
-
-        context.dictationViewModel.handleCancelHotkey()
-        try await Task.sleep(for: .milliseconds(120))
-        context.dictationViewModel.handleCancelHotkey()
-
-        XCTAssertEqual(context.dictationViewModel.state, .recording)
-        XCTAssertEqual(
-            context.dictationViewModel.recordingCancelWarningMessage,
-            try TestSupport.localizedCatalogValueForCurrentLocale(for: "Press Esc again to cancel recording")
-        )
-        XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
-    }
-
-    @MainActor
     func testHandleCancelHotkey_processingStillCancelsImmediately() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?
