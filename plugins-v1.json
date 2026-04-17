@@ -857,6 +857,34 @@
       "size": 186451,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-speechmatics-v1.0.3/SpeechmaticsPlugin.zip",
       "minOSVersion": "14.0"
+    },
+    {
+      "id": "com.typewhisper.webhook",
+      "name": "Webhook Notifications",
+      "author": "TypeWhisper",
+      "description": "Send transcribed or processed text to any webhook URL via HTTP POST.",
+      "descriptions": {
+        "de": "Transkribierten oder verarbeiteten Text per HTTP POST an eine beliebige Webhook-URL senden."
+      },
+      "category": "post-processor",
+      "downloadCount": 0,
+      "iconSystemName": "arrow.up.forward.app",
+      "releases": [
+        {
+          "version": "1.0.12",
+          "minHostVersion": "0.9.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 208933,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-webhook-v1.0.12/WebhookPlugin.zip",
+          "minOSVersion": "14.0"
+        }
+      ],
+      "version": "1.0.12",
+      "minHostVersion": "0.9.0",
+      "sdkCompatibilityVersion": "v1",
+      "size": 208933,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-webhook-v1.0.12/WebhookPlugin.zip",
+      "minOSVersion": "14.0"
     }
   ]
 }
