@@ -771,6 +771,34 @@
       "size": 15130453,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gemma4-v1.0.2/Gemma4Plugin.zip",
       "minOSVersion": "14.0"
+    },
+    {
+      "id": "com.typewhisper.script",
+      "name": "Script Runner",
+      "author": "TypeWhisper",
+      "description": "Post-process transcribed text through custom shell scripts. Pass text via stdin, get results via stdout.",
+      "descriptions": {
+        "de": "Transkribierten Text durch eigene Shell-Skripte nachbearbeiten. Text wird per stdin uebergeben, Ergebnis per stdout zurueckgegeben."
+      },
+      "category": "post-processor",
+      "downloadCount": 0,
+      "iconSystemName": "terminal",
+      "releases": [
+        {
+          "version": "1.1.3",
+          "minHostVersion": "0.9.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 227446,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-script-v1.1.3/ScriptPlugin.zip",
+          "minOSVersion": "14.0"
+        }
+      ],
+      "version": "1.1.3",
+      "minHostVersion": "0.9.0",
+      "sdkCompatibilityVersion": "v1",
+      "size": 227446,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-script-v1.1.3/ScriptPlugin.zip",
+      "minOSVersion": "14.0"
     }
   ]
 }
