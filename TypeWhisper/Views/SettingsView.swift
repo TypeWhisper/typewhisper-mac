@@ -21,14 +21,19 @@ struct SettingsView: View {
     @ObservedObject private var registryService = PluginRegistryService.shared
     @ObservedObject private var homeViewModel = HomeViewModel.shared
     @ObservedObject private var promptActionsViewModel = PromptActionsViewModel.shared
-    @AppStorage(UserDefaultsKeys.showRecorderTab) private var showRecorderTab = false
 
     private var destinations: [SettingsDestination] {
-        var items: [SettingsDestination] = [
+        [
             SettingsDestination(tab: .home, title: String(localized: "Home"), systemImage: "house", badge: nil),
             SettingsDestination(tab: .general, title: String(localized: "General"), systemImage: "gear", badge: nil),
             SettingsDestination(tab: .recording, title: String(localized: "Recording"), systemImage: "mic.fill", badge: nil),
             SettingsDestination(tab: .hotkeys, title: String(localized: "Hotkeys"), systemImage: "keyboard", badge: nil),
+            SettingsDestination(
+                tab: .recorder,
+                title: String(localized: "settings.tab.recorder"),
+                systemImage: "waveform.circle",
+                badge: nil
+            ),
             SettingsDestination(tab: .fileTranscription, title: String(localized: "File Transcription"), systemImage: "doc.text", badge: nil),
             SettingsDestination(tab: .history, title: String(localized: "History"), systemImage: "clock.arrow.circlepath", badge: nil),
             SettingsDestination(tab: .dictionary, title: String(localized: "Dictionary"), systemImage: "book.closed", badge: nil),
@@ -45,20 +50,6 @@ struct SettingsView: View {
             SettingsDestination(tab: .license, title: String(localized: "License"), systemImage: "key", badge: nil),
             SettingsDestination(tab: .about, title: String(localized: "About"), systemImage: "info.circle", badge: nil)
         ]
-
-        if showRecorderTab {
-            items.insert(
-                SettingsDestination(
-                    tab: .recorder,
-                    title: String(localized: "settings.tab.recorder"),
-                    systemImage: "waveform.circle",
-                    badge: nil
-                ),
-                at: 5
-            )
-        }
-
-        return items
     }
 
     var body: some View {
@@ -92,11 +83,6 @@ struct SettingsView: View {
             if navigate {
                 selectedTab = .integrations
                 promptActionsViewModel.navigateToIntegrations = false
-            }
-        }
-        .onChange(of: showRecorderTab) { _, isVisible in
-            if !isVisible, selectedTab == .recorder {
-                selectedTab = .home
             }
         }
     }
@@ -184,10 +170,8 @@ private struct SettingsModernMainTabs: TabContent {
             detail(.fileTranscription)
         }
 
-        if let recorderDestination = destinations.first(where: { $0.tab == .recorder }) {
-            Tab(recorderDestination.title, systemImage: recorderDestination.systemImage, value: recorderDestination.tab) {
-                detail(recorderDestination.tab)
-            }
+        Tab(settingsTitle(destinations, .recorder), systemImage: settingsSystemImage(destinations, .recorder), value: .recorder) {
+            detail(.recorder)
         }
 
         Tab(settingsTitle(destinations, .history), systemImage: settingsSystemImage(destinations, .history), value: .history) {
