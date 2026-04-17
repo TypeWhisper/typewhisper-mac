@@ -6,7 +6,6 @@ import os
 import TypeWhisperPluginSDK
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhisper-mac", category: "DictationViewModel")
-private let recordingCancelWarningIcon = "exclamationmark.triangle.fill"
 
 struct DictationSessionTranscription: Sendable, Equatable {
     let text: String
@@ -167,8 +166,7 @@ final class DictationViewModel: ObservableObject {
     private var transcriptionTask: Task<Void, Never>?
     private var errorResetTask: Task<Void, Never>?
     private var insertingResetTask: Task<Void, Never>?
-    private var recordingCancelWarningResetTimer: Timer?
-    private var isAwaitingRecordingCancelConfirmation = false
+    private var recordingCancelWarningShownAt: Date?
     private var urlResolutionTask: Task<Void, Never>?
     private var metadataCaptureTask: Task<Void, Never>?
     /// Snapshot of the streaming params used in the most recent `streamingHandler.start(...)`.
@@ -192,8 +190,8 @@ final class DictationViewModel: ObservableObject {
     private var recordingCancelWarningDuration: TimeInterval = 2
 
     var recordingCancelWarningMessage: String? {
-        guard state == .recording, actionFeedbackIcon == recordingCancelWarningIcon else { return nil }
-        return actionFeedbackMessage
+        guard state == .recording, isRecordingCancelWarningActive(referenceDate: Date()) else { return nil }
+        return String(localized: "Press Esc again to cancel recording")
     }
 
     init(
@@ -409,7 +407,6 @@ final class DictationViewModel: ObservableObject {
 
     isolated deinit {
         recordingTimer?.invalidate()
-        recordingCancelWarningResetTimer?.invalidate()
     }
 
     private func beginDictationSession(id: UUID) {
@@ -522,11 +519,12 @@ final class DictationViewModel: ObservableObject {
     func handleCancelHotkey() {
         switch state {
         case .recording:
-            if !isAwaitingRecordingCancelConfirmation {
-                showRecordingCancelWarning()
-            } else {
+            let now = Date()
+            if isRecordingCancelWarningActive(referenceDate: now) {
                 clearRecordingCancelWarning()
                 cancelCurrentOperation()
+            } else {
+                showRecordingCancelWarning(at: now)
             }
         case .processing:
             cancelCurrentOperation()
@@ -535,29 +533,20 @@ final class DictationViewModel: ObservableObject {
         }
     }
 
-    private func showRecordingCancelWarning() {
-        isAwaitingRecordingCancelConfirmation = true
-        actionFeedbackMessage = String(localized: "Press Esc again to cancel recording")
-        actionFeedbackIcon = recordingCancelWarningIcon
-        actionFeedbackIsError = false
-        actionDisplayDuration = recordingCancelWarningDuration
-        recordingCancelWarningResetTimer?.invalidate()
-        recordingCancelWarningResetTimer = Timer.scheduledTimer(withTimeInterval: recordingCancelWarningDuration, repeats: false) { [weak self] _ in
-            MainActor.assumeIsolated {
-                self?.clearRecordingCancelWarning()
-            }
-        }
+    private func showRecordingCancelWarning(at date: Date) {
+        recordingCancelWarningShownAt = date
+        objectWillChange.send()
+    }
+
+    private func isRecordingCancelWarningActive(referenceDate: Date) -> Bool {
+        guard let shownAt = recordingCancelWarningShownAt else { return false }
+        return referenceDate.timeIntervalSince(shownAt) < recordingCancelWarningDuration
     }
 
     private func clearRecordingCancelWarning() {
-        isAwaitingRecordingCancelConfirmation = false
-        recordingCancelWarningResetTimer?.invalidate()
-        recordingCancelWarningResetTimer = nil
-        guard actionFeedbackIcon == recordingCancelWarningIcon else { return }
-        actionFeedbackMessage = nil
-        actionFeedbackIcon = nil
-        actionFeedbackIsError = false
-        actionDisplayDuration = 3.5
+        guard recordingCancelWarningShownAt != nil else { return }
+        recordingCancelWarningShownAt = nil
+        objectWillChange.send()
     }
 
     private func cancelCurrentOperation() {
