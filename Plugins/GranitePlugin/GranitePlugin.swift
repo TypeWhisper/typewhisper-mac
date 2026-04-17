@@ -31,7 +31,7 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
             ?? Self.availableModels.first?.id
         _hfToken = host.loadSecret(key: "hf-token")
 
-        Task { await restoreLoadedModel() }
+        Task { await restoreLoadedModel(allowDownloads: false) }
     }
 
     func deactivate() {
@@ -175,7 +175,7 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     }
 
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
-    @objc func triggerRestoreModel() { Task { await restoreLoadedModel() } }
+    @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: true) } }
 
     func unloadModel(clearPersistence: Bool = true) {
         model = nil
@@ -196,12 +196,25 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         try? FileManager.default.removeItem(at: modelDir)
     }
 
-    func restoreLoadedModel() async {
+    func restoreLoadedModel(allowDownloads: Bool = true) async {
         guard let savedId = host?.userDefault(forKey: "loadedModel") as? String,
               let modelDef = Self.availableModels.first(where: { $0.id == savedId }) else {
             return
         }
+        guard allowDownloads || hasDownloadedModel(modelDef) else { return }
         try? await loadModel(modelDef)
+    }
+
+    private func hasDownloadedModel(_ modelDef: GraniteModelDef) -> Bool {
+        guard let modelsDir = host?.pluginDataDirectory.appendingPathComponent("models") else { return false }
+        let subdirectory = modelDef.repoId.replacingOccurrences(of: "/", with: "_")
+        let modelDir = modelsDir
+            .appendingPathComponent("mlx-audio")
+            .appendingPathComponent(subdirectory)
+
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: modelDir.path, isDirectory: &isDirectory)
+            && isDirectory.boolValue
     }
 
     // MARK: - Settings View
@@ -397,7 +410,7 @@ private struct GraniteSettingsView: View {
         .task {
             if case .notLoaded = plugin.modelState {
                 isPolling = true
-                await plugin.restoreLoadedModel()
+                await plugin.restoreLoadedModel(allowDownloads: false)
                 isPolling = false
                 modelState = plugin.modelState
             }

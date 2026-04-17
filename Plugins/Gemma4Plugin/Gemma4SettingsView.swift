@@ -81,7 +81,7 @@ struct Gemma4SettingsView: View {
         .task {
             if case .notLoaded = plugin.modelState {
                 isPolling = true
-                await plugin.restoreLoadedModel()
+                await plugin.restoreLoadedModel(allowDownloads: false)
                 isPolling = false
                 modelState = plugin.modelState
             }

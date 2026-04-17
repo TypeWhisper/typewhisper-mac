@@ -3,7 +3,6 @@ import SwiftUI
 import MLXVLM
 import MLXLMCommon
 import Hub
-import Tokenizers
 import TypeWhisperPluginSDK
 
 // MARK: - Plugin Entry Point
@@ -33,7 +32,7 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMModelSelectable, Plugi
         _generationTemperature = host.userDefault(forKey: "generationTemperature") as? Double
             ?? Self.defaultGenerationTemperature
 
-        Task { await restoreLoadedModel() }
+        Task { await restoreLoadedModel(allowDownloads: false) }
     }
 
     func deactivate() {
@@ -133,8 +132,7 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMModelSelectable, Plugi
                 extraEOSTokens: ["<end_of_turn>"]
             )
             let container = try await VLMModelFactory.shared.loadContainer(
-                from: HubDownloader(hub: hub),
-                using: TransformersTokenizerLoader(),
+                hub: hub,
                 configuration: configuration
             )
 
@@ -152,7 +150,7 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMModelSelectable, Plugi
     }
 
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
-    @objc func triggerRestoreModel() { Task { await restoreLoadedModel() } }
+    @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: true) } }
 
     func unloadModel(clearPersistence: Bool = true) {
         modelContainer = nil
@@ -171,12 +169,23 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMModelSelectable, Plugi
         try? FileManager.default.removeItem(at: repoDir)
     }
 
-    func restoreLoadedModel() async {
+    func restoreLoadedModel(allowDownloads: Bool = true) async {
         guard let savedId = host?.userDefault(forKey: "loadedModel") as? String,
               let modelDef = Self.availableModels.first(where: { $0.id == savedId }) else {
             return
         }
+        guard allowDownloads || hasDownloadedModel(modelDef) else { return }
         try? await loadModel(modelDef)
+    }
+
+    private func hasDownloadedModel(_ modelDef: Gemma4ModelDef) -> Bool {
+        guard let modelsDir = host?.pluginDataDirectory.appendingPathComponent("models") else { return false }
+        let repo = Hub.Repo(id: modelDef.repoId)
+        let repoDir = HubApi(downloadBase: modelsDir).localRepoLocation(repo)
+
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: repoDir.path, isDirectory: &isDirectory)
+            && isDirectory.boolValue
     }
 
     // MARK: - Settings Activity
@@ -240,77 +249,6 @@ struct Gemma4ModelDef: Identifiable {
     let repoId: String
     let sizeDescription: String
     let ramRequirement: String
-}
-
-private struct HubDownloader: Downloader {
-    let hub: HubApi
-
-    func download(
-        id: String,
-        revision: String?,
-        matching patterns: [String],
-        useLatest: Bool,
-        progressHandler: @escaping @Sendable (Progress) -> Void
-    ) async throws -> URL {
-        let repo = Hub.Repo(id: id)
-        return try await hub.snapshot(
-            from: repo,
-            revision: revision ?? "main",
-            matching: patterns,
-            progressHandler: progressHandler
-        )
-    }
-}
-
-private struct TransformersTokenizerLoader: TokenizerLoader {
-    func load(from directory: URL) async throws -> any MLXLMCommon.Tokenizer {
-        let upstream = try await AutoTokenizer.from(modelFolder: directory)
-        return TokenizerBridge(upstream)
-    }
-}
-
-private struct TokenizerBridge: MLXLMCommon.Tokenizer {
-    private let upstream: any Tokenizers.Tokenizer
-
-    init(_ upstream: any Tokenizers.Tokenizer) {
-        self.upstream = upstream
-    }
-
-    func encode(text: String, addSpecialTokens: Bool) -> [Int] {
-        upstream.encode(text: text, addSpecialTokens: addSpecialTokens)
-    }
-
-    func decode(tokenIds: [Int], skipSpecialTokens: Bool) -> String {
-        upstream.decode(tokens: tokenIds, skipSpecialTokens: skipSpecialTokens)
-    }
-
-    func convertTokenToId(_ token: String) -> Int? {
-        upstream.convertTokenToId(token)
-    }
-
-    func convertIdToToken(_ id: Int) -> String? {
-        upstream.convertIdToToken(id)
-    }
-
-    var bosToken: String? { upstream.bosToken }
-    var eosToken: String? { upstream.eosToken }
-    var unknownToken: String? { upstream.unknownToken }
-
-    func applyChatTemplate(
-        messages: [[String: any Sendable]],
-        tools: [[String: any Sendable]]?,
-        additionalContext: [String: any Sendable]?
-    ) throws -> [Int] {
-        do {
-            return try upstream.applyChatTemplate(
-                messages: messages,
-                tools: tools,
-                additionalContext: additionalContext
-            )
-        } catch Tokenizers.TokenizerError.missingChatTemplate {
-            throw MLXLMCommon.TokenizerError.missingChatTemplate
-        }
-    }
 }
 
 enum Gemma4PluginError: LocalizedError {
