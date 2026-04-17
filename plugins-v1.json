@@ -658,6 +658,34 @@
       "size": 227190,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-linear-v1.0.12/LinearPlugin.zip",
       "minOSVersion": "14.0"
+    },
+    {
+      "id": "com.typewhisper.obsidian",
+      "name": "Obsidian",
+      "author": "TypeWhisper",
+      "description": "Save transcriptions to your Obsidian vault as Markdown notes. Supports daily notes, frontmatter, and auto-export.",
+      "descriptions": {
+        "de": "Transkriptionen als Markdown-Notizen in deinem Obsidian-Vault speichern. Unterstuetzt Tagesnotizen, Frontmatter und Auto-Export."
+      },
+      "category": "action",
+      "downloadCount": 0,
+      "iconSystemName": "doc.text",
+      "releases": [
+        {
+          "version": "1.0.3",
+          "minHostVersion": "0.9.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 161995,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-obsidian-v1.0.3/ObsidianPlugin.zip",
+          "minOSVersion": "14.0"
+        }
+      ],
+      "version": "1.0.3",
+      "minHostVersion": "0.9.0",
+      "sdkCompatibilityVersion": "v1",
+      "size": 161995,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-obsidian-v1.0.3/ObsidianPlugin.zip",
+      "minOSVersion": "14.0"
     }
   ]
 }
