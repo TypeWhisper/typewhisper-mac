@@ -601,6 +601,34 @@
       "size": 242014,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-google-cloud-stt-v1.0.3/GoogleCloudSTTPlugin.zip",
       "minOSVersion": "14.0"
+    },
+    {
+      "id": "com.typewhisper.livetranscript",
+      "name": "Live Transcript",
+      "author": "TypeWhisper",
+      "description": "Show a floating live transcript window during recording.",
+      "descriptions": {
+        "de": "Zeigt ein schwebendes Live-Transkript-Fenster waehrend der Aufnahme."
+      },
+      "category": "utility",
+      "downloadCount": 0,
+      "iconSystemName": "text.bubble",
+      "releases": [
+        {
+          "version": "1.0.5",
+          "minHostVersion": "1.1.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 198536,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-livetranscript-v1.0.5/LiveTranscriptPlugin.zip",
+          "minOSVersion": "14.0"
+        }
+      ],
+      "version": "1.0.5",
+      "minHostVersion": "1.1.0",
+      "sdkCompatibilityVersion": "v1",
+      "size": 198536,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-livetranscript-v1.0.5/LiveTranscriptPlugin.zip",
+      "minOSVersion": "14.0"
     }
   ]
 }
