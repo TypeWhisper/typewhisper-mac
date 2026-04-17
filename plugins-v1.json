@@ -42,6 +42,17 @@
       "iconSystemName": "waveform",
       "releases": [
         {
+          "version": "1.0.20",
+          "minHostVersion": "1.2.1",
+          "sdkCompatibilityVersion": "v1",
+          "size": 2971027,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-whisperkit-v1.0.20/WhisperKitPlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        },
+        {
           "version": "1.0.19",
           "minHostVersion": "1.2.1",
           "sdkCompatibilityVersion": "v1",
@@ -53,11 +64,11 @@
           ]
         }
       ],
-      "version": "1.0.19",
+      "version": "1.0.20",
       "minHostVersion": "1.2.1",
       "sdkCompatibilityVersion": "v1",
-      "size": 2970209,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-whisperkit-v1.0.19/WhisperKitPlugin.zip",
+      "size": 2971027,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-whisperkit-v1.0.20/WhisperKitPlugin.zip",
       "minOSVersion": "14.0",
       "supportedArchitectures": [
         "arm64"
