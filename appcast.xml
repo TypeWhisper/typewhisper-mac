@@ -5,6 +5,15 @@
     <language>en</language>
     <description>Stable, release candidate, and daily updates for TypeWhisper.</description>
     <item>
+      <title>Version 1.3.0-rc1</title>
+      <pubDate>Fri, 17 Apr 2026 14:42:15 +0000</pubDate>
+      <sparkle:version>599</sparkle:version>
+      <sparkle:shortVersionString>1.3.0-rc1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:channel>release-candidate</sparkle:channel>
+      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.3.0-rc1/TypeWhisper-v1.3.0-rc1.zip" sparkle:edSignature="VX3eRnq7abchKBMs8w4kC/zXT3l0XTHXhlUbkWpingVpmJ9I0L2Xm4y1+pMrj1lQIGt75vxAIzbcC7HjJ2n7AA==" length="10501038" type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.3.0-daily.20260417</title>
       <pubDate>Fri, 17 Apr 2026 05:30:53 +0000</pubDate>
       <sparkle:version>593</sparkle:version>
