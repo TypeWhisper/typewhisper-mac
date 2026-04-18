@@ -313,6 +313,25 @@
       "downloadCount": 118
     },
     {
+      "id": "com.typewhisper.claude",
+      "name": "Claude",
+      "version": "1.0.2",
+      "minHostVersion": "0.9.0",
+      "sdkCompatibilityVersion": "v1",
+      "author": "TypeWhisper",
+      "description": "LLM provider via Anthropic Claude API. Requires API key.",
+      "descriptions": {
+        "de": "LLM-Anbieter ueber die Anthropic Claude API. Erfordert API-Key."
+      },
+      "category": "llm",
+      "size": 119947,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-claude-v1.0.2/ClaudePlugin.zip",
+      "minOSVersion": "14.0",
+      "iconSystemName": "brain.head.profile",
+      "requiresAPIKey": true,
+      "downloadCount": 255
+    },
+    {
       "id": "com.typewhisper.gemma4",
       "name": "Gemma 4",
       "version": "1.0.1",
