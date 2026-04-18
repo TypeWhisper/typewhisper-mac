@@ -7,29 +7,6 @@ import os
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhisper-mac", category: "AudioRecordingService")
 
-final class DelayedReleaseRetainer<Object: AnyObject>: @unchecked Sendable {
-    private final class RetainedObjectBox: @unchecked Sendable {
-        let object: Object
-
-        init(_ object: Object) {
-            self.object = object
-        }
-    }
-
-    private let queue: DispatchQueue
-
-    init(label: String, qos: DispatchQoS = .utility) {
-        queue = DispatchQueue(label: label, qos: qos)
-    }
-
-    func retain(_ object: Object, for duration: TimeInterval) {
-        let retainedObject = RetainedObjectBox(object)
-        queue.asyncAfter(deadline: .now() + duration) {
-            withExtendedLifetime(retainedObject) {}
-        }
-    }
-}
-
 /// Captures microphone audio via AVAudioEngine and converts to 16kHz mono Float32 samples.
 final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private let recoveryNotificationQueue: OperationQueue = {
@@ -76,6 +53,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         case noMicrophoneDetected
         case selectedInputDeviceUnavailable
         case selectedInputDeviceIncompatible(AudioInputDeviceCompatibilityIssue)
+        case audioRoutingConflict
         case engineStartFailed(String)
         case noAudioData
 
@@ -89,6 +67,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 SelectedInputDeviceError.unavailable.errorDescription
             case .selectedInputDeviceIncompatible(let issue):
                 SelectedInputDeviceError.incompatible(issue).errorDescription
+            case .audioRoutingConflict:
+                localizedAppText(
+                    "The selected microphone conflicts with your current audio routing. Disconnect Bluetooth or choose a different input.",
+                    de: "Das ausgewählte Mikrofon kollidiert mit deiner aktuellen Audio-Route. Trenne Bluetooth oder wähle ein anderes Eingabegerät."
+                )
             case .engineStartFailed(let detail):
                 "Failed to start audio engine: \(detail)"
             case .noAudioData:
@@ -100,6 +83,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     @Published private(set) var isRecording = false
     @Published private(set) var audioLevel: Float = 0
     @Published private(set) var rawAudioLevel: Float = 0
+    /// Set when the recovery coordinator gives up (e.g. burst circuit breaker
+    /// trips). The view model observes this and surfaces the error to the UI,
+    /// tears down the session, and resumes any paused media / restores ducking.
+    /// Reset to nil at the start of each `startRecording`.
+    @Published private(set) var recoveryError: AudioRecordingError?
     var hasMicrophonePermissionOverride: Bool?
     var inputAvailabilityOverride: ((AudioDeviceID?) -> Bool)?
     var startRecordingOverride: (() throws -> Void)?
@@ -234,6 +222,10 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             throw AudioRecordingError.microphonePermissionDenied
         }
 
+        // Clear any terminal-recovery error from a previous session so the
+        // view model doesn't see a stale failure on the first buffer update.
+        recoveryError = nil
+
         try validateRecordingInputAvailability()
 
         if let startRecordingOverride {
@@ -247,6 +239,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
 
         clearRecordingBuffer()
+
         let engine = AVAudioEngine()
         engineLock.withLock { audioEngine = engine }
         recoveryCoordinator.beginStarting()
@@ -332,10 +325,15 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private func scheduleRecoveryIfNeeded(_ action: AudioEngineRecoveryAction) {
-        guard case .schedule(let generation, let delay) = action else { return }
-
-        recoveryQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
-            self?.performScheduledRecovery(generation: generation)
+        switch action {
+        case .none, .performImmediateRecovery:
+            return
+        case .schedule(let generation, let delay):
+            recoveryQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.performScheduledRecovery(generation: generation)
+            }
+        case .fail(let failure):
+            handleRecoveryFailure(failure)
         }
     }
 
@@ -354,6 +352,43 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             try restartEngineWithRecovery(engine, label: "config-change")
         } catch {
             logger.error("Failed to restart audio engine after configuration change: \(error.localizedDescription)")
+        }
+    }
+
+    private func handleRecoveryFailure(_ failure: AudioEngineRecoveryFailure) {
+        let error: AudioRecordingError
+        switch failure {
+        case .configurationChangeBurstLimitExceeded:
+            logger.error("Audio engine recovery circuit breaker tripped after repeated configuration changes")
+            if hasExplicitDeviceSelection {
+                error = .audioRoutingConflict
+            } else {
+                error = .engineStartFailed("Audio engine kept restarting after repeated configuration changes")
+            }
+        }
+
+        failActiveRecordingDueToRecovery(error)
+    }
+
+    private func failActiveRecordingDueToRecovery(_ error: AudioRecordingError) {
+        recoveryCoordinator.transitionToIdle()
+        removeConfigurationObserver()
+        let engine: AVAudioEngine? = engineLock.withLock {
+            let engine = audioEngine
+            audioEngine = nil
+            return engine
+        }
+        if let engine {
+            teardownEngine(engine)
+            engineTeardownRetainer.retain(engine, for: Self.engineTeardownRetentionInterval)
+        }
+        clearRecordingBuffer()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.recoveryError = error
+            self.isRecording = false
+            self.audioLevel = 0
+            self.rawAudioLevel = 0
         }
     }
 
@@ -483,6 +518,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let engineStartTime = CFAbsoluteTimeGetCurrent()
         do {
             try engine.start()
+            // Open the post-start quiescence window so configuration-change
+            // notifications caused by our own AudioUnitSetProperty / start
+            // sequence (Bluetooth A2DP↔HFP renegotiation) are deferred
+            // instead of driving an infinite restart loop. See issue #332.
+            recoveryCoordinator.noteEngineStarted()
             let elapsedMs = (CFAbsoluteTimeGetCurrent() - engineStartTime) * 1000
             logger.info("\(label, privacy: .public) audio engine started in \(String(format: "%.1f", elapsedMs), privacy: .public)ms")
         } catch {
@@ -639,12 +679,21 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
     }
 
+    /// Clears the terminal-recovery error after a downstream observer has
+    /// handled it. Called from `DictationViewModel` once the session is
+    /// unwound so the @Published value doesn't linger for later bindings.
+    func clearRecoveryError() {
+        recoveryError = nil
+    }
+
     private func mapSelectedInputDeviceError(_ error: SelectedInputDeviceError) -> AudioRecordingError {
         switch error {
         case .unavailable:
             return .selectedInputDeviceUnavailable
         case .incompatible(let issue):
             return .selectedInputDeviceIncompatible(issue)
+        case .routingConflict:
+            return .audioRoutingConflict
         }
     }
 

@@ -473,6 +473,38 @@ final class DictationViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
+        // When the recovery coordinator's circuit breaker gives up mid-session,
+        // `AudioRecordingService` publishes the terminal error here. Surface
+        // it to the UI and unwind the dictation session cleanly — restore
+        // ducking, resume media, stop streaming, cancel the session.
+        audioRecordingService.$recoveryError
+            .compactMap { $0 }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] error in
+                guard let self else { return }
+                // Always drain the publisher so `recoveryError` never lingers
+                // on `AudioRecordingService`, even when the session is no
+                // longer active (stop-in-flight, already processed, etc.).
+                defer { self.audioRecordingService.clearRecoveryError() }
+                guard self.state == .recording, !self.isStopInFlight else { return }
+                self.metadataCaptureTask?.cancel()
+                self.metadataCaptureTask = nil
+                self.urlResolutionTask?.cancel()
+                self.urlResolutionTask = nil
+                self.lastStreamingParams = nil
+                self.audioDuckingService.restoreAudio()
+                self.mediaPlaybackService.resumeIfWePaused()
+                self.streamingHandler.stop()
+                self.stopRecordingTimer()
+
+                let errorMessage = error.localizedDescription
+                self.accessibilityAnnouncementService.announceError(errorMessage)
+                self.cancelActiveDictationSessionIfNeeded(message: errorMessage)
+                self.hotkeyService.cancelDictation()
+                self.showError(errorMessage, category: "recording")
+            }
+            .store(in: &cancellables)
+
         hotkeyService.$currentMode
             .dropFirst()
             .receive(on: DispatchQueue.main)
