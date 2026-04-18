@@ -104,12 +104,14 @@ enum UserDefaultsKeys {
     static let watchFolderModel = "watchFolderModel"
 
     // MARK: - Licensing
+    static let usageIntent = "usageIntent"
     static let userType = "userType"
     static let licenseStatus = "licenseStatus"
     static let licenseTier = "licenseTier"
     static let lastLicenseValidation = "lastLicenseValidation"
     static let licenseIsLifetime = "licenseIsLifetime"
     static let welcomeSheetShown = "welcomeSheetShown"
+    static let workUsagePromptDismissed = "workUsagePromptDismissed"
 
     // MARK: - Supporter
     static let supporterTier = "supporterTier"

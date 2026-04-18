@@ -163,6 +163,27 @@ enum AppConstants {
         static let checkoutURLSupporterGold = "https://buy.polar.sh/polar_cl_FpojMlLmyF73gOqpXLihSE0lNYnoQoaMxGp724IIor4"
     }
 
+    enum Website {
+        private static var localeSegment: String {
+            let preferred = UserDefaults.standard.string(forKey: UserDefaultsKeys.preferredAppLanguage)
+                ?? Bundle.main.preferredLocalizations.first
+                ?? Locale.preferredLanguages.first
+                ?? "en"
+            return preferred.hasPrefix("de") ? "de" : "en"
+        }
+
+        private static let rootURL = "https://www.typewhisper.com"
+        static let licensingEmailURL = URL(string: "mailto:licensing@typewhisper.com")!
+
+        static var pricingURL: URL {
+            URL(string: "\(rootURL)/\(localeSegment)/pricing/")!
+        }
+
+        static var teamContactURL: URL {
+            URL(string: "\(rootURL)/\(localeSegment)/business/") ?? licensingEmailURL
+        }
+    }
+
     // MARK: - Discord Claim Service
     enum DiscordClaim {
         static let defaultBaseURLString = "http://127.0.0.1:8787"
