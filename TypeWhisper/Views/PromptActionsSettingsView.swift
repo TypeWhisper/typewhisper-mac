@@ -67,6 +67,9 @@ struct PromptActionsSettingsView: View {
         } message: {
             Text(viewModel.error ?? "")
         }
+        .onAppear {
+            processingService.validateSelectionAfterPluginLoad()
+        }
     }
 
     // MARK: - Provider Section
@@ -277,10 +280,17 @@ struct ModelPickerView: View {
                 }
             }
             .onAppear {
-                if selection.isEmpty || !models.contains(where: { $0.id == selection }) {
-                    selection = models.first?.id ?? ""
-                }
+                ensureValidSelection()
             }
+            .onChange(of: models.map(\.id)) {
+                ensureValidSelection()
+            }
+        }
+    }
+
+    private func ensureValidSelection() {
+        if selection.isEmpty || !models.contains(where: { $0.id == selection }) {
+            selection = models.first?.id ?? ""
         }
     }
 }

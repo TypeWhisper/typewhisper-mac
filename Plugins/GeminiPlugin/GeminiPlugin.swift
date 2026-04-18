@@ -8,6 +8,21 @@ import TypeWhisperPluginSDK
 final class GeminiPlugin: NSObject, LLMProviderPlugin, @unchecked Sendable {
     static let pluginId = "com.typewhisper.gemini"
     static let pluginName = "Gemini"
+    private static let cachedLLMModelsKey = "fetchedLLMModels.v2"
+    private static let legacyCachedLLMModelsKey = "fetchedLLMModels"
+    private static let selectedLLMModelKey = "selectedLLMModel"
+    private static let compatibleModelsEndpoint = "https://generativelanguage.googleapis.com/v1beta/openai/models"
+    private static let modelIdPrefix = "models/"
+    private static let excludedCompatibleModelTokens = [
+        "embedding",
+        "-image",
+        "tts",
+        "live",
+        "audio",
+        "robotics",
+        "computer-use",
+        "deep-research",
+    ]
 
     fileprivate var host: HostServices?
     fileprivate var _apiKey: String?
@@ -26,12 +41,14 @@ final class GeminiPlugin: NSObject, LLMProviderPlugin, @unchecked Sendable {
     func activate(host: HostServices) {
         self.host = host
         _apiKey = host.loadSecret(key: "api-key")
-        if let data = host.userDefault(forKey: "fetchedLLMModels") as? Data,
+        if let data = host.userDefault(forKey: Self.cachedLLMModelsKey) as? Data,
            let models = try? JSONDecoder().decode([GeminiFetchedModel].self, from: data) {
             _fetchedLLMModels = models
         }
-        _selectedLLMModelId = host.userDefault(forKey: "selectedLLMModel") as? String
-            ?? supportedModels.first?.id
+        host.setUserDefault(nil, forKey: Self.legacyCachedLLMModelsKey)
+        _selectedLLMModelId = host.userDefault(forKey: Self.selectedLLMModelKey) as? String
+        normalizeSelectedModel()
+        refreshCompatibleModelsIfNeeded()
     }
 
     func deactivate() {
@@ -48,9 +65,9 @@ final class GeminiPlugin: NSObject, LLMProviderPlugin, @unchecked Sendable {
     }
 
     private static let fallbackLLMModels: [PluginModelInfo] = [
-        PluginModelInfo(id: "gemini-2.5-flash", displayName: "Gemini 2.5 Flash"),
-        PluginModelInfo(id: "gemini-2.5-pro", displayName: "Gemini 2.5 Pro"),
-        PluginModelInfo(id: "gemini-2.5-flash-lite", displayName: "Gemini 2.5 Flash Lite"),
+        PluginModelInfo(id: "gemini-flash-latest", displayName: "Gemini Flash Latest"),
+        PluginModelInfo(id: "gemini-pro-latest", displayName: "Gemini Pro Latest"),
+        PluginModelInfo(id: "gemini-flash-lite-latest", displayName: "Gemini Flash-Lite Latest"),
     ]
 
     var supportedModels: [PluginModelInfo] {
@@ -75,7 +92,7 @@ final class GeminiPlugin: NSObject, LLMProviderPlugin, @unchecked Sendable {
 
     func selectLLMModel(_ modelId: String) {
         _selectedLLMModelId = modelId
-        host?.setUserDefault(modelId, forKey: "selectedLLMModel")
+        host?.setUserDefault(modelId, forKey: Self.selectedLLMModelKey)
     }
 
     var selectedLLMModelId: String? { _selectedLLMModelId }
@@ -112,11 +129,11 @@ final class GeminiPlugin: NSObject, LLMProviderPlugin, @unchecked Sendable {
     }
 
     func validateApiKey(_ key: String) async -> Bool {
-        guard !key.isEmpty else { return false }
-        // Validate by listing models
-        guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models?key=\(key)") else { return false }
+        guard !key.isEmpty,
+              let url = URL(string: Self.compatibleModelsEndpoint) else { return false }
 
         var request = URLRequest(url: url)
+        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 10
 
         do {
@@ -131,54 +148,105 @@ final class GeminiPlugin: NSObject, LLMProviderPlugin, @unchecked Sendable {
     fileprivate func setFetchedLLMModels(_ models: [GeminiFetchedModel]) {
         _fetchedLLMModels = models
         if let data = try? JSONEncoder().encode(models) {
-            host?.setUserDefault(data, forKey: "fetchedLLMModels")
+            host?.setUserDefault(data, forKey: Self.cachedLLMModelsKey)
         }
+        host?.setUserDefault(nil, forKey: Self.legacyCachedLLMModelsKey)
+        normalizeSelectedModel()
         host?.notifyCapabilitiesChanged()
     }
 
     fileprivate func fetchLLMModels() async -> [GeminiFetchedModel] {
         guard let apiKey = _apiKey, !apiKey.isEmpty,
-              let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models?key=\(apiKey)&pageSize=100") else { return [] }
+              let url = URL(string: Self.compatibleModelsEndpoint) else { return [] }
 
         var request = URLRequest(url: url)
-        request.timeoutInterval = 10
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 15
 
         do {
             let (data, response) = try await PluginHTTPClient.data(for: request)
             guard let httpResponse = response as? HTTPURLResponse,
                   httpResponse.statusCode == 200 else { return [] }
-
-            struct ModelsResponse: Decodable {
-                let models: [GeminiAPIModel]
-            }
-
-            let decoded = try JSONDecoder().decode(ModelsResponse.self, from: data)
-            return decoded.models
-                .filter { Self.isLLMModel($0) }
-                .map { model in
-                    let id = model.name.hasPrefix("models/") ? String(model.name.dropFirst(7)) : model.name
-                    return GeminiFetchedModel(id: id, displayName: model.displayName)
-                }
-                .sorted { $0.id < $1.id }
+            return try Self.decodeCompatibleLLMModels(from: data)
         } catch {
             return []
         }
     }
 
-    nonisolated private static func isLLMModel(_ model: GeminiAPIModel) -> Bool {
-        guard let methods = model.supportedGenerationMethods,
-              methods.contains("generateContent") else { return false }
-        let id = model.name.hasPrefix("models/") ? String(model.name.dropFirst(7)) : model.name
-        return id.hasPrefix("gemini-")
+    nonisolated static func decodeCompatibleLLMModels(from data: Data) throws -> [GeminiFetchedModel] {
+        let decoded = try JSONDecoder().decode(GeminiCompatibleModelsResponse.self, from: data)
+        var seenIds = Set<String>()
+
+        return decoded.data
+            .compactMap { model -> GeminiFetchedModel? in
+                let normalizedId = normalizedCompatibleModelId(model.id)
+                guard isCompatibleChatModelId(normalizedId),
+                      seenIds.insert(normalizedId).inserted else { return nil }
+                return GeminiFetchedModel(id: normalizedId, displayName: model.displayName)
+            }
+            .sorted { $0.id < $1.id }
+    }
+
+    nonisolated private static func normalizedCompatibleModelId(_ id: String) -> String {
+        guard id.hasPrefix(modelIdPrefix) else { return id }
+        return String(id.dropFirst(modelIdPrefix.count))
+    }
+
+    nonisolated private static func isCompatibleChatModelId(_ id: String) -> Bool {
+        guard id.hasPrefix("gemini-") else { return false }
+        return !excludedCompatibleModelTokens.contains { id.contains($0) }
+    }
+
+    private func normalizeSelectedModel() {
+        let supportedIds = Set(supportedModels.map(\.id))
+        guard !supportedIds.isEmpty else {
+            _selectedLLMModelId = nil
+            return
+        }
+
+        if let selectedModelId = _selectedLLMModelId,
+           supportedIds.contains(selectedModelId) {
+            return
+        }
+
+        let fallbackModelId = supportedModels.first?.id
+        _selectedLLMModelId = fallbackModelId
+        if let fallbackModelId {
+            host?.setUserDefault(fallbackModelId, forKey: Self.selectedLLMModelKey)
+        }
+    }
+
+    private func refreshCompatibleModelsIfNeeded() {
+        guard _fetchedLLMModels.isEmpty,
+              _apiKey?.isEmpty == false else { return }
+
+        Task { [weak self] in
+            guard let self else { return }
+
+            let models = await self.fetchLLMModels()
+            guard !models.isEmpty else { return }
+
+            await MainActor.run {
+                self.setFetchedLLMModels(models)
+            }
+        }
     }
 }
 
-// MARK: - API Model (for decoding Gemini API response)
+// MARK: - OpenAI-Compatible Models API
 
-private struct GeminiAPIModel: Decodable {
-    let name: String
+private struct GeminiCompatibleModelsResponse: Decodable {
+    let data: [GeminiCompatibleModel]
+}
+
+private struct GeminiCompatibleModel: Decodable {
+    let id: String
     let displayName: String?
-    let supportedGenerationMethods: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case displayName = "display_name"
+    }
 }
 
 // MARK: - Fetched Model
@@ -310,6 +378,9 @@ private struct GeminiSettingsView: View {
             }
             selectedModel = plugin.selectedLLMModelId ?? plugin.supportedModels.first?.id ?? ""
             fetchedLLMModels = plugin._fetchedLLMModels
+            if plugin.isAvailable, fetchedLLMModels.isEmpty {
+                refreshLLMModels()
+            }
         }
     }
 
