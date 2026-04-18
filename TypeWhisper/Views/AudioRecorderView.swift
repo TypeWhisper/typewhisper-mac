@@ -198,9 +198,9 @@ struct AudioRecorderView: View {
                               !engine.supportedLanguages.isEmpty else {
                             return SettingsViewModel.shared.availableLanguages
                         }
-                        return engine.supportedLanguages
-                            .map { ($0, Locale.current.localizedString(forIdentifier: $0) ?? $0) }
-                            .sorted { $0.1.localizedCaseInsensitiveCompare($1.1) == .orderedAscending }
+                        return localizedAppLanguageOptions(for: engine.supportedLanguages)
+                            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+                            .map { (code: $0.code, name: $0.name) }
                     }()
 
                     LanguageSelectionEditor(

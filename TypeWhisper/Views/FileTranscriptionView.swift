@@ -112,8 +112,9 @@ struct FileTranscriptionView: View {
 
                     LanguageSelectionEditor(
                         selection: $watchFolder.languageSelection,
-                        availableLanguages: watchFolder.selectedEngineSupportedLanguages
-                            .map { ($0, Locale.current.localizedString(forIdentifier: $0) ?? $0) }
+                        availableLanguages: localizedAppLanguageOptions(for: watchFolder.selectedEngineSupportedLanguages)
+                            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+                            .map { (code: $0.code, name: $0.name) }
                     )
                 }
 

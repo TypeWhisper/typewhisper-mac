@@ -27,6 +27,50 @@ func localizedAppLanguageName(for code: String) -> String {
     return locale.localizedString(forIdentifier: code) ?? code
 }
 
+struct LocalizedAppLanguageOption: Equatable {
+    let code: String
+    let name: String
+}
+
+func localizedAppLanguageOptions(for codes: [String]) -> [LocalizedAppLanguageOption] {
+    codes.map { code in
+        LocalizedAppLanguageOption(code: code, name: localizedAppLanguageName(for: code))
+    }
+}
+
+func localizedAppLanguageSearchTerms(for code: String, preferredDisplayName: String? = nil) -> [String] {
+    var terms: [String] = []
+
+    if let preferredDisplayName {
+        appendLanguageSearchTerm(preferredDisplayName, to: &terms)
+    }
+
+    appendLanguageSearchTerm(code, to: &terms)
+    appendLanguageSearchTerm(localizedAppLanguageName(for: code), to: &terms)
+
+    let locales = [
+        Locale.current,
+        Locale(identifier: "en"),
+        Locale(identifier: code)
+    ]
+
+    for locale in locales {
+        appendLanguageSearchTerm(locale.localizedString(forIdentifier: code), to: &terms)
+    }
+
+    return terms
+}
+
+private func appendLanguageSearchTerm(_ value: String?, to terms: inout [String]) {
+    guard let value else { return }
+
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return }
+    guard !terms.contains(where: { $0.caseInsensitiveCompare(trimmed) == .orderedSame }) else { return }
+
+    terms.append(trimmed)
+}
+
 func localizedAppLanguageFlag(for code: String) -> String? {
     guard code != "auto" else { return nil }
 

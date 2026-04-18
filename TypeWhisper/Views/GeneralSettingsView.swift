@@ -287,7 +287,8 @@ struct LanguageSelectionEditor: View {
     private var filteredLanguages: [(code: String, name: String)] {
         guard !searchQuery.isEmpty else { return availableLanguages }
         return availableLanguages.filter {
-            $0.name.localizedCaseInsensitiveContains(searchQuery) || $0.code.localizedCaseInsensitiveContains(searchQuery)
+            localizedAppLanguageSearchTerms(for: $0.code, preferredDisplayName: $0.name)
+                .contains(where: { $0.localizedCaseInsensitiveContains(searchQuery) })
         }
     }
 
