@@ -489,6 +489,14 @@
       "requiresAPIKey": true,
       "releases": [
         {
+          "version": "1.0.15",
+          "minHostVersion": "0.9.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 165622,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gemini-v1.0.15/GeminiPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.14",
           "minHostVersion": "0.9.0",
           "sdkCompatibilityVersion": "v1",
@@ -498,11 +506,11 @@
           "downloadCount": 3
         }
       ],
-      "version": "1.0.14",
+      "version": "1.0.15",
       "minHostVersion": "0.9.0",
       "sdkCompatibilityVersion": "v1",
-      "size": 157103,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gemini-v1.0.14/GeminiPlugin.zip",
+      "size": 165622,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gemini-v1.0.15/GeminiPlugin.zip",
       "minOSVersion": "14.0"
     },
     {
