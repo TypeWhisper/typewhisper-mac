@@ -188,6 +188,7 @@ final class ServiceContainer: ObservableObject {
         TermPackRegistryService.shared = termPackRegistryService
 
         modelManagerService.observePluginManager()
+        promptProcessingService.observePluginManager()
         settingsViewModel.observePluginManager()
         watchFolderViewModel.observePluginManager()
     }

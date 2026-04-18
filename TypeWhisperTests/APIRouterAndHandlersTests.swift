@@ -6,6 +6,37 @@ import TypeWhisperPluginSDK
 @testable import TypeWhisper
 
 final class APIRouterAndHandlersTests: XCTestCase {
+    @objc(APIRouterMockLLMProviderPlugin)
+    private final class MockLLMProviderPlugin: NSObject, LLMProviderPlugin, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.llm" }
+        static var pluginName: String { "Mock LLM" }
+
+        private let requestLock = NSLock()
+        var models: [PluginModelInfo] = []
+        var responseText = "processed"
+        nonisolated(unsafe) private var _lastRequestedModel: String?
+
+        var lastRequestedModel: String? {
+            requestLock.withLock { _lastRequestedModel }
+        }
+
+        required override init() {}
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+
+        var providerName: String { "Gemini" }
+        var isAvailable: Bool { true }
+        var supportedModels: [PluginModelInfo] { models }
+
+        func process(systemPrompt: String, userText: String, model: String?) async throws -> String {
+            requestLock.withLock {
+                _lastRequestedModel = model
+            }
+            return responseText
+        }
+    }
+
     @objc(APIRouterMockTranscriptionPlugin)
     private final class MockTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTranscriptionEnginePlugin, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.transcription" }
@@ -173,6 +204,64 @@ final class APIRouterAndHandlersTests: XCTestCase {
             guard isActive else { return }
             isActive = false
             onFinish?()
+        }
+    }
+
+    private final class MockEventBus: EventBusProtocol, @unchecked Sendable {
+        @discardableResult
+        func subscribe(handler: @escaping @Sendable (TypeWhisperEvent) async -> Void) -> UUID {
+            UUID()
+        }
+
+        func unsubscribe(id: UUID) {}
+    }
+
+    private final class MockHostServices: HostServices, @unchecked Sendable {
+        private var secrets: [String: String]
+        private var defaults: [String: Any]
+
+        let pluginDataDirectory: URL
+        let eventBus: EventBusProtocol = MockEventBus()
+        var activeAppBundleId: String?
+        var activeAppName: String?
+        var availableRuleNames: [String]
+        private(set) var capabilitiesChangedCount = 0
+        private(set) var streamingDisplayActiveValues: [Bool] = []
+
+        init(
+            pluginDataDirectory: URL,
+            secrets: [String: String] = [:],
+            defaults: [String: Any] = [:],
+            availableRuleNames: [String] = []
+        ) {
+            self.pluginDataDirectory = pluginDataDirectory
+            self.secrets = secrets
+            self.defaults = defaults
+            self.availableRuleNames = availableRuleNames
+        }
+
+        func storeSecret(key: String, value: String) throws {
+            secrets[key] = value
+        }
+
+        func loadSecret(key: String) -> String? {
+            secrets[key]
+        }
+
+        func userDefault(forKey key: String) -> Any? {
+            defaults[key]
+        }
+
+        func setUserDefault(_ value: Any?, forKey key: String) {
+            defaults[key] = value
+        }
+
+        func notifyCapabilitiesChanged() {
+            capabilitiesChangedCount += 1
+        }
+
+        func setStreamingDisplayActive(_ active: Bool) {
+            streamingDisplayActiveValues.append(active)
         }
     }
 
@@ -1562,6 +1651,177 @@ final class APIRouterAndHandlersTests: XCTestCase {
     private static func jsonObject(_ response: HTTPResponse) throws -> [String: Any] {
         let object = try JSONSerialization.jsonObject(with: response.body)
         return try XCTUnwrap(object as? [String: Any])
+    }
+
+    @MainActor
+    func testPromptProcessingRepairsInvalidGlobalCloudModelBeforeRequest() async throws {
+        let providerKey = "llmProviderType"
+        let modelKey = "llmCloudModel"
+        let originalProvider = UserDefaults.standard.object(forKey: providerKey)
+        let originalModel = UserDefaults.standard.object(forKey: modelKey)
+        defer {
+            if let originalProvider {
+                UserDefaults.standard.set(originalProvider, forKey: providerKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: providerKey)
+            }
+            if let originalModel {
+                UserDefaults.standard.set(originalModel, forKey: modelKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: modelKey)
+            }
+        }
+
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        UserDefaults.standard.set("Gemini", forKey: providerKey)
+        UserDefaults.standard.set("legacy-direct-model", forKey: modelKey)
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockLLMProviderPlugin()
+        plugin.models = [
+            PluginModelInfo(id: "gemini-2.5-flash", displayName: "Gemini 2.5 Flash"),
+            PluginModelInfo(id: "gemini-2.5-pro", displayName: "Gemini 2.5 Pro")
+        ]
+
+        let manifest = PluginManifest(
+            id: "com.typewhisper.mock.llm",
+            name: "Mock LLM",
+            version: "1.0.0",
+            principalClass: "APIRouterMockLLMProviderPlugin"
+        )
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: manifest,
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let service = PromptProcessingService()
+        let result = try await service.process(prompt: "Fix grammar", text: "hello world")
+
+        XCTAssertEqual(result, "processed")
+        XCTAssertEqual(plugin.lastRequestedModel, "gemini-2.5-flash")
+        XCTAssertEqual(service.selectedCloudModel, "gemini-2.5-flash")
+        XCTAssertEqual(UserDefaults.standard.string(forKey: modelKey), "gemini-2.5-flash")
+    }
+
+    @MainActor
+    func testPromptProcessingIgnoresInvalidPromptOverrideWithoutPersistingIt() async throws {
+        let providerKey = "llmProviderType"
+        let modelKey = "llmCloudModel"
+        let originalProvider = UserDefaults.standard.object(forKey: providerKey)
+        let originalModel = UserDefaults.standard.object(forKey: modelKey)
+        defer {
+            if let originalProvider {
+                UserDefaults.standard.set(originalProvider, forKey: providerKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: providerKey)
+            }
+            if let originalModel {
+                UserDefaults.standard.set(originalModel, forKey: modelKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: modelKey)
+            }
+        }
+
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        UserDefaults.standard.set("Gemini", forKey: providerKey)
+        UserDefaults.standard.set("gemini-2.5-pro", forKey: modelKey)
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockLLMProviderPlugin()
+        plugin.models = [
+            PluginModelInfo(id: "gemini-2.5-flash", displayName: "Gemini 2.5 Flash"),
+            PluginModelInfo(id: "gemini-2.5-pro", displayName: "Gemini 2.5 Pro")
+        ]
+
+        let manifest = PluginManifest(
+            id: "com.typewhisper.mock.llm",
+            name: "Mock LLM",
+            version: "1.0.0",
+            principalClass: "APIRouterMockLLMProviderPlugin"
+        )
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: manifest,
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let service = PromptProcessingService()
+        let result = try await service.process(
+            prompt: "Fix grammar",
+            text: "hello world",
+            cloudModelOverride: "legacy-direct-model"
+        )
+
+        XCTAssertEqual(result, "processed")
+        XCTAssertEqual(plugin.lastRequestedModel, "gemini-2.5-pro")
+        XCTAssertEqual(service.selectedCloudModel, "gemini-2.5-pro")
+        XCTAssertEqual(UserDefaults.standard.string(forKey: modelKey), "gemini-2.5-pro")
+    }
+
+    @MainActor
+    func testGeminiPluginCompatibleModelDecodingNormalizesIdsAndFiltersToChatModels() throws {
+        let response = Data(
+            """
+            {
+              "object": "list",
+              "data": [
+                { "id": "models/gemini-2.5-pro", "object": "model", "display_name": "Gemini 2.5 Pro" },
+                { "id": "models/gemini-3-flash-preview", "object": "model", "display_name": "Gemini 3 Flash Preview" },
+                { "id": "models/gemini-2.5-flash-image", "object": "model", "display_name": "Nano Banana" },
+                { "id": "models/gemini-embedding-2-preview", "object": "model", "display_name": "Gemini Embedding 2 Preview" },
+                { "id": "models/gemini-2.5-flash-native-audio-latest", "object": "model", "display_name": "Gemini 2.5 Flash Native Audio Latest" },
+                { "id": "models/gemma-4-31b-it", "object": "model", "display_name": "Gemma 4 31B IT" }
+              ]
+            }
+            """.utf8
+        )
+
+        let models = try GeminiPlugin.decodeCompatibleLLMModels(from: response)
+
+        XCTAssertEqual(models.map(\.id), ["gemini-2.5-pro", "gemini-3-flash-preview"])
+        XCTAssertEqual(models.first?.displayName, "Gemini 2.5 Pro")
+        XCTAssertEqual(models.last?.displayName, "Gemini 3 Flash Preview")
+    }
+
+    @MainActor
+    func testGeminiPluginActivationIgnoresLegacyCacheAndRepairsInvalidSelection() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let legacyCache = try JSONEncoder().encode([
+            GeminiFetchedModel(id: "gemini-1.5-pro", displayName: "Gemini 1.5 Pro")
+        ])
+        let host = MockHostServices(
+            pluginDataDirectory: appSupportDirectory,
+            defaults: [
+                "fetchedLLMModels": legacyCache,
+                "selectedLLMModel": "gemini-1.5-pro"
+            ]
+        )
+        let plugin = GeminiPlugin()
+
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.supportedModels.map(\.id), ["gemini-flash-latest", "gemini-pro-latest", "gemini-flash-lite-latest"])
+        XCTAssertEqual(plugin.selectedLLMModelId, "gemini-flash-latest")
+        XCTAssertEqual(host.userDefault(forKey: "selectedLLMModel") as? String, "gemini-flash-latest")
     }
 
     @MainActor
