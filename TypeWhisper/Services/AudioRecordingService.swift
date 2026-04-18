@@ -119,6 +119,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private var _hasExplicitDeviceSelection = false
 
     private var audioEngine: AVAudioEngine?
+    private var installedTapFormat: AVAudioFormat?
     private var configChangeObserver: NSObjectProtocol?
     private var sampleBuffer: [Float] = []
     private var _peakRawAudioLevel: Float = 0
@@ -345,8 +346,15 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             scheduleRecoveryIfNeeded(recoveryCoordinator.finishRecovery())
         }
 
-        let engine: AVAudioEngine? = engineLock.withLock { audioEngine }
+        let (engine, expected): (AVAudioEngine?, AVAudioFormat?) = engineLock.withLock {
+            (audioEngine, installedTapFormat)
+        }
         guard isRecording, let engine else { return }
+
+        let live = engine.inputNode.outputFormat(forBus: 0)
+        if let expected,
+           live.sampleRate == expected.sampleRate,
+           live.channelCount == expected.channelCount { return }
 
         logger.warning("Audio engine configuration changed during recording, restarting engine")
 
@@ -483,6 +491,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let engineStartTime = CFAbsoluteTimeGetCurrent()
         do {
             try engine.start()
+            engineLock.withLock { installedTapFormat = tapFormat }
             let elapsedMs = (CFAbsoluteTimeGetCurrent() - engineStartTime) * 1000
             logger.info("\(label, privacy: .public) audio engine started in \(String(format: "%.1f", elapsedMs), privacy: .public)ms")
         } catch {
