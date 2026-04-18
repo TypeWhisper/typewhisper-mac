@@ -237,10 +237,9 @@ final class SettingsViewModel: ObservableObject {
                 codes.insert(code)
             }
         }
-        return codes.map { code in
-            let name = Locale.current.localizedString(forIdentifier: code) ?? code
-            return (code: code, name: name)
-        }.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        return localizedAppLanguageOptions(for: Array(codes))
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            .map { (code: $0.code, name: $0.name) }
     }
 
     var supportsTranslation: Bool {

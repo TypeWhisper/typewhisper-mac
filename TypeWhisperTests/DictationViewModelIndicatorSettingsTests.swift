@@ -111,3 +111,39 @@ final class DockIconVisibilityTests: XCTestCase {
         )
     }
 }
+
+final class LanguageLocalizationTests: XCTestCase {
+    private var originalPreferredAppLanguage: String?
+
+    override func setUp() {
+        super.setUp()
+        originalPreferredAppLanguage = UserDefaults.standard.string(forKey: UserDefaultsKeys.preferredAppLanguage)
+    }
+
+    override func tearDown() {
+        if let originalPreferredAppLanguage {
+            UserDefaults.standard.set(originalPreferredAppLanguage, forKey: UserDefaultsKeys.preferredAppLanguage)
+        } else {
+            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.preferredAppLanguage)
+        }
+        super.tearDown()
+    }
+
+    func testLocalizedAppLanguageOptionsFollowPreferredAppLanguage() {
+        UserDefaults.standard.set("en", forKey: UserDefaultsKeys.preferredAppLanguage)
+
+        let options = localizedAppLanguageOptions(for: ["de", "en"])
+
+        XCTAssertEqual(options.map(\.code), ["de", "en"])
+        XCTAssertEqual(options.map(\.name), ["German", "English"])
+    }
+
+    func testLanguageSearchTermsIncludeEnglishAliasForEnglish() {
+        UserDefaults.standard.set("de", forKey: UserDefaultsKeys.preferredAppLanguage)
+
+        let searchTerms = localizedAppLanguageSearchTerms(for: "en")
+
+        XCTAssertTrue(searchTerms.contains(where: { $0.localizedCaseInsensitiveContains("english") }))
+        XCTAssertTrue(searchTerms.contains(where: { $0.localizedCaseInsensitiveContains("englisch") }))
+    }
+}
