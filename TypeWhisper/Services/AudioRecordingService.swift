@@ -106,7 +106,24 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private var _selectedDeviceID: AudioDeviceID?
     private var _hasExplicitDeviceSelection = false
 
+    private struct StartupConfigurationChangeGuard {
+        let engineID: ObjectIdentifier
+        let expectedSampleRate: Double
+        let expectedChannelCount: AVAudioChannelCount
+
+        init(engine: AVAudioEngine, expectedTapFormat: AVAudioFormat) {
+            engineID = ObjectIdentifier(engine)
+            expectedSampleRate = expectedTapFormat.sampleRate
+            expectedChannelCount = expectedTapFormat.channelCount
+        }
+
+        func matches(_ liveFormat: AVAudioFormat) -> Bool {
+            liveFormat.sampleRate == expectedSampleRate && liveFormat.channelCount == expectedChannelCount
+        }
+    }
+
     private var audioEngine: AVAudioEngine?
+    private var startupConfigurationChangeGuard: StartupConfigurationChangeGuard?
     private var configChangeObserver: NSObjectProtocol?
     private var sampleBuffer: [Float] = []
     private var _peakRawAudioLevel: Float = 0
@@ -241,7 +258,10 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         clearRecordingBuffer()
 
         let engine = AVAudioEngine()
-        engineLock.withLock { audioEngine = engine }
+        engineLock.withLock {
+            audioEngine = engine
+            startupConfigurationChangeGuard = nil
+        }
         recoveryCoordinator.beginStarting()
         installConfigurationObserver(for: engine)
 
@@ -249,11 +269,15 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             try startEngineWithRecovery(engine, label: "recording")
 
             if recoveryCoordinator.finishStartingSuccessfully() == .performImmediateRecovery {
-                logger.warning("Audio engine configuration changed while recording was starting, restarting with fresh input format")
                 guard let currentEngine = engineLock.withLock({ audioEngine }) else {
                     throw AudioRecordingError.engineStartFailed("Recording engine disappeared during startup recovery")
                 }
-                try restartEngineWithRecovery(currentEngine, label: "recording-startup")
+                if consumeStartupConfigurationChangeGuardIfNeeded(for: currentEngine) {
+                    logger.info("Ignoring benign post-start audio engine configuration change after tap renegotiation")
+                } else {
+                    logger.warning("Audio engine configuration changed while recording was starting, restarting with fresh input format")
+                    try restartEngineWithRecovery(currentEngine, label: "recording-startup")
+                }
                 scheduleRecoveryIfNeeded(recoveryCoordinator.finishRecovery())
             }
 
@@ -279,6 +303,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let engine: AVAudioEngine? = engineLock.withLock {
             let e = audioEngine
             audioEngine = nil
+            startupConfigurationChangeGuard = nil
             return e
         }
         guard let engine else { return [] }
@@ -346,6 +371,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let engine: AVAudioEngine? = engineLock.withLock { audioEngine }
         guard isRecording, let engine else { return }
 
+        if consumeStartupConfigurationChangeGuardIfNeeded(for: engine) {
+            logger.info("Ignoring benign post-start audio engine configuration change after tap renegotiation")
+            return
+        }
+
         logger.warning("Audio engine configuration changed during recording, restarting engine")
 
         do {
@@ -376,6 +406,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let engine: AVAudioEngine? = engineLock.withLock {
             let engine = audioEngine
             audioEngine = nil
+            startupConfigurationChangeGuard = nil
             return engine
         }
         if let engine {
@@ -518,6 +549,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let engineStartTime = CFAbsoluteTimeGetCurrent()
         do {
             try engine.start()
+            armStartupConfigurationChangeGuard(for: engine, expectedTapFormat: tapFormat)
             // Open the post-start quiescence window so configuration-change
             // notifications caused by our own AudioUnitSetProperty / start
             // sequence (Bluetooth A2DP↔HFP renegotiation) are deferred
@@ -543,6 +575,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let didReplace = engineLock.withLock { () -> Bool in
             guard audioEngine === engine else { return false }
             audioEngine = replacementEngine
+            startupConfigurationChangeGuard = nil
             return true
         }
         return didReplace ? replacementEngine : nil
@@ -554,6 +587,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         engineLock.withLock {
             if audioEngine === engine {
                 audioEngine = nil
+            }
+            if startupConfigurationChangeGuard?.engineID == ObjectIdentifier(engine) {
+                startupConfigurationChangeGuard = nil
             }
         }
         teardownEngine(engine)
@@ -697,6 +733,34 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
     }
 
+    private func armStartupConfigurationChangeGuard(for engine: AVAudioEngine, expectedTapFormat: AVAudioFormat) {
+        engineLock.withLock {
+            startupConfigurationChangeGuard = StartupConfigurationChangeGuard(engine: engine, expectedTapFormat: expectedTapFormat)
+        }
+    }
+
+    private func consumeStartupConfigurationChangeGuardIfNeeded(for engine: AVAudioEngine) -> Bool {
+        let engineID = ObjectIdentifier(engine)
+        let shouldInspectLiveFormat = engineLock.withLock {
+            startupConfigurationChangeGuard?.engineID == engineID
+        }
+        guard shouldInspectLiveFormat else { return false }
+        return consumeStartupConfigurationChangeGuardIfMatching(for: engine, liveFormat: engine.inputNode.outputFormat(forBus: 0))
+    }
+
+    private func consumeStartupConfigurationChangeGuardIfMatching(for engine: AVAudioEngine, liveFormat: AVAudioFormat) -> Bool {
+        let engineID = ObjectIdentifier(engine)
+        let guardState: StartupConfigurationChangeGuard? = engineLock.withLock {
+            guard let guardState = startupConfigurationChangeGuard, guardState.engineID == engineID else {
+                return nil
+            }
+            startupConfigurationChangeGuard = nil
+            return guardState
+        }
+        guard let guardState else { return false }
+        return guardState.matches(liveFormat)
+    }
+
     private func validateTapInstallationPreconditions(expected: AVAudioFormat, current: AVAudioFormat) throws {
         let currentSampleRate = current.sampleRate
         let currentChannelCount = current.channelCount
@@ -737,6 +801,14 @@ extension AudioRecordingService {
 
     func testingValidateTapInstallationPreconditions(expected: AVAudioFormat, current: AVAudioFormat) throws {
         try validateTapInstallationPreconditions(expected: expected, current: current)
+    }
+
+    func testingArmStartupConfigurationChangeGuard(for engine: AVAudioEngine, expectedTapFormat: AVAudioFormat) {
+        armStartupConfigurationChangeGuard(for: engine, expectedTapFormat: expectedTapFormat)
+    }
+
+    func testingConsumeStartupConfigurationChangeGuardIfMatching(for engine: AVAudioEngine, liveFormat: AVAudioFormat) -> Bool {
+        consumeStartupConfigurationChangeGuardIfMatching(for: engine, liveFormat: liveFormat)
     }
 }
 #endif
