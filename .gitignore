@@ -44,3 +44,7 @@ CodeSigning.local.xcconfig
 
 # Git worktrees
 .worktrees/
+
+# Plugin build artifacts
+Plugins/*/dist/
+*.profraw
