@@ -81,6 +81,9 @@ final class DictationViewModel: ObservableObject {
     @Published var mediaPauseEnabled: Bool {
         didSet { UserDefaults.standard.set(mediaPauseEnabled, forKey: UserDefaultsKeys.mediaPauseEnabled) }
     }
+    @Published var transcribeShortQuietClipsAggressively: Bool {
+        didSet { Self.persistTranscribeShortQuietClipsAggressively(transcribeShortQuietClipsAggressively) }
+    }
     @Published var spokenFeedbackEnabled: Bool {
         didSet { speechFeedbackService.spokenFeedbackEnabled = spokenFeedbackEnabled }
     }
@@ -178,6 +181,7 @@ final class DictationViewModel: ObservableObject {
     private var lastStreamingParams: StreamingParamsSnapshot?
     private var isStopInFlight = false
     private var activeDictationSessionID: UUID?
+    private var pendingPushToTalkDiscardMessage: String?
     private var dictationSessions: [UUID: DictationSessionSnapshot] = [:]
     private var dictationSessionOrder: [UUID] = []
     private let maxTrackedDictationSessions = 100
@@ -267,6 +271,7 @@ final class DictationViewModel: ObservableObject {
         self.indicatorTranscriptPreviewEnabled = Self.loadIndicatorTranscriptPreviewEnabled()
         self.preserveClipboard = UserDefaults.standard.bool(forKey: UserDefaultsKeys.preserveClipboard)
         self.mediaPauseEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.mediaPauseEnabled)
+        self.transcribeShortQuietClipsAggressively = Self.loadTranscribeShortQuietClipsAggressively()
         self.spokenFeedbackEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.spokenFeedbackEnabled)
         self.indicatorStyle = Self.loadIndicatorStyle()
         self.notchIndicatorVisibility = UserDefaults.standard.string(forKey: UserDefaultsKeys.notchIndicatorVisibility)
@@ -319,6 +324,7 @@ final class DictationViewModel: ObservableObject {
         settingsHandler.onHotkeyLabelsChanged = { [weak self] in
             self?.hotkeyLabelsVersion += 1
         }
+        hotkeyService.discardPushToTalkRecordingOnExtraKeyPress = true
     }
 
     var canDictate: Bool {
@@ -343,6 +349,14 @@ final class DictationViewModel: ObservableObject {
 
     nonisolated static func persistIndicatorStyle(_ style: IndicatorStyle, defaults: UserDefaults = .standard) {
         defaults.set(style.rawValue, forKey: UserDefaultsKeys.indicatorStyle)
+    }
+
+    nonisolated static func loadTranscribeShortQuietClipsAggressively(defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: UserDefaultsKeys.transcribeShortQuietClipsAggressively) as? Bool ?? false
+    }
+
+    nonisolated static func persistTranscribeShortQuietClipsAggressively(_ enabled: Bool, defaults: UserDefaults = .standard) {
+        defaults.set(enabled, forKey: UserDefaultsKeys.transcribeShortQuietClipsAggressively)
     }
 
     var needsMicPermission: Bool {
@@ -480,6 +494,10 @@ final class DictationViewModel: ObservableObject {
             self?.handleCancelHotkey()
         }
 
+        hotkeyService.onPushToTalkInterruption = { [weak self] in
+            self?.handlePushToTalkInterruption()
+        }
+
         // Sync profile hotkeys whenever profiles change
         // dropFirst: avoid early monitor setup during ServiceContainer.init() before app is ready
         profileService.$profiles
@@ -600,6 +618,7 @@ final class DictationViewModel: ObservableObject {
         insertingResetTask?.cancel()
         insertingResetTask = nil
         clearRecordingCancelWarning()
+        pendingPushToTalkDiscardMessage = nil
         metadataCaptureTask?.cancel()
         metadataCaptureTask = nil
         urlResolutionTask?.cancel()
@@ -820,6 +839,23 @@ final class DictationViewModel: ObservableObject {
         let sessionID = activeDictationSessionID
 
         restoreRecordingSideEffects()
+        if let discardMessage = pendingPushToTalkDiscardMessage {
+            pendingPushToTalkDiscardMessage = nil
+            streamingHandler.stop()
+            lastStreamingParams = nil
+            stopRecordingTimer()
+            _ = await audioRecordingService.stopRecording(policy: .immediate)
+            if let sessionID {
+                failDictationSession(id: sessionID, error: discardMessage)
+            }
+            showNotchFeedback(
+                message: discardMessage,
+                icon: "xmark.circle",
+                duration: 1.8
+            )
+            return
+        }
+
         let liveSessionResult = await streamingHandler.finish()
         lastStreamingParams = nil
         stopRecordingTimer()
@@ -842,7 +878,8 @@ final class DictationViewModel: ObservableObject {
         let decision = classifyShortSpeech(
             rawDuration: rawDuration,
             peakLevel: peakLevel,
-            hasPreviewText: hasPreviewText
+            hasPreviewText: hasPreviewText,
+            transcribeShortQuietClipsAggressively: transcribeShortQuietClipsAggressively
         )
         let graceApplied = audioRecordingService.lastStopGraceCaptureApplied
 
@@ -1103,6 +1140,7 @@ final class DictationViewModel: ObservableObject {
         lastStreamingParams = nil
         isStopInFlight = false
         activeDictationSessionID = nil
+        pendingPushToTalkDiscardMessage = nil
         clearRecordingCancelWarning()
         state = .idle
         partialText = ""
@@ -1116,6 +1154,11 @@ final class DictationViewModel: ObservableObject {
         actionFeedbackIcon = nil
         actionFeedbackIsError = false
         actionDisplayDuration = 3.5
+    }
+
+    private func handlePushToTalkInterruption() {
+        guard state == .recording, !isStopInFlight else { return }
+        pendingPushToTalkDiscardMessage = String(localized: "Recording discarded because additional keys were pressed")
     }
 
     private func applyRuleMatch(
@@ -1420,17 +1463,28 @@ enum ShortSpeechDecision: Equatable {
     }
 }
 
-func classifyShortSpeech(rawDuration: TimeInterval, peakLevel: Float, hasPreviewText: Bool) -> ShortSpeechDecision {
+func classifyShortSpeech(
+    rawDuration: TimeInterval,
+    peakLevel: Float,
+    hasPreviewText: Bool,
+    transcribeShortQuietClipsAggressively: Bool = false
+) -> ShortSpeechDecision {
     guard rawDuration >= 0.04 else { return .discardTooShort }
     if hasPreviewText { return .transcribe }
 
     if rawDuration < 1.0 {
         // Bias toward transcribing short clips. False negatives here are worse than
         // letting the recognizer return empty text for actual silence.
-        return peakLevel < 0.005 ? .discardNoSpeech : .transcribe
+        if peakLevel < 0.005 {
+            return transcribeShortQuietClipsAggressively ? .transcribe : .discardNoSpeech
+        }
+        return .transcribe
     }
 
-    return peakLevel < 0.01 ? .discardNoSpeech : .transcribe
+    if peakLevel < 0.01 {
+        return transcribeShortQuietClipsAggressively ? .transcribe : .discardNoSpeech
+    }
+    return .transcribe
 }
 
 func paddedSamplesForFinalTranscription(_ samples: [Float], rawDuration: TimeInterval) -> [Float] {

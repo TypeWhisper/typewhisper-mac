@@ -985,6 +985,53 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    func testPushToTalkInterruptionDiscardStopsImmediatelyAndMarksSessionFailedByDefault() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        XCTAssertTrue(context.hotkeyService.discardPushToTalkRecordingOnExtraKeyPress)
+
+        var stopPolicies: [String] = []
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { policy in
+            stopPolicies.append(policy.logDescription)
+            return []
+        }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        XCTAssertEqual(context.dictationViewModel.state, .recording)
+
+        context.hotkeyService.onPushToTalkInterruption?()
+        _ = context.dictationViewModel.apiStopRecording()
+
+        for _ in 0..<20 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .failed {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+
+        XCTAssertEqual(stopPolicies, [AudioRecordingService.StopPolicy.immediate.logDescription])
+        XCTAssertEqual(
+            context.dictationViewModel.actionFeedbackMessage,
+            "Recording discarded because additional keys were pressed"
+        )
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
+        XCTAssertEqual(
+            context.dictationViewModel.apiDictationSession(id: sessionID)?.error,
+            "Recording discarded because additional keys were pressed"
+        )
+    }
+
+    @MainActor
     func testApiStartRecording_appliesBundleProfileBeforeDeferredMetadataCapture() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?
@@ -1615,6 +1662,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
     private final class DictationContext: @unchecked Sendable {
         let dictationViewModel: DictationViewModel
         let audioRecordingService: AudioRecordingService
+        let hotkeyService: HotkeyService
         let audioDeviceService: AudioDeviceService
         let audioDuckingService: AudioDuckingService
         let textInsertionService: TextInsertionService
@@ -1625,6 +1673,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         init(
             dictationViewModel: DictationViewModel,
             audioRecordingService: AudioRecordingService,
+            hotkeyService: HotkeyService,
             audioDeviceService: AudioDeviceService,
             audioDuckingService: AudioDuckingService,
             textInsertionService: TextInsertionService,
@@ -1634,6 +1683,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         ) {
             self.dictationViewModel = dictationViewModel
             self.audioRecordingService = audioRecordingService
+            self.hotkeyService = hotkeyService
             self.audioDeviceService = audioDeviceService
             self.audioDuckingService = audioDuckingService
             self.textInsertionService = textInsertionService
@@ -1736,6 +1786,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         return DictationContext(
             dictationViewModel: dictationViewModel,
             audioRecordingService: audioRecordingService,
+            hotkeyService: hotkeyService,
             audioDeviceService: audioDeviceService,
             audioDuckingService: audioDuckingService,
             textInsertionService: textInsertionService,
@@ -2723,6 +2774,129 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertTrue(service.processEventForTesting(keyUp, source: .monitor))
         XCTAssertEqual(startCount, 1)
         XCTAssertEqual(stopCount, 1)
+    }
+
+    @MainActor
+    func testModifierComboPushToTalkDoesNotStopOnTransientFlagsChangedLoss() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(commandOptionComboHotkey(), for: .pushToTalk)
+
+        var startCount = 0
+        var stopCount = 0
+        service.onDictationStart = { startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+
+        let comboDown = try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: [.command, .option])
+        let transientLoss = try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: [.command])
+        let comboRestored = try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: [.command, .option])
+        let fullRelease = try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: [])
+
+        XCTAssertTrue(service.processEventForTesting(comboDown, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(stopCount, 0)
+
+        XCTAssertTrue(service.processEventForTesting(transientLoss, source: .monitor))
+        XCTAssertEqual(stopCount, 0)
+
+        XCTAssertTrue(service.processEventForTesting(comboRestored, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(stopCount, 0)
+
+        XCTAssertTrue(service.processEventForTesting(fullRelease, source: .monitor))
+        XCTAssertEqual(stopCount, 1)
+    }
+
+    @MainActor
+    func testRightSideModifierComboPushToTalkStaysActiveUntilFinalRelease() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(commandOptionComboHotkey(), for: .pushToTalk)
+
+        var startCount = 0
+        var stopCount = 0
+        service.onDictationStart = { startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+
+        let rightCommandDown = try makeFlagsChangedEvent(keyCode: 0x36, modifierFlags: [.command])
+        let rightOptionDown = try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: [.command, .option])
+        let transientRightCommandLoss = try makeFlagsChangedEvent(keyCode: 0x36, modifierFlags: [.option])
+        let comboRestored = try makeFlagsChangedEvent(keyCode: 0x36, modifierFlags: [.command, .option])
+        let finalRelease = try makeFlagsChangedEvent(keyCode: 0x36, modifierFlags: [])
+
+        XCTAssertFalse(service.processEventForTesting(rightCommandDown, source: .monitor))
+        XCTAssertEqual(startCount, 0)
+
+        XCTAssertTrue(service.processEventForTesting(rightOptionDown, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(stopCount, 0)
+
+        XCTAssertTrue(service.processEventForTesting(transientRightCommandLoss, source: .monitor))
+        XCTAssertEqual(stopCount, 0)
+
+        XCTAssertTrue(service.processEventForTesting(comboRestored, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(stopCount, 0)
+
+        XCTAssertTrue(service.processEventForTesting(finalRelease, source: .monitor))
+        XCTAssertEqual(stopCount, 1)
+    }
+
+    @MainActor
+    func testPushToTalkExtraKeyInterruptionSignalsDiscardWithoutImmediateStop() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(commandOptionComboHotkey(), for: .pushToTalk)
+        service.discardPushToTalkRecordingOnExtraKeyPress = true
+
+        var startCount = 0
+        var stopCount = 0
+        var interruptionCount = 0
+        service.onDictationStart = { startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+        service.onPushToTalkInterruption = { interruptionCount += 1 }
+
+        let comboDown = try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: [.command, .option])
+        let extraKeyDown = try makeKeyboardEvent(keyCode: 0x25, keyDown: true, flags: [.maskCommand, .maskAlternate])
+        let extraKeyUp = try makeKeyboardEvent(keyCode: 0x25, keyDown: false, flags: [.maskCommand, .maskAlternate])
+        let fullRelease = try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: [])
+
+        XCTAssertTrue(service.processEventForTesting(comboDown, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(stopCount, 0)
+
+        XCTAssertFalse(service.processEventForTesting(extraKeyDown, source: .monitor))
+        XCTAssertEqual(interruptionCount, 1)
+        XCTAssertEqual(stopCount, 0)
+
+        XCTAssertFalse(service.processEventForTesting(extraKeyUp, source: .monitor))
+        XCTAssertEqual(interruptionCount, 1)
+        XCTAssertEqual(stopCount, 0)
+
+        XCTAssertTrue(service.processEventForTesting(fullRelease, source: .monitor))
+        XCTAssertEqual(stopCount, 1)
+    }
+
+    @MainActor
+    func testPushToTalkExtraKeyInterruptionDoesNothingWhenPolicyDisabled() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(commandOptionComboHotkey(), for: .pushToTalk)
+        service.discardPushToTalkRecordingOnExtraKeyPress = false
+
+        var interruptionCount = 0
+        service.onPushToTalkInterruption = { interruptionCount += 1 }
+
+        let comboDown = try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: [.command, .option])
+        let extraKeyDown = try makeKeyboardEvent(keyCode: 0x25, keyDown: true, flags: [.maskCommand, .maskAlternate])
+
+        XCTAssertTrue(service.processEventForTesting(comboDown, source: .monitor))
+        XCTAssertFalse(service.processEventForTesting(extraKeyDown, source: .monitor))
+        XCTAssertEqual(interruptionCount, 0)
     }
 
     @MainActor
