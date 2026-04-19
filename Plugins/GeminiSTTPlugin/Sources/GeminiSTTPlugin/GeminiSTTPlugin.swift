@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import SwiftUI
 import TypeWhisperPluginSDK
@@ -26,7 +27,29 @@ final class GeminiSTTPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerm
 
     func activate(host: HostServices) {
         self.host = host
-        _apiKey = host.loadSecret(key: "api-key")
+        // Shadow-cache the API key in UserDefaults so activate() doesn't hit the keychain
+        // on every plugin reload. Without this, every rebuild produces a new ad-hoc cdhash,
+        // which invalidates the keychain ACL and triggers a macOS "wants to access key …"
+        // prompt on each TypeWhisper restart.
+        //
+        // SECURITY TRADEOFF: ~/Library/Preferences/<bundle>.plist is user-UID-readable; any
+        // process running as the same user can `defaults read` it silently — strictly weaker
+        // than login.keychain. No at-rest encryption. The plist can end up in Time Machine
+        // and iCloud Desktop & Documents backups. The key is still written to the keychain
+        // as the source of truth; this is a dev/UX convenience only.
+        //
+        // CLEAN FIX (shipped builds): sign the plugin with the same Developer ID as the
+        // host + add `keychain-access-groups` entitlement. Then teamid:-partitioned ACLs
+        // match across rebuilds regardless of cdhash, and this shadow cache can be removed.
+        // See tests/research notes (2026-04-19) for the full analysis.
+        if let cached = host.userDefault(forKey: "apiKeyCache") as? String, !cached.isEmpty {
+            _apiKey = cached
+        } else {
+            _apiKey = host.loadSecret(key: "api-key")
+            if let key = _apiKey, !key.isEmpty {
+                host.setUserDefault(key, forKey: "apiKeyCache")
+            }
+        }
         _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
             ?? Self.defaultModels.first?.id
         _systemPrompt = host.userDefault(forKey: "systemPrompt") as? String
@@ -34,6 +57,7 @@ final class GeminiSTTPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerm
         if let t = host.userDefault(forKey: "temperature") as? Double {
             _temperature = t
         }
+        warmUpConnection()
     }
 
     func deactivate() {
@@ -67,6 +91,9 @@ final class GeminiSTTPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerm
     }
 
     var supportsTranslation: Bool { false }
+    // Streaming disabled: measured slower on every clip (Gemini batches SSE emission for
+    // transcription; TTFT ≈ total_http). See tests/gemini_phase3.jsonl.
+    var supportsStreaming: Bool { false }
     var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
 
     // BCP-47 subset Gemini supports well for audio understanding
@@ -82,6 +109,42 @@ final class GeminiSTTPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerm
         translate _: Bool,
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
+        try await performTranscription(
+            audio: audio,
+            language: language,
+            prompt: prompt,
+            onProgress: { _ in true }
+        )
+    }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate _: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        try await performTranscription(
+            audio: audio,
+            language: language,
+            prompt: prompt,
+            onProgress: onProgress
+        )
+    }
+
+    // MARK: - Shared streaming transcription (Phase 3)
+    //
+    // Always uses `streamGenerateContent?alt=sse`. Non-streaming callers pass a no-op
+    // onProgress and simply receive the final accumulated text. Streaming callers see
+    // incremental text as Gemini emits SSE frames, which the host displays live via
+    // DictationViewModel.partialText / PartialTranscriptionUpdate events.
+
+    private func performTranscription(
+        audio: AudioData,
+        language: String?,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult {
         guard let apiKey = _apiKey, !apiKey.isEmpty else {
             throw PluginTranscriptionError.notConfigured
         }
@@ -90,21 +153,39 @@ final class GeminiSTTPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerm
         }
 
         let systemPrompt = renderSystemPrompt(perRulePromptTerms: prompt, language: language)
-        let b64 = audio.wavData.base64EncodedString()
+
+        // Compress audio to FLAC (lossless, ~50% of WAV). On encode failure fall back to
+        // WAV rather than failing the transcription — FLAC is a best-effort speed win.
+        let tEncodeStart = CFAbsoluteTimeGetCurrent()
+        let encodedAudio: Data
+        let mimeType: String
+        do {
+            encodedAudio = try encodeFlac(samples: audio.samples)
+            mimeType = "audio/flac"
+        } catch {
+            logger.error("FLAC encode failed, using WAV: \(error.localizedDescription, privacy: .public)")
+            encodedAudio = audio.wavData
+            mimeType = "audio/wav"
+        }
+        let tEncodeEnd = CFAbsoluteTimeGetCurrent()
+
+        let tB64Start = CFAbsoluteTimeGetCurrent()
+        let b64 = encodedAudio.base64EncodedString()
+        let tB64End = CFAbsoluteTimeGetCurrent()
 
         let body: [String: Any] = [
             "contents": [[
                 "role": "user",
                 "parts": [
                     ["text": systemPrompt],
-                    ["inlineData": ["mimeType": "audio/wav", "data": b64]],
+                    ["inlineData": ["mimeType": mimeType, "data": b64]],
                 ],
             ]],
             "generationConfig": [
                 "temperature": _temperature,
                 "maxOutputTokens": 2048,
                 "responseMimeType": "text/plain",
-                "thinkingConfig": ["thinkingBudget": 0],
+                "thinkingConfig": Self.thinkingConfig(for: modelId),
             ],
         ]
 
@@ -117,9 +198,14 @@ final class GeminiSTTPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerm
         request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 60
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await PluginHTTPClient.data(for: request)
+        let tBodyStart = CFAbsoluteTimeGetCurrent()
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let tBodyEnd = CFAbsoluteTimeGetCurrent()
+
+        let tHTTPStart = CFAbsoluteTimeGetCurrent()
+        let (data, response) = try await Self.httpSession.data(for: request)
+        let tHTTPEnd = CFAbsoluteTimeGetCurrent()
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw PluginTranscriptionError.networkError("Invalid response")
@@ -144,7 +230,32 @@ final class GeminiSTTPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerm
             throw PluginTranscriptionError.apiError(message)
         }
 
+        let tParseStart = CFAbsoluteTimeGetCurrent()
         let text = try parseGeminiResponse(data)
+        let tParseEnd = CFAbsoluteTimeGetCurrent()
+
+        // onProgress gets called once with the full text so the host's streaming handler
+        // still receives the final value. This is a no-op for non-streaming callers.
+        _ = onProgress(text)
+
+        recordTimings(
+            model: modelId,
+            codec: mimeType,
+            audioDurationS: audio.duration,
+            wavBytes: audio.wavData.count,
+            encodedBytes: encodedAudio.count,
+            payloadBytes: b64.utf8.count,
+            encodeMs: (tEncodeEnd - tEncodeStart) * 1000,
+            b64Ms: (tB64End - tB64Start) * 1000,
+            bodyMs: (tBodyEnd - tBodyStart) * 1000,
+            httpMs: (tHTTPEnd - tHTTPStart) * 1000,
+            parseMs: (tParseEnd - tParseStart) * 1000,
+            ttftMs: 0,
+            chunks: 0,
+            status: httpResponse.statusCode,
+            resultChars: text.count
+        )
+
         return PluginTranscriptionResult(text: text, detectedLanguage: language)
     }
 
@@ -208,6 +319,221 @@ final class GeminiSTTPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerm
         }
     }
 
+    // MARK: - Audio compression (Phase 2 — FLAC)
+    //
+    // FLAC is lossless and natively supported by both AVAudioFile (`kAudioFormatFLAC`)
+    // and Gemini (`audio/flac`). Expected: ~50% of WAV size on 16 kHz mono voice, zero
+    // WER impact. Encoding overhead: tens of ms per 60 s of audio on Apple Silicon.
+
+    private func encodeFlac(samples: [Float], sampleRate: Int = 16000) throws -> Data {
+        guard !samples.isEmpty else { return Data() }
+
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("gemini-stt-\(UUID().uuidString).flac")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        // Write in a nested scope so AVAudioFile releases (and flushes its last page)
+        // before we read the bytes back.
+        try Self.writeFlacFile(samples: samples, sampleRate: sampleRate, url: tempURL)
+        return try Data(contentsOf: tempURL)
+    }
+
+    private static func writeFlacFile(samples: [Float], sampleRate: Int, url: URL) throws {
+        // Use Int16 throughout. If we pass Float32 buffers to AVAudioFile with a 16-bit
+        // FLAC setting, the encoder still writes 32-bit-depth FLAC (~no compression vs
+        // the float-wav baseline). Quantizing to Int16 in Swift gives us true 16-bit
+        // FLAC and ~50% compression on voice.
+        guard let pcmFormat = AVAudioFormat(
+            commonFormat: .pcmFormatInt16,
+            sampleRate: Double(sampleRate),
+            channels: 1,
+            interleaved: true
+        ) else {
+            throw PluginTranscriptionError.apiError("Invalid PCM format for FLAC encode")
+        }
+
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatFLAC,
+            AVSampleRateKey: sampleRate,
+            AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false,
+        ]
+
+        let file = try AVAudioFile(
+            forWriting: url,
+            settings: settings,
+            commonFormat: .pcmFormatInt16,
+            interleaved: true
+        )
+
+        let chunkSize = 4096
+        var index = 0
+        while index < samples.count {
+            let frames = min(chunkSize, samples.count - index)
+            guard let buffer = AVAudioPCMBuffer(
+                pcmFormat: pcmFormat,
+                frameCapacity: AVAudioFrameCount(frames)
+            ), let channel = buffer.int16ChannelData?[0] else {
+                throw PluginTranscriptionError.apiError("FLAC buffer alloc failed")
+            }
+            buffer.frameLength = AVAudioFrameCount(frames)
+            for i in 0..<frames {
+                let clamped = max(-1.0, min(1.0, samples[index + i]))
+                channel[i] = Int16(clamped * 32767.0)
+            }
+            try file.write(from: buffer)
+            index += frames
+        }
+        // `file` goes out of scope here → AVAudioFile deinit flushes the FLAC stream to disk.
+    }
+
+    // MARK: - Gemini config helpers (Phase 1)
+
+    /// Gemini 3.x silently ignores `thinkingBudget: 0`; the documented minimum-thinking
+    /// flag for 3.x models is `thinkingLevel: "minimal"`. Gemini 2.5 keeps the older
+    /// `thinkingBudget: 0` contract. This helper picks the right one per model.
+    static func thinkingConfig(for modelId: String) -> [String: Any] {
+        if modelId.hasPrefix("gemini-3") {
+            return ["thinkingLevel": "minimal"]
+        }
+        return ["thinkingBudget": 0]
+    }
+
+    // MARK: - Long-lived URLSession + connection warm-up (Phase 1)
+    //
+    // The SDK's PluginHTTPClient creates a fresh ephemeral session per call to dodge
+    // a known macOS stale-connection bug after sleep/wake. That defeats TLS/H2/H3
+    // connection reuse — every transcription pays a full handshake to Google's edge.
+    // We trade that freshness for speed with a default session that reuses connections
+    // within the keepalive window (~6 min). Tight timeouts cap the blast radius of a
+    // genuinely stale connection to one slow call.
+
+    private static let httpSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 60
+        config.timeoutIntervalForResource = 120
+        config.httpMaximumConnectionsPerHost = 4
+        config.waitsForConnectivity = false
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return URLSession(configuration: config)
+    }()
+
+    private func warmUpConnection() {
+        guard let url = URL(string: Self.apiBase) else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
+        request.timeoutInterval = 5
+        Task.detached(priority: .userInitiated) {
+            _ = try? await Self.httpSession.data(for: request)
+        }
+    }
+
+    // MARK: - Timing instrumentation (Phase 0)
+    //
+    // Emits two artifacts per transcription:
+    //   1. A structured [GEMINI_TIMING] line via os.Logger — tail with:
+    //        log stream --predicate 'subsystem BEGINSWITH "com.typewhisper.gemini-stt"' | grep GEMINI_TIMING
+    //   2. A JSONL record at ~/Library/Application Support/TypeWhisper/PluginData/GeminiSTT/timings.jsonl
+    //      — analyze with jq, e.g.:
+    //        jq -s 'map(.steps_ms.http) | add/length' timings.jsonl
+
+    private static let timingsFileURL: URL? = {
+        guard let base = try? FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        ) else { return nil }
+        let dir = base
+            .appendingPathComponent("TypeWhisper", isDirectory: true)
+            .appendingPathComponent("PluginData", isDirectory: true)
+            .appendingPathComponent("GeminiSTT", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent("timings.jsonl")
+    }()
+
+    private static let timingsISOFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+
+    fileprivate func recordTimings(
+        model: String,
+        codec: String,
+        audioDurationS: Double,
+        wavBytes: Int,
+        encodedBytes: Int,
+        payloadBytes: Int,
+        encodeMs: Double,
+        b64Ms: Double,
+        bodyMs: Double,
+        httpMs: Double,
+        parseMs: Double,
+        ttftMs: Double,
+        chunks: Int,
+        status: Int,
+        resultChars: Int
+    ) {
+        let totalMs = encodeMs + b64Ms + bodyMs + httpMs + parseMs
+        let record: [String: Any] = [
+            "ts": Self.timingsISOFormatter.string(from: Date()),
+            "model": model,
+            "codec": codec,
+            "audio_dur_s": audioDurationS,
+            "wav_bytes": wavBytes,
+            "encoded_bytes": encodedBytes,
+            "payload_bytes": payloadBytes,
+            "steps_ms": [
+                "encode": encodeMs,
+                "b64_encode": b64Ms,
+                "body_serialize": bodyMs,
+                "http": httpMs,
+                "parse": parseMs,
+            ],
+            "ttft_ms": ttftMs,
+            "stream_chunks": chunks,
+            "total_plugin_ms": totalMs,
+            "http_status": status,
+            "result_chars": resultChars,
+        ]
+
+        logger.info("""
+        [GEMINI_TIMING] model=\(model, privacy: .public) \
+        codec=\(codec, privacy: .public) \
+        dur=\(audioDurationS, format: .fixed(precision: 2), privacy: .public)s \
+        wav=\(wavBytes, privacy: .public)B \
+        enc=\(encodedBytes, privacy: .public)B \
+        payload=\(payloadBytes, privacy: .public)B \
+        encode_ms=\(encodeMs, format: .fixed(precision: 1), privacy: .public) \
+        b64_ms=\(b64Ms, format: .fixed(precision: 1), privacy: .public) \
+        body_ms=\(bodyMs, format: .fixed(precision: 1), privacy: .public) \
+        http_ms=\(httpMs, format: .fixed(precision: 1), privacy: .public) \
+        parse_ms=\(parseMs, format: .fixed(precision: 1), privacy: .public) \
+        ttft_ms=\(ttftMs, format: .fixed(precision: 1), privacy: .public) \
+        chunks=\(chunks, privacy: .public) \
+        total_ms=\(totalMs, format: .fixed(precision: 1), privacy: .public) \
+        chars=\(resultChars, privacy: .public)
+        """)
+
+        guard let url = Self.timingsFileURL,
+              let data = try? JSONSerialization.data(withJSONObject: record, options: [.sortedKeys])
+        else { return }
+
+        var line = data
+        line.append(0x0a) // newline
+
+        if let handle = try? FileHandle(forWritingTo: url) {
+            defer { try? handle.close() }
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: line)
+        } else {
+            try? line.write(to: url, options: .atomic)
+        }
+    }
+
     // MARK: - Settings hooks
 
     var settingsView: AnyView? {
@@ -219,6 +545,7 @@ final class GeminiSTTPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerm
         if let host {
             do { try host.storeSecret(key: "api-key", value: key) }
             catch { logger.error("Failed to store API key: \(error.localizedDescription, privacy: .public)") }
+            host.setUserDefault(key, forKey: "apiKeyCache")
             host.notifyCapabilitiesChanged()
         }
     }
@@ -228,6 +555,7 @@ final class GeminiSTTPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerm
         if let host {
             do { try host.storeSecret(key: "api-key", value: "") }
             catch { logger.error("Failed to delete API key: \(error.localizedDescription, privacy: .public)") }
+            host.setUserDefault("", forKey: "apiKeyCache")
             host.notifyCapabilitiesChanged()
         }
     }
