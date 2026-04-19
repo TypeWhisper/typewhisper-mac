@@ -36,6 +36,7 @@ enum AudioInputDeviceCompatibility: Sendable, Equatable {
 enum SelectedInputDeviceError: LocalizedError, Sendable, Equatable {
     case unavailable
     case incompatible(AudioInputDeviceCompatibilityIssue)
+    case routingConflict
 
     var errorDescription: String? {
         switch self {
@@ -46,6 +47,11 @@ enum SelectedInputDeviceError: LocalizedError, Sendable, Equatable {
             )
         case .incompatible(let issue):
             return issue.detailText
+        case .routingConflict:
+            return localizedAppText(
+                "The selected microphone conflicts with your current audio routing. Disconnect Bluetooth or choose a different input.",
+                de: "Das ausgewählte Mikrofon kollidiert mit deiner aktuellen Audio-Route. Trenne Bluetooth oder wähle ein anderes Eingabegerät."
+            )
         }
     }
 }
@@ -60,6 +66,19 @@ struct AudioInputDevice: Identifiable, Equatable {
 }
 
 final class AudioDeviceService: ObservableObject, @unchecked Sendable {
+    /// Serial OperationQueue used by the preview configuration-change
+    /// observer. Its `underlyingQueue` is set to `previewRecoveryQueue` in
+    /// `init` so that `AVAudioEngineConfigurationChange` notifications are
+    /// serialized onto the same queue the recovery coordinator runs on,
+    /// preserving the thread-confinement invariants of
+    /// `AudioEngineRecoveryCoordinator`. Mirrors the pattern used by
+    /// `AudioRecordingService.recoveryNotificationQueue`.
+    private let previewNotificationQueue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.name = "com.typewhisper.preview-recovery.notifications"
+        queue.maxConcurrentOperationCount = 1
+        return queue
+    }()
 
     @Published var inputDevices: [AudioInputDevice] = []
     @Published var selectedDeviceUID: String? {
@@ -96,6 +115,12 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     private let previewLock = NSLock()
     private let previewRecoveryQueue = DispatchQueue(label: "com.typewhisper.preview-recovery", qos: .userInitiated)
     private let previewRecoveryCoordinator = AudioEngineRecoveryCoordinator()
+    /// Retains the outgoing preview `AVAudioEngine` for a short interval after
+    /// teardown so CoreAudio's internal callbacks cannot outlive the object
+    /// they still reference. Mirrors `AudioRecordingService.engineTeardownRetainer`.
+    /// See issue #332.
+    private let previewEngineTeardownRetainer = DelayedReleaseRetainer<AVAudioEngine>(label: "com.typewhisper.preview-engine-teardown")
+    private static let previewEngineTeardownRetentionInterval: TimeInterval = 0.3
     private var activePreviewDeviceID: AudioDeviceID?
     private var compatibilityCache: [String: AudioInputDeviceCompatibility] = [:]
     private var isApplyingValidatedSelection = false
@@ -127,7 +152,12 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         }
     }
 
-    init(initialInputDevices: [AudioInputDevice]? = nil, monitorDeviceChanges: Bool = true, probeCompatibilities: Bool = false) {
+    init(
+        initialInputDevices: [AudioInputDevice]? = nil,
+        monitorDeviceChanges: Bool = true,
+        probeCompatibilities: Bool = false
+    ) {
+        previewNotificationQueue.underlyingQueue = previewRecoveryQueue
         isInitializingSelection = true
         selectedDeviceUID = UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedInputDeviceUID)
         inputDevices = applyCompatibilityCache(to: initialInputDevices ?? listInputDevices())
@@ -233,6 +263,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         }
         if let engine {
             teardownPreviewEngine(engine)
+            previewEngineTeardownRetainer.retain(engine, for: Self.previewEngineTeardownRetentionInterval)
         }
         isPreviewActive = false
         previewAudioLevel = 0
@@ -270,10 +301,15 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     }
 
     private func schedulePreviewRecoveryIfNeeded(_ action: AudioEngineRecoveryAction) {
-        guard case .schedule(let generation, let delay) = action else { return }
-
-        previewRecoveryQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
-            self?.performScheduledPreviewRecovery(generation: generation)
+        switch action {
+        case .none, .performImmediateRecovery:
+            return
+        case .schedule(let generation, let delay):
+            previewRecoveryQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.performScheduledPreviewRecovery(generation: generation)
+            }
+        case .fail(let failure):
+            handlePreviewRecoveryFailure(failure)
         }
     }
 
@@ -297,12 +333,45 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         }
     }
 
+    private func handlePreviewRecoveryFailure(_ failure: AudioEngineRecoveryFailure) {
+        let error: SelectedInputDeviceError
+        switch failure {
+        case .configurationChangeBurstLimitExceeded:
+            logger.error("Preview recovery circuit breaker tripped after repeated configuration changes")
+            error = .routingConflict
+        }
+
+        failActivePreviewDueToRecovery(error)
+    }
+
+    private func failActivePreviewDueToRecovery(_ error: SelectedInputDeviceError) {
+        previewRecoveryCoordinator.transitionToIdle()
+        removePreviewConfigurationObserver()
+        let engine: AVAudioEngine? = previewLock.withLock {
+            let engine = previewEngine
+            previewEngine = nil
+            activePreviewDeviceID = nil
+            return engine
+        }
+        if let engine {
+            teardownPreviewEngine(engine)
+            previewEngineTeardownRetainer.retain(engine, for: Self.previewEngineTeardownRetentionInterval)
+        }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.isPreviewActive = false
+            self.previewAudioLevel = 0
+            self.previewRawLevel = 0
+            self.previewError = error
+        }
+    }
+
     private func installPreviewConfigurationObserver(for engine: AVAudioEngine) {
         removePreviewConfigurationObserver()
         previewConfigChangeObserver = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange,
             object: engine,
-            queue: nil
+            queue: previewNotificationQueue
         ) { [weak self] _ in
             self?.handlePreviewConfigurationChangeNotification()
         }
@@ -357,8 +426,22 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         preferredDeviceID: AudioDeviceID?,
         label: String
     ) throws {
+        // Swap in a fresh AVAudioEngine instead of reusing the stuck one.
+        // Reusing the same engine after CoreAudio flagged its AUHAL mid-switch
+        // causes `AudioUnitSetProperty` to return 'nope'
+        // (kAudioHardwareIllegalOperationError). See issue #332.
+        guard let replacementEngine = replacePreviewAudioEngineForRecoveryIfNeeded(engine) else { return }
+
+        installPreviewConfigurationObserver(for: replacementEngine)
         teardownPreviewEngine(engine)
-        try startPreviewEngineWithRecovery(engine, preferredDeviceID: preferredDeviceID, label: label)
+        previewEngineTeardownRetainer.retain(engine, for: Self.previewEngineTeardownRetentionInterval)
+
+        do {
+            try startPreviewEngineWithRecovery(replacementEngine, preferredDeviceID: preferredDeviceID, label: label)
+        } catch {
+            cleanupAfterFailedPreviewStart(replacementEngine)
+            throw error
+        }
     }
 
     private func configureAndStartPreviewEngine(
@@ -375,11 +458,19 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         logger.info("\(label, privacy: .public) input format: sampleRate=\(format.sampleRate), channels=\(format.channelCount)")
         try validateInputFormat(format, for: preferredDeviceID)
 
+        // Re-read the format immediately before installTap and reject the
+        // install if it has drifted (e.g. Bluetooth flipping from A2DP to HFP
+        // between `configureExplicitInputDevice` and here). Mirrors
+        // `AudioRecordingService.validateTapInstallationPreconditions`.
+        // See issue #332.
+        let currentFormat = inputNode.outputFormat(forBus: 0)
+        try validatePreviewTapInstallationPreconditions(expected: format, current: currentFormat)
+
         // Wrap installTap so NSException (e.g. AVAudioSession incompatible format)
         // is converted into a Swift error instead of crashing the app. See K2.
         do {
             _ = try ObjCExceptionCatcher.catching {
-                inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
+                inputNode.installTap(onBus: 0, bufferSize: 1024, format: currentFormat) { [weak self] buffer, _ in
                     self?.processPreviewBuffer(buffer)
                 }
             }
@@ -396,10 +487,43 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
 
         do {
             try engine.start()
+            // Open the post-start quiescence window. Without this, the
+            // observer armed on this engine catches the config-change
+            // triggered by our own `AudioUnitSetProperty(...CurrentDevice)`
+            // write and schedules another restart — indefinitely.
+            // See issue #332.
+            previewRecoveryCoordinator.noteEngineStarted()
         } catch {
             inputNode.removeTap(onBus: 0)
             engine.stop()
             throw error
+        }
+    }
+
+    @discardableResult
+    private func replacePreviewAudioEngineForRecoveryIfNeeded(_ engine: AVAudioEngine) -> AVAudioEngine? {
+        let replacementEngine = AVAudioEngine()
+        let didReplace = previewLock.withLock { () -> Bool in
+            guard previewEngine === engine else { return false }
+            previewEngine = replacementEngine
+            return true
+        }
+        return didReplace ? replacementEngine : nil
+    }
+
+    private func validatePreviewTapInstallationPreconditions(expected: AVAudioFormat, current: AVAudioFormat) throws {
+        let currentSampleRate = current.sampleRate
+        let currentChannelCount = current.channelCount
+        let matchesExpected = currentSampleRate == expected.sampleRate && currentChannelCount == expected.channelCount
+
+        guard currentSampleRate > 0, currentChannelCount > 0, matchesExpected else {
+            throw NSError(
+                domain: AudioEngineRecoveryErrorDomains.transientFormatMismatch,
+                code: 0,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Format mismatch before preview installTap: expected \(expected.sampleRate) Hz/\(expected.channelCount) ch, got \(current.sampleRate) Hz/\(current.channelCount) ch"
+                ]
+            )
         }
     }
 
@@ -418,6 +542,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             }
         }
         teardownPreviewEngine(engine)
+        previewEngineTeardownRetainer.retain(engine, for: Self.previewEngineTeardownRetentionInterval)
         isPreviewActive = false
         previewAudioLevel = 0
         previewRawLevel = 0
@@ -862,3 +987,31 @@ private func audioStatusString(_ status: OSStatus) -> String {
     }
     return "\(status)"
 }
+
+#if DEBUG
+extension AudioDeviceService {
+    @discardableResult
+    func testingReplacePreviewEngineForRecoveryIfNeeded(_ engine: AVAudioEngine) -> AVAudioEngine? {
+        replacePreviewAudioEngineForRecoveryIfNeeded(engine)
+    }
+
+    func testingSetPreviewEngine(_ engine: AVAudioEngine?, activeDeviceID: AudioDeviceID? = nil) {
+        previewLock.withLock {
+            previewEngine = engine
+            activePreviewDeviceID = activeDeviceID
+        }
+    }
+
+    func testingCurrentPreviewEngine() -> AVAudioEngine? {
+        previewLock.withLock { previewEngine }
+    }
+
+    func testingCurrentPreviewDeviceID() -> AudioDeviceID? {
+        previewLock.withLock { activePreviewDeviceID }
+    }
+
+    func testingValidatePreviewTapInstallationPreconditions(expected: AVAudioFormat, current: AVAudioFormat) throws {
+        try validatePreviewTapInstallationPreconditions(expected: expected, current: current)
+    }
+}
+#endif

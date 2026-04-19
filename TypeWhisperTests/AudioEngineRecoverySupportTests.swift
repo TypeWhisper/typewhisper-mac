@@ -3,6 +3,10 @@ import AVFoundation
 import XCTest
 @testable import TypeWhisper
 
+private final class TestClock: @unchecked Sendable {
+    var now: TimeInterval = 0
+}
+
 final class AudioEngineRecoverySupportTests: XCTestCase {
     func testRetryableErrorClassification_matchesKnownAudioUnitCodes() {
         let formatError = NSError(domain: NSOSStatusErrorDomain, code: Int(kAudioUnitErr_FormatNotSupported))
@@ -56,6 +60,18 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         XCTAssertEqual(coordinator.finishRecovery(), .none)
     }
 
+    func testConfigurationChangeWithinQuiescenceWindow_preservesStartupRecoveryPath() {
+        let clock = TestClock()
+        let coordinator = AudioEngineRecoveryCoordinator(now: { clock.now })
+
+        coordinator.beginStarting()
+        coordinator.noteEngineStarted()
+        clock.now += 0.1
+
+        XCTAssertEqual(coordinator.noteConfigurationChange(), .none)
+        XCTAssertEqual(coordinator.finishStartingSuccessfully(), .performImmediateRecovery)
+    }
+
     func testMultipleConfigurationChanges_coalesceToLatestScheduledGeneration() {
         let coordinator = AudioEngineRecoveryCoordinator()
 
@@ -95,6 +111,69 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
 
         XCTAssertNotEqual(generation, followUpGeneration)
         XCTAssertEqual(delay, AudioEngineRecoveryPolicy.configurationDebounce)
+    }
+
+    func testSelfTriggeredConfigurationChangeWithinQuiescenceWindow_isDeferredWhileRunning() {
+        let clock = TestClock()
+        let coordinator = AudioEngineRecoveryCoordinator(now: { clock.now })
+
+        coordinator.beginStarting()
+        coordinator.noteEngineStarted()
+        XCTAssertEqual(coordinator.finishStartingSuccessfully(), .none)
+
+        clock.now += 0.1
+        guard case .schedule(_, let delay) = coordinator.noteConfigurationChange() else {
+            return XCTFail("Expected deferred recovery schedule")
+        }
+
+        XCTAssertEqual(delay, AudioEngineRecoveryPolicy.configurationChangeQuiescence - 0.1, accuracy: 0.0001)
+    }
+
+    func testSelfTriggeredConfigurationChangeWithinQuiescenceWindow_isDeferredDuringScheduledRecovery() {
+        let clock = TestClock()
+        let coordinator = AudioEngineRecoveryCoordinator(now: { clock.now })
+
+        coordinator.beginStarting()
+        coordinator.noteEngineStarted()
+        XCTAssertEqual(coordinator.finishStartingSuccessfully(), .none)
+
+        clock.now = 1
+        guard case .schedule(let generation, _) = coordinator.noteConfigurationChange() else {
+            return XCTFail("Expected scheduled recovery")
+        }
+
+        XCTAssertTrue(coordinator.beginScheduledRecovery(generation: generation))
+
+        coordinator.noteEngineStarted()
+        clock.now += 0.1
+        XCTAssertEqual(coordinator.noteConfigurationChange(), .none)
+        guard case .schedule(_, let delay) = coordinator.finishRecovery() else {
+            return XCTFail("Expected deferred follow-up recovery")
+        }
+        XCTAssertEqual(delay, AudioEngineRecoveryPolicy.configurationChangeQuiescence - 0.1, accuracy: 0.0001)
+    }
+
+    func testRecoveryCoordinator_stopsAfterRestartLoopThreshold() {
+        let clock = TestClock()
+        let coordinator = AudioEngineRecoveryCoordinator(now: { clock.now })
+
+        coordinator.beginStarting()
+        coordinator.noteEngineStarted()
+        XCTAssertEqual(coordinator.finishStartingSuccessfully(), .none)
+        clock.now += AudioEngineRecoveryPolicy.configurationChangeQuiescence + 0.1
+
+        for attempt in 0..<(AudioEngineRecoveryPolicy.configurationChangeBurstLimit - 1) {
+            guard case .schedule(let generation, let delay) = coordinator.noteConfigurationChange() else {
+                return XCTFail("Expected scheduled recovery for attempt \(attempt + 1)")
+            }
+            XCTAssertEqual(delay, AudioEngineRecoveryPolicy.configurationDebounce)
+            XCTAssertTrue(coordinator.beginScheduledRecovery(generation: generation))
+            XCTAssertEqual(coordinator.finishRecovery(), .none)
+
+            clock.now += 0.2
+        }
+
+        XCTAssertEqual(coordinator.noteConfigurationChange(), .fail(.configurationChangeBurstLimitExceeded))
     }
 
     func testTransientFormatMismatchError_describesMismatch() throws {
@@ -221,6 +300,39 @@ final class AudioDeviceServiceCompatibilityTests: XCTestCase {
         XCTAssertEqual(service.selectedDevice?.uid, "display-mic")
         XCTAssertNotNil(service.selectedDeviceStatusMessage)
     }
+
+    func testPreviewRecoveryEngineSwap_replacesStoredEngineInstance() {
+        let service = AudioDeviceService(
+            initialInputDevices: [],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false
+        )
+        let originalEngine = AVAudioEngine()
+
+        service.testingSetPreviewEngine(originalEngine, activeDeviceID: AudioDeviceID(42))
+        let replacementEngine = service.testingReplacePreviewEngineForRecoveryIfNeeded(originalEngine)
+
+        XCTAssertNotNil(replacementEngine)
+        XCTAssertTrue(service.testingCurrentPreviewEngine() === replacementEngine)
+        XCTAssertFalse(service.testingCurrentPreviewEngine() === originalEngine)
+        XCTAssertEqual(service.testingCurrentPreviewDeviceID(), AudioDeviceID(42))
+    }
+
+    func testPreviewTapPreconditions_throwRetryableMismatchWhenFormatChangesImmediately() throws {
+        let service = AudioDeviceService(
+            initialInputDevices: [],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false
+        )
+        let expected = try XCTUnwrap(AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48_000, channels: 1, interleaved: false))
+        let current = try XCTUnwrap(AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 24_000, channels: 1, interleaved: false))
+
+        XCTAssertThrowsError(try service.testingValidatePreviewTapInstallationPreconditions(expected: expected, current: current)) { error in
+            let nsError = error as NSError
+            XCTAssertEqual(nsError.domain, AudioEngineRecoveryErrorDomains.transientFormatMismatch)
+            XCTAssertTrue(AudioEngineRecoveryPolicy.isRetryable(error: nsError))
+        }
+    }
 }
 
 final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
@@ -304,5 +416,48 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
             XCTAssertEqual(nsError.domain, AudioEngineRecoveryErrorDomains.transientFormatMismatch)
             XCTAssertTrue(AudioEngineRecoveryPolicy.isRetryable(error: nsError))
         }
+    }
+
+    func testStartupConfigurationChangeGuard_ignoresOnlyFirstMatchingChangeForSameEngine() throws {
+        let service = AudioRecordingService()
+        let engine = AVAudioEngine()
+        let matchingFormat = try XCTUnwrap(AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48_000, channels: 1, interleaved: false))
+
+        service.testingArmStartupConfigurationChangeGuard(for: engine, expectedTapFormat: matchingFormat)
+
+        XCTAssertTrue(service.testingConsumeStartupConfigurationChangeGuardIfMatching(for: engine, liveFormat: matchingFormat))
+        XCTAssertFalse(service.testingConsumeStartupConfigurationChangeGuardIfMatching(for: engine, liveFormat: matchingFormat))
+    }
+
+    func testStartupConfigurationChangeGuard_doesNotIgnoreMatchingFormatOnDifferentEngine() throws {
+        let service = AudioRecordingService()
+        let expectedEngine = AVAudioEngine()
+        let otherEngine = AVAudioEngine()
+        let matchingFormat = try XCTUnwrap(AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48_000, channels: 1, interleaved: false))
+
+        service.testingArmStartupConfigurationChangeGuard(for: expectedEngine, expectedTapFormat: matchingFormat)
+
+        XCTAssertFalse(service.testingConsumeStartupConfigurationChangeGuardIfMatching(for: otherEngine, liveFormat: matchingFormat))
+        XCTAssertTrue(service.testingConsumeStartupConfigurationChangeGuardIfMatching(for: expectedEngine, liveFormat: matchingFormat))
+    }
+
+    func testStartupConfigurationChangeGuard_doesNotIgnoreMatchingFormatWithoutPendingState() throws {
+        let service = AudioRecordingService()
+        let engine = AVAudioEngine()
+        let matchingFormat = try XCTUnwrap(AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48_000, channels: 1, interleaved: false))
+
+        XCTAssertFalse(service.testingConsumeStartupConfigurationChangeGuardIfMatching(for: engine, liveFormat: matchingFormat))
+    }
+
+    func testStartupConfigurationChangeGuard_mismatchDoesNotIgnoreAndConsumesSingleUseState() throws {
+        let service = AudioRecordingService()
+        let engine = AVAudioEngine()
+        let expectedFormat = try XCTUnwrap(AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48_000, channels: 1, interleaved: false))
+        let mismatchedFormat = try XCTUnwrap(AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 48_000, channels: 2, interleaved: false))
+
+        service.testingArmStartupConfigurationChangeGuard(for: engine, expectedTapFormat: expectedFormat)
+
+        XCTAssertFalse(service.testingConsumeStartupConfigurationChangeGuardIfMatching(for: engine, liveFormat: mismatchedFormat))
+        XCTAssertFalse(service.testingConsumeStartupConfigurationChangeGuardIfMatching(for: engine, liveFormat: expectedFormat))
     }
 }
