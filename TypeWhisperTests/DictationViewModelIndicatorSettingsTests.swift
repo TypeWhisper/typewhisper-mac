@@ -57,6 +57,20 @@ final class DictationViewModelIndicatorSettingsTests: XCTestCase {
 
         XCTAssertEqual(DictationViewModel.loadIndicatorStyle(defaults: defaults), .notch)
     }
+
+    func testAggressiveShortSpeechTranscriptionDefaultsToDisabled() {
+        XCTAssertFalse(DictationViewModel.loadTranscribeShortQuietClipsAggressively(defaults: defaults))
+    }
+
+    func testAggressiveShortSpeechTranscriptionPersistsWhenEnabled() {
+        DictationViewModel.persistTranscribeShortQuietClipsAggressively(true, defaults: defaults)
+
+        XCTAssertEqual(
+            defaults.object(forKey: UserDefaultsKeys.transcribeShortQuietClipsAggressively) as? Bool,
+            true
+        )
+        XCTAssertTrue(DictationViewModel.loadTranscribeShortQuietClipsAggressively(defaults: defaults))
+    }
 }
 
 final class DockIconVisibilityTests: XCTestCase {

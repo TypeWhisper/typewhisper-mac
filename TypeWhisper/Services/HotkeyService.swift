@@ -118,11 +118,14 @@ final class HotkeyService: ObservableObject {
     var onPromptPaletteToggle: (() -> Void)?
     var onProfileDictationStart: ((UUID) -> Void)?
     var onCancelPressed: (() -> Void)?
+    var onPushToTalkInterruption: (() -> Void)?
+    var discardPushToTalkRecordingOnExtraKeyPress = false
 
     private var keyDownTime: Date?
     private var isActive = false
     private var activeSlotType: HotkeySlotType?
     private(set) var activeProfileId: UUID?
+    private var pushToTalkInterruptionSignaled = false
 
     private static let toggleThreshold: TimeInterval = 1.0
     private static let doubleTapThreshold: TimeInterval = 0.4
@@ -257,6 +260,7 @@ final class HotkeyService: ObservableObject {
         activeProfileId = nil
         currentMode = nil
         keyDownTime = nil
+        pushToTalkInterruptionSignaled = false
     }
 
     // MARK: - Profile Hotkeys
@@ -453,6 +457,7 @@ final class HotkeyService: ObservableObject {
             return false
         }
 
+        signalPushToTalkInterruptionIfNeeded(for: event)
         updateCapsLockOriginTracker(for: event)
         var shouldSuppress = false
 
@@ -609,6 +614,33 @@ final class HotkeyService: ObservableObject {
             source: source
         ) {
             handleProfileKeyUp(profileId: profileId)
+        }
+    }
+
+    private func signalPushToTalkInterruptionIfNeeded(for event: NSEvent) {
+        guard discardPushToTalkRecordingOnExtraKeyPress,
+              !pushToTalkInterruptionSignaled,
+              isActive,
+              activeSlotType == .pushToTalk,
+              activeProfileId == nil,
+              event.type == .keyDown,
+              let hotkey = slots[.pushToTalk]?.hotkey,
+              isExtraKeyDuringActivePushToTalk(event, hotkey: hotkey) else {
+            return
+        }
+
+        pushToTalkInterruptionSignaled = true
+        onPushToTalkInterruption?()
+    }
+
+    private func isExtraKeyDuringActivePushToTalk(_ event: NSEvent, hotkey: UnifiedHotkey) -> Bool {
+        switch hotkey.kind {
+        case .modifierCombo, .modifierOnly, .fn:
+            return true
+        case .keyWithModifiers, .bareKey:
+            return event.keyCode != hotkey.keyCode
+        case .mouseButton:
+            return false
         }
     }
 
@@ -868,14 +900,12 @@ final class HotkeyService: ObservableObject {
             let relevantMask: NSEvent.ModifierFlags = [.command, .option, .control, .shift, .function]
             let current = event.modifierFlags.intersection(relevantMask)
             let allDown = current.contains(requiredFlags)
+            let anyRequiredStillDown = !current.intersection(requiredFlags).isEmpty
             if allDown, !modifierWasDown { return .down }
-            if !allDown, modifierWasDown {
-                // If the sentinel keyCode (0xFFFF) is used, we have no physical key to track.
-                // Otherwise, we'd need to track which modifiers are still down.
-                // For now, modifier-only combos don't have a 'base key'.
-                return .up
-            }
             if allDown, modifierWasDown { return .repeatDown }
+            if modifierWasDown {
+                return anyRequiredStillDown ? .repeatDown : .up
+            }
 
         case .keyWithModifiers:
             let requiredFlags = NSEvent.ModifierFlags(rawValue: hotkey.modifierFlags)
@@ -929,12 +959,14 @@ final class HotkeyService: ObservableObject {
             activeProfileId = nil
             currentMode = nil
             keyDownTime = nil
+            pushToTalkInterruptionSignaled = false
             onDictationStop?()
         } else {
             activeSlotType = slotType
             activeProfileId = nil
             keyDownTime = Date()
             isActive = true
+            pushToTalkInterruptionSignaled = false
             currentMode = slotType == .toggle ? .toggle : .pushToTalk
             onDictationStart?()
         }
@@ -953,6 +985,7 @@ final class HotkeyService: ObservableObject {
                 activeSlotType = nil
                 currentMode = nil
                 keyDownTime = nil
+                pushToTalkInterruptionSignaled = false
                 onDictationStop?()
             }
         case .pushToTalk:
@@ -960,6 +993,7 @@ final class HotkeyService: ObservableObject {
             activeSlotType = nil
             currentMode = nil
             keyDownTime = nil
+            pushToTalkInterruptionSignaled = false
             onDictationStop?()
         case .toggle:
             break
@@ -978,12 +1012,14 @@ final class HotkeyService: ObservableObject {
             activeProfileId = nil
             currentMode = nil
             keyDownTime = nil
+            pushToTalkInterruptionSignaled = false
             onDictationStop?()
         } else {
             activeProfileId = profileId
             activeSlotType = nil
             keyDownTime = Date()
             isActive = true
+            pushToTalkInterruptionSignaled = false
             currentMode = .pushToTalk // hybrid behavior
             onProfileDictationStart?(profileId)
         }
@@ -1002,6 +1038,7 @@ final class HotkeyService: ObservableObject {
             activeProfileId = nil
             currentMode = nil
             keyDownTime = nil
+            pushToTalkInterruptionSignaled = false
             onDictationStop?()
         }
     }

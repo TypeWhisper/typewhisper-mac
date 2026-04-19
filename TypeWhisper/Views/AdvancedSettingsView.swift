@@ -129,6 +129,15 @@ struct AdvancedSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
+                Toggle(
+                    String(localized: "Transcribe short / quiet clips more aggressively"),
+                    isOn: $dictation.transcribeShortQuietClipsAggressively
+                )
+
+                Text(String(localized: "Still discards accidental ultra-short taps, but keeps more very short or quiet recordings instead of classifying them as no speech."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 if speechFeedbackService.hasAvailableProviders {
                     Toggle(String(localized: "Spoken feedback"), isOn: $dictation.spokenFeedbackEnabled)
 

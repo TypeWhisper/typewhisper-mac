@@ -41,6 +41,18 @@ final class DictationShortSpeechTests: XCTestCase {
         XCTAssertEqual(classifyShortSpeech(rawDuration: 0.12, peakLevel: 0.0049, hasPreviewText: false), .discardNoSpeech)
     }
 
+    func testOneHundredTwentyMsQuietClip_transcribesWhenAggressivePolicyEnabled() {
+        XCTAssertEqual(
+            classifyShortSpeech(
+                rawDuration: 0.12,
+                peakLevel: 0.0049,
+                hasPreviewText: false,
+                transcribeShortQuietClipsAggressively: true
+            ),
+            .transcribe
+        )
+    }
+
     func testOneHundredTwentyMsQuietClip_withPreviewText_transcribes() {
         XCTAssertEqual(classifyShortSpeech(rawDuration: 0.12, peakLevel: 0.0049, hasPreviewText: true), .transcribe)
     }
@@ -56,6 +68,18 @@ final class DictationShortSpeechTests: XCTestCase {
 
     func testFourHundredMsQuietClip_withPreviewText_transcribes() {
         XCTAssertEqual(classifyShortSpeech(rawDuration: 0.4, peakLevel: 0.0049, hasPreviewText: true), .transcribe)
+    }
+
+    func testThirtyMsQuietClip_staysTooShortEvenWhenAggressivePolicyEnabled() {
+        XCTAssertEqual(
+            classifyShortSpeech(
+                rawDuration: 0.03,
+                peakLevel: 0.2,
+                hasPreviewText: false,
+                transcribeShortQuietClipsAggressively: true
+            ),
+            .discardTooShort
+        )
     }
 
     func testEightHundredEightyFiveMsClip_withLowSpeechPeakStillTranscribes() {

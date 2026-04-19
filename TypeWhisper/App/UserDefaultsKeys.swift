@@ -14,6 +14,7 @@ enum UserDefaultsKeys {
     static let indicatorTranscriptPreviewEnabled = "indicatorTranscriptPreviewEnabled"
     static let preserveClipboard = "preserveClipboard"
     static let mediaPauseEnabled = "mediaPauseEnabled"
+    static let transcribeShortQuietClipsAggressively = "transcribeShortQuietClipsAggressively"
 
     // MARK: - Hotkey (JSON-encoded UnifiedHotkey per slot)
     static let hybridHotkey = "hybridHotkey"
