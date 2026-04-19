@@ -427,6 +427,31 @@ final class DictationViewModel: ObservableObject {
         failDictationSession(id: sessionID, error: message)
     }
 
+    private func restoreRecordingSideEffects() {
+        audioDuckingService.restoreAudio()
+        mediaPlaybackService.resumeIfWePaused()
+    }
+
+    private func clearDeferredRecordingContext() {
+        metadataCaptureTask?.cancel()
+        metadataCaptureTask = nil
+        urlResolutionTask?.cancel()
+        urlResolutionTask = nil
+        lastStreamingParams = nil
+    }
+
+    private func abortActiveRecordingImmediately(sessionMessage: String) {
+        clearDeferredRecordingContext()
+        restoreRecordingSideEffects()
+        streamingHandler.stop()
+        stopRecordingTimer()
+        Task {
+            _ = await audioRecordingService.stopRecording(policy: .immediate)
+        }
+        cancelActiveDictationSessionIfNeeded(message: sessionMessage)
+        hotkeyService.cancelDictation()
+    }
+
     private func storeDictationSession(_ session: DictationSessionSnapshot) {
         dictationSessions[session.id] = session
         dictationSessionOrder.removeAll { $0 == session.id }
@@ -487,20 +512,9 @@ final class DictationViewModel: ObservableObject {
                 // longer active (stop-in-flight, already processed, etc.).
                 defer { self.audioRecordingService.clearRecoveryError() }
                 guard self.state == .recording, !self.isStopInFlight else { return }
-                self.metadataCaptureTask?.cancel()
-                self.metadataCaptureTask = nil
-                self.urlResolutionTask?.cancel()
-                self.urlResolutionTask = nil
-                self.lastStreamingParams = nil
-                self.audioDuckingService.restoreAudio()
-                self.mediaPlaybackService.resumeIfWePaused()
-                self.streamingHandler.stop()
-                self.stopRecordingTimer()
-
                 let errorMessage = error.localizedDescription
+                self.abortActiveRecordingImmediately(sessionMessage: errorMessage)
                 self.accessibilityAnnouncementService.announceError(errorMessage)
-                self.cancelActiveDictationSessionIfNeeded(message: errorMessage)
-                self.hotkeyService.cancelDictation()
                 self.showError(errorMessage, category: "recording")
             }
             .store(in: &cancellables)
@@ -517,15 +531,8 @@ final class DictationViewModel: ObservableObject {
             .compactMap { $0 }
             .sink { [weak self] _ in
                 guard let self, self.state == .recording, !self.isStopInFlight else { return }
-                self.audioDuckingService.restoreAudio()
-                self.streamingHandler.stop()
-                self.stopRecordingTimer()
-                Task {
-                    _ = await self.audioRecordingService.stopRecording(policy: .immediate)
-                }
                 let errorMessage = String(localized: "Microphone disconnected")
-                self.cancelActiveDictationSessionIfNeeded(message: errorMessage)
-                self.hotkeyService.cancelDictation()
+                self.abortActiveRecordingImmediately(sessionMessage: errorMessage)
                 self.showNotchFeedback(
                     message: errorMessage,
                     icon: "mic.slash",
@@ -563,14 +570,7 @@ final class DictationViewModel: ObservableObject {
         switch state {
         case .recording:
             guard !isStopInFlight else { return }
-            audioDuckingService.restoreAudio()
-            streamingHandler.stop()
-            stopRecordingTimer()
-            Task {
-                _ = await audioRecordingService.stopRecording(policy: .immediate)
-            }
-            cancelActiveDictationSessionIfNeeded(message: cancelledMessage)
-            hotkeyService.cancelDictation()
+            abortActiveRecordingImmediately(sessionMessage: cancelledMessage)
             showNotchFeedback(message: cancelledMessage, icon: "xmark.circle", duration: 1.5)
         case .processing:
             cancelActiveDictationSessionIfNeeded(message: cancelledMessage)
@@ -669,13 +669,8 @@ final class DictationViewModel: ObservableObject {
                 "Recording started: immediateContextMs=\(String(format: "%.1f", immediateContextMs), privacy: .public), totalStartMs=\(String(format: "%.1f", totalStartMs), privacy: .public)"
             )
         } catch {
-            metadataCaptureTask?.cancel()
-            metadataCaptureTask = nil
-            urlResolutionTask?.cancel()
-            urlResolutionTask = nil
-            lastStreamingParams = nil
-            audioDuckingService.restoreAudio()
-            mediaPlaybackService.resumeIfWePaused()
+            clearDeferredRecordingContext()
+            restoreRecordingSideEffects()
             let errorMessage: String
             if let recordingError = error as? AudioRecordingService.AudioRecordingError,
                case .noMicrophoneDetected = recordingError {
@@ -824,8 +819,7 @@ final class DictationViewModel: ObservableObject {
     private func finalizeStopDictation() async {
         let sessionID = activeDictationSessionID
 
-        audioDuckingService.restoreAudio()
-        mediaPlaybackService.resumeIfWePaused()
+        restoreRecordingSideEffects()
         let liveSessionResult = await streamingHandler.finish()
         lastStreamingParams = nil
         stopRecordingTimer()

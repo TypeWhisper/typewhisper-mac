@@ -302,14 +302,36 @@ final class APIRouterAndHandlersTests: XCTestCase {
     @MainActor
     private final class MockMediaPlaybackService: MediaPlaybackService {
         let onPause: () -> Void
+        let onResume: () -> Void
 
-        init(onPause: @escaping () -> Void) {
+        init(
+            onPause: @escaping () -> Void = {},
+            onResume: @escaping () -> Void = {}
+        ) {
             self.onPause = onPause
+            self.onResume = onResume
             super.init(startListening: false)
         }
 
         override func pauseIfPlaying() {
             onPause()
+        }
+
+        override func resumeIfWePaused() {
+            onResume()
+        }
+    }
+
+    @MainActor
+    private final class MockAudioDuckingService: AudioDuckingService {
+        let onRestore: () -> Void
+
+        init(onRestore: @escaping () -> Void = {}) {
+            self.onRestore = onRestore
+        }
+
+        override func restoreAudio() {
+            onRestore()
         }
     }
 
@@ -1503,6 +1525,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
     private final class DictationContext: @unchecked Sendable {
         let dictationViewModel: DictationViewModel
         let audioRecordingService: AudioRecordingService
+        let audioDeviceService: AudioDeviceService
+        let audioDuckingService: AudioDuckingService
         let textInsertionService: TextInsertionService
         let profileService: ProfileService
         let ttsProvider: MockTTSProviderPlugin
@@ -1511,6 +1535,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
         init(
             dictationViewModel: DictationViewModel,
             audioRecordingService: AudioRecordingService,
+            audioDeviceService: AudioDeviceService,
+            audioDuckingService: AudioDuckingService,
             textInsertionService: TextInsertionService,
             profileService: ProfileService,
             ttsProvider: MockTTSProviderPlugin,
@@ -1518,6 +1544,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
         ) {
             self.dictationViewModel = dictationViewModel
             self.audioRecordingService = audioRecordingService
+            self.audioDeviceService = audioDeviceService
+            self.audioDuckingService = audioDuckingService
             self.textInsertionService = textInsertionService
             self.profileService = profileService
             self.ttsProvider = ttsProvider
@@ -1528,6 +1556,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
     @MainActor
     private static func makeDictationContext(
         appSupportDirectory: URL,
+        audioDuckingService: AudioDuckingService? = nil,
         mediaPlaybackService: MediaPlaybackService? = nil
     ) -> DictationContext {
         EventBus.shared = EventBus()
@@ -1573,7 +1602,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let textInsertionService = TextInsertionService()
         let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
         let profileService = ProfileService(appSupportDirectory: appSupportDirectory)
-        let audioDuckingService = AudioDuckingService()
+        let audioDuckingService = audioDuckingService ?? AudioDuckingService()
         let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
         let snippetService = SnippetService(appSupportDirectory: appSupportDirectory)
         let soundService = SoundService()
@@ -1617,6 +1646,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
         return DictationContext(
             dictationViewModel: dictationViewModel,
             audioRecordingService: audioRecordingService,
+            audioDeviceService: audioDeviceService,
+            audioDuckingService: audioDuckingService,
             textInsertionService: textInsertionService,
             profileService: profileService,
             ttsProvider: ttsProvider,
@@ -2306,6 +2337,49 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    func testHandleCancelHotkey_secondEscapeDuringRecordingRestoresAudioThenResumesMediaBeforeImmediateStop() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var events: [String] = []
+        let stopRecordingCalled = expectation(description: "stop recording called")
+        let audioDuckingService = MockAudioDuckingService {
+            events.append("restore_audio")
+        }
+        let mediaPlaybackService = MockMediaPlaybackService(
+            onResume: {
+                events.append("resume_media")
+            }
+        )
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            audioDuckingService: audioDuckingService,
+            mediaPlaybackService: mediaPlaybackService
+        )
+        let context = try XCTUnwrap(dictationContext)
+        context.audioRecordingService.stopRecordingOverride = { policy in
+            events.append("stop_recording_\(policy.logDescription)")
+            stopRecordingCalled.fulfill()
+            return []
+        }
+        context.dictationViewModel.state = .recording
+
+        context.dictationViewModel.handleCancelHotkey()
+        context.dictationViewModel.handleCancelHotkey()
+
+        await fulfillment(of: [stopRecordingCalled], timeout: 1.0)
+
+        XCTAssertEqual(
+            events,
+            ["restore_audio", "resume_media", "stop_recording_immediate"]
+        )
+    }
+
+    @MainActor
     func testHandleCancelHotkey_processingStillCancelsImmediately() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?
@@ -2325,6 +2399,52 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual(
             context.dictationViewModel.actionFeedbackMessage,
             try TestSupport.localizedCatalogValueForCurrentLocale(for: "Cancelled")
+        )
+    }
+
+    @MainActor
+    func testDisconnectedDeviceDuringRecordingRestoresAudioThenResumesMediaBeforeImmediateStop() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var events: [String] = []
+        let stopRecordingCalled = expectation(description: "stop recording called")
+        let audioDuckingService = MockAudioDuckingService {
+            events.append("restore_audio")
+        }
+        let mediaPlaybackService = MockMediaPlaybackService(
+            onResume: {
+                events.append("resume_media")
+            }
+        )
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            audioDuckingService: audioDuckingService,
+            mediaPlaybackService: mediaPlaybackService
+        )
+        let context = try XCTUnwrap(dictationContext)
+        context.audioRecordingService.stopRecordingOverride = { policy in
+            events.append("stop_recording_\(policy.logDescription)")
+            stopRecordingCalled.fulfill()
+            return []
+        }
+        context.dictationViewModel.state = .recording
+
+        context.audioDeviceService.disconnectedDeviceName = "USB Mic"
+
+        await fulfillment(of: [stopRecordingCalled], timeout: 1.0)
+
+        XCTAssertEqual(
+            events,
+            ["restore_audio", "resume_media", "stop_recording_immediate"]
+        )
+        XCTAssertEqual(
+            context.dictationViewModel.actionFeedbackMessage,
+            try TestSupport.localizedCatalogValueForCurrentLocale(for: "Microphone disconnected")
         )
     }
 
