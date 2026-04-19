@@ -88,6 +88,13 @@ public protocol LLMProviderPlugin: TypeWhisperPlugin {
     func process(systemPrompt: String, userText: String, model: String?) async throws -> String
 }
 
+/// Optional protocol for LLM plugins that can describe why they are currently unavailable.
+/// This lets the host distinguish local model setup from missing remote credentials.
+public protocol LLMProviderSetupStatusProviding {
+    var requiresExternalCredentials: Bool { get }
+    var unavailableReason: String? { get }
+}
+
 /// Optional protocol for LLM plugins that expose their selected model.
 /// Kept separate from LLMProviderPlugin to preserve binary compatibility with existing plugins.
 @objc public protocol LLMModelSelectable {

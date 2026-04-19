@@ -11,6 +11,36 @@
         }
       }
     },
+    "HuggingFace Token" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HuggingFace-Token"
+          }
+        }
+      }
+    },
+    "Invalid HuggingFace Token" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ungültiger HuggingFace-Token"
+          }
+        }
+      }
+    },
+    "Load" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laden"
+          }
+        }
+      }
+    },
     "Loading model..." : {
       "localizations" : {
         "de" : {
@@ -51,12 +81,32 @@
         }
       }
     },
+    "Optional. Increases download rate limits. Free at huggingface.co/settings/tokens" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Optional. Erhöht Download-Ratenlimits. Kostenlos unter huggingface.co/settings/tokens"
+          }
+        }
+      }
+    },
     "Optimizing for Neural Engine..." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Optimierung für Neural Engine ..."
+          }
+        }
+      }
+    },
+    "Remove" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entfernen"
           }
         }
       }
@@ -71,12 +121,42 @@
         }
       }
     },
+    "Save" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Speichern"
+          }
+        }
+      }
+    },
     "Unload" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Deaktivieren"
+          }
+        }
+      }
+    },
+    "Valid HuggingFace Token" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gültiger HuggingFace-Token"
+          }
+        }
+      }
+    },
+    "Validating token..." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Token wird validiert ..."
           }
         }
       }

@@ -11,6 +11,46 @@
         }
       }
     },
+    "Cancel" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abbrechen"
+          }
+        }
+      }
+    },
+    "Download timed out while fetching Gemma 4 from Hugging Face. Please retry. Adding an optional HuggingFace token in this plugin can also increase download rate limits." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Download von Gemma 4 von Hugging Face hat zu lange gedauert. Bitte erneut versuchen. Ein optionaler HuggingFace-Token in diesem Plugin kann die Download-Rate-Limits erhoehen."
+          }
+        }
+      }
+    },
+    "HuggingFace Token" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "HuggingFace Token"
+          }
+        }
+      }
+    },
+    "Load a Gemma 4 model in Integrations before using it for prompts." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lade zuerst ein Gemma-4-Modell in den Integrationen, bevor du es fuer Prompts verwendest."
+          }
+        }
+      }
+    },
     "Local LLM powered by Google Gemma 4 on Apple Silicon. No API key required." : {
       "localizations" : {
         "de" : {
@@ -27,6 +67,106 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Modell"
+          }
+        }
+      }
+    },
+    "Invalid HuggingFace Token" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ungültiger HuggingFace-Token"
+          }
+        }
+      }
+    },
+    "Experimental" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Experimentell"
+          }
+        }
+      }
+    },
+    "Experimental. You can try it at your own risk." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Experimentell. Du kannst es auf eigene Gefahr ausprobieren."
+          }
+        }
+      }
+    },
+    "Valid HuggingFace Token" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gültiger HuggingFace-Token"
+          }
+        }
+      }
+    },
+    "Validating token..." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Token wird geprüft..."
+          }
+        }
+      }
+    },
+    "Optional. Increases download rate limits. Free at huggingface.co/settings/tokens" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Optional. Erhoeht Download-Rate-Limits. Kostenlos unter huggingface.co/settings/tokens"
+          }
+        }
+      }
+    },
+    "Remove" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entfernen"
+          }
+        }
+      }
+    },
+    "Save" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Speichern"
+          }
+        }
+      }
+    },
+    "Gemma 4 E2B/E4B 4-bit models are recommended. Larger variants are experimental and may fail depending on hardware." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gemma 4 E2B/E4B 4-bit Modelle sind empfohlen. Groessere Varianten sind experimentell und koennen je nach Hardware fehlschlagen."
+          }
+        }
+      }
+    },
+    "Try anyway" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trotzdem versuchen"
           }
         }
       }

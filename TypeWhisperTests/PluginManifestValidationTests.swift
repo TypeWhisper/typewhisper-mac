@@ -40,6 +40,7 @@ final class PluginManifestValidationTests: XCTestCase {
             "Plugins/WhisperKitPlugin/manifest.json",
             "Plugins/ParakeetPlugin/manifest.json",
             "Plugins/GranitePlugin/manifest.json",
+            "Plugins/Gemma4Plugin/manifest.json",
             "Plugins/Qwen3Plugin/manifest.json",
             "Plugins/VoxtralPlugin/manifest.json",
         ]
@@ -50,6 +51,364 @@ final class PluginManifestValidationTests: XCTestCase {
             let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
             XCTAssertEqual(manifest.supportedArchitectures, ["arm64"], relativePath)
         }
+    }
+}
+
+@MainActor
+final class Gemma4PluginModelPolicyTests: XCTestCase {
+    private actor RequestRecorder {
+        private var request: URLRequest?
+
+        func set(_ request: URLRequest) {
+            self.request = request
+        }
+
+        func get() -> URLRequest? {
+            request
+        }
+    }
+
+    private final class MockEventBus: EventBusProtocol {
+        @discardableResult
+        func subscribe(handler: @escaping @Sendable (TypeWhisperEvent) async -> Void) -> UUID { UUID() }
+        func unsubscribe(id: UUID) {}
+    }
+
+    private final class MockHostServices: HostServices, @unchecked Sendable {
+        private var defaults: [String: Any]
+        private var secrets: [String: String]
+
+        let pluginDataDirectory: URL
+        let eventBus: EventBusProtocol = MockEventBus()
+        var activeAppBundleId: String?
+        var activeAppName: String?
+        var availableRuleNames: [String] = []
+        private(set) var capabilitiesChangedCount = 0
+        private(set) var streamingDisplayActiveValues: [Bool] = []
+
+        init(
+            pluginDataDirectory: URL,
+            defaults: [String: Any] = [:],
+            secrets: [String: String] = [:]
+        ) {
+            self.pluginDataDirectory = pluginDataDirectory
+            self.defaults = defaults
+            self.secrets = secrets
+        }
+
+        func storeSecret(key: String, value: String) throws { secrets[key] = value }
+        func loadSecret(key: String) -> String? { secrets[key] }
+        func userDefault(forKey key: String) -> Any? { defaults[key] }
+        func setUserDefault(_ value: Any?, forKey key: String) { defaults[key] = value }
+        func notifyCapabilitiesChanged() { capabilitiesChangedCount += 1 }
+        func setStreamingDisplayActive(_ active: Bool) { streamingDisplayActiveValues.append(active) }
+    }
+
+    func testGemma4SupportedModelsRemainTheRecommendedDenseVariants() {
+        XCTAssertEqual(
+            Gemma4Plugin.supportedModelDefinitions.map(\.id),
+            ["gemma-4-e2b-it-4bit", "gemma-4-e4b-it-4bit"]
+        )
+    }
+
+    func testGemma4ExperimentalModelsExposeWarnings() {
+        let experimentalModels = Gemma4Plugin.availableModels.filter { !$0.isSupported }
+
+        XCTAssertEqual(
+            experimentalModels.map(\.id),
+            ["gemma-4-e4b-it-8bit", "gemma-4-26b-a4b-it-4bit"]
+        )
+        XCTAssertTrue(experimentalModels.allSatisfy { ($0.experimentalWarning ?? "").isEmpty == false })
+    }
+
+    func testGemma4ActivationPreservesExperimentalSelectedModel() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let host = MockHostServices(
+            pluginDataDirectory: appSupportDirectory,
+            defaults: ["selectedLLMModel": "gemma-4-26b-a4b-it-4bit"]
+        )
+        let plugin = Gemma4Plugin()
+
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.selectedLLMModelId, "gemma-4-26b-a4b-it-4bit")
+        XCTAssertEqual(host.userDefault(forKey: "selectedLLMModel") as? String, "gemma-4-26b-a4b-it-4bit")
+    }
+
+    func testGemma4ActivationKeepsExperimentalLoadedModelForManualRestore() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let host = MockHostServices(
+            pluginDataDirectory: appSupportDirectory,
+            defaults: [
+                "selectedLLMModel": "gemma-4-e2b-it-4bit",
+                "loadedModel": "gemma-4-26b-a4b-it-4bit"
+            ]
+        )
+        let plugin = Gemma4Plugin()
+
+        plugin.activate(host: host)
+
+        XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, "gemma-4-26b-a4b-it-4bit")
+        XCTAssertEqual(plugin.modelState, .notLoaded)
+    }
+
+    func testGemma4CancelModelLoadResetsProgressAndState() throws {
+        let plugin = Gemma4Plugin()
+        let model = try XCTUnwrap(Gemma4Plugin.modelDefinition(for: "gemma-4-e2b-it-4bit"))
+
+        plugin.beginModelLoad(for: model, isAlreadyDownloaded: false)
+        plugin.cancelModelLoad()
+
+        XCTAssertEqual(plugin.modelState, .notLoaded)
+        XCTAssertEqual(plugin.currentDownloadProgress, 0)
+        XCTAssertEqual(plugin.selectedLLMModelId, model.id)
+    }
+
+    func testGemma4UnsupportedModelTypeErrorsUseFriendlyMessage() throws {
+        let model = try XCTUnwrap(Gemma4Plugin.modelDefinition(for: "gemma-4-26b-a4b-it-4bit"))
+        let error = NSError(domain: "Test", code: 1, userInfo: [NSLocalizedDescriptionKey: "Model type gemma4 not supported"])
+
+        let message = Gemma4Plugin.userFacingLoadErrorMessage(for: error, modelDef: model)
+
+        XCTAssertEqual(
+            message,
+            "Gemma 4 26B-A4B (4-bit, MoE) is experimental in this TypeWhisper release and may still fail to load. Recommended models: Gemma 4 E2B (4-bit), Gemma 4 E4B (4-bit)."
+        )
+    }
+
+    func testGemma4TimeoutErrorsSuggestRetryAndOptionalHuggingFaceToken() throws {
+        let model = try XCTUnwrap(Gemma4Plugin.modelDefinition(for: "gemma-4-e2b-it-4bit"))
+        let error = URLError(.timedOut)
+
+        let message = Gemma4Plugin.userFacingLoadErrorMessage(for: error, modelDef: model)
+
+        XCTAssertEqual(
+            message,
+            "Download timed out while fetching Gemma 4 from Hugging Face. Please retry. Adding an optional HuggingFace token in this plugin can also increase download rate limits."
+        )
+    }
+
+    func testGemma4ValidatesHuggingFaceTokenAgainstWhoAmIEndpoint() async throws {
+        let plugin = Gemma4Plugin()
+        let requestRecorder = RequestRecorder()
+
+        let isValid = await plugin.validateHuggingFaceToken("hf_test_123") { request in
+            await requestRecorder.set(request)
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            let data = Data(#"{"name":"typewhisper","type":"user"}"#.utf8)
+            return (data, response)
+        }
+
+        XCTAssertTrue(isValid)
+        let maybeRequest = await requestRecorder.get()
+        let request = try XCTUnwrap(maybeRequest)
+        XCTAssertEqual(request.url?.absoluteString, "https://huggingface.co/api/whoami-v2")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer hf_test_123")
+        XCTAssertEqual(request.httpMethod, "GET")
+    }
+
+    func testGemma4RejectsInvalidHuggingFaceTokenResponses() async {
+        let plugin = Gemma4Plugin()
+
+        let isValid = await plugin.validateHuggingFaceToken("hf_invalid") { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 401,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (Data(), response)
+        }
+
+        XCTAssertFalse(isValid)
+    }
+
+    func testQwen3ValidatesHuggingFaceTokenAgainstWhoAmIEndpoint() async throws {
+        let plugin = Qwen3Plugin()
+        let requestRecorder = RequestRecorder()
+
+        let isValid = await plugin.validateHuggingFaceToken("hf_qwen3_test") { request in
+            await requestRecorder.set(request)
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            let data = Data(#"{"name":"typewhisper","auth":{"type":"access_token"}}"#.utf8)
+            return (data, response)
+        }
+
+        XCTAssertTrue(isValid)
+        let maybeRequest = await requestRecorder.get()
+        let request = try XCTUnwrap(maybeRequest)
+        XCTAssertEqual(request.url?.absoluteString, "https://huggingface.co/api/whoami-v2")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer hf_qwen3_test")
+        XCTAssertEqual(request.httpMethod, "GET")
+    }
+
+    func testQwen3RejectsInvalidHuggingFaceTokenResponses() async {
+        let plugin = Qwen3Plugin()
+
+        let isValid = await plugin.validateHuggingFaceToken("hf_invalid") { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 401,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (Data(), response)
+        }
+
+        XCTAssertFalse(isValid)
+    }
+
+    func testVoxtralValidatesHuggingFaceTokenAgainstWhoAmIEndpoint() async throws {
+        let plugin = VoxtralPlugin()
+        let requestRecorder = RequestRecorder()
+
+        let isValid = await plugin.validateHuggingFaceToken("hf_voxtral_test") { request in
+            await requestRecorder.set(request)
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            let data = Data(#"{"name":"typewhisper","type":"user"}"#.utf8)
+            return (data, response)
+        }
+
+        XCTAssertTrue(isValid)
+        let maybeRequest = await requestRecorder.get()
+        let request = try XCTUnwrap(maybeRequest)
+        XCTAssertEqual(request.url?.absoluteString, "https://huggingface.co/api/whoami-v2")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer hf_voxtral_test")
+        XCTAssertEqual(request.httpMethod, "GET")
+    }
+
+    func testVoxtralRejectsInvalidHuggingFaceTokenResponses() async {
+        let plugin = VoxtralPlugin()
+
+        let isValid = await plugin.validateHuggingFaceToken("hf_invalid") { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 401,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (Data(), response)
+        }
+
+        XCTAssertFalse(isValid)
+    }
+
+    func testGraniteValidatesHuggingFaceTokenAgainstWhoAmIEndpoint() async throws {
+        let plugin = GranitePlugin()
+        let requestRecorder = RequestRecorder()
+
+        let isValid = await plugin.validateHuggingFaceToken("hf_granite_test") { request in
+            await requestRecorder.set(request)
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            let data = Data(#"{"name":"typewhisper","type":"user"}"#.utf8)
+            return (data, response)
+        }
+
+        XCTAssertTrue(isValid)
+        let maybeRequest = await requestRecorder.get()
+        let request = try XCTUnwrap(maybeRequest)
+        XCTAssertEqual(request.url?.absoluteString, "https://huggingface.co/api/whoami-v2")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer hf_granite_test")
+        XCTAssertEqual(request.httpMethod, "GET")
+    }
+
+    func testGraniteRejectsInvalidHuggingFaceTokenResponses() async {
+        let plugin = GranitePlugin()
+
+        let isValid = await plugin.validateHuggingFaceToken("hf_invalid") { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 401,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (Data(), response)
+        }
+
+        XCTAssertFalse(isValid)
+    }
+
+    func testWhisperKitValidatesHuggingFaceTokenAgainstWhoAmIEndpoint() async throws {
+        let plugin = WhisperKitPlugin()
+        let requestRecorder = RequestRecorder()
+
+        let isValid = await plugin.validateHuggingFaceToken("hf_whisperkit_test") { request in
+            await requestRecorder.set(request)
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            let data = Data(#"{"name":"typewhisper","type":"user"}"#.utf8)
+            return (data, response)
+        }
+
+        XCTAssertTrue(isValid)
+        let maybeRequest = await requestRecorder.get()
+        let request = try XCTUnwrap(maybeRequest)
+        XCTAssertEqual(request.url?.absoluteString, "https://huggingface.co/api/whoami-v2")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer hf_whisperkit_test")
+        XCTAssertEqual(request.httpMethod, "GET")
+    }
+
+    func testWhisperKitRejectsInvalidHuggingFaceTokenResponses() async {
+        let plugin = WhisperKitPlugin()
+
+        let isValid = await plugin.validateHuggingFaceToken("hf_invalid") { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 401,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (Data(), response)
+        }
+
+        XCTAssertFalse(isValid)
+    }
+
+    func testWhisperKitActivationDoesNotAutoRestorePersistedLoadedModel() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let host = MockHostServices(
+            pluginDataDirectory: appSupportDirectory,
+            defaults: [
+                "selectedModel": "openai_whisper-tiny",
+                "loadedModel": "openai_whisper-tiny",
+            ]
+        )
+        let plugin = WhisperKitPlugin()
+
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.selectedModelId, "openai_whisper-tiny")
+        XCTAssertFalse(plugin.isConfigured)
     }
 }
 

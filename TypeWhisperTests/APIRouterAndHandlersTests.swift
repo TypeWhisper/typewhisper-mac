@@ -7,13 +7,17 @@ import TypeWhisperPluginSDK
 
 final class APIRouterAndHandlersTests: XCTestCase {
     @objc(APIRouterMockLLMProviderPlugin)
-    private final class MockLLMProviderPlugin: NSObject, LLMProviderPlugin, @unchecked Sendable {
+    private final class MockLLMProviderPlugin: NSObject, LLMProviderPlugin, LLMProviderSetupStatusProviding, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.llm" }
         static var pluginName: String { "Mock LLM" }
 
         private let requestLock = NSLock()
         var models: [PluginModelInfo] = []
         var responseText = "processed"
+        var available = true
+        var configuredProviderName = "Gemini"
+        var requiresExternalCredentials = true
+        var unavailableReason: String?
         nonisolated(unsafe) private var _lastRequestedModel: String?
 
         var lastRequestedModel: String? {
@@ -25,8 +29,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
         func activate(host: HostServices) {}
         func deactivate() {}
 
-        var providerName: String { "Gemini" }
-        var isAvailable: Bool { true }
+        var providerName: String { configuredProviderName }
+        var isAvailable: Bool { available }
         var supportedModels: [PluginModelInfo] { models }
 
         func process(systemPrompt: String, userText: String, model: String?) async throws -> String {
@@ -1773,6 +1777,69 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual(plugin.lastRequestedModel, "gemini-2.5-pro")
         XCTAssertEqual(service.selectedCloudModel, "gemini-2.5-pro")
         XCTAssertEqual(UserDefaults.standard.string(forKey: modelKey), "gemini-2.5-pro")
+    }
+
+    @MainActor
+    func testPromptProcessingReturnsSetupRequiredForLocalProviderWithoutLoadedModel() async throws {
+        let providerKey = "llmProviderType"
+        let modelKey = "llmCloudModel"
+        let originalProvider = UserDefaults.standard.object(forKey: providerKey)
+        let originalModel = UserDefaults.standard.object(forKey: modelKey)
+        defer {
+            if let originalProvider {
+                UserDefaults.standard.set(originalProvider, forKey: providerKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: providerKey)
+            }
+            if let originalModel {
+                UserDefaults.standard.set(originalModel, forKey: modelKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: modelKey)
+            }
+        }
+
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        UserDefaults.standard.set("Gemma 4 (MLX)", forKey: providerKey)
+        UserDefaults.standard.removeObject(forKey: modelKey)
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockLLMProviderPlugin()
+        plugin.available = false
+        plugin.configuredProviderName = "Gemma 4 (MLX)"
+        plugin.requiresExternalCredentials = false
+        plugin.unavailableReason = "Load a Gemma 4 model in Integrations before using it for prompts."
+
+        let manifest = PluginManifest(
+            id: "com.typewhisper.mock.local-llm",
+            name: "Mock Local LLM",
+            version: "1.0.0",
+            principalClass: "APIRouterMockLLMProviderPlugin"
+        )
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: manifest,
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let service = PromptProcessingService()
+
+        do {
+            _ = try await service.process(prompt: "Fix grammar", text: "hello world")
+            XCTFail("Expected local provider setup error")
+        } catch {
+            XCTAssertEqual(
+                error.localizedDescription,
+                "Load a Gemma 4 model in Integrations before using it for prompts."
+            )
+        }
     }
 
     @MainActor

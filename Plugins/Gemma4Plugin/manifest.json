@@ -4,6 +4,9 @@
     "version": "1.0.1",
     "minHostVersion": "0.11.0",
     "sdkCompatibilityVersion": "v1",
+    "supportedArchitectures": [
+        "arm64"
+    ],
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
     "description": "Local LLM powered by Google Gemma 4 on Apple Silicon via MLX. No API key required.",
