@@ -33,7 +33,7 @@ This matrix describes the officially supported direct-download path for the curr
 | --- | --- | --- |
 | Local engines | Yes | Recommended default path |
 | Cloud engines | Yes | Require valid API keys |
-| Bundled MLX engines | Yes | Qwen3, Granite, and Voxtral support an optional HuggingFace token for higher download rate limits |
+| Bundled MLX engines | Yes | Qwen3, Granite, Voxtral, and Gemma 4 are bundled. Qwen3, Granite, and Voxtral support an optional HuggingFace token for higher download rate limits. Gemma 4 prompt processing is currently limited to the E2B/E4B 4-bit variants |
 | Bundled plugins | Yes | Part of the tested product path |
 | External third-party plugins | Best effort | Not a stable-release blocker for the current stable release |
 

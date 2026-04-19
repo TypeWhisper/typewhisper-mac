@@ -14,6 +14,7 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
     fileprivate var whisperKit: WhisperKit?
     fileprivate var loadedModelId: String?
     fileprivate var _selectedModelId: String?
+    fileprivate var _hfToken: String?
     fileprivate var modelState: WhisperModelState = .notLoaded
     fileprivate var downloadProgress: Double = 0
 
@@ -24,13 +25,17 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
     func activate(host: HostServices) {
         self.host = host
         _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
-        Task { await restoreLoadedModel(allowDownloads: false) }
+        _hfToken = host.loadSecret(key: "hf-token")
+        // Do not eagerly restore on plugin activation. The host already has an
+        // on-demand restore path before transcription, and restoring here can
+        // leave the settings UI stuck in a long-running "Loading model..." state.
     }
 
     func deactivate() {
         whisperKit = nil
         loadedModelId = nil
         modelState = .notLoaded
+        _hfToken = nil
         host = nil
     }
 
@@ -269,7 +274,8 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
                 var lastProgress = 0.0
                 modelFolder = try await WhisperKit.download(
                     variant: modelDef.id,
-                    downloadBase: downloadBase
+                    downloadBase: downloadBase,
+                    token: _hfToken
                 ) { progress in
                     let fraction = progress.fractionCompleted
                     let mapped = 0.05 + fraction * 0.75
@@ -285,6 +291,7 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
 
             let config = WhisperKitConfig(
                 downloadBase: downloadBase,
+                modelToken: _hfToken,
                 modelFolder: modelFolder.path,
                 verbose: false,
                 logLevel: .error,
@@ -355,7 +362,20 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
 
     fileprivate func isModelDownloaded(_ modelDef: WhisperModelDef) -> Bool {
         let modelPath = resolvedModelPath(for: modelDef)
-        return FileManager.default.fileExists(atPath: modelPath.path)
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: modelPath.path) else { return false }
+
+        let requiredModelNames = [
+            "MelSpectrogram",
+            "AudioEncoder",
+            "TextDecoder",
+        ]
+
+        return requiredModelNames.allSatisfy { name in
+            let compiled = modelPath.appendingPathComponent("\(name).mlmodelc").path
+            let package = modelPath.appendingPathComponent("\(name).mlpackage").path
+            return fileManager.fileExists(atPath: compiled) || fileManager.fileExists(atPath: package)
+        }
     }
 
     /// Migrate models from old location (TypeWhisper/models/) to plugin data directory
@@ -425,6 +445,49 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
 
     var settingsView: AnyView? {
         AnyView(WhisperKitSettingsView(plugin: self))
+    }
+
+    func setHuggingFaceToken(_ token: String) {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        _hfToken = trimmed.isEmpty ? nil : trimmed
+        try? host?.storeSecret(key: "hf-token", value: trimmed)
+    }
+
+    func clearHuggingFaceToken() {
+        _hfToken = nil
+        try? host?.storeSecret(key: "hf-token", value: "")
+    }
+
+    func validateHuggingFaceToken(
+        _ token: String,
+        dataFetcher: @escaping @Sendable (URLRequest) async throws -> (Data, URLResponse) = PluginHTTPClient.data
+    ) async -> Bool {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let url = URL(string: "https://huggingface.co/api/whoami-v2") else {
+            return false
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(trimmed)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 15
+
+        do {
+            let (data, response) = try await dataFetcher(request)
+            guard let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200 else {
+                return false
+            }
+
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return false
+            }
+
+            return json["name"] != nil || json["type"] != nil || json["auth"] != nil
+        } catch {
+            return false
+        }
     }
 
     // MARK: - Model Definitions
@@ -528,8 +591,24 @@ private struct WhisperKitSettingsView: View {
     @State private var downloadProgress: Double = 0
     @State private var activeModelId: String?
     @State private var isPolling = false
+    @State private var hfTokenInput = ""
+    @State private var showHfToken = false
+    @State private var isValidatingToken = false
+    @State private var tokenValidationResult: Bool?
 
     private let pollTimer = Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()
+
+    private var trimmedHfTokenInput: String {
+        hfTokenInput.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var storedHfToken: String {
+        plugin._hfToken?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    private var hasStoredHfToken: Bool {
+        !storedHfToken.isEmpty
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -539,6 +618,74 @@ private struct WhisperKitSettingsView: View {
             Text("Local speech-to-text using OpenAI Whisper via CoreML. 99+ languages, streaming, translation to English.", bundle: bundle)
                 .font(.callout)
                 .foregroundStyle(.secondary)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("HuggingFace Token", bundle: bundle)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+
+                Text("Optional. Increases download rate limits. Free at huggingface.co/settings/tokens", bundle: bundle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                HStack {
+                    if showHfToken {
+                        TextField("hf_...", text: $hfTokenInput)
+                            .textFieldStyle(.roundedBorder)
+                    } else {
+                        SecureField("hf_...", text: $hfTokenInput)
+                            .textFieldStyle(.roundedBorder)
+                    }
+
+                    Button {
+                        showHfToken.toggle()
+                    } label: {
+                        Image(systemName: showHfToken ? "eye.slash" : "eye")
+                    }
+                    .buttonStyle(.borderless)
+
+                    if hasStoredHfToken {
+                        Button(String(localized: "Remove", bundle: bundle)) {
+                            hfTokenInput = ""
+                            tokenValidationResult = nil
+                            isValidatingToken = false
+                            plugin.clearHuggingFaceToken()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+
+                    Button(String(localized: "Save", bundle: bundle)) {
+                        validateAndSaveHuggingFaceToken()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(trimmedHfTokenInput.isEmpty || isValidatingToken)
+                }
+
+                if isValidatingToken {
+                    HStack(spacing: 4) {
+                        ProgressView().controlSize(.small)
+                        Text("Validating token...", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else if let tokenValidationResult {
+                    HStack(spacing: 4) {
+                        Image(systemName: tokenValidationResult ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .foregroundStyle(tokenValidationResult ? .green : .red)
+                        Text(
+                            tokenValidationResult
+                                ? String(localized: "Valid HuggingFace Token", bundle: bundle)
+                                : String(localized: "Invalid HuggingFace Token", bundle: bundle)
+                        )
+                        .font(.caption)
+                        .foregroundStyle(tokenValidationResult ? .green : .red)
+                    }
+                }
+            }
 
             Divider()
 
@@ -568,6 +715,9 @@ private struct WhisperKitSettingsView: View {
             modelState = plugin.modelState
             downloadProgress = plugin.downloadProgress
             activeModelId = plugin._selectedModelId
+            if let token = plugin._hfToken, !token.isEmpty {
+                hfTokenInput = token
+            }
             // If the plugin is mid-load (e.g., restoring on app launch), start polling
             if case .downloading = plugin.modelState { isPolling = true }
             else if case .loading = plugin.modelState { isPolling = true }
@@ -590,6 +740,12 @@ private struct WhisperKitSettingsView: View {
             }
             if case .ready = pluginState { isPolling = false }
             else if case .error = pluginState { isPolling = false }
+        }
+        .onChange(of: hfTokenInput) { _, newValue in
+            let trimmedValue = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedValue != storedHfToken {
+                tokenValidationResult = nil
+            }
         }
     }
 
@@ -651,7 +807,12 @@ private struct WhisperKitSettingsView: View {
                     .font(.caption)
             }
         } else {
-            Button(String(localized: "Download & Load", bundle: bundle)) {
+            let isDownloaded = plugin.isModelDownloaded(modelDef)
+            Button(
+                isDownloaded
+                    ? String(localized: "Load", bundle: bundle)
+                    : String(localized: "Download & Load", bundle: bundle)
+            ) {
                 activeModelId = modelDef.id
                 modelState = .downloading
                 downloadProgress = 0.05
@@ -678,6 +839,26 @@ private struct WhisperKitSettingsView: View {
             String(localized: "Loading model...", bundle: bundle)
         default:
             String(localized: "Loading...", bundle: bundle)
+        }
+    }
+
+    private func validateAndSaveHuggingFaceToken() {
+        let trimmedToken = trimmedHfTokenInput
+        guard !trimmedToken.isEmpty else { return }
+
+        isValidatingToken = true
+        tokenValidationResult = nil
+
+        Task {
+            let isValid = await plugin.validateHuggingFaceToken(trimmedToken)
+            await MainActor.run {
+                isValidatingToken = false
+                tokenValidationResult = isValid
+                if isValid {
+                    plugin.setHuggingFaceToken(trimmedToken)
+                    hfTokenInput = trimmedToken
+                }
+            }
         }
     }
 }

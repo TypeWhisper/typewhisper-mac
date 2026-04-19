@@ -32,6 +32,7 @@
 - Transcript preview toggle for Notch and Overlay
 - Plugin enable/disable
 - MLX plugin settings: save and remove HuggingFace token, then verify download error copy for Qwen3, Granite, and Voxtral
+- Gemma 4 plugin: verify E2B/E4B 4-bit download and load, and verify E4B 8-bit plus 26B-A4B remain visible but disabled with explanatory copy
 - Community term pack download and apply
 - Built-in term packs render localized metadata in English and German
 - App audio recording with separate tracks

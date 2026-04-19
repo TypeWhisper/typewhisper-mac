@@ -198,6 +198,10 @@ struct ProviderStatusView: View {
     var onNavigateToIntegrations: (() -> Void)? = nil
 
     var body: some View {
+        let plugin = PluginManager.shared.llmProvider(for: providerId)
+        let setupStatus = plugin as? any LLMProviderSetupStatusProviding
+        let usesLocalSetup = setupStatus?.requiresExternalCredentials == false
+
         if providerId == PromptProcessingService.appleIntelligenceId {
             if processingService.isAppleIntelligenceAvailable {
                 Label(String(localized: "Available"), systemImage: "checkmark.circle.fill")
@@ -210,9 +214,25 @@ struct ProviderStatusView: View {
             }
         } else {
             if processingService.isProviderReady(providerId) {
-                Label(String(localized: "API key configured"), systemImage: "checkmark.circle.fill")
+                Label(usesLocalSetup ? String(localized: "Ready") : String(localized: "API key configured"), systemImage: "checkmark.circle.fill")
                     .font(.caption)
                     .foregroundStyle(.green)
+            } else if usesLocalSetup,
+                      let unavailableReason = setupStatus?.unavailableReason {
+                if let onNavigateToIntegrations {
+                    Button {
+                        onNavigateToIntegrations()
+                    } label: {
+                        Label(unavailableReason, systemImage: "exclamationmark.triangle.fill")
+                    }
+                    .buttonStyle(.link)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                } else {
+                    Label(unavailableReason, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
             } else if let onNavigateToIntegrations {
                 Button {
                     onNavigateToIntegrations()
@@ -228,7 +248,7 @@ struct ProviderStatusView: View {
                     .foregroundStyle(.orange)
             }
 
-            if let plugin = PluginManager.shared.llmProvider(for: providerId) {
+            if let plugin {
                 if let modelId = (plugin as? LLMModelSelectable)?.preferredModelId as? String {
                     // Plugin manages its own model selection - just show info
                     let displayName = plugin.supportedModels.first(where: { $0.id == modelId })?.displayName ?? modelId

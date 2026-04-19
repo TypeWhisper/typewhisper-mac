@@ -150,6 +150,12 @@ class PromptProcessingService: ObservableObject {
             throw LLMError.noProviderConfigured
         }
         guard plugin.isAvailable else {
+            if let setupStatus = plugin as? any LLMProviderSetupStatusProviding,
+               !setupStatus.requiresExternalCredentials {
+                throw LLMError.providerNotReady(
+                    setupStatus.unavailableReason ?? "This provider is not ready yet."
+                )
+            }
             throw LLMError.noApiKey
         }
 

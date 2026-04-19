@@ -19,6 +19,18 @@
 		AA00000000000000000350 /* ObjCExceptionCatcher.m in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000351 /* ObjCExceptionCatcher.m */; };
 		C23000000000000000000001 /* OpenAIPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000139 /* OpenAIPlugin.swift */; };
 		C23000000000000000000002 /* Qwen3ContextBiasFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000321 /* Qwen3ContextBiasFormatter.swift */; };
+		C23000000000000000000003 /* Gemma4Plugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000295 /* Gemma4Plugin.swift */; };
+		C23000000000000000000004 /* Gemma4SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000296 /* Gemma4SettingsView.swift */; };
+		C23000000000000000000005 /* MLXVLM in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000047 /* MLXVLM */; };
+		C23000000000000000000006 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000049 /* MLXLMCommon */; };
+		C23000000000000000000007 /* Transformers in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000048 /* Transformers */; };
+		C23000000000000000000008 /* Qwen3Plugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000150 /* Qwen3Plugin.swift */; };
+		C23000000000000000000009 /* VoxtralPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000191 /* VoxtralPlugin.swift */; };
+		C2300000000000000000000A /* GranitePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000221 /* GranitePlugin.swift */; };
+		C2300000000000000000000B /* MLXAudioSTT in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000012 /* MLXAudioSTT */; };
+		C2300000000000000000000C /* MLXAudioCore in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000013 /* MLXAudioCore */; };
+		C2300000000000000000000D /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000015 /* WhisperKit */; };
+		C2300000000000000000000E /* WhisperKitPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000154 /* WhisperKitPlugin.swift */; };
 		2F4D6A8B0C1E3F5A7B9D2C4E /* DictationViewModelIndicatorSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F4D6A8B0C1E3F5A7B9D2C4F /* DictationViewModelIndicatorSettingsTests.swift */; };
 		91B4D7E2C5A809F1632E4B7C /* PluginRegistryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B4D7E2C5A809F1632E4B7D /* PluginRegistryServiceTests.swift */; };
 		91B4D7E2C5A809F1632E4B7E /* StreamingHandlerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B4D7E2C5A809F1632E4B7F /* StreamingHandlerTests.swift */; };
@@ -665,6 +677,12 @@
 			files = (
 				1834537D0CCC21190DB68EBD /* Cocoa.framework in Frameworks */,
 				928A1F1B7A0D4C62A2B90761 /* TypeWhisperPluginSDK in Frameworks */,
+				C23000000000000000000005 /* MLXVLM in Frameworks */,
+				C23000000000000000000006 /* MLXLMCommon in Frameworks */,
+				C23000000000000000000007 /* Transformers in Frameworks */,
+				C2300000000000000000000B /* MLXAudioSTT in Frameworks */,
+				C2300000000000000000000C /* MLXAudioCore in Frameworks */,
+				C2300000000000000000000D /* WhisperKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1715,6 +1733,12 @@
 			name = TypeWhisperTests;
 			packageProductDependencies = (
 				PP00000000000000000034 /* TypeWhisperPluginSDK */,
+				PP00000000000000000047 /* MLXVLM */,
+				PP00000000000000000048 /* Transformers */,
+				PP00000000000000000049 /* MLXLMCommon */,
+				PP00000000000000000012 /* MLXAudioSTT */,
+				PP00000000000000000013 /* MLXAudioCore */,
+				PP00000000000000000015 /* WhisperKit */,
 			);
 			productName = TypeWhisperTests;
 			productReference = E6F8E5940EF4832A7B8D735D /* TypeWhisperTests.xctest */;
@@ -2852,6 +2876,12 @@
 				F0A1B2C3D4E5F60718293A4B /* GeminiPlugin.swift in Sources */,
 				C23000000000000000000001 /* OpenAIPlugin.swift in Sources */,
 				C23000000000000000000002 /* Qwen3ContextBiasFormatter.swift in Sources */,
+				C23000000000000000000008 /* Qwen3Plugin.swift in Sources */,
+				C23000000000000000000009 /* VoxtralPlugin.swift in Sources */,
+				C2300000000000000000000A /* GranitePlugin.swift in Sources */,
+				C2300000000000000000000E /* WhisperKitPlugin.swift in Sources */,
+				C23000000000000000000003 /* Gemma4Plugin.swift in Sources */,
+				C23000000000000000000004 /* Gemma4SettingsView.swift in Sources */,
 				1E6EDB8B0D1573A05A610078 /* PluginManifestValidationTests.swift in Sources */,
 				91B4D7E2C5A809F1632E4B7C /* PluginRegistryServiceTests.swift in Sources */,
 				86F4253D3CDE30E859D0F219 /* ProfileServiceTests.swift in Sources */,
@@ -5453,8 +5483,8 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/argmaxinc/WhisperKit.git";
 			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.9.0;
+				branch = main;
+				kind = branch;
 			};
 		};
 		RR00000000000000000002 /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
@@ -5477,8 +5507,8 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/Blaizzy/mlx-audio-swift.git";
 			requirement = {
-				branch = main;
-				kind = branch;
+				kind = revision;
+				revision = 2685c640d4079641a01ef3489cacb684c34109fd;
 			};
 		};
 		RR00000000000000000007 /* XCRemoteSwiftPackageReference "mediaremote-adapter" */ = {
@@ -5494,7 +5524,7 @@
 			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm.git";
 			requirement = {
 				kind = exactVersion;
-				version = 2.30.6;
+				version = 3.31.3;
 			};
 		};
 		RR00000000000000000009 /* XCRemoteSwiftPackageReference "swift-transformers" */ = {
@@ -5697,6 +5727,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = RR00000000000000000009 /* XCRemoteSwiftPackageReference "swift-transformers" */;
 			productName = Transformers;
+		};
+		PP00000000000000000049 /* MLXLMCommon */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = RR00000000000000000008 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXLMCommon;
 		};
 		PP00000000000000000046 /* TypeWhisperPluginSDK */ = {
 			isa = XCSwiftPackageProductDependency;
