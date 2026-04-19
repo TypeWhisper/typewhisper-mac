@@ -340,6 +340,25 @@ final class APIRouterAndHandlersTests: XCTestCase {
             pauseCalls += 1
         }
     }
+
+    @MainActor
+    private final class TestMediaPlaybackResumeScheduler {
+        private(set) var scheduledDelays: [TimeInterval] = []
+        private var actions: [@MainActor () -> Void] = []
+
+        func schedule(after delay: TimeInterval, action: @escaping @MainActor () -> Void) {
+            scheduledDelays.append(delay)
+            actions.append(action)
+        }
+
+        func runPendingActions() {
+            let pendingActions = actions
+            actions.removeAll()
+            for action in pendingActions {
+                action()
+            }
+        }
+    }
     #endif
 
     func testRouterHandlesOptionsAndNotFound() async {
@@ -1015,13 +1034,23 @@ final class APIRouterAndHandlersTests: XCTestCase {
     @MainActor
     func testMediaPlaybackServicePausesAndResumesFromOneShotTrackInfo() {
         let controller = FakeMediaPlaybackController()
+        let scheduler = TestMediaPlaybackResumeScheduler()
         controller.returnedSnapshot = (true, "com.apple.Music")
-        let service = MediaPlaybackService(startListening: false) { controller }
+        let service = MediaPlaybackService(
+            startListening: false,
+            resumeDelay: 0.6,
+            resumeScheduler: scheduler.schedule(after:action:)
+        ) { controller }
 
         service.pauseIfPlaying()
         service.resumeIfWePaused()
 
         XCTAssertEqual(controller.pauseCalls, 1)
+        XCTAssertEqual(controller.playCalls, 0)
+        XCTAssertEqual(scheduler.scheduledDelays, [0.6])
+
+        scheduler.runPendingActions()
+
         XCTAssertEqual(controller.playCalls, 1)
     }
 
@@ -1041,11 +1070,16 @@ final class APIRouterAndHandlersTests: XCTestCase {
     @MainActor
     func testMediaPlaybackServiceIgnoresStalePauseProbeAfterResume() {
         let controller = FakeMediaPlaybackController()
+        let scheduler = TestMediaPlaybackResumeScheduler()
         var deferredCallback: ((_ isPlaying: Bool, _ bundleIdentifier: String?) -> Void)?
         controller.onGetPlaybackSnapshot = { callback in
             deferredCallback = callback
         }
-        let service = MediaPlaybackService(startListening: false) { controller }
+        let service = MediaPlaybackService(
+            startListening: false,
+            resumeDelay: 0.6,
+            resumeScheduler: scheduler.schedule(after:action:)
+        ) { controller }
 
         service.pauseIfPlaying()
         service.resumeIfWePaused()
@@ -1053,6 +1087,58 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         XCTAssertEqual(controller.pauseCalls, 0)
         XCTAssertEqual(controller.playCalls, 0)
+
+        scheduler.runPendingActions()
+
+        XCTAssertEqual(controller.pauseCalls, 0)
+        XCTAssertEqual(controller.playCalls, 0)
+    }
+
+    @MainActor
+    func testMediaPlaybackServiceCancelsPendingResumeWhenRecordingRestartsBeforeDelayElapses() {
+        let controller = FakeMediaPlaybackController()
+        let scheduler = TestMediaPlaybackResumeScheduler()
+        controller.returnedSnapshot = (true, "com.apple.Music")
+        let service = MediaPlaybackService(
+            startListening: false,
+            resumeDelay: 0.6,
+            resumeScheduler: scheduler.schedule(after:action:)
+        ) { controller }
+
+        service.pauseIfPlaying()
+        service.resumeIfWePaused()
+        service.pauseIfPlaying()
+
+        scheduler.runPendingActions()
+
+        XCTAssertEqual(controller.pauseCalls, 1)
+        XCTAssertEqual(controller.playCalls, 0)
+
+        service.resumeIfWePaused()
+        scheduler.runPendingActions()
+
+        XCTAssertEqual(controller.playCalls, 1)
+    }
+
+    @MainActor
+    func testMediaPlaybackServiceCoalescesDuplicateResumeRequestsIntoSinglePlay() {
+        let controller = FakeMediaPlaybackController()
+        let scheduler = TestMediaPlaybackResumeScheduler()
+        controller.returnedSnapshot = (true, "com.apple.Music")
+        let service = MediaPlaybackService(
+            startListening: false,
+            resumeDelay: 0.6,
+            resumeScheduler: scheduler.schedule(after:action:)
+        ) { controller }
+
+        service.pauseIfPlaying()
+        service.resumeIfWePaused()
+        service.resumeIfWePaused()
+
+        scheduler.runPendingActions()
+
+        XCTAssertEqual(controller.pauseCalls, 1)
+        XCTAssertEqual(controller.playCalls, 1)
     }
     #endif
 
