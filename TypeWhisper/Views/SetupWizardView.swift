@@ -1111,7 +1111,13 @@ private struct RecommendationSettingsButton: View {
     var body: some View {
         Button {
             if let loaded = PluginManager.shared.loadedPlugins.first(where: { $0.manifest.id == manifestId }) {
-                PluginSettingsWindowManager.shared.present(loaded)
+                if !loaded.isEnabled {
+                    PluginManager.shared.setPluginEnabled(manifestId, enabled: true)
+                }
+                if let activePlugin = PluginManager.shared.loadedPlugins.first(where: { $0.manifest.id == manifestId }),
+                   activePlugin.supportsSettingsWindow {
+                    PluginSettingsWindowManager.shared.present(activePlugin)
+                }
             }
         } label: {
             HStack(spacing: 4) {

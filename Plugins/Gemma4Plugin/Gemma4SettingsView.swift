@@ -6,6 +6,7 @@ struct Gemma4SettingsView: View {
     private let bundle = Bundle(for: Gemma4Plugin.self)
     @State private var modelState: Gemma4ModelState = .notLoaded
     @State private var selectedModelId: String = ""
+    @State private var llmTemperatureMode: PluginLLMTemperatureMode = .custom
     @State private var generationTemperature: Double = Gemma4Plugin.defaultGenerationTemperature
     @State private var downloadProgress: Double = 0
     @State private var hfTokenInput = ""
@@ -44,27 +45,41 @@ struct Gemma4SettingsView: View {
                     .font(.subheadline)
                     .fontWeight(.medium)
 
-                HStack {
-                    Text("Temperature", bundle: bundle)
-                    Spacer()
-                    Text(generationTemperature, format: .number.precision(.fractionLength(2)))
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
+                Picker("Temperature Mode", selection: $llmTemperatureMode) {
+                    Text("Provider Default", bundle: bundle).tag(PluginLLMTemperatureMode.providerDefault)
+                    Text("Custom", bundle: bundle).tag(PluginLLMTemperatureMode.custom)
                 }
-                .font(.caption)
+                .onChange(of: llmTemperatureMode) { _, newValue in
+                    plugin.setLLMTemperatureMode(newValue)
+                }
 
-                Slider(value: $generationTemperature, in: 0...1, step: 0.05)
-                    .onChange(of: generationTemperature) { _, newValue in
-                        plugin.setGenerationTemperature(newValue)
+                if llmTemperatureMode == .custom {
+                    HStack {
+                        Text("Temperature", bundle: bundle)
+                        Spacer()
+                        Text(generationTemperature, format: .number.precision(.fractionLength(2)))
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
                     }
+                    .font(.caption)
 
-                HStack {
-                    Text("Precise", bundle: bundle)
-                    Spacer()
-                    Text("Creative", bundle: bundle)
+                    Slider(value: $generationTemperature, in: 0...1, step: 0.05)
+                        .onChange(of: generationTemperature) { _, newValue in
+                            plugin.setGenerationTemperature(newValue)
+                        }
+
+                    HStack {
+                        Text("Precise", bundle: bundle)
+                        Spacer()
+                        Text("Creative", bundle: bundle)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                } else {
+                    Text("Uses Gemma 4's built-in default temperature.", bundle: bundle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
             }
 
             Divider()
@@ -153,6 +168,7 @@ struct Gemma4SettingsView: View {
         .onAppear {
             modelState = plugin.modelState
             selectedModelId = plugin.selectedLLMModelId ?? Gemma4Plugin.availableModels.first?.id ?? ""
+            llmTemperatureMode = plugin.llmTemperatureMode
             generationTemperature = plugin.generationTemperature
             downloadProgress = plugin.currentDownloadProgress
             if let token = plugin.huggingFaceToken, !token.isEmpty {

@@ -12,6 +12,8 @@ final class OpenRouterPlugin: NSObject, LLMProviderPlugin, LLMModelSelectable, @
     fileprivate var host: HostServices?
     fileprivate var _apiKey: String?
     fileprivate var _selectedLLMModelId: String?
+    fileprivate var _llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue
+    fileprivate var _llmTemperatureValue: Double = 0.3
     fileprivate var _fetchedModels: [OpenRouterFetchedModel] = []
 
     private let chatHelper = PluginOpenAIChatHelper(
@@ -31,6 +33,10 @@ final class OpenRouterPlugin: NSObject, LLMProviderPlugin, LLMModelSelectable, @
         }
         _selectedLLMModelId = host.userDefault(forKey: "selectedLLMModel") as? String
             ?? supportedModels.first?.id
+        _llmTemperatureModeRaw = host.userDefault(forKey: "llmTemperatureMode") as? String
+            ?? PluginLLMTemperatureMode.providerDefault.rawValue
+        _llmTemperatureValue = host.userDefault(forKey: "llmTemperatureValue") as? Double
+            ?? 0.3
     }
 
     func deactivate() {
@@ -63,6 +69,20 @@ final class OpenRouterPlugin: NSObject, LLMProviderPlugin, LLMModelSelectable, @
     }
 
     func process(systemPrompt: String, userText: String, model: String?) async throws -> String {
+        try await process(
+            systemPrompt: systemPrompt,
+            userText: userText,
+            model: model,
+            temperatureDirective: .inheritProviderSetting
+        )
+    }
+
+    func process(
+        systemPrompt: String,
+        userText: String,
+        model: String?,
+        temperatureDirective: PluginLLMTemperatureDirective
+    ) async throws -> String {
         guard let apiKey = _apiKey, !apiKey.isEmpty else {
             throw PluginChatError.notConfigured
         }
@@ -71,7 +91,8 @@ final class OpenRouterPlugin: NSObject, LLMProviderPlugin, LLMModelSelectable, @
             apiKey: apiKey,
             model: modelId,
             systemPrompt: systemPrompt,
-            userText: userText
+            userText: userText,
+            temperature: providerTemperatureDirective.resolvedTemperature(applying: temperatureDirective)
         )
     }
 
@@ -82,6 +103,24 @@ final class OpenRouterPlugin: NSObject, LLMProviderPlugin, LLMModelSelectable, @
 
     var selectedLLMModelId: String? { _selectedLLMModelId }
     @objc var preferredModelId: String? { _selectedLLMModelId }
+    var llmTemperatureMode: PluginLLMTemperatureMode {
+        PluginLLMTemperatureMode(rawValue: _llmTemperatureModeRaw) ?? .providerDefault
+    }
+    var llmTemperatureValue: Double { _llmTemperatureValue }
+    fileprivate var providerTemperatureDirective: PluginLLMTemperatureDirective {
+        PluginLLMTemperatureDirective(mode: llmTemperatureMode, value: _llmTemperatureValue)
+    }
+
+    func setLLMTemperatureMode(_ mode: PluginLLMTemperatureMode) {
+        _llmTemperatureModeRaw = mode.rawValue
+        host?.setUserDefault(mode.rawValue, forKey: "llmTemperatureMode")
+    }
+
+    func setLLMTemperatureValue(_ value: Double) {
+        let clamped = min(max(value, 0.0), 2.0)
+        _llmTemperatureValue = clamped
+        host?.setUserDefault(clamped, forKey: "llmTemperatureValue")
+    }
 
     // MARK: - Settings View
 
@@ -265,6 +304,8 @@ private struct OpenRouterSettingsView: View {
     @State private var validationResult: Bool?
     @State private var showApiKey = false
     @State private var selectedModel: String = ""
+    @State private var llmTemperatureMode: PluginLLMTemperatureMode = .providerDefault
+    @State private var llmTemperatureValue: Double = 0.3
     @State private var fetchedModels: [OpenRouterFetchedModel] = []
     @State private var searchText = ""
     @State private var remainingCredits: Double?
@@ -394,6 +435,38 @@ private struct OpenRouterSettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Temperature", bundle: bundle)
+                        .font(.headline)
+
+                    Picker("Temperature Mode", selection: $llmTemperatureMode) {
+                        Text("Provider Default", bundle: bundle).tag(PluginLLMTemperatureMode.providerDefault)
+                        Text("Custom", bundle: bundle).tag(PluginLLMTemperatureMode.custom)
+                    }
+                    .onChange(of: llmTemperatureMode) {
+                        plugin.setLLMTemperatureMode(llmTemperatureMode)
+                    }
+
+                    if llmTemperatureMode == .custom {
+                        HStack {
+                            Text("Temperature", bundle: bundle)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(llmTemperatureValue, format: .number.precision(.fractionLength(2)))
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+
+                        Slider(value: $llmTemperatureValue, in: 0...2, step: 0.1)
+                            .onChange(of: llmTemperatureValue) {
+                                plugin.setLLMTemperatureValue(llmTemperatureValue)
+                            }
+                    }
+                }
             }
 
             Text("API keys are stored securely in the Keychain", bundle: bundle)
@@ -407,6 +480,8 @@ private struct OpenRouterSettingsView: View {
             }
             fetchedModels = plugin._fetchedModels
             selectedModel = plugin.selectedLLMModelId ?? plugin.supportedModels.first?.id ?? ""
+            llmTemperatureMode = plugin.llmTemperatureMode
+            llmTemperatureValue = plugin.llmTemperatureValue
 
             if plugin.isAvailable {
                 Task {

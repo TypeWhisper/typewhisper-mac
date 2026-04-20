@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import TypeWhisperPluginSDK
 
 @MainActor
 class PromptActionsViewModel: ObservableObject {
@@ -23,6 +24,8 @@ class PromptActionsViewModel: ObservableObject {
     @Published var editIcon = "sparkles"
     @Published var editProviderId: String?
     @Published var editCloudModel = ""
+    @Published var editTemperatureMode: PluginLLMTemperatureMode = .inheritProviderSetting
+    @Published var editTemperatureValue: Double = 0.3
     @Published var editTargetActionPluginId: String?
 
     private let promptActionService: PromptActionService
@@ -61,6 +64,8 @@ class PromptActionsViewModel: ObservableObject {
         editIcon = "sparkles"
         editProviderId = nil
         editCloudModel = ""
+        editTemperatureMode = .inheritProviderSetting
+        editTemperatureValue = defaultTemperatureValue(for: promptProcessingService.selectedProviderId)
         editTargetActionPluginId = nil
     }
 
@@ -73,6 +78,8 @@ class PromptActionsViewModel: ObservableObject {
         editIcon = action.icon
         editProviderId = action.providerType
         editCloudModel = action.cloudModel ?? ""
+        editTemperatureMode = action.temperatureMode
+        editTemperatureValue = action.temperatureValue ?? defaultTemperatureValue(for: action.providerType ?? promptProcessingService.selectedProviderId)
         editTargetActionPluginId = action.targetActionPluginId
     }
 
@@ -85,6 +92,8 @@ class PromptActionsViewModel: ObservableObject {
         editIcon = "sparkles"
         editProviderId = nil
         editCloudModel = ""
+        editTemperatureMode = .inheritProviderSetting
+        editTemperatureValue = defaultTemperatureValue(for: promptProcessingService.selectedProviderId)
         editTargetActionPluginId = nil
     }
 
@@ -101,6 +110,8 @@ class PromptActionsViewModel: ObservableObject {
                 icon: editIcon,
                 providerType: editProviderId,
                 cloudModel: editCloudModel.isEmpty ? nil : editCloudModel,
+                temperatureModeRaw: editTemperatureMode.rawValue,
+                temperatureValue: editTemperatureMode == .custom ? editTemperatureValue : nil,
                 targetActionPluginId: editTargetActionPluginId
             )
         } else if let action = selectedAction {
@@ -111,6 +122,8 @@ class PromptActionsViewModel: ObservableObject {
                 icon: editIcon,
                 providerType: editProviderId,
                 cloudModel: editCloudModel.isEmpty ? nil : editCloudModel,
+                temperatureModeRaw: editTemperatureMode.rawValue,
+                temperatureValue: editTemperatureMode == .custom ? editTemperatureValue : nil,
                 targetActionPluginId: editTargetActionPluginId
             )
         }
@@ -144,5 +157,23 @@ class PromptActionsViewModel: ObservableObject {
 
     func clearError() {
         error = nil
+    }
+
+    func clampTemperatureValueForEffectiveProvider() {
+        let range = supportedTemperatureRange(
+            for: editProviderId ?? promptProcessingService.selectedProviderId
+        )
+        editTemperatureValue = min(max(editTemperatureValue, range.lowerBound), range.upperBound)
+    }
+
+    func supportedTemperatureRange(for providerId: String?) -> ClosedRange<Double> {
+        guard providerId == "Gemma 4 (MLX)" else {
+            return 0.0...2.0
+        }
+        return 0.0...1.0
+    }
+
+    func defaultTemperatureValue(for providerId: String?) -> Double {
+        providerId == "Gemma 4 (MLX)" ? 0.1 : 0.3
     }
 }

@@ -168,7 +168,8 @@ final class PromptPaletteHandler {
                     prompt: action.prompt,
                     text: ctx.text,
                     providerOverride: action.providerType,
-                    cloudModelOverride: action.cloudModel
+                    cloudModelOverride: action.cloudModel,
+                    temperatureDirective: action.temperatureDirective
                 )
                 guard !Task.isCancelled else { return }
 

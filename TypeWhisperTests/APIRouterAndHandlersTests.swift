@@ -7,7 +7,7 @@ import TypeWhisperPluginSDK
 
 final class APIRouterAndHandlersTests: XCTestCase {
     @objc(APIRouterMockLLMProviderPlugin)
-    private final class MockLLMProviderPlugin: NSObject, LLMProviderPlugin, LLMProviderSetupStatusProviding, @unchecked Sendable {
+    private final class MockLLMProviderPlugin: NSObject, LLMProviderPlugin, LLMProviderSetupStatusProviding, LLMTemperatureControllableProvider, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.llm" }
         static var pluginName: String { "Mock LLM" }
 
@@ -19,9 +19,14 @@ final class APIRouterAndHandlersTests: XCTestCase {
         var requiresExternalCredentials = true
         var unavailableReason: String?
         nonisolated(unsafe) private var _lastRequestedModel: String?
+        nonisolated(unsafe) private var _lastTemperatureDirective: PluginLLMTemperatureDirective?
 
         var lastRequestedModel: String? {
             requestLock.withLock { _lastRequestedModel }
+        }
+
+        var lastTemperatureDirective: PluginLLMTemperatureDirective? {
+            requestLock.withLock { _lastTemperatureDirective }
         }
 
         required override init() {}
@@ -38,6 +43,38 @@ final class APIRouterAndHandlersTests: XCTestCase {
                 _lastRequestedModel = model
             }
             return responseText
+        }
+
+        func process(
+            systemPrompt: String,
+            userText: String,
+            model: String?,
+            temperatureDirective: PluginLLMTemperatureDirective
+        ) async throws -> String {
+            requestLock.withLock {
+                _lastRequestedModel = model
+                _lastTemperatureDirective = temperatureDirective
+            }
+            return responseText
+        }
+    }
+
+    @objc(APIRouterMockLegacyLLMProviderPlugin)
+    private final class MockLegacyLLMProviderPlugin: NSObject, LLMProviderPlugin, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.legacy-llm" }
+        static var pluginName: String { "Mock Legacy LLM" }
+
+        required override init() {}
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+
+        var providerName: String { "Legacy LLM" }
+        var isAvailable: Bool { true }
+        var supportedModels: [PluginModelInfo] { [] }
+
+        func process(systemPrompt: String, userText: String, model: String?) async throws -> String {
+            "processed"
         }
     }
 
@@ -1948,6 +1985,64 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    func testPromptProcessingPassesTemperatureDirectiveToTemperatureAwareProvider() async throws {
+        let providerKey = "llmProviderType"
+        let modelKey = "llmCloudModel"
+        let originalProvider = UserDefaults.standard.object(forKey: providerKey)
+        let originalModel = UserDefaults.standard.object(forKey: modelKey)
+        defer {
+            if let originalProvider {
+                UserDefaults.standard.set(originalProvider, forKey: providerKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: providerKey)
+            }
+            if let originalModel {
+                UserDefaults.standard.set(originalModel, forKey: modelKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: modelKey)
+            }
+        }
+
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        UserDefaults.standard.set("Gemini", forKey: providerKey)
+        UserDefaults.standard.set("gemini-2.5-pro", forKey: modelKey)
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockLLMProviderPlugin()
+        plugin.models = [PluginModelInfo(id: "gemini-2.5-pro", displayName: "Gemini 2.5 Pro")]
+
+        let manifest = PluginManifest(
+            id: "com.typewhisper.mock.llm",
+            name: "Mock LLM",
+            version: "1.0.0",
+            principalClass: "APIRouterMockLLMProviderPlugin"
+        )
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: manifest,
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let service = PromptProcessingService()
+        _ = try await service.process(
+            prompt: "Fix grammar",
+            text: "hello world",
+            temperatureDirective: .custom(0.8)
+        )
+
+        XCTAssertEqual(plugin.lastRequestedModel, "gemini-2.5-pro")
+        XCTAssertEqual(plugin.lastTemperatureDirective, .custom(0.8))
+    }
+
+    @MainActor
     func testPromptProcessingReturnsSetupRequiredForLocalProviderWithoutLoadedModel() async throws {
         let providerKey = "llmProviderType"
         let modelKey = "llmCloudModel"
@@ -2008,6 +2103,21 @@ final class APIRouterAndHandlersTests: XCTestCase {
                 "Load a Gemma 4 model in Integrations before using it for prompts."
             )
         }
+    }
+
+    @MainActor
+    func testPromptProcessingRequiresForegroundActivationOnlyForLocalProviders() {
+        let remotePlugin = MockLLMProviderPlugin()
+        remotePlugin.requiresExternalCredentials = true
+
+        let localPlugin = MockLLMProviderPlugin()
+        localPlugin.requiresExternalCredentials = false
+
+        let legacyPlugin = MockLegacyLLMProviderPlugin()
+
+        XCTAssertFalse(PromptProcessingService.requiresForegroundActivation(for: remotePlugin))
+        XCTAssertTrue(PromptProcessingService.requiresForegroundActivation(for: localPlugin))
+        XCTAssertFalse(PromptProcessingService.requiresForegroundActivation(for: legacyPlugin))
     }
 
     @MainActor

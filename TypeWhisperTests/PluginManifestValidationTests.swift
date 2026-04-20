@@ -232,6 +232,20 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         XCTAssertFalse(isValid)
     }
 
+    func testGemma4UsesTemperatureControllableProviderPath() {
+        let plugin: any LLMProviderPlugin = Gemma4Plugin()
+
+        XCTAssertTrue(plugin is any LLMTemperatureControllableProvider)
+    }
+
+    func testGemma4PromptPrefillStepSizeIsReducedForLargerModels() {
+        XCTAssertEqual(Gemma4Plugin.promptPrefillStepSize(for: "gemma-4-e2b-it-4bit"), 256)
+        XCTAssertEqual(Gemma4Plugin.promptPrefillStepSize(for: "gemma-4-e4b-it-4bit"), 128)
+        XCTAssertEqual(Gemma4Plugin.promptPrefillStepSize(for: "gemma-4-e4b-it-8bit"), 128)
+        XCTAssertEqual(Gemma4Plugin.promptPrefillStepSize(for: "gemma-4-26b-a4b-it-4bit"), 64)
+        XCTAssertEqual(Gemma4Plugin.promptPrefillStepSize(for: nil), 128)
+    }
+
     func testQwen3ValidatesHuggingFaceTokenAgainstWhoAmIEndpoint() async throws {
         let plugin = Qwen3Plugin()
         let requestRecorder = RequestRecorder()
@@ -409,6 +423,130 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
 
         XCTAssertEqual(plugin.selectedModelId, "openai_whisper-tiny")
         XCTAssertFalse(plugin.isConfigured)
+    }
+}
+
+@MainActor
+final class PluginManagerLoadOrderTests: XCTestCase {
+    func testSortedPluginBundleURLsPrioritizeEnabledBundlesBeforeDisabledOnes() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let manager = PluginManager(appSupportDirectory: appSupportDirectory)
+        let pluginsDirectory = manager.pluginsDirectory
+        try FileManager.default.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)
+
+        let disabledVoxtral = try makePluginBundle(
+            at: pluginsDirectory,
+            bundleName: "VoxtralPlugin.bundle",
+            pluginId: "com.typewhisper.voxtral",
+            pluginName: "Voxtral"
+        )
+        let enabledGemma = try makePluginBundle(
+            at: pluginsDirectory,
+            bundleName: "Gemma4Plugin.bundle",
+            pluginId: "com.typewhisper.gemma4",
+            pluginName: "Gemma 4"
+        )
+        let enabledParakeet = try makePluginBundle(
+            at: pluginsDirectory,
+            bundleName: "ParakeetPlugin.bundle",
+            pluginId: "com.typewhisper.parakeet",
+            pluginName: "Parakeet"
+        )
+
+        let voxtralKey = "plugin.com.typewhisper.voxtral.enabled"
+        let gemmaKey = "plugin.com.typewhisper.gemma4.enabled"
+        let parakeetKey = "plugin.com.typewhisper.parakeet.enabled"
+
+        let defaults = UserDefaults.standard
+        let originalVoxtral = defaults.object(forKey: voxtralKey)
+        let originalGemma = defaults.object(forKey: gemmaKey)
+        let originalParakeet = defaults.object(forKey: parakeetKey)
+        defer {
+            restore(defaults, key: voxtralKey, value: originalVoxtral)
+            restore(defaults, key: gemmaKey, value: originalGemma)
+            restore(defaults, key: parakeetKey, value: originalParakeet)
+        }
+
+        defaults.set(false, forKey: voxtralKey)
+        defaults.set(true, forKey: gemmaKey)
+        defaults.set(true, forKey: parakeetKey)
+
+        let sorted = manager.sortedPluginBundleURLs(
+            [disabledVoxtral, enabledParakeet, enabledGemma],
+            isBundledSource: false
+        )
+
+        XCTAssertEqual(
+            sorted.map(\.lastPathComponent),
+            ["Gemma4Plugin.bundle", "ParakeetPlugin.bundle", "VoxtralPlugin.bundle"]
+        )
+    }
+
+    func testScanAndLoadPluginsRegistersDisabledBundleWithoutLoadingRuntime() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let manager = PluginManager(appSupportDirectory: appSupportDirectory)
+        let pluginsDirectory = manager.pluginsDirectory
+        try FileManager.default.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)
+
+        _ = try makePluginBundle(
+            at: pluginsDirectory,
+            bundleName: "DisabledLLMPlugin.bundle",
+            pluginId: "com.typewhisper.disabled-llm",
+            pluginName: "Disabled LLM",
+            principalClass: "MissingPluginClass",
+            category: "llm"
+        )
+
+        let enabledKey = "plugin.com.typewhisper.disabled-llm.enabled"
+        let defaults = UserDefaults.standard
+        let originalValue = defaults.object(forKey: enabledKey)
+        defer { restore(defaults, key: enabledKey, value: originalValue) }
+        defaults.set(false, forKey: enabledKey)
+
+        manager.scanAndLoadPlugins()
+
+        let plugin = try XCTUnwrap(manager.loadedPlugins.first { $0.manifest.id == "com.typewhisper.disabled-llm" })
+        XCTAssertFalse(plugin.isEnabled)
+        XCTAssertFalse(plugin.bundle.isLoaded)
+        XCTAssertEqual(plugin.manifest.category, "llm")
+    }
+
+    private func makePluginBundle(
+        at directory: URL,
+        bundleName: String,
+        pluginId: String,
+        pluginName: String,
+        sdkCompatibilityVersion: String? = PluginSDKCompatibility.currentVersion,
+        principalClass: String = "NSObject",
+        category: String? = nil
+    ) throws -> URL {
+        let bundleURL = directory.appendingPathComponent(bundleName, isDirectory: true)
+        let resourcesURL = bundleURL.appendingPathComponent("Contents/Resources", isDirectory: true)
+        try FileManager.default.createDirectory(at: resourcesURL, withIntermediateDirectories: true)
+
+        let manifest = PluginManifest(
+            id: pluginId,
+            name: pluginName,
+            version: "1.0.0",
+            sdkCompatibilityVersion: sdkCompatibilityVersion,
+            principalClass: principalClass,
+            category: category
+        )
+        let data = try JSONEncoder().encode(manifest)
+        try data.write(to: resourcesURL.appendingPathComponent("manifest.json"))
+        return bundleURL
+    }
+
+    private func restore(_ defaults: UserDefaults, key: String, value: Any?) {
+        if let value {
+            defaults.set(value, forKey: key)
+        } else {
+            defaults.removeObject(forKey: key)
+        }
     }
 }
 
