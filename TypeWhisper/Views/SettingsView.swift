@@ -259,23 +259,26 @@ private struct SettingsSidebarShell<DetailContent: View>: View {
     let destinations: [SettingsDestination]
     let detail: (SettingsTab) -> DetailContent
 
-    @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var isSidebarVisible = true
 
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            List(destinations, selection: $selectedTab) { destination in
-                SettingsSidebarRow(destination: destination)
-                    .tag(destination.tab)
+        HStack(spacing: 0) {
+            if isSidebarVisible {
+                List(destinations, selection: $selectedTab) { destination in
+                    SettingsSidebarRow(destination: destination)
+                        .tag(destination.tab)
+                }
+                .listStyle(.sidebar)
+                .frame(width: 240)
+
+                Divider()
             }
-            .listStyle(.sidebar)
-            .navigationSplitViewColumnWidth(240)
-        } detail: {
+
             detail(selectedTab)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         // macOS 14 glitches when the default NavigationSplitView sidebar reveal animates.
         // Use a custom zero-duration toggle instead.
-        .toolbar(removing: .sidebarToggle)
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 Button(action: toggleSidebar) {
@@ -292,7 +295,7 @@ private struct SettingsSidebarShell<DetailContent: View>: View {
             context.duration = 0
             context.allowsImplicitAnimation = false
             withAnimation(nil) {
-                columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly
+                isSidebarVisible.toggle()
             }
         }
     }
