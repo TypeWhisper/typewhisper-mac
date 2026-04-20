@@ -791,6 +791,17 @@
       "iconSystemName": "cpu",
       "releases": [
         {
+          "version": "1.0.3",
+          "minHostVersion": "0.11.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 18092826,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gemma4-v1.0.3/Gemma4Plugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        },
+        {
           "version": "1.0.2",
           "minHostVersion": "0.11.0",
           "sdkCompatibilityVersion": "v1",
@@ -800,12 +811,15 @@
           "downloadCount": 49
         }
       ],
-      "version": "1.0.2",
+      "version": "1.0.3",
       "minHostVersion": "0.11.0",
       "sdkCompatibilityVersion": "v1",
-      "size": 15130453,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gemma4-v1.0.2/Gemma4Plugin.zip",
-      "minOSVersion": "14.0"
+      "size": 18092826,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gemma4-v1.0.3/Gemma4Plugin.zip",
+      "minOSVersion": "14.0",
+      "supportedArchitectures": [
+        "arm64"
+      ]
     },
     {
       "id": "com.typewhisper.script",
