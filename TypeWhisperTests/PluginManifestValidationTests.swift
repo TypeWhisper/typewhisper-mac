@@ -35,6 +35,51 @@ final class PluginManifestValidationTests: XCTestCase {
         }
     }
 
+    func testBundledPluginManifestVersionsStayAlignedWithReleasedParity() throws {
+        let expectedVersions = [
+            "Plugins/AssemblyAIPlugin/manifest.json": "1.0.8",
+            "Plugins/CerebrasPlugin/manifest.json": "1.0.3",
+            "Plugins/ClaudePlugin/manifest.json": "1.0.2",
+            "Plugins/CloudflareASRPlugin/manifest.json": "1.0.3",
+            "Plugins/CoherePlugin/manifest.json": "1.0.3",
+            "Plugins/DeepgramPlugin/manifest.json": "1.0.7",
+            "Plugins/ElevenLabsPlugin/manifest.json": "1.0.4",
+            "Plugins/FileMemoryPlugin/manifest.json": "1.0.2",
+            "Plugins/FireworksPlugin/manifest.json": "1.0.4",
+            "Plugins/GeminiPlugin/manifest.json": "1.0.15",
+            "Plugins/Gemma4Plugin/manifest.json": "1.0.3",
+            "Plugins/GladiaPlugin/manifest.json": "1.0.4",
+            "Plugins/GoogleCloudSTTPlugin/manifest.json": "1.0.3",
+            "Plugins/GranitePlugin/manifest.json": "1.0.6",
+            "Plugins/GroqPlugin/manifest.json": "1.0.18",
+            "Plugins/LinearPlugin/manifest.json": "1.0.12",
+            "Plugins/LiveTranscriptPlugin/manifest.json": "1.0.5",
+            "Plugins/ObsidianPlugin/manifest.json": "1.0.3",
+            "Plugins/OpenAICompatiblePlugin/manifest.json": "1.0.13",
+            "Plugins/OpenAIPlugin/manifest.json": "1.1.4",
+            "Plugins/OpenAIVectorMemoryPlugin/manifest.json": "1.0.2",
+            "Plugins/OpenRouterPlugin/manifest.json": "1.0.3",
+            "Plugins/ParakeetPlugin/manifest.json": "1.2.8",
+            "Plugins/Qwen3Plugin/manifest.json": "1.0.22",
+            "Plugins/ScriptPlugin/manifest.json": "1.1.3",
+            "Plugins/SonioxPlugin/manifest.json": "1.0.3",
+            "Plugins/SpeechAnalyzerPlugin/manifest.json": "1.0.13",
+            "Plugins/SpeechmaticsPlugin/manifest.json": "1.0.3",
+            "Plugins/SystemTTSPlugin/manifest.json": "1.0.1",
+            "Plugins/VoxtralPlugin/manifest.json": "1.0.10",
+            "Plugins/WebhookPlugin/manifest.json": "1.0.12",
+            "Plugins/WhisperKitPlugin/manifest.json": "1.0.21",
+        ]
+
+        for (relativePath, expectedVersion) in expectedVersions.sorted(by: { $0.key < $1.key }) {
+            let manifestURL = TestSupport.repoRoot.appendingPathComponent(relativePath)
+            let data = try Data(contentsOf: manifestURL)
+            let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
+
+            XCTAssertEqual(manifest.version, expectedVersion, relativePath)
+        }
+    }
+
     func testAppleSiliconOnlyPluginsDeclareArm64Compatibility() throws {
         let manifestPaths = [
             "Plugins/WhisperKitPlugin/manifest.json",

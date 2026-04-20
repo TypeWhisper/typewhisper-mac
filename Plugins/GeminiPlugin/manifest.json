@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.gemini",
     "name": "Gemini",
-    "version": "1.0.12",
+    "version": "1.0.15",
     "minHostVersion": "0.9.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",

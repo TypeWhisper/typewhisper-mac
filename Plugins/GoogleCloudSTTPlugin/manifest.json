@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.google-cloud-stt",
     "name": "Google Cloud Speech-to-Text",
-    "version": "1.0.0",
+    "version": "1.0.3",
     "minHostVersion": "0.12.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",

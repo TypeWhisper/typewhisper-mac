@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.assemblyai",
     "name": "AssemblyAI",
-    "version": "1.0.4",
+    "version": "1.0.8",
     "minHostVersion": "0.12.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
