@@ -90,11 +90,12 @@ private struct Gemma4TokenizerLoader: TokenizerLoader {
 // MARK: - Plugin Entry Point
 
 @objc(Gemma4Plugin)
-final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMProviderSetupStatusProviding, LLMModelSelectable, PluginSettingsActivityReporting, @unchecked Sendable {
+final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllableProvider, LLMProviderSetupStatusProviding, LLMModelSelectable, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.gemma4"
     static let pluginName = "Gemma 4"
     static let defaultGenerationTemperature = 0.1
     static let experimentalModelWarning = "Experimental. You can try it at your own risk."
+    static let promptMaxTokens = 2048
 
     enum DownloadError: LocalizedError {
         case invalidRepositoryID(String)
@@ -112,6 +113,7 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMProviderSetupStatusPro
     fileprivate var modelContainer: ModelContainer?
     fileprivate var loadedModelId: String?
     fileprivate var _generationTemperature: Double = 0.1
+    fileprivate var _llmTemperatureModeRaw: String = PluginLLMTemperatureMode.custom.rawValue
     fileprivate var _hfToken: String?
 
     private func modelsDirectory() -> URL {
@@ -146,6 +148,8 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMProviderSetupStatusPro
 
         _generationTemperature = host.userDefault(forKey: "generationTemperature") as? Double
             ?? Self.defaultGenerationTemperature
+        _llmTemperatureModeRaw = host.userDefault(forKey: "llmTemperatureMode") as? String
+            ?? PluginLLMTemperatureMode.custom.rawValue
         _hfToken = host.loadSecret(key: "hf-token")
 
         Task { await restoreLoadedModel(allowDownloads: false) }
@@ -175,6 +179,20 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMProviderSetupStatusPro
     }
 
     func process(systemPrompt: String, userText: String, model: String?) async throws -> String {
+        try await process(
+            systemPrompt: systemPrompt,
+            userText: userText,
+            model: model,
+            temperatureDirective: .inheritProviderSetting
+        )
+    }
+
+    func process(
+        systemPrompt: String,
+        userText: String,
+        model: String?,
+        temperatureDirective: PluginLLMTemperatureDirective
+    ) async throws -> String {
         guard let modelContainer else {
             throw PluginChatError.notConfigured
         }
@@ -197,10 +215,12 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMProviderSetupStatusPro
         ]
         let userInput = UserInput(chat: chat)
         let input = try await modelContainer.prepare(input: userInput)
+        let resolvedTemperature = providerTemperatureDirective
+            .resolvedTemperature(applying: temperatureDirective) ?? Self.defaultGenerationTemperature
 
-        let parameters = GenerateParameters(
-            maxTokens: 2048,
-            temperature: Float(_generationTemperature)
+        let parameters = Self.promptGenerationParameters(
+            temperature: resolvedTemperature,
+            modelId: model ?? loadedModelId
         )
 
         let stream = try await modelContainer.generate(input: input, parameters: parameters)
@@ -231,6 +251,17 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMProviderSetupStatusPro
     var currentDownloadProgress: Double { downloadProgress }
 
     var generationTemperature: Double { _generationTemperature }
+    var llmTemperatureMode: PluginLLMTemperatureMode {
+        PluginLLMTemperatureMode(rawValue: _llmTemperatureModeRaw) ?? .custom
+    }
+    fileprivate var providerTemperatureDirective: PluginLLMTemperatureDirective {
+        switch llmTemperatureMode {
+        case .providerDefault:
+            return .custom(Self.defaultGenerationTemperature)
+        case .custom, .inheritProviderSetting:
+            return .custom(_generationTemperature)
+        }
+    }
 
     var requiresExternalCredentials: Bool { false }
 
@@ -253,6 +284,18 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMProviderSetupStatusPro
         let clamped = min(max(temperature, 0.0), 1.0)
         _generationTemperature = clamped
         host?.setUserDefault(clamped, forKey: "generationTemperature")
+    }
+
+    func setLLMTemperatureMode(_ mode: PluginLLMTemperatureMode) {
+        let storedMode: PluginLLMTemperatureMode
+        switch mode {
+        case .providerDefault:
+            storedMode = .providerDefault
+        case .custom, .inheritProviderSetting:
+            storedMode = .custom
+        }
+        _llmTemperatureModeRaw = storedMode.rawValue
+        host?.setUserDefault(storedMode.rawValue, forKey: "llmTemperatureMode")
     }
 
     func saveHuggingFaceToken(_ token: String) {
@@ -514,6 +557,27 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMProviderSetupStatusPro
         }
 
         return error.localizedDescription
+    }
+
+    static func promptPrefillStepSize(for modelId: String?) -> Int {
+        switch modelId {
+        case "gemma-4-e2b-it-4bit":
+            return 256
+        case "gemma-4-e4b-it-4bit", "gemma-4-e4b-it-8bit":
+            return 128
+        case "gemma-4-26b-a4b-it-4bit":
+            return 64
+        default:
+            return 128
+        }
+    }
+
+    static func promptGenerationParameters(temperature: Double, modelId: String?) -> GenerateParameters {
+        GenerateParameters(
+            maxTokens: promptMaxTokens,
+            temperature: Float(temperature),
+            prefillStepSize: promptPrefillStepSize(for: modelId)
+        )
     }
 
     private static func unsupportedModelMessage(for modelDef: Gemma4ModelDef) -> String {

@@ -462,6 +462,8 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
     fileprivate var _fetchedLLMModels: [OpenAIFetchedModel] = []
     fileprivate var _authMode: OpenAIAuthMode = .apiKey
     fileprivate var _reasoningEffort: OpenAIReasoningEffort = .medium
+    fileprivate var _llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue
+    fileprivate var _llmTemperatureValue: Double = 0.3
     fileprivate var _oauthAccessToken: String?
     fileprivate var _oauthRefreshToken: String?
     fileprivate var _oauthIDToken: String?
@@ -485,6 +487,8 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
         reasoningEffort: "reasoningEffort",
         selectedModel: "selectedModel",
         selectedLLMModel: "selectedLLMModel",
+        llmTemperatureMode: "llmTemperatureMode",
+        llmTemperatureValue: "llmTemperatureValue",
         fetchedLLMModels: "fetchedLLMModels",
         oauthAccountID: "oauthAccountID",
         oauthPlanType: "oauthPlanType",
@@ -541,6 +545,10 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
             ?? transcriptionModels.first?.id
         _selectedLLMModelId = host.userDefault(forKey: Self.storageKeys.selectedLLMModel) as? String
             ?? supportedModels.first?.id
+        _llmTemperatureModeRaw = host.userDefault(forKey: Self.storageKeys.llmTemperatureMode) as? String
+            ?? PluginLLMTemperatureMode.providerDefault.rawValue
+        _llmTemperatureValue = host.userDefault(forKey: Self.storageKeys.llmTemperatureValue) as? Double
+            ?? 0.3
         _oauthAccountID = host.userDefault(forKey: Self.storageKeys.oauthAccountID) as? String
         _oauthPlanType = host.userDefault(forKey: Self.storageKeys.oauthPlanType) as? String
         _oauthExpiresAt = host.userDefault(forKey: Self.storageKeys.oauthExpiresAt) as? Date
@@ -641,6 +649,20 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
     }
 
     func process(systemPrompt: String, userText: String, model: String?) async throws -> String {
+        try await process(
+            systemPrompt: systemPrompt,
+            userText: userText,
+            model: model,
+            temperatureDirective: .inheritProviderSetting
+        )
+    }
+
+    func process(
+        systemPrompt: String,
+        userText: String,
+        model: String?,
+        temperatureDirective: PluginLLMTemperatureDirective
+    ) async throws -> String {
         let modelId = model ?? _selectedLLMModelId ?? supportedModels.first!.id
         let reasoningEffort = Self.supportsReasoningEffort(for: modelId) ? _reasoningEffort.rawValue : nil
 
@@ -656,7 +678,11 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
                 userText: userText,
                 maxOutputTokenParameter: Self.outputTokenParameter(for: modelId),
                 reasoningEffort: reasoningEffort,
-                temperature: Self.chatCompletionTemperature(for: modelId, reasoningEffort: reasoningEffort)
+                temperature: resolvedTemperature(
+                    for: modelId,
+                    reasoningEffort: reasoningEffort,
+                    temperatureDirective: temperatureDirective
+                )
             )
         case .chatGPT:
             return try await processWithChatGPT(systemPrompt: systemPrompt, userText: userText, model: modelId)
@@ -670,10 +696,25 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
 
     var selectedLLMModelId: String? { _selectedLLMModelId }
     fileprivate var reasoningEffort: OpenAIReasoningEffort { _reasoningEffort }
+    fileprivate var llmTemperatureMode: PluginLLMTemperatureMode {
+        PluginLLMTemperatureMode(rawValue: _llmTemperatureModeRaw) ?? .providerDefault
+    }
+    fileprivate var llmTemperatureValue: Double { _llmTemperatureValue }
 
     fileprivate func setReasoningEffort(_ effort: OpenAIReasoningEffort) {
         _reasoningEffort = effort
         host?.setUserDefault(effort.rawValue, forKey: Self.storageKeys.reasoningEffort)
+    }
+
+    fileprivate func setLLMTemperatureMode(_ mode: PluginLLMTemperatureMode) {
+        _llmTemperatureModeRaw = mode.rawValue
+        host?.setUserDefault(mode.rawValue, forKey: Self.storageKeys.llmTemperatureMode)
+    }
+
+    fileprivate func setLLMTemperatureValue(_ value: Double) {
+        let clamped = min(max(value, 0.0), 2.0)
+        _llmTemperatureValue = clamped
+        host?.setUserDefault(clamped, forKey: Self.storageKeys.llmTemperatureValue)
     }
 
     // MARK: - Settings View
@@ -695,6 +736,31 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
     fileprivate var chatGPTPlanType: String? { _oauthPlanType }
     fileprivate func supportsReasoningEffort(for modelID: String) -> Bool {
         Self.supportsReasoningEffort(for: modelID)
+    }
+
+    fileprivate func supportsCustomTemperature(for modelID: String) -> Bool {
+        let reasoningEffort = Self.supportsReasoningEffort(for: modelID) ? _reasoningEffort.rawValue : nil
+        return Self.supportsCustomTemperature(for: modelID, reasoningEffort: reasoningEffort)
+    }
+
+    fileprivate func resolvedTemperature(
+        for modelID: String,
+        reasoningEffort: String?,
+        temperatureDirective: PluginLLMTemperatureDirective
+    ) -> Double? {
+        switch temperatureDirective {
+        case .providerDefault:
+            return Self.chatCompletionTemperature(for: modelID, reasoningEffort: reasoningEffort)
+        case .custom(let value):
+            return Self.supportsCustomTemperature(for: modelID, reasoningEffort: reasoningEffort) ? value : nil
+        case .inheritProviderSetting:
+            switch llmTemperatureMode {
+            case .providerDefault, .inheritProviderSetting:
+                return Self.chatCompletionTemperature(for: modelID, reasoningEffort: reasoningEffort)
+            case .custom:
+                return Self.supportsCustomTemperature(for: modelID, reasoningEffort: reasoningEffort) ? _llmTemperatureValue : nil
+            }
+        }
     }
 
     fileprivate func setAuthMode(_ mode: OpenAIAuthMode) {
@@ -1098,6 +1164,10 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
             || lowered.contains("codex")
     }
 
+    nonisolated static func supportsCustomTemperature(for modelID: String, reasoningEffort: String?) -> Bool {
+        chatCompletionTemperature(for: modelID, reasoningEffort: reasoningEffort) != nil
+    }
+
     nonisolated static func chatCompletionTemperature(for modelID: String, reasoningEffort: String?) -> Double? {
         let lowered = modelID.lowercased()
         if lowered.hasPrefix("gpt-5"), reasoningEffort?.isEmpty == false {
@@ -1142,6 +1212,8 @@ private struct OpenAISettingsView: View {
     @State private var selectedModel: String = ""
     @State private var selectedLLMModel: String = ""
     @State private var selectedReasoningEffort: OpenAIReasoningEffort = .medium
+    @State private var llmTemperatureMode: PluginLLMTemperatureMode = .providerDefault
+    @State private var llmTemperatureValue: Double = 0.3
     @State private var fetchedLLMModels: [OpenAIFetchedModel] = []
     @State private var oauthBusy = false
     @State private var oauthStatusMessage: String?
@@ -1212,6 +1284,8 @@ private struct OpenAISettingsView: View {
             selectedModel = plugin.selectedModelId ?? plugin.transcriptionModels.first?.id ?? ""
             selectedLLMModel = plugin.selectedLLMModelId ?? plugin.supportedModels.first?.id ?? ""
             selectedReasoningEffort = plugin.reasoningEffort
+            llmTemperatureMode = plugin.llmTemperatureMode
+            llmTemperatureValue = plugin.llmTemperatureValue
             fetchedLLMModels = plugin._fetchedLLMModels
         }
     }
@@ -1411,6 +1485,47 @@ private struct OpenAISettingsView: View {
                 Text("Using default models. Press Refresh to fetch all available models.", bundle: bundle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            if authMode == .apiKey {
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Temperature", bundle: bundle)
+                        .font(.headline)
+
+                    Picker("Temperature Mode", selection: $llmTemperatureMode) {
+                        Text("Provider Default", bundle: bundle).tag(PluginLLMTemperatureMode.providerDefault)
+                        Text("Custom", bundle: bundle).tag(PluginLLMTemperatureMode.custom)
+                    }
+                    .onChange(of: llmTemperatureMode) {
+                        plugin.setLLMTemperatureMode(llmTemperatureMode)
+                    }
+
+                    if llmTemperatureMode == .custom {
+                        HStack {
+                            Text("Temperature", bundle: bundle)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(llmTemperatureValue, format: .number.precision(.fractionLength(2)))
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+
+                        Slider(value: $llmTemperatureValue, in: 0...2, step: 0.1)
+                            .onChange(of: llmTemperatureValue) {
+                                plugin.setLLMTemperatureValue(llmTemperatureValue)
+                            }
+                    }
+
+                    if llmTemperatureMode == .custom,
+                       !plugin.supportsCustomTemperature(for: selectedLLMModel) {
+                        Text("Custom temperature is ignored for the selected GPT-5 reasoning configuration.", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
         }
     }

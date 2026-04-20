@@ -546,8 +546,10 @@ private struct PromptActionEditorSheet: View {
                                     if let newId {
                                         let models = viewModel.promptProcessingService.modelsForProvider(newId)
                                         viewModel.editCloudModel = models.first?.id ?? ""
+                                        viewModel.clampTemperatureValueForEffectiveProvider()
                                     } else {
                                         viewModel.editCloudModel = ""
+                                        viewModel.clampTemperatureValueForEffectiveProvider()
                                     }
                                 }
 
@@ -568,6 +570,71 @@ private struct PromptActionEditorSheet: View {
                             }
                             .padding(.vertical, 4)
                         }
+                    }
+
+                    GroupBox(String(localized: "Temperature")) {
+                        let effectiveProviderId = viewModel.editProviderId ?? viewModel.promptProcessingService.selectedProviderId
+                        let isAppleIntelligence = effectiveProviderId == PromptProcessingService.appleIntelligenceId
+                        let supportedRange = viewModel.supportedTemperatureRange(for: effectiveProviderId)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Picker(String(localized: "Who decides?"), selection: $viewModel.editTemperatureMode) {
+                                Text(String(localized: "Use my provider setting")).tag(PluginLLMTemperatureMode.inheritProviderSetting)
+                                Text(String(localized: "Use provider default")).tag(PluginLLMTemperatureMode.providerDefault)
+                                Text(String(localized: "Set for this prompt")).tag(PluginLLMTemperatureMode.custom)
+                            }
+                            .disabled(isAppleIntelligence)
+
+                            if viewModel.editTemperatureMode == .custom {
+                                HStack {
+                                    Text(String(localized: "Temperature"))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    Spacer()
+                                    Text(viewModel.editTemperatureValue, format: .number.precision(.fractionLength(2)))
+                                        .foregroundStyle(.secondary)
+                                        .monospacedDigit()
+                                }
+
+                                Slider(
+                                    value: $viewModel.editTemperatureValue,
+                                    in: supportedRange,
+                                    step: effectiveProviderId == "Gemma 4 (MLX)" ? 0.05 : 0.1
+                                )
+                                .disabled(isAppleIntelligence)
+
+                                HStack {
+                                    Text("\(supportedRange.lowerBound, format: .number.precision(.fractionLength(1)))")
+                                    Spacer()
+                                    Text("\(supportedRange.upperBound, format: .number.precision(.fractionLength(1)))")
+                                }
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            }
+
+                            let helperText: LocalizedStringResource = {
+                                if isAppleIntelligence {
+                                    return "Temperature is not available for Apple Intelligence."
+                                }
+
+                                switch viewModel.editTemperatureMode {
+                                case .inheritProviderSetting:
+                                    return "Uses the temperature saved in this provider's settings."
+                                case .providerDefault:
+                                    return "Ignores your saved provider setting and lets the provider use its own default behavior."
+                                case .custom:
+                                    if effectiveProviderId == "Gemma 4 (MLX)" {
+                                        return "Uses this value only for this prompt. Gemma 4 supports values from 0.0 to 1.0."
+                                    } else {
+                                        return "Uses this value only for this prompt and overrides the provider setting."
+                                    }
+                                }
+                            }()
+
+                            Text(helperText)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 4)
                     }
 
                     let actionPlugins = PluginManager.shared.actionPlugins

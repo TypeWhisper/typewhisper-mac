@@ -1303,7 +1303,8 @@ final class DictationViewModel: ObservableObject {
                 try await pps.process(
                     prompt: prompt, text: text,
                     providerOverride: providerOverride,
-                    cloudModelOverride: modelOverride
+                    cloudModelOverride: modelOverride,
+                    temperatureDirective: promptAction?.temperatureDirective ?? .inheritProviderSetting
                 )
             }
         }

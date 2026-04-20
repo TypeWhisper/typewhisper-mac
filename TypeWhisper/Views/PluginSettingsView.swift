@@ -156,6 +156,9 @@ struct PluginSettingsView: View {
         if let regPlugin = registryService.registry.first(where: { $0.id == plugin.id }) {
             return PluginCategory(rawValue: regPlugin.category) ?? .utility
         }
+        if let manifestCategory = plugin.manifest.category {
+            return PluginCategory(rawValue: manifestCategory) ?? .utility
+        }
         if plugin.instance is TranscriptionEnginePlugin { return .transcription }
         if plugin.instance is TTSProviderPlugin { return .tts }
         if plugin.instance is LLMProviderPlugin { return .llm }
@@ -617,7 +620,7 @@ private struct InstalledPluginRow: View {
                 .accessibilityLabel(String(localized: "Uninstall \(plugin.manifest.name)"))
             }
 
-            if plugin.instance.settingsView != nil {
+            if plugin.supportsSettingsWindow {
                 Button {
                     PluginSettingsWindowManager.shared.present(plugin)
                 } label: {
@@ -645,6 +648,10 @@ private struct InstalledPluginRow: View {
     }
 
     private func refreshPluginActivity() {
+        guard plugin.isRuntimeLoaded else {
+            pluginActivity = nil
+            return
+        }
         pluginActivity = (plugin.instance as? any PluginSettingsActivityReporting)?.currentSettingsActivity
     }
 }

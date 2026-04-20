@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import TypeWhisperPluginSDK
 
 @Model
 final class PromptAction {
@@ -14,6 +15,8 @@ final class PromptAction {
     var hotkeyModifiers: Int?
     var providerType: String?
     var cloudModel: String?
+    var temperatureModeRaw: String
+    var temperatureValue: Double?
     var targetActionPluginId: String?
     var createdAt: Date
     var updatedAt: Date
@@ -30,6 +33,8 @@ final class PromptAction {
         hotkeyModifiers: Int? = nil,
         providerType: String? = nil,
         cloudModel: String? = nil,
+        temperatureModeRaw: String = PluginLLMTemperatureMode.inheritProviderSetting.rawValue,
+        temperatureValue: Double? = nil,
         targetActionPluginId: String? = nil,
         createdAt: Date = Date(),
         updatedAt: Date? = nil
@@ -45,9 +50,20 @@ final class PromptAction {
         self.hotkeyModifiers = hotkeyModifiers
         self.providerType = providerType
         self.cloudModel = cloudModel
+        self.temperatureModeRaw = temperatureModeRaw
+        self.temperatureValue = temperatureValue
         self.targetActionPluginId = targetActionPluginId
         self.createdAt = createdAt
         self.updatedAt = updatedAt ?? createdAt
+    }
+
+    var temperatureMode: PluginLLMTemperatureMode {
+        get { PluginLLMTemperatureMode(rawValue: temperatureModeRaw) ?? .inheritProviderSetting }
+        set { temperatureModeRaw = newValue.rawValue }
+    }
+
+    var temperatureDirective: PluginLLMTemperatureDirective {
+        PluginLLMTemperatureDirective(mode: temperatureMode, value: temperatureValue)
     }
 
     static var presets: [PromptAction] {
@@ -57,63 +73,81 @@ final class PromptAction {
                 prompt: "Translate the following text to English. If it's already in English, translate it to German. Only return the translation, nothing else.",
                 icon: "globe",
                 isPreset: true,
-                sortOrder: 0
+                sortOrder: 0,
+                temperatureModeRaw: PluginLLMTemperatureMode.custom.rawValue,
+                temperatureValue: 0.0
             ),
             PromptAction(
                 name: String(localized: "preset.writeEmail"),
                 prompt: "Turn the following text into a well-structured, professional email. Respond in the same language as the input text. Only return the email text.",
                 icon: "envelope",
                 isPreset: true,
-                sortOrder: 1
+                sortOrder: 1,
+                temperatureModeRaw: PluginLLMTemperatureMode.custom.rawValue,
+                temperatureValue: 0.3
             ),
             PromptAction(
                 name: String(localized: "preset.formatAsList"),
                 prompt: "Format the following text as a clean bullet-point list. Respond in the same language as the input text. Only return the formatted list.",
                 icon: "list.bullet",
                 isPreset: true,
-                sortOrder: 2
+                sortOrder: 2,
+                temperatureModeRaw: PluginLLMTemperatureMode.custom.rawValue,
+                temperatureValue: 0.1
             ),
             PromptAction(
                 name: String(localized: "preset.actionItems"),
                 prompt: "Extract all action items, tasks, and to-dos from the following text. Format them as a checklist. Respond in the same language as the input text. Only return the checklist.",
                 icon: "checklist",
                 isPreset: true,
-                sortOrder: 3
+                sortOrder: 3,
+                temperatureModeRaw: PluginLLMTemperatureMode.custom.rawValue,
+                temperatureValue: 0.1
             ),
             PromptAction(
                 name: String(localized: "preset.reply"),
                 prompt: "Write a concise, friendly reply to the following message. Respond in the same language as the input text. Only return the reply.",
                 icon: "arrowshape.turn.up.left",
                 isPreset: true,
-                sortOrder: 4
+                sortOrder: 4,
+                temperatureModeRaw: PluginLLMTemperatureMode.custom.rawValue,
+                temperatureValue: 0.4
             ),
             PromptAction(
                 name: String(localized: "preset.createTable"),
                 prompt: "Convert the following text into a well-formatted Markdown table. Extract key information and organize it into appropriate columns. Respond in the same language as the input text. Only return the table, nothing else.",
                 icon: "tablecells",
                 isPreset: true,
-                sortOrder: 5
+                sortOrder: 5,
+                temperatureModeRaw: PluginLLMTemperatureMode.custom.rawValue,
+                temperatureValue: 0.1
             ),
             PromptAction(
                 name: String(localized: "preset.draftEmail"),
                 prompt: "Draft a complete, professional email from the following notes. Include an appropriate subject line, greeting, body paragraphs, and closing. Respond in the same language as the input text. Only return the email.",
                 icon: "envelope.badge",
                 isPreset: true,
-                sortOrder: 6
+                sortOrder: 6,
+                temperatureModeRaw: PluginLLMTemperatureMode.custom.rawValue,
+                temperatureValue: 0.4
             ),
             PromptAction(
                 name: String(localized: "preset.jsonData"),
                 prompt: "Extract structured data from the following text and format it as valid, well-indented JSON. Use descriptive keys and appropriate data types. Only return the JSON, nothing else.",
                 icon: "curlybraces",
                 isPreset: true,
-                sortOrder: 7
+                sortOrder: 7,
+                temperatureModeRaw: PluginLLMTemperatureMode.custom.rawValue,
+                temperatureValue: 0.0
             ),
             PromptAction(
                 name: String(localized: "preset.meetingNotes"),
                 prompt: "Structure the following text as professional meeting notes. Include sections for: Attendees (if mentioned), Key Discussion Points, Decisions Made, and Action Items with owners. Use Markdown formatting. Respond in the same language as the input text.",
                 icon: "doc.text.magnifyingglass",
                 isPreset: true,
-                sortOrder: 8
+                sortOrder: 8,
+                temperatureModeRaw: PluginLLMTemperatureMode.custom.rawValue,
+                temperatureValue: 0.2
             ),
         ]
     }
