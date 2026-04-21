@@ -1161,6 +1161,14 @@
       "iconSystemName": "arrow.up.forward.app",
       "releases": [
         {
+          "version": "1.0.13",
+          "minHostVersion": "0.9.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 208937,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-webhook-v1.0.13/WebhookPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.12",
           "minHostVersion": "0.9.0",
           "sdkCompatibilityVersion": "v1",
@@ -1170,11 +1178,11 @@
           "downloadCount": 5
         }
       ],
-      "version": "1.0.12",
+      "version": "1.0.13",
       "minHostVersion": "0.9.0",
       "sdkCompatibilityVersion": "v1",
-      "size": 208933,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-webhook-v1.0.12/WebhookPlugin.zip",
+      "size": 208937,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-webhook-v1.0.13/WebhookPlugin.zip",
       "minOSVersion": "14.0"
     },
     {
