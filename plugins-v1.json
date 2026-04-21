@@ -177,6 +177,14 @@
       "requiresAPIKey": true,
       "releases": [
         {
+          "version": "1.0.20",
+          "minHostVersion": "0.9.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 182186,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-groq-v1.0.20/GroqPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.19",
           "minHostVersion": "0.9.0",
           "sdkCompatibilityVersion": "v1",
@@ -195,11 +203,11 @@
           "downloadCount": 51
         }
       ],
-      "version": "1.0.19",
+      "version": "1.0.20",
       "minHostVersion": "0.9.0",
       "sdkCompatibilityVersion": "v1",
-      "size": 182181,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-groq-v1.0.19/GroqPlugin.zip",
+      "size": 182186,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-groq-v1.0.20/GroqPlugin.zip",
       "minOSVersion": "14.0"
     },
     {
