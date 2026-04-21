@@ -131,6 +131,7 @@ class PromptActionService: ObservableObject {
         name: String,
         prompt: String,
         icon: String = "sparkles",
+        isEnabled: Bool = true,
         providerType: String? = nil,
         cloudModel: String? = nil,
         temperatureModeRaw: String = PluginLLMTemperatureMode.inheritProviderSetting.rawValue,
@@ -144,6 +145,7 @@ class PromptActionService: ObservableObject {
             name: name,
             prompt: prompt,
             icon: icon,
+            isEnabled: isEnabled,
             sortOrder: maxOrder + 1,
             providerType: providerType,
             cloudModel: cloudModel,
@@ -167,6 +169,7 @@ class PromptActionService: ObservableObject {
         name: String,
         prompt: String,
         icon: String,
+        isEnabled: Bool = true,
         providerType: String? = nil,
         cloudModel: String? = nil,
         temperatureModeRaw: String = PluginLLMTemperatureMode.inheritProviderSetting.rawValue,
@@ -178,6 +181,7 @@ class PromptActionService: ObservableObject {
         action.name = name
         action.prompt = prompt
         action.icon = icon
+        action.isEnabled = isEnabled
         action.providerType = providerType
         action.cloudModel = cloudModel
         action.temperatureModeRaw = temperatureModeRaw
