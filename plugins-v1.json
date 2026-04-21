@@ -463,6 +463,14 @@
       "requiresAPIKey": true,
       "releases": [
         {
+          "version": "1.0.4",
+          "minHostVersion": "0.12.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 103238,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cohere-v1.0.4/CoherePlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.3",
           "minHostVersion": "0.12.0",
           "sdkCompatibilityVersion": "v1",
@@ -472,11 +480,11 @@
           "downloadCount": 2
         }
       ],
-      "version": "1.0.3",
+      "version": "1.0.4",
       "minHostVersion": "0.12.0",
       "sdkCompatibilityVersion": "v1",
-      "size": 103229,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cohere-v1.0.3/CoherePlugin.zip",
+      "size": 103238,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cohere-v1.0.4/CoherePlugin.zip",
       "minOSVersion": "14.0"
     },
     {
