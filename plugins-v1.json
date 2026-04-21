@@ -590,6 +590,14 @@
       "requiresAPIKey": true,
       "releases": [
         {
+          "version": "1.0.5",
+          "minHostVersion": "0.9.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 201397,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-fireworks-v1.0.5/FireworksPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.4",
           "minHostVersion": "0.9.0",
           "sdkCompatibilityVersion": "v1",
@@ -599,11 +607,11 @@
           "downloadCount": 2
         }
       ],
-      "version": "1.0.4",
+      "version": "1.0.5",
       "minHostVersion": "0.9.0",
       "sdkCompatibilityVersion": "v1",
-      "size": 181870,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-fireworks-v1.0.4/FireworksPlugin.zip",
+      "size": 201397,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-fireworks-v1.0.5/FireworksPlugin.zip",
       "minOSVersion": "14.0"
     },
     {
