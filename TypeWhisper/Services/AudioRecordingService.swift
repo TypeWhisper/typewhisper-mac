@@ -291,10 +291,23 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     func stopRecording(policy: StopPolicy) async -> [Float] {
         if let stopRecordingOverride {
             let samples = await stopRecordingOverride(policy)
+            let rms: Float
+            if samples.isEmpty {
+                rms = 0
+            } else {
+                rms = sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(samples.count))
+            }
+            let normalizedLevel = min(1.0, rms * 5)
+
+            bufferLock.withLock {
+                _peakRawAudioLevel = rms
+            }
+
             setLastStopGraceCaptureApplied(false)
             DispatchQueue.main.async { [weak self] in
                 self?.isRecording = false
-                self?.audioLevel = 0
+                self?.audioLevel = normalizedLevel
+                self?.rawAudioLevel = rms
             }
             return samples
         }

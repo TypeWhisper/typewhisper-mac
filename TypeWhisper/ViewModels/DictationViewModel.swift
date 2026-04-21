@@ -244,9 +244,6 @@ final class DictationViewModel: ObservableObject {
         )
         self.streamingHandler = StreamingHandler(
             modelManager: modelManager,
-            streamPromptProvider: { [weak dictionaryService] in
-                dictionaryService?.getTermsForPrompt() ?? ""
-            },
             bufferProvider: { [weak audioRecordingService] in
                 audioRecordingService?.getCurrentBuffer() ?? []
             },
@@ -878,6 +875,7 @@ final class DictationViewModel: ObservableObject {
         stopRecordingTimer()
         let previewText = partialText.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasPreviewText = !previewText.isEmpty
+        let hasConfirmedText = hasConfirmedTranscriptionResultText(liveSessionResult)
 
         if !partialText.isEmpty {
             let elapsed = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
@@ -895,13 +893,13 @@ final class DictationViewModel: ObservableObject {
         let decision = classifyShortSpeech(
             rawDuration: rawDuration,
             peakLevel: peakLevel,
-            hasPreviewText: hasPreviewText,
+            hasConfirmedText: hasConfirmedText,
             transcribeShortQuietClipsAggressively: transcribeShortQuietClipsAggressively
         )
         let graceApplied = audioRecordingService.lastStopGraceCaptureApplied
 
         logger.info(
-            "Stop finalized: rawDuration=\(String(format: "%.3f", rawDuration), privacy: .public)s, bufferedSamples=\(samples.count), peakLevel=\(String(format: "%.4f", peakLevel), privacy: .public), hasPreviewText=\(hasPreviewText, privacy: .public), previewTextLength=\(previewText.count, privacy: .public), stopPolicy=\(stopPolicy.logDescription, privacy: .public), graceApplied=\(graceApplied, privacy: .public), decision=\(decision.logDescription, privacy: .public)"
+            "Stop finalized: rawDuration=\(String(format: "%.3f", rawDuration), privacy: .public)s, bufferedSamples=\(samples.count), peakLevel=\(String(format: "%.4f", peakLevel), privacy: .public), hasPreviewText=\(hasPreviewText, privacy: .public), previewTextLength=\(previewText.count, privacy: .public), hasConfirmedText=\(hasConfirmedText, privacy: .public), stopPolicy=\(stopPolicy.logDescription, privacy: .public), graceApplied=\(graceApplied, privacy: .public), decision=\(decision.logDescription, privacy: .public)"
         )
 
         switch decision {
@@ -958,7 +956,9 @@ final class DictationViewModel: ObservableObject {
                 let engineOverride = effectiveEngineOverrideId
                 let cloudModelOverride = effectiveCloudModelOverride
                 let translationTarget = effectiveTranslationTarget
-                let termsPrompt = dictionaryService.getTermsForPrompt()
+                let termsPrompt = dictionaryService.getTermsForPrompt(
+                    providerId: engineOverride ?? modelManager.selectedProviderId
+                )
 
                 let result = if let liveSessionResult {
                     liveSessionResult
@@ -1210,6 +1210,9 @@ final class DictationViewModel: ObservableObject {
         )
         lastStreamingParams = allowLiveTranscription ? params : nil
         streamingHandler.start(
+            streamPrompt: dictionaryService.getTermsForPrompt(
+                providerId: params.engineOverrideId ?? params.providerId
+            ) ?? "",
             engineOverrideId: params.engineOverrideId,
             selectedProviderId: params.providerId,
             languageSelection: params.languageSelection,
@@ -1496,25 +1499,30 @@ enum ShortSpeechDecision: Equatable {
     }
 }
 
+func hasConfirmedTranscriptionResultText(_ result: TranscriptionResult?) -> Bool {
+    guard let result else { return false }
+    return !result.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+}
+
 func classifyShortSpeech(
     rawDuration: TimeInterval,
     peakLevel: Float,
-    hasPreviewText: Bool,
+    hasConfirmedText: Bool,
     transcribeShortQuietClipsAggressively: Bool = false
 ) -> ShortSpeechDecision {
     guard rawDuration >= 0.04 else { return .discardTooShort }
-    if hasPreviewText { return .transcribe }
+    if hasConfirmedText { return .transcribe }
 
     if rawDuration < 1.0 {
         // Bias toward transcribing short clips. False negatives here are worse than
         // letting the recognizer return empty text for actual silence.
-        if peakLevel < 0.005 {
+        if peakLevel < 0.003 {
             return transcribeShortQuietClipsAggressively ? .transcribe : .discardNoSpeech
         }
         return .transcribe
     }
 
-    if peakLevel < 0.01 {
+    if peakLevel < 0.006 {
         return transcribeShortQuietClipsAggressively ? .transcribe : .discardNoSpeech
     }
     return .transcribe

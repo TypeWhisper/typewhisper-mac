@@ -73,9 +73,11 @@ private struct GladiaLiveSession: Sendable {
 }
 
 @objc(GladiaPlugin)
-final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, @unchecked Sendable {
+final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.gladia"
     static let pluginName = "Gladia"
+    private static let dictionaryLogger = Logger(subsystem: "com.typewhisper.gladia", category: "Plugin")
+    private static let dictionaryBudget = DictionaryTermsBudget(maxTerms: 1_000, maxCharsPerTerm: 50)
 
     fileprivate var host: HostServices?
     fileprivate var _apiKey: String?
@@ -122,6 +124,7 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
     var supportsTranslation: Bool { false }
     var supportsStreaming: Bool { true }
     var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
+    var dictionaryTermsBudget: DictionaryTermsBudget { Self.dictionaryBudget }
     var supportedLanguages: [String] { gladiaSupportedLanguages }
 
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
@@ -763,9 +766,15 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
 
     private static func customVocabularyConfig(prompt: String?) -> [String: Any]? {
         let vocabulary = PluginDictionaryTerms.terms(fromPrompt: prompt)
-        guard !vocabulary.isEmpty else { return nil }
+        let clippedVocabulary = PluginDictionaryTerms.clippedTerms(from: vocabulary, budget: dictionaryBudget)
+        if clippedVocabulary.count < vocabulary.count {
+            dictionaryLogger.warning(
+                "Gladia dropped \(vocabulary.count - clippedVocabulary.count) dictionary term(s) outside the documented vocabulary budget"
+            )
+        }
+        guard !clippedVocabulary.isEmpty else { return nil }
         return [
-            "vocabulary": vocabulary,
+            "vocabulary": clippedVocabulary,
             "default_intensity": 0.7,
         ]
     }

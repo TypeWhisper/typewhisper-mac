@@ -142,6 +142,45 @@ final class APIRouterAndHandlersTests: XCTestCase {
         }
     }
 
+    @objc(APIRouterBudgetedTranscriptionPlugin)
+    private final class BudgetedTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsBudgetProviding, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.budgeted-transcription" }
+        static var pluginName: String { "Budgeted Mock Transcription" }
+        private static let promptLock = NSLock()
+        nonisolated(unsafe) private static var _lastPrompt: String?
+
+        static var lastPrompt: String? {
+            promptLock.withLock { _lastPrompt }
+        }
+
+        static func reset() {
+            promptLock.withLock {
+                _lastPrompt = nil
+            }
+        }
+
+        required override init() {}
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+
+        var providerId: String { "budgeted-mock" }
+        var providerDisplayName: String { "Budgeted Mock" }
+        var isConfigured: Bool { true }
+        var transcriptionModels: [PluginModelInfo] { [PluginModelInfo(id: "large", displayName: "Large")] }
+        var selectedModelId: String? { "large" }
+        func selectModel(_ modelId: String) {}
+        var supportsTranslation: Bool { false }
+        var dictionaryTermsBudget: DictionaryTermsBudget { DictionaryTermsBudget(maxTotalChars: 2_000) }
+
+        func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+            Self.promptLock.withLock {
+                Self._lastPrompt = prompt
+            }
+            return PluginTranscriptionResult(text: "transcribed", detectedLanguage: language)
+        }
+    }
+
     @objc(APIRouterConfigurableTranscriptionPlugin)
     private final class ConfigurableTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.configurable-transcription" }
@@ -308,6 +347,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
     private final class APIContext: @unchecked Sendable {
         let router: APIRouter
+        let modelManager: ModelManagerService
         let historyService: HistoryService
         let profileService: ProfileService
         let dictionaryService: DictionaryService
@@ -319,6 +359,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         init(
             router: APIRouter,
+            modelManager: ModelManagerService,
             historyService: HistoryService,
             profileService: ProfileService,
             dictionaryService: DictionaryService,
@@ -329,6 +370,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             retainedObjects: [AnyObject]
         ) {
             self.router = router
+            self.modelManager = modelManager
             self.historyService = historyService
             self.profileService = profileService
             self.dictionaryService = dictionaryService
@@ -575,6 +617,107 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         XCTAssertEqual(response["text"] as? String, "transcribed")
         XCTAssertEqual(MockTranscriptionPlugin.lastPrompt, "TypeWhisper, WhisperKit")
+    }
+
+    func testTranscribeEndpointUsesOverrideEngineBudgetForDictionaryPrompt() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        BudgetedTranscriptionPlugin.reset()
+        context = await MainActor.run {
+            let context = Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+            PluginManager.shared.loadedPlugins.append(
+                LoadedPlugin(
+                    manifest: PluginManifest(
+                        id: "com.typewhisper.mock.budgeted-transcription",
+                        name: "Budgeted Mock Transcription",
+                        version: "1.0.0",
+                        principalClass: "APIRouterBudgetedTranscriptionPlugin"
+                    ),
+                    instance: BudgetedTranscriptionPlugin(),
+                    bundle: Bundle.main,
+                    sourceURL: appSupportDirectory,
+                    isEnabled: true
+                )
+            )
+            context.dictionaryService.setTerms(Self.makeLongTerms(count: 40, length: 24), replaceExisting: true)
+            return context
+        }
+
+        let router = try XCTUnwrap(context?.router)
+        let wavData = WavEncoder.encode(Array(repeating: Float(0), count: 1600))
+
+        let response = try Self.jsonObject(await router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: [
+                    "content-type": "audio/wav",
+                    "x-engine": "budgeted-mock",
+                ],
+                body: wavData
+            )
+        ))
+
+        XCTAssertEqual(response["text"] as? String, "transcribed")
+        XCTAssertNil(MockTranscriptionPlugin.lastPrompt)
+        XCTAssertGreaterThan(try XCTUnwrap(BudgetedTranscriptionPlugin.lastPrompt).count, 600)
+    }
+
+    func testTranscribeEndpointUsesSelectedEngineBudgetWhenNoOverrideIsProvided() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        BudgetedTranscriptionPlugin.reset()
+        context = await MainActor.run {
+            let context = Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+            let budgetedPlugin = BudgetedTranscriptionPlugin()
+            PluginManager.shared.loadedPlugins.append(
+                LoadedPlugin(
+                    manifest: PluginManifest(
+                        id: "com.typewhisper.mock.budgeted-transcription",
+                        name: "Budgeted Mock Transcription",
+                        version: "1.0.0",
+                        principalClass: "APIRouterBudgetedTranscriptionPlugin"
+                    ),
+                    instance: budgetedPlugin,
+                    bundle: Bundle.main,
+                    sourceURL: appSupportDirectory,
+                    isEnabled: true
+                )
+            )
+            context.modelManager.selectProvider(budgetedPlugin.providerId)
+            context.dictionaryService.setTerms(Self.makeLongTerms(count: 40, length: 24), replaceExisting: true)
+            return context
+        }
+
+        let router = try XCTUnwrap(context?.router)
+        let wavData = WavEncoder.encode(Array(repeating: Float(0), count: 1600))
+
+        let response = try Self.jsonObject(await router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: ["content-type": "audio/wav"],
+                body: wavData
+            )
+        ))
+
+        XCTAssertEqual(response["text"] as? String, "transcribed")
+        XCTAssertNil(MockTranscriptionPlugin.lastPrompt)
+        XCTAssertGreaterThan(try XCTUnwrap(BudgetedTranscriptionPlugin.lastPrompt).count, 600)
     }
 
     func testTranscribeEndpointAcceptsRepeatedLanguageHints() async throws {
@@ -1673,6 +1816,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         return APIContext(
             router: router,
+            modelManager: modelManager,
             historyService: historyService,
             profileService: profileService,
             dictionaryService: dictionaryService,
@@ -1707,6 +1851,14 @@ final class APIRouterAndHandlersTests: XCTestCase {
                 handlers
             ]
         )
+    }
+
+    private static func makeLongTerms(count: Int, length: Int) -> [String] {
+        (1...count).map { index in
+            let prefix = "Term\(index)-"
+            let paddingLength = max(0, length - prefix.count)
+            return prefix + String(repeating: "x", count: paddingLength)
+        }
     }
 
     private final class DictationContext: @unchecked Sendable {

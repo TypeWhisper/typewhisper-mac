@@ -424,6 +424,93 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         XCTAssertEqual(plugin.selectedModelId, "openai_whisper-tiny")
         XCTAssertFalse(plugin.isConfigured)
     }
+
+}
+
+final class PluginDictionaryGuardTests: XCTestCase {
+    func testWhisperKitConditioningPromptClampsPlainTermListsTo500Characters() {
+        let prompt = PluginDictionaryTerms.prompt(from: makeLongTerms(count: 80, length: 18), maxLength: 10_000)
+        let conditioned = WhisperKitPlugin.conditioningPrompt(from: prompt)
+
+        XCTAssertNotNil(conditioned)
+        XCTAssertTrue(conditioned?.hasPrefix("The audio may contain these names or technical terms: ") == true)
+        XCTAssertLessThanOrEqual(conditioned?.count ?? .max, 500)
+    }
+
+    func testWhisperKitSanitizedStreamingTextRemovesConditioningPromptPrefix() {
+        let prompt = "AssemblyAI, Deepgram, Gemini, Nova 2, Nova 3, OpenAI, Speechmatics, Whisper"
+        let conditioned = WhisperKitPlugin.conditioningPrompt(from: prompt)
+
+        XCTAssertEqual(
+            WhisperKitPlugin.sanitizedStreamingText(
+                "\(conditioned ?? "") hello world",
+                conditioningPrompt: conditioned
+            ),
+            "hello world"
+        )
+    }
+
+    func testDeepgramDictionaryQueryItemsLimitDictionaryTermsTo100AndPreserveOrder() {
+        let prompt = PluginDictionaryTerms.prompt(from: makeLongTerms(count: 150, length: 10), maxLength: 10_000)
+        let queryItems = DeepgramPlugin.dictionaryQueryItems(prompt: prompt, modelId: "nova-2")
+
+        XCTAssertEqual(queryItems.count, 100)
+        XCTAssertTrue(queryItems.allSatisfy { $0.name == "keywords" })
+        XCTAssertEqual(queryItems.first?.value, "Term1-xxxx")
+        XCTAssertEqual(queryItems.last?.value, "Term100-xx")
+    }
+
+    @available(macOS 26, *)
+    func testSpeechAnalyzerAnalysisContextLimitsDictionaryTermsTo100() {
+        let prompt = PluginDictionaryTerms.prompt(from: makeLongTerms(count: 150, length: 10), maxLength: 10_000)
+        let context = SpeechAnalyzerPlugin.analysisContext(from: prompt)
+        let terms = context.contextualStrings[.general] ?? []
+
+        XCTAssertEqual(terms.count, 100)
+        XCTAssertEqual(terms.first, "Term1-xxxx")
+        XCTAssertEqual(terms.last, "Term100-xx")
+    }
+
+    private func makeLongTerms(count: Int, length: Int) -> [String] {
+        (1...count).map { index in
+            let prefix = "Term\(index)-"
+            let paddingLength = max(0, length - prefix.count)
+            return prefix + String(repeating: "x", count: paddingLength)
+        }
+    }
+}
+
+final class WhisperKitSettingsStateTests: XCTestCase {
+    func testApplyingNotLoadedStateClearsStaleLoadingAndStopsPolling() {
+        let initial = WhisperKitSettingsPollState(
+            modelState: .loading(phase: "loading"),
+            downloadProgress: 0.9,
+            activeModelId: "openai_whisper-large-v3_turbo",
+            isPolling: true
+        )
+
+        let updated = initial.applyingPolledPluginState(
+            .notLoaded,
+            downloadProgress: 0,
+            selectedModelId: "openai_whisper-large-v3_turbo"
+        )
+
+        XCTAssertEqual(updated.modelState, .notLoaded)
+        XCTAssertEqual(updated.downloadProgress, 0)
+        XCTAssertEqual(updated.activeModelId, "openai_whisper-large-v3_turbo")
+        XCTAssertFalse(updated.isPolling)
+    }
+
+    func testBusyStateTreatsPrewarmingAsLoading() {
+        let state = WhisperKitSettingsPollState(
+            modelState: .loading(phase: "prewarming"),
+            downloadProgress: 0.9,
+            activeModelId: "openai_whisper-large-v3_turbo",
+            isPolling: true
+        )
+
+        XCTAssertTrue(state.isBusy)
+    }
 }
 
 @MainActor

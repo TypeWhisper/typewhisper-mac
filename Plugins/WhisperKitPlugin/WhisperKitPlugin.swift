@@ -6,9 +6,10 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(WhisperKitPlugin)
-final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, @unchecked Sendable {
+final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.whisperkit"
     static let pluginName = "WhisperKit"
+    private static let maxConditioningPromptChars = 500
 
     fileprivate var host: HostServices?
     fileprivate var whisperKit: WhisperKit?
@@ -77,6 +78,7 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
     var supportsTranslation: Bool { true }
     var supportsStreaming: Bool { true }
     var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
+    var dictionaryTermsBudget: DictionaryTermsBudget { DictionaryTermsBudget(maxTotalChars: Self.maxConditioningPromptChars) }
 
     var supportedLanguages: [String] {
         [
@@ -173,7 +175,11 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
             audioArray: audio.samples,
             decodeOptions: options,
             callback: { progress in
-                let shouldContinue = onProgress(progress.text)
+                let sanitizedText = Self.sanitizedStreamingText(
+                    progress.text,
+                    conditioningPrompt: effectivePrompt
+                )
+                let shouldContinue = onProgress(sanitizedText)
                 return shouldContinue ? nil : false
             }
         )
@@ -197,8 +203,8 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
         return encoded.isEmpty ? nil : encoded
     }
 
-    private static func conditioningPrompt(from prompt: String?) -> String? {
-        guard let prompt else { return nil }
+    static func conditioningPrompt(from prompt: String?) -> String? {
+        guard let prompt = clampedPrompt(prompt, maxLength: maxConditioningPromptChars) else { return nil }
 
         let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedPrompt.isEmpty else { return nil }
@@ -207,10 +213,39 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
         // Convert the legacy transport format into a softer natural-language context line.
         let terms = PluginDictionaryTerms.terms(fromPrompt: trimmedPrompt)
         if !terms.isEmpty && Self.looksLikePlainTermList(trimmedPrompt, terms: terms) {
-            return "The audio may contain these names or technical terms: \(terms.joined(separator: ", "))."
+            let prefix = "The audio may contain these names or technical terms: "
+            let suffix = "."
+            let availableTermChars = max(0, maxConditioningPromptChars - prefix.count - suffix.count)
+            guard let termPrompt = PluginDictionaryTerms.prompt(from: terms, maxLength: availableTermChars) else {
+                return nil
+            }
+            return prefix + termPrompt + suffix
         }
 
         return trimmedPrompt
+    }
+
+    static func sanitizedStreamingText(_ text: String, conditioningPrompt: String?) -> String {
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else { return "" }
+
+        guard let conditioningPrompt = conditioningPrompt?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !conditioningPrompt.isEmpty,
+              let promptRange = trimmedText.range(
+                  of: conditioningPrompt,
+                  options: [.anchored, .caseInsensitive, .diacriticInsensitive]
+              ) else {
+            return trimmedText
+        }
+
+        return String(trimmedText[promptRange.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func clampedPrompt(_ prompt: String?, maxLength: Int) -> String? {
+        guard let prompt else { return nil }
+        let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return String(trimmed.prefix(maxLength))
     }
 
     private static func looksLikePlainTermList(_ prompt: String, terms: [String]) -> Bool {
@@ -582,6 +617,45 @@ enum WhisperModelState: Equatable {
     }
 }
 
+struct WhisperKitSettingsPollState: Equatable {
+    var modelState: WhisperModelState
+    var downloadProgress: Double
+    var activeModelId: String?
+    var isPolling: Bool
+
+    var isBusy: Bool {
+        switch modelState {
+        case .downloading, .loading:
+            return true
+        case .notLoaded, .ready, .error:
+            return false
+        }
+    }
+
+    func applyingPolledPluginState(
+        _ pluginState: WhisperModelState,
+        downloadProgress: Double,
+        selectedModelId: String?
+    ) -> WhisperKitSettingsPollState {
+        var updated = self
+        updated.modelState = pluginState
+        updated.downloadProgress = downloadProgress
+
+        switch pluginState {
+        case .ready:
+            updated.activeModelId = selectedModelId ?? updated.activeModelId
+            updated.isPolling = false
+        case .downloading, .loading:
+            updated.isPolling = true
+        case .notLoaded, .error:
+            updated.activeModelId = selectedModelId ?? updated.activeModelId
+            updated.isPolling = false
+        }
+
+        return updated
+    }
+}
+
 // MARK: - Settings View
 
 private struct WhisperKitSettingsView: View {
@@ -719,27 +793,30 @@ private struct WhisperKitSettingsView: View {
                 hfTokenInput = token
             }
             // If the plugin is mid-load (e.g., restoring on app launch), start polling
-            if case .downloading = plugin.modelState { isPolling = true }
-            else if case .loading = plugin.modelState { isPolling = true }
+            isPolling = WhisperKitSettingsPollState(
+                modelState: plugin.modelState,
+                downloadProgress: plugin.downloadProgress,
+                activeModelId: plugin._selectedModelId,
+                isPolling: false
+            ).isBusy
         }
         .onReceive(pollTimer) { _ in
             guard isPolling else { return }
-            downloadProgress = plugin.downloadProgress
-            let pluginState = plugin.modelState
-            if pluginState != .notLoaded {
-                modelState = pluginState
+            let updatedState = WhisperKitSettingsPollState(
+                modelState: modelState,
+                downloadProgress: downloadProgress,
+                activeModelId: activeModelId,
+                isPolling: isPolling
+            ).applyingPolledPluginState(
+                plugin.modelState,
+                downloadProgress: plugin.downloadProgress,
+                selectedModelId: plugin._selectedModelId
+            )
 
-                switch pluginState {
-                case .ready:
-                    activeModelId = plugin._selectedModelId ?? activeModelId
-                case .downloading, .loading:
-                    break
-                case .notLoaded, .error:
-                    activeModelId = plugin._selectedModelId ?? activeModelId
-                }
-            }
-            if case .ready = pluginState { isPolling = false }
-            else if case .error = pluginState { isPolling = false }
+            modelState = updatedState.modelState
+            downloadProgress = updatedState.downloadProgress
+            activeModelId = updatedState.activeModelId
+            isPolling = updatedState.isPolling
         }
         .onChange(of: hfTokenInput) { _, newValue in
             let trimmedValue = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -808,6 +885,12 @@ private struct WhisperKitSettingsView: View {
             }
         } else {
             let isDownloaded = plugin.isModelDownloaded(modelDef)
+            let viewState = WhisperKitSettingsPollState(
+                modelState: modelState,
+                downloadProgress: downloadProgress,
+                activeModelId: activeModelId,
+                isPolling: isPolling
+            )
             Button(
                 isDownloaded
                     ? String(localized: "Load", bundle: bundle)
@@ -827,7 +910,7 @@ private struct WhisperKitSettingsView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
-            .disabled(modelState == .downloading || modelState == .loading(phase: "loading"))
+            .disabled(viewState.isBusy)
         }
     }
 

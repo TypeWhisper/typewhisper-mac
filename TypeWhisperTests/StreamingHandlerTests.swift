@@ -17,6 +17,7 @@ final class StreamingHandlerTests: XCTestCase {
         var supportsStreaming: Bool { false }
         var supportedLanguages: [String] { ["en"] }
         private(set) var transcribeCallCount = 0
+        private(set) var lastPrompt: String?
 
         func activate(host: HostServices) {}
         func deactivate() {}
@@ -24,6 +25,7 @@ final class StreamingHandlerTests: XCTestCase {
 
         func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
             transcribeCallCount += 1
+            lastPrompt = prompt
             return PluginTranscriptionResult(text: "final", detectedLanguage: language)
         }
     }
@@ -75,6 +77,7 @@ final class StreamingHandlerTests: XCTestCase {
         var supportsStreaming: Bool { true }
         var supportedLanguages: [String] { ["en"] }
         let session = MockLiveSession()
+        private(set) var lastPrompt: String?
 
         func activate(host: HostServices) {}
         func deactivate() {}
@@ -102,6 +105,7 @@ final class StreamingHandlerTests: XCTestCase {
             prompt: String?,
             onProgress: @Sendable @escaping (String) -> Bool
         ) async throws -> any LiveTranscriptionSession {
+            lastPrompt = prompt
             await session.setOnProgress(onProgress)
             return session
         }
@@ -121,6 +125,7 @@ final class StreamingHandlerTests: XCTestCase {
         var supportedLanguages: [String] { ["de", "en"] }
         let session = MockLiveSession()
         private(set) var lastSelection = PluginLanguageSelection()
+        private(set) var lastPrompt: String?
 
         func activate(host: HostServices) {}
         func deactivate() {}
@@ -159,6 +164,7 @@ final class StreamingHandlerTests: XCTestCase {
             onProgress: @Sendable @escaping (String) -> Bool
         ) async throws -> any LiveTranscriptionSession {
             lastSelection = languageSelection
+            lastPrompt = prompt
             await session.setOnProgress(onProgress)
             return session
         }
@@ -220,13 +226,13 @@ final class StreamingHandlerTests: XCTestCase {
 
         let handler = StreamingHandler(
             modelManager: modelManager,
-            streamPromptProvider: { "" },
             bufferProvider: { Array(repeating: 0.5, count: 16_000) },
             bufferDeltaProvider: { _ in ([], 0) },
             bufferedDurationProvider: { 1.0 }
         )
 
         handler.start(
+            streamPrompt: "Batch Terms",
             engineOverrideId: plugin.providerId,
             selectedProviderId: plugin.providerId,
             languageSelection: .exact("en"),
@@ -240,6 +246,7 @@ final class StreamingHandlerTests: XCTestCase {
         handler.stop()
 
         XCTAssertEqual(plugin.transcribeCallCount, 1)
+        XCTAssertEqual(plugin.lastPrompt, "Batch Terms")
     }
 
     func testDisabledLiveTranscriptionPreventsAnyIntermediateWork() async throws {
@@ -269,13 +276,13 @@ final class StreamingHandlerTests: XCTestCase {
 
         let handler = StreamingHandler(
             modelManager: modelManager,
-            streamPromptProvider: { "" },
             bufferProvider: { Array(repeating: 0.5, count: 16_000) },
             bufferDeltaProvider: { _ in ([], 0) },
             bufferedDurationProvider: { 1.0 }
         )
 
         handler.start(
+            streamPrompt: "Unused Terms",
             engineOverrideId: plugin.providerId,
             selectedProviderId: plugin.providerId,
             languageSelection: .exact("en"),
@@ -325,7 +332,6 @@ final class StreamingHandlerTests: XCTestCase {
 
         let handler = StreamingHandler(
             modelManager: modelManager,
-            streamPromptProvider: { "" },
             bufferProvider: { [] },
             bufferDeltaProvider: { _ in
                 indexLock.lock()
@@ -343,6 +349,7 @@ final class StreamingHandlerTests: XCTestCase {
 
         var activeChecks = 0
         handler.start(
+            streamPrompt: "Live Terms",
             engineOverrideId: plugin.providerId,
             selectedProviderId: plugin.providerId,
             languageSelection: .exact("en"),
@@ -361,6 +368,7 @@ final class StreamingHandlerTests: XCTestCase {
         XCTAssertEqual(result?.text, "finished")
         let recorded = await plugin.session.recordedChunks()
         XCTAssertEqual(recorded, chunks.map(\.count))
+        XCTAssertEqual(plugin.lastPrompt, "Live Terms")
     }
 
     func testModelManagerUsesHintAwarePluginWhenMultipleHintsAreSelected() async throws {
@@ -456,13 +464,13 @@ final class StreamingHandlerTests: XCTestCase {
 
         let handler = StreamingHandler(
             modelManager: modelManager,
-            streamPromptProvider: { "" },
             bufferProvider: { [] },
             bufferDeltaProvider: { _ in (Array(repeating: 0.1, count: 4000), 4000) },
             bufferedDurationProvider: { 0.25 }
         )
 
         handler.start(
+            streamPrompt: "Hint Terms",
             engineOverrideId: plugin.providerId,
             selectedProviderId: plugin.providerId,
             languageSelection: .hints(["de", "en"]),
@@ -477,5 +485,6 @@ final class StreamingHandlerTests: XCTestCase {
 
         XCTAssertEqual(plugin.lastSelection.languageHints, ["de", "en"])
         XCTAssertNil(plugin.lastSelection.requestedLanguage)
+        XCTAssertEqual(plugin.lastPrompt, "Hint Terms")
     }
 }

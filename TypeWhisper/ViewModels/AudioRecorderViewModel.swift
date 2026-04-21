@@ -96,9 +96,6 @@ final class AudioRecorderViewModel: ObservableObject {
         self.dictionaryService = dictionaryService
         self.streamingHandler = StreamingHandler(
             modelManager: modelManager,
-            streamPromptProvider: { [weak dictionaryService] in
-                dictionaryService?.getTermsForPrompt() ?? ""
-            },
             bufferProvider: { [weak recorderService] in
                 recorderService?.getCurrentBuffer() ?? []
             },
@@ -225,7 +222,7 @@ final class AudioRecorderViewModel: ObservableObject {
                     task: selectedTask,
                     providerId: modelManager.selectedProviderId,
                     modelId: modelManager.selectedModelId,
-                    prompt: dictionaryService.getTermsForPrompt(),
+                    prompt: dictionaryService.getTermsForPrompt(providerId: modelManager.selectedProviderId),
                     liveSessionResult: liveSessionResult
                 )
                 state = .finalizing
@@ -353,6 +350,7 @@ final class AudioRecorderViewModel: ObservableObject {
 
         let task = (selectedTask == .translate && !plugin.supportsTranslation) ? .transcribe : selectedTask
         streamingHandler.start(
+            streamPrompt: dictionaryService.getTermsForPrompt(providerId: providerId) ?? "",
             engineOverrideId: providerId,
             selectedProviderId: modelManager.selectedProviderId,
             languageSelection: languageSelection,

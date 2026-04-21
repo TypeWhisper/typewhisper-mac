@@ -37,9 +37,10 @@ private actor TranscriptCollector {
 // MARK: - Plugin Entry Point
 
 @objc(SpeechmaticsPlugin)
-final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, @unchecked Sendable {
+final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.speechmatics"
     static let pluginName = "Speechmatics"
+    private static let dictionaryBudget = DictionaryTermsBudget(maxTerms: 1_000, maxWordsPerTerm: 6)
 
     fileprivate var host: HostServices?
     fileprivate var _apiKey: String?
@@ -91,6 +92,7 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryT
     var supportsTranslation: Bool { false }
     var supportsStreaming: Bool { true }
     var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
+    var dictionaryTermsBudget: DictionaryTermsBudget { Self.dictionaryBudget }
 
     var supportedLanguages: [String] {
         [
@@ -486,7 +488,14 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryT
     }
 
     private static func additionalVocabulary(prompt: String?) -> [String] {
-        PluginDictionaryTerms.terms(fromPrompt: prompt)
+        let vocabulary = PluginDictionaryTerms.terms(fromPrompt: prompt)
+        let clippedVocabulary = PluginDictionaryTerms.clippedTerms(from: vocabulary, budget: dictionaryBudget)
+        if clippedVocabulary.count < vocabulary.count {
+            Logger(subsystem: "com.typewhisper.speechmatics", category: "Plugin").warning(
+                "Speechmatics dropped \(vocabulary.count - clippedVocabulary.count) dictionary term(s) outside the documented vocabulary budget"
+            )
+        }
+        return clippedVocabulary
     }
 
     // MARK: - Audio Conversion

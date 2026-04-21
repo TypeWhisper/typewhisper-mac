@@ -12,7 +12,6 @@ final class StreamingHandler {
     private var sampleCursor = 0
 
     private let modelManager: ModelManagerService
-    private let streamPromptProvider: () -> String
     private let bufferProvider: () -> [Float]
     private let bufferDeltaProvider: (Int) -> (samples: [Float], nextOffset: Int)
     private let bufferedDurationProvider: () -> Double
@@ -22,19 +21,18 @@ final class StreamingHandler {
 
     init(
         modelManager: ModelManagerService,
-        streamPromptProvider: @escaping () -> String,
         bufferProvider: @escaping () -> [Float],
         bufferDeltaProvider: @escaping (Int) -> (samples: [Float], nextOffset: Int),
         bufferedDurationProvider: @escaping () -> Double
     ) {
         self.modelManager = modelManager
-        self.streamPromptProvider = streamPromptProvider
         self.bufferProvider = bufferProvider
         self.bufferDeltaProvider = bufferDeltaProvider
         self.bufferedDurationProvider = bufferedDurationProvider
     }
 
     func start(
+        streamPrompt: String,
         engineOverrideId: String?,
         selectedProviderId: String?,
         languageSelection: LanguageSelection,
@@ -56,7 +54,6 @@ final class StreamingHandler {
         sampleCursor = 0
         onStreamingStateChange?(true)
 
-        let streamPrompt = streamPromptProvider()
         let pollInterval: Duration = plugin.supportsStreaming ? .milliseconds(350) : .seconds(3)
 
         streamingTask = Task { [weak self] in

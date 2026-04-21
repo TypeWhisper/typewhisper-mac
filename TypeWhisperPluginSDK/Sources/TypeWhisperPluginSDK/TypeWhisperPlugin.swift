@@ -244,6 +244,25 @@ public enum DictionaryTermsSupport: String, Sendable, CaseIterable {
     case unsupported
 }
 
+public struct DictionaryTermsBudget: Sendable, Equatable {
+    public let maxTerms: Int?
+    public let maxCharsPerTerm: Int?
+    public let maxWordsPerTerm: Int?
+    public let maxTotalChars: Int?
+
+    public init(
+        maxTerms: Int? = nil,
+        maxCharsPerTerm: Int? = nil,
+        maxWordsPerTerm: Int? = nil,
+        maxTotalChars: Int? = nil
+    ) {
+        self.maxTerms = maxTerms
+        self.maxCharsPerTerm = maxCharsPerTerm
+        self.maxWordsPerTerm = maxWordsPerTerm
+        self.maxTotalChars = maxTotalChars
+    }
+}
+
 public protocol DictionaryTermsCapabilityProviding: TypeWhisperPlugin {
     var dictionaryTermsSupport: DictionaryTermsSupport { get }
 }
@@ -274,6 +293,50 @@ public enum PluginDictionaryTerms {
     public static func terms(fromPrompt prompt: String?) -> [String] {
         guard let prompt, !prompt.isEmpty else { return [] }
         return normalizedTerms(from: prompt.split(separator: ",").map(String.init))
+    }
+
+    public static func clippedTerms(from terms: [String], budget: DictionaryTermsBudget?) -> [String] {
+        var clipped = normalizedTerms(from: terms)
+
+        if let maxCharsPerTerm = budget?.maxCharsPerTerm {
+            clipped = clipped.filter { $0.count <= maxCharsPerTerm }
+        }
+
+        if let maxWordsPerTerm = budget?.maxWordsPerTerm {
+            clipped = clipped.filter {
+                $0.split(whereSeparator: \.isWhitespace).count <= maxWordsPerTerm
+            }
+        }
+
+        if let maxTerms = budget?.maxTerms {
+            let safeMaxTerms = max(0, maxTerms)
+            if clipped.count > safeMaxTerms {
+                clipped = Array(clipped.prefix(safeMaxTerms))
+            }
+        }
+
+        if let maxTotalChars = budget?.maxTotalChars {
+            var limited: [String] = []
+            var totalChars = 0
+
+            for term in clipped {
+                let separatorChars = limited.isEmpty ? 0 : 2
+                let nextTotal = totalChars + separatorChars + term.count
+                guard nextTotal <= maxTotalChars else { break }
+                limited.append(term)
+                totalChars = nextTotal
+            }
+
+            clipped = limited
+        }
+
+        return clipped
+    }
+
+    public static func prompt(from terms: [String], budget: DictionaryTermsBudget?) -> String? {
+        let clipped = clippedTerms(from: terms, budget: budget)
+        guard !clipped.isEmpty else { return nil }
+        return clipped.joined(separator: ", ")
     }
 
     public static func prompt(from terms: [String], maxLength: Int = 600) -> String? {
@@ -312,6 +375,10 @@ public protocol TranscriptionEnginePlugin: TypeWhisperPlugin {
     var supportedLanguages: [String] { get }
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?,
                     onProgress: @Sendable @escaping (String) -> Bool) async throws -> PluginTranscriptionResult
+}
+
+public protocol DictionaryTermsBudgetProviding: TranscriptionEnginePlugin {
+    var dictionaryTermsBudget: DictionaryTermsBudget { get }
 }
 
 /// Optional model-catalog extension for engines that expose a broader model list than

@@ -292,8 +292,17 @@ final class DictionaryService: ObservableObject {
         }
     }
 
-    func getTermsForPrompt() -> String? {
-        PluginDictionaryTerms.prompt(from: enabledTerms())
+    func getTermsForPrompt(providerId: String?) -> String? {
+        let terms = enabledTerms()
+        guard !terms.isEmpty else { return nil }
+
+        guard let providerId,
+              let plugin = PluginManager.shared?.transcriptionEngine(for: providerId),
+              let budget = (plugin as? any DictionaryTermsBudgetProviding)?.dictionaryTermsBudget else {
+            return PluginDictionaryTerms.prompt(from: terms)
+        }
+
+        return PluginDictionaryTerms.prompt(from: terms, budget: budget)
     }
 
     /// Apply all enabled corrections to the given text

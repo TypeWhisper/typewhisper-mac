@@ -17,6 +17,13 @@ TypeWhisper supports external plugins as macOS `.bundle` files. Place compiled b
 | `TranscriptionEnginePlugin` | Custom transcription engines | Yes (transcription result) |
 | `ActionPlugin` | Route LLM output to custom actions (e.g. create Linear issues) | Yes (action result) |
 
+For transcription plugins, dictionary-term support remains optional. Engines that
+have documented input limits can additionally conform to `DictionaryTermsBudgetProviding`
+and return a `DictionaryTermsBudget` so the host clips the global dictionary before
+request assembly. Legacy `v1` plugins that do not implement the budget protocol keep
+working unchanged and automatically fall back to the host's default 600-character
+dictionary prompt budget.
+
 ## Event Bus
 
 Plugins can subscribe to events without modifying the transcription pipeline:
