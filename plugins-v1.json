@@ -330,6 +330,14 @@
       "requiresAPIKey": true,
       "releases": [
         {
+          "version": "1.0.4",
+          "minHostVersion": "0.9.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 173427,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cerebras-v1.0.4/CerebrasPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.3",
           "minHostVersion": "0.9.0",
           "sdkCompatibilityVersion": "v1",
@@ -339,11 +347,11 @@
           "downloadCount": 6
         }
       ],
-      "version": "1.0.3",
+      "version": "1.0.4",
       "minHostVersion": "0.9.0",
       "sdkCompatibilityVersion": "v1",
-      "size": 153075,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cerebras-v1.0.3/CerebrasPlugin.zip",
+      "size": 173427,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cerebras-v1.0.4/CerebrasPlugin.zip",
       "minOSVersion": "14.0"
     },
     {
