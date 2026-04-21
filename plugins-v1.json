@@ -1122,6 +1122,17 @@
       "iconSystemName": "cpu",
       "releases": [
         {
+          "version": "1.0.10",
+          "minHostVersion": "1.2.1",
+          "sdkCompatibilityVersion": "v1",
+          "size": 18919835,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-voxtral-v1.0.10/VoxtralPlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        },
+        {
           "version": "1.0.9",
           "minHostVersion": "1.2.1",
           "sdkCompatibilityVersion": "v1",
@@ -1134,11 +1145,11 @@
           "downloadCount": 27
         }
       ],
-      "version": "1.0.9",
+      "version": "1.0.10",
       "minHostVersion": "1.2.1",
       "sdkCompatibilityVersion": "v1",
-      "size": 18435253,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-voxtral-v1.0.9/VoxtralPlugin.zip",
+      "size": 18919835,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-voxtral-v1.0.10/VoxtralPlugin.zip",
       "minOSVersion": "14.0",
       "supportedArchitectures": [
         "arm64"
