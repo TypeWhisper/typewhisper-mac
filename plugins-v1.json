@@ -506,6 +506,14 @@
       "iconSystemName": "shield.lefthalf.filled",
       "releases": [
         {
+          "version": "1.0.4",
+          "minHostVersion": "0.9.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 193365,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cloudflare-asr-v1.0.4/CloudflareASRPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.3",
           "minHostVersion": "0.9.0",
           "sdkCompatibilityVersion": "v1",
@@ -515,11 +523,11 @@
           "downloadCount": 5
         }
       ],
-      "version": "1.0.3",
+      "version": "1.0.4",
       "minHostVersion": "0.9.0",
       "sdkCompatibilityVersion": "v1",
-      "size": 193371,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cloudflare-asr-v1.0.3/CloudflareASRPlugin.zip",
+      "size": 193365,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cloudflare-asr-v1.0.4/CloudflareASRPlugin.zip",
       "minOSVersion": "14.0"
     },
     {
