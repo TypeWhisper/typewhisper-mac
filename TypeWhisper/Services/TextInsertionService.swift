@@ -17,6 +17,7 @@ final class TextInsertionService {
     var focusedTextFieldOverride: (() -> Bool)?
     var focusedTextElementOverride: (() -> AXUIElement?)?
     var focusedTextStateOverride: ((AXUIElement) -> FocusedTextSnapshot?)?
+    var textSelectionOverride: (() -> TextSelection?)?
     var insertTextAtOverride: ((AXUIElement, String) -> Bool)?
     var pasteSimulatorOverride: (() -> Void)?
     var returnSimulatorOverride: (() -> Void)?
@@ -264,6 +265,9 @@ enum InsertionResult {
 
     /// Returns the selected text and the AXUIElement, so the selection can be replaced later.
     func getTextSelection() -> TextSelection? {
+        if let textSelectionOverride {
+            return textSelectionOverride()
+        }
         guard isAccessibilityGranted else { return nil }
 
         let systemWide = AXUIElementCreateSystemWide()

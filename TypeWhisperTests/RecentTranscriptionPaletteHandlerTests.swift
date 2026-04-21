@@ -145,6 +145,54 @@ final class RecentTranscriptionPaletteHandlerTests: XCTestCase {
 }
 
 @MainActor
+final class PromptPaletteHandlerTests: XCTestCase {
+    func testTriggerSelectionStillOpensPaletteWhenCurrentProviderIsNotReady() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let textInsertionService = TextInsertionService()
+        textInsertionService.accessibilityGrantedOverride = true
+        textInsertionService.captureActiveAppOverride = { ("Notes", nil, nil) }
+        textInsertionService.textSelectionOverride = {
+            TextInsertionService.TextSelection(
+                text: "Selected text",
+                element: AXUIElementCreateSystemWide()
+            )
+        }
+
+        let promptActionService = PromptActionService(appSupportDirectory: appSupportDirectory)
+        promptActionService.addAction(
+            name: "Translate",
+            prompt: "Translate the selected text.",
+            providerType: "Groq"
+        )
+
+        let promptProcessingService = PromptProcessingService()
+        promptProcessingService.selectedProviderId = "missing-provider"
+
+        let controller = PromptPaletteControllerSpy()
+        let handler = PromptPaletteHandler(
+            textInsertionService: textInsertionService,
+            promptActionService: promptActionService,
+            promptProcessingService: promptProcessingService,
+            soundService: SoundService(),
+            accessibilityAnnouncementService: AccessibilityAnnouncementService(),
+            promptPaletteController: controller
+        )
+
+        var shownError: String?
+        handler.onShowError = { shownError = $0 }
+
+        handler.triggerSelection(currentState: .idle, soundFeedbackEnabled: false)
+
+        XCTAssertTrue(controller.isVisible)
+        XCTAssertEqual(controller.lastActions?.map(\.name), ["Translate"])
+        XCTAssertEqual(controller.lastSourceText, "Selected text")
+        XCTAssertNil(shownError)
+    }
+}
+
+@MainActor
 final class SelectionPaletteInteractionModelTests: XCTestCase {
     func testArrowKeysMoveSelectionAndReturnSelectsCurrentItem() throws {
         let items = [
@@ -225,6 +273,25 @@ final class SelectionPaletteInteractionModelTests: XCTestCase {
                 keyCode: keyCode
             )
         )
+    }
+}
+
+@MainActor
+private final class PromptPaletteControllerSpy: PromptPaletteControlling {
+    private(set) var isVisible = false
+    private(set) var lastActions: [PromptAction]?
+    private(set) var lastSourceText: String?
+    private var onSelect: ((PromptAction) -> Void)?
+
+    func show(actions: [PromptAction], sourceText: String, onSelect: @escaping (PromptAction) -> Void) {
+        isVisible = true
+        lastActions = actions
+        lastSourceText = sourceText
+        self.onSelect = onSelect
+    }
+
+    func hide() {
+        isVisible = false
     }
 }
 

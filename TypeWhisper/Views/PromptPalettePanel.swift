@@ -1,7 +1,14 @@
 import SwiftUI
 
 @MainActor
-final class PromptPaletteController {
+protocol PromptPaletteControlling: AnyObject {
+    var isVisible: Bool { get }
+    func show(actions: [PromptAction], sourceText: String, onSelect: @escaping (PromptAction) -> Void)
+    func hide()
+}
+
+@MainActor
+final class PromptPaletteController: PromptPaletteControlling {
     private let paletteController: any SelectionPaletteControlling
 
     init(paletteController: any SelectionPaletteControlling = SelectionPaletteController()) {
