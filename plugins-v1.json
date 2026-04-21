@@ -740,6 +740,14 @@
       "requiresAPIKey": true,
       "releases": [
         {
+          "version": "1.0.13",
+          "minHostVersion": "0.9.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 227191,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-linear-v1.0.13/LinearPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.12",
           "minHostVersion": "0.9.0",
           "sdkCompatibilityVersion": "v1",
@@ -749,11 +757,11 @@
           "downloadCount": 2
         }
       ],
-      "version": "1.0.12",
+      "version": "1.0.13",
       "minHostVersion": "0.9.0",
       "sdkCompatibilityVersion": "v1",
-      "size": 227190,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-linear-v1.0.12/LinearPlugin.zip",
+      "size": 227191,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-linear-v1.0.13/LinearPlugin.zip",
       "minOSVersion": "14.0"
     },
     {
