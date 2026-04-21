@@ -292,6 +292,14 @@
       "requiresAPIKey": true,
       "releases": [
         {
+          "version": "1.0.3",
+          "minHostVersion": "0.9.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 142371,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-claude-v1.0.3/ClaudePlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.2",
           "minHostVersion": "0.9.0",
           "sdkCompatibilityVersion": "v1",
@@ -301,11 +309,11 @@
           "downloadCount": 64
         }
       ],
-      "version": "1.0.2",
+      "version": "1.0.3",
       "minHostVersion": "0.9.0",
       "sdkCompatibilityVersion": "v1",
-      "size": 119947,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-claude-v1.0.2/ClaudePlugin.zip",
+      "size": 142371,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-claude-v1.0.3/ClaudePlugin.zip",
       "minOSVersion": "14.0"
     },
     {
