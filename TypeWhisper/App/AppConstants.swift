@@ -83,6 +83,10 @@ enum AppConstants {
 
     static let appVersion: String = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
     static let buildVersion: String = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0"
+    static let currentReleaseFingerprint: String = {
+        let channel = bundledReleaseChannel()
+        return "\(appVersion)+\(buildVersion)@\(channel.rawValue)"
+    }()
     static func bundledReleaseChannel(infoDictionary: [String: Any]? = Bundle.main.infoDictionary) -> ReleaseChannel {
         guard let rawValue = infoDictionary?["TypeWhisperReleaseChannel"] as? String,
               let channel = ReleaseChannel(rawValue: rawValue) else {

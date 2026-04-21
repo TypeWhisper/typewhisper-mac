@@ -42,7 +42,17 @@ enum DockIconVisibility {
 struct TypeWhisperApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @AppStorage(UserDefaultsKeys.showMenuBarIcon) private var showMenuBarIcon = true
-    @State private var showWelcomeSheet = false
+    @State private var startupSheet: StartupSheetRoute?
+    @State private var lastPresentedStartupSheet: StartupSheetRoute?
+    @State private var ignoreNextStartupSheetDismiss = false
+
+    private var postUpdatePromptCoordinator: PostUpdatePromptCoordinator {
+        PostUpdatePromptCoordinator.shared
+    }
+
+    private var settingsNavigation: SettingsNavigationCoordinator {
+        SettingsNavigationCoordinator.shared
+    }
 
     var body: some Scene {
         MenuBarExtra(AppConstants.isDevelopment ? "TypeWhisper Dev" : "TypeWhisper", systemImage: "waveform", isInserted: $showMenuBarIcon) {
@@ -88,13 +98,22 @@ struct TypeWhisperApp: App {
             EmptyView()
         } else {
             SettingsView()
-                .sheet(isPresented: $showWelcomeSheet) {
-                    WelcomeSheet()
+                .sheet(item: $startupSheet, onDismiss: handleStartupSheetDismissed) { route in
+                    switch route {
+                    case .welcome:
+                        WelcomeSheet()
+                    case .postUpdateLicensing:
+                        PostUpdateLicensePromptView(
+                            onPersonalOSS: handlePersonalOSSSelection,
+                            onWorkUsage: handleWorkUsageSelection,
+                            onExistingKey: handleExistingKeySelection,
+                            onBecomeSupporter: handleSupporterSelection,
+                            onNotNow: handlePromptDismissalAction
+                        )
+                    }
                 }
                 .task {
-                    if LicenseService.shared.needsWelcomeSheet {
-                        showWelcomeSheet = true
-                    }
+                    refreshStartupSheet()
                 }
         }
     }
@@ -122,9 +141,86 @@ struct TypeWhisperApp: App {
 
         // Trigger ServiceContainer initialization
         _ = ServiceContainer.shared
+        SettingsNavigationCoordinator.shared = SettingsNavigationCoordinator()
+        PostUpdatePromptCoordinator.shared = PostUpdatePromptCoordinator()
 
         Task { @MainActor in
             await ServiceContainer.shared.initialize()
+        }
+    }
+
+    private func refreshStartupSheet() {
+        if HomeViewModel.shared.showSetupWizard {
+            startupSheet = nil
+            return
+        }
+
+        let nextRoute: StartupSheetRoute?
+        if LicenseService.shared.needsWelcomeSheet {
+            nextRoute = .welcome
+        } else {
+            nextRoute = postUpdatePromptCoordinator.activeSheetRoute
+        }
+
+        startupSheet = nextRoute
+        if let nextRoute {
+            lastPresentedStartupSheet = nextRoute
+        }
+    }
+
+    private func handleStartupSheetDismissed() {
+        let dismissedRoute = lastPresentedStartupSheet
+        defer {
+            lastPresentedStartupSheet = nil
+        }
+
+        if dismissedRoute == .postUpdateLicensing {
+            if ignoreNextStartupSheetDismiss {
+                ignoreNextStartupSheetDismiss = false
+            } else {
+                postUpdatePromptCoordinator.handleSheetDismissedWithoutExplicitAction()
+            }
+        }
+
+        refreshStartupSheet()
+    }
+
+    private func dismissStartupPrompt(after action: () -> Void) {
+        ignoreNextStartupSheetDismiss = true
+        action()
+        startupSheet = nil
+    }
+
+    private func handlePersonalOSSSelection() {
+        dismissStartupPrompt {
+            postUpdatePromptCoordinator.handlePersonalOSSSelection()
+        }
+    }
+
+    private func handleWorkUsageSelection() {
+        dismissStartupPrompt {
+            postUpdatePromptCoordinator.handleWorkUsageSelection()
+            settingsNavigation.navigateToLicense(target: .top)
+        }
+    }
+
+    private func handleExistingKeySelection() {
+        dismissStartupPrompt {
+            postUpdatePromptCoordinator.handleExistingKeySelection()
+            settingsNavigation.navigateToLicense(target: .activationKey)
+        }
+    }
+
+    private func handleSupporterSelection() {
+        dismissStartupPrompt {
+            postUpdatePromptCoordinator.handleSupporterSelection()
+            settingsNavigation.navigateToLicense(target: .supporter)
+        }
+    }
+
+    private func handlePromptDismissalAction() {
+        dismissStartupPrompt {
+            postUpdatePromptCoordinator.handleNotNowSelection()
         }
     }
 }
@@ -297,6 +393,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             HomeViewModel.shared.showSetupWizard = true
             NSApp.setActivationPolicy(.regular)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.openSettingsWindow()
+            }
+        } else if PostUpdatePromptCoordinator.shared.shouldAutoOpenSettingsOnLaunch {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 self.openSettingsWindow()
             }
         }

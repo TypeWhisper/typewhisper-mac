@@ -114,6 +114,8 @@ enum UserDefaultsKeys {
     static let licenseIsLifetime = "licenseIsLifetime"
     static let welcomeSheetShown = "welcomeSheetShown"
     static let workUsagePromptDismissed = "workUsagePromptDismissed"
+    static let lastSeenReleaseFingerprint = "lastSeenReleaseFingerprint"
+    static let lastAcknowledgedPostUpdatePromptRelease = "lastAcknowledgedPostUpdatePromptRelease"
 
     // MARK: - Supporter
     static let supporterTier = "supporterTier"
