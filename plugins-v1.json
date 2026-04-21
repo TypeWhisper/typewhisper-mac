@@ -880,6 +880,14 @@
       "requiresAPIKey": true,
       "releases": [
         {
+          "version": "1.0.4",
+          "minHostVersion": "0.9.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 211467,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openrouter-v1.0.4/OpenRouterPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.3",
           "minHostVersion": "0.9.0",
           "sdkCompatibilityVersion": "v1",
@@ -889,11 +897,11 @@
           "downloadCount": 10
         }
       ],
-      "version": "1.0.3",
+      "version": "1.0.4",
       "minHostVersion": "0.9.0",
       "sdkCompatibilityVersion": "v1",
-      "size": 191090,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openrouter-v1.0.3/OpenRouterPlugin.zip",
+      "size": 211467,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openrouter-v1.0.4/OpenRouterPlugin.zip",
       "minOSVersion": "14.0"
     },
     {
