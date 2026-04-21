@@ -1116,6 +1116,14 @@
       "requiresAPIKey": true,
       "releases": [
         {
+          "version": "1.0.4",
+          "minHostVersion": "0.12.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 187877,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-speechmatics-v1.0.4/SpeechmaticsPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.3",
           "minHostVersion": "0.12.0",
           "sdkCompatibilityVersion": "v1",
@@ -1125,11 +1133,11 @@
           "downloadCount": 1
         }
       ],
-      "version": "1.0.3",
+      "version": "1.0.4",
       "minHostVersion": "0.12.0",
       "sdkCompatibilityVersion": "v1",
-      "size": 186451,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-speechmatics-v1.0.3/SpeechmaticsPlugin.zip",
+      "size": 187877,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-speechmatics-v1.0.4/SpeechmaticsPlugin.zip",
       "minOSVersion": "14.0"
     },
     {
