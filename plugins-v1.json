@@ -690,6 +690,14 @@
       "requiresAPIKey": true,
       "releases": [
         {
+          "version": "1.0.4",
+          "minHostVersion": "0.12.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 242032,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-google-cloud-stt-v1.0.4/GoogleCloudSTTPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.3",
           "minHostVersion": "0.12.0",
           "sdkCompatibilityVersion": "v1",
@@ -699,11 +707,11 @@
           "downloadCount": 5
         }
       ],
-      "version": "1.0.3",
+      "version": "1.0.4",
       "minHostVersion": "0.12.0",
       "sdkCompatibilityVersion": "v1",
-      "size": 242014,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-google-cloud-stt-v1.0.3/GoogleCloudSTTPlugin.zip",
+      "size": 242032,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-google-cloud-stt-v1.0.4/GoogleCloudSTTPlugin.zip",
       "minOSVersion": "14.0"
     },
     {
