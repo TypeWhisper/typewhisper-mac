@@ -66,6 +66,7 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
     case pushToTalk
     case toggle
     case promptPalette
+    case recentTranscriptions
 
     var defaultsKey: String {
         switch self {
@@ -73,6 +74,7 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
         case .pushToTalk: return UserDefaultsKeys.pttHotkey
         case .toggle: return UserDefaultsKeys.toggleHotkey
         case .promptPalette: return UserDefaultsKeys.promptPaletteHotkey
+        case .recentTranscriptions: return UserDefaultsKeys.recentTranscriptionsHotkey
         }
     }
 }
@@ -116,6 +118,7 @@ final class HotkeyService: ObservableObject {
     var onDictationStart: (() -> Void)?
     var onDictationStop: (() -> Void)?
     var onPromptPaletteToggle: (() -> Void)?
+    var onRecentTranscriptionsToggle: (() -> Void)?
     var onProfileDictationStart: ((UUID) -> Void)?
     var onCancelPressed: (() -> Void)?
     var onPushToTalkInterruption: (() -> Void)?
@@ -162,6 +165,7 @@ final class HotkeyService: ObservableObject {
         .pushToTalk: SlotState(),
         .toggle: SlotState(),
         .promptPalette: SlotState(),
+        .recentTranscriptions: SlotState(),
     ]
 
     // MARK: - Per-Profile Hotkey State
@@ -951,6 +955,10 @@ final class HotkeyService: ObservableObject {
             onPromptPaletteToggle?()
             return
         }
+        if slotType == .recentTranscriptions {
+            onRecentTranscriptionsToggle?()
+            return
+        }
 
         if isActive {
             // Any hotkey stops active recording
@@ -998,6 +1006,8 @@ final class HotkeyService: ObservableObject {
         case .toggle:
             break
         case .promptPalette:
+            break // handled on keyDown only
+        case .recentTranscriptions:
             break // handled on keyDown only
         }
     }

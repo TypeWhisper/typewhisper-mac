@@ -287,6 +287,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         ServiceContainer.shared.hotkeyService.onPromptPaletteToggle = {
             DictationViewModel.shared.triggerStandalonePromptSelection()
         }
+        ServiceContainer.shared.hotkeyService.onRecentTranscriptionsToggle = {
+            DictationViewModel.shared.triggerRecentTranscriptionsPalette()
+        }
 
         // Auto-open Settings with setup wizard when microphone permission is not yet granted
         if AVAudioApplication.shared.recordPermission != .granted {

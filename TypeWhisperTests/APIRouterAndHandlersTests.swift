@@ -675,11 +675,20 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
     func testDictationEndpointsReturnSessionIDAndCompletedTranscription() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let historyEnabledKey = UserDefaultsKeys.historyEnabled
+        let originalHistoryEnabled = UserDefaults.standard.object(forKey: historyEnabledKey)
         var context: APIContext?
         defer {
             context = nil
+            if let originalHistoryEnabled {
+                UserDefaults.standard.set(originalHistoryEnabled, forKey: historyEnabledKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: historyEnabledKey)
+            }
             TestSupport.remove(appSupportDirectory)
         }
+
+        UserDefaults.standard.set(true, forKey: historyEnabledKey)
 
         context = await MainActor.run {
             Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
@@ -1272,6 +1281,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let hotkeyService = HotkeyService()
         let textInsertionService = TextInsertionService()
         let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
+        let recentTranscriptionStore = RecentTranscriptionStore()
         let profileService = ProfileService(appSupportDirectory: appSupportDirectory)
         let audioDuckingService = AudioDuckingService()
         let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
@@ -1293,6 +1303,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             modelManager: modelManager,
             settingsViewModel: settingsViewModel,
             historyService: historyService,
+            recentTranscriptionStore: recentTranscriptionStore,
             profileService: profileService,
             translationService: nil,
             audioDuckingService: audioDuckingService,
@@ -1609,6 +1620,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let hotkeyService = HotkeyService()
         let textInsertionService = TextInsertionService()
         let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
+        let recentTranscriptionStore = RecentTranscriptionStore()
         let profileService = ProfileService(appSupportDirectory: appSupportDirectory)
         let audioDuckingService = AudioDuckingService()
         let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
@@ -1630,6 +1642,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             modelManager: modelManager,
             settingsViewModel: settingsViewModel,
             historyService: historyService,
+            recentTranscriptionStore: recentTranscriptionStore,
             profileService: profileService,
             translationService: nil,
             audioDuckingService: audioDuckingService,
@@ -1778,6 +1791,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let hotkeyService = HotkeyService()
         let textInsertionService = TextInsertionService()
         let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
+        let recentTranscriptionStore = RecentTranscriptionStore()
         let profileService = ProfileService(appSupportDirectory: appSupportDirectory)
         let audioDuckingService = audioDuckingService ?? AudioDuckingService()
         let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
@@ -1800,6 +1814,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             modelManager: modelManager,
             settingsViewModel: settingsViewModel,
             historyService: historyService,
+            recentTranscriptionStore: recentTranscriptionStore,
             profileService: profileService,
             translationService: nil,
             audioDuckingService: audioDuckingService,
@@ -3200,6 +3215,53 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
 
         XCTAssertTrue(service.processEventForTesting(keyUp, source: .monitor))
         XCTAssertEqual(startCount, 1)
+    }
+
+    @MainActor
+    func testRecentTranscriptionsHotkeyInvokesDedicatedCallbackOnKeyDown() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(spaceHotkey(), for: .recentTranscriptions)
+
+        var callbackCount = 0
+        var startCount = 0
+        service.onRecentTranscriptionsToggle = { callbackCount += 1 }
+        service.onDictationStart = { startCount += 1 }
+
+        let keyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
+
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertEqual(callbackCount, 1)
+        XCTAssertEqual(startCount, 0)
+        XCTAssertNil(service.currentMode)
+    }
+
+    @MainActor
+    func testRecentTranscriptionsHotkeyDoesNotStopActiveDictation() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(spaceHotkey(), for: .toggle)
+        service.setHotkeyForTesting(commandOptionAHotkey(), for: .recentTranscriptions)
+
+        var startCount = 0
+        var stopCount = 0
+        var callbackCount = 0
+        service.onDictationStart = { startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+        service.onRecentTranscriptionsToggle = { callbackCount += 1 }
+
+        let toggleDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
+        let recentDown = try makeKeyboardEvent(keyCode: 0x00, keyDown: true, flags: [.maskCommand, .maskAlternate])
+
+        XCTAssertTrue(service.processEventForTesting(toggleDown, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+
+        XCTAssertTrue(service.processEventForTesting(recentDown, source: .monitor))
+        XCTAssertEqual(callbackCount, 1)
+        XCTAssertEqual(stopCount, 0)
+        XCTAssertEqual(service.currentMode, .toggle)
     }
 
     @MainActor
