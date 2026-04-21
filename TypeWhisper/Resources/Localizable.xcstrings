@@ -4322,6 +4322,16 @@
         }
       }
     },
+    "No recent transcriptions" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine letzten Transkriptionen"
+          }
+        }
+      }
+    },
     "No memory storage plugins active. Enable one in Integrations." : {
       "localizations" : {
         "de" : {
@@ -4721,6 +4731,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Öffnet das Polar.sh-Kundenportal, wo du dein Abo verwalten, Zahlungsmethoden ändern oder kündigen kannst."
+          }
+        }
+      }
+    },
+    "Open your latest transcriptions and insert one into the focused app." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öffne deine letzten Transkriptionen und füge eine in die fokussierte App ein."
           }
         }
       }
@@ -5577,6 +5597,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Letzte Transkriptionen"
+          }
+        }
+      }
+    },
+    "Recent transcription shortcut" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tastenkürzel für letzte Transkriptionen"
           }
         }
       }

@@ -63,6 +63,24 @@ struct HotkeySettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Section(String(localized: "Recent Transcriptions")) {
+                HotkeyRecorderView(
+                    label: dictation.recentTranscriptionsHotkeyLabel,
+                    title: String(localized: "Recent transcription shortcut"),
+                    onRecord: { hotkey in
+                        if let conflict = dictation.isHotkeyAssigned(hotkey, excluding: .recentTranscriptions) {
+                            dictation.clearHotkey(for: conflict)
+                        }
+                        dictation.setHotkey(hotkey, for: .recentTranscriptions)
+                    },
+                    onClear: { dictation.clearHotkey(for: .recentTranscriptions) }
+                )
+
+                Text(String(localized: "Open your latest transcriptions and insert one into the focused app."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         .padding()

@@ -21,6 +21,7 @@ enum UserDefaultsKeys {
     static let pttHotkey = "pttHotkey"
     static let toggleHotkey = "toggleHotkey"
     static let promptPaletteHotkey = "promptPaletteHotkey"
+    static let recentTranscriptionsHotkey = "recentTranscriptionsHotkey"
 
     // MARK: - Model / Engine
     static let selectedEngine = "selectedEngine"
@@ -113,6 +114,8 @@ enum UserDefaultsKeys {
     static let licenseIsLifetime = "licenseIsLifetime"
     static let welcomeSheetShown = "welcomeSheetShown"
     static let workUsagePromptDismissed = "workUsagePromptDismissed"
+    static let lastSeenReleaseFingerprint = "lastSeenReleaseFingerprint"
+    static let lastAcknowledgedPostUpdatePromptRelease = "lastAcknowledgedPostUpdatePromptRelease"
 
     // MARK: - Supporter
     static let supporterTier = "supporterTier"

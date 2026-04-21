@@ -15,12 +15,18 @@ private struct SettingsDestination: Identifiable, Hashable {
     var id: SettingsTab { tab }
 }
 
+private struct SettingsDestinationSection: Identifiable {
+    let id: String
+    let destinations: [SettingsDestination]
+}
+
 struct SettingsView: View {
     @State private var selectedTab: SettingsTab = .home
     @ObservedObject private var fileTranscription = FileTranscriptionViewModel.shared
     @ObservedObject private var registryService = PluginRegistryService.shared
     @ObservedObject private var homeViewModel = HomeViewModel.shared
     @ObservedObject private var promptActionsViewModel = PromptActionsViewModel.shared
+    @ObservedObject private var settingsNavigation = SettingsNavigationCoordinator.shared
 
     private var destinations: [SettingsDestination] {
         [
@@ -52,18 +58,22 @@ struct SettingsView: View {
         ]
     }
 
+    private var destinationSections: [SettingsDestinationSection] {
+        settingsDestinationSections(destinations)
+    }
+
     var body: some View {
         Group {
             if #available(macOS 15, *) {
                 SettingsModernShell(
                     selectedTab: $selectedTab,
-                    destinations: destinations,
+                    sections: destinationSections,
                     detail: { tab in AnyView(settingsDetail(for: tab)) }
                 )
             } else {
                 SettingsSidebarShell(
                     selectedTab: $selectedTab,
-                    destinations: destinations,
+                    sections: destinationSections,
                     detail: settingsDetail(for:)
                 )
             }
@@ -84,6 +94,9 @@ struct SettingsView: View {
                 selectedTab = .integrations
                 promptActionsViewModel.navigateToIntegrations = false
             }
+        }
+        .onReceive(settingsNavigation.$request.compactMap { $0 }) { request in
+            selectedTab = request.tab
         }
     }
 
@@ -133,108 +146,64 @@ struct SettingsView: View {
 @available(macOS 15, *)
 private struct SettingsModernShell: View {
     @Binding var selectedTab: SettingsTab
-    let destinations: [SettingsDestination]
+    let sections: [SettingsDestinationSection]
     let detail: (SettingsTab) -> AnyView
+
+    @State private var sidebarSearchText = ""
+    @State private var splitViewVisibility: NavigationSplitViewVisibility = .all
+
+    private var filteredSections: [SettingsDestinationSection] {
+        let query = sidebarSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return sections }
+
+        return sections
+            .map { section in
+                SettingsDestinationSection(
+                    id: section.id,
+                    destinations: section.destinations.filter { destination in
+                        destination.title.localizedCaseInsensitiveContains(query)
+                    }
+                )
+            }
+            .filter { !$0.destinations.isEmpty }
+    }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            SettingsModernMainTabs(destinations: destinations, detail: detail)
-        }
-        .tabViewStyle(.sidebarAdaptable)
-    }
-}
-
-@available(macOS 15, *)
-private struct SettingsModernMainTabs: TabContent {
-    let destinations: [SettingsDestination]
-    let detail: (SettingsTab) -> AnyView
-
-    var body: some TabContent<SettingsTab> {
-        Tab(settingsTitle(destinations, .home), systemImage: settingsSystemImage(destinations, .home), value: .home) {
-            detail(.home)
-        }
-
-        Tab(settingsTitle(destinations, .general), systemImage: settingsSystemImage(destinations, .general), value: .general) {
-            detail(.general)
-        }
-
-        Tab(settingsTitle(destinations, .recording), systemImage: settingsSystemImage(destinations, .recording), value: .recording) {
-            detail(.recording)
-        }
-
-        Tab(settingsTitle(destinations, .hotkeys), systemImage: settingsSystemImage(destinations, .hotkeys), value: .hotkeys) {
-            detail(.hotkeys)
-        }
-
-        Tab(settingsTitle(destinations, .fileTranscription), systemImage: settingsSystemImage(destinations, .fileTranscription), value: .fileTranscription) {
-            detail(.fileTranscription)
-        }
-
-        Tab(settingsTitle(destinations, .recorder), systemImage: settingsSystemImage(destinations, .recorder), value: .recorder) {
-            detail(.recorder)
-        }
-
-        Tab(settingsTitle(destinations, .history), systemImage: settingsSystemImage(destinations, .history), value: .history) {
-            detail(.history)
-        }
-        SettingsModernExtraTabs(destinations: destinations, detail: detail)
-    }
-}
-
-@available(macOS 15, *)
-private struct SettingsModernExtraTabs: TabContent {
-    let destinations: [SettingsDestination]
-    let detail: (SettingsTab) -> AnyView
-
-    var body: some TabContent<SettingsTab> {
-        Tab(settingsTitle(destinations, .dictionary), systemImage: settingsSystemImage(destinations, .dictionary), value: .dictionary) {
-            detail(.dictionary)
-        }
-
-        Tab(settingsTitle(destinations, .snippets), systemImage: settingsSystemImage(destinations, .snippets), value: .snippets) {
-            detail(.snippets)
-        }
-
-        Tab(settingsTitle(destinations, .profiles), systemImage: settingsSystemImage(destinations, .profiles), value: .profiles) {
-            detail(.profiles)
-        }
-
-        Tab(settingsTitle(destinations, .prompts), systemImage: settingsSystemImage(destinations, .prompts), value: .prompts) {
-            detail(.prompts)
-        }
-
-        if let integrationsBadge = settingsBadge(destinations, .integrations) {
-            Tab(settingsTitle(destinations, .integrations), systemImage: settingsSystemImage(destinations, .integrations), value: .integrations) {
-                detail(.integrations)
+        NavigationSplitView(columnVisibility: $splitViewVisibility) {
+            List(selection: $selectedTab) {
+                ForEach(filteredSections) { section in
+                    Section {
+                        ForEach(section.destinations) { destination in
+                            SettingsSidebarRow(destination: destination)
+                                .tag(destination.tab)
+                        }
+                    }
+                }
             }
-            .badge(integrationsBadge)
-        } else {
-            Tab(settingsTitle(destinations, .integrations), systemImage: settingsSystemImage(destinations, .integrations), value: .integrations) {
-                detail(.integrations)
+            .listStyle(.sidebar)
+            .searchable(
+                text: $sidebarSearchText,
+                placement: .sidebar,
+                prompt: Text(localizedAppText("Search Settings", de: "Einstellungen durchsuchen"))
+            )
+            .navigationSplitViewColumnWidth(min: 240, ideal: 270, max: 320)
+        } detail: {
+            detail(selectedTab)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button(action: toggleSidebar) {
+                    Image(systemName: "sidebar.leading")
+                }
+                .help(localizedAppText("Toggle Sidebar", de: "Seitenleiste ein-/ausblenden"))
+                .accessibilityLabel(localizedAppText("Toggle Sidebar", de: "Seitenleiste ein-/ausblenden"))
             }
         }
-
-        SettingsModernBottomTabs(destinations: destinations, detail: detail)
     }
-}
 
-@available(macOS 15, *)
-private struct SettingsModernBottomTabs: TabContent {
-    let destinations: [SettingsDestination]
-    let detail: (SettingsTab) -> AnyView
-
-    var body: some TabContent<SettingsTab> {
-        Tab(settingsTitle(destinations, .advanced), systemImage: settingsSystemImage(destinations, .advanced), value: .advanced) {
-            detail(.advanced)
-        }
-
-        Tab(settingsTitle(destinations, .license), systemImage: settingsSystemImage(destinations, .license), value: .license) {
-            detail(.license)
-        }
-
-        Tab(settingsTitle(destinations, .about), systemImage: settingsSystemImage(destinations, .about), value: .about) {
-            detail(.about)
-        }
+    private func toggleSidebar() {
+        splitViewVisibility = splitViewVisibility == .detailOnly ? .all : .detailOnly
     }
 }
 
@@ -254,9 +223,47 @@ private func settingsBadge(_ destinations: [SettingsDestination], _ tab: Setting
     settingsDestination(destinations, tab).badge
 }
 
+private func settingsDestinationSections(_ destinations: [SettingsDestination]) -> [SettingsDestinationSection] {
+    [
+        SettingsDestinationSection(
+            id: "home",
+            destinations: [settingsDestination(destinations, .home)]
+        ),
+        SettingsDestinationSection(
+            id: "core",
+            destinations: [
+                settingsDestination(destinations, .general),
+                settingsDestination(destinations, .recording),
+                settingsDestination(destinations, .hotkeys),
+                settingsDestination(destinations, .fileTranscription),
+                settingsDestination(destinations, .recorder)
+            ]
+        ),
+        SettingsDestinationSection(
+            id: "workspace",
+            destinations: [
+                settingsDestination(destinations, .history),
+                settingsDestination(destinations, .dictionary),
+                settingsDestination(destinations, .snippets),
+                settingsDestination(destinations, .profiles),
+                settingsDestination(destinations, .prompts),
+                settingsDestination(destinations, .integrations)
+            ]
+        ),
+        SettingsDestinationSection(
+            id: "system",
+            destinations: [
+                settingsDestination(destinations, .advanced),
+                settingsDestination(destinations, .license),
+                settingsDestination(destinations, .about)
+            ]
+        )
+    ]
+}
+
 private struct SettingsSidebarShell<DetailContent: View>: View {
     @Binding var selectedTab: SettingsTab
-    let destinations: [SettingsDestination]
+    let sections: [SettingsDestinationSection]
     let detail: (SettingsTab) -> DetailContent
 
     @State private var isSidebarVisible = true
@@ -264,9 +271,15 @@ private struct SettingsSidebarShell<DetailContent: View>: View {
     var body: some View {
         HStack(spacing: 0) {
             if isSidebarVisible {
-                List(destinations, selection: $selectedTab) { destination in
-                    SettingsSidebarRow(destination: destination)
-                        .tag(destination.tab)
+                List(selection: $selectedTab) {
+                    ForEach(sections) { section in
+                        Section {
+                            ForEach(section.destinations) { destination in
+                                SettingsSidebarRow(destination: destination)
+                                    .tag(destination.tab)
+                            }
+                        }
+                    }
                 }
                 .listStyle(.sidebar)
                 .frame(width: 240)
@@ -311,16 +324,26 @@ private struct SettingsSidebarRow: View {
             Spacer(minLength: 8)
 
             if let badge = destination.badge {
-                Text("\(badge)")
-                    .font(.caption2.weight(.semibold))
-                    .monospacedDigit()
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(.tertiary, in: Capsule())
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel("\(destination.title), \(badge) updates")
+                SettingsSidebarBadge(title: destination.title, count: badge)
             }
         }
+        .contentShape(Rectangle())
+    }
+}
+
+private struct SettingsSidebarBadge: View {
+    let title: String
+    let count: Int
+
+    var body: some View {
+        Text("\(count)")
+            .font(.caption2.weight(.semibold))
+            .monospacedDigit()
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(.tertiary, in: Capsule())
+            .foregroundStyle(.secondary)
+            .accessibilityLabel("\(title), \(count) updates")
     }
 }
 

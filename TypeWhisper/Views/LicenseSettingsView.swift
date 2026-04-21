@@ -2,12 +2,24 @@ import AppKit
 import SwiftUI
 
 struct LicenseSettingsView: View {
+    private enum ScrollAnchor: Hashable {
+        case top
+        case supporter
+        case activationKey
+    }
+
+    private enum FocusField: Hashable {
+        case licenseKey
+    }
+
     @ObservedObject private var license = LicenseService.shared
     @ObservedObject private var supporterDiscord =
         SupporterDiscordService.shared ?? SupporterDiscordService(licenseService: LicenseService.shared)
+    @ObservedObject private var settingsNavigation = SettingsNavigationCoordinator.shared
 
     @State private var licenseKeyInput = ""
     @State private var activationNotice: String?
+    @FocusState private var focusedField: FocusField?
 
     private let planColumns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
     private let planDescriptionMinHeight: CGFloat = 52
@@ -17,26 +29,38 @@ struct LicenseSettingsView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                planSelectionSection
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    Color.clear
+                        .frame(height: 0)
+                        .id(ScrollAnchor.top)
 
-                if shouldShowCommercialSection {
-                    commercialSection
+                    planSelectionSection
+
+                    if shouldShowCommercialSection {
+                        commercialSection
+                    }
+
+                    supporterSection
+                        .id(ScrollAnchor.supporter)
+
+                    sharedActivationSection
+                        .id(ScrollAnchor.activationKey)
                 }
-
-                supporterSection
-
-                sharedActivationSection
+                .padding(20)
             }
-            .padding(20)
-        }
-        .frame(minWidth: 560, minHeight: 360)
-        .task(id: "\(license.supporterStatus.rawValue)-\(license.supporterTier?.rawValue ?? "none")") {
-            if license.isSupporter {
-                await supporterDiscord.refreshStatusIfNeeded()
-            } else {
-                supporterDiscord.handleSupporterEntitlementRemoved()
+            .frame(minWidth: 560, minHeight: 360)
+            .task(id: "\(license.supporterStatus.rawValue)-\(license.supporterTier?.rawValue ?? "none")") {
+                if license.isSupporter {
+                    await supporterDiscord.refreshStatusIfNeeded()
+                } else {
+                    supporterDiscord.handleSupporterEntitlementRemoved()
+                }
+            }
+            .onReceive(settingsNavigation.$request.compactMap { $0 }) { request in
+                guard request.tab == .license else { return }
+                handleNavigation(request.licenseTarget ?? .top, proxy: proxy)
             }
         }
     }
@@ -386,6 +410,7 @@ struct LicenseSettingsView: View {
         HStack {
             TextField(localizedAppText("TYPEWHISPER-xxxx-xxxx", de: "TYPEWHISPER-xxxx-xxxx"), text: input)
                 .textFieldStyle(.roundedBorder)
+                .focused($focusedField, equals: .licenseKey)
 
             Button(localizedAppText("Activate", de: "Aktivieren")) {
                 Task { await action() }
@@ -803,6 +828,27 @@ struct LicenseSettingsView: View {
 
     private func openClaimURL(_ url: URL?) async {
         openURL(url)
+    }
+
+    private func handleNavigation(_ target: LicenseSettingsNavigationTarget, proxy: ScrollViewProxy) {
+        focusedField = nil
+
+        withAnimation(.easeInOut(duration: 0.15)) {
+            switch target {
+            case .top:
+                proxy.scrollTo(ScrollAnchor.top, anchor: .top)
+            case .supporter:
+                proxy.scrollTo(ScrollAnchor.supporter, anchor: .top)
+            case .activationKey:
+                proxy.scrollTo(ScrollAnchor.activationKey, anchor: .top)
+            }
+        }
+
+        guard target == .activationKey else { return }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            focusedField = .licenseKey
+        }
     }
 
     @ViewBuilder
