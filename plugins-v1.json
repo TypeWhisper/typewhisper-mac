@@ -660,6 +660,14 @@
       "requiresAPIKey": true,
       "releases": [
         {
+          "version": "1.0.5",
+          "minHostVersion": "0.12.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 209552,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gladia-v1.0.5/GladiaPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.4",
           "minHostVersion": "0.12.0",
           "sdkCompatibilityVersion": "v1",
@@ -669,11 +677,11 @@
           "downloadCount": 4
         }
       ],
-      "version": "1.0.4",
+      "version": "1.0.5",
       "minHostVersion": "0.12.0",
       "sdkCompatibilityVersion": "v1",
-      "size": 207928,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gladia-v1.0.4/GladiaPlugin.zip",
+      "size": 209552,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gladia-v1.0.5/GladiaPlugin.zip",
       "minOSVersion": "14.0"
     },
     {
