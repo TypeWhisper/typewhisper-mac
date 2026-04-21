@@ -114,6 +114,32 @@ private final class MockDictionaryTermsPlugin: NSObject, TranscriptionEnginePlug
     }
 }
 
+@objc(MockDictionaryBudgetPlugin)
+private final class MockDictionaryBudgetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsBudgetProviding, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.dictionary-budget"
+    static let pluginName = "Mock Dictionary Budget"
+
+    required override init() {}
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    var providerId: String { "mock-dictionary-budget" }
+    var providerDisplayName: String { "Mock Dictionary Budget" }
+    var isConfigured: Bool { true }
+    var transcriptionModels: [PluginModelInfo] { [] }
+    var selectedModelId: String? { nil }
+    func selectModel(_ modelId: String) {}
+    var supportsTranslation: Bool { false }
+    var dictionaryTermsBudget: DictionaryTermsBudget {
+        DictionaryTermsBudget(maxTerms: 10, maxCharsPerTerm: 20, maxWordsPerTerm: 3, maxTotalChars: 120)
+    }
+
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "ok", detectedLanguage: language)
+    }
+}
+
 @objc(MockCatalogTranscriptionPlugin)
 private final class MockCatalogTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.mock.catalog"
@@ -245,6 +271,17 @@ final class ProtocolContractTests: XCTestCase {
         XCTAssertEqual(capabilityPlugin.dictionaryTermsSupport, .requiresPluginSetting)
     }
 
+    func testDictionaryTermsBudgetProtocolIsOptional() {
+        let legacyPlugin = MockTranscriptionPlugin()
+        let budgetPlugin = MockDictionaryBudgetPlugin()
+
+        XCTAssertFalse(legacyPlugin is any DictionaryTermsBudgetProviding)
+        XCTAssertEqual(
+            budgetPlugin.dictionaryTermsBudget,
+            DictionaryTermsBudget(maxTerms: 10, maxCharsPerTerm: 20, maxWordsPerTerm: 3, maxTotalChars: 120)
+        )
+    }
+
     func testTranscriptionModelCatalogProtocolIsOptional() {
         let legacyPlugin = MockTranscriptionPlugin()
         let catalogPlugin = MockCatalogTranscriptionPlugin()
@@ -289,6 +326,52 @@ final class ProtocolContractTests: XCTestCase {
         XCTAssertEqual(
             PluginDictionaryTerms.prompt(from: ["TypeWhisper", "MLX"], maxLength: 100),
             "TypeWhisper, MLX"
+        )
+    }
+
+    func testPluginDictionaryTermsClippedTermsApplyPerTermFiltersBeforeMaxTerms() {
+        XCTAssertEqual(
+            PluginDictionaryTerms.clippedTerms(
+                from: ["toolongchars", "beta", "gamma"],
+                budget: DictionaryTermsBudget(maxTerms: 1, maxCharsPerTerm: 5)
+            ),
+            ["beta"]
+        )
+        XCTAssertEqual(
+            PluginDictionaryTerms.clippedTerms(
+                from: ["one two three", "alpha beta", "gamma"],
+                budget: DictionaryTermsBudget(maxTerms: 1, maxWordsPerTerm: 2)
+            ),
+            ["alpha beta"]
+        )
+    }
+
+    func testPluginDictionaryTermsClippedTermsApplyTotalCharacterBudgetToJoinedPrompt() {
+        XCTAssertEqual(
+            PluginDictionaryTerms.clippedTerms(
+                from: ["AA", "BB", "CC"],
+                budget: DictionaryTermsBudget(maxTotalChars: 6)
+            ),
+            ["AA", "BB"]
+        )
+    }
+
+    func testPluginDictionaryTermsClippedTermsTreatNegativeMaxTermsAsZero() {
+        let budget = DictionaryTermsBudget(maxTerms: -1)
+
+        XCTAssertEqual(
+            PluginDictionaryTerms.clippedTerms(from: ["Alpha", "Beta", "Gamma"], budget: budget),
+            []
+        )
+        XCTAssertNil(PluginDictionaryTerms.prompt(from: ["Alpha", "Beta", "Gamma"], budget: budget))
+    }
+
+    func testPluginDictionaryTermsPromptWithBudgetReturnsNilWhenNothingSurvives() {
+        XCTAssertNil(
+            PluginDictionaryTerms.prompt(
+                from: ["toolong"],
+                budget: DictionaryTermsBudget(maxCharsPerTerm: 2)
+            )
         )
     }
 }

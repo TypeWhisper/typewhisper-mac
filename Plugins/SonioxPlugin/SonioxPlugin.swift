@@ -67,7 +67,7 @@ private actor TranscriptCollector {
 // MARK: - Plugin Entry Point
 
 @objc(SonioxPlugin)
-final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, @unchecked Sendable {
+final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.soniox"
     static let pluginName = "Soniox"
 
@@ -119,6 +119,7 @@ final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
     var supportsTranslation: Bool { true }
     var supportsStreaming: Bool { true }
     var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
+    var dictionaryTermsBudget: DictionaryTermsBudget { DictionaryTermsBudget(maxTotalChars: 10_000) }
 
     var supportedLanguages: [String] { sonioxSupportedLanguages }
 

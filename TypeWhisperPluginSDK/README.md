@@ -141,6 +141,27 @@ extension MyTranscriptionEngine: TranscriptionModelCatalogProviding {
 }
 ```
 
+If your engine accepts custom dictionary terms and has documented limits, you can
+optionally add `DictionaryTermsBudgetProviding` so TypeWhisper clips the global
+dictionary before your engine sees it:
+
+```swift
+extension MyTranscriptionEngine: DictionaryTermsBudgetProviding {
+    var dictionaryTermsBudget: DictionaryTermsBudget {
+        DictionaryTermsBudget(
+            maxTerms: 1000,
+            maxCharsPerTerm: 50,
+            maxWordsPerTerm: 6,
+            maxTotalChars: 10_000
+        )
+    }
+}
+```
+
+This protocol is optional. Legacy plugins that do not adopt it remain compatible on
+`sdkCompatibilityVersion = "v1"` and automatically continue to use TypeWhisper's
+default 600-character fallback when building dictionary prompts.
+
 ### LLMProviderPlugin
 
 Add an LLM for prompt processing (text transformation, summarization, etc.).

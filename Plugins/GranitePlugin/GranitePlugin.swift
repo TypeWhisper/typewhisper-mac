@@ -9,7 +9,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(GranitePlugin)
-final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, @unchecked Sendable {
+final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.granite"
     static let pluginName = "Granite Speech"
 
@@ -82,6 +82,7 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     var supportsTranslation: Bool { true }
     var supportsStreaming: Bool { true }
     var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
+    var dictionaryTermsBudget: DictionaryTermsBudget { DictionaryTermsBudget(maxTotalChars: 4_000) }
 
     func transcribe(
         audio: AudioData,

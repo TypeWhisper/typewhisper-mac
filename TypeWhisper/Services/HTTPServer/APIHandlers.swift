@@ -190,7 +190,15 @@ final class APIHandlers: @unchecked Sendable {
             defer { try? FileManager.default.removeItem(at: tempURL) }
 
             let samples = try await audioFileService.loadAudioSamples(from: tempURL)
-            let dictionaryPrompt = await MainActor.run { dictionaryService.getTermsForPrompt() }
+            let effectiveProviderId: String?
+            if let engineId = resolvedOverride.engineId {
+                effectiveProviderId = engineId
+            } else {
+                effectiveProviderId = await modelManager.selectedProviderId
+            }
+            let dictionaryPrompt = await MainActor.run {
+                dictionaryService.getTermsForPrompt(providerId: effectiveProviderId)
+            }
             let prompt = mergedPrompt(requestPrompt: requestPrompt, dictionaryPrompt: dictionaryPrompt)
             let languageSelection: LanguageSelection
             if !languageHints.isEmpty {

@@ -37,7 +37,7 @@ private actor TranscriptCollector {
 // MARK: - Plugin Entry Point
 
 @objc(AssemblyAIPlugin)
-final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, @unchecked Sendable {
+final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.assemblyai"
     static let pluginName = "AssemblyAI"
 
@@ -89,6 +89,7 @@ final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
     var supportsTranslation: Bool { false }
     var supportsStreaming: Bool { true }
     var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
+    var dictionaryTermsBudget: DictionaryTermsBudget { Self.dictionaryTermsBudget(for: _selectedModelId) }
 
     var supportedLanguages: [String] {
         if _selectedModelId == "universal-2" {
@@ -263,8 +264,18 @@ final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
         return transcriptId
     }
 
+    private static func dictionaryTermsBudget(for modelId: String?) -> DictionaryTermsBudget {
+        if modelId == "universal-3-pro" {
+            return DictionaryTermsBudget(maxTerms: 1_000, maxWordsPerTerm: 6)
+        }
+        return DictionaryTermsBudget(maxTerms: 100, maxCharsPerTerm: 50)
+    }
+
     private static func applyDictionaryTerms(prompt: String?, modelId: String, to body: inout [String: Any]) {
-        let terms = PluginDictionaryTerms.terms(fromPrompt: prompt)
+        let terms = PluginDictionaryTerms.clippedTerms(
+            from: PluginDictionaryTerms.terms(fromPrompt: prompt),
+            budget: dictionaryTermsBudget(for: modelId)
+        )
         guard !terms.isEmpty else { return }
 
         if modelId == "universal-3-pro" {
@@ -416,7 +427,10 @@ final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
     }
 
     private func streamingKeytermsPromptJSON(from prompt: String?, modelId: String) -> String? {
-        let rawTerms = PluginDictionaryTerms.terms(fromPrompt: prompt)
+        let rawTerms = PluginDictionaryTerms.clippedTerms(
+            from: PluginDictionaryTerms.terms(fromPrompt: prompt),
+            budget: Self.dictionaryTermsBudget(for: modelId)
+        )
         guard !rawTerms.isEmpty else { return nil }
 
         let maxTerms = 100

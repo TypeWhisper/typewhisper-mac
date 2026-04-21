@@ -300,9 +300,11 @@ private actor TranscriptCollector {
 // MARK: - Plugin Entry Point
 
 @objc(DeepgramPlugin)
-final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, @unchecked Sendable {
+final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.deepgram"
     static let pluginName = "Deepgram"
+    private static let logger = Logger(subsystem: "com.typewhisper.deepgram", category: "Plugin")
+    private static let maxDictionaryTerms = 100
 
     fileprivate var host: HostServices?
     fileprivate var _apiKey: String?
@@ -356,6 +358,7 @@ final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
     var supportsTranslation: Bool { false }
     var supportsStreaming: Bool { true }
     var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
+    var dictionaryTermsBudget: DictionaryTermsBudget { DictionaryTermsBudget(maxTerms: Self.maxDictionaryTerms) }
 
     var supportedLanguages: [String] {
         [
@@ -618,12 +621,19 @@ final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
         return PluginTranscriptionResult(text: finalText, detectedLanguage: language)
     }
 
-    private static func dictionaryQueryItems(prompt: String?, modelId: String) -> [URLQueryItem] {
+    internal static func dictionaryQueryItems(prompt: String?, modelId: String) -> [URLQueryItem] {
         let terms = PluginDictionaryTerms.terms(fromPrompt: prompt)
         guard !terms.isEmpty else { return [] }
 
+        let limitedTerms = Array(terms.prefix(Self.maxDictionaryTerms))
+        if limitedTerms.count < terms.count {
+            logger.warning(
+                "Deepgram limited dictionary terms to \(Self.maxDictionaryTerms) entries for model \(modelId, privacy: .public)"
+            )
+        }
+
         let parameterName = modelId.lowercased().hasPrefix("nova-3") ? "keyterm" : "keywords"
-        return terms.map { URLQueryItem(name: parameterName, value: $0) }
+        return limitedTerms.map { URLQueryItem(name: parameterName, value: $0) }
     }
 
     // MARK: - JSON Parsing Helpers

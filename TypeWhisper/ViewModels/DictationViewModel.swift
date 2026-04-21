@@ -244,9 +244,6 @@ final class DictationViewModel: ObservableObject {
         )
         self.streamingHandler = StreamingHandler(
             modelManager: modelManager,
-            streamPromptProvider: { [weak dictionaryService] in
-                dictionaryService?.getTermsForPrompt() ?? ""
-            },
             bufferProvider: { [weak audioRecordingService] in
                 audioRecordingService?.getCurrentBuffer() ?? []
             },
@@ -959,7 +956,9 @@ final class DictationViewModel: ObservableObject {
                 let engineOverride = effectiveEngineOverrideId
                 let cloudModelOverride = effectiveCloudModelOverride
                 let translationTarget = effectiveTranslationTarget
-                let termsPrompt = dictionaryService.getTermsForPrompt()
+                let termsPrompt = dictionaryService.getTermsForPrompt(
+                    providerId: engineOverride ?? modelManager.selectedProviderId
+                )
 
                 let result = if let liveSessionResult {
                     liveSessionResult
@@ -1211,6 +1210,9 @@ final class DictationViewModel: ObservableObject {
         )
         lastStreamingParams = allowLiveTranscription ? params : nil
         streamingHandler.start(
+            streamPrompt: dictionaryService.getTermsForPrompt(
+                providerId: params.engineOverrideId ?? params.providerId
+            ) ?? "",
             engineOverrideId: params.engineOverrideId,
             selectedProviderId: params.providerId,
             languageSelection: params.languageSelection,

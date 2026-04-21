@@ -9,9 +9,11 @@ import os
 
 @available(macOS 26, *)
 @objc(SpeechAnalyzerPlugin)
-final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, @unchecked Sendable {
+final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.speechanalyzer"
     static let pluginName = "Apple Speech"
+    private static let logger = Logger(subsystem: "com.typewhisper.speechanalyzer", category: "Plugin")
+    private static let maxContextualTerms = 100
 
     fileprivate var host: HostServices?
     fileprivate var currentLocale: Locale?
@@ -83,6 +85,7 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Tran
     var supportsTranslation: Bool { false }
     var supportsStreaming: Bool { true }
     var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
+    var dictionaryTermsBudget: DictionaryTermsBudget { DictionaryTermsBudget(maxTerms: Self.maxContextualTerms) }
 
     var supportedLanguages: [String] {
         let codes = Set(cachedModels.compactMap { model -> String? in
@@ -190,11 +193,15 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Tran
         )
     }
 
-    fileprivate static func analysisContext(from prompt: String?) -> AnalysisContext {
+    static func analysisContext(from prompt: String?) -> AnalysisContext {
         let context = AnalysisContext()
         let terms = PluginDictionaryTerms.terms(fromPrompt: prompt)
-        if !terms.isEmpty {
-            context.contextualStrings[.general] = terms
+        let limitedTerms = Array(terms.prefix(Self.maxContextualTerms))
+        if limitedTerms.count < terms.count {
+            logger.warning("Apple Speech limited dictionary terms to \(Self.maxContextualTerms) entries")
+        }
+        if !limitedTerms.isEmpty {
+            context.contextualStrings[.general] = limitedTerms
         }
         return context
     }
