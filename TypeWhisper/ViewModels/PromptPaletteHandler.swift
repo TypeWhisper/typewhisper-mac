@@ -8,8 +8,6 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhis
 
 @MainActor
 final class PromptPaletteHandler {
-    private let promptPaletteController = PromptPaletteController()
-
     private enum InsertionOutcome {
         case failed
         case insertedViaAccessibility
@@ -26,6 +24,7 @@ final class PromptPaletteHandler {
     }
     private var paletteContext: PaletteContext?
 
+    private let promptPaletteController: any PromptPaletteControlling
     private let textInsertionService: TextInsertionService
     private let promptActionService: PromptActionService
     private let promptProcessingService: PromptProcessingService
@@ -46,8 +45,10 @@ final class PromptPaletteHandler {
         promptActionService: PromptActionService,
         promptProcessingService: PromptProcessingService,
         soundService: SoundService,
-        accessibilityAnnouncementService: AccessibilityAnnouncementService
+        accessibilityAnnouncementService: AccessibilityAnnouncementService,
+        promptPaletteController: any PromptPaletteControlling = PromptPaletteController()
     ) {
+        self.promptPaletteController = promptPaletteController
         self.textInsertionService = textInsertionService
         self.promptActionService = promptActionService
         self.promptProcessingService = promptProcessingService
@@ -67,14 +68,12 @@ final class PromptPaletteHandler {
         }
         guard currentState == .idle else { return }
 
-        guard promptProcessingService.isCurrentProviderReady else {
-            soundService.play(.error, enabled: soundFeedbackEnabled)
-            onShowError?(String(localized: "noLLMProvider"))
-            return
-        }
-
         let actions = promptActionService.getEnabledActions()
         guard !actions.isEmpty else { return }
+
+        // Palette presentation should not depend on the currently selected provider.
+        // Individual actions may override the provider, and readiness is validated
+        // when the chosen action actually runs.
 
         // Capture active app BEFORE the palette steals focus
         let activeApp = textInsertionService.captureActiveApp()
