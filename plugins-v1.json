@@ -850,6 +850,14 @@
       "iconSystemName": "doc.text",
       "releases": [
         {
+          "version": "1.0.4",
+          "minHostVersion": "0.9.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 161999,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-obsidian-v1.0.4/ObsidianPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.3",
           "minHostVersion": "0.9.0",
           "sdkCompatibilityVersion": "v1",
@@ -859,11 +867,11 @@
           "downloadCount": 17
         }
       ],
-      "version": "1.0.3",
+      "version": "1.0.4",
       "minHostVersion": "0.9.0",
       "sdkCompatibilityVersion": "v1",
-      "size": 161995,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-obsidian-v1.0.3/ObsidianPlugin.zip",
+      "size": 161999,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-obsidian-v1.0.4/ObsidianPlugin.zip",
       "minOSVersion": "14.0"
     },
     {
