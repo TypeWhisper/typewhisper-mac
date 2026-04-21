@@ -471,6 +471,14 @@
       "requiresAPIKey": true,
       "releases": [
         {
+          "version": "1.0.5",
+          "minHostVersion": "0.12.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 179526,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-elevenlabs-v1.0.5/ElevenLabsPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.4",
           "minHostVersion": "0.12.0",
           "sdkCompatibilityVersion": "v1",
@@ -480,11 +488,11 @@
           "downloadCount": 7
         }
       ],
-      "version": "1.0.4",
+      "version": "1.0.5",
       "minHostVersion": "0.12.0",
       "sdkCompatibilityVersion": "v1",
-      "size": 179534,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-elevenlabs-v1.0.4/ElevenLabsPlugin.zip",
+      "size": 179526,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-elevenlabs-v1.0.5/ElevenLabsPlugin.zip",
       "minOSVersion": "14.0"
     },
     {
