@@ -21,6 +21,7 @@ struct SettingsView: View {
     @ObservedObject private var registryService = PluginRegistryService.shared
     @ObservedObject private var homeViewModel = HomeViewModel.shared
     @ObservedObject private var promptActionsViewModel = PromptActionsViewModel.shared
+    @ObservedObject private var settingsNavigation = SettingsNavigationCoordinator.shared
 
     private var destinations: [SettingsDestination] {
         [
@@ -84,6 +85,9 @@ struct SettingsView: View {
                 selectedTab = .integrations
                 promptActionsViewModel.navigateToIntegrations = false
             }
+        }
+        .onReceive(settingsNavigation.$request.compactMap { $0 }) { request in
+            selectedTab = request.tab
         }
     }
 

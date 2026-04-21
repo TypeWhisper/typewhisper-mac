@@ -10,6 +10,7 @@
 		1834537D0CCC21190DB68EBD /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D8AA5F3DBFD9010D09311C40 /* Cocoa.framework */; };
 		1E6EDB8B0D1573A05A610078 /* PluginManifestValidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDF548E65340A17A3A16590B /* PluginManifestValidationTests.swift */; };
 		204C804898EAE1127B62EC98 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E808D246301E36546EEB811F /* TestSupport.swift */; };
+		A1F000000000000000000102 /* PostUpdatePromptCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */; };
 		A1C3E59B7D1042F9A8C6E2B1 /* PromptActionTemperaturePersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D4F6A8C0E2143F9B7D5C1A /* PromptActionTemperaturePersistenceTests.swift */; };
 		24FFE19AC026C48AE32BCD7C /* AppFormatterServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5852D6767C5FA955B84C52 /* AppFormatterServiceTests.swift */; };
 		F0A1B2C3D4E5F60718293A4B /* GeminiPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000141 /* GeminiPlugin.swift */; };
@@ -18,6 +19,9 @@
 		A10000000000000000000003 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000044 /* TypeWhisperPluginSDK */; };
 		A10000000000000000000005 /* SpeechFeedbackServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* SpeechFeedbackServiceTests.swift */; };
 		AA00000000000000000350 /* ObjCExceptionCatcher.m in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000351 /* ObjCExceptionCatcher.m */; };
+		AA00000000000000000353 /* PostUpdatePromptCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000353 /* PostUpdatePromptCoordinator.swift */; };
+		AA00000000000000000354 /* SettingsNavigationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000354 /* SettingsNavigationCoordinator.swift */; };
+		AA00000000000000000355 /* PostUpdateLicensePromptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000355 /* PostUpdateLicensePromptView.swift */; };
 		C23000000000000000000001 /* OpenAIPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000139 /* OpenAIPlugin.swift */; };
 		C23000000000000000000002 /* Qwen3ContextBiasFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000321 /* Qwen3ContextBiasFormatter.swift */; };
 		C23000000000000000000003 /* Gemma4Plugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000295 /* Gemma4Plugin.swift */; };
@@ -389,6 +393,7 @@
 		7D2E4F50617283946C1F7A8B /* SoundServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SoundServiceTests.swift; sourceTree = "<group>"; };
 		AA8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictationShortSpeechTests.swift; sourceTree = "<group>"; };
 		8E39448D561C47B16EEF4C6B /* HTTPRequestParserTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HTTPRequestParserTests.swift; sourceTree = "<group>"; };
+		A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PostUpdatePromptCoordinatorTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000004 /* SpeechFeedbackServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeechFeedbackServiceTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000001 /* TypeWhisperApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypeWhisperApp.swift; sourceTree = "<group>"; };
 		BB00000000000000000002 /* ServiceContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceContainer.swift; sourceTree = "<group>"; };
@@ -409,6 +414,9 @@
 		BB00000000000000000350 /* ObjCExceptionCatcher.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ObjCExceptionCatcher.h; sourceTree = "<group>"; };
 		BB00000000000000000351 /* ObjCExceptionCatcher.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ObjCExceptionCatcher.m; sourceTree = "<group>"; };
 		BB00000000000000000352 /* TypeWhisper-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "TypeWhisper-Bridging-Header.h"; sourceTree = "<group>"; };
+		BB00000000000000000353 /* PostUpdatePromptCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostUpdatePromptCoordinator.swift; sourceTree = "<group>"; };
+		BB00000000000000000354 /* SettingsNavigationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsNavigationCoordinator.swift; sourceTree = "<group>"; };
+		BB00000000000000000355 /* PostUpdateLicensePromptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostUpdateLicensePromptView.swift; sourceTree = "<group>"; };
 		BB00000000000000000040 /* HTTPResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPResponse.swift; sourceTree = "<group>"; };
 		BB00000000000000000041 /* HTTPRequestParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPRequestParser.swift; sourceTree = "<group>"; };
 		BB00000000000000000042 /* APIRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIRouter.swift; sourceTree = "<group>"; };
@@ -1076,6 +1084,8 @@
 				BB00000000000000000070 /* UpdateChecker.swift */,
 				BB00000000000000000119 /* UserDefaultsKeys.swift */,
 				BB00000000000000000147 /* AppConstants.swift */,
+				BB00000000000000000353 /* PostUpdatePromptCoordinator.swift */,
+				BB00000000000000000354 /* SettingsNavigationCoordinator.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -1204,6 +1214,7 @@
 				BB00000000000000000250 /* AboutSettingsView.swift */,
 				BB00000000000000000287 /* LicenseSettingsView.swift */,
 				BB00000000000000000288 /* WelcomeSheet.swift */,
+				BB00000000000000000355 /* PostUpdateLicensePromptView.swift */,
 				BB00000000000000000289 /* SupporterBadgeView.swift */,
 			);
 			path = Views;
@@ -1702,6 +1713,7 @@
 				A8D4F2B6E1C3097B5F8A4E62 /* DictionaryExporterTests.swift */,
 				8E39448D561C47B16EEF4C6B /* HTTPRequestParserTests.swift */,
 				3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */,
+				A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */,
 				BDF548E65340A17A3A16590B /* PluginManifestValidationTests.swift */,
 				91B4D7E2C5A809F1632E4B7D /* PluginRegistryServiceTests.swift */,
 				B2D4F6A8C0E2143F9B7D5C1A /* PromptActionTemperaturePersistenceTests.swift */,
@@ -2876,6 +2888,7 @@
 				C7A3E9F1D5B2084A6E9C3D71 /* DictionaryExporterTests.swift in Sources */,
 				F635B3F08018D57E0CB709BF /* HTTPRequestParserTests.swift in Sources */,
 				6A9D1EE0C163693B1A798779 /* HistoryServiceTests.swift in Sources */,
+				A1F000000000000000000102 /* PostUpdatePromptCoordinatorTests.swift in Sources */,
 				F0A1B2C3D4E5F60718293A4B /* GeminiPlugin.swift in Sources */,
 				C23000000000000000000001 /* OpenAIPlugin.swift in Sources */,
 				C23000000000000000000002 /* Qwen3ContextBiasFormatter.swift in Sources */,
@@ -3024,6 +3037,9 @@
 				AA00000000000000000300 /* LicenseService.swift in Sources */,
 				AA00000000000000000301 /* LicenseSettingsView.swift in Sources */,
 				AA00000000000000000302 /* WelcomeSheet.swift in Sources */,
+				AA00000000000000000353 /* PostUpdatePromptCoordinator.swift in Sources */,
+				AA00000000000000000354 /* SettingsNavigationCoordinator.swift in Sources */,
+				AA00000000000000000355 /* PostUpdateLicensePromptView.swift in Sources */,
 				AA00000000000000000303 /* SupporterBadgeView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
