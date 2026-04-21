@@ -99,6 +99,17 @@
       "iconSystemName": "bird",
       "releases": [
         {
+          "version": "1.2.9",
+          "minHostVersion": "1.2.1",
+          "sdkCompatibilityVersion": "v1",
+          "size": 3368149,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-parakeet-v1.2.9/ParakeetPlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        },
+        {
           "version": "1.2.8",
           "minHostVersion": "1.2.1",
           "sdkCompatibilityVersion": "v1",
@@ -123,11 +134,11 @@
           "downloadCount": 2
         }
       ],
-      "version": "1.2.8",
+      "version": "1.2.9",
       "minHostVersion": "1.2.1",
       "sdkCompatibilityVersion": "v1",
-      "size": 3368144,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-parakeet-v1.2.8/ParakeetPlugin.zip",
+      "size": 3368149,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-parakeet-v1.2.9/ParakeetPlugin.zip",
       "minOSVersion": "14.0",
       "supportedArchitectures": [
         "arm64"
