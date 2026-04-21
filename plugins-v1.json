@@ -658,6 +658,14 @@
       "iconSystemName": "doc.text",
       "releases": [
         {
+          "version": "1.0.3",
+          "minHostVersion": "0.14.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 107224,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-file-memory-v1.0.3/FileMemoryPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.2",
           "minHostVersion": "0.14.0",
           "sdkCompatibilityVersion": "v1",
@@ -666,11 +674,11 @@
           "minOSVersion": "14.0"
         }
       ],
-      "version": "1.0.2",
+      "version": "1.0.3",
       "minHostVersion": "0.14.0",
       "sdkCompatibilityVersion": "v1",
-      "size": 107212,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-file-memory-v1.0.2/FileMemoryPlugin.zip",
+      "size": 107224,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-file-memory-v1.0.3/FileMemoryPlugin.zip",
       "minOSVersion": "14.0"
     },
     {
