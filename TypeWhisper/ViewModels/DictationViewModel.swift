@@ -94,6 +94,7 @@ final class DictationViewModel: ObservableObject {
     var pttHotkeyLabel: String { Self.loadHotkeyLabel(for: .pushToTalk) }
     var toggleHotkeyLabel: String { Self.loadHotkeyLabel(for: .toggle) }
     var promptPaletteHotkeyLabel: String { Self.loadHotkeyLabel(for: .promptPalette) }
+    var recentTranscriptionsHotkeyLabel: String { Self.loadHotkeyLabel(for: .recentTranscriptions) }
     @Published var activeRuleName: String?
     @Published var activeRuleReasonLabel: String?
     @Published var activeRuleExplanation: String?
@@ -134,6 +135,7 @@ final class DictationViewModel: ObservableObject {
     private let modelManager: ModelManagerService
     private let settingsViewModel: SettingsViewModel
     private let historyService: HistoryService
+    private let recentTranscriptionStore: RecentTranscriptionStore
     private let profileService: ProfileService
     private let translationService: AnyObject? // TranslationService (macOS 15+)
     private let audioDuckingService: AudioDuckingService
@@ -159,6 +161,7 @@ final class DictationViewModel: ObservableObject {
     private var recordingStartTime: Date?
     private let streamingHandler: StreamingHandler
     private let promptPaletteHandler: PromptPaletteHandler
+    private let recentTranscriptionPaletteHandler: RecentTranscriptionPaletteHandler
     private let settingsHandler: DictationSettingsHandler
     private var transcriptionTask: Task<Void, Never>?
     private var errorResetTask: Task<Void, Never>?
@@ -198,6 +201,7 @@ final class DictationViewModel: ObservableObject {
         modelManager: ModelManagerService,
         settingsViewModel: SettingsViewModel,
         historyService: HistoryService,
+        recentTranscriptionStore: RecentTranscriptionStore,
         profileService: ProfileService,
         translationService: AnyObject?,
         audioDuckingService: AudioDuckingService,
@@ -219,6 +223,7 @@ final class DictationViewModel: ObservableObject {
         self.modelManager = modelManager
         self.settingsViewModel = settingsViewModel
         self.historyService = historyService
+        self.recentTranscriptionStore = recentTranscriptionStore
         self.profileService = profileService
         self.translationService = translationService
         self.audioDuckingService = audioDuckingService
@@ -258,6 +263,11 @@ final class DictationViewModel: ObservableObject {
             promptProcessingService: promptProcessingService,
             soundService: soundService,
             accessibilityAnnouncementService: accessibilityAnnouncementService
+        )
+        self.recentTranscriptionPaletteHandler = RecentTranscriptionPaletteHandler(
+            textInsertionService: textInsertionService,
+            historyService: historyService,
+            recentTranscriptionStore: recentTranscriptionStore
         )
         self.settingsHandler = DictationSettingsHandler(
             hotkeyService: hotkeyService,
@@ -315,6 +325,12 @@ final class DictationViewModel: ObservableObject {
             (self?.actionFeedbackMessage, self?.actionFeedbackIcon, self?.actionDisplayDuration ?? 3.5)
         }
         promptPaletteHandler.getPreserveClipboard = { [weak self] in
+            self?.preserveClipboard ?? false
+        }
+        recentTranscriptionPaletteHandler.onShowNotchFeedback = { [weak self] message, icon, duration, isError, category in
+            self?.showNotchFeedback(message: message, icon: icon, duration: duration, isError: isError, errorCategory: category ?? "general")
+        }
+        recentTranscriptionPaletteHandler.getPreserveClipboard = { [weak self] in
             self?.preserveClipboard ?? false
         }
 
@@ -605,6 +621,7 @@ final class DictationViewModel: ObservableObject {
 
         // Dismiss prompt palette if active
         promptPaletteHandler.hide()
+        recentTranscriptionPaletteHandler.hide()
 
         // Cancel auto-unload timer to prevent unloading during recording
         modelManager.cancelAutoUnloadTimer()
@@ -1005,6 +1022,15 @@ final class DictationViewModel: ObservableObject {
                     llmStepName: llmStepName
                 )
                 text = ppResult.text
+                let transcriptionID = sessionID ?? UUID()
+                let completionTimestamp = Date()
+                recentTranscriptionStore.recordTranscription(
+                    id: transcriptionID,
+                    finalText: text,
+                    timestamp: completionTimestamp,
+                    appName: activeApp.name,
+                    appBundleIdentifier: activeApp.bundleId
+                )
 
                 partialText = ""
 
@@ -1035,7 +1061,7 @@ final class DictationViewModel: ObservableObject {
 
                 if UserDefaults.standard.object(forKey: UserDefaultsKeys.historyEnabled) as? Bool ?? true {
                     historyService.addRecord(
-                        id: sessionID ?? UUID(),
+                        id: transcriptionID,
                         rawText: result.text,
                         finalText: text,
                         appName: activeApp.name,
@@ -1069,7 +1095,7 @@ final class DictationViewModel: ObservableObject {
                 let completedTranscription = DictationSessionTranscription(
                     text: text,
                     rawText: result.text,
-                    timestamp: Date(),
+                    timestamp: completionTimestamp,
                     appName: activeApp.name,
                     appBundleIdentifier: activeApp.bundleId,
                     appURL: activeApp.url,
@@ -1399,7 +1425,13 @@ final class DictationViewModel: ObservableObject {
     }
 
     func triggerStandalonePromptSelection() {
+        recentTranscriptionPaletteHandler.hide()
         promptPaletteHandler.triggerSelection(currentState: state, soundFeedbackEnabled: soundFeedbackEnabled)
+    }
+
+    func triggerRecentTranscriptionsPalette() {
+        promptPaletteHandler.hide()
+        recentTranscriptionPaletteHandler.triggerSelection(currentState: state)
     }
 
     private func showNotchFeedback(message: String, icon: String, duration: TimeInterval = 2.5, isError: Bool = false, errorCategory: String = "general") {

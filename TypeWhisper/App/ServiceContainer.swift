@@ -12,6 +12,7 @@ final class ServiceContainer: ObservableObject {
     let hotkeyService: HotkeyService
     let textInsertionService: TextInsertionService
     let historyService: HistoryService
+    let recentTranscriptionStore: RecentTranscriptionStore
     let textDiffService: TextDiffService
     let profileService: ProfileService
     let translationService: AnyObject? // TranslationService (macOS 15+)
@@ -62,6 +63,7 @@ final class ServiceContainer: ObservableObject {
         hotkeyService = HotkeyService()
         textInsertionService = TextInsertionService()
         historyService = HistoryService()
+        recentTranscriptionStore = RecentTranscriptionStore()
         textDiffService = TextDiffService()
         profileService = ProfileService()
         #if canImport(Translation)
@@ -109,6 +111,7 @@ final class ServiceContainer: ObservableObject {
             modelManager: modelManagerService,
             settingsViewModel: settingsViewModel,
             historyService: historyService,
+            recentTranscriptionStore: recentTranscriptionStore,
             profileService: profileService,
             translationService: translationService,
             audioDuckingService: audioDuckingService,

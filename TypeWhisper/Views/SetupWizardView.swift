@@ -1090,6 +1090,7 @@ struct SetupWizardView: View {
         case .pushToTalk: return dictation.pttHotkeyLabel
         case .toggle: return dictation.toggleHotkeyLabel
         case .promptPalette: return dictation.promptPaletteHotkeyLabel
+        case .recentTranscriptions: return dictation.recentTranscriptionsHotkeyLabel
         }
     }
 
@@ -1099,6 +1100,7 @@ struct SetupWizardView: View {
         case .pushToTalk: return String(localized: "Push-to-Talk")
         case .toggle: return String(localized: "Toggle")
         case .promptPalette: return String(localized: "Prompt Palette")
+        case .recentTranscriptions: return String(localized: "Recent Transcriptions")
         }
     }
 }

@@ -46,6 +46,11 @@
 		E5A1B2C3D4F5061728394A5D /* NotchIndicatorLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5A1B2C3D4F5061728394A5E /* NotchIndicatorLayoutTests.swift */; };
 		3A4B5C6D7E8F901234567890 /* AudioEngineRecoverySupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A4B5C6D7E8F901234567891 /* AudioEngineRecoverySupportTests.swift */; };
 		6A9D1EE0C163693B1A798779 /* HistoryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */; };
+		A91F00000000000000000001 /* SelectionPalettePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B91F00000000000000000001 /* SelectionPalettePanel.swift */; };
+		A91F00000000000000000002 /* RecentTranscriptionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B91F00000000000000000002 /* RecentTranscriptionStore.swift */; };
+		A91F00000000000000000003 /* RecentTranscriptionPaletteHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B91F00000000000000000003 /* RecentTranscriptionPaletteHandler.swift */; };
+		A91F00000000000000000004 /* RecentTranscriptionStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B91F00000000000000000004 /* RecentTranscriptionStoreTests.swift */; };
+		A91F00000000000000000005 /* RecentTranscriptionPaletteHandlerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B91F00000000000000000005 /* RecentTranscriptionPaletteHandlerTests.swift */; };
 		6C1F7A8B9D2E4F5061728394 /* SoundServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D2E4F50617283946C1F7A8B /* SoundServiceTests.swift */; };
 		BB8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift */; };
 		76858B5B28A121356A5D9599 /* TextDiffServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05313C25F9E79BCFC02899F2 /* TextDiffServiceTests.swift */; };
@@ -394,6 +399,11 @@
 		05313C25F9E79BCFC02899F2 /* TextDiffServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TextDiffServiceTests.swift; sourceTree = "<group>"; };
 		3A4B5C6D7E8F901234567891 /* AudioEngineRecoverySupportTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AudioEngineRecoverySupportTests.swift; sourceTree = "<group>"; };
 		3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HistoryServiceTests.swift; sourceTree = "<group>"; };
+		B91F00000000000000000001 /* SelectionPalettePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionPalettePanel.swift; sourceTree = "<group>"; };
+		B91F00000000000000000002 /* RecentTranscriptionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentTranscriptionStore.swift; sourceTree = "<group>"; };
+		B91F00000000000000000003 /* RecentTranscriptionPaletteHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentTranscriptionPaletteHandler.swift; sourceTree = "<group>"; };
+		B91F00000000000000000004 /* RecentTranscriptionStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecentTranscriptionStoreTests.swift; sourceTree = "<group>"; };
+		B91F00000000000000000005 /* RecentTranscriptionPaletteHandlerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecentTranscriptionPaletteHandlerTests.swift; sourceTree = "<group>"; };
 		7D2E4F50617283946C1F7A8B /* SoundServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SoundServiceTests.swift; sourceTree = "<group>"; };
 		AA8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictationShortSpeechTests.swift; sourceTree = "<group>"; };
 		8E39448D561C47B16EEF4C6B /* HTTPRequestParserTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HTTPRequestParserTests.swift; sourceTree = "<group>"; };
@@ -1131,6 +1141,7 @@
 				BB00000000000000000050 /* SubtitleExporter.swift */,
 				BB00000000000000000148 /* HistoryExporter.swift */,
 				BB00000000000000000061 /* HistoryService.swift */,
+				B91F00000000000000000002 /* RecentTranscriptionStore.swift */,
 				BB00000000000000000062 /* TextDiffService.swift */,
 				BB00000000000000000066 /* ProfileService.swift */,
 				BB00000000000000000073 /* TranslationService.swift */,
@@ -1180,6 +1191,7 @@
 				BB00000000000000000171 /* DictationEnums.swift */,
 				BB00000000000000000172 /* StreamingHandler.swift */,
 				BB00000000000000000173 /* PromptPaletteHandler.swift */,
+				B91F00000000000000000003 /* RecentTranscriptionPaletteHandler.swift */,
 				BB00000000000000000174 /* DictationSettingsHandler.swift */,
 				BB00000000000000000239 /* AudioRecorderViewModel.swift */,
 				BB00000000000000000242 /* WatchFolderViewModel.swift */,
@@ -1210,6 +1222,7 @@
 				BB00000000000000000094 /* AudioWaveformView.swift */,
 				BB00000000000000000117 /* PromptActionsSettingsView.swift */,
 				BB00000000000000000118 /* PromptPalettePanel.swift */,
+				B91F00000000000000000001 /* SelectionPalettePanel.swift */,
 				BB00000000000000000120 /* NotchIndicatorPanel.swift */,
 				E5A1B2C3D4F5061728394A5C /* NotchIndicatorLayout.swift */,
 				BB00000000000000000121 /* NotchIndicatorView.swift */,
@@ -1722,6 +1735,8 @@
 				A8D4F2B6E1C3097B5F8A4E62 /* DictionaryExporterTests.swift */,
 				8E39448D561C47B16EEF4C6B /* HTTPRequestParserTests.swift */,
 				3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */,
+				B91F00000000000000000005 /* RecentTranscriptionPaletteHandlerTests.swift */,
+				B91F00000000000000000004 /* RecentTranscriptionStoreTests.swift */,
 				A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */,
 				BDF548E65340A17A3A16590B /* PluginManifestValidationTests.swift */,
 				91B4D7E2C5A809F1632E4B7D /* PluginRegistryServiceTests.swift */,
@@ -2900,6 +2915,8 @@
 				C7A3E9F1D5B2084A6E9C3D71 /* DictionaryExporterTests.swift in Sources */,
 				F635B3F08018D57E0CB709BF /* HTTPRequestParserTests.swift in Sources */,
 				6A9D1EE0C163693B1A798779 /* HistoryServiceTests.swift in Sources */,
+				A91F00000000000000000005 /* RecentTranscriptionPaletteHandlerTests.swift in Sources */,
+				A91F00000000000000000004 /* RecentTranscriptionStoreTests.swift in Sources */,
 				A1F000000000000000000102 /* PostUpdatePromptCoordinatorTests.swift in Sources */,
 				F0A1B2C3D4E5F60718293A4B /* GeminiPlugin.swift in Sources */,
 				C23000000000000000000001 /* OpenAIPlugin.swift in Sources */,
@@ -2959,6 +2976,7 @@
 				AA00000000000000000181 /* DictationEnums.swift in Sources */,
 				AA00000000000000000182 /* StreamingHandler.swift in Sources */,
 				AA00000000000000000183 /* PromptPaletteHandler.swift in Sources */,
+				A91F00000000000000000003 /* RecentTranscriptionPaletteHandler.swift in Sources */,
 				AA00000000000000000207 /* IndicatorCoordinator.swift in Sources */,
 				AA00000000000000000184 /* DictationSettingsHandler.swift in Sources */,
 				AA00000000000000000040 /* HTTPResponse.swift in Sources */,
@@ -2970,6 +2988,7 @@
 				AA00000000000000000046 /* AdvancedSettingsView.swift in Sources */,
 				AA00000000000000000050 /* SubtitleExporter.swift in Sources */,
 				AA00000000000000000153 /* HistoryExporter.swift in Sources */,
+				A91F00000000000000000002 /* RecentTranscriptionStore.swift in Sources */,
 				AA00000000000000000283 /* DictionaryExporter.swift in Sources */,
 				AA00000000000000000284 /* TermPackRegistryService.swift in Sources */,
 				AA00000000000000000051 /* GeneralSettingsView.swift in Sources */,
@@ -3020,6 +3039,7 @@
 				AA00000000000000000315 /* PromptWizardSupport.swift in Sources */,
 				AA00000000000000000117 /* PromptActionsSettingsView.swift in Sources */,
 				AA00000000000000000118 /* PromptPalettePanel.swift in Sources */,
+				A91F00000000000000000001 /* SelectionPalettePanel.swift in Sources */,
 				AA00000000000000000217 /* IndicatorPreviewView.swift in Sources */,
 					AA00000000000000000123 /* EventBus.swift in Sources */,
 					AA00000000000000000124 /* PluginManager.swift in Sources */,

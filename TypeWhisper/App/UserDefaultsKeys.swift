@@ -21,6 +21,7 @@ enum UserDefaultsKeys {
     static let pttHotkey = "pttHotkey"
     static let toggleHotkey = "toggleHotkey"
     static let promptPaletteHotkey = "promptPaletteHotkey"
+    static let recentTranscriptionsHotkey = "recentTranscriptionsHotkey"
 
     // MARK: - Model / Engine
     static let selectedEngine = "selectedEngine"
