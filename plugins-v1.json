@@ -186,6 +186,14 @@
       "requiresAPIKey": false,
       "releases": [
         {
+          "version": "1.1.5",
+          "minHostVersion": "1.2.2",
+          "sdkCompatibilityVersion": "v1",
+          "size": 392233,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-v1.1.5/OpenAIPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.1.4",
           "minHostVersion": "1.2.2",
           "sdkCompatibilityVersion": "v1",
@@ -195,11 +203,11 @@
           "downloadCount": 26
         }
       ],
-      "version": "1.1.4",
+      "version": "1.1.5",
       "minHostVersion": "1.2.2",
       "sdkCompatibilityVersion": "v1",
-      "size": 367918,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-v1.1.4/OpenAIPlugin.zip",
+      "size": 392233,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-v1.1.5/OpenAIPlugin.zip",
       "minOSVersion": "14.0"
     },
     {
