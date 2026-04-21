@@ -933,6 +933,14 @@
       "iconSystemName": "brain",
       "releases": [
         {
+          "version": "1.0.3",
+          "minHostVersion": "0.14.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 198044,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-vector-memory-v1.0.3/OpenAIVectorMemoryPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.2",
           "minHostVersion": "0.14.0",
           "sdkCompatibilityVersion": "v1",
@@ -941,11 +949,11 @@
           "minOSVersion": "14.0"
         }
       ],
-      "version": "1.0.2",
+      "version": "1.0.3",
       "minHostVersion": "0.14.0",
       "sdkCompatibilityVersion": "v1",
-      "size": 198037,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-vector-memory-v1.0.2/OpenAIVectorMemoryPlugin.zip",
+      "size": 198044,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-vector-memory-v1.0.3/OpenAIVectorMemoryPlugin.zip",
       "minOSVersion": "14.0"
     },
     {
