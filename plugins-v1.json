@@ -784,6 +784,14 @@
       "iconSystemName": "text.bubble",
       "releases": [
         {
+          "version": "1.0.6",
+          "minHostVersion": "1.1.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 198538,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-livetranscript-v1.0.6/LiveTranscriptPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.5",
           "minHostVersion": "1.1.0",
           "sdkCompatibilityVersion": "v1",
@@ -792,11 +800,11 @@
           "minOSVersion": "14.0"
         }
       ],
-      "version": "1.0.5",
+      "version": "1.0.6",
       "minHostVersion": "1.1.0",
       "sdkCompatibilityVersion": "v1",
-      "size": 198536,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-livetranscript-v1.0.5/LiveTranscriptPlugin.zip",
+      "size": 198538,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-livetranscript-v1.0.6/LiveTranscriptPlugin.zip",
       "minOSVersion": "14.0"
     },
     {
