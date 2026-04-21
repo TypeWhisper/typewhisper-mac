@@ -1155,6 +1155,17 @@
       "iconSystemName": "cpu",
       "releases": [
         {
+          "version": "1.0.6",
+          "minHostVersion": "1.2.1",
+          "sdkCompatibilityVersion": "v1",
+          "size": 18916447,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-granite-v1.0.6/GranitePlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        },
+        {
           "version": "1.0.5",
           "minHostVersion": "1.2.1",
           "sdkCompatibilityVersion": "v1",
@@ -1167,11 +1178,11 @@
           "downloadCount": 11
         }
       ],
-      "version": "1.0.5",
+      "version": "1.0.6",
       "minHostVersion": "1.2.1",
       "sdkCompatibilityVersion": "v1",
-      "size": 18431772,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-granite-v1.0.5/GranitePlugin.zip",
+      "size": 18916447,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-granite-v1.0.6/GranitePlugin.zip",
       "minOSVersion": "14.0",
       "supportedArchitectures": [
         "arm64"
