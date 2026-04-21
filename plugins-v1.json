@@ -215,6 +215,14 @@
       "iconSystemName": "server.rack",
       "releases": [
         {
+          "version": "1.0.14",
+          "minHostVersion": "0.9.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 202211,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-compatible-v1.0.14/OpenAICompatiblePlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.13",
           "minHostVersion": "0.9.0",
           "sdkCompatibilityVersion": "v1",
@@ -224,11 +232,11 @@
           "downloadCount": 163
         }
       ],
-      "version": "1.0.13",
+      "version": "1.0.14",
       "minHostVersion": "0.9.0",
       "sdkCompatibilityVersion": "v1",
-      "size": 183891,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-compatible-v1.0.13/OpenAICompatiblePlugin.zip",
+      "size": 202211,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-compatible-v1.0.14/OpenAICompatiblePlugin.zip",
       "minOSVersion": "14.0"
     },
     {
