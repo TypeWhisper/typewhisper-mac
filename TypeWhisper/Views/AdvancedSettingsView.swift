@@ -174,6 +174,8 @@ struct AdvancedSettingsView: View {
                 }
             }
 
+            SpokenPunctuationSettingsSection()
+
             // MARK: - History
             Section(String(localized: "History")) {
                 Toggle(String(localized: "Save history"), isOn: $historyEnabled)

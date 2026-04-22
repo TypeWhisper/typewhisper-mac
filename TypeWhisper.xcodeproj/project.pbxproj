@@ -16,6 +16,10 @@
 		A1F000000000000000000102 /* PostUpdatePromptCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */; };
 		A1C3E59B7D1042F9A8C6E2B1 /* PromptActionTemperaturePersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D4F6A8C0E2143F9B7D5C1A /* PromptActionTemperaturePersistenceTests.swift */; };
 		24FFE19AC026C48AE32BCD7C /* AppFormatterServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5852D6767C5FA955B84C52 /* AppFormatterServiceTests.swift */; };
+		24FFE19AC026C48AE32BCD7D /* SpeechPunctuationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5852D6767C5FA955B84C53 /* SpeechPunctuationServiceTests.swift */; };
+		24FFE19AC026C48AE32BCD7E /* DictationPunctuationProfileStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5852D6767C5FA955B84C54 /* DictationPunctuationProfileStoreTests.swift */; };
+		24FFE19AC026C48AE32BCD7F /* PunctuationRulesLoaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5852D6767C5FA955B84C55 /* PunctuationRulesLoaderTests.swift */; };
+		24FFE19AC026C48AE32BCD80 /* PunctuationStrategyResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5852D6767C5FA955B84C56 /* PunctuationStrategyResolverTests.swift */; };
 		F0A1B2C3D4E5F60718293A4B /* GeminiPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000141 /* GeminiPlugin.swift */; };
 		A10000000000000000000001 /* SystemTTSPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000001 /* SystemTTSPlugin.swift */; };
 		A10000000000000000000002 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000002 /* manifest.json */; };
@@ -82,6 +86,7 @@
 		AA00000000000000000044 /* APIHandlers.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000044 /* APIHandlers.swift */; };
 		AA00000000000000000045 /* APIServerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000045 /* APIServerViewModel.swift */; };
 		AA00000000000000000046 /* AdvancedSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000046 /* AdvancedSettingsView.swift */; };
+		AA00000000000000000340 /* SpokenPunctuationSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000340 /* SpokenPunctuationSettingsSection.swift */; };
 		AA00000000000000000050 /* SubtitleExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000050 /* SubtitleExporter.swift */; };
 		AA00000000000000000051 /* GeneralSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000051 /* GeneralSettingsView.swift */; };
 		AA00000000000000000052 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000052 /* Localizable.xcstrings */; };
@@ -265,6 +270,17 @@
 		AA00000000000000000265 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000253 /* Localizable.xcstrings */; };
 		AA00000000000000000266 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000035 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000247 /* AppFormatterService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000235 /* AppFormatterService.swift */; };
+		AA00000000000000000248 /* SpeechPunctuationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000236 /* SpeechPunctuationService.swift */; };
+		AA00000000000000000330 /* DictationPunctuationProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000330 /* DictationPunctuationProfile.swift */; };
+		AA00000000000000000331 /* PunctuationRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000331 /* PunctuationRules.swift */; };
+		AA00000000000000000332 /* DictationRuntimeContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000332 /* DictationRuntimeContext.swift */; };
+		AA00000000000000000333 /* DictationPunctuationProfileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000333 /* DictationPunctuationProfileStore.swift */; };
+		AA00000000000000000334 /* PunctuationRulesLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000334 /* PunctuationRulesLoader.swift */; };
+		AA00000000000000000335 /* PunctuationStrategyResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000335 /* PunctuationStrategyResolver.swift */; };
+		AA00000000000000000336 /* PunctuationVerificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000336 /* PunctuationVerificationService.swift */; };
+		AA00000000000000000337 /* de.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000337 /* de.json */; };
+		AA00000000000000000338 /* en.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000338 /* en.json */; };
+		AA00000000000000000339 /* it.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000339 /* it.json */; };
 		AA00000000000000000250 /* AudioRecorderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000238 /* AudioRecorderService.swift */; };
 		AA00000000000000000251 /* AudioRecorderViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000239 /* AudioRecorderViewModel.swift */; };
 		AA00000000000000000252 /* AudioRecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000240 /* AudioRecorderView.swift */; };
@@ -414,6 +430,16 @@
 		BB00000000000000000001 /* TypeWhisperApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypeWhisperApp.swift; sourceTree = "<group>"; };
 		BB00000000000000000002 /* ServiceContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceContainer.swift; sourceTree = "<group>"; };
 		BB00000000000000000005 /* TranscriptionResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionResult.swift; sourceTree = "<group>"; };
+		BB00000000000000000330 /* DictationPunctuationProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationPunctuationProfile.swift; sourceTree = "<group>"; };
+		BB00000000000000000331 /* PunctuationRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PunctuationRules.swift; sourceTree = "<group>"; };
+		BB00000000000000000332 /* DictationRuntimeContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationRuntimeContext.swift; sourceTree = "<group>"; };
+		BB00000000000000000333 /* DictationPunctuationProfileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationPunctuationProfileStore.swift; sourceTree = "<group>"; };
+		BB00000000000000000334 /* PunctuationRulesLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PunctuationRulesLoader.swift; sourceTree = "<group>"; };
+		BB00000000000000000335 /* PunctuationStrategyResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PunctuationStrategyResolver.swift; sourceTree = "<group>"; };
+		BB00000000000000000336 /* PunctuationVerificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PunctuationVerificationService.swift; sourceTree = "<group>"; };
+		BB00000000000000000337 /* de.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = PunctuationRules/de.json; sourceTree = "<group>"; };
+		BB00000000000000000338 /* en.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = PunctuationRules/en.json; sourceTree = "<group>"; };
+		BB00000000000000000339 /* it.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = PunctuationRules/it.json; sourceTree = "<group>"; };
 		BB00000000000000000009 /* ModelManagerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManagerService.swift; sourceTree = "<group>"; };
 		BB00000000000000000010 /* AudioFileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioFileService.swift; sourceTree = "<group>"; };
 		BB00000000000000000012 /* FileTranscriptionViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTranscriptionViewModel.swift; sourceTree = "<group>"; };
@@ -440,6 +466,7 @@
 		BB00000000000000000044 /* APIHandlers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIHandlers.swift; sourceTree = "<group>"; };
 		BB00000000000000000045 /* APIServerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIServerViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000046 /* AdvancedSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedSettingsView.swift; sourceTree = "<group>"; };
+		BB00000000000000000340 /* SpokenPunctuationSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpokenPunctuationSettingsSection.swift; sourceTree = "<group>"; };
 		BB00000000000000000050 /* SubtitleExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleExporter.swift; sourceTree = "<group>"; };
 		BB00000000000000000051 /* GeneralSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralSettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000052 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
@@ -616,6 +643,7 @@
 		BB00000000000000000253 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		BB00000000000000000254 /* FireworksPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FireworksPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000235 /* AppFormatterService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppFormatterService.swift; sourceTree = "<group>"; };
+		BB00000000000000000236 /* SpeechPunctuationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechPunctuationService.swift; sourceTree = "<group>"; };
 		BB00000000000000000238 /* AudioRecorderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderService.swift; sourceTree = "<group>"; };
 		BB00000000000000000239 /* AudioRecorderViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000240 /* AudioRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderView.swift; sourceTree = "<group>"; };
@@ -630,6 +658,10 @@
 		BE6B6611B899F649B097A726 /* SnippetServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SnippetServiceTests.swift; sourceTree = "<group>"; };
 		B2D4F6A8C0E2143F9B7D5C1A /* PromptActionTemperaturePersistenceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptActionTemperaturePersistenceTests.swift; sourceTree = "<group>"; };
 		CE5852D6767C5FA955B84C52 /* AppFormatterServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppFormatterServiceTests.swift; sourceTree = "<group>"; };
+		CE5852D6767C5FA955B84C53 /* SpeechPunctuationServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeechPunctuationServiceTests.swift; sourceTree = "<group>"; };
+		CE5852D6767C5FA955B84C54 /* DictationPunctuationProfileStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictationPunctuationProfileStoreTests.swift; sourceTree = "<group>"; };
+		CE5852D6767C5FA955B84C55 /* PunctuationRulesLoaderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PunctuationRulesLoaderTests.swift; sourceTree = "<group>"; };
+		CE5852D6767C5FA955B84C56 /* PunctuationStrategyResolverTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PunctuationStrategyResolverTests.swift; sourceTree = "<group>"; };
 		D63A42880A0BA4C84F36E873 /* DictionaryServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictionaryServiceTests.swift; sourceTree = "<group>"; };
 		D8AA5F3DBFD9010D09311C40 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
 		DD00000000000000000098 /* typewhisper-cli */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "typewhisper-cli"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -1114,6 +1146,9 @@
 			isa = PBXGroup;
 			children = (
 				BB00000000000000000005 /* TranscriptionResult.swift */,
+				BB00000000000000000330 /* DictationPunctuationProfile.swift */,
+				BB00000000000000000331 /* PunctuationRules.swift */,
+				BB00000000000000000332 /* DictationRuntimeContext.swift */,
 				BB00000000000000000060 /* TranscriptionRecord.swift */,
 				BB00000000000000000065 /* Profile.swift */,
 				BB00000000000000000077 /* DictionaryEntry.swift */,
@@ -1165,6 +1200,11 @@
 				BB00000000000000000180 /* WidgetDataService.swift */,
 				BB00000000000000000228 /* MemoryService.swift */,
 				BB00000000000000000235 /* AppFormatterService.swift */,
+				BB00000000000000000236 /* SpeechPunctuationService.swift */,
+				BB00000000000000000333 /* DictationPunctuationProfileStore.swift */,
+				BB00000000000000000334 /* PunctuationRulesLoader.swift */,
+				BB00000000000000000335 /* PunctuationStrategyResolver.swift */,
+				BB00000000000000000336 /* PunctuationVerificationService.swift */,
 				BB00000000000000000238 /* AudioRecorderService.swift */,
 				BB00000000000000000241 /* WatchFolderService.swift */,
 				BB00000000000000000244 /* ErrorLogService.swift */,
@@ -1214,6 +1254,7 @@
 				BB00000000000000000017 /* SettingsView.swift */,
 				BB00000000000000000046 /* AdvancedSettingsView.swift */,
 				BB00000000000000000051 /* GeneralSettingsView.swift */,
+				BB00000000000000000340 /* SpokenPunctuationSettingsSection.swift */,
 				BB00000000000000000064 /* HistoryView.swift */,
 				BB00000000000000000068 /* ProfilesSettingsView.swift */,
 				BB00000000000000000075 /* TranslationHostWindow.swift */,
@@ -1252,6 +1293,9 @@
 				BB00000000000000000019 /* TypeWhisper.entitlements */,
 				BB00000000000000000109 /* PrivacyInfo.xcprivacy */,
 				BB00000000000000000052 /* Localizable.xcstrings */,
+				BB00000000000000000337 /* de.json */,
+				BB00000000000000000338 /* en.json */,
+				BB00000000000000000339 /* it.json */,
 				BB00000000000000000072 /* Assets.xcassets */,
 			);
 			path = Resources;
@@ -1729,6 +1773,10 @@
 				E6D200DCDD6580F443C5CE0A /* APIRouterAndHandlersTests.swift */,
 				3A4B5C6D7E8F901234567891 /* AudioEngineRecoverySupportTests.swift */,
 				CE5852D6767C5FA955B84C52 /* AppFormatterServiceTests.swift */,
+				CE5852D6767C5FA955B84C53 /* SpeechPunctuationServiceTests.swift */,
+				CE5852D6767C5FA955B84C54 /* DictationPunctuationProfileStoreTests.swift */,
+				CE5852D6767C5FA955B84C55 /* PunctuationRulesLoaderTests.swift */,
+				CE5852D6767C5FA955B84C56 /* PunctuationStrategyResolverTests.swift */,
 				FD34FDF9D999D85DA1C35375 /* CLISupportTests.swift */,
 				2F4D6A8B0C1E3F5A7B9D2C4F /* DictationViewModelIndicatorSettingsTests.swift */,
 				E5A1B2C3D4F5061728394A5E /* NotchIndicatorLayoutTests.swift */,
@@ -2597,6 +2645,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000052 /* Localizable.xcstrings in Resources */,
+				AA00000000000000000337 /* de.json in Resources */,
+				AA00000000000000000338 /* en.json in Resources */,
+				AA00000000000000000339 /* it.json in Resources */,
 				AA00000000000000000072 /* Assets.xcassets in Resources */,
 				AA00000000000000000087 /* recording_start.wav in Resources */,
 				AA00000000000000000088 /* transcription_success.wav in Resources */,
@@ -2908,6 +2959,10 @@
 			files = (
 				7EC0EFA7DA6597CAEA640448 /* APIRouterAndHandlersTests.swift in Sources */,
 				24FFE19AC026C48AE32BCD7C /* AppFormatterServiceTests.swift in Sources */,
+				24FFE19AC026C48AE32BCD7D /* SpeechPunctuationServiceTests.swift in Sources */,
+				24FFE19AC026C48AE32BCD7E /* DictationPunctuationProfileStoreTests.swift in Sources */,
+				24FFE19AC026C48AE32BCD7F /* PunctuationRulesLoaderTests.swift in Sources */,
+				24FFE19AC026C48AE32BCD80 /* PunctuationStrategyResolverTests.swift in Sources */,
 				7DADCC6E1AEA99CA48F83F50 /* CLISupportTests.swift in Sources */,
 				2F4D6A8B0C1E3F5A7B9D2C4E /* DictationViewModelIndicatorSettingsTests.swift in Sources */,
 				E5A1B2C3D4F5061728394A5D /* NotchIndicatorLayoutTests.swift in Sources */,
@@ -2964,6 +3019,8 @@
 				AA00000000000000000001 /* TypeWhisperApp.swift in Sources */,
 				AA00000000000000000002 /* ServiceContainer.swift in Sources */,
 				AA00000000000000000005 /* TranscriptionResult.swift in Sources */,
+				AA00000000000000000330 /* DictationPunctuationProfile.swift in Sources */,
+				AA00000000000000000331 /* PunctuationRules.swift in Sources */,
 				AA00000000000000000009 /* ModelManagerService.swift in Sources */,
 				AA00000000000000000010 /* AudioFileService.swift in Sources */,
 				AA00000000000000000012 /* FileTranscriptionViewModel.swift in Sources */,
@@ -2990,6 +3047,7 @@
 				AA00000000000000000044 /* APIHandlers.swift in Sources */,
 				AA00000000000000000045 /* APIServerViewModel.swift in Sources */,
 				AA00000000000000000046 /* AdvancedSettingsView.swift in Sources */,
+				AA00000000000000000340 /* SpokenPunctuationSettingsSection.swift in Sources */,
 				AA00000000000000000050 /* SubtitleExporter.swift in Sources */,
 				AA00000000000000000153 /* HistoryExporter.swift in Sources */,
 				A91F00000000000000000002 /* RecentTranscriptionStore.swift in Sources */,
@@ -2997,6 +3055,7 @@
 				AA00000000000000000284 /* TermPackRegistryService.swift in Sources */,
 				AA00000000000000000051 /* GeneralSettingsView.swift in Sources */,
 				AA00000000000000000060 /* TranscriptionRecord.swift in Sources */,
+				AA00000000000000000332 /* DictationRuntimeContext.swift in Sources */,
 				AA00000000000000000061 /* HistoryService.swift in Sources */,
 				AA00000000000000000062 /* TextDiffService.swift in Sources */,
 				AA00000000000000000063 /* HistoryViewModel.swift in Sources */,
@@ -3061,6 +3120,11 @@
 				AA00000000000000000197 /* WidgetDataService.swift in Sources */,
 				AA00000000000000000240 /* MemoryService.swift in Sources */,
 				AA00000000000000000247 /* AppFormatterService.swift in Sources */,
+				AA00000000000000000248 /* SpeechPunctuationService.swift in Sources */,
+				AA00000000000000000333 /* DictationPunctuationProfileStore.swift in Sources */,
+				AA00000000000000000334 /* PunctuationRulesLoader.swift in Sources */,
+				AA00000000000000000335 /* PunctuationStrategyResolver.swift in Sources */,
+				AA00000000000000000336 /* PunctuationVerificationService.swift in Sources */,
 				AA00000000000000000250 /* AudioRecorderService.swift in Sources */,
 				AA00000000000000000251 /* AudioRecorderViewModel.swift in Sources */,
 				AA00000000000000000252 /* AudioRecorderView.swift in Sources */,

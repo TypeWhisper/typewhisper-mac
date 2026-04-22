@@ -77,6 +77,20 @@ final class ModelManagerService: ObservableObject {
         return plugin.selectedModelId
     }
 
+    func selectedModelId(for providerId: String?) -> String? {
+        guard let providerId,
+              let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else { return nil }
+        return plugin.selectedModelId
+    }
+
+    func resolvedModelId(engineOverrideId: String? = nil, cloudModelOverride: String? = nil) -> String? {
+        if let cloudModelOverride {
+            return cloudModelOverride
+        }
+        let providerId = engineOverrideId ?? selectedProviderId
+        return selectedModelId(for: providerId)
+    }
+
     var activeModelName: String? {
         guard let providerId = selectedProviderId,
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId),

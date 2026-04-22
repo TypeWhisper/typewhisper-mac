@@ -1,0 +1,20 @@
+{
+  "language": "de",
+  "rules": [
+    { "phrase": "fragezeichen", "replacement": "?", "category": "punctuation" },
+    { "phrase": "ausrufezeichen", "replacement": "!", "category": "punctuation" },
+    { "phrase": "doppelpunkt", "replacement": ":", "category": "punctuation" },
+    { "phrase": "semikolon", "replacement": ";", "category": "punctuation" },
+    { "phrase": "offene klammer", "replacement": "(", "category": "brackets" },
+    { "phrase": "geschlossene klammer", "replacement": ")", "category": "brackets" },
+    { "phrase": "komma", "replacement": ",", "category": "punctuation" },
+    { "phrase": "punkt", "replacement": ".", "category": "punctuation" }
+  ],
+  "verificationScenarios": [
+    { "spoken": "hallo komma welt", "expected": "hallo, welt" },
+    { "spoken": "wie geht es dir fragezeichen", "expected": "wie geht es dir?" },
+    { "spoken": "hallo offene klammer test geschlossene klammer", "expected": "hallo (test)" },
+    { "spoken": "achtung ausrufezeichen", "expected": "achtung!" },
+    { "spoken": "titel doppelpunkt test", "expected": "titel: test" }
+  ]
+}

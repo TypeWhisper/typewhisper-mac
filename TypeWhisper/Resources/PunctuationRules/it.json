@@ -1,0 +1,22 @@
+{
+  "language": "it",
+  "rules": [
+    { "phrase": "punto interrogativo", "replacement": "?", "category": "punctuation" },
+    { "phrase": "punto esclamativo", "replacement": "!", "category": "punctuation" },
+    { "phrase": "due punti", "replacement": ":", "category": "punctuation" },
+    { "phrase": "punto e virgola", "replacement": ";", "category": "punctuation" },
+    { "phrase": "aperta parentesi", "replacement": "(", "category": "brackets" },
+    { "phrase": "aprire parentesi", "replacement": "(", "category": "brackets" },
+    { "phrase": "chiusa parentesi", "replacement": ")", "category": "brackets" },
+    { "phrase": "chiudere parentesi", "replacement": ")", "category": "brackets" },
+    { "phrase": "virgola", "replacement": ",", "category": "punctuation" },
+    { "phrase": "punto", "replacement": ".", "category": "punctuation" }
+  ],
+  "verificationScenarios": [
+    { "spoken": "ciao virgola mondo", "expected": "ciao, mondo" },
+    { "spoken": "come stai punto interrogativo", "expected": "come stai?" },
+    { "spoken": "ciao aperta parentesi test chiusa parentesi", "expected": "ciao (test)" },
+    { "spoken": "attenzione punto esclamativo", "expected": "attenzione!" },
+    { "spoken": "titolo due punti esempio", "expected": "titolo: esempio" }
+  ]
+}

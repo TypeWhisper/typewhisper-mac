@@ -337,6 +337,24 @@ public struct PluginOpenAIChatHelper: Sendable {
         self.chatEndpoint = chatEndpoint
     }
 
+    // Keep the pre-ac10ea9 symbol available so already-installed plugin bundles
+    // continue to load after the helper grew token-parameter customization.
+    public func process(
+        apiKey: String,
+        model: String,
+        systemPrompt: String,
+        userText: String
+    ) async throws -> String {
+        try await process(
+            apiKey: apiKey,
+            model: model,
+            systemPrompt: systemPrompt,
+            userText: userText,
+            maxOutputTokens: 4096,
+            maxOutputTokenParameter: "max_tokens"
+        )
+    }
+
     public func process(
         apiKey: String,
         model: String,
