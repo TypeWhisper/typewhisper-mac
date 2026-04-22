@@ -73,6 +73,113 @@ final class DictationViewModelIndicatorSettingsTests: XCTestCase {
     }
 }
 
+final class IndicatorScreenResolverTests: XCTestCase {
+    @MainActor
+    func testActiveScreenPrefersFocusedElementBeforeWindowLookup() throws {
+        let screen = try XCTUnwrap(NSScreen.screens.first)
+        var windowLookupCalled = false
+        var mouseLookupCalled = false
+
+        let resolver = IndicatorScreenResolver(
+            focusedElementPositionProvider: { CGPoint(x: screen.frame.midX, y: screen.frame.midY) },
+            frontmostApplicationProvider: { NSRunningApplication.current },
+            mouseLocationProvider: {
+                mouseLookupCalled = true
+                return .zero
+            },
+            screensProvider: { [screen] },
+            mainScreenProvider: { screen },
+            windowFrameProvider: { _ in
+                windowLookupCalled = true
+                return screen.frame
+            }
+        )
+
+        let resolvedScreen = resolver.resolveScreen(for: .activeScreen)
+
+        XCTAssertTrue(resolvedScreen === screen)
+        XCTAssertFalse(windowLookupCalled)
+        XCTAssertFalse(mouseLookupCalled)
+    }
+
+    @MainActor
+    func testActiveScreenUsesWindowFrameBeforeMouseFallback() throws {
+        let screen = try XCTUnwrap(NSScreen.screens.first)
+        var mouseLookupCalled = false
+
+        let resolver = IndicatorScreenResolver(
+            focusedElementPositionProvider: { nil },
+            focusedWindowFrameProvider: { nil },
+            frontmostApplicationProvider: { NSRunningApplication.current },
+            mouseLocationProvider: {
+                mouseLookupCalled = true
+                return .zero
+            },
+            screensProvider: { [screen] },
+            mainScreenProvider: { screen },
+            windowFrameProvider: { _ in screen.frame }
+        )
+
+        let resolvedScreen = resolver.resolveScreen(for: .activeScreen)
+
+        XCTAssertTrue(resolvedScreen === screen)
+        XCTAssertFalse(mouseLookupCalled)
+    }
+
+    @MainActor
+    func testActiveScreenUsesFocusedWindowBeforeFrontmostApplicationFallback() throws {
+        let screen = try XCTUnwrap(NSScreen.screens.first)
+        var frontmostWindowLookupCalled = false
+        var mouseLookupCalled = false
+
+        let resolver = IndicatorScreenResolver(
+            focusedElementPositionProvider: { nil },
+            focusedWindowFrameProvider: { screen.frame },
+            frontmostApplicationProvider: { NSRunningApplication.current },
+            mouseLocationProvider: {
+                mouseLookupCalled = true
+                return .zero
+            },
+            screensProvider: { [screen] },
+            mainScreenProvider: { screen },
+            windowFrameProvider: { _ in
+                frontmostWindowLookupCalled = true
+                return .zero
+            }
+        )
+
+        let resolvedScreen = resolver.resolveScreen(for: .activeScreen)
+
+        XCTAssertTrue(resolvedScreen === screen)
+        XCTAssertFalse(frontmostWindowLookupCalled)
+        XCTAssertFalse(mouseLookupCalled)
+    }
+
+    @MainActor
+    func testActiveScreenFallsBackToMouseLocation() throws {
+        let screen = try XCTUnwrap(NSScreen.screens.first)
+        var mouseLookupCalled = false
+
+        let resolver = IndicatorScreenResolver(
+            focusedElementPositionProvider: { nil },
+            focusedWindowFrameProvider: { nil },
+            frontmostApplicationProvider: { NSRunningApplication.current },
+            mouseLocationProvider: {
+                mouseLookupCalled = true
+                return CGPoint(x: screen.frame.midX, y: screen.frame.midY)
+            },
+            screensProvider: { [screen] },
+            mainScreenProvider: { screen },
+            windowFrameProvider: { _ in nil }
+        )
+
+        let resolvedScreen = resolver.resolveScreen(for: .activeScreen)
+
+        XCTAssertTrue(resolvedScreen === screen)
+        XCTAssertTrue(mouseLookupCalled)
+    }
+}
+
 final class DockIconVisibilityTests: XCTestCase {
     func testDockIconStaysHiddenWhenMenuBarIconIsVisibleAndNoWindowIsOpen() {
         XCTAssertFalse(
