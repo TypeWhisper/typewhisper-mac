@@ -1426,6 +1426,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
         let recentTranscriptionStore = RecentTranscriptionStore()
         let profileService = ProfileService(appSupportDirectory: appSupportDirectory)
+        let workflowService = WorkflowService(appSupportDirectory: appSupportDirectory)
         let audioDuckingService = AudioDuckingService()
         let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
         let snippetService = SnippetService(appSupportDirectory: appSupportDirectory)
@@ -1448,6 +1449,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             historyService: historyService,
             recentTranscriptionStore: recentTranscriptionStore,
             profileService: profileService,
+            workflowService: workflowService,
             translationService: nil,
             audioDuckingService: audioDuckingService,
             dictionaryService: dictionaryService,
@@ -1765,6 +1767,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
         let recentTranscriptionStore = RecentTranscriptionStore()
         let profileService = ProfileService(appSupportDirectory: appSupportDirectory)
+        let workflowService = WorkflowService(appSupportDirectory: appSupportDirectory)
         let audioDuckingService = AudioDuckingService()
         let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
         let snippetService = SnippetService(appSupportDirectory: appSupportDirectory)
@@ -1787,6 +1790,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             historyService: historyService,
             recentTranscriptionStore: recentTranscriptionStore,
             profileService: profileService,
+            workflowService: workflowService,
             translationService: nil,
             audioDuckingService: audioDuckingService,
             dictionaryService: dictionaryService,
@@ -1945,6 +1949,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
         let recentTranscriptionStore = RecentTranscriptionStore()
         let profileService = ProfileService(appSupportDirectory: appSupportDirectory)
+        let workflowService = WorkflowService(appSupportDirectory: appSupportDirectory)
         let audioDuckingService = audioDuckingService ?? AudioDuckingService()
         let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
         let snippetService = SnippetService(appSupportDirectory: appSupportDirectory)
@@ -1968,6 +1973,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             historyService: historyService,
             recentTranscriptionStore: recentTranscriptionStore,
             profileService: profileService,
+            workflowService: workflowService,
             translationService: nil,
             audioDuckingService: audioDuckingService,
             dictionaryService: dictionaryService,
@@ -3417,10 +3423,74 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testWorkflowHotkeyInvokesDedicatedWorkflowCallback() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        let workflowId = UUID()
+        service.registerWorkflowHotkeys([(id: workflowId, hotkey: spaceHotkey())])
+
+        var startedWorkflowId: UUID?
+        service.onWorkflowDictationStart = { startedWorkflowId = $0 }
+
+        let keyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
+        let keyUp = try makeKeyboardEvent(keyCode: 0x31, keyDown: false)
+
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertEqual(startedWorkflowId, workflowId)
+        XCTAssertEqual(service.currentMode, .pushToTalk)
+        XCTAssertEqual(service.activeWorkflowId, workflowId)
+
+        XCTAssertTrue(service.processEventForTesting(keyUp, source: .monitor))
+        XCTAssertEqual(service.currentMode, .toggle)
+        XCTAssertEqual(service.activeWorkflowId, workflowId)
+    }
+
+    @MainActor
+    func testWorkflowCanRegisterMultipleHotkeysForSameWorkflow() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        let workflowId = UUID()
+        service.registerWorkflowHotkeys([
+            (id: workflowId, hotkey: spaceHotkey()),
+            (id: workflowId, hotkey: alternateSpaceHotkey())
+        ])
+
+        var startedWorkflowIds: [UUID] = []
+        service.onWorkflowDictationStart = { startedWorkflowIds.append($0) }
+
+        let firstDown = try makeKeyboardEvent(
+            keyCode: 0x31,
+            keyDown: true,
+            flags: [.maskCommand, .maskAlternate, .maskShift, .maskControl]
+        )
+        let secondDown = try makeKeyboardEvent(
+            keyCode: 0x31,
+            keyDown: true,
+            flags: [.maskCommand, .maskAlternate]
+        )
+
+        XCTAssertTrue(service.processEventForTesting(firstDown, source: .monitor))
+        service.cancelDictation()
+        XCTAssertTrue(service.processEventForTesting(secondDown, source: .monitor))
+        XCTAssertEqual(startedWorkflowIds, [workflowId, workflowId])
+    }
+
+    @MainActor
     private func spaceHotkey() -> UnifiedHotkey {
         UnifiedHotkey(
             keyCode: 0x31,
             modifierFlags: NSEvent.ModifierFlags([.control, .option, .shift, .command]).rawValue,
+            isFn: false
+        )
+    }
+
+    @MainActor
+    private func alternateSpaceHotkey() -> UnifiedHotkey {
+        UnifiedHotkey(
+            keyCode: 0x31,
+            modifierFlags: NSEvent.ModifierFlags([.option, .command]).rawValue,
             isFn: false
         )
     }

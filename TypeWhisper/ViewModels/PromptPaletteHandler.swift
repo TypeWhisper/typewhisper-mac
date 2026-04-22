@@ -26,7 +26,7 @@ final class PromptPaletteHandler {
 
     private let promptPaletteController: any PromptPaletteControlling
     private let textInsertionService: TextInsertionService
-    private let promptActionService: PromptActionService
+    private let workflowService: WorkflowService
     private let promptProcessingService: PromptProcessingService
     private let soundService: SoundService
     private let accessibilityAnnouncementService: AccessibilityAnnouncementService
@@ -42,7 +42,7 @@ final class PromptPaletteHandler {
 
     init(
         textInsertionService: TextInsertionService,
-        promptActionService: PromptActionService,
+        workflowService: WorkflowService,
         promptProcessingService: PromptProcessingService,
         soundService: SoundService,
         accessibilityAnnouncementService: AccessibilityAnnouncementService,
@@ -50,7 +50,7 @@ final class PromptPaletteHandler {
     ) {
         self.promptPaletteController = promptPaletteController
         self.textInsertionService = textInsertionService
-        self.promptActionService = promptActionService
+        self.workflowService = workflowService
         self.promptProcessingService = promptProcessingService
         self.soundService = soundService
         self.accessibilityAnnouncementService = accessibilityAnnouncementService
@@ -68,12 +68,8 @@ final class PromptPaletteHandler {
         }
         guard currentState == .idle else { return }
 
-        let actions = promptActionService.getEnabledActions()
-        guard !actions.isEmpty else { return }
-
-        // Palette presentation should not depend on the currently selected provider.
-        // Individual actions may override the provider, and readiness is validated
-        // when the chosen action actually runs.
+        let workflows = workflowService.workflows.filter { $0.isEnabled && $0.isManuallyRunnable }
+        guard !workflows.isEmpty else { return }
 
         // Capture active app BEFORE the palette steals focus
         let activeApp = textInsertionService.captureActiveApp()
@@ -93,7 +89,7 @@ final class PromptPaletteHandler {
             showPalette(
                 text: sel.text, selection: sel, focusedElement: nil,
                 selectionViaCopy: false, activeApp: activeApp,
-                browserInfoTask: browserInfoTask, actions: actions,
+                browserInfoTask: browserInfoTask, workflows: workflows,
                 soundFeedbackEnabled: soundFeedbackEnabled
             )
         } else {
@@ -105,7 +101,7 @@ final class PromptPaletteHandler {
                     showPalette(
                         text: copied, selection: nil, focusedElement: nil,
                         selectionViaCopy: true, activeApp: activeApp,
-                        browserInfoTask: browserInfoTask, actions: actions,
+                        browserInfoTask: browserInfoTask, workflows: workflows,
                         soundFeedbackEnabled: soundFeedbackEnabled
                     )
                 } else if let clipboard = NSPasteboard.general.string(forType: .string), !clipboard.isEmpty {
@@ -114,7 +110,7 @@ final class PromptPaletteHandler {
                     showPalette(
                         text: clipboard, selection: nil, focusedElement: focusedElement,
                         selectionViaCopy: false, activeApp: activeApp,
-                        browserInfoTask: browserInfoTask, actions: actions,
+                        browserInfoTask: browserInfoTask, workflows: workflows,
                         soundFeedbackEnabled: soundFeedbackEnabled
                     )
                 } else {
@@ -122,7 +118,7 @@ final class PromptPaletteHandler {
                     let message = "Please select or copy some text first."
                     soundService.play(.error, enabled: soundFeedbackEnabled)
                     self.accessibilityAnnouncementService.announceError(message)
-                    self.onShowNotchFeedback?(message, "xmark.circle.fill", 2.5, true, "prompt")
+                    self.onShowNotchFeedback?(message, "xmark.circle.fill", 2.5, true, "workflow")
                     self.onShowError?(message)
                 }
             }
@@ -136,7 +132,7 @@ final class PromptPaletteHandler {
         selectionViaCopy: Bool,
         activeApp: (name: String?, bundleId: String?, url: String?),
         browserInfoTask: Task<(url: String?, title: String?), Never>?,
-        actions: [PromptAction],
+        workflows: [Workflow],
         soundFeedbackEnabled: Bool
     ) {
         paletteContext = PaletteContext(
@@ -148,32 +144,37 @@ final class PromptPaletteHandler {
             selectionViaCopy: selectionViaCopy
         )
 
-        promptPaletteController.show(actions: actions, sourceText: text) { [weak self] action in
-            self?.processStandalonePrompt(action: action, soundFeedbackEnabled: soundFeedbackEnabled)
+        promptPaletteController.show(workflows: workflows, sourceText: text) { [weak self] workflow in
+            self?.processStandaloneWorkflow(workflow: workflow, soundFeedbackEnabled: soundFeedbackEnabled)
         }
     }
 
-    private func processStandalonePrompt(action: PromptAction, soundFeedbackEnabled: Bool) {
+    private func processStandaloneWorkflow(workflow: Workflow, soundFeedbackEnabled: Bool) {
         guard let ctx = paletteContext else { return }
         paletteContext = nil
 
-        onShowNotchFeedback?(action.name + "...", "ellipsis.circle", 30, false, nil)
-        accessibilityAnnouncementService.announcePromptProcessing(action.name)
+        onShowNotchFeedback?(workflow.name + "...", "ellipsis.circle", 30, false, nil)
+        accessibilityAnnouncementService.announcePromptProcessing(workflow.name)
 
         Task { [weak self] in
             guard let self else { return }
             do {
-                let result = try await promptProcessingService.process(
-                    prompt: action.prompt,
-                    text: ctx.text,
-                    providerOverride: action.providerType,
-                    cloudModelOverride: action.cloudModel,
-                    temperatureDirective: action.temperatureDirective
-                )
+                let result: String
+                if let systemPrompt = workflow.systemPrompt() {
+                    result = try await promptProcessingService.process(
+                        prompt: systemPrompt,
+                        text: ctx.text,
+                        providerOverride: workflow.behavior.providerId,
+                        cloudModelOverride: workflow.behavior.cloudModel,
+                        temperatureDirective: workflow.behavior.temperatureDirective
+                    )
+                } else {
+                    result = ctx.text
+                }
                 guard !Task.isCancelled else { return }
 
                 // Route to action plugin if configured
-                if let actionPluginId = action.targetActionPluginId,
+                if let actionPluginId = workflow.output.targetActionPluginId,
                    let actionPlugin = PluginManager.shared.actionPlugin(for: actionPluginId) {
                     let browserInfo = await ctx.browserInfoTask?.value
                     let resolvedUrl = browserInfo?.url ?? ctx.activeApp.url
@@ -231,6 +232,11 @@ final class PromptPaletteHandler {
                     textInsertionService.restoreClipboard(savedClipboard)
                 }
 
+                if workflow.output.autoEnter, insertionOutcome != .failed {
+                    try? await Task.sleep(for: .milliseconds(50))
+                    textInsertionService.simulateReturn()
+                }
+
                 soundService.play(.transcriptionSuccess, enabled: soundFeedbackEnabled)
                 self.accessibilityAnnouncementService.announcePromptComplete()
                 let feedbackMessage: String
@@ -250,7 +256,7 @@ final class PromptPaletteHandler {
                 guard !Task.isCancelled else { return }
                 soundService.play(.error, enabled: soundFeedbackEnabled)
                 self.accessibilityAnnouncementService.announceError(error.localizedDescription)
-                onShowNotchFeedback?(error.localizedDescription, "xmark.circle.fill", 2.5, true, "prompt")
+                onShowNotchFeedback?(error.localizedDescription, "xmark.circle.fill", 2.5, true, "workflow")
             }
         }
     }

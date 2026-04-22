@@ -127,6 +127,7 @@ class PromptActionService: ObservableObject {
         }
     }
 
+    @discardableResult
     func addAction(
         name: String,
         prompt: String,
@@ -137,8 +138,8 @@ class PromptActionService: ObservableObject {
         temperatureModeRaw: String = PluginLLMTemperatureMode.inheritProviderSetting.rawValue,
         temperatureValue: Double? = nil,
         targetActionPluginId: String? = nil
-    ) {
-        guard let context = modelContext else { return }
+    ) -> PromptAction? {
+        guard let context = modelContext else { return nil }
 
         let maxOrder = promptActions.map(\.sortOrder).max() ?? -1
         let action = PromptAction(
@@ -162,8 +163,11 @@ class PromptActionService: ObservableObject {
         } catch {
             logger.error("Failed to save prompt action: \(error.localizedDescription)")
         }
+
+        return action
     }
 
+    @discardableResult
     func updateAction(
         _ action: PromptAction,
         name: String,
@@ -175,8 +179,8 @@ class PromptActionService: ObservableObject {
         temperatureModeRaw: String = PluginLLMTemperatureMode.inheritProviderSetting.rawValue,
         temperatureValue: Double? = nil,
         targetActionPluginId: String? = nil
-    ) {
-        guard let context = modelContext else { return }
+    ) -> PromptAction? {
+        guard let context = modelContext else { return nil }
 
         action.name = name
         action.prompt = prompt
@@ -195,6 +199,8 @@ class PromptActionService: ObservableObject {
         } catch {
             logger.error("Failed to update prompt action: \(error.localizedDescription)")
         }
+
+        return action
     }
 
     func deleteAction(_ action: PromptAction) {

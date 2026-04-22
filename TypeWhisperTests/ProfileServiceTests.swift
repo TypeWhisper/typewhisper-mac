@@ -110,4 +110,94 @@ final class ProfileServiceTests: XCTestCase {
         XCTAssertEqual(specificMatch?.profile.name, "Safari Only")
         XCTAssertEqual(specificMatch?.kind, .appOnly)
     }
+
+    @MainActor
+    func testPrepareNewProfilePrefillsPromptActionAndKeepsEmptyScope() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let profileService = ProfileService(appSupportDirectory: appSupportDirectory)
+        let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
+        let settingsViewModel = SettingsViewModel(modelManager: ModelManagerService())
+        let viewModel = ProfilesViewModel(
+            profileService: profileService,
+            historyService: historyService,
+            settingsViewModel: settingsViewModel
+        )
+
+        viewModel.prepareNewProfile(prefilledPromptActionId: "prompt-123")
+
+        XCTAssertTrue(viewModel.showingEditor)
+        XCTAssertEqual(viewModel.editorStep, .scope)
+        XCTAssertEqual(viewModel.editorPromptActionId, "prompt-123")
+        XCTAssertTrue(viewModel.editorPromptActionWasPrefilled)
+        XCTAssertTrue(viewModel.editorBundleIdentifiers.isEmpty)
+        XCTAssertTrue(viewModel.editorUrlPatterns.isEmpty)
+        XCTAssertTrue(viewModel.shouldShowPrefilledPromptFallbackNotice)
+    }
+
+    @MainActor
+    func testPrepareNewProfileWithoutPrefillKeepsPromptUnset() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let profileService = ProfileService(appSupportDirectory: appSupportDirectory)
+        let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
+        let settingsViewModel = SettingsViewModel(modelManager: ModelManagerService())
+        let viewModel = ProfilesViewModel(
+            profileService: profileService,
+            historyService: historyService,
+            settingsViewModel: settingsViewModel
+        )
+
+        viewModel.prepareNewProfile()
+
+        XCTAssertNil(viewModel.editorPromptActionId)
+        XCTAssertFalse(viewModel.editorPromptActionWasPrefilled)
+        XCTAssertFalse(viewModel.shouldShowPrefilledPromptFallbackNotice)
+    }
+
+    @MainActor
+    func testFocusRulesByPromptFiltersVisibleProfiles() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let profileService = ProfileService(appSupportDirectory: appSupportDirectory)
+        let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
+        let settingsViewModel = SettingsViewModel(modelManager: ModelManagerService())
+        let viewModel = ProfilesViewModel(
+            profileService: profileService,
+            historyService: historyService,
+            settingsViewModel: settingsViewModel
+        )
+
+        profileService.addProfile(name: "Prompt A 1", promptActionId: "prompt-a")
+        profileService.addProfile(name: "Prompt B", promptActionId: "prompt-b")
+        profileService.addProfile(name: "Prompt A 2", promptActionId: "prompt-a")
+        viewModel.profiles = profileService.profiles
+
+        XCTAssertEqual(viewModel.visibleProfiles.count, 3)
+
+        viewModel.focusRules(usingPromptActionId: "prompt-a")
+
+        XCTAssertTrue(viewModel.isFilteringRulesByPrompt)
+        XCTAssertEqual(
+            Set(viewModel.visibleProfiles.map(\.name)),
+            Set(["Prompt A 1", "Prompt A 2"])
+        )
+
+        viewModel.clearPromptRuleFocus()
+
+        XCTAssertFalse(viewModel.isFilteringRulesByPrompt)
+        XCTAssertEqual(viewModel.visibleProfiles.count, 3)
+    }
 }

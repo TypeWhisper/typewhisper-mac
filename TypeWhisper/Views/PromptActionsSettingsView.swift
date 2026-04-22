@@ -53,10 +53,10 @@ struct PromptActionsSettingsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(localizedAppText("Prompts", de: "Prompts"))
                     .font(.headline)
-                Text(localizedAppText(
-                    "Create reusable AI actions like translation, replies, extraction, or formatting.",
-                    de: "Erstelle wiederverwendbare KI-Aktionen wie Übersetzen, Antworten, Extrahieren oder Formatieren."
-                ))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(String(localized: "Build reusable AI actions for Rules or the Prompt Palette."))
+                    Text(String(localized: "Prompts run automatically during dictation only when a rule assigns them. Without a rule, they remain available via the Prompt Palette."))
+                }
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             }
@@ -204,18 +204,25 @@ struct PromptActionsSettingsView: View {
         let indexedActions = Array(viewModel.promptActions.enumerated())
 
         return ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(indexedActions, id: \.element.id) { index, action in
-                    PromptActionRow(action: action, viewModel: viewModel, processingService: processingService)
+            VStack(alignment: .leading, spacing: 12) {
+                if viewModel.shouldShowRuleAssignmentCallout,
+                   let action = viewModel.pendingRuleAssignmentPrompt {
+                    PromptRuleAssignmentCallout(action: action, viewModel: viewModel)
+                }
 
-                    if index < indexedActions.count - 1 {
-                        Divider()
-                            .padding(.leading, 64)
+                LazyVStack(spacing: 0) {
+                    ForEach(indexedActions, id: \.element.id) { index, action in
+                        PromptActionRow(action: action, viewModel: viewModel, processingService: processingService)
+
+                        if index < indexedActions.count - 1 {
+                            Divider()
+                                .padding(.leading, 64)
+                        }
                     }
                 }
-            }
-            .background {
-                promptWizardGroupedListSurface(cornerRadius: 14)
+                .background {
+                    promptWizardGroupedListSurface(cornerRadius: 14)
+                }
             }
         }
     }
@@ -233,6 +240,7 @@ struct PromptActionsSettingsView: View {
                     "Examples: translate English/German, draft a reply, extract JSON, or turn notes into meeting notes.",
                     de: "Beispiele: Englisch/Deutsch übersetzen, eine Antwort formulieren, JSON extrahieren oder Notizen in Meeting Notes umwandeln."
                 ))
+                Text(String(localized: "Prompts become automatic during dictation only when a rule assigns them. Otherwise they stay available from the Prompt Palette."))
             }
         }
         actions: {
@@ -416,6 +424,9 @@ private struct PromptActionRow: View {
     @State private var isHovering = false
 
     var body: some View {
+        let assignmentStatus = viewModel.assignmentStatus(for: action)
+        let matchingRules = viewModel.rulesUsing(action)
+
         HStack(alignment: .top, spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -447,6 +458,38 @@ private struct PromptActionRow: View {
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+                HStack(spacing: 10) {
+                    if assignmentStatus.isAssigned {
+                        Button {
+                            viewModel.showRules(for: action)
+                        } label: {
+                            PromptRuleAssignmentChip(
+                                title: viewModel.assignmentSummary(for: action),
+                                isAssigned: true
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .help(localizedAppText("Show matching rules", de: "Passende Regeln anzeigen"))
+                    } else {
+                        PromptRuleAssignmentChip(
+                            title: viewModel.assignmentSummary(for: action),
+                            isAssigned: false
+                        )
+                    }
+
+                    if !assignmentStatus.isAssigned {
+                        Button(String(localized: "Create Rule")) {
+                            viewModel.createRule(for: action)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                    }
+                }
+
+                if !matchingRules.isEmpty {
+                    PromptRuleUsageLinks(profiles: matchingRules, viewModel: viewModel)
+                }
             }
 
             Spacer()
@@ -528,6 +571,94 @@ private struct PromptActionRow: View {
         }
 
         return Color.clear
+    }
+}
+
+private struct PromptRuleAssignmentCallout: View {
+    let action: PromptAction
+    @ObservedObject var viewModel: PromptActionsViewModel
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.orange.opacity(0.16))
+                    .frame(width: 36, height: 36)
+
+                Image(systemName: "point.3.connected.trianglepath.dotted")
+                    .foregroundStyle(.orange)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(String(localized: "Prompt saved. Create a rule to run it automatically during dictation."))
+                    .font(.subheadline.weight(.semibold))
+                Text(String(localized: "Without a rule, prompts remain available via the Prompt Palette."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            HStack(spacing: 8) {
+                Button(String(localized: "Create Rule")) {
+                    viewModel.createRule(for: action)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+
+                Button {
+                    viewModel.dismissRuleAssignmentCallout()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(16)
+        .background {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.orange.opacity(0.08))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color.orange.opacity(0.18), lineWidth: 1)
+        }
+    }
+}
+
+private struct PromptRuleAssignmentChip: View {
+    let title: String
+    let isAssigned: Bool
+
+    var body: some View {
+        let tint: Color = isAssigned ? .green : .orange
+
+        Label(title, systemImage: isAssigned ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(tint.opacity(0.14), in: Capsule())
+    }
+}
+
+private struct PromptRuleUsageLinks: View {
+    let profiles: [Profile]
+    @ObservedObject var viewModel: PromptActionsViewModel
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(profiles) { profile in
+                    Button(profile.name) {
+                        viewModel.openRule(profile)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            }
+        }
     }
 }
 

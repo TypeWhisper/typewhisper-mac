@@ -15,6 +15,8 @@ final class ServiceContainer: ObservableObject {
     let recentTranscriptionStore: RecentTranscriptionStore
     let textDiffService: TextDiffService
     let profileService: ProfileService
+    let workflowService: WorkflowService
+    let legacyWorkflowService: LegacyWorkflowService
     let translationService: AnyObject? // TranslationService (macOS 15+)
     let audioDuckingService: AudioDuckingService
     let mediaPlaybackService: MediaPlaybackService
@@ -66,6 +68,12 @@ final class ServiceContainer: ObservableObject {
         recentTranscriptionStore = RecentTranscriptionStore()
         textDiffService = TextDiffService()
         profileService = ProfileService()
+        workflowService = WorkflowService()
+        promptActionService = PromptActionService()
+        legacyWorkflowService = LegacyWorkflowService(
+            profileService: profileService,
+            promptActionService: promptActionService
+        )
         #if canImport(Translation)
         if #available(macOS 15, *) {
             translationService = TranslationService()
@@ -81,7 +89,6 @@ final class ServiceContainer: ObservableObject {
         snippetService = SnippetService()
         soundService = SoundService()
         audioDeviceService = AudioDeviceService()
-        promptActionService = PromptActionService()
         promptProcessingService = PromptProcessingService()
         pluginManager = PluginManager()
         pluginRegistryService = PluginRegistryService()
@@ -113,6 +120,7 @@ final class ServiceContainer: ObservableObject {
             historyService: historyService,
             recentTranscriptionStore: recentTranscriptionStore,
             profileService: profileService,
+            workflowService: workflowService,
             translationService: translationService,
             audioDuckingService: audioDuckingService,
             dictionaryService: dictionaryService,
@@ -158,7 +166,8 @@ final class ServiceContainer: ObservableObject {
         homeViewModel = HomeViewModel(historyService: historyService)
         promptActionsViewModel = PromptActionsViewModel(
             promptActionService: promptActionService,
-            promptProcessingService: promptProcessingService
+            promptProcessingService: promptProcessingService,
+            profileService: profileService
         )
         audioRecorderViewModel = AudioRecorderViewModel(recorderService: audioRecorderService, modelManager: modelManagerService, dictionaryService: dictionaryService)
         watchFolderViewModel = WatchFolderViewModel(
@@ -200,7 +209,7 @@ final class ServiceContainer: ObservableObject {
         guard !AppConstants.isRunningTests else { return }
 
         hotkeyService.setup()
-        dictationViewModel.registerInitialProfileHotkeys()
+        dictationViewModel.registerInitialTriggerHotkeys()
         let retentionDays = UserDefaults.standard.integer(forKey: UserDefaultsKeys.historyRetentionDays)
         if retentionDays > 0 { historyService.purgeOldRecords(retentionDays: retentionDays) }
 
@@ -209,7 +218,19 @@ final class ServiceContainer: ObservableObject {
         }
 
         pluginManager.setRuleNamesProvider { [weak self] in
-            self?.profileService.profiles.map(\.name) ?? []
+            guard let self else { return [] }
+            var names: [String] = []
+            for workflow in self.workflowService.workflows {
+                if !names.contains(workflow.name) {
+                    names.append(workflow.name)
+                }
+            }
+            for profile in self.profileService.profiles {
+                if !names.contains(profile.name) {
+                    names.append(profile.name)
+                }
+            }
+            return names
         }
         pluginManager.scanAndLoadPlugins()
 

@@ -67,4 +67,17 @@ final class AppFormatterServiceTests: XCTestCase {
 
         XCTAssertEqual(output, "<p>hello &lt;team&gt;</p>\n<ul>\n<li>launch</li>\n</ul>")
     }
+
+    @MainActor
+    func testRegisterDefaultUserDefaultsIncludesAppFormattingFlag() {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        defer {
+            defaults.removePersistentDomain(forName: #function)
+        }
+
+        AppDelegate.registerDefaultUserDefaults(defaults)
+
+        XCTAssertEqual(defaults.object(forKey: UserDefaultsKeys.appFormattingEnabled) as? Bool, false)
+    }
 }

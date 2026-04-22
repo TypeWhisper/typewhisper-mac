@@ -6,6 +6,7 @@ final class DictationSettingsHandler {
     private let audioRecordingService: AudioRecordingService
     private let textInsertionService: TextInsertionService
     private let profileService: ProfileService
+    private let workflowService: WorkflowService
     private var permissionPollTask: Task<Void, Never>?
 
     var onObjectWillChange: (() -> Void)?
@@ -15,12 +16,14 @@ final class DictationSettingsHandler {
         hotkeyService: HotkeyService,
         audioRecordingService: AudioRecordingService,
         textInsertionService: TextInsertionService,
-        profileService: ProfileService
+        profileService: ProfileService,
+        workflowService: WorkflowService
     ) {
         self.hotkeyService = hotkeyService
         self.audioRecordingService = audioRecordingService
         self.textInsertionService = textInsertionService
         self.profileService = profileService
+        self.workflowService = workflowService
     }
 
     func requestMicPermission() {
@@ -60,8 +63,14 @@ final class DictationSettingsHandler {
         return ""
     }
 
-    func registerInitialProfileHotkeys() {
+    func registerInitialTriggerHotkeys() {
         syncProfileHotkeys(profileService.profiles)
+        syncWorkflowHotkeys(workflowService.workflows)
+    }
+
+    @available(*, deprecated, renamed: "registerInitialTriggerHotkeys")
+    func registerInitialProfileHotkeys() {
+        registerInitialTriggerHotkeys()
     }
 
     func syncProfileHotkeys(_ profiles: [Profile]) {
@@ -72,6 +81,20 @@ final class DictationSettingsHandler {
                 return (id: profile.id, hotkey: hotkey)
             }
         hotkeyService.registerProfileHotkeys(entries)
+    }
+
+    func syncWorkflowHotkeys(_ workflows: [Workflow]) {
+        let entries = workflows
+            .filter(\.isEnabled)
+            .flatMap { workflow -> [(id: UUID, hotkey: UnifiedHotkey)] in
+                guard let trigger = workflow.trigger, trigger.kind == .hotkey else {
+                    return []
+                }
+                return trigger.hotkeys.map { hotkey in
+                    (id: workflow.id, hotkey: hotkey)
+                }
+            }
+        hotkeyService.registerWorkflowHotkeys(entries)
     }
 
     func pollPermissionStatus() {

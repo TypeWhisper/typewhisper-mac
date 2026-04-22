@@ -233,7 +233,7 @@ struct GeneralSettingsView: View {
         Text(String(localized: "Recording Indicator")).tag(NotchIndicatorContent.indicator)
         Text(String(localized: "Timer")).tag(NotchIndicatorContent.timer)
         Text(String(localized: "Waveform")).tag(NotchIndicatorContent.waveform)
-        Text("Rule").tag(NotchIndicatorContent.profile)
+        Text(localizedAppText("Workflow", de: "Workflow")).tag(NotchIndicatorContent.profile)
         Text(String(localized: "None")).tag(NotchIndicatorContent.none)
     }
 

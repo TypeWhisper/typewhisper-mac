@@ -5459,6 +5459,46 @@
         }
       }
     },
+    "Prompt already selected" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prompt bereits ausgewählt"
+          }
+        }
+      }
+    },
+    "Prompt saved. Create a rule to run it automatically during dictation." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prompt gespeichert. Erstelle eine Regel, damit er bei Diktaten automatisch läuft."
+          }
+        }
+      }
+    },
+    "Build reusable AI actions for Rules or the Prompt Palette." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Baue wiederverwendbare KI-Aktionen für Regeln oder die Prompt-Palette."
+          }
+        }
+      }
+    },
+    "Create Rule" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Regel erstellen"
+          }
+        }
+      }
+    },
     "Prompts" : {
       "localizations" : {
         "de" : {
@@ -5475,6 +5515,46 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Prompts & KI"
+          }
+        }
+      }
+    },
+    "Prompts become automatic during dictation only when a rule assigns them. Otherwise they stay available from the Prompt Palette." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prompts werden bei Diktaten nur dann automatisch, wenn eine Regel sie zuweist. Andernfalls bleiben sie über die Prompt-Palette verfügbar."
+          }
+        }
+      }
+    },
+    "Prompts run automatically during dictation only when a rule assigns them. Without a rule, they remain available via the Prompt Palette." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prompts laufen bei Diktaten nur dann automatisch, wenn eine Regel sie zuweist. Ohne Regel bleiben sie über die Prompt-Palette verfügbar."
+          }
+        }
+      }
+    },
+    "Saving without an app or website creates a global fallback rule with this prompt." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Speichern ohne App oder Website erstellt eine globale Fallback-Regel mit diesem Prompt."
+          }
+        }
+      }
+    },
+    "Without a rule, prompts remain available via the Prompt Palette." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ohne Regel bleiben Prompts über die Prompt-Palette verfügbar."
           }
         }
       }

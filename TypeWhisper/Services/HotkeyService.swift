@@ -96,6 +96,7 @@ final class HotkeyService: ObservableObject {
         enum Target: Hashable {
             case slot(HotkeySlotType)
             case profile(UUID)
+            case workflow(UUID)
         }
 
         let target: Target
@@ -120,6 +121,7 @@ final class HotkeyService: ObservableObject {
     var onPromptPaletteToggle: (() -> Void)?
     var onRecentTranscriptionsToggle: (() -> Void)?
     var onProfileDictationStart: ((UUID) -> Void)?
+    var onWorkflowDictationStart: ((UUID) -> Void)?
     var onCancelPressed: (() -> Void)?
     var onPushToTalkInterruption: (() -> Void)?
     var discardPushToTalkRecordingOnExtraKeyPress = false
@@ -128,6 +130,7 @@ final class HotkeyService: ObservableObject {
     private var isActive = false
     private var activeSlotType: HotkeySlotType?
     private(set) var activeProfileId: UUID?
+    private(set) var activeWorkflowId: UUID?
     private var pushToTalkInterruptionSignaled = false
 
     private static let toggleThreshold: TimeInterval = 1.0
@@ -194,6 +197,30 @@ final class HotkeyService: ObservableObject {
     }
 
     private var profileSlots: [UUID: ProfileHotkeyState] = [:]
+
+    private struct WorkflowHotkeyState {
+        let workflowId: UUID
+        var hotkey: UnifiedHotkey
+        var fnWasDown = false
+        var fnComboKeyPressed = false
+        var modifierWasDown = false
+        var keyWasDown = false
+        var mouseButtonWasDown = false
+        var lastTapUpTime: Date?
+        var tapCount: Int = 0
+
+        mutating func resetTransientState() {
+            fnWasDown = false
+            fnComboKeyPressed = false
+            modifierWasDown = false
+            keyWasDown = false
+            mouseButtonWasDown = false
+            lastTapUpTime = nil
+            tapCount = 0
+        }
+    }
+
+    private var workflowSlots: [UUID: [WorkflowHotkeyState]] = [:]
 
     private var globalMonitor: Any?
     private var localMonitor: Any?
@@ -262,6 +289,7 @@ final class HotkeyService: ObservableObject {
         isActive = false
         activeSlotType = nil
         activeProfileId = nil
+        activeWorkflowId = nil
         currentMode = nil
         keyDownTime = nil
         pushToTalkInterruptionSignaled = false
@@ -278,6 +306,17 @@ final class HotkeyService: ObservableObject {
         setupMonitor()
     }
 
+    func registerWorkflowHotkeys(_ entries: [(id: UUID, hotkey: UnifiedHotkey)]) {
+        workflowSlots.removeAll()
+        for entry in entries {
+            workflowSlots[entry.id, default: []].append(
+                WorkflowHotkeyState(workflowId: entry.id, hotkey: entry.hotkey)
+            )
+        }
+        tearDownMonitor()
+        setupMonitor()
+    }
+
     func isHotkeyAssignedToProfile(_ hotkey: UnifiedHotkey, excludingProfileId: UUID?) -> UUID? {
         for (id, state) in profileSlots where id != excludingProfileId {
             if state.hotkey == hotkey { return id }
@@ -287,6 +326,22 @@ final class HotkeyService: ObservableObject {
                 && state.hotkey.mouseButton == hotkey.mouseButton
                 && state.hotkey.isDoubleTap != hotkey.isDoubleTap {
                 return id
+            }
+        }
+        return nil
+    }
+
+    func isHotkeyAssignedToWorkflow(_ hotkey: UnifiedHotkey, excludingWorkflowId: UUID?) -> UUID? {
+        for (id, states) in workflowSlots where id != excludingWorkflowId {
+            for state in states {
+                if state.hotkey == hotkey { return id }
+                if state.hotkey.keyCode == hotkey.keyCode
+                    && state.hotkey.modifierFlags == hotkey.modifierFlags
+                    && state.hotkey.isFn == hotkey.isFn
+                    && state.hotkey.mouseButton == hotkey.mouseButton
+                    && state.hotkey.isDoubleTap != hotkey.isDoubleTap {
+                    return id
+                }
             }
         }
         return nil
@@ -528,6 +583,52 @@ final class HotkeyService: ObservableObject {
             )
         }
 
+        // Workflow slots
+        for workflowId in Array(workflowSlots.keys) {
+            guard var states = workflowSlots[workflowId] else { continue }
+            for index in states.indices {
+                var wState = states[index]
+                if shouldSuppressForCapsLockOrigin(event, hotkey: wState.hotkey, keyWasDown: wState.keyWasDown) {
+                    wState.resetTransientState()
+                    states[index] = wState
+                    continue
+                }
+                var state = SlotState(
+                    hotkey: wState.hotkey,
+                    fnWasDown: wState.fnWasDown,
+                    fnComboKeyPressed: wState.fnComboKeyPressed,
+                    modifierWasDown: wState.modifierWasDown,
+                    keyWasDown: wState.keyWasDown,
+                    mouseButtonWasDown: wState.mouseButtonWasDown,
+                    lastTapUpTime: wState.lastTapUpTime,
+                    tapCount: wState.tapCount
+                )
+                let (keyDown, keyUp, isMatch) = processKeyEvent(
+                    event,
+                    hotkey: wState.hotkey,
+                    state: &state,
+                    fnTriggerMode: .pressThenRelease
+                )
+                wState.fnWasDown = state.fnWasDown
+                wState.fnComboKeyPressed = state.fnComboKeyPressed
+                wState.modifierWasDown = state.modifierWasDown
+                wState.keyWasDown = state.keyWasDown
+                wState.mouseButtonWasDown = state.mouseButtonWasDown
+                wState.lastTapUpTime = state.lastTapUpTime
+                wState.tapCount = state.tapCount
+                states[index] = wState
+                if isMatch { shouldSuppress = true }
+                dispatchWorkflowMatch(
+                    workflowId: workflowId,
+                    hotkey: wState.hotkey,
+                    keyDown: keyDown,
+                    keyUp: keyUp,
+                    source: source
+                )
+            }
+            workflowSlots[workflowId] = states
+        }
+
         return shouldSuppress
     }
 
@@ -621,12 +722,40 @@ final class HotkeyService: ObservableObject {
         }
     }
 
+    private func dispatchWorkflowMatch(
+        workflowId: UUID,
+        hotkey: UnifiedHotkey,
+        keyDown: Bool,
+        keyUp: Bool,
+        source: HotkeyEventSource
+    ) {
+        if keyDown, shouldDispatch(
+            target: .workflow(workflowId),
+            phase: .down,
+            hotkey: hotkey,
+            source: source
+        ) {
+            if source != .eventTap {
+                logFallbackMatchIfNeeded(hotkey: hotkey, source: source)
+            }
+            handleWorkflowKeyDown(workflowId: workflowId)
+        } else if keyUp, shouldDispatch(
+            target: .workflow(workflowId),
+            phase: .up,
+            hotkey: hotkey,
+            source: source
+        ) {
+            handleWorkflowKeyUp(workflowId: workflowId)
+        }
+    }
+
     private func signalPushToTalkInterruptionIfNeeded(for event: NSEvent) {
         guard discardPushToTalkRecordingOnExtraKeyPress,
               !pushToTalkInterruptionSignaled,
               isActive,
               activeSlotType == .pushToTalk,
               activeProfileId == nil,
+              activeWorkflowId == nil,
               event.type == .keyDown,
               let hotkey = slots[.pushToTalk]?.hotkey,
               isExtraKeyDuringActivePushToTalk(event, hotkey: hotkey) else {
@@ -965,6 +1094,7 @@ final class HotkeyService: ObservableObject {
             isActive = false
             activeSlotType = nil
             activeProfileId = nil
+            activeWorkflowId = nil
             currentMode = nil
             keyDownTime = nil
             pushToTalkInterruptionSignaled = false
@@ -972,6 +1102,7 @@ final class HotkeyService: ObservableObject {
         } else {
             activeSlotType = slotType
             activeProfileId = nil
+            activeWorkflowId = nil
             keyDownTime = Date()
             isActive = true
             pushToTalkInterruptionSignaled = false
@@ -981,7 +1112,7 @@ final class HotkeyService: ObservableObject {
     }
 
     private func handleKeyUp(slotType: HotkeySlotType) {
-        guard isActive, slotType == activeSlotType, activeProfileId == nil else { return }
+        guard isActive, slotType == activeSlotType, activeProfileId == nil, activeWorkflowId == nil else { return }
 
         switch slotType {
         case .hybrid:
@@ -1020,12 +1151,14 @@ final class HotkeyService: ObservableObject {
             isActive = false
             activeSlotType = nil
             activeProfileId = nil
+            activeWorkflowId = nil
             currentMode = nil
             keyDownTime = nil
             pushToTalkInterruptionSignaled = false
             onDictationStop?()
         } else {
             activeProfileId = profileId
+            activeWorkflowId = nil
             activeSlotType = nil
             keyDownTime = Date()
             isActive = true
@@ -1046,6 +1179,49 @@ final class HotkeyService: ObservableObject {
             isActive = false
             activeSlotType = nil
             activeProfileId = nil
+            activeWorkflowId = nil
+            currentMode = nil
+            keyDownTime = nil
+            pushToTalkInterruptionSignaled = false
+            onDictationStop?()
+        }
+    }
+
+    // MARK: - Key Down / Up (Workflow Slots)
+
+    private func handleWorkflowKeyDown(workflowId: UUID) {
+        if isActive {
+            isActive = false
+            activeSlotType = nil
+            activeProfileId = nil
+            activeWorkflowId = nil
+            currentMode = nil
+            keyDownTime = nil
+            pushToTalkInterruptionSignaled = false
+            onDictationStop?()
+        } else {
+            activeProfileId = nil
+            activeWorkflowId = workflowId
+            activeSlotType = nil
+            keyDownTime = Date()
+            isActive = true
+            pushToTalkInterruptionSignaled = false
+            currentMode = .pushToTalk
+            onWorkflowDictationStart?(workflowId)
+        }
+    }
+
+    private func handleWorkflowKeyUp(workflowId: UUID) {
+        guard isActive, activeWorkflowId == workflowId else { return }
+
+        guard let downTime = keyDownTime else { return }
+        if Date().timeIntervalSince(downTime) < Self.toggleThreshold {
+            currentMode = .toggle
+        } else {
+            isActive = false
+            activeSlotType = nil
+            activeProfileId = nil
+            activeWorkflowId = nil
             currentMode = nil
             keyDownTime = nil
             pushToTalkInterruptionSignaled = false

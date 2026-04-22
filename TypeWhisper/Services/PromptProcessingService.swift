@@ -238,7 +238,9 @@ class PromptProcessingService: ObservableObject {
             return try await operation()
         }
 
-        activateAppForLocalPromptProcessing(providerId: providerId)
+        // Keep local prompt processing on a high-priority activity budget, but do not
+        // activate the app window. Stealing focus here breaks insertion because the
+        // original target text field is no longer frontmost once the LLM step finishes.
         let activity = ProcessInfo.processInfo.beginActivity(
             options: [.userInitiated, .latencyCritical],
             reason: "Local prompt processing with \(providerId)"
@@ -248,24 +250,6 @@ class PromptProcessingService: ObservableObject {
         }
 
         return try await operation()
-    }
-
-    private func activateAppForLocalPromptProcessing(providerId: String) {
-        guard !AppConstants.isRunningTests, !NSApp.isActive else { return }
-
-        logger.info("Activating app for local prompt processing with plugin \(providerId)")
-        let currentApplication = NSRunningApplication.current
-        let sourceApplication = ActivationSourceTracker.shared.lastExternalApplication
-            ?? NSWorkspace.shared.frontmostApplication
-
-        if let sourceApplication,
-           sourceApplication.processIdentifier != currentApplication.processIdentifier,
-           currentApplication.activate(from: sourceApplication) {
-            return
-        }
-
-        _ = currentApplication.activate()
-        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func normalizeSelectedCloudModelIfNeeded(for providerId: String) {
