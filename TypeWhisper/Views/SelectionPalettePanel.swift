@@ -159,12 +159,12 @@ private struct SelectionPaletteContentView: View {
         VStack(spacing: 0) {
             if let previewText = model.configuration.previewText {
                 Text(previewText)
-                    .font(.system(size: 12))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(model.configuration.previewLineLimit)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 14)
-                    .padding(.top, 10)
+                    .padding(.top, 12)
                     .padding(.bottom, 8)
 
                 Divider()
@@ -175,10 +175,9 @@ private struct SelectionPaletteContentView: View {
                     prompt: searchPrompt,
                     text: model.searchText
                 )
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-
-                Divider()
+                .padding(.horizontal, 12)
+                .padding(.top, model.configuration.previewText == nil ? 12 : 10)
+                .padding(.bottom, 10)
             }
 
             if model.filteredItems.isEmpty {
@@ -207,7 +206,7 @@ private struct SelectionPaletteContentView: View {
                             }
                         }
                         .padding(.vertical, 4)
-                        .padding(.horizontal, 6)
+                        .padding(.horizontal, 8)
                     }
                     .onChange(of: model.selectedIndex) { _, newValue in
                         proxy.scrollTo(newValue, anchor: .center)
@@ -216,12 +215,12 @@ private struct SelectionPaletteContentView: View {
             }
         }
         .frame(width: model.configuration.panelWidth, height: model.configuration.panelHeight)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
         )
-        .shadow(color: .black.opacity(0.3), radius: 20, y: 10)
+        .shadow(color: .black.opacity(0.28), radius: 24, y: 12)
     }
 }
 
@@ -232,26 +231,31 @@ private struct SelectionPaletteSearchField: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 14))
+                .font(.system(size: 14, weight: .medium))
                 .foregroundColor(.secondary)
                 .accessibilityHidden(true)
 
             HStack(spacing: 1) {
-                if text.isEmpty {
-                    Text(prompt)
-                        .foregroundColor(.secondary)
-                } else {
-                    Text(text)
-                        .foregroundColor(.primary)
-                }
+                Text(text.isEmpty ? prompt : text)
+                    .foregroundColor(text.isEmpty ? .secondary : .primary)
 
                 Rectangle()
                     .fill(Color.accentColor.opacity(0.85))
-                    .frame(width: 1, height: 14)
+                    .frame(width: 1, height: 13)
             }
-            .font(.system(size: 15))
+            .font(.system(size: 14, weight: .medium))
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.white.opacity(0.045))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+        )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(prompt)
         .accessibilityValue(text)
@@ -266,24 +270,29 @@ private struct SelectionPaletteRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
             if let iconSystemName = item.iconSystemName {
-                Image(systemName: iconSystemName)
-                    .font(.system(size: 14))
-                    .foregroundColor(isSelected ? .white : .accentColor)
-                    .frame(width: 24, height: 24)
-                    .accessibilityHidden(true)
+                ZStack {
+                    Circle()
+                        .fill(isSelected ? Color.white.opacity(0.14) : Color.accentColor.opacity(0.12))
+                        .frame(width: 28, height: 28)
+
+                    Image(systemName: iconSystemName)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(isSelected ? .white : .accentColor)
+                        .accessibilityHidden(true)
+                }
             }
 
             VStack(alignment: .leading, spacing: item.subtitle == nil ? 0 : 2) {
                 Text(item.title)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 13.5, weight: .semibold))
                     .foregroundColor(isSelected ? .white : .primary)
                     .lineLimit(titleLineLimit)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 if let subtitle = item.subtitle {
                     Text(subtitle)
-                        .font(.system(size: 11))
-                        .foregroundColor(isSelected ? .white.opacity(0.9) : .secondary)
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundColor(isSelected ? .white.opacity(0.82) : .secondary)
                         .lineLimit(1)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -291,11 +300,15 @@ private struct SelectionPaletteRow: View {
 
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
         .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(isSelected ? Color.accentColor : Color.clear)
+            RoundedRectangle(cornerRadius: 10)
+                .fill(isSelected ? Color.accentColor.opacity(0.22) : Color.clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(isSelected ? Color.accentColor.opacity(0.55) : Color.clear, lineWidth: 1)
         )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(item.subtitle.map { "\(item.title), \($0)" } ?? item.title)

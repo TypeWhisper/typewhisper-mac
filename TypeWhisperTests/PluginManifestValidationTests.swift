@@ -406,7 +406,7 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         XCTAssertFalse(isValid)
     }
 
-    func testWhisperKitActivationDoesNotAutoRestorePersistedLoadedModel() throws {
+    func testWhisperKitActivationKeepsPersistedLoadedModelForAutoRestore() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
 
@@ -423,6 +423,7 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
 
         XCTAssertEqual(plugin.selectedModelId, "openai_whisper-tiny")
         XCTAssertFalse(plugin.isConfigured)
+        XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, "openai_whisper-tiny")
     }
 
 }

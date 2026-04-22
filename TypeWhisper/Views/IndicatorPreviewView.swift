@@ -203,7 +203,7 @@ struct IndicatorPreviewView: View {
             }
             .frame(height: 14)
         case .profile:
-            Text("Rule")
+            Text(localizedAppText("Workflow", de: "Workflow"))
                 .font(.system(size: size * 0.85, weight: .medium))
                 .foregroundStyle(.white)
                 .lineLimit(1)

@@ -142,6 +142,7 @@ struct TypeWhisperApp: App {
         // Trigger ServiceContainer initialization
         _ = ServiceContainer.shared
         SettingsNavigationCoordinator.shared = SettingsNavigationCoordinator()
+        WorkflowsNavigationCoordinator.shared = WorkflowsNavigationCoordinator()
         PostUpdatePromptCoordinator.shared = PostUpdatePromptCoordinator()
 
         Task { @MainActor in
@@ -349,12 +350,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         )
     }
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        UserDefaults.standard.register(defaults: [
+    static func registerDefaultUserDefaults(_ defaults: UserDefaults = .standard) {
+        defaults.register(defaults: [
             UserDefaultsKeys.showMenuBarIcon: true,
             UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden: DockIconBehavior.keepVisible.rawValue,
-            UserDefaultsKeys.updateChannel: AppConstants.defaultReleaseChannel.rawValue
+            UserDefaultsKeys.updateChannel: AppConstants.defaultReleaseChannel.rawValue,
+            UserDefaultsKeys.appFormattingEnabled: false
         ])
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        Self.registerDefaultUserDefaults()
 
         guard !AppConstants.isRunningTests else {
             return
@@ -379,9 +385,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         }
         #endif
 
-        // Prompt palette hotkey - opens standalone prompt palette panel
+        // Workflow palette hotkey - opens the standalone workflow palette panel
         ServiceContainer.shared.hotkeyService.onPromptPaletteToggle = {
-            DictationViewModel.shared.triggerStandalonePromptSelection()
+            DictationViewModel.shared.triggerWorkflowPalette()
         }
         ServiceContainer.shared.hotkeyService.onRecentTranscriptionsToggle = {
             DictationViewModel.shared.triggerRecentTranscriptionsPalette()

@@ -10,6 +10,8 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
     static let pluginId = "com.typewhisper.whisperkit"
     static let pluginName = "WhisperKit"
     private static let maxConditioningPromptChars = 500
+    private static let modelRepo = "argmaxinc/whisperkit-coreml"
+    private static let modelEndpoint = "https://huggingface.co"
 
     fileprivate var host: HostServices?
     fileprivate var whisperKit: WhisperKit?
@@ -27,17 +29,42 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
         self.host = host
         _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
         _hfToken = host.loadSecret(key: "hf-token")
-        // Do not eagerly restore on plugin activation. The host already has an
-        // on-demand restore path before transcription, and restoring here can
-        // leave the settings UI stuck in a long-running "Loading model..." state.
+        if let persistedLoadedModel = host.userDefault(forKey: "loadedModel") as? String,
+           !persistedLoadedModel.isEmpty {
+            if _selectedModelId == nil {
+                _selectedModelId = persistedLoadedModel
+                host.setUserDefault(persistedLoadedModel, forKey: "selectedModel")
+            }
+        }
+        Task { await restoreLoadedModel(allowDownloads: false) }
     }
 
     func deactivate() {
+        releaseWhisperKitResources()
         whisperKit = nil
         loadedModelId = nil
         modelState = .notLoaded
+        downloadProgress = 0
         _hfToken = nil
         host = nil
+    }
+
+    private func releaseWhisperKitResources() {
+        guard let whisperKit else { return }
+
+        // Release Core ML submodels and callbacks explicitly instead of relying
+        // solely on WhisperKit deallocation to eventually tear them down.
+        autoreleasepool {
+            whisperKit.modelStateCallback = nil
+            whisperKit.segmentDiscoveryCallback = nil
+            whisperKit.transcriptionStateCallback = nil
+            whisperKit.tokenizer = nil
+            whisperKit.voiceActivityDetector = nil
+            whisperKit.clearState()
+            (whisperKit.featureExtractor as? WhisperMLModel)?.unloadModel()
+            (whisperKit.audioEncoder as? WhisperMLModel)?.unloadModel()
+            (whisperKit.textDecoder as? WhisperMLModel)?.unloadModel()
+        }
     }
 
     // MARK: - TranscriptionEnginePlugin
@@ -296,13 +323,15 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
         do {
             // Migrate old models if they exist
             migrateOldModels(for: modelDef)
+            let modelPath = resolvedModelPath(for: modelDef)
 
             let modelFolder: URL
-            if isModelDownloaded(modelDef) {
+            if isUsableDownloadedModel(at: modelPath) {
                 modelState = .loading(phase: "loading")
                 downloadProgress = 0.80
-                modelFolder = resolvedModelPath(for: modelDef)
+                modelFolder = modelPath
             } else {
+                removeIncompleteModelIfNeeded(at: modelPath)
                 modelState = .downloading
                 downloadProgress = 0.05
 
@@ -319,6 +348,7 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
                     self.downloadProgress = mapped
                 }
             }
+            try await repairDownloadedModelIfNeeded(at: modelFolder, variant: modelDef.id)
 
             // Load
             modelState = .loading(phase: "loading")
@@ -362,8 +392,13 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
             host?.setUserDefault(modelDef.id, forKey: "loadedModel")
             host?.notifyCapabilitiesChanged()
         } catch {
+            releaseWhisperKitResources()
+            whisperKit = nil
+            loadedModelId = nil
             modelState = .error(error.localizedDescription)
             downloadProgress = 0
+            host?.setUserDefault(nil, forKey: "loadedModel")
+            host?.notifyCapabilitiesChanged()
         }
     }
 
@@ -371,6 +406,7 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
     @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: true) } }
 
     func unloadModel(clearPersistence: Bool = true) {
+        releaseWhisperKitResources()
         whisperKit = nil
         loadedModelId = nil
         modelState = .notLoaded
@@ -397,8 +433,20 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
 
     fileprivate func isModelDownloaded(_ modelDef: WhisperModelDef) -> Bool {
         let modelPath = resolvedModelPath(for: modelDef)
+        return isUsableDownloadedModel(at: modelPath)
+    }
+
+    private func isUsableDownloadedModel(at modelPath: URL) -> Bool {
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: modelPath.path) else { return false }
+
+        let requiredRootFiles = [
+            "config.json",
+            "generation_config.json",
+        ]
+        guard requiredRootFiles.allSatisfy({ fileManager.fileExists(atPath: modelPath.appendingPathComponent($0).path) }) else {
+            return false
+        }
 
         let requiredModelNames = [
             "MelSpectrogram",
@@ -407,10 +455,120 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
         ]
 
         return requiredModelNames.allSatisfy { name in
-            let compiled = modelPath.appendingPathComponent("\(name).mlmodelc").path
-            let package = modelPath.appendingPathComponent("\(name).mlpackage").path
-            return fileManager.fileExists(atPath: compiled) || fileManager.fileExists(atPath: package)
+            let compiled = modelPath.appendingPathComponent("\(name).mlmodelc")
+            let package = modelPath.appendingPathComponent("\(name).mlpackage")
+            return isUsableCompiledModel(at: compiled) || fileManager.fileExists(atPath: package.path)
         }
+    }
+
+    private func isUsableCompiledModel(at compiledPath: URL) -> Bool {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: compiledPath.path) else { return false }
+
+        let componentName = compiledPath.deletingPathExtension().lastPathComponent
+        let requiredCompiledFiles = requiredCompiledFiles(for: componentName)
+
+        return requiredCompiledFiles.allSatisfy {
+            fileManager.fileExists(atPath: compiledPath.appendingPathComponent($0).path)
+        }
+    }
+
+    private func repairDownloadedModelIfNeeded(at modelPath: URL, variant: String) async throws {
+        let missingFiles = requiredModelFiles(at: modelPath)
+            .filter { !FileManager.default.fileExists(atPath: modelPath.appendingPathComponent($0).path) }
+
+        guard !missingFiles.isEmpty else { return }
+
+        for relativePath in missingFiles {
+            try await downloadModelFile(
+                variant: variant,
+                relativePath: relativePath,
+                destination: modelPath.appendingPathComponent(relativePath)
+            )
+        }
+    }
+
+    private func requiredModelFiles(at modelPath: URL) -> [String] {
+        let requiredComponents = Set(["MelSpectrogram", "AudioEncoder", "TextDecoder"])
+        let existingComponents = (try? FileManager.default.contentsOfDirectory(at: modelPath, includingPropertiesForKeys: nil))
+            .map { urls in
+                urls
+                    .filter { $0.pathExtension == "mlmodelc" }
+                    .map { $0.deletingPathExtension().lastPathComponent }
+            } ?? []
+
+        let componentNames = Array(requiredComponents.union(existingComponents)).sorted()
+
+        var files = [
+            "config.json",
+            "generation_config.json",
+        ]
+
+        for componentName in componentNames {
+            for suffix in requiredCompiledFiles(for: componentName) {
+                files.append("\(componentName).mlmodelc/\(suffix)")
+            }
+        }
+
+        return files
+    }
+
+    private func requiredCompiledFiles(for componentName: String) -> [String] {
+        var files = [
+            "metadata.json",
+            "model.mil",
+            "coremldata.bin",
+            "analytics/coremldata.bin",
+            "weights/weight.bin",
+        ]
+
+        if componentName == "AudioEncoder" || componentName == "TextDecoder" {
+            files.append("model.mlmodel")
+        }
+
+        return files
+    }
+
+    private func downloadModelFile(
+        variant: String,
+        relativePath: String,
+        destination: URL
+    ) async throws {
+        var url = URL(string: Self.modelEndpoint)!
+        for component in Self.modelRepo.split(separator: "/") {
+            url.append(path: String(component))
+        }
+        url.append(path: "resolve")
+        url.append(path: "main")
+        url.append(path: variant)
+        for component in relativePath.split(separator: "/") {
+            url.append(path: String(component))
+        }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 300
+        if let token = _hfToken, !token.isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        let (temporaryFile, response) = try await URLSession.shared.download(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200..<300).contains(httpResponse.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+
+        let fileManager = FileManager.default
+        try fileManager.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if fileManager.fileExists(atPath: destination.path) {
+            try fileManager.removeItem(at: destination)
+        }
+        try fileManager.moveItem(at: temporaryFile, to: destination)
+    }
+
+    private func removeIncompleteModelIfNeeded(at modelPath: URL) {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: modelPath.path), !isUsableDownloadedModel(at: modelPath) else { return }
+        try? fileManager.removeItem(at: modelPath)
     }
 
     /// Migrate models from old location (TypeWhisper/models/) to plugin data directory
@@ -419,9 +577,10 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
         let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
 
         let destination = resolvedModelPath(for: modelDef)
-        if fm.fileExists(atPath: destination.path) {
+        if isUsableDownloadedModel(at: destination) {
             return
         }
+        removeIncompleteModelIfNeeded(at: destination)
 
         // Check both production and dev paths
         for dirName in ["TypeWhisper", "TypeWhisper-Dev"] {
@@ -441,7 +600,7 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
 
             for legacyRoot in legacyRoots {
                 let oldPath = legacyRoot.appendingPathComponent(modelDef.id)
-                guard fm.fileExists(atPath: oldPath.path) else { continue }
+                guard isUsableDownloadedModel(at: oldPath) else { continue }
                 try? fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
                 try? fm.moveItem(at: oldPath, to: destination)
                 if fm.fileExists(atPath: destination.path) {
@@ -684,6 +843,21 @@ private struct WhisperKitSettingsView: View {
         !storedHfToken.isEmpty
     }
 
+    private var normalizedPluginModelState: WhisperModelState {
+        switch plugin.modelState {
+        case .downloading, .loading, .error:
+            return plugin.modelState
+        case .ready:
+            return (plugin.whisperKit != nil && plugin.loadedModelId != nil) ? plugin.modelState : .notLoaded
+        case .notLoaded:
+            return .notLoaded
+        }
+    }
+
+    private var persistedLoadedModelId: String? {
+        plugin.host?.userDefault(forKey: "loadedModel") as? String
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("WhisperKit", bundle: bundle)
@@ -786,29 +960,41 @@ private struct WhisperKitSettingsView: View {
         }
         .padding()
         .onAppear {
-            modelState = plugin.modelState
+            modelState = normalizedPluginModelState
             downloadProgress = plugin.downloadProgress
             activeModelId = plugin._selectedModelId
             if let token = plugin._hfToken, !token.isEmpty {
                 hfTokenInput = token
             }
-            // If the plugin is mid-load (e.g., restoring on app launch), start polling
             isPolling = WhisperKitSettingsPollState(
-                modelState: plugin.modelState,
+                modelState: normalizedPluginModelState,
                 downloadProgress: plugin.downloadProgress,
                 activeModelId: plugin._selectedModelId,
                 isPolling: false
             ).isBusy
+
+            if plugin.whisperKit == nil,
+               plugin.loadedModelId == nil,
+               plugin.modelState == .notLoaded,
+               let persistedLoadedModelId,
+               !persistedLoadedModelId.isEmpty {
+                activeModelId = persistedLoadedModelId
+                modelState = .loading(phase: "loading")
+                isPolling = true
+                Task {
+                    await plugin.restoreLoadedModel(allowDownloads: false)
+                    syncViewStateFromPlugin()
+                }
+            }
         }
         .onReceive(pollTimer) { _ in
-            guard isPolling else { return }
             let updatedState = WhisperKitSettingsPollState(
                 modelState: modelState,
                 downloadProgress: downloadProgress,
                 activeModelId: activeModelId,
                 isPolling: isPolling
             ).applyingPolledPluginState(
-                plugin.modelState,
+                normalizedPluginModelState,
                 downloadProgress: plugin.downloadProgress,
                 selectedModelId: plugin._selectedModelId
             )
@@ -856,14 +1042,27 @@ private struct WhisperKitSettingsView: View {
 
     @ViewBuilder
     private func modelStatusView(_ modelDef: WhisperModelDef) -> some View {
+        let isDownloaded = plugin.isModelDownloaded(modelDef)
+        let viewState = WhisperKitSettingsPollState(
+            modelState: modelState,
+            downloadProgress: downloadProgress,
+            activeModelId: activeModelId,
+            isPolling: isPolling
+        )
+
         if case .ready(let loadedId) = modelState, loadedId == modelDef.id {
             HStack(spacing: 8) {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.green)
                 Button(String(localized: "Unload", bundle: bundle)) {
                     plugin.unloadModel()
-                    plugin.deleteModelFiles(modelDef)
-                    modelState = plugin.modelState
+                    syncViewStateFromPlugin()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                Button(String(localized: "Remove", bundle: bundle), role: .destructive) {
+                    removeDownloadedModel(modelDef)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -884,34 +1083,53 @@ private struct WhisperKitSettingsView: View {
                     .font(.caption)
             }
         } else {
-            let isDownloaded = plugin.isModelDownloaded(modelDef)
-            let viewState = WhisperKitSettingsPollState(
-                modelState: modelState,
-                downloadProgress: downloadProgress,
-                activeModelId: activeModelId,
-                isPolling: isPolling
-            )
-            Button(
-                isDownloaded
-                    ? String(localized: "Load", bundle: bundle)
-                    : String(localized: "Download & Load", bundle: bundle)
-            ) {
-                activeModelId = modelDef.id
-                modelState = .downloading
-                downloadProgress = 0.05
-                isPolling = true
-                Task {
-                    await plugin.loadModel(modelDef)
-                    isPolling = false
-                    modelState = plugin.modelState
-                    downloadProgress = plugin.downloadProgress
-                    activeModelId = plugin._selectedModelId
+            HStack(spacing: 8) {
+                Button(
+                    isDownloaded
+                        ? String(localized: "Load", bundle: bundle)
+                        : String(localized: "Download & Load", bundle: bundle)
+                ) {
+                    activeModelId = modelDef.id
+                    modelState = .downloading
+                    downloadProgress = 0.05
+                    isPolling = true
+                    Task {
+                        await plugin.loadModel(modelDef)
+                        isPolling = false
+                        modelState = plugin.modelState
+                        downloadProgress = plugin.downloadProgress
+                        activeModelId = plugin._selectedModelId
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(viewState.isBusy)
+
+                if isDownloaded {
+                    Button(String(localized: "Remove", bundle: bundle), role: .destructive) {
+                        removeDownloadedModel(modelDef)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(viewState.isBusy)
                 }
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
-            .disabled(viewState.isBusy)
         }
+    }
+
+    private func syncViewStateFromPlugin() {
+        modelState = normalizedPluginModelState
+        downloadProgress = plugin.downloadProgress
+        activeModelId = plugin._selectedModelId
+        isPolling = false
+    }
+
+    private func removeDownloadedModel(_ modelDef: WhisperModelDef) {
+        if case .ready(let loadedId) = modelState, loadedId == modelDef.id {
+            plugin.unloadModel()
+        }
+        plugin.deleteModelFiles(modelDef)
+        syncViewStateFromPlugin()
     }
 
     private func phaseText(_ phase: String) -> String {
