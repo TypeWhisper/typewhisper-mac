@@ -177,16 +177,36 @@ struct AudioRecorderView: View {
                             }
                             .disabled(isEditingLocked)
                         }
-                    }
 
-                    // Language picker
-                    Picker(String(localized: "recorder.language"), selection: $viewModel.selectedLanguage) {
-                        Text(String(localized: "Auto-detect")).tag(nil as String?)
-                        Divider()
-                        ForEach(SettingsViewModel.shared.availableLanguages, id: \.code) { lang in
-                            Text(lang.name).tag(lang.code as String?)
+                        if !modelManager.supportsLiveTranscriptionSession(engineOverrideId: providerId),
+                           modelManager.usesMeteredStreamingFallback(engineOverrideId: providerId) {
+                            Label(
+                                localizedAppText(
+                                    "This engine updates the live preview every few seconds and may use additional API calls while recording.",
+                                    de: "Diese Engine aktualisiert die Live-Vorschau nur alle paar Sekunden und kann waehrend der Aufnahme zusaetzliche API-Aufrufe ausloesen."
+                                ),
+                                systemImage: "info.circle"
+                            )
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                         }
                     }
+
+                    let languageOptions: [(code: String, name: String)] = {
+                        guard let providerId = selectedProvider,
+                              let engine = pluginManager.transcriptionEngine(for: providerId),
+                              !engine.supportedLanguages.isEmpty else {
+                            return SettingsViewModel.shared.availableLanguages
+                        }
+                        return localizedAppLanguageOptions(for: engine.supportedLanguages)
+                            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+                            .map { (code: $0.code, name: $0.name) }
+                    }()
+
+                    LanguageSelectionEditor(
+                        selection: $viewModel.languageSelection,
+                        availableLanguages: languageOptions
+                    )
                     .disabled(isEditingLocked)
 
                     // Task picker (transcribe/translate)

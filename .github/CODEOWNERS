@@ -1,0 +1,13 @@
+# Replace @SeoFood with your maintainer handle or a GitHub team, for example:
+# * @your-org/core-maintainers
+
+# Default: require maintainer review for everything.
+* @SeoFood
+
+# Critical paths called out explicitly for clarity.
+/.github/workflows/ @SeoFood
+/TypeWhisper/Services/ @SeoFood
+/TypeWhisper/ViewModels/ @SeoFood
+/TypeWhisperTests/ @SeoFood
+/TypeWhisperPluginSDK/ @SeoFood
+/Plugins/ @SeoFood

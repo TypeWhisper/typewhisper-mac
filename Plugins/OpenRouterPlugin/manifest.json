@@ -1,8 +1,9 @@
 {
     "id": "com.typewhisper.openrouter",
     "name": "OpenRouter",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "minHostVersion": "0.9.0",
+    "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
     "description": "Access 300+ LLMs from OpenAI, Anthropic, Meta, Google and more via OpenRouter. Shows model pricing and account balance. Requires API key.",
@@ -11,6 +12,6 @@
     },
     "category": "llm",
     "iconSystemName": "globe",
-    "requiresAPIKey": true,
-    "principalClass": "OpenRouterPlugin"
+    "principalClass": "OpenRouterPlugin",
+    "requiresAPIKey": true
 }

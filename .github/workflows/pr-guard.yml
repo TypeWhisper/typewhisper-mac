@@ -1,0 +1,136 @@
+name: PR Guard
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  author-policy:
+    name: Enforce PR author policy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Block non-allowlisted bots and multiple open PRs from external authors
+        uses: actions/github-script@v9
+        env:
+          # Repo variable, optional: comma-separated GitHub logins.
+          # Example: SeoFood,dependabot[bot],trusted-contributor
+          EXTRA_ALLOWLIST: ${{ vars.PR_GUARD_ALLOWLIST || '' }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pr = context.payload.pull_request;
+            const author = pr.user.login;
+            const association = pr.author_association;
+            const issueNumber = pr.number;
+            const marker = '<!-- pr-guard -->';
+
+            const defaultAllowlist = new Set([
+              'SeoFood',
+              'dependabot[bot]'
+            ]);
+
+            const parseCsv = (value) =>
+              (value || '')
+                .split(',')
+                .map((entry) => entry.trim())
+                .filter(Boolean);
+
+            for (const login of parseCsv(process.env.EXTRA_ALLOWLIST)) {
+              defaultAllowlist.add(login);
+            }
+
+            const isBot = author.endsWith('[bot]');
+            const isInternal = ['OWNER', 'MEMBER', 'COLLABORATOR'].includes(association);
+            const isAllowlisted = defaultAllowlist.has(author);
+
+            const upsertComment = async (body) => {
+              try {
+                const { data: comments } = await github.rest.issues.listComments({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  per_page: 100
+                });
+
+                const existing = comments.find((comment) =>
+                  comment.user?.type === 'Bot' && comment.body?.includes(marker)
+                );
+
+                if (existing) {
+                  await github.rest.issues.updateComment({
+                    owner,
+                    repo,
+                    comment_id: existing.id,
+                    body
+                  });
+                  return;
+                }
+
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  body
+                });
+              } catch (error) {
+                if (error.status === 403) {
+                  core.warning(`PR Guard: unable to write comment for #${issueNumber}: ${error.message}`);
+                  return;
+                }
+
+                throw error;
+              }
+            };
+
+            if (isAllowlisted || isInternal) {
+              core.info(`PR Guard: allowing ${author} (${association})`);
+              return;
+            }
+
+            if (isBot) {
+              await upsertComment([
+                marker,
+                `@${author} this repository blocks automated PRs from non-allowlisted bot accounts.`,
+                '',
+                'If this bot should be allowed, add it to the `PR_GUARD_ALLOWLIST` repository variable or the hardcoded allowlist in `.github/workflows/pr-guard.yml`.'
+              ].join('\n'));
+
+              core.setFailed(`PR Guard blocked non-allowlisted bot PR from ${author}`);
+              return;
+            }
+
+            const { data: pulls } = await github.rest.pulls.list({
+              owner,
+              repo,
+              state: 'open',
+              per_page: 100
+            });
+
+            const otherOpenPRs = pulls.filter((openPR) =>
+              openPR.user?.login === author && openPR.number !== issueNumber
+            );
+
+            if (otherOpenPRs.length === 0) {
+              core.info(`PR Guard: ${author} has no other open PRs`);
+              return;
+            }
+
+            const firstOtherPR = otherOpenPRs[0];
+            await upsertComment([
+              marker,
+              `@${author} you already have another open PR in this repository: #${firstOtherPR.number}.`,
+              '',
+              'To keep review quality high, non-allowlisted external contributors may only have one open PR at a time.',
+              '',
+              `Please continue on #${firstOtherPR.number} first, or ask a maintainer to allowlist your account if multiple concurrent PRs are expected.`
+            ].join('\n'));
+
+            core.setFailed(
+              `PR Guard blocked ${author}: ${otherOpenPRs.length} other open PR(s) detected`
+            );

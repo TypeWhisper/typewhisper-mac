@@ -1,4 +1,6 @@
+import AppKit
 import Foundation
+import Combine
 import TypeWhisperPluginSDK
 import os.log
 
@@ -7,7 +9,16 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhis
 @MainActor
 class PromptProcessingService: ObservableObject {
     @Published var selectedProviderId: String {
-        didSet { UserDefaults.standard.set(selectedProviderId, forKey: "llmProviderType") }
+        didSet {
+            let normalized = normalizeProviderId(selectedProviderId)
+            guard normalized == selectedProviderId else {
+                selectedProviderId = normalized
+                return
+            }
+
+            UserDefaults.standard.set(selectedProviderId, forKey: "llmProviderType")
+            normalizeSelectedCloudModelIfNeeded(for: selectedProviderId)
+        }
     }
     @Published var selectedCloudModel: String {
         didSet { UserDefaults.standard.set(selectedCloudModel, forKey: "llmCloudModel") }
@@ -15,6 +26,7 @@ class PromptProcessingService: ObservableObject {
 
     weak var memoryService: MemoryService?
     private var appleIntelligenceProvider: LLMProvider?
+    private var cancellables = Set<AnyCancellable>()
 
     static let appleIntelligenceId = "appleIntelligence"
 
@@ -89,6 +101,17 @@ class PromptProcessingService: ObservableObject {
         }
     }
 
+    func observePluginManager() {
+        PluginManager.shared.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.validateSelectionAfterPluginLoad()
+                self.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+    }
+
     /// Validate and fix selectedProviderId and selectedCloudModel after plugins are loaded.
     /// Called from ServiceContainer after scanAndLoadPlugins().
     func validateSelectionAfterPluginLoad() {
@@ -98,15 +121,35 @@ class PromptProcessingService: ObservableObject {
             selectedProviderId = normalized
         }
 
-        // Validate cloud model against available models for the selected provider
-        let models = modelsForProvider(selectedProviderId)
-        if !models.isEmpty && !models.contains(where: { $0.id == selectedCloudModel }) {
-            let pluginPreferred = (PluginManager.shared.llmProvider(for: selectedProviderId) as? LLMModelSelectable)?.preferredModelId as? String
-            selectedCloudModel = pluginPreferred ?? models.first?.id ?? ""
-        }
+        normalizeSelectedCloudModelIfNeeded(for: selectedProviderId)
     }
 
     func process(prompt: String, text: String, providerOverride: String? = nil, cloudModelOverride: String? = nil, skipMemoryInjection: Bool = false) async throws -> String {
+        try await process(
+            prompt: prompt,
+            text: text,
+            providerOverride: providerOverride,
+            cloudModelOverride: cloudModelOverride,
+            temperatureDirective: .inheritProviderSetting,
+            skipMemoryInjection: skipMemoryInjection
+        )
+    }
+
+    static func requiresForegroundActivation(for plugin: any LLMProviderPlugin) -> Bool {
+        guard let setupStatus = plugin as? any LLMProviderSetupStatusProviding else {
+            return false
+        }
+        return !setupStatus.requiresExternalCredentials
+    }
+
+    func process(
+        prompt: String,
+        text: String,
+        providerOverride: String? = nil,
+        cloudModelOverride: String? = nil,
+        temperatureDirective: PluginLLMTemperatureDirective = .inheritProviderSetting,
+        skipMemoryInjection: Bool = false
+    ) async throws -> String {
         // Inject memory context into prompt if available
         var effectivePrompt = prompt
         if !skipMemoryInjection, let memoryService {
@@ -116,7 +159,7 @@ class PromptProcessingService: ObservableObject {
             }
         }
 
-        let effectiveId = providerOverride ?? selectedProviderId
+        let effectiveId = normalizeProviderId(providerOverride ?? selectedProviderId)
 
         if effectiveId == Self.appleIntelligenceId {
             guard let provider = appleIntelligenceProvider, provider.isAvailable else {
@@ -133,18 +176,139 @@ class PromptProcessingService: ObservableObject {
             throw LLMError.noProviderConfigured
         }
         guard plugin.isAvailable else {
+            if let setupStatus = plugin as? any LLMProviderSetupStatusProviding,
+               !setupStatus.requiresExternalCredentials {
+                throw LLMError.providerNotReady(
+                    setupStatus.unavailableReason ?? "This provider is not ready yet."
+                )
+            }
             throw LLMError.noApiKey
         }
 
-        let preferred = (plugin as? LLMModelSelectable)?.preferredModelId as? String
-        let model = cloudModelOverride ?? preferred ?? (selectedCloudModel.isEmpty ? nil : selectedCloudModel)
+        normalizeSelectedCloudModelIfNeeded(for: effectiveId)
+        let requestedModel = cloudModelOverride?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = resolvedModelId(
+            for: effectiveId,
+            requestedModel: requestedModel?.isEmpty == false ? requestedModel : nil,
+            persistGlobalSelection: false
+        )
         logger.info("Processing prompt with plugin \(effectiveId)")
-        let result = try await plugin.process(
-            systemPrompt: effectivePrompt,
+        let result = try await withForegroundActivationIfNeeded(for: plugin, providerId: effectiveId) {
+            try await processWithPlugin(
+                plugin,
+                prompt: effectivePrompt,
+                text: text,
+                model: model,
+                temperatureDirective: temperatureDirective
+            )
+        }
+        logger.info("Prompt processing complete, result length: \(result.count)")
+        return result
+    }
+
+    private func processWithPlugin(
+        _ plugin: any LLMProviderPlugin,
+        prompt: String,
+        text: String,
+        model: String?,
+        temperatureDirective: PluginLLMTemperatureDirective
+    ) async throws -> String {
+        if let temperatureAwarePlugin = plugin as? any LLMTemperatureControllableProvider {
+            return try await temperatureAwarePlugin.process(
+                systemPrompt: prompt,
+                userText: text,
+                model: model,
+                temperatureDirective: temperatureDirective
+            )
+        }
+
+        return try await plugin.process(
+            systemPrompt: prompt,
             userText: text,
             model: model
         )
-        logger.info("Prompt processing complete, result length: \(result.count)")
-        return result
+    }
+
+    private func withForegroundActivationIfNeeded<T>(
+        for plugin: any LLMProviderPlugin,
+        providerId: String,
+        operation: () async throws -> T
+    ) async throws -> T {
+        guard Self.requiresForegroundActivation(for: plugin) else {
+            return try await operation()
+        }
+
+        activateAppForLocalPromptProcessing(providerId: providerId)
+        let activity = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiated, .latencyCritical],
+            reason: "Local prompt processing with \(providerId)"
+        )
+        defer {
+            ProcessInfo.processInfo.endActivity(activity)
+        }
+
+        return try await operation()
+    }
+
+    private func activateAppForLocalPromptProcessing(providerId: String) {
+        guard !AppConstants.isRunningTests, !NSApp.isActive else { return }
+
+        logger.info("Activating app for local prompt processing with plugin \(providerId)")
+        let currentApplication = NSRunningApplication.current
+        let sourceApplication = ActivationSourceTracker.shared.lastExternalApplication
+            ?? NSWorkspace.shared.frontmostApplication
+
+        if let sourceApplication,
+           sourceApplication.processIdentifier != currentApplication.processIdentifier,
+           currentApplication.activate(from: sourceApplication) {
+            return
+        }
+
+        _ = currentApplication.activate()
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func normalizeSelectedCloudModelIfNeeded(for providerId: String) {
+        guard providerId != Self.appleIntelligenceId else { return }
+        _ = resolvedModelId(
+            for: providerId,
+            requestedModel: selectedCloudModel.isEmpty ? nil : selectedCloudModel,
+            persistGlobalSelection: true
+        )
+    }
+
+    private func resolvedModelId(
+        for providerId: String,
+        requestedModel: String?,
+        persistGlobalSelection: Bool
+    ) -> String? {
+        let models = modelsForProvider(providerId)
+        guard !models.isEmpty else { return requestedModel }
+
+        let validIds = Set(models.map(\.id))
+        if let requestedModel,
+           validIds.contains(requestedModel) {
+            return requestedModel
+        }
+
+        let preferredModelId = (PluginManager.shared.llmProvider(for: providerId) as? LLMModelSelectable)?.preferredModelId as? String
+        let fallbackModelId: String?
+        if let preferredModelId,
+           validIds.contains(preferredModelId) {
+            fallbackModelId = preferredModelId
+        } else if !selectedCloudModel.isEmpty,
+                  validIds.contains(selectedCloudModel) {
+            fallbackModelId = selectedCloudModel
+        } else {
+            fallbackModelId = models.first?.id
+        }
+
+        if persistGlobalSelection,
+           let fallbackModelId,
+           selectedCloudModel != fallbackModelId {
+            selectedCloudModel = fallbackModelId
+        }
+
+        return fallbackModelId
     }
 }

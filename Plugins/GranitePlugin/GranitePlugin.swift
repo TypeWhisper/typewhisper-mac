@@ -9,7 +9,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(GranitePlugin)
-final class GranitePlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActivityReporting, @unchecked Sendable {
+final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.granite"
     static let pluginName = "Granite Speech"
 
@@ -31,7 +31,7 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsAc
             ?? Self.availableModels.first?.id
         _hfToken = host.loadSecret(key: "hf-token")
 
-        Task { await restoreLoadedModel() }
+        Task { await restoreLoadedModel(allowDownloads: false) }
     }
 
     func deactivate() {
@@ -57,6 +57,17 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsAc
             .map { PluginModelInfo(id: $0.id, displayName: $0.displayName) }
     }
 
+    var availableModels: [PluginModelInfo] {
+        Self.availableModels.map { def in
+            PluginModelInfo(
+                id: def.id,
+                displayName: def.displayName,
+                sizeDescription: def.sizeDescription,
+                loaded: def.id == loadedModelId
+            )
+        }
+    }
+
     var supportedLanguages: [String] {
         ["en", "fr", "de", "es", "pt", "ja"]
     }
@@ -70,6 +81,8 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsAc
 
     var supportsTranslation: Bool { true }
     var supportsStreaming: Bool { true }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
+    var dictionaryTermsBudget: DictionaryTermsBudget { DictionaryTermsBudget(maxTotalChars: 4_000) }
 
     func transcribe(
         audio: AudioData,
@@ -163,7 +176,7 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsAc
     }
 
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
-    @objc func triggerRestoreModel() { Task { await restoreLoadedModel() } }
+    @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: true) } }
 
     func unloadModel(clearPersistence: Bool = true) {
         model = nil
@@ -184,12 +197,25 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsAc
         try? FileManager.default.removeItem(at: modelDir)
     }
 
-    func restoreLoadedModel() async {
+    func restoreLoadedModel(allowDownloads: Bool = true) async {
         guard let savedId = host?.userDefault(forKey: "loadedModel") as? String,
               let modelDef = Self.availableModels.first(where: { $0.id == savedId }) else {
             return
         }
+        guard allowDownloads || hasDownloadedModel(modelDef) else { return }
         try? await loadModel(modelDef)
+    }
+
+    private func hasDownloadedModel(_ modelDef: GraniteModelDef) -> Bool {
+        guard let modelsDir = host?.pluginDataDirectory.appendingPathComponent("models") else { return false }
+        let subdirectory = modelDef.repoId.replacingOccurrences(of: "/", with: "_")
+        let modelDir = modelsDir
+            .appendingPathComponent("mlx-audio")
+            .appendingPathComponent(subdirectory)
+
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: modelDir.path, isDirectory: &isDirectory)
+            && isDirectory.boolValue
     }
 
     // MARK: - Settings View
@@ -207,6 +233,49 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsAc
 
     var settingsView: AnyView? {
         AnyView(GraniteSettingsView(plugin: self))
+    }
+
+    func setHuggingFaceToken(_ token: String) {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        _hfToken = trimmed.isEmpty ? nil : trimmed
+        try? host?.storeSecret(key: "hf-token", value: trimmed)
+    }
+
+    func clearHuggingFaceToken() {
+        _hfToken = nil
+        try? host?.storeSecret(key: "hf-token", value: "")
+    }
+
+    func validateHuggingFaceToken(
+        _ token: String,
+        dataFetcher: @escaping @Sendable (URLRequest) async throws -> (Data, URLResponse) = PluginHTTPClient.data
+    ) async -> Bool {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let url = URL(string: "https://huggingface.co/api/whoami-v2") else {
+            return false
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(trimmed)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 15
+
+        do {
+            let (data, response) = try await dataFetcher(request)
+            guard let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200 else {
+                return false
+            }
+
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return false
+            }
+
+            return json["name"] != nil || json["type"] != nil || json["auth"] != nil
+        } catch {
+            return false
+        }
     }
 
     // MARK: - Model Definitions
@@ -290,8 +359,22 @@ private struct GraniteSettingsView: View {
     @State private var isPolling = false
     @State private var hfTokenInput = ""
     @State private var showHfToken = false
+    @State private var isValidatingToken = false
+    @State private var tokenValidationResult: Bool?
 
     private let pollTimer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
+
+    private var trimmedHfTokenInput: String {
+        hfTokenInput.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var storedHfToken: String {
+        plugin._hfToken?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    private var hasStoredHfToken: Bool {
+        !storedHfToken.isEmpty
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -330,25 +413,44 @@ private struct GraniteSettingsView: View {
                     }
                     .buttonStyle(.borderless)
 
-                    if plugin._hfToken != nil, !plugin._hfToken!.isEmpty {
+                    if hasStoredHfToken {
                         Button(String(localized: "Remove", bundle: bundle)) {
                             hfTokenInput = ""
-                            plugin._hfToken = nil
-                            try? plugin.host?.storeSecret(key: "hf-token", value: "")
+                            tokenValidationResult = nil
+                            isValidatingToken = false
+                            plugin.clearHuggingFaceToken()
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                     }
 
                     Button(String(localized: "Save", bundle: bundle)) {
-                        let trimmed = hfTokenInput.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !trimmed.isEmpty else { return }
-                        plugin._hfToken = trimmed
-                        try? plugin.host?.storeSecret(key: "hf-token", value: trimmed)
+                        validateAndSaveHuggingFaceToken()
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
-                    .disabled(hfTokenInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(trimmedHfTokenInput.isEmpty || isValidatingToken)
+                }
+
+                if isValidatingToken {
+                    HStack(spacing: 4) {
+                        ProgressView().controlSize(.small)
+                        Text("Validating token...", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else if let tokenValidationResult {
+                    HStack(spacing: 4) {
+                        Image(systemName: tokenValidationResult ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .foregroundStyle(tokenValidationResult ? .green : .red)
+                        Text(
+                            tokenValidationResult
+                                ? String(localized: "Valid HuggingFace Token", bundle: bundle)
+                                : String(localized: "Invalid HuggingFace Token", bundle: bundle)
+                        )
+                        .font(.caption)
+                        .foregroundStyle(tokenValidationResult ? .green : .red)
+                    }
                 }
             }
 
@@ -385,7 +487,7 @@ private struct GraniteSettingsView: View {
         .task {
             if case .notLoaded = plugin.modelState {
                 isPolling = true
-                await plugin.restoreLoadedModel()
+                await plugin.restoreLoadedModel(allowDownloads: false)
                 isPolling = false
                 modelState = plugin.modelState
             }
@@ -398,6 +500,12 @@ private struct GraniteSettingsView: View {
             }
             if case .ready = pluginState { isPolling = false }
             else if case .error = pluginState { isPolling = false }
+        }
+        .onChange(of: hfTokenInput) { _, newValue in
+            let trimmedValue = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedValue != storedHfToken {
+                tokenValidationResult = nil
+            }
         }
     }
 
@@ -446,5 +554,25 @@ private struct GraniteSettingsView: View {
             }
         }
         .padding(.vertical, 4)
+    }
+
+    private func validateAndSaveHuggingFaceToken() {
+        let trimmedToken = trimmedHfTokenInput
+        guard !trimmedToken.isEmpty else { return }
+
+        isValidatingToken = true
+        tokenValidationResult = nil
+
+        Task {
+            let isValid = await plugin.validateHuggingFaceToken(trimmedToken)
+            await MainActor.run {
+                isValidatingToken = false
+                tokenValidationResult = isValid
+                if isValid {
+                    plugin.setHuggingFaceToken(trimmedToken)
+                    hfTokenInput = trimmedToken
+                }
+            }
+        }
     }
 }

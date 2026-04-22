@@ -1,4 +1,5 @@
 import Foundation
+import XCTest
 
 enum TestSupport {
     static let repoRoot: URL = URL(fileURLWithPath: #filePath)
@@ -52,6 +53,44 @@ enum TestSupport {
         try FileManager.default.createDirectory(at: deferredCleanupRoot, withIntermediateDirectories: true)
     }
 
+    static func localizedCatalogValue(for key: String, language: String) throws -> String {
+        let localizations = try catalogLocalizations(for: key)
+        let languageEntry = try XCTUnwrap(
+            localizations[language] as? [String: Any],
+            "Missing \(language) localization for key: \(key)"
+        )
+        let stringUnit = try XCTUnwrap(
+            languageEntry["stringUnit"] as? [String: Any],
+            "Missing stringUnit for key: \(key)"
+        )
+        return try XCTUnwrap(
+            stringUnit["value"] as? String,
+            "Missing localized value for key: \(key)"
+        )
+    }
+
+    static func localizedCatalogValue(for key: String, preferredLanguages: [String]) throws -> String {
+        let localizations = try catalogLocalizations(for: key)
+
+        for language in normalizedLanguageCandidates(from: preferredLanguages) {
+            guard let languageEntry = localizations[language] as? [String: Any],
+                  let stringUnit = languageEntry["stringUnit"] as? [String: Any],
+                  let value = stringUnit["value"] as? String else {
+                continue
+            }
+            return value
+        }
+
+        return key
+    }
+
+    static func localizedCatalogValueForCurrentLocale(for key: String, bundle: Bundle = .main) throws -> String {
+        try localizedCatalogValue(
+            for: key,
+            preferredLanguages: bundle.preferredLocalizations + Locale.preferredLanguages
+        )
+    }
+
     private static func cleanupStaleDirectories() {
         let cutoff = Date().addingTimeInterval(-staleDirectoryLifetime)
         let resourceKeys: Set<URLResourceKey> = [.contentModificationDateKey]
@@ -70,5 +109,37 @@ enum TestSupport {
             guard modifiedAt < cutoff else { continue }
             try? FileManager.default.removeItem(at: directory)
         }
+    }
+
+    private static func catalogLocalizations(for key: String) throws -> [String: Any] {
+        let data = try Data(contentsOf: repoRoot.appendingPathComponent("TypeWhisper/Resources/Localizable.xcstrings"))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let strings = try XCTUnwrap(object["strings"] as? [String: Any])
+        let entry = try XCTUnwrap(strings[key] as? [String: Any], "Missing catalog entry for key: \(key)")
+        return try XCTUnwrap(entry["localizations"] as? [String: Any], "Missing localizations for key: \(key)")
+    }
+
+    private static func normalizedLanguageCandidates(from identifiers: [String]) -> [String] {
+        var candidates: [String] = []
+        var seen = Set<String>()
+
+        func append(_ identifier: String) {
+            guard !identifier.isEmpty, seen.insert(identifier).inserted else { return }
+            candidates.append(identifier)
+        }
+
+        for identifier in identifiers {
+            append(identifier)
+
+            let normalized = identifier.replacingOccurrences(of: "_", with: "-")
+            append(normalized)
+
+            if let languageCode = normalized.split(separator: "-").first {
+                append(String(languageCode))
+            }
+        }
+
+        append("en")
+        return candidates
     }
 }

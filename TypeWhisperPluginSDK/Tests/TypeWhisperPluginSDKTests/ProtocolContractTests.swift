@@ -32,11 +32,11 @@ private struct MockHostServices: HostServices {
     let activeAppBundleId: String? = "com.apple.Notes"
     let activeAppName: String? = "Notes"
     let eventBus: EventBusProtocol
-    let availableProfileNames: [String]
+    let availableRuleNames: [String]
 
-    init(eventBus: EventBusProtocol, availableProfileNames: [String]) {
+    init(eventBus: EventBusProtocol, availableRuleNames: [String]) {
         self.eventBus = eventBus
-        self.availableProfileNames = availableProfileNames
+        self.availableRuleNames = availableRuleNames
         self.pluginDataDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     }
 
@@ -90,22 +90,147 @@ private final class MockTranscriptionPlugin: NSObject, TranscriptionEnginePlugin
     }
 }
 
+@objc(MockDictionaryTermsPlugin)
+private final class MockDictionaryTermsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.dictionary-terms"
+    static let pluginName = "Mock Dictionary Terms"
+
+    required override init() {}
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    var providerId: String { "mock-dictionary-terms" }
+    var providerDisplayName: String { "Mock Dictionary Terms" }
+    var isConfigured: Bool { true }
+    var transcriptionModels: [PluginModelInfo] { [] }
+    var selectedModelId: String? { nil }
+    func selectModel(_ modelId: String) {}
+    var supportsTranslation: Bool { false }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .requiresPluginSetting }
+
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "ok", detectedLanguage: language)
+    }
+}
+
+@objc(MockDictionaryBudgetPlugin)
+private final class MockDictionaryBudgetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsBudgetProviding, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.dictionary-budget"
+    static let pluginName = "Mock Dictionary Budget"
+
+    required override init() {}
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    var providerId: String { "mock-dictionary-budget" }
+    var providerDisplayName: String { "Mock Dictionary Budget" }
+    var isConfigured: Bool { true }
+    var transcriptionModels: [PluginModelInfo] { [] }
+    var selectedModelId: String? { nil }
+    func selectModel(_ modelId: String) {}
+    var supportsTranslation: Bool { false }
+    var dictionaryTermsBudget: DictionaryTermsBudget {
+        DictionaryTermsBudget(maxTerms: 10, maxCharsPerTerm: 20, maxWordsPerTerm: 3, maxTotalChars: 120)
+    }
+
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "ok", detectedLanguage: language)
+    }
+}
+
+@objc(MockCatalogTranscriptionPlugin)
+private final class MockCatalogTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.catalog"
+    static let pluginName = "Mock Catalog"
+
+    required override init() {}
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    var providerId: String { "mock-catalog" }
+    var providerDisplayName: String { "Mock Catalog" }
+    var isConfigured: Bool { true }
+    var transcriptionModels: [PluginModelInfo] { [PluginModelInfo(id: "tiny", displayName: "Tiny")] }
+    var availableModels: [PluginModelInfo] {
+        [
+            PluginModelInfo(id: "tiny", displayName: "Tiny"),
+            PluginModelInfo(id: "large", displayName: "Large")
+        ]
+    }
+    var selectedModelId: String? { "tiny" }
+    func selectModel(_ modelId: String) {}
+    var supportsTranslation: Bool { false }
+
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "ok", detectedLanguage: language)
+    }
+}
+
+private final class MockTTSPlaybackSession: TTSPlaybackSession, @unchecked Sendable {
+    var isActive = true
+    var onFinish: (@Sendable () -> Void)?
+
+    func stop() {
+        isActive = false
+        onFinish?()
+    }
+}
+
+@objc(MockTTSPlugin)
+private final class MockTTSPlugin: NSObject, TTSProviderPlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.tts"
+    static let pluginName = "Mock TTS"
+
+    private(set) var host: HostServices?
+
+    required override init() {}
+
+    func activate(host: HostServices) {
+        self.host = host
+    }
+
+    func deactivate() {
+        host = nil
+    }
+
+    var providerId: String { "mock-tts" }
+    var providerDisplayName: String { "Mock TTS" }
+    var isConfigured: Bool { true }
+    var availableVoices: [PluginVoiceInfo] { [PluginVoiceInfo(id: "default", displayName: "Default")] }
+    var selectedVoiceId: String? { host?.userDefault(forKey: "voice") as? String }
+    var settingsSummary: String? { "Default voice" }
+
+    func selectVoice(_ voiceId: String?) {
+        host?.setUserDefault(voiceId, forKey: "voice")
+    }
+
+    func speak(_ request: TTSSpeakRequest) async throws -> any TTSPlaybackSession {
+        let session = MockTTSPlaybackSession()
+        host?.setUserDefault(request.text, forKey: "lastSpokenText")
+        return session
+    }
+}
+
 final class ProtocolContractTests: XCTestCase {
-    func testHostServicesExposeProfilesSecretsAndDefaults() throws {
-        let host = MockHostServices(eventBus: MockEventBus(), availableProfileNames: ["Work", "Docs"])
+    func testHostServicesExposeRulesSecretsAndDefaults() throws {
+        let host = MockHostServices(eventBus: MockEventBus(), availableRuleNames: ["Work", "Docs"])
 
         try host.storeSecret(key: "apiKey", value: "secret")
         host.setUserDefault("value", forKey: "sample")
 
         XCTAssertEqual(host.loadSecret(key: "apiKey"), "secret")
         XCTAssertEqual(host.userDefault(forKey: "sample") as? String, "value")
+        XCTAssertEqual(host.availableRuleNames, ["Work", "Docs"])
         XCTAssertEqual(host.availableProfileNames, ["Work", "Docs"])
         XCTAssertEqual(host.activeAppName, "Notes")
     }
 
     func testTranscriptionPluginUsesDefaultStreamingFallback() async throws {
         let plugin = MockTranscriptionPlugin()
-        let host = MockHostServices(eventBus: MockEventBus(), availableProfileNames: ["Work"])
+        let host = MockHostServices(eventBus: MockEventBus(), availableRuleNames: ["Work"])
         plugin.activate(host: host)
 
         let result = try await plugin.transcribe(
@@ -120,7 +245,7 @@ final class ProtocolContractTests: XCTestCase {
         )
 
         XCTAssertEqual(result.text, "transcribed")
-        XCTAssertEqual(plugin.host?.availableProfileNames, ["Work"])
+        XCTAssertEqual(plugin.host?.availableRuleNames, ["Work"])
         XCTAssertNil(plugin.settingsView)
 
         plugin.deactivate()
@@ -136,5 +261,117 @@ final class ProtocolContractTests: XCTestCase {
         XCTAssertEqual(decoded.content, entry.content)
         XCTAssertEqual(decoded.type, entry.type)
         XCTAssertEqual(String(data: wav.prefix(4), encoding: .utf8), "RIFF")
+    }
+
+    func testDictionaryTermsCapabilityProtocolIsOptional() {
+        let legacyPlugin = MockTranscriptionPlugin()
+        let capabilityPlugin = MockDictionaryTermsPlugin()
+
+        XCTAssertFalse(legacyPlugin is any DictionaryTermsCapabilityProviding)
+        XCTAssertEqual(capabilityPlugin.dictionaryTermsSupport, .requiresPluginSetting)
+    }
+
+    func testDictionaryTermsBudgetProtocolIsOptional() {
+        let legacyPlugin = MockTranscriptionPlugin()
+        let budgetPlugin = MockDictionaryBudgetPlugin()
+
+        XCTAssertFalse(legacyPlugin is any DictionaryTermsBudgetProviding)
+        XCTAssertEqual(
+            budgetPlugin.dictionaryTermsBudget,
+            DictionaryTermsBudget(maxTerms: 10, maxCharsPerTerm: 20, maxWordsPerTerm: 3, maxTotalChars: 120)
+        )
+    }
+
+    func testTranscriptionModelCatalogProtocolIsOptional() {
+        let legacyPlugin = MockTranscriptionPlugin()
+        let catalogPlugin = MockCatalogTranscriptionPlugin()
+
+        XCTAssertFalse(legacyPlugin is any TranscriptionModelCatalogProviding)
+        XCTAssertEqual(legacyPlugin.modelCatalog.map(\.id), ["tiny"])
+        XCTAssertEqual(catalogPlugin.modelCatalog.map(\.id), ["tiny", "large"])
+    }
+
+    func testTTSPluginCanPersistVoiceAndReceiveSpeakRequest() async throws {
+        let plugin = MockTTSPlugin()
+        let host = MockHostServices(eventBus: MockEventBus(), availableRuleNames: ["Work"])
+        plugin.activate(host: host)
+
+        plugin.selectVoice("default")
+        let session = try await plugin.speak(
+            TTSSpeakRequest(text: "Hello", language: "en", purpose: .manualReadback)
+        )
+
+        XCTAssertEqual(plugin.selectedVoiceId, "default")
+        XCTAssertEqual(plugin.settingsSummary, "Default voice")
+        XCTAssertEqual(host.userDefault(forKey: "lastSpokenText") as? String, "Hello")
+        XCTAssertTrue(session.isActive)
+
+        session.stop()
+        XCTAssertFalse(session.isActive)
+    }
+
+    func testPluginDictionaryTermsNormalizesPromptAndContextTokens() {
+        XCTAssertEqual(
+            PluginDictionaryTerms.normalizedTerms(from: [" Kubernetes ", "kubernetes", "", "MLX"]),
+            ["Kubernetes", "MLX"]
+        )
+        XCTAssertEqual(
+            PluginDictionaryTerms.terms(fromPrompt: " Kubernetes, MLX, Kubernetes "),
+            ["Kubernetes", "MLX"]
+        )
+        XCTAssertEqual(
+            PluginDictionaryTerms.contextBiasTokens(fromPrompt: "TypeWhisper, Apple Silicon MLX"),
+            ["TypeWhisper", "Apple", "Silicon", "MLX"]
+        )
+        XCTAssertEqual(
+            PluginDictionaryTerms.prompt(from: ["TypeWhisper", "MLX"], maxLength: 100),
+            "TypeWhisper, MLX"
+        )
+    }
+
+    func testPluginDictionaryTermsClippedTermsApplyPerTermFiltersBeforeMaxTerms() {
+        XCTAssertEqual(
+            PluginDictionaryTerms.clippedTerms(
+                from: ["toolongchars", "beta", "gamma"],
+                budget: DictionaryTermsBudget(maxTerms: 1, maxCharsPerTerm: 5)
+            ),
+            ["beta"]
+        )
+        XCTAssertEqual(
+            PluginDictionaryTerms.clippedTerms(
+                from: ["one two three", "alpha beta", "gamma"],
+                budget: DictionaryTermsBudget(maxTerms: 1, maxWordsPerTerm: 2)
+            ),
+            ["alpha beta"]
+        )
+    }
+
+    func testPluginDictionaryTermsClippedTermsApplyTotalCharacterBudgetToJoinedPrompt() {
+        XCTAssertEqual(
+            PluginDictionaryTerms.clippedTerms(
+                from: ["AA", "BB", "CC"],
+                budget: DictionaryTermsBudget(maxTotalChars: 6)
+            ),
+            ["AA", "BB"]
+        )
+    }
+
+    func testPluginDictionaryTermsClippedTermsTreatNegativeMaxTermsAsZero() {
+        let budget = DictionaryTermsBudget(maxTerms: -1)
+
+        XCTAssertEqual(
+            PluginDictionaryTerms.clippedTerms(from: ["Alpha", "Beta", "Gamma"], budget: budget),
+            []
+        )
+        XCTAssertNil(PluginDictionaryTerms.prompt(from: ["Alpha", "Beta", "Gamma"], budget: budget))
+    }
+
+    func testPluginDictionaryTermsPromptWithBudgetReturnsNilWhenNothingSurvives() {
+        XCTAssertNil(
+            PluginDictionaryTerms.prompt(
+                from: ["toolong"],
+                budget: DictionaryTermsBudget(maxCharsPerTerm: 2)
+            )
+        )
     }
 }

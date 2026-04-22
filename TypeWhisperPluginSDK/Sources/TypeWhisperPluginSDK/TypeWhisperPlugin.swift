@@ -59,12 +59,25 @@ public final class PluginModelInfo: @unchecked Sendable {
     public let displayName: String
     public let sizeDescription: String
     public let languageCount: Int
+    /// Whether the model's weights are available locally (nil when the plugin does not report this).
+    public let downloaded: Bool?
+    /// Whether the model is currently loaded into memory (nil when the plugin does not report this).
+    public let loaded: Bool?
 
-    public init(id: String, displayName: String, sizeDescription: String = "", languageCount: Int = 0) {
+    public init(
+        id: String,
+        displayName: String,
+        sizeDescription: String = "",
+        languageCount: Int = 0,
+        downloaded: Bool? = nil,
+        loaded: Bool? = nil
+    ) {
         self.id = id
         self.displayName = displayName
         self.sizeDescription = sizeDescription
         self.languageCount = languageCount
+        self.downloaded = downloaded
+        self.loaded = loaded
     }
 }
 
@@ -73,6 +86,13 @@ public protocol LLMProviderPlugin: TypeWhisperPlugin {
     var isAvailable: Bool { get }
     var supportedModels: [PluginModelInfo] { get }
     func process(systemPrompt: String, userText: String, model: String?) async throws -> String
+}
+
+/// Optional protocol for LLM plugins that can describe why they are currently unavailable.
+/// This lets the host distinguish local model setup from missing remote credentials.
+public protocol LLMProviderSetupStatusProviding {
+    var requiresExternalCredentials: Bool { get }
+    var unavailableReason: String? { get }
 }
 
 /// Optional protocol for LLM plugins that expose their selected model.
@@ -88,17 +108,25 @@ public struct PostProcessingContext: Sendable {
     public let bundleIdentifier: String?
     public let url: String?
     public let language: String?
-    public let profileName: String?
+    public let ruleName: String?
     public let selectedText: String?
 
-    public init(appName: String? = nil, bundleIdentifier: String? = nil, url: String? = nil, language: String? = nil, profileName: String? = nil, selectedText: String? = nil) {
+    public init(appName: String? = nil, bundleIdentifier: String? = nil, url: String? = nil, language: String? = nil, ruleName: String? = nil, selectedText: String? = nil) {
         self.appName = appName
         self.bundleIdentifier = bundleIdentifier
         self.url = url
         self.language = language
-        self.profileName = profileName
+        self.ruleName = ruleName
         self.selectedText = selectedText
     }
+
+    @available(*, deprecated, renamed: "init(appName:bundleIdentifier:url:language:ruleName:selectedText:)")
+    public init(appName: String? = nil, bundleIdentifier: String? = nil, url: String? = nil, language: String? = nil, profileName: String?, selectedText: String? = nil) {
+        self.init(appName: appName, bundleIdentifier: bundleIdentifier, url: url, language: language, ruleName: profileName, selectedText: selectedText)
+    }
+
+    @available(*, deprecated, renamed: "ruleName")
+    public var profileName: String? { ruleName }
 }
 
 public protocol PostProcessorPlugin: TypeWhisperPlugin {
@@ -200,6 +228,139 @@ public struct PluginTranscriptionResult: Sendable {
     }
 }
 
+public struct PluginLanguageSelection: Sendable, Equatable {
+    public let requestedLanguage: String?
+    public let languageHints: [String]
+
+    public init(requestedLanguage: String? = nil, languageHints: [String] = []) {
+        self.requestedLanguage = requestedLanguage
+        self.languageHints = languageHints
+    }
+}
+
+public enum DictionaryTermsSupport: String, Sendable, CaseIterable {
+    case supported
+    case requiresPluginSetting
+    case unsupported
+}
+
+public struct DictionaryTermsBudget: Sendable, Equatable {
+    public let maxTerms: Int?
+    public let maxCharsPerTerm: Int?
+    public let maxWordsPerTerm: Int?
+    public let maxTotalChars: Int?
+
+    public init(
+        maxTerms: Int? = nil,
+        maxCharsPerTerm: Int? = nil,
+        maxWordsPerTerm: Int? = nil,
+        maxTotalChars: Int? = nil
+    ) {
+        self.maxTerms = maxTerms
+        self.maxCharsPerTerm = maxCharsPerTerm
+        self.maxWordsPerTerm = maxWordsPerTerm
+        self.maxTotalChars = maxTotalChars
+    }
+}
+
+public protocol DictionaryTermsCapabilityProviding: TypeWhisperPlugin {
+    var dictionaryTermsSupport: DictionaryTermsSupport { get }
+}
+
+public protocol LiveTranscriptionSession: AnyObject, Sendable {
+    func appendAudio(samples: [Float]) async throws
+    func finish() async throws -> PluginTranscriptionResult
+    func cancel() async
+}
+
+public enum PluginDictionaryTerms {
+    public static func normalizedTerms(from terms: [String]) -> [String] {
+        var seen = Set<String>()
+        var normalized: [String] = []
+
+        for rawTerm in terms {
+            let term = rawTerm.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !term.isEmpty else { continue }
+
+            let dedupeKey = term.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            guard seen.insert(dedupeKey).inserted else { continue }
+            normalized.append(term)
+        }
+
+        return normalized
+    }
+
+    public static func terms(fromPrompt prompt: String?) -> [String] {
+        guard let prompt, !prompt.isEmpty else { return [] }
+        return normalizedTerms(from: prompt.split(separator: ",").map(String.init))
+    }
+
+    public static func clippedTerms(from terms: [String], budget: DictionaryTermsBudget?) -> [String] {
+        var clipped = normalizedTerms(from: terms)
+
+        if let maxCharsPerTerm = budget?.maxCharsPerTerm {
+            clipped = clipped.filter { $0.count <= maxCharsPerTerm }
+        }
+
+        if let maxWordsPerTerm = budget?.maxWordsPerTerm {
+            clipped = clipped.filter {
+                $0.split(whereSeparator: \.isWhitespace).count <= maxWordsPerTerm
+            }
+        }
+
+        if let maxTerms = budget?.maxTerms {
+            let safeMaxTerms = max(0, maxTerms)
+            if clipped.count > safeMaxTerms {
+                clipped = Array(clipped.prefix(safeMaxTerms))
+            }
+        }
+
+        if let maxTotalChars = budget?.maxTotalChars {
+            var limited: [String] = []
+            var totalChars = 0
+
+            for term in clipped {
+                let separatorChars = limited.isEmpty ? 0 : 2
+                let nextTotal = totalChars + separatorChars + term.count
+                guard nextTotal <= maxTotalChars else { break }
+                limited.append(term)
+                totalChars = nextTotal
+            }
+
+            clipped = limited
+        }
+
+        return clipped
+    }
+
+    public static func prompt(from terms: [String], budget: DictionaryTermsBudget?) -> String? {
+        let clipped = clippedTerms(from: terms, budget: budget)
+        guard !clipped.isEmpty else { return nil }
+        return clipped.joined(separator: ", ")
+    }
+
+    public static func prompt(from terms: [String], maxLength: Int = 600) -> String? {
+        let normalized = normalizedTerms(from: terms)
+        guard !normalized.isEmpty else { return nil }
+
+        var result = ""
+        for (index, term) in normalized.enumerated() {
+            let separator = index > 0 ? ", " : ""
+            guard result.count + separator.count + term.count <= maxLength else { break }
+            result += separator + term
+        }
+
+        return result.isEmpty ? nil : result
+    }
+
+    public static func contextBiasTokens(fromPrompt prompt: String?) -> [String] {
+        let tokens = terms(fromPrompt: prompt).flatMap { term in
+            term.split(whereSeparator: { $0.isWhitespace || $0 == "," }).map(String.init)
+        }
+        return normalizedTerms(from: tokens)
+    }
+}
+
 public protocol TranscriptionEnginePlugin: TypeWhisperPlugin {
     var providerId: String { get }
     var providerDisplayName: String { get }
@@ -216,6 +377,97 @@ public protocol TranscriptionEnginePlugin: TypeWhisperPlugin {
                     onProgress: @Sendable @escaping (String) -> Bool) async throws -> PluginTranscriptionResult
 }
 
+public protocol DictionaryTermsBudgetProviding: TranscriptionEnginePlugin {
+    var dictionaryTermsBudget: DictionaryTermsBudget { get }
+}
+
+/// Optional model-catalog extension for engines that expose a broader model list than
+/// their currently active `transcriptionModels`. Kept separate to preserve binary
+/// compatibility with existing transcription plugins.
+public protocol TranscriptionModelCatalogProviding: TranscriptionEnginePlugin {
+    var availableModels: [PluginModelInfo] { get }
+}
+
+public extension TranscriptionEnginePlugin {
+    var modelCatalog: [PluginModelInfo] {
+        (self as? any TranscriptionModelCatalogProviding)?.availableModels ?? transcriptionModels
+    }
+}
+
+public enum PluginSDKCompatibility {
+    /// Opaque compatibility line for plugin ABI/protocol contracts. Bump only when the
+    /// host and marketplace plugins must be rebuilt together against a new SDK contract.
+    public static let currentVersion = "v1"
+
+    public static func isCompatible(manifestVersion: String?, isBundled: Bool) -> Bool {
+        guard !isBundled else { return true }
+        return manifestVersion == currentVersion
+    }
+
+    public static func incompatibilityReason(manifestVersion: String?, isBundled: Bool) -> String? {
+        guard !isBundled else { return nil }
+        guard let manifestVersion else {
+            return "missing sdkCompatibilityVersion (expected \(currentVersion))"
+        }
+        guard manifestVersion == currentVersion else {
+            return "requires sdkCompatibilityVersion \(currentVersion) (found \(manifestVersion))"
+        }
+        return nil
+    }
+}
+
+public protocol LiveTranscriptionCapablePlugin: TranscriptionEnginePlugin {
+    func createLiveTranscriptionSession(
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession
+}
+
+public protocol LanguageHintTranscriptionEnginePlugin: TranscriptionEnginePlugin {
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult
+
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult
+}
+
+public protocol LiveLanguageHintTranscriptionCapablePlugin: LiveTranscriptionCapablePlugin {
+    func createLiveTranscriptionSession(
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession
+}
+
+public extension LanguageHintTranscriptionEnginePlugin {
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        try await transcribe(
+            audio: audio,
+            languageSelection: languageSelection,
+            translate: translate,
+            prompt: prompt
+        )
+    }
+}
+
 public extension TranscriptionEnginePlugin {
     var supportsStreaming: Bool { false }
     var supportedLanguages: [String] { [] }
@@ -223,6 +475,59 @@ public extension TranscriptionEnginePlugin {
                     onProgress: @Sendable @escaping (String) -> Bool) async throws -> PluginTranscriptionResult {
         try await transcribe(audio: audio, language: language, translate: translate, prompt: prompt)
     }
+}
+
+// MARK: - Text-to-Speech Provider Plugin
+
+public enum TTSPurpose: String, Sendable, Codable, CaseIterable {
+    case status
+    case transcription
+    case manualReadback
+}
+
+public struct TTSSpeakRequest: Sendable, Equatable {
+    public let text: String
+    public let language: String?
+    public let purpose: TTSPurpose
+
+    public init(text: String, language: String? = nil, purpose: TTSPurpose) {
+        self.text = text
+        self.language = language
+        self.purpose = purpose
+    }
+}
+
+public struct PluginVoiceInfo: Sendable, Equatable, Hashable {
+    public let id: String
+    public let displayName: String
+    public let localeIdentifier: String?
+
+    public init(id: String, displayName: String, localeIdentifier: String? = nil) {
+        self.id = id
+        self.displayName = displayName
+        self.localeIdentifier = localeIdentifier
+    }
+}
+
+public protocol TTSPlaybackSession: AnyObject, Sendable {
+    var isActive: Bool { get }
+    var onFinish: (@Sendable () -> Void)? { get set }
+    func stop()
+}
+
+public protocol TTSProviderPlugin: TypeWhisperPlugin {
+    var providerId: String { get }
+    var providerDisplayName: String { get }
+    var isConfigured: Bool { get }
+    var availableVoices: [PluginVoiceInfo] { get }
+    var selectedVoiceId: String? { get }
+    var settingsSummary: String? { get }
+    func selectVoice(_ voiceId: String?)
+    func speak(_ request: TTSSpeakRequest) async throws -> any TTSPlaybackSession
+}
+
+public extension TTSProviderPlugin {
+    var settingsSummary: String? { nil }
 }
 
 // MARK: - Action Plugin
@@ -281,15 +586,50 @@ public enum MemoryType: String, Codable, Sendable, CaseIterable {
 public struct MemorySource: Codable, Sendable {
     public let appName: String?
     public let bundleIdentifier: String?
-    public let profileName: String?
+    public let ruleName: String?
     public let timestamp: Date
 
+    enum CodingKeys: String, CodingKey {
+        case appName
+        case bundleIdentifier
+        case ruleName
+        case profileName
+        case timestamp
+    }
+
     public init(appName: String? = nil, bundleIdentifier: String? = nil,
-                profileName: String? = nil, timestamp: Date = Date()) {
+                ruleName: String? = nil, timestamp: Date = Date()) {
         self.appName = appName
         self.bundleIdentifier = bundleIdentifier
-        self.profileName = profileName
+        self.ruleName = ruleName
         self.timestamp = timestamp
+    }
+
+    @available(*, deprecated, renamed: "init(appName:bundleIdentifier:ruleName:timestamp:)")
+    public init(appName: String? = nil, bundleIdentifier: String? = nil,
+                profileName: String?, timestamp: Date = Date()) {
+        self.init(appName: appName, bundleIdentifier: bundleIdentifier, ruleName: profileName, timestamp: timestamp)
+    }
+
+    @available(*, deprecated, renamed: "ruleName")
+    public var profileName: String? { ruleName }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        appName = try container.decodeIfPresent(String.self, forKey: .appName)
+        bundleIdentifier = try container.decodeIfPresent(String.self, forKey: .bundleIdentifier)
+        ruleName = try container.decodeIfPresent(String.self, forKey: .ruleName)
+            ?? container.decodeIfPresent(String.self, forKey: .profileName)
+        timestamp = try container.decode(Date.self, forKey: .timestamp)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(appName, forKey: .appName)
+        try container.encodeIfPresent(bundleIdentifier, forKey: .bundleIdentifier)
+        try container.encodeIfPresent(ruleName, forKey: .ruleName)
+        try container.encodeIfPresent(ruleName, forKey: .profileName)
+        try container.encode(timestamp, forKey: .timestamp)
     }
 }
 

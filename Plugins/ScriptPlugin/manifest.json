@@ -3,6 +3,7 @@
     "name": "Script Runner",
     "version": "1.1.0",
     "minHostVersion": "0.9.0",
+    "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
     "description": "Post-process transcribed text through custom shell scripts. Pass text via stdin, get results via stdout.",

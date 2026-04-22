@@ -22,6 +22,7 @@ echo ""
 
 # Clean previous build
 rm -rf "$BUILD_DIR"
+mkdir -p "$BUILD_DIR"
 
 # Resolve packages
 echo "--- Resolving Swift packages ---"

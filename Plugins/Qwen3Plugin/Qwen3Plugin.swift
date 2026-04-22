@@ -8,7 +8,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(Qwen3Plugin)
-final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActivityReporting, @unchecked Sendable {
+final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.qwen3"
     static let pluginName = "Qwen3 ASR"
 
@@ -47,7 +47,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActi
             ?? Self.availableModels.first?.id
         _hfToken = host.loadSecret(key: "hf-token")
 
-        Task { await restoreLoadedModel() }
+        Task { await restoreLoadedModel(allowDownloads: false) }
     }
 
     func deactivate() {
@@ -73,6 +73,17 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActi
             .map { PluginModelInfo(id: $0.id, displayName: $0.displayName) }
     }
 
+    var availableModels: [PluginModelInfo] {
+        Self.availableModels.map { def in
+            PluginModelInfo(
+                id: def.id,
+                displayName: def.displayName,
+                sizeDescription: def.sizeDescription,
+                loaded: def.id == loadedModelId
+            )
+        }
+    }
+
     var supportedLanguages: [String] {
         [
             "af", "am", "ar", "az", "be", "bg", "bn", "bs", "ca", "cs",
@@ -95,6 +106,8 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActi
     }
 
     var supportsTranslation: Bool { false }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
+    var dictionaryTermsBudget: DictionaryTermsBudget { DictionaryTermsBudget(maxTotalChars: 10_000) }
 
     func transcribe(
         audio: AudioData,
@@ -108,15 +121,26 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActi
 
         let audioArray = MLXArray(audio.samples)
         let languageName = Self.resolveLanguageName(language)
-        let primaryParams = Self.makeParams(Self.primaryParams, language: languageName)
+        let context = Self.contextBiasString(from: prompt)
 
-        let primaryOutput = model.generate(audio: audioArray, generationParameters: primaryParams)
+        let primaryOutput = Self.generate(
+            model: model,
+            audio: audioArray,
+            params: Self.primaryParams,
+            context: context,
+            language: languageName
+        )
         let primaryText = Self.normalizeTranscript(primaryOutput.text)
         let text: String
 
         if QwenTranscriptGuard.isLikelyLooped(primaryText) {
-            let fallbackParams = Self.makeParams(Self.fallbackParams, language: languageName)
-            let fallbackOutput = model.generate(audio: audioArray, generationParameters: fallbackParams)
+            let fallbackOutput = Self.generate(
+                model: model,
+                audio: audioArray,
+                params: Self.fallbackParams,
+                context: "",
+                language: languageName
+            )
             let fallbackText = Self.normalizeTranscript(fallbackOutput.text)
 
             if fallbackText.isEmpty {
@@ -162,7 +186,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActi
     }
 
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
-    @objc func triggerRestoreModel() { Task { await restoreLoadedModel() } }
+    @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: true) } }
 
     func unloadModel(clearPersistence: Bool = true) {
         model = nil
@@ -183,12 +207,25 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActi
         try? FileManager.default.removeItem(at: modelDir)
     }
 
-    func restoreLoadedModel() async {
+    func restoreLoadedModel(allowDownloads: Bool = true) async {
         guard let savedId = host?.userDefault(forKey: "loadedModel") as? String,
               let modelDef = Self.availableModels.first(where: { $0.id == savedId }) else {
             return
         }
+        guard allowDownloads || hasDownloadedModel(modelDef) else { return }
         try? await loadModel(modelDef)
+    }
+
+    private func hasDownloadedModel(_ modelDef: Qwen3ModelDef) -> Bool {
+        guard let modelsDir = host?.pluginDataDirectory.appendingPathComponent("models") else { return false }
+        let subdirectory = modelDef.repoId.replacingOccurrences(of: "/", with: "_")
+        let modelDir = modelsDir
+            .appendingPathComponent("mlx-audio")
+            .appendingPathComponent(subdirectory)
+
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: modelDir.path, isDirectory: &isDirectory)
+            && isDirectory.boolValue
     }
 
     // MARK: - Settings View
@@ -206,6 +243,49 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActi
 
     var settingsView: AnyView? {
         AnyView(Qwen3SettingsView(plugin: self))
+    }
+
+    func setHuggingFaceToken(_ token: String) {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        _hfToken = trimmed.isEmpty ? nil : trimmed
+        try? host?.storeSecret(key: "hf-token", value: trimmed)
+    }
+
+    func clearHuggingFaceToken() {
+        _hfToken = nil
+        try? host?.storeSecret(key: "hf-token", value: "")
+    }
+
+    func validateHuggingFaceToken(
+        _ token: String,
+        dataFetcher: @escaping @Sendable (URLRequest) async throws -> (Data, URLResponse) = PluginHTTPClient.data
+    ) async -> Bool {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let url = URL(string: "https://huggingface.co/api/whoami-v2") else {
+            return false
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(trimmed)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 15
+
+        do {
+            let (data, response) = try await dataFetcher(request)
+            guard let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200 else {
+                return false
+            }
+
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return false
+            }
+
+            return json["name"] != nil || json["type"] != nil || json["auth"] != nil
+        } catch {
+            return false
+        }
     }
 
     // MARK: - Model Definitions
@@ -262,13 +342,25 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActi
         return languageNames[code] ?? "English"
     }
 
-    private static func makeParams(_ base: STTGenerateParameters, language: String) -> STTGenerateParameters {
-        STTGenerateParameters(
-            maxTokens: base.maxTokens,
-            temperature: base.temperature,
+    private static func contextBiasString(from prompt: String?) -> String {
+        Qwen3ContextBiasFormatter.format(prompt: prompt)
+    }
+
+    private static func generate(
+        model: Qwen3ASRModel,
+        audio: MLXArray,
+        params: STTGenerateParameters,
+        context: String,
+        language: String
+    ) -> STTOutput {
+        model.generate(
+            audio: audio,
+            maxTokens: params.maxTokens,
+            temperature: params.temperature,
+            context: context,
             language: language,
-            chunkDuration: base.chunkDuration,
-            minChunkDuration: base.minChunkDuration
+            chunkDuration: params.chunkDuration,
+            minChunkDuration: params.minChunkDuration
         )
     }
 
@@ -414,8 +506,22 @@ private struct Qwen3SettingsView: View {
     @State private var isPolling = false
     @State private var hfTokenInput = ""
     @State private var showHfToken = false
+    @State private var isValidatingToken = false
+    @State private var tokenValidationResult: Bool?
 
     private let pollTimer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
+
+    private var trimmedHfTokenInput: String {
+        hfTokenInput.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var storedHfToken: String {
+        plugin._hfToken?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    private var hasStoredHfToken: Bool {
+        !storedHfToken.isEmpty
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -454,25 +560,44 @@ private struct Qwen3SettingsView: View {
                     }
                     .buttonStyle(.borderless)
 
-                    if plugin._hfToken != nil, !plugin._hfToken!.isEmpty {
+                    if hasStoredHfToken {
                         Button(String(localized: "Remove", bundle: bundle)) {
                             hfTokenInput = ""
-                            plugin._hfToken = nil
-                            try? plugin.host?.storeSecret(key: "hf-token", value: "")
+                            tokenValidationResult = nil
+                            isValidatingToken = false
+                            plugin.clearHuggingFaceToken()
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                     }
 
                     Button(String(localized: "Save", bundle: bundle)) {
-                        let trimmed = hfTokenInput.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !trimmed.isEmpty else { return }
-                        plugin._hfToken = trimmed
-                        try? plugin.host?.storeSecret(key: "hf-token", value: trimmed)
+                        validateAndSaveHuggingFaceToken()
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
-                    .disabled(hfTokenInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(trimmedHfTokenInput.isEmpty || isValidatingToken)
+                }
+
+                if isValidatingToken {
+                    HStack(spacing: 4) {
+                        ProgressView().controlSize(.small)
+                        Text("Validating token...", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else if let tokenValidationResult {
+                    HStack(spacing: 4) {
+                        Image(systemName: tokenValidationResult ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .foregroundStyle(tokenValidationResult ? .green : .red)
+                        Text(
+                            tokenValidationResult
+                                ? String(localized: "Valid HuggingFace Token", bundle: bundle)
+                                : String(localized: "Invalid HuggingFace Token", bundle: bundle)
+                        )
+                        .font(.caption)
+                        .foregroundStyle(tokenValidationResult ? .green : .red)
+                    }
                 }
             }
 
@@ -511,7 +636,7 @@ private struct Qwen3SettingsView: View {
             // Auto-restore previously loaded model
             if case .notLoaded = plugin.modelState {
                 isPolling = true
-                await plugin.restoreLoadedModel()
+                await plugin.restoreLoadedModel(allowDownloads: false)
                 isPolling = false
                 modelState = plugin.modelState
             }
@@ -524,6 +649,12 @@ private struct Qwen3SettingsView: View {
             }
             if case .ready = pluginState { isPolling = false }
             else if case .error = pluginState { isPolling = false }
+        }
+        .onChange(of: hfTokenInput) { _, newValue in
+            let trimmedValue = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedValue != storedHfToken {
+                tokenValidationResult = nil
+            }
         }
     }
 
@@ -572,5 +703,25 @@ private struct Qwen3SettingsView: View {
             }
         }
         .padding(.vertical, 4)
+    }
+
+    private func validateAndSaveHuggingFaceToken() {
+        let trimmedToken = trimmedHfTokenInput
+        guard !trimmedToken.isEmpty else { return }
+
+        isValidatingToken = true
+        tokenValidationResult = nil
+
+        Task {
+            let isValid = await plugin.validateHuggingFaceToken(trimmedToken)
+            await MainActor.run {
+                isValidatingToken = false
+                tokenValidationResult = isValid
+                if isValid {
+                    plugin.setHuggingFaceToken(trimmedToken)
+                    hfTokenInput = trimmedToken
+                }
+            }
+        }
     }
 }

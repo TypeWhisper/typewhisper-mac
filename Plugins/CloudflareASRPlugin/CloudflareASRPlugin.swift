@@ -5,7 +5,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(CloudflareASRPlugin)
-final class CloudflareASRPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+final class CloudflareASRPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.cloudflare-asr"
     static let pluginName = "Cloudflare ASR"
 
@@ -66,6 +66,7 @@ final class CloudflareASRPlugin: NSObject, TranscriptionEnginePlugin, @unchecked
     }
 
     var supportsTranslation: Bool { true }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
 
     var supportedLanguages: [String] {
         [

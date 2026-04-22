@@ -2,6 +2,39 @@ import XCTest
 @testable import TypeWhisper
 
 final class SoundServiceTests: XCTestCase {
+    func testSoundEventKeysHaveGermanLocalizationsInCatalog() throws {
+        XCTAssertEqual(
+            SoundEvent.recordingStarted.displayName,
+            try TestSupport.localizedCatalogValueForCurrentLocale(for: "Recording started")
+        )
+        XCTAssertEqual(try TestSupport.localizedCatalogValue(for: "Recording started", language: "de"), "Aufnahme gestartet")
+
+        XCTAssertEqual(
+            SoundEvent.transcriptionSuccess.displayName,
+            try TestSupport.localizedCatalogValueForCurrentLocale(for: "Transcription success")
+        )
+        XCTAssertEqual(try TestSupport.localizedCatalogValue(for: "Transcription success", language: "de"), "Transkription erfolgreich")
+    }
+
+    func testAccessibilityAndSpeechFeedbackKeysHaveGermanLocalizationsInCatalog() throws {
+        XCTAssertEqual(try TestSupport.localizedCatalogValue(for: "Recording started", language: "de"), "Aufnahme gestartet")
+        XCTAssertEqual(try TestSupport.localizedCatalogValue(for: "Prompt complete", language: "de"), "Prompt abgeschlossen")
+        XCTAssertEqual(try TestSupport.localizedCatalogValue(for: "Processing prompt", language: "de"), "Verarbeite Prompt")
+        XCTAssertEqual(try TestSupport.localizedCatalogValue(for: "Processing prompt: %@", language: "de"), "Verarbeite Prompt: %@")
+        XCTAssertEqual(try TestSupport.localizedCatalogValue(for: "Error: %@", language: "de"), "Fehler: %@")
+        XCTAssertEqual(
+            try TestSupport.localizedCatalogValue(for: "Transcription complete, %lld words", language: "de"),
+            "Transkription abgeschlossen, %lld Wörter"
+        )
+    }
+
+    func testCatalogLookupFallsBackToSourceStringWhenPreferredLanguageHasNoTranslation() throws {
+        XCTAssertEqual(
+            try TestSupport.localizedCatalogValue(for: "Recording started", preferredLanguages: ["en-US"]),
+            "Recording started"
+        )
+    }
+
     @MainActor
     func testSoundResolutionCachesImportedCustomSounds() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
@@ -72,4 +105,5 @@ final class SoundServiceTests: XCTestCase {
             }
         }
     }
+
 }

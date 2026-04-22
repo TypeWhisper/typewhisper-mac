@@ -19,7 +19,7 @@ jobs:
         run: |
           gh api repos/TypeWhisper/typewhisper-mac/releases --paginate > /tmp/releases.json
 
-      - name: Update plugins.json on gh-pages
+      - name: Update Plugin Registries on gh-pages
         run: |
           git fetch origin gh-pages
           git worktree add -B gh-pages /tmp/gh-pages origin/gh-pages
@@ -30,47 +30,86 @@ jobs:
             git reset --hard origin/gh-pages
 
             python3 << 'PYEOF'
-          import json, re
+          import glob, json, os, re, tempfile
 
           with open("/tmp/releases.json") as f:
               releases = json.load(f)
 
-          # Sum download counts per plugin across all versions
+          # Sum download counts per plugin across all versions and track per-release counts.
           counts = {}
+          release_counts = {}
           for release in releases:
               tag = release.get("tag_name", "")
-              m = re.match(r"^plugin-(.+)-v\d", tag)
+              m = re.match(r"^plugin-(.+)-v(\d+(?:\.\d+)+)$", tag)
               if not m:
                   continue
               plugin_name = m.group(1)
+              version = m.group(2)
+              total = sum(asset.get("download_count", 0) for asset in release.get("assets", []))
+              release_counts[(plugin_name, version)] = total
               for asset in release.get("assets", []):
                   counts[plugin_name] = counts.get(plugin_name, 0) + asset.get("download_count", 0)
 
-          with open("/tmp/gh-pages/plugins.json") as f:
-              registry = json.load(f)
-
           changed = False
-          for plugin in registry["plugins"]:
-              pid = plugin["id"]  # e.g. "com.typewhisper.qwen3"
-              for name, count in counts.items():
-                  if name in pid:
-                      old = plugin.get("downloadCount", 0)
-                      if old != count:
-                          plugin["downloadCount"] = count
-                          changed = True
-                          print(f"{pid}: {old} -> {count}")
-                      break
+          registry_paths = sorted(glob.glob("/tmp/gh-pages/plugins*.json"))
 
-          if changed:
-              with open("/tmp/gh-pages/plugins.json", "w") as f:
-                  json.dump(registry, f, indent=2)
-                  f.write("\n")
-              print("plugins.json updated")
-          else:
+          for target_path in registry_paths:
+              with open(target_path) as f:
+                  registry = json.load(f)
+
+              file_changed = False
+              for plugin in registry["plugins"]:
+                  pid = plugin["id"]  # e.g. "com.typewhisper.qwen3"
+                  for name, count in counts.items():
+                      if name in pid:
+                          old = plugin.get("downloadCount", 0)
+                          if old != count:
+                              plugin["downloadCount"] = count
+                              file_changed = True
+                              print(f"{os.path.basename(target_path)} {pid}: {old} -> {count}")
+
+                          for release in plugin.get("releases", []):
+                              version = release.get("version")
+                              if not version:
+                                  continue
+                              release_old = release.get("downloadCount", 0)
+                              release_new = release_counts.get((name, version), 0)
+                              if release_old != release_new:
+                                  release["downloadCount"] = release_new
+                                  file_changed = True
+                                  print(f"{os.path.basename(target_path)} {pid}@{version}: {release_old} -> {release_new}")
+                          break
+
+              if not file_changed:
+                  continue
+
+              changed = True
+              target_dir = os.path.dirname(target_path)
+              fd, tmp_path = tempfile.mkstemp(prefix=f"{os.path.basename(target_path)}.", dir=target_dir)
+              try:
+                  with os.fdopen(fd, "w") as f:
+                      json.dump(registry, f, indent=2)
+                      f.write("\n")
+                      f.flush()
+                      os.fsync(f.fileno())
+                  os.replace(tmp_path, target_path)
+              except Exception:
+                  try:
+                      os.unlink(tmp_path)
+                  except OSError:
+                      pass
+                  raise
+              print(f"{os.path.basename(target_path)} updated")
+
+          if not changed:
               print("No changes needed")
           PYEOF
 
-            git add plugins.json
+            for registry_file in plugins*.json; do
+              if [ -f "$registry_file" ]; then
+                git add "$registry_file"
+              fi
+            done
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git diff --cached --quiet || git commit -m "Update plugin download counts"
@@ -79,11 +118,11 @@ jobs:
 
           for i in 1 2 3 4 5; do
             if update_registry; then
-              echo "Successfully updated plugins.json (attempt $i)"
+              echo "Successfully updated plugin registries (attempt $i)"
               break
             fi
             if [ "$i" -eq 5 ]; then
-              echo "Failed to update plugins.json after 5 attempts"
+              echo "Failed to update plugin registries after 5 attempts"
               exit 1
             fi
             echo "Attempt $i failed, retrying..."

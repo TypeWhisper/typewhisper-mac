@@ -1,9 +1,12 @@
+import AppKit
 import SwiftUI
 import Charts
 
 struct HomeSettingsView: View {
     @ObservedObject private var viewModel = HomeViewModel.shared
     @ObservedObject private var dictation = DictationViewModel.shared
+    @ObservedObject private var license = LicenseService.shared
+    @AppStorage(UserDefaultsKeys.workUsagePromptDismissed) private var workUsagePromptDismissed = false
 
     var body: some View {
         if viewModel.showSetupWizard {
@@ -37,6 +40,10 @@ struct HomeSettingsView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    if license.shouldShowWorkUsagePrompt && !workUsagePromptDismissed {
+                        workUsageCard
+                    }
+
                     // Row 1: Stats grid or Getting Started
                     if viewModel.hasAnyTranscriptions {
                         statsGrid
@@ -87,7 +94,59 @@ struct HomeSettingsView: View {
                 .padding(.bottom)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .frame(minWidth: 500, minHeight: 400)
+    }
+
+    private var workUsageCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(localizedAppText("Using TypeWhisper at work?", de: "Nutzt du TypeWhisper beruflich?"))
+                        .font(.headline)
+                    Text(localizedAppText(
+                        "Commercial pricing, lifetime options, and the team story are clearer on the website.",
+                        de: "Kommerzielle Preise, Lifetime-Optionen und die Team-Story sind auf der Website klarer erklärt."
+                    ))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Button {
+                    workUsagePromptDismissed = true
+                } label: {
+                    Image(systemName: "xmark")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+
+            HStack(spacing: 10) {
+                Button {
+                    NSWorkspace.shared.open(AppConstants.Website.pricingURL)
+                } label: {
+                    Label(localizedAppText("See pricing on the website", de: "Preise auf der Website ansehen"), systemImage: "globe")
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button(localizedAppText("Not now", de: "Später")) {
+                    workUsagePromptDismissed = true
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(Color.accentColor.opacity(0.2), lineWidth: 1)
+        )
     }
 
     // MARK: - Time Period Picker
@@ -211,7 +270,7 @@ struct HomeSettingsView: View {
                     .overlay(alignment: .topLeading) {
                         if let hoveredDate, let point = viewModel.chartData.first(where: { Calendar.current.isDate($0.date, inSameDayAs: hoveredDate) }), point.wordCount > 0 {
                             VStack(spacing: 2) {
-                                Text("\(point.wordCount)")
+                                Text("\(point.wordCount) \(String(localized: "words"))")
                                     .font(.caption.bold())
                                     .monospacedDigit()
                                 Text(point.date.formatted(.dateTime.month(.abbreviated).day()))

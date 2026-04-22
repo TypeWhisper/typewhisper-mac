@@ -1,5 +1,54 @@
 import XCTest
+import TypeWhisperPluginSDK
 @testable import TypeWhisper
+
+private final class BudgetedDictionaryEnginePlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsBudgetProviding, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.tests.budgeted-dictionary-engine"
+    static let pluginName = "Budgeted Dictionary Engine"
+    var providerIdValue = "budgeted"
+    var budgetValue = DictionaryTermsBudget()
+
+    required override init() {}
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    var providerId: String { providerIdValue }
+    var providerDisplayName: String { "Budgeted Mock" }
+    var isConfigured: Bool { true }
+    var transcriptionModels: [PluginModelInfo] { [] }
+    var selectedModelId: String? { nil }
+    func selectModel(_ modelId: String) {}
+    var supportsTranslation: Bool { false }
+    var dictionaryTermsBudget: DictionaryTermsBudget { budgetValue }
+
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "ok", detectedLanguage: language)
+    }
+}
+
+private final class LegacyDictionaryEnginePlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.tests.legacy-dictionary-engine"
+    static let pluginName = "Legacy Dictionary Engine"
+    var providerIdValue = "legacy"
+
+    required override init() {}
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    var providerId: String { providerIdValue }
+    var providerDisplayName: String { "Legacy Mock" }
+    var isConfigured: Bool { true }
+    var transcriptionModels: [PluginModelInfo] { [] }
+    var selectedModelId: String? { nil }
+    func selectModel(_ modelId: String) {}
+    var supportsTranslation: Bool { false }
+
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "ok", detectedLanguage: language)
+    }
+}
 
 final class DictionaryServiceTests: XCTestCase {
     override func setUp() {
@@ -11,6 +60,7 @@ final class DictionaryServiceTests: XCTestCase {
     override func tearDown() {
         UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.activatedTermPacks)
         UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.activatedTermPackStates)
+        PluginManager.shared = nil
         super.tearDown()
     }
 
@@ -27,7 +77,7 @@ final class DictionaryServiceTests: XCTestCase {
 
         XCTAssertEqual(service.termsCount, 1)
         XCTAssertEqual(service.correctionsCount, 1)
-        XCTAssertEqual(service.getTermsForPrompt(), "TypeWhisper")
+        XCTAssertEqual(service.getTermsForPrompt(providerId: nil), "TypeWhisper")
 
         let corrected = service.applyCorrections(to: "teh TypeWhisper")
         XCTAssertEqual(corrected, "the TypeWhisper")
@@ -35,6 +85,116 @@ final class DictionaryServiceTests: XCTestCase {
 
         service.learnCorrection(original: "langauge", replacement: "language")
         XCTAssertEqual(service.correctionsCount, 2)
+    }
+
+    @MainActor
+    func testEmptyCorrectionReplacementPersistsAndRemovesText() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "¿", replacement: "")
+
+        XCTAssertEqual(service.correctionsCount, 1)
+        XCTAssertEqual(service.corrections.first?.replacement, "")
+        XCTAssertEqual(service.applyCorrections(to: "¿Como estas?"), "Como estas?")
+        XCTAssertEqual(service.corrections.first?.usageCount, 1)
+
+        let reloadedService = DictionaryService(appSupportDirectory: appSupportDirectory)
+        XCTAssertEqual(reloadedService.correctionsCount, 1)
+        XCTAssertEqual(reloadedService.corrections.first?.replacement, "")
+        XCTAssertEqual(reloadedService.applyCorrections(to: "¿Como estas?"), "Como estas?")
+        reloadedService.loadEntries()
+        XCTAssertEqual(reloadedService.corrections.first?.usageCount, 2)
+    }
+
+    @MainActor
+    func testEnabledTermsAreNormalizedAndPromptRendererStaysBackwardCompatible() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .term, original: " Kubernetes ")
+        service.addEntry(type: .term, original: "MLX")
+        service.addEntry(type: .term, original: "mlx")
+        service.addEntry(type: .term, original: "TypeWhisper")
+
+        XCTAssertEqual(service.enabledTerms(), ["Kubernetes", "MLX", "TypeWhisper"])
+        XCTAssertEqual(
+            service.getTermsForPrompt(providerId: nil),
+            PluginDictionaryTerms.prompt(from: ["Kubernetes", "MLX", "TypeWhisper"])
+        )
+    }
+
+    @MainActor
+    func testGetTermsForPromptUsesLoadedEngineBudget() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.setTerms(["Alpha", "BetaBeta", "Gamma", "alpha"], replaceExisting: true)
+
+        let plugin = BudgetedDictionaryEnginePlugin()
+        plugin.providerIdValue = "budgeted"
+        plugin.budgetValue = DictionaryTermsBudget(maxTerms: 2, maxCharsPerTerm: 5)
+        installPlugins([plugin], appSupportDirectory: appSupportDirectory)
+
+        XCTAssertEqual(service.getTermsForPrompt(providerId: plugin.providerId), "Alpha, Gamma")
+    }
+
+    @MainActor
+    func testGetTermsForPromptFallsBackToLegacyBudgetForUnknownOrUnbudgetedEngines() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.setTerms(makeLongTerms(count: 40, length: 24), replaceExisting: true)
+
+        let plugin = LegacyDictionaryEnginePlugin()
+        plugin.providerIdValue = "legacy"
+        installPlugins([plugin], appSupportDirectory: appSupportDirectory)
+
+        let expectedFallback = PluginDictionaryTerms.prompt(from: service.enabledTerms())
+        XCTAssertEqual(service.getTermsForPrompt(providerId: nil), expectedFallback)
+        XCTAssertEqual(service.getTermsForPrompt(providerId: plugin.providerId), expectedFallback)
+        XCTAssertEqual(service.getTermsForPrompt(providerId: "missing"), expectedFallback)
+        XCTAssertLessThanOrEqual(expectedFallback?.count ?? 0, 600)
+    }
+
+    @MainActor
+    func testGetTermsForPromptAllowsBudgetsAboveLegacy600Characters() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.setTerms(makeLongTerms(count: 40, length: 24), replaceExisting: true)
+
+        let plugin = BudgetedDictionaryEnginePlugin()
+        plugin.providerIdValue = "budgeted"
+        plugin.budgetValue = DictionaryTermsBudget(maxTotalChars: 2_000)
+        installPlugins([plugin], appSupportDirectory: appSupportDirectory)
+
+        let prompt = try XCTUnwrap(service.getTermsForPrompt(providerId: plugin.providerId))
+        XCTAssertGreaterThan(prompt.count, 600)
+    }
+
+    @MainActor
+    func testGetTermsForPromptAppliesWordAndCharacterFilters() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.setTerms(
+            ["Alpha", "one two three", "123456789012345678901", "Beta Beta", "Gamma"],
+            replaceExisting: true
+        )
+
+        let plugin = BudgetedDictionaryEnginePlugin()
+        plugin.providerIdValue = "budgeted"
+        plugin.budgetValue = DictionaryTermsBudget(maxCharsPerTerm: 20, maxWordsPerTerm: 2)
+        installPlugins([plugin], appSupportDirectory: appSupportDirectory)
+
+        XCTAssertEqual(service.getTermsForPrompt(providerId: plugin.providerId), "Alpha, Beta Beta, Gamma")
     }
 
     @MainActor
@@ -110,6 +270,33 @@ final class DictionaryServiceTests: XCTestCase {
         XCTAssertEqual(service.entries.filter { $0.type == .term }.map(\.original), ["Cargo"])
         XCTAssertEqual(viewModel.activatedPackStates[v2.id]?.installedTerms, ["Cargo"])
         XCTAssertEqual(viewModel.activatedPackStates[v2.id]?.installedVersion, "1.1.0")
+    }
+
+    @MainActor
+    private func installPlugins(_ plugins: [any TranscriptionEnginePlugin], appSupportDirectory: URL) {
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = plugins.enumerated().map { index, plugin in
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.tests.\(plugin.providerId).\(index)",
+                    name: plugin.providerDisplayName,
+                    version: "1.0.0",
+                    principalClass: "DictionaryServiceTestsPlugin\(index)"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        }
+    }
+
+    private func makeLongTerms(count: Int, length: Int) -> [String] {
+        (1...count).map { index in
+            let prefix = "Term\(index)-"
+            let paddingLength = max(0, length - prefix.count)
+            return prefix + String(repeating: "x", count: paddingLength)
+        }
     }
 }
 

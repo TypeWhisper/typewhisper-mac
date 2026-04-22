@@ -124,11 +124,6 @@ class DictionaryViewModel: ObservableObject {
             return
         }
 
-        if editType == .correction && editReplacement.isEmpty {
-            error = String(localized: "Replacement text cannot be empty for corrections")
-            return
-        }
-
         let replacement = editType == .correction ? editReplacement : nil
 
         if isCreatingNew {

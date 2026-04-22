@@ -246,7 +246,7 @@ final class TranslationService: ObservableObject {
             "nl", "pl", "pt", "ru", "th", "tr", "uk", "vi", "zh-Hans", "zh-Hant",
         ]
         return codes.compactMap { code in
-            let name = Locale.current.localizedString(forLanguageCode: code) ?? code
+            let name = Locale.current.localizedString(forIdentifier: code) ?? code
             return (code: code, name: name)
         }.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }()
@@ -314,12 +314,12 @@ final class TranslationService: ObservableObject {
             map[foldLanguageToken(code)] = code
 
             for locale in helperLocales {
-                if let localized = locale.localizedString(forLanguageCode: code) {
+                if let localized = locale.localizedString(forIdentifier: code) {
                     map[foldLanguageToken(localized)] = code
                 }
             }
 
-            if let autonym = Locale(identifier: code).localizedString(forLanguageCode: code) {
+            if let autonym = Locale(identifier: code).localizedString(forIdentifier: code) {
                 map[foldLanguageToken(autonym)] = code
             }
         }

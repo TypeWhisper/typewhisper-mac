@@ -27,6 +27,11 @@ enum TranscriptionEngineError: LocalizedError {
 
 @MainActor
 final class ModelManagerService: ObservableObject {
+    struct LiveTranscriptionSessionHandle: Sendable {
+        let providerId: String
+        let session: any LiveTranscriptionSession
+    }
+
     @Published private(set) var selectedProviderId: String?
 
     @Published var autoUnloadSeconds: Int {
@@ -127,6 +132,22 @@ final class ModelManagerService: ObservableObject {
         return plugin.supportsStreaming
     }
 
+    func supportsLiveTranscriptionSession(engineOverrideId: String? = nil) -> Bool {
+        guard let providerId = engineOverrideId ?? selectedProviderId,
+              let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
+            return false
+        }
+        return plugin is LiveTranscriptionCapablePlugin
+    }
+
+    func usesMeteredStreamingFallback(engineOverrideId: String? = nil) -> Bool {
+        guard let providerId = engineOverrideId ?? selectedProviderId,
+              let loadedPlugin = PluginManager.shared.loadedTranscriptionPlugin(for: providerId) else {
+            return false
+        }
+        return loadedPlugin.manifest.requiresAPIKey == true
+    }
+
     /// Resolve display name for a given engine/model override combination
     func resolvedModelDisplayName(engineOverrideId: String? = nil, cloudModelOverride: String? = nil) -> String? {
         let providerId = engineOverrideId ?? selectedProviderId
@@ -134,11 +155,13 @@ final class ModelManagerService: ObservableObject {
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else { return nil }
 
         if let modelId = cloudModelOverride,
-           let model = plugin.transcriptionModels.first(where: { $0.id == modelId }) {
+           let model = plugin.modelCatalog.first(where: { $0.id == modelId })
+            ?? plugin.transcriptionModels.first(where: { $0.id == modelId }) {
             return model.displayName
         }
         if let selectedId = plugin.selectedModelId,
-           let model = plugin.transcriptionModels.first(where: { $0.id == selectedId }) {
+           let model = plugin.modelCatalog.first(where: { $0.id == selectedId })
+            ?? plugin.transcriptionModels.first(where: { $0.id == selectedId }) {
             return model.displayName
         }
         return plugin.providerDisplayName
@@ -156,14 +179,152 @@ final class ModelManagerService: ObservableObject {
             selectProvider(fallback.providerId)
         } else if let anyEngine = PluginManager.shared.transcriptionEngines.first {
             selectProvider(anyEngine.providerId)
+        } else {
+            selectedProviderId = nil
+            UserDefaults.standard.removeObject(forKey: providerKey)
         }
     }
 
     // MARK: - Transcription
 
+    /// Apply a one-shot cloud model override without persisting the default.
+    ///
+    /// Returns the model id that should be restored after the transcription call completes
+    /// (nil means "no restore needed" -- either no override was applied or the plugin had no
+    /// previous selection to restore to). Callers must pair this with `restoreCloudModelOverride`
+    /// inside a `defer` so the original selection is restored even on throw.
+    private func applyCloudModelOverride(
+        plugin: any TranscriptionEnginePlugin,
+        override: String?
+    ) -> String? {
+        guard let override else { return nil }
+        let previousId = plugin.selectedModelId
+        // If the plugin had no previous selection we can't express "unselect" through the SDK,
+        // so the override stays in place. For configured plugins selectedModelId is normally set.
+        guard let previousId, previousId != override else {
+            if previousId != override { plugin.selectModel(override) }
+            return nil
+        }
+        plugin.selectModel(override)
+        return previousId
+    }
+
+    private func restoreCloudModelOverride(
+        plugin: any TranscriptionEnginePlugin,
+        previousId: String?
+    ) {
+        guard let previousId else { return }
+        plugin.selectModel(previousId)
+    }
+
+    func createLiveTranscriptionSession(
+        language: String?,
+        task: TranscriptionTask,
+        engineOverrideId: String? = nil,
+        cloudModelOverride: String? = nil,
+        prompt: String? = nil,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> LiveTranscriptionSessionHandle? {
+        try await createLiveTranscriptionSession(
+            languageSelection: language.map(LanguageSelection.exact) ?? .auto,
+            task: task,
+            engineOverrideId: engineOverrideId,
+            cloudModelOverride: cloudModelOverride,
+            prompt: prompt,
+            onProgress: onProgress
+        )
+    }
+
+    func createLiveTranscriptionSession(
+        languageSelection: LanguageSelection,
+        task: TranscriptionTask,
+        engineOverrideId: String? = nil,
+        cloudModelOverride: String? = nil,
+        prompt: String? = nil,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> LiveTranscriptionSessionHandle? {
+        let providerId = engineOverrideId ?? selectedProviderId
+        guard let providerId,
+              let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
+            throw TranscriptionEngineError.modelNotLoaded
+        }
+
+        if !plugin.isConfigured {
+            await triggerRestoreModel(plugin)
+        }
+        guard plugin.isConfigured else {
+            throw TranscriptionEngineError.modelNotLoaded
+        }
+
+        let overrideRestoreId = applyCloudModelOverride(plugin: plugin, override: cloudModelOverride)
+        defer { restoreCloudModelOverride(plugin: plugin, previousId: overrideRestoreId) }
+
+        guard let livePlugin = plugin as? LiveTranscriptionCapablePlugin else {
+            return nil
+        }
+
+        let runtimeSelection = runtimeLanguageSelection(for: languageSelection, plugin: plugin)
+        let session: any LiveTranscriptionSession
+        if !runtimeSelection.languageHints.isEmpty,
+           let hintPlugin = livePlugin as? LiveLanguageHintTranscriptionCapablePlugin {
+            session = try await hintPlugin.createLiveTranscriptionSession(
+                languageSelection: runtimeSelection,
+                translate: task == .translate,
+                prompt: prompt,
+                onProgress: onProgress
+            )
+        } else {
+            session = try await livePlugin.createLiveTranscriptionSession(
+                language: runtimeSelection.requestedLanguage,
+                translate: task == .translate,
+                prompt: prompt,
+                onProgress: onProgress
+            )
+        }
+        return LiveTranscriptionSessionHandle(providerId: providerId, session: session)
+    }
+
+    func finishLiveTranscriptionSession(
+        _ handle: LiveTranscriptionSessionHandle,
+        bufferedDuration: Double
+    ) async throws -> TranscriptionResult {
+        let startTime = CFAbsoluteTimeGetCurrent()
+        let result = try await handle.session.finish()
+        let processingTime = CFAbsoluteTimeGetCurrent() - startTime
+
+        scheduleAutoUnloadIfNeeded()
+
+        return TranscriptionResult(
+            text: result.text,
+            detectedLanguage: result.detectedLanguage,
+            duration: bufferedDuration,
+            processingTime: processingTime,
+            engineUsed: handle.providerId,
+            segments: result.segments.map { TranscriptionSegment(text: $0.text, start: $0.start, end: $0.end) }
+        )
+    }
+
     func transcribe(
         audioSamples: [Float],
         language: String?,
+        task: TranscriptionTask,
+        engineOverrideId: String? = nil,
+        cloudModelOverride: String? = nil,
+        prompt: String? = nil
+    ) async throws -> TranscriptionResult {
+        try await transcribe(
+            audioSamples: audioSamples,
+            languageSelection: language.map(LanguageSelection.exact) ?? .auto,
+            task: task,
+            engineOverrideId: engineOverrideId,
+            cloudModelOverride: cloudModelOverride,
+            prompt: prompt
+        )
+    }
+
+    func transcribe(
+        audioSamples: [Float],
+        languageSelection: LanguageSelection,
         task: TranscriptionTask,
         engineOverrideId: String? = nil,
         cloudModelOverride: String? = nil,
@@ -182,9 +343,8 @@ final class ModelManagerService: ObservableObject {
             throw TranscriptionEngineError.modelNotLoaded
         }
 
-        if let modelId = cloudModelOverride {
-            plugin.selectModel(modelId)
-        }
+        let overrideRestoreId = applyCloudModelOverride(plugin: plugin, override: cloudModelOverride)
+        defer { restoreCloudModelOverride(plugin: plugin, previousId: overrideRestoreId) }
 
         let startTime = CFAbsoluteTimeGetCurrent()
         let wavData = WavEncoder.encode(audioSamples)
@@ -196,10 +356,11 @@ final class ModelManagerService: ObservableObject {
             duration: audioDuration
         )
 
-        let result = try await plugin.transcribe(
+        let result = try await transcribeWithResolvedLanguageSelection(
+            plugin: plugin,
             audio: audio,
-            language: language,
-            translate: task == .translate,
+            languageSelection: runtimeLanguageSelection(for: languageSelection, plugin: plugin),
+            task: task,
             prompt: prompt
         )
 
@@ -226,6 +387,26 @@ final class ModelManagerService: ObservableObject {
         prompt: String? = nil,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> TranscriptionResult {
+        try await transcribe(
+            audioSamples: audioSamples,
+            languageSelection: language.map(LanguageSelection.exact) ?? .auto,
+            task: task,
+            engineOverrideId: engineOverrideId,
+            cloudModelOverride: cloudModelOverride,
+            prompt: prompt,
+            onProgress: onProgress
+        )
+    }
+
+    func transcribe(
+        audioSamples: [Float],
+        languageSelection: LanguageSelection,
+        task: TranscriptionTask,
+        engineOverrideId: String? = nil,
+        cloudModelOverride: String? = nil,
+        prompt: String? = nil,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> TranscriptionResult {
         let providerId = engineOverrideId ?? selectedProviderId
         guard let providerId,
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
@@ -239,9 +420,8 @@ final class ModelManagerService: ObservableObject {
             throw TranscriptionEngineError.modelNotLoaded
         }
 
-        if let modelId = cloudModelOverride {
-            plugin.selectModel(modelId)
-        }
+        let overrideRestoreId = applyCloudModelOverride(plugin: plugin, override: cloudModelOverride)
+        defer { restoreCloudModelOverride(plugin: plugin, previousId: overrideRestoreId) }
 
         let startTime = CFAbsoluteTimeGetCurrent()
         let wavData = WavEncoder.encode(audioSamples)
@@ -253,24 +433,14 @@ final class ModelManagerService: ObservableObject {
             duration: audioDuration
         )
 
-        let result: PluginTranscriptionResult
-        if plugin.supportsStreaming {
-            result = try await plugin.transcribe(
-                audio: audio,
-                language: language,
-                translate: task == .translate,
-                prompt: prompt,
-                onProgress: onProgress
-            )
-        } else {
-            result = try await plugin.transcribe(
-                audio: audio,
-                language: language,
-                translate: task == .translate,
-                prompt: prompt
-            )
-            let _ = onProgress(result.text)
-        }
+        let result = try await transcribeWithResolvedLanguageSelection(
+            plugin: plugin,
+            audio: audio,
+            languageSelection: runtimeLanguageSelection(for: languageSelection, plugin: plugin),
+            task: task,
+            prompt: prompt,
+            onProgress: onProgress
+        )
 
         let processingTime = CFAbsoluteTimeGetCurrent() - startTime
 
@@ -321,6 +491,95 @@ final class ModelManagerService: ObservableObject {
         let sel = NSSelectorFromString("triggerAutoUnload")
         guard nsPlugin.responds(to: sel) else { return }
         nsPlugin.perform(sel)
+    }
+
+    private func runtimeLanguageSelection(
+        for languageSelection: LanguageSelection,
+        plugin: TranscriptionEnginePlugin
+    ) -> PluginLanguageSelection {
+        if case .hints(let requestedCodes) = languageSelection,
+           requestedCodes.count > 1,
+           !pluginSupportsLanguageHints(plugin) {
+            return PluginLanguageSelection()
+        }
+
+        let normalizedSelection = languageSelection.normalizedForSupportedLanguages(plugin.supportedLanguages)
+        switch normalizedSelection {
+        case .exact(let code):
+            return PluginLanguageSelection(requestedLanguage: code)
+        case .hints(let codes):
+            return PluginLanguageSelection(languageHints: codes)
+        case .inheritGlobal, .auto:
+            return PluginLanguageSelection()
+        }
+    }
+
+    private func pluginSupportsLanguageHints(_ plugin: TranscriptionEnginePlugin) -> Bool {
+        plugin is LanguageHintTranscriptionEnginePlugin || plugin is LiveLanguageHintTranscriptionCapablePlugin
+    }
+
+    private func transcribeWithResolvedLanguageSelection(
+        plugin: TranscriptionEnginePlugin,
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        task: TranscriptionTask,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        if !languageSelection.languageHints.isEmpty,
+           let hintPlugin = plugin as? LanguageHintTranscriptionEnginePlugin {
+            return try await hintPlugin.transcribe(
+                audio: audio,
+                languageSelection: languageSelection,
+                translate: task == .translate,
+                prompt: prompt
+            )
+        }
+
+        return try await plugin.transcribe(
+            audio: audio,
+            language: languageSelection.requestedLanguage,
+            translate: task == .translate,
+            prompt: prompt
+        )
+    }
+
+    private func transcribeWithResolvedLanguageSelection(
+        plugin: TranscriptionEnginePlugin,
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        task: TranscriptionTask,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        if !languageSelection.languageHints.isEmpty,
+           let hintPlugin = plugin as? LanguageHintTranscriptionEnginePlugin {
+            return try await hintPlugin.transcribe(
+                audio: audio,
+                languageSelection: languageSelection,
+                translate: task == .translate,
+                prompt: prompt,
+                onProgress: onProgress
+            )
+        }
+
+        if plugin.supportsStreaming {
+            return try await plugin.transcribe(
+                audio: audio,
+                language: languageSelection.requestedLanguage,
+                translate: task == .translate,
+                prompt: prompt,
+                onProgress: onProgress
+            )
+        }
+
+        let result = try await plugin.transcribe(
+            audio: audio,
+            language: languageSelection.requestedLanguage,
+            translate: task == .translate,
+            prompt: prompt
+        )
+        let _ = onProgress(result.text)
+        return result
     }
 
     /// Trigger model restore via ObjC dispatch (avoids Swift protocol witness table issues

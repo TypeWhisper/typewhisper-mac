@@ -7,7 +7,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(ParakeetPlugin)
-final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActivityReporting, @unchecked Sendable {
+final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.parakeet"
     static let pluginName = "Parakeet"
     private static let logger = Logger(subsystem: "com.typewhisper.plugin.parakeet", category: "Transcription")
@@ -40,7 +40,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsA
            let version = ParakeetVersion(rawValue: versionString) {
             selectedVersion = version
         }
-        Task { await restoreLoadedModel() }
+        Task { await restoreLoadedModel(allowDownloads: false) }
     }
 
     func deactivate() {
@@ -93,6 +93,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsA
     }
 
     var supportsTranslation: Bool { false }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .requiresPluginSetting }
 
     var supportedLanguages: [String] {
         selectedVersion.supportedLanguages
@@ -337,7 +338,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsA
     }
 
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
-    @objc func triggerRestoreModel() { Task { await restoreLoadedModel() } }
+    @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: true) } }
 
     func unloadModel(clearPersistence: Bool = true) {
         if let manager = asrManager {
@@ -358,7 +359,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsA
         host?.notifyCapabilitiesChanged()
     }
 
-    func restoreLoadedModel() async {
+    func restoreLoadedModel(allowDownloads: Bool = true) async {
         guard let savedModelId = host?.userDefault(forKey: "loadedModel") as? String else {
             return
         }
@@ -366,7 +367,13 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsA
         if let version = ParakeetVersion.from(modelId: savedModelId) {
             selectedVersion = version
         }
+        guard allowDownloads || isModelDownloaded(version: selectedVersion) else { return }
         await loadModel()
+    }
+
+    private func isModelDownloaded(version: ParakeetVersion) -> Bool {
+        let cacheDir = AsrModels.defaultCacheDirectory(for: version.asrModelVersion)
+        return AsrModels.modelsExist(at: cacheDir, version: version.asrModelVersion)
     }
 
     // MARK: - Settings View

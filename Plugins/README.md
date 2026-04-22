@@ -13,8 +13,16 @@ TypeWhisper supports external plugins as macOS `.bundle` files. Place compiled b
 | `TypeWhisperPlugin` | Base protocol, event observation | No |
 | `PostProcessorPlugin` | Transform text in the pipeline | Yes (processed text) |
 | `LLMProviderPlugin` | Add custom LLM providers | Yes (LLM response) |
+| `TTSProviderPlugin` | Add text-to-speech providers for spoken feedback and readback | Yes (playback session) |
 | `TranscriptionEnginePlugin` | Custom transcription engines | Yes (transcription result) |
 | `ActionPlugin` | Route LLM output to custom actions (e.g. create Linear issues) | Yes (action result) |
+
+For transcription plugins, dictionary-term support remains optional. Engines that
+have documented input limits can additionally conform to `DictionaryTermsBudgetProviding`
+and return a `DictionaryTermsBudget` so the host clips the global dictionary before
+request assembly. Legacy `v1` plugins that do not implement the budget protocol keep
+working unchanged and automatically fall back to the host's default 600-character
+dictionary prompt budget.
 
 ## Event Bus
 
@@ -43,11 +51,15 @@ Plugins can subscribe to events without modifying the transcription pipeline:
     "name": "My Plugin",
     "version": "1.0.0",
     "minHostVersion": "1.0.0",
+    "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
+    "supportedArchitectures": ["arm64"],
     "author": "Your Name",
     "principalClass": "MyPluginClassName"
 }
 ```
+
+`category` may be one of `transcription`, `tts`, `llm`, `post-processor`, `action`, `memory`, or `utility`.
 
 ### Host Services
 
@@ -57,7 +69,7 @@ Each plugin receives a `HostServices` object providing:
 - **UserDefaults** (plugin-scoped): `userDefault(forKey:)`, `setUserDefault(_:forKey:)`
 - **Data directory**: `pluginDataDirectory` - persistent storage at `~/Library/Application Support/TypeWhisper/PluginData/<pluginId>/`
 - **App context**: `activeAppBundleId`, `activeAppName`
-- **Profiles**: `availableProfileNames` - list of user-defined profile names
+- **Rules**: `availableRuleNames` - list of user-defined rule names
 - **Event Bus**: `eventBus` for subscribing to events
 - **Capabilities**: `notifyCapabilitiesChanged()` - notify the host when plugin state changes (e.g. model loaded/unloaded)
 - **Streaming display hint**: `setStreamingDisplayActive(_:)` - tell TypeWhisper that your plugin renders its own streaming UI

@@ -74,7 +74,7 @@ struct ExampleWebhookConfig: Codable, Identifiable {
     var httpMethod: String
     var headers: [String: String]
     var isEnabled: Bool
-    var profileFilter: [String]  // Empty = all profiles
+    var profileFilter: [String]  // Empty = all rules
 
     init(name: String = "", url: String = "", httpMethod: String = "POST",
          headers: [String: String] = ["Content-Type": "application/json"],
@@ -152,10 +152,10 @@ final class ExampleWebhookService: ObservableObject, @unchecked Sendable {
 
     func sendWebhooks(for payload: TranscriptionCompletedPayload) async {
         for webhook in webhooks where webhook.isEnabled {
-            // Profile filter: empty = all, otherwise match by name
+            // Rule filter: empty = all, otherwise match by name
             if !webhook.profileFilter.isEmpty {
-                guard let profileName = payload.profileName,
-                      webhook.profileFilter.contains(profileName) else {
+                guard let ruleName = payload.ruleName,
+                      webhook.profileFilter.contains(ruleName) else {
                     continue
                 }
             }
@@ -287,7 +287,7 @@ struct ExampleWebhookSettingsView: View {
         .sheet(item: $editingWebhook) { webhook in
             ExampleWebhookEditView(
                 webhook: webhook,
-                availableProfiles: service.host.availableProfileNames,
+                availableProfiles: service.host.availableRuleNames,
                 onSave: { updated in
                     service.updateWebhook(updated)
                     editingWebhook = nil
@@ -320,7 +320,7 @@ private struct WebhookRow: View {
                         .lineLimit(1)
                 }
                 if !webhook.profileFilter.isEmpty {
-                    Text("Profiles: \(webhook.profileFilter.joined(separator: ", "))")
+                    Text("Rules: \(webhook.profileFilter.joined(separator: ", "))")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
@@ -425,9 +425,9 @@ private struct ExampleWebhookEditView: View {
                     }
                 }
 
-                Section(String(localized: "Profiles", bundle: bundle)) {
+                Section("Rules") {
                     if availableProfiles.isEmpty {
-                        Text("No profiles configured.", bundle: bundle)
+                        Text("No rules configured.")
                             .foregroundStyle(.secondary)
                             .font(.caption)
                     } else {
@@ -447,7 +447,7 @@ private struct ExampleWebhookEditView: View {
 
                     Text(webhook.profileFilter.isEmpty
                          ? String(localized: "Active for all transcriptions.", bundle: bundle)
-                         : String(localized: "Only active for selected profiles.", bundle: bundle))
+                         : "Only active for selected rules.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

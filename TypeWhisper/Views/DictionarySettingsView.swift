@@ -1,11 +1,18 @@
 import SwiftUI
+import TypeWhisperPluginSDK
+
+private func dictionaryReplacementDisplayText(_ replacement: String) -> String {
+    replacement.isEmpty ? "\"\"" : replacement
+}
 
 struct DictionarySettingsView: View {
     @ObservedObject private var viewModel = DictionaryViewModel.shared
     @ObservedObject private var termPackRegistryService: TermPackRegistryService
+    @ObservedObject private var pluginManager: PluginManager
 
     init() {
         _termPackRegistryService = ObservedObject(wrappedValue: TermPackRegistryService.shared)
+        _pluginManager = ObservedObject(wrappedValue: PluginManager.shared)
     }
 
     var body: some View {
@@ -60,6 +67,11 @@ struct DictionarySettingsView: View {
                 }
                 .padding(.horizontal, 4)
                 .padding(.bottom, 4)
+
+                if viewModel.filterTab != .termPacks, !engineSupportRows.isEmpty {
+                    DictionaryEngineSupportSection(rows: engineSupportRows)
+                        .padding(.bottom, 8)
+                }
 
                 if viewModel.filterTab == .termPacks {
                     termPacksView
@@ -119,7 +131,7 @@ struct DictionarySettingsView: View {
                 Text(String(localized: "No dictionary entries"))
                     .font(.headline)
                     .foregroundStyle(.secondary)
-                Text(String(localized: "Terms help speech recognition identify technical words correctly. Corrections fix common transcription mistakes automatically."))
+                Text(String(localized: "Terms help only on engines that support transcription-time biasing. Corrections always run after transcription and apply across engines."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -237,6 +249,113 @@ struct DictionarySettingsView: View {
         }
         .task {
             await termPackRegistryService.fetchRegistry()
+        }
+    }
+
+    private var engineSupportRows: [DictionaryEngineSupportRow] {
+        pluginManager.transcriptionEngines
+            .map {
+                DictionaryEngineSupportRow(
+                    engineName: $0.providerDisplayName,
+                    support: ($0 as? any DictionaryTermsCapabilityProviding)?.dictionaryTermsSupport ?? .unsupported
+                )
+            }
+            .sorted { $0.engineName.localizedCaseInsensitiveCompare($1.engineName) == .orderedAscending }
+    }
+}
+
+private struct DictionaryEngineSupportRow: Identifiable {
+    let engineName: String
+    let support: DictionaryTermsSupport
+
+    var id: String { engineName }
+
+    var badgeText: LocalizedStringKey {
+        switch support {
+        case .supported:
+            return "Terms + Corrections"
+        case .requiresPluginSetting:
+            return "Terms requires plugin setting"
+        case .unsupported:
+            return "Corrections only"
+        }
+    }
+
+    var tint: Color {
+        switch support {
+        case .supported:
+            return .accentColor
+        case .requiresPluginSetting:
+            return .orange
+        case .unsupported:
+            return .secondary
+        }
+    }
+
+    var detailText: LocalizedStringKey? {
+        switch support {
+        case .supported:
+            return nil
+        case .requiresPluginSetting:
+            if engineName == "Parakeet" {
+                return "Terms work only when Vocabulary Boosting is enabled in the Parakeet plugin settings."
+            }
+            return "This engine needs an extra plugin setting before Terms are applied."
+        case .unsupported:
+            if engineName == "Cohere" {
+                return "Cohere currently ignores Terms. Dictionary Corrections still apply after transcription."
+            }
+            return "This engine currently uses Dictionary Corrections only."
+        }
+    }
+}
+
+private struct DictionaryEngineSupportSection: View {
+    let rows: [DictionaryEngineSupportRow]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(String(localized: "Engine Support"))
+                    .font(.callout)
+                    .fontWeight(.semibold)
+                Text(String(localized: "Terms depend on engine support. Corrections always run after transcription."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(spacing: 8) {
+                ForEach(rows) { row in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 8) {
+                            Text(row.engineName)
+                                .font(.callout)
+                                .fontWeight(.medium)
+                            Spacer()
+                            Text(row.badgeText)
+                                .font(.caption)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(row.tint.opacity(0.14))
+                                .foregroundStyle(row.tint)
+                                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                        }
+
+                        if let detailText = row.detailText {
+                            Text(detailText)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color(NSColor.controlBackgroundColor))
+                    )
+                }
+            }
         }
     }
 }
@@ -366,7 +485,7 @@ private struct TermPackCardView: View {
                                     Image(systemName: "arrow.right")
                                         .font(.caption2)
                                         .foregroundStyle(.tertiary)
-                                    Text(correction.replacement)
+                                    Text(dictionaryReplacementDisplayText(correction.replacement))
                                 }
                                 .font(.caption)
                                 .padding(.horizontal, 8)
@@ -422,7 +541,7 @@ private struct DictionaryCardView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
 
-                Text(replacement)
+                Text(dictionaryReplacementDisplayText(replacement))
                     .font(.callout)
                     .fontWeight(.medium)
             } else {
@@ -509,7 +628,7 @@ private struct DictionaryEditorSheet: View {
 
             VStack(alignment: .leading, spacing: 20) {
                 Text(viewModel.editType == .term
-                     ? String(localized: "Terms are sent to the transcription service for better recognition")
+                     ? String(localized: "Terms are sent only to engines that support transcription-time biasing")
                      : String(localized: "Corrections replace text after transcription"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -567,7 +686,7 @@ private struct DictionaryEditorSheet: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
-                .disabled(viewModel.editOriginal.isEmpty || (viewModel.editType == .correction && viewModel.editReplacement.isEmpty))
+                .disabled(viewModel.editOriginal.isEmpty)
             }
             .padding()
             .background(Color(NSColor.windowBackgroundColor))

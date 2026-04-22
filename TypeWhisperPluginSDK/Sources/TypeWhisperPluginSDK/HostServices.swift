@@ -22,8 +22,8 @@ public protocol HostServices: Sendable {
     // Event bus
     var eventBus: EventBusProtocol { get }
 
-    // Available profile names
-    var availableProfileNames: [String] { get }
+    // Available rule names
+    var availableRuleNames: [String] { get }
 
     // Notify host that plugin capabilities changed (e.g. model loaded/unloaded)
     func notifyCapabilitiesChanged()
@@ -31,6 +31,11 @@ public protocol HostServices: Sendable {
     // Streaming display: call with true when the plugin provides its own streaming text UI,
     // so the built-in indicator suppresses its streaming text display.
     func setStreamingDisplayActive(_ active: Bool)
+}
+
+public extension HostServices {
+    @available(*, deprecated, renamed: "availableRuleNames")
+    var availableProfileNames: [String] { availableRuleNames }
 }
 
 // MARK: - HTTP Client (Ephemeral Sessions)
@@ -356,7 +361,30 @@ public struct PluginOpenAIChatHelper: Sendable {
         systemPrompt: String,
         userText: String,
         maxOutputTokens: Int? = 4096,
-        maxOutputTokenParameter: String = "max_tokens"
+        maxOutputTokenParameter: String = "max_tokens",
+        reasoningEffort: String? = nil
+    ) async throws -> String {
+        try await process(
+            apiKey: apiKey,
+            model: model,
+            systemPrompt: systemPrompt,
+            userText: userText,
+            maxOutputTokens: maxOutputTokens,
+            maxOutputTokenParameter: maxOutputTokenParameter,
+            reasoningEffort: reasoningEffort,
+            temperature: 0.3
+        )
+    }
+
+    public func process(
+        apiKey: String,
+        model: String,
+        systemPrompt: String,
+        userText: String,
+        maxOutputTokens: Int? = 4096,
+        maxOutputTokenParameter: String = "max_tokens",
+        reasoningEffort: String? = nil,
+        temperature: Double?
     ) async throws -> String {
         let endpoint = "\(baseURL)\(chatEndpoint)"
         guard let url = URL(string: endpoint) else {
@@ -368,7 +396,9 @@ public struct PluginOpenAIChatHelper: Sendable {
             systemPrompt: systemPrompt,
             userText: userText,
             maxOutputTokens: maxOutputTokens,
-            maxOutputTokenParameter: maxOutputTokenParameter
+            maxOutputTokenParameter: maxOutputTokenParameter,
+            reasoningEffort: reasoningEffort,
+            temperature: temperature
         )
 
         var request = URLRequest(url: url)
@@ -412,24 +442,73 @@ public struct PluginOpenAIChatHelper: Sendable {
         return content.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    public func process(
+        apiKey: String,
+        model: String,
+        systemPrompt: String,
+        userText: String,
+        maxOutputTokens: Int? = 4096,
+        maxOutputTokenParameter: String = "max_tokens"
+    ) async throws -> String {
+        try await process(
+            apiKey: apiKey,
+            model: model,
+            systemPrompt: systemPrompt,
+            userText: userText,
+            maxOutputTokens: maxOutputTokens,
+            maxOutputTokenParameter: maxOutputTokenParameter,
+            reasoningEffort: nil
+        )
+    }
+
+    public func process(
+        apiKey: String,
+        model: String,
+        systemPrompt: String,
+        userText: String,
+        maxOutputTokens: Int? = 4096,
+        maxOutputTokenParameter: String = "max_tokens",
+        temperature: Double?
+    ) async throws -> String {
+        try await process(
+            apiKey: apiKey,
+            model: model,
+            systemPrompt: systemPrompt,
+            userText: userText,
+            maxOutputTokens: maxOutputTokens,
+            maxOutputTokenParameter: maxOutputTokenParameter,
+            reasoningEffort: nil,
+            temperature: temperature
+        )
+    }
+
     func requestBody(
         model: String,
         systemPrompt: String,
         userText: String,
         maxOutputTokens: Int?,
-        maxOutputTokenParameter: String
+        maxOutputTokenParameter: String,
+        reasoningEffort: String?,
+        temperature: Double?
     ) -> [String: Any] {
         var requestBody: [String: Any] = [
             "model": model,
             "messages": [
                 ["role": "system", "content": systemPrompt],
                 ["role": "user", "content": userText]
-            ],
-            "temperature": 0.3
+            ]
         ]
+
+        if let temperature {
+            requestBody["temperature"] = temperature
+        }
 
         if let maxOutputTokens {
             requestBody[maxOutputTokenParameter] = maxOutputTokens
+        }
+
+        if let reasoningEffort, !reasoningEffort.isEmpty {
+            requestBody["reasoning_effort"] = reasoningEffort
         }
 
         return requestBody

@@ -68,7 +68,7 @@ private enum ElevenLabsReceivePayload: Sendable {
 }
 
 @objc(ElevenLabsPlugin)
-final class ElevenLabsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+final class ElevenLabsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.elevenlabs"
     static let pluginName = "ElevenLabs"
 
@@ -116,6 +116,7 @@ final class ElevenLabsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Se
 
     var supportsTranslation: Bool { false }
     var supportsStreaming: Bool { true }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
     var supportedLanguages: [String] { elevenLabsSupportedLanguages }
 
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
@@ -126,7 +127,13 @@ final class ElevenLabsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Se
             throw PluginTranscriptionError.noModelSelected
         }
 
-        return try await transcribeREST(audio: audio, language: language, modelId: modelId, apiKey: apiKey)
+        return try await transcribeREST(
+            audio: audio,
+            language: language,
+            modelId: modelId,
+            apiKey: apiKey,
+            prompt: prompt
+        )
     }
 
     func transcribe(
@@ -143,6 +150,18 @@ final class ElevenLabsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Se
             throw PluginTranscriptionError.noModelSelected
         }
 
+        if !PluginDictionaryTerms.terms(fromPrompt: prompt).isEmpty {
+            let result = try await transcribeREST(
+                audio: audio,
+                language: language,
+                modelId: modelId,
+                apiKey: apiKey,
+                prompt: prompt
+            )
+            _ = onProgress(result.text)
+            return result
+        }
+
         do {
             return try await transcribeWebSocket(
                 audio: audio,
@@ -153,7 +172,13 @@ final class ElevenLabsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Se
             )
         } catch {
             logger.warning("Realtime transcription failed, falling back to REST: \(error.localizedDescription)")
-            return try await transcribeREST(audio: audio, language: language, modelId: modelId, apiKey: apiKey)
+            return try await transcribeREST(
+                audio: audio,
+                language: language,
+                modelId: modelId,
+                apiKey: apiKey,
+                prompt: prompt
+            )
         }
     }
 
@@ -161,7 +186,8 @@ final class ElevenLabsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Se
         audio: AudioData,
         language: String?,
         modelId: String,
-        apiKey: String
+        apiKey: String,
+        prompt: String?
     ) async throws -> PluginTranscriptionResult {
         guard let url = URL(string: "https://api.elevenlabs.io/v1/speech-to-text") else {
             throw PluginTranscriptionError.apiError("Invalid ElevenLabs REST URL")
@@ -185,6 +211,11 @@ final class ElevenLabsPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Se
         body.appendMultipartField(boundary: boundary, name: "model_id", value: modelId)
         if let language, !language.isEmpty {
             body.appendMultipartField(boundary: boundary, name: "language_code", value: language)
+        }
+        if modelId == "scribe_v2" {
+            for term in PluginDictionaryTerms.terms(fromPrompt: prompt) {
+                body.appendMultipartField(boundary: boundary, name: "keyterms", value: term)
+            }
         }
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         request.httpBody = body
@@ -474,6 +505,18 @@ private struct ElevenLabsSettingsView: View {
     @State private var showApiKey = false
     @State private var selectedModel = ""
     private let bundle = Bundle(for: ElevenLabsPlugin.self)
+    private var trimmedInputKey: String {
+        apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    private var storedKey: String {
+        plugin._apiKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+    private var hasStoredKey: Bool {
+        !storedKey.isEmpty
+    }
+    private var isEditingStoredKey: Bool {
+        hasStoredKey && trimmedInputKey == storedKey
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -498,7 +541,7 @@ private struct ElevenLabsSettingsView: View {
                     }
                     .buttonStyle(.borderless)
 
-                    if plugin.isConfigured {
+                    if hasStoredKey && isEditingStoredKey && validationResult != false {
                         Button(String(localized: "Remove", bundle: bundle)) {
                             apiKeyInput = ""
                             validationResult = nil
@@ -513,7 +556,7 @@ private struct ElevenLabsSettingsView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
-                        .disabled(apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .disabled(trimmedInputKey.isEmpty || isValidating)
                     }
                 }
 
@@ -566,16 +609,22 @@ private struct ElevenLabsSettingsView: View {
         .onAppear {
             if let key = plugin._apiKey, !key.isEmpty {
                 apiKeyInput = key
+                isValidating = true
+                Task {
+                    let isValid = await plugin.validateApiKey(key)
+                    await MainActor.run {
+                        isValidating = false
+                        validationResult = isValid
+                    }
+                }
             }
             selectedModel = plugin.selectedModelId ?? plugin.transcriptionModels.first?.id ?? ""
         }
     }
 
     private func saveApiKey() {
-        let trimmedKey = apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedKey = trimmedInputKey
         guard !trimmedKey.isEmpty else { return }
-
-        plugin.setApiKey(trimmedKey)
 
         isValidating = true
         validationResult = nil
@@ -583,6 +632,9 @@ private struct ElevenLabsSettingsView: View {
         Task {
             let isValid = await plugin.validateApiKey(trimmedKey)
             await MainActor.run {
+                if isValid {
+                    plugin.setApiKey(trimmedKey)
+                }
                 isValidating = false
                 validationResult = isValid
             }

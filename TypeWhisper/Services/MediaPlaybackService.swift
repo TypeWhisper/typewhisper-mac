@@ -28,21 +28,40 @@ class MediaPlaybackService {
     private var didPause = false
 
     #if !APPSTORE
+    typealias ResumeScheduler = @MainActor (_ delay: TimeInterval, _ action: @escaping @MainActor () -> Void) -> Void
+
     private let controllerFactory: () -> MediaPlaybackControlling
+    private let resumeDelay: TimeInterval
+    private let resumeScheduler: ResumeScheduler
     private lazy var mediaController: MediaPlaybackControlling = controllerFactory()
     private var nowPlayingBundleID: String?
     private var trackInfoRequestGeneration = 0
+    private var resumeGeneration = 0
 
     init(
         startListening _: Bool = true,
         controllerFactory: @escaping () -> MediaPlaybackControlling = { MediaController() }
     ) {
         self.controllerFactory = controllerFactory
+        self.resumeDelay = 0.6
+        self.resumeScheduler = Self.defaultResumeScheduler
+    }
+
+    init(
+        startListening _: Bool = true,
+        resumeDelay: TimeInterval,
+        resumeScheduler: @escaping ResumeScheduler,
+        controllerFactory: @escaping () -> MediaPlaybackControlling = { MediaController() }
+    ) {
+        self.controllerFactory = controllerFactory
+        self.resumeDelay = resumeDelay
+        self.resumeScheduler = resumeScheduler
     }
 
     /// Uses a one-shot status probe to avoid keeping MediaRemote listener processes
     /// alive while TypeWhisper is idle in the menu bar.
     func pauseIfPlaying() {
+        cancelPendingResume()
         guard !didPause else { return }
         trackInfoRequestGeneration += 1
         let generation = trackInfoRequestGeneration
@@ -66,9 +85,32 @@ class MediaPlaybackService {
     func resumeIfWePaused() {
         trackInfoRequestGeneration += 1
         guard didPause else { return }
-        mediaController.play()
-        didPause = false
-        logger.info("Media playback resumed")
+        cancelPendingResume()
+        let generation = resumeGeneration
+
+        resumeScheduler(resumeDelay) { [weak self] in
+            guard let self else { return }
+            guard generation == self.resumeGeneration else { return }
+            guard self.didPause else { return }
+
+            self.mediaController.play()
+            self.didPause = false
+            logger.info("Media playback resumed")
+        }
+
+        logger.info("Scheduled media playback resume in \(self.resumeDelay, privacy: .public)s")
+    }
+
+    private func cancelPendingResume() {
+        resumeGeneration += 1
+    }
+
+    private static let defaultResumeScheduler: ResumeScheduler = { delay, action in
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            Task { @MainActor in
+                action()
+            }
+        }
     }
     #else
     init(startListening: Bool = true) {}

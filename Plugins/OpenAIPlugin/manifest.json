@@ -1,16 +1,17 @@
 {
     "id": "com.typewhisper.openai",
-    "name": "OpenAI",
-    "version": "1.0.13",
-    "minHostVersion": "0.9.0",
+    "name": "OpenAI / ChatGPT",
+    "version": "1.1.1",
+    "minHostVersion": "1.2.2",
+    "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
-    "description": "Cloud transcription and LLM via OpenAI API. Whisper and GPT models, requires API key.",
+    "description": "Cloud transcription plus OpenAI/ChatGPT prompts. Use an API key or ChatGPT login.",
     "descriptions": {
-        "de": "Cloud-Transkription und LLM ueber die OpenAI-API. Whisper- und GPT-Modelle, erfordert API-Key."
+        "de": "Cloud-Transkription plus OpenAI-/ChatGPT-Prompts. Nutzbar per API-Key oder ChatGPT-Login."
     },
     "category": "transcription",
     "iconSystemName": "brain",
-    "requiresAPIKey": true,
-    "principalClass": "OpenAIPlugin"
+    "principalClass": "OpenAIPlugin",
+    "requiresAPIKey": false
 }

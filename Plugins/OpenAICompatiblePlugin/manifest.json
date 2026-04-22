@@ -1,8 +1,9 @@
 {
     "id": "com.typewhisper.openai-compatible",
     "name": "OpenAI Compatible",
-    "version": "1.0.9",
+    "version": "1.0.10",
     "minHostVersion": "0.9.0",
+    "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
     "description": "Connect to any OpenAI-compatible API server for transcription and LLM. Works with Ollama, LM Studio, vLLM, and more.",

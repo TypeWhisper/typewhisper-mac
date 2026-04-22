@@ -57,7 +57,16 @@ struct CLIClient {
         try await get("/v1/models")
     }
 
-    func transcribe(fileURL: URL?, language: String?, task: String?, targetLanguage: String?) async throws -> Data {
+    func transcribe(
+        fileURL: URL?,
+        language: String?,
+        languageHints: [String],
+        task: String?,
+        targetLanguage: String?,
+        engine: String? = nil,
+        model: String? = nil,
+        awaitDownload: Bool = false
+    ) async throws -> Data {
         let audioData: Data
         let filename: String
 
@@ -91,16 +100,29 @@ struct CLIClient {
         if let language {
             body.appendFormField("language", value: language, boundary: boundary)
         }
+        for languageHint in languageHints {
+            body.appendFormField("language_hint", value: languageHint, boundary: boundary)
+        }
         if let task {
             body.appendFormField("task", value: task, boundary: boundary)
         }
         if let targetLanguage {
             body.appendFormField("target_language", value: targetLanguage, boundary: boundary)
         }
+        if let engine {
+            body.appendFormField("engine", value: engine, boundary: boundary)
+        }
+        if let model {
+            body.appendFormField("model", value: model, boundary: boundary)
+        }
 
         body.append("--\(boundary)--\r\n")
 
-        let url = URL(string: "\(baseURL)/v1/transcribe")!
+        var transcribePath = "/v1/transcribe"
+        if awaitDownload {
+            transcribePath += "?await_download=1"
+        }
+        let url = URL(string: "\(baseURL)\(transcribePath)")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")

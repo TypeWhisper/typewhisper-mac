@@ -83,6 +83,10 @@ enum AppConstants {
 
     static let appVersion: String = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
     static let buildVersion: String = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0"
+    static let currentReleaseFingerprint: String = {
+        let channel = bundledReleaseChannel()
+        return "\(appVersion)+\(buildVersion)@\(channel.rawValue)"
+    }()
     static func bundledReleaseChannel(infoDictionary: [String: Any]? = Bundle.main.infoDictionary) -> ReleaseChannel {
         guard let rawValue = infoDictionary?["TypeWhisperReleaseChannel"] as? String,
               let channel = ReleaseChannel(rawValue: rawValue) else {
@@ -161,6 +165,27 @@ enum AppConstants {
         static let checkoutURLSupporterBronze = "https://buy.polar.sh/polar_cl_yilyo1V90RnuUX59V2PyLUIg45FpzYI8aMhG824wYn8"
         static let checkoutURLSupporterSilver = "https://buy.polar.sh/polar_cl_lXFAqnanhrrPd1RZ95SCb2L05L3lNrUQIkYVd0ZmK5b"
         static let checkoutURLSupporterGold = "https://buy.polar.sh/polar_cl_FpojMlLmyF73gOqpXLihSE0lNYnoQoaMxGp724IIor4"
+    }
+
+    enum Website {
+        private static var localeSegment: String {
+            let preferred = UserDefaults.standard.string(forKey: UserDefaultsKeys.preferredAppLanguage)
+                ?? Bundle.main.preferredLocalizations.first
+                ?? Locale.preferredLanguages.first
+                ?? "en"
+            return preferred.hasPrefix("de") ? "de" : "en"
+        }
+
+        private static let rootURL = "https://www.typewhisper.com"
+        static let licensingEmailURL = URL(string: "mailto:licensing@typewhisper.com")!
+
+        static var pricingURL: URL {
+            URL(string: "\(rootURL)/\(localeSegment)/pricing/")!
+        }
+
+        static var teamContactURL: URL {
+            URL(string: "\(rootURL)/\(localeSegment)/business/") ?? licensingEmailURL
+        }
     }
 
     // MARK: - Discord Claim Service

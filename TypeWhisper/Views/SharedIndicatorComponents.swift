@@ -174,7 +174,7 @@ struct IndicatorRecordingContent: View {
                 compact: true
             )
         case .profile:
-            if let name = viewModel.activeProfileName {
+            if let name = viewModel.activeRuleName {
                 Text(name)
                     .font(.system(size: sizing.profileFontSize, weight: .medium))
                     .foregroundStyle(.white)
@@ -183,7 +183,7 @@ struct IndicatorRecordingContent: View {
                     .padding(.horizontal, sizing.profilePaddingH)
                     .padding(.vertical, sizing.profilePaddingV)
                     .background(.white.opacity(0.2), in: Capsule())
-                    .accessibilityLabel(String(localized: "Active profile"))
+                    .accessibilityLabel("Active rule")
                     .accessibilityValue(name)
             } else {
                 Color.clear.frame(width: 0, height: 0)
@@ -216,10 +216,11 @@ struct IndicatorExpandableText: View {
             .frame(height: expanded ? sizing.textExpandedHeight : 0)
             .clipped()
             .onChange(of: text) {
-                proxy.scrollTo("bottom", anchor: .bottom)
+                withAnimation(nil) {
+                    proxy.scrollTo("bottom", anchor: .bottom)
+                }
             }
         }
-        .transaction { $0.disablesAnimations = true }
         .accessibilityLabel(String(localized: "Streaming text"))
         .accessibilityValue(text)
     }
@@ -231,12 +232,13 @@ struct IndicatorActionFeedback: View {
     let message: String
     let icon: String?
     let isError: Bool
+    let iconColor: Color?
     let contentPadding: CGFloat
 
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: icon ?? (isError ? "xmark.circle.fill" : "checkmark.circle.fill"))
-                .foregroundStyle(isError ? .red : .green)
+                .foregroundStyle(iconColor ?? (isError ? .red : .green))
                 .font(.system(size: 16))
                 .accessibilityHidden(true)
             Text(message)

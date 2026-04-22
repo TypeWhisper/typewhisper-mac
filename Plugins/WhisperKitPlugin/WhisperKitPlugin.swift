@@ -6,14 +6,16 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(WhisperKitPlugin)
-final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActivityReporting, @unchecked Sendable {
+final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.whisperkit"
     static let pluginName = "WhisperKit"
+    private static let maxConditioningPromptChars = 500
 
     fileprivate var host: HostServices?
     fileprivate var whisperKit: WhisperKit?
     fileprivate var loadedModelId: String?
     fileprivate var _selectedModelId: String?
+    fileprivate var _hfToken: String?
     fileprivate var modelState: WhisperModelState = .notLoaded
     fileprivate var downloadProgress: Double = 0
 
@@ -24,13 +26,17 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, PluginSetting
     func activate(host: HostServices) {
         self.host = host
         _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
-        Task { await restoreLoadedModel() }
+        _hfToken = host.loadSecret(key: "hf-token")
+        // Do not eagerly restore on plugin activation. The host already has an
+        // on-demand restore path before transcription, and restoring here can
+        // leave the settings UI stuck in a long-running "Loading model..." state.
     }
 
     func deactivate() {
         whisperKit = nil
         loadedModelId = nil
         modelState = .notLoaded
+        _hfToken = nil
         host = nil
     }
 
@@ -50,6 +56,18 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, PluginSetting
             .map { PluginModelInfo(id: $0.id, displayName: $0.displayName, sizeDescription: $0.sizeDescription, languageCount: 99) }
     }
 
+    var availableModels: [PluginModelInfo] {
+        Self.availableModels.map { def in
+            PluginModelInfo(
+                id: def.id,
+                displayName: def.displayName,
+                sizeDescription: def.sizeDescription,
+                languageCount: 99,
+                loaded: def.id == loadedModelId
+            )
+        }
+    }
+
     var selectedModelId: String? { _selectedModelId }
 
     func selectModel(_ modelId: String) {
@@ -59,6 +77,8 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, PluginSetting
 
     var supportsTranslation: Bool { true }
     var supportsStreaming: Bool { true }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
+    var dictionaryTermsBudget: DictionaryTermsBudget { DictionaryTermsBudget(maxTotalChars: Self.maxConditioningPromptChars) }
 
     var supportedLanguages: [String] {
         [
@@ -86,7 +106,7 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, PluginSetting
             throw PluginTranscriptionError.notConfigured
         }
 
-        let options = DecodingOptions(
+        var options = DecodingOptions(
             verbose: false,
             task: translate ? .translate : .transcribe,
             language: language,
@@ -99,6 +119,12 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, PluginSetting
             withoutTimestamps: false,
             chunkingStrategy: .vad
         )
+        let effectivePrompt = Self.conditioningPrompt(from: prompt)
+        if let tokenizer = whisperKit.tokenizer,
+           let promptTokens = Self.promptTokens(from: effectivePrompt, tokenizer: tokenizer) {
+            options.promptTokens = promptTokens
+            options.usePrefillPrompt = true
+        }
 
         let results = try await whisperKit.transcribe(
             audioArray: audio.samples,
@@ -125,7 +151,7 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, PluginSetting
             throw PluginTranscriptionError.notConfigured
         }
 
-        let options = DecodingOptions(
+        var options = DecodingOptions(
             verbose: false,
             task: translate ? .translate : .transcribe,
             language: language,
@@ -138,12 +164,22 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, PluginSetting
             withoutTimestamps: false,
             chunkingStrategy: .vad
         )
+        let effectivePrompt = Self.conditioningPrompt(from: prompt)
+        if let tokenizer = whisperKit.tokenizer,
+           let promptTokens = Self.promptTokens(from: effectivePrompt, tokenizer: tokenizer) {
+            options.promptTokens = promptTokens
+            options.usePrefillPrompt = true
+        }
 
         let results = try await whisperKit.transcribe(
             audioArray: audio.samples,
             decodeOptions: options,
             callback: { progress in
-                let shouldContinue = onProgress(progress.text)
+                let sanitizedText = Self.sanitizedStreamingText(
+                    progress.text,
+                    conditioningPrompt: effectivePrompt
+                )
+                let shouldContinue = onProgress(sanitizedText)
                 return shouldContinue ? nil : false
             }
         )
@@ -157,6 +193,75 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, PluginSetting
         return PluginTranscriptionResult(text: text, detectedLanguage: detectedLanguage, segments: segments)
     }
 
+    private static func promptTokens(from prompt: String?, tokenizer: WhisperTokenizer) -> [Int]? {
+        guard let prompt, !prompt.isEmpty else { return nil }
+        let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPrompt.isEmpty else { return nil }
+
+        let encoded = tokenizer.encode(text: " " + trimmedPrompt)
+            .filter { $0 < tokenizer.specialTokens.specialTokenBegin }
+        return encoded.isEmpty ? nil : encoded
+    }
+
+    static func conditioningPrompt(from prompt: String?) -> String? {
+        guard let prompt = clampedPrompt(prompt, maxLength: maxConditioningPromptChars) else { return nil }
+
+        let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPrompt.isEmpty else { return nil }
+
+        // WhisperKit reacts badly to a bare comma-separated term list as decoder prompt.
+        // Convert the legacy transport format into a softer natural-language context line.
+        let terms = PluginDictionaryTerms.terms(fromPrompt: trimmedPrompt)
+        if !terms.isEmpty && Self.looksLikePlainTermList(trimmedPrompt, terms: terms) {
+            let prefix = "The audio may contain these names or technical terms: "
+            let suffix = "."
+            let availableTermChars = max(0, maxConditioningPromptChars - prefix.count - suffix.count)
+            guard let termPrompt = PluginDictionaryTerms.prompt(from: terms, maxLength: availableTermChars) else {
+                return nil
+            }
+            return prefix + termPrompt + suffix
+        }
+
+        return trimmedPrompt
+    }
+
+    static func sanitizedStreamingText(_ text: String, conditioningPrompt: String?) -> String {
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else { return "" }
+
+        guard let conditioningPrompt = conditioningPrompt?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !conditioningPrompt.isEmpty,
+              let promptRange = trimmedText.range(
+                  of: conditioningPrompt,
+                  options: [.anchored, .caseInsensitive, .diacriticInsensitive]
+              ) else {
+            return trimmedText
+        }
+
+        return String(trimmedText[promptRange.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func clampedPrompt(_ prompt: String?, maxLength: Int) -> String? {
+        guard let prompt else { return nil }
+        let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return String(trimmed.prefix(maxLength))
+    }
+
+    private static func looksLikePlainTermList(_ prompt: String, terms: [String]) -> Bool {
+        let normalizedPrompt = prompt
+            .replacingOccurrences(of: "\n", with: ",")
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        guard !normalizedPrompt.isEmpty, normalizedPrompt.count == terms.count else { return false }
+
+        return zip(normalizedPrompt, terms).allSatisfy { raw, parsed in
+            raw.compare(parsed, options: [.caseInsensitive, .diacriticInsensitive], range: nil, locale: .current) == .orderedSame
+        }
+    }
+
     // MARK: - Model Management
 
     fileprivate var downloadBase: URL {
@@ -164,25 +269,55 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, PluginSetting
             ?? FileManager.default.temporaryDirectory
     }
 
-    fileprivate func loadModel(_ modelDef: WhisperModelDef) async {
-        modelState = .downloading
-        downloadProgress = 0.05
+    private var modelStorageRoots: [URL] {
+        [
+            downloadBase
+                .appendingPathComponent("models")
+                .appendingPathComponent("argmaxinc")
+                .appendingPathComponent("whisperkit-coreml"),
+            downloadBase
+                .appendingPathComponent("argmaxinc")
+                .appendingPathComponent("whisperkit-coreml"),
+        ]
+    }
 
+    private func resolvedModelPath(for modelDef: WhisperModelDef) -> URL {
+        let fileManager = FileManager.default
+        for root in modelStorageRoots {
+            let candidate = root.appendingPathComponent(modelDef.id)
+            if fileManager.fileExists(atPath: candidate.path) {
+                return candidate
+            }
+        }
+        return modelStorageRoots[0].appendingPathComponent(modelDef.id)
+    }
+
+    fileprivate func loadModel(_ modelDef: WhisperModelDef) async {
         do {
             // Migrate old models if they exist
             migrateOldModels(for: modelDef)
 
-            // Download
-            var lastProgress = 0.0
-            let modelFolder = try await WhisperKit.download(
-                variant: modelDef.id,
-                downloadBase: downloadBase
-            ) { progress in
-                let fraction = progress.fractionCompleted
-                let mapped = 0.05 + fraction * 0.75
-                guard mapped - lastProgress >= 0.01 else { return }
-                lastProgress = mapped
-                self.downloadProgress = mapped
+            let modelFolder: URL
+            if isModelDownloaded(modelDef) {
+                modelState = .loading(phase: "loading")
+                downloadProgress = 0.80
+                modelFolder = resolvedModelPath(for: modelDef)
+            } else {
+                modelState = .downloading
+                downloadProgress = 0.05
+
+                var lastProgress = 0.0
+                modelFolder = try await WhisperKit.download(
+                    variant: modelDef.id,
+                    downloadBase: downloadBase,
+                    token: _hfToken
+                ) { progress in
+                    let fraction = progress.fractionCompleted
+                    let mapped = 0.05 + fraction * 0.75
+                    guard mapped - lastProgress >= 0.01 else { return }
+                    lastProgress = mapped
+                    self.downloadProgress = mapped
+                }
             }
 
             // Load
@@ -191,6 +326,7 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, PluginSetting
 
             let config = WhisperKitConfig(
                 downloadBase: downloadBase,
+                modelToken: _hfToken,
                 modelFolder: modelFolder.path,
                 verbose: false,
                 logLevel: .error,
@@ -232,7 +368,7 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, PluginSetting
     }
 
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
-    @objc func triggerRestoreModel() { Task { await restoreLoadedModel() } }
+    @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: true) } }
 
     func unloadModel(clearPersistence: Bool = true) {
         whisperKit = nil
@@ -246,27 +382,35 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, PluginSetting
     }
 
     fileprivate func deleteModelFiles(_ modelDef: WhisperModelDef) {
-        let modelPath = downloadBase
-            .appendingPathComponent("argmaxinc")
-            .appendingPathComponent("whisperkit-coreml")
-            .appendingPathComponent(modelDef.id)
+        let modelPath = resolvedModelPath(for: modelDef)
         try? FileManager.default.removeItem(at: modelPath)
     }
 
-    func restoreLoadedModel() async {
+    func restoreLoadedModel(allowDownloads: Bool = true) async {
         guard let savedId = host?.userDefault(forKey: "loadedModel") as? String,
               let modelDef = Self.availableModels.first(where: { $0.id == savedId }) else {
             return
         }
+        guard allowDownloads || isModelDownloaded(modelDef) else { return }
         await loadModel(modelDef)
     }
 
     fileprivate func isModelDownloaded(_ modelDef: WhisperModelDef) -> Bool {
-        let modelPath = downloadBase
-            .appendingPathComponent("argmaxinc")
-            .appendingPathComponent("whisperkit-coreml")
-            .appendingPathComponent(modelDef.id)
-        return FileManager.default.fileExists(atPath: modelPath.path)
+        let modelPath = resolvedModelPath(for: modelDef)
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: modelPath.path) else { return false }
+
+        let requiredModelNames = [
+            "MelSpectrogram",
+            "AudioEncoder",
+            "TextDecoder",
+        ]
+
+        return requiredModelNames.allSatisfy { name in
+            let compiled = modelPath.appendingPathComponent("\(name).mlmodelc").path
+            let package = modelPath.appendingPathComponent("\(name).mlpackage").path
+            return fileManager.fileExists(atPath: compiled) || fileManager.fileExists(atPath: package)
+        }
     }
 
     /// Migrate models from old location (TypeWhisper/models/) to plugin data directory
@@ -274,26 +418,36 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, PluginSetting
         let fm = FileManager.default
         let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
 
+        let destination = resolvedModelPath(for: modelDef)
+        if fm.fileExists(atPath: destination.path) {
+            return
+        }
+
         // Check both production and dev paths
         for dirName in ["TypeWhisper", "TypeWhisper-Dev"] {
-            let oldPath = appSupport
-                .appendingPathComponent(dirName)
-                .appendingPathComponent("models")
-                .appendingPathComponent("argmaxinc")
-                .appendingPathComponent("whisperkit-coreml")
-                .appendingPathComponent(modelDef.id)
+            let legacyRoots = [
+                appSupport
+                    .appendingPathComponent(dirName)
+                    .appendingPathComponent("models")
+                    .appendingPathComponent("argmaxinc")
+                    .appendingPathComponent("whisperkit-coreml"),
+                appSupport
+                    .appendingPathComponent(dirName)
+                    .appendingPathComponent("models")
+                    .appendingPathComponent("models")
+                    .appendingPathComponent("argmaxinc")
+                    .appendingPathComponent("whisperkit-coreml"),
+            ]
 
-            guard fm.fileExists(atPath: oldPath.path) else { continue }
-
-            let newPath = downloadBase
-                .appendingPathComponent("argmaxinc")
-                .appendingPathComponent("whisperkit-coreml")
-                .appendingPathComponent(modelDef.id)
-
-            guard !fm.fileExists(atPath: newPath.path) else { continue }
-
-            try? fm.createDirectory(at: newPath.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try? fm.moveItem(at: oldPath, to: newPath)
+            for legacyRoot in legacyRoots {
+                let oldPath = legacyRoot.appendingPathComponent(modelDef.id)
+                guard fm.fileExists(atPath: oldPath.path) else { continue }
+                try? fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try? fm.moveItem(at: oldPath, to: destination)
+                if fm.fileExists(atPath: destination.path) {
+                    return
+                }
+            }
         }
     }
 
@@ -326,6 +480,49 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, PluginSetting
 
     var settingsView: AnyView? {
         AnyView(WhisperKitSettingsView(plugin: self))
+    }
+
+    func setHuggingFaceToken(_ token: String) {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        _hfToken = trimmed.isEmpty ? nil : trimmed
+        try? host?.storeSecret(key: "hf-token", value: trimmed)
+    }
+
+    func clearHuggingFaceToken() {
+        _hfToken = nil
+        try? host?.storeSecret(key: "hf-token", value: "")
+    }
+
+    func validateHuggingFaceToken(
+        _ token: String,
+        dataFetcher: @escaping @Sendable (URLRequest) async throws -> (Data, URLResponse) = PluginHTTPClient.data
+    ) async -> Bool {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let url = URL(string: "https://huggingface.co/api/whoami-v2") else {
+            return false
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(trimmed)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 15
+
+        do {
+            let (data, response) = try await dataFetcher(request)
+            guard let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200 else {
+                return false
+            }
+
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return false
+            }
+
+            return json["name"] != nil || json["type"] != nil || json["auth"] != nil
+        } catch {
+            return false
+        }
     }
 
     // MARK: - Model Definitions
@@ -420,6 +617,45 @@ enum WhisperModelState: Equatable {
     }
 }
 
+struct WhisperKitSettingsPollState: Equatable {
+    var modelState: WhisperModelState
+    var downloadProgress: Double
+    var activeModelId: String?
+    var isPolling: Bool
+
+    var isBusy: Bool {
+        switch modelState {
+        case .downloading, .loading:
+            return true
+        case .notLoaded, .ready, .error:
+            return false
+        }
+    }
+
+    func applyingPolledPluginState(
+        _ pluginState: WhisperModelState,
+        downloadProgress: Double,
+        selectedModelId: String?
+    ) -> WhisperKitSettingsPollState {
+        var updated = self
+        updated.modelState = pluginState
+        updated.downloadProgress = downloadProgress
+
+        switch pluginState {
+        case .ready:
+            updated.activeModelId = selectedModelId ?? updated.activeModelId
+            updated.isPolling = false
+        case .downloading, .loading:
+            updated.isPolling = true
+        case .notLoaded, .error:
+            updated.activeModelId = selectedModelId ?? updated.activeModelId
+            updated.isPolling = false
+        }
+
+        return updated
+    }
+}
+
 // MARK: - Settings View
 
 private struct WhisperKitSettingsView: View {
@@ -429,8 +665,24 @@ private struct WhisperKitSettingsView: View {
     @State private var downloadProgress: Double = 0
     @State private var activeModelId: String?
     @State private var isPolling = false
+    @State private var hfTokenInput = ""
+    @State private var showHfToken = false
+    @State private var isValidatingToken = false
+    @State private var tokenValidationResult: Bool?
 
     private let pollTimer = Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()
+
+    private var trimmedHfTokenInput: String {
+        hfTokenInput.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var storedHfToken: String {
+        plugin._hfToken?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    private var hasStoredHfToken: Bool {
+        !storedHfToken.isEmpty
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -440,6 +692,74 @@ private struct WhisperKitSettingsView: View {
             Text("Local speech-to-text using OpenAI Whisper via CoreML. 99+ languages, streaming, translation to English.", bundle: bundle)
                 .font(.callout)
                 .foregroundStyle(.secondary)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("HuggingFace Token", bundle: bundle)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+
+                Text("Optional. Increases download rate limits. Free at huggingface.co/settings/tokens", bundle: bundle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                HStack {
+                    if showHfToken {
+                        TextField("hf_...", text: $hfTokenInput)
+                            .textFieldStyle(.roundedBorder)
+                    } else {
+                        SecureField("hf_...", text: $hfTokenInput)
+                            .textFieldStyle(.roundedBorder)
+                    }
+
+                    Button {
+                        showHfToken.toggle()
+                    } label: {
+                        Image(systemName: showHfToken ? "eye.slash" : "eye")
+                    }
+                    .buttonStyle(.borderless)
+
+                    if hasStoredHfToken {
+                        Button(String(localized: "Remove", bundle: bundle)) {
+                            hfTokenInput = ""
+                            tokenValidationResult = nil
+                            isValidatingToken = false
+                            plugin.clearHuggingFaceToken()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+
+                    Button(String(localized: "Save", bundle: bundle)) {
+                        validateAndSaveHuggingFaceToken()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(trimmedHfTokenInput.isEmpty || isValidatingToken)
+                }
+
+                if isValidatingToken {
+                    HStack(spacing: 4) {
+                        ProgressView().controlSize(.small)
+                        Text("Validating token...", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else if let tokenValidationResult {
+                    HStack(spacing: 4) {
+                        Image(systemName: tokenValidationResult ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .foregroundStyle(tokenValidationResult ? .green : .red)
+                        Text(
+                            tokenValidationResult
+                                ? String(localized: "Valid HuggingFace Token", bundle: bundle)
+                                : String(localized: "Invalid HuggingFace Token", bundle: bundle)
+                        )
+                        .font(.caption)
+                        .foregroundStyle(tokenValidationResult ? .green : .red)
+                    }
+                }
+            }
 
             Divider()
 
@@ -469,20 +789,40 @@ private struct WhisperKitSettingsView: View {
             modelState = plugin.modelState
             downloadProgress = plugin.downloadProgress
             activeModelId = plugin._selectedModelId
+            if let token = plugin._hfToken, !token.isEmpty {
+                hfTokenInput = token
+            }
             // If the plugin is mid-load (e.g., restoring on app launch), start polling
-            if case .downloading = plugin.modelState { isPolling = true }
-            else if case .loading = plugin.modelState { isPolling = true }
+            isPolling = WhisperKitSettingsPollState(
+                modelState: plugin.modelState,
+                downloadProgress: plugin.downloadProgress,
+                activeModelId: plugin._selectedModelId,
+                isPolling: false
+            ).isBusy
         }
         .onReceive(pollTimer) { _ in
             guard isPolling else { return }
-            downloadProgress = plugin.downloadProgress
-            let pluginState = plugin.modelState
-            if pluginState != .notLoaded {
-                modelState = pluginState
-                activeModelId = plugin._selectedModelId ?? activeModelId
+            let updatedState = WhisperKitSettingsPollState(
+                modelState: modelState,
+                downloadProgress: downloadProgress,
+                activeModelId: activeModelId,
+                isPolling: isPolling
+            ).applyingPolledPluginState(
+                plugin.modelState,
+                downloadProgress: plugin.downloadProgress,
+                selectedModelId: plugin._selectedModelId
+            )
+
+            modelState = updatedState.modelState
+            downloadProgress = updatedState.downloadProgress
+            activeModelId = updatedState.activeModelId
+            isPolling = updatedState.isPolling
+        }
+        .onChange(of: hfTokenInput) { _, newValue in
+            let trimmedValue = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedValue != storedHfToken {
+                tokenValidationResult = nil
             }
-            if case .ready = pluginState { isPolling = false }
-            else if case .error = pluginState { isPolling = false }
         }
     }
 
@@ -544,7 +884,18 @@ private struct WhisperKitSettingsView: View {
                     .font(.caption)
             }
         } else {
-            Button(String(localized: "Download & Load", bundle: bundle)) {
+            let isDownloaded = plugin.isModelDownloaded(modelDef)
+            let viewState = WhisperKitSettingsPollState(
+                modelState: modelState,
+                downloadProgress: downloadProgress,
+                activeModelId: activeModelId,
+                isPolling: isPolling
+            )
+            Button(
+                isDownloaded
+                    ? String(localized: "Load", bundle: bundle)
+                    : String(localized: "Download & Load", bundle: bundle)
+            ) {
                 activeModelId = modelDef.id
                 modelState = .downloading
                 downloadProgress = 0.05
@@ -559,7 +910,7 @@ private struct WhisperKitSettingsView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
-            .disabled(modelState == .downloading || modelState == .loading(phase: "loading"))
+            .disabled(viewState.isBusy)
         }
     }
 
@@ -571,6 +922,26 @@ private struct WhisperKitSettingsView: View {
             String(localized: "Loading model...", bundle: bundle)
         default:
             String(localized: "Loading...", bundle: bundle)
+        }
+    }
+
+    private func validateAndSaveHuggingFaceToken() {
+        let trimmedToken = trimmedHfTokenInput
+        guard !trimmedToken.isEmpty else { return }
+
+        isValidatingToken = true
+        tokenValidationResult = nil
+
+        Task {
+            let isValid = await plugin.validateHuggingFaceToken(trimmedToken)
+            await MainActor.run {
+                isValidatingToken = false
+                tokenValidationResult = isValid
+                if isValid {
+                    plugin.setHuggingFaceToken(trimmedToken)
+                    hfTokenInput = trimmedToken
+                }
+            }
         }
     }
 }

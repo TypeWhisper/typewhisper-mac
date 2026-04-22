@@ -16,6 +16,7 @@ private struct DiagnosticsReport: Encodable {
         let macOSVersion: String
         let localeIdentifier: String
         let timeZoneIdentifier: String
+        let cpuArchitecture: String
     }
 
     struct PermissionsInfo: Encodable {
@@ -61,6 +62,7 @@ private struct DiagnosticsReport: Encodable {
         let soundFeedbackEnabled: Bool
         let spokenFeedbackEnabled: Bool
         let showMenuBarIcon: Bool
+        let dockIconBehaviorWhenMenuBarHidden: String
         let watchFolderAutoStart: Bool
         let setupWizardCompleted: Bool
         let preferredAppLanguage: String?
@@ -151,7 +153,8 @@ final class ErrorLogService: ObservableObject {
             system: .init(
                 macOSVersion: ProcessInfo.processInfo.operatingSystemVersionString,
                 localeIdentifier: Locale.current.identifier,
-                timeZoneIdentifier: TimeZone.current.identifier
+                timeZoneIdentifier: TimeZone.current.identifier,
+                cpuArchitecture: RuntimeArchitecture.current
             ),
             permissions: .init(
                 microphoneGranted: AVAudioApplication.shared.recordPermission == .granted,
@@ -194,6 +197,7 @@ final class ErrorLogService: ObservableObject {
                 soundFeedbackEnabled: defaults.object(forKey: UserDefaultsKeys.soundFeedbackEnabled) as? Bool ?? true,
                 spokenFeedbackEnabled: defaults.bool(forKey: UserDefaultsKeys.spokenFeedbackEnabled),
                 showMenuBarIcon: defaults.object(forKey: UserDefaultsKeys.showMenuBarIcon) as? Bool ?? true,
+                dockIconBehaviorWhenMenuBarHidden: defaults.string(forKey: UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden) ?? DockIconBehavior.keepVisible.rawValue,
                 watchFolderAutoStart: defaults.bool(forKey: UserDefaultsKeys.watchFolderAutoStart),
                 setupWizardCompleted: defaults.bool(forKey: UserDefaultsKeys.setupWizardCompleted),
                 preferredAppLanguage: defaults.string(forKey: UserDefaultsKeys.preferredAppLanguage)

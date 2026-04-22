@@ -6,9 +6,9 @@
 
 Speech-to-text and AI text processing for macOS. Transcribe audio using on-device AI models or cloud APIs (Groq, OpenAI), then process the result with custom LLM prompts. Your voice data stays on your Mac with local models - or use cloud APIs for faster processing.
 
-TypeWhisper `1.x` is the direct-download macOS release line. The supported core remains system-wide dictation, file transcription, prompt processing, profiles, history, dictionary, snippets, and bundled integrations. HTTP API, CLI, widgets, watch folders, and the plugin SDK remain supported advanced surfaces.
+TypeWhisper `1.2` is the current stable direct-download release for macOS. It includes system-wide dictation, file transcription, prompt processing, rules, history, dictionary, snippets, and bundled integrations. Advanced surfaces like the HTTP API, CLI, widgets, watch folders, and the plugin SDK remain supported for power users and automation.
 
-See [docs/1.1-readiness.md](docs/1.1-readiness.md), [docs/support-matrix.md](docs/support-matrix.md), and [docs/release-checklist.md](docs/release-checklist.md) for the current release definition and ship gates.
+See the [release readiness guide](docs/release-readiness.md), [support matrix](docs/support-matrix.md), and [release checklist](docs/release-checklist.md) for the current release definition and ship gates.
 
 <p align="center">
   <video src="https://github.com/user-attachments/assets/22fe922d-4a4c-47d1-805e-684a148ebd03" autoplay loop muted playsinline width="270"></video>
@@ -25,7 +25,7 @@ See [docs/1.1-readiness.md](docs/1.1-readiness.md), [docs/support-matrix.md](doc
 <p align="center">
   <a href=".github/screenshots/history.png"><img src=".github/screenshots/history.png" width="270" alt="Transcription History"></a>
   <a href=".github/screenshots/dictionary.png"><img src=".github/screenshots/dictionary.png" width="270" alt="Dictionary"></a>
-  <a href=".github/screenshots/profiles.png"><img src=".github/screenshots/profiles.png" width="270" alt="Profiles"></a>
+  <a href=".github/screenshots/profiles.png"><img src=".github/screenshots/profiles.png" width="270" alt="Rules"></a>
 </p>
 
 <p align="center">
@@ -71,12 +71,13 @@ See [docs/1.1-readiness.md](docs/1.1-readiness.md), [docs/support-matrix.md](doc
 ### AI Processing
 
 - **Custom prompts** - Process transcriptions (or any text) with LLM prompts. 8 presets included (Translate, Formal, Summarize, Fix Grammar, Email, List, Shorter, Explain). Standalone Prompt Palette via global hotkey - a floating panel for AI text processing independent of dictation
-- **LLM providers** - Apple Intelligence (macOS 26+), Groq, OpenAI, Gemini, and OpenAI Compatible with per-prompt provider and model override
+- **LLM providers** - Apple Intelligence (macOS 26+), Groq, OpenAI / ChatGPT, Gemini, and OpenAI Compatible with per-prompt provider and model override
+- **Local prompt processing** - Gemma 4 via MLX runs on-device on Apple Silicon, with the current verified release path limited to the E2B/E4B 4-bit models
 - **Translation** - Translate transcriptions on-device using Apple Translate
 
 ### Personalization
 
-- **Profiles** - Per-app and per-website overrides for language, task, engine, prompt, hotkey, and auto-submit. Match by app (bundle ID) and/or domain with subdomain support
+- **Rules** - Per-app and per-website overrides for language, task, engine, prompt, hotkey, and auto-submit. Match by app (bundle ID) and/or domain with subdomain support
 - **Dictionary** - Terms improve cloud recognition accuracy. Corrections fix common transcription mistakes automatically. Auto-learns from manual corrections. Includes importable term packs
 - **Localized term packs** - Built-in term pack names and descriptions are localized in English and German
 - **Snippets** - Text shortcuts with trigger/replacement. Supports placeholders like `{{DATE}}`, `{{TIME}}`, and `{{CLIPBOARD}}`
@@ -84,7 +85,7 @@ See [docs/1.1-readiness.md](docs/1.1-readiness.md), [docs/support-matrix.md](doc
 
 ### Integration & Extensibility
 
-- **Plugin system** - Extend TypeWhisper with custom LLM providers, transcription engines, post-processors, and action plugins. Granite, Groq, OpenAI, OpenAI Compatible, Gemini, Linear, Qwen3, Voxtral, and Webhook ship as bundled plugins, alongside the local engine plugins. Linear plugin enables voice-to-issue creation. See [Plugins/README.md](Plugins/README.md)
+- **Plugin system** - Extend TypeWhisper with custom LLM providers, transcription engines, post-processors, and action plugins. Granite, Groq, OpenAI / ChatGPT, OpenAI Compatible, Gemini, Linear, Qwen3, Voxtral, and Webhook ship as bundled plugins, alongside the local engine plugins. Linear plugin enables voice-to-issue creation. See [Plugins/README.md](Plugins/README.md)
 - **MLX download controls** - Bundled Qwen3, Granite, and Voxtral plugins support an optional HuggingFace token for higher rate limits and clearer download errors
 - **HTTP API** - Local REST API for integration with external tools and scripts
 - **CLI tool** - Shell-friendly transcription via the command line
@@ -121,12 +122,63 @@ Installed builds can switch channels in `Settings -> About` via the `Update Chan
 3. Pick an engine and, if needed, download a local model.
 4. Trigger the global hotkey and complete your first dictation.
 
+## Manual Uninstall (macOS)
+
+These steps are for official TypeWhisper release builds on macOS. They remove the app itself, its local state, widget data, and stored secrets so you can reinstall from a clean slate.
+
+If you installed via Homebrew, you can optionally start with:
+
+```bash
+brew uninstall --cask typewhisper
+```
+
+That removes the app bundle, but it does not reliably remove all files in `~/Library` or TypeWhisper entries in Keychain.
+
+If `~/Library` is hidden in Finder, use `Go -> Go to Folder...` and paste the paths below.
+
+1. Quit TypeWhisper if it is running.
+2. Delete the app bundle:
+   ```bash
+   rm -rf /Applications/TypeWhisper.app
+   ```
+3. Delete app data and plugins:
+   ```bash
+   rm -rf ~/Library/Application\ Support/TypeWhisper
+   ```
+4. Delete preferences:
+   ```bash
+   rm -f ~/Library/Preferences/com.typewhisper.mac.plist
+   ```
+5. Delete widget and app group data used by official releases:
+   ```bash
+   rm -rf ~/Library/Group\ Containers/2D8ALY3LCL.com.typewhisper.mac
+   ```
+6. Remove TypeWhisper secrets from Keychain:
+   - In Keychain Access, search for `com.typewhisper.mac.apikey` and delete matching items.
+   - This includes API and plugin secrets stored under the `com.typewhisper.mac.apikey.*` service prefix.
+   - Also remove the license items stored under service `com.typewhisper.mac.apikey.license`, especially the `polar-license` and `polar-supporter` accounts.
+7. If you installed the CLI tool from Settings > Advanced, remove it too:
+   ```bash
+   rm -f /usr/local/bin/typewhisper
+   ```
+8. Optional: if you want to remove exported user files as well, delete:
+   ```bash
+   rm -rf ~/Documents/TypeWhisper\ Recordings
+   ```
+9. Restart your Mac, then install the latest build again.
+
+If a fresh install still crashes immediately after these steps, please open an issue and include your macOS version, how you installed TypeWhisper, and whether the crash happens on first launch or after granting permissions.
+
 ## System Requirements
 
 - macOS 14.0 (Sonoma) or later
 - Apple Silicon (M1 or later) recommended
 - 8 GB RAM minimum, 16 GB+ recommended for larger models
 - Some features (Apple Translate, improved Settings UI) require macOS 15+. Apple Intelligence and SpeechAnalyzer require macOS 26+.
+
+## Gemma 4 Support
+
+TypeWhisper includes a bundled local Gemma 4 plugin powered by MLX for on-device prompt processing on Apple Silicon. In the current verified release path, Gemma 4 support is limited to the dense `E2B 4-bit` and `E4B 4-bit` variants; larger or unverified variants stay visible in the UI but remain disabled until they are validated end to end.
 
 ## Model Recommendations
 
@@ -187,6 +239,11 @@ curl http://localhost:8978/v1/status
 curl -X POST http://localhost:8978/v1/transcribe \
   -F "file=@recording.wav" \
   -F "language=en"
+
+curl -X POST http://localhost:8978/v1/transcribe \
+  -F "file=@recording.wav" \
+  -F "language_hint=de" \
+  -F "language_hint=en"
 ```
 
 ```json
@@ -201,7 +258,8 @@ curl -X POST http://localhost:8978/v1/transcribe \
 ```
 
 Optional parameters:
-- `language` - ISO 639-1 code (e.g., `en`, `de`). Omit for auto-detection.
+- `language` - ISO 639-1 code (e.g., `en`, `de`). Omit for full auto-detection.
+- `language_hint` - Repeatable language hint for restricted auto-detection. Do not combine with `language`.
 - `task` - `transcribe` (default) or `translate` (translates to English, WhisperKit only).
 - `target_language` - ISO 639-1 code for translation target language (e.g., `es`, `fr`). Uses Apple Translate.
 
@@ -233,27 +291,30 @@ curl "http://localhost:8978/v1/history?q=meeting&limit=10&offset=0"
 curl -X DELETE "http://localhost:8978/v1/history?id=<uuid>"
 ```
 
-### Profiles
+### Rules
 
 ```bash
-# List all profiles
-curl http://localhost:8978/v1/profiles
+# List all rules
+curl http://localhost:8978/v1/rules
 
-# Toggle a profile on/off
-curl -X PUT "http://localhost:8978/v1/profiles/toggle?id=<uuid>"
+# Toggle a rule on/off
+curl -X PUT "http://localhost:8978/v1/rules/toggle?id=<uuid>"
 ```
 
 ### Dictation Control
 
 ```bash
-# Start dictation
+# Start dictation (returns session id)
 curl -X POST http://localhost:8978/v1/dictation/start
 
-# Stop dictation
+# Stop dictation (returns same session id)
 curl -X POST http://localhost:8978/v1/dictation/stop
 
-# Check dictation status
+# Check whether dictation is currently recording
 curl http://localhost:8978/v1/dictation/status
+
+# Fetch status/result for a specific dictation session
+curl "http://localhost:8978/v1/dictation/transcription?id=<uuid>"
 ```
 
 ## CLI Tool
@@ -279,6 +340,7 @@ typewhisper transcribe file.wav # Transcribe an audio file
 | `--port <N>` | Server port (default: auto-detect) |
 | `--json` | Output as JSON |
 | `--language <code>` | Source language (e.g. `en`, `de`) |
+| `--language-hint <code>` | Repeatable language hint for restricted auto-detection |
 | `--task <task>` | `transcribe` (default) or `translate` |
 | `--translate-to <code>` | Target language for translation |
 
@@ -288,6 +350,9 @@ typewhisper transcribe file.wav # Transcribe an audio file
 # Transcribe with language and JSON output
 typewhisper transcribe recording.wav --language de --json
 
+# Restrict auto-detection to a shortlist
+typewhisper transcribe recording.wav --language-hint de --language-hint en
+
 # Pipe audio from stdin
 cat audio.wav | typewhisper transcribe -
 
@@ -295,11 +360,11 @@ cat audio.wav | typewhisper transcribe -
 typewhisper transcribe meeting.m4a --json | jq -r '.text'
 ```
 
-The CLI requires the API server to be running (Settings > Advanced) and follows the documented `1.x` command and flag surface.
+The CLI requires the API server to be running (Settings > Advanced) and follows the documented command and flag surface for the current stable release.
 
-## Profiles
+## Rules
 
-Profiles let you configure transcription settings per application or website. For example:
+Rules let you configure transcription settings per application or website. For example:
 
 - **Mail** - German language, Whisper Large v3
 - **Slack** - English language, Parakeet TDT v3
@@ -307,14 +372,14 @@ Profiles let you configure transcription settings per application or website. Fo
 - **github.com** - English language (matches in any browser)
 - **docs.google.com** - German language, translate to English
 
-Create profiles in Settings > Profiles. Assign apps and/or URL patterns, set language/task/engine overrides, assign a custom prompt for automatic post-processing, configure a per-profile hotkey, enable auto-submit (automatically sends text in chat apps), and adjust priority. URL patterns support subdomain matching - e.g. `google.com` also matches `docs.google.com`. The domain autocomplete suggests domains from your transcription history.
+Create rules in Settings > Regeln. Assign apps and/or URL patterns, set language/task/engine overrides, assign a custom prompt for automatic post-processing, optionally configure a manual rule shortcut, enable auto-submit (automatically sends text in chat apps), and adjust priority. Spoken language can be left on full auto-detect, fixed to one exact language, or restricted to a shortlist of likely languages for better detection accuracy. URL patterns support subdomain matching - e.g. `google.com` also matches `docs.google.com`. The domain autocomplete suggests domains from your transcription history.
 
-When you start dictating, TypeWhisper matches the active app and browser URL against your profiles with the following priority:
+When you start dictating, TypeWhisper matches the active app and browser URL against your rules with the following priority:
 1. **App + URL match** - highest specificity (e.g. Chrome + github.com)
-2. **URL-only match** - cross-browser profiles (e.g. github.com in any browser)
-3. **App-only match** - generic app profiles (e.g. all of Chrome)
+2. **URL-only match** - cross-browser rules (e.g. github.com in any browser)
+3. **App-only match** - generic app rules (e.g. all of Chrome)
 
-The active profile name is shown as a badge in the notch indicator.
+The active rule name is shown as a badge in the notch indicator, together with a short explanation of why it matched.
 
 Multiple engines can be loaded simultaneously for instant switching between profiles. Note that loading multiple local models increases memory usage. Cloud engines (Groq, OpenAI) have negligible memory overhead.
 

@@ -10,9 +10,15 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhis
 /// Inserts transcribed text into the active application via clipboard + simulated Cmd+V.
 @MainActor
 final class TextInsertionService {
+    typealias FocusedTextSnapshot = (value: String?, selectedText: String?, selectedRange: NSRange?)
+
     var accessibilityGrantedOverride: Bool?
     var pasteboardProvider: () -> NSPasteboard = { .general }
     var focusedTextFieldOverride: (() -> Bool)?
+    var focusedTextElementOverride: (() -> AXUIElement?)?
+    var focusedTextStateOverride: ((AXUIElement) -> FocusedTextSnapshot?)?
+    var textSelectionOverride: (() -> TextSelection?)?
+    var insertTextAtOverride: ((AXUIElement, String) -> Bool)?
     var pasteSimulatorOverride: (() -> Void)?
     var returnSimulatorOverride: (() -> Void)?
     var captureActiveAppOverride: (() -> (name: String?, bundleId: String?, url: String?))?
@@ -79,6 +85,11 @@ enum InsertionResult {
     }
 
     nonisolated private static func identifyBrowser(_ bundleId: String) -> BrowserType {
+        let normalized = bundleId.lowercased()
+        if normalized.contains("wavebox") {
+            return .chromiumBased
+        }
+
         switch bundleId {
         case "com.apple.Safari":
             return .safari
@@ -254,6 +265,9 @@ enum InsertionResult {
 
     /// Returns the selected text and the AXUIElement, so the selection can be replaced later.
     func getTextSelection() -> TextSelection? {
+        if let textSelectionOverride {
+            return textSelectionOverride()
+        }
         guard isAccessibilityGranted else { return nil }
 
         let systemWide = AXUIElementCreateSystemWide()
@@ -274,6 +288,9 @@ enum InsertionResult {
 
     /// Returns the focused text element (even without selection), for later insertion.
     func getFocusedTextElement() -> AXUIElement? {
+        if let focusedTextElementOverride {
+            return focusedTextElementOverride()
+        }
         guard isAccessibilityGranted else { return nil }
 
         let systemWide = AXUIElementCreateSystemWide()
@@ -299,12 +316,40 @@ enum InsertionResult {
 
     /// Inserts text at the cursor position of a previously captured AXUIElement.
     func insertTextAt(element: AXUIElement, text: String) -> Bool {
+        if let insertTextAtOverride {
+            return insertTextAtOverride(element, text)
+        }
+
         let result = AXUIElementSetAttributeValue(
             element,
             kAXSelectedTextAttribute as CFString,
             text as CFTypeRef
         )
         return result == .success
+    }
+
+    /// Inserts via Accessibility only when we can verify that the focused text state changed.
+    /// This avoids silently dropping text in apps that report AX success but ignore the write.
+    func insertTextAtAndVerifyChange(element: AXUIElement, text: String) -> Bool {
+        guard let initialState = captureFocusedTextState(for: element) else {
+            return false
+        }
+        guard insertTextAt(element: element, text: text),
+              let currentState = captureFocusedTextState(for: element) else {
+            return false
+        }
+        return Self.focusedTextDidChange(
+            from: (
+                value: initialState.value,
+                selectedText: initialState.selectedText,
+                selectedRange: initialState.selectedRange
+            ),
+            to: (
+                value: currentState.value,
+                selectedText: currentState.selectedText,
+                selectedRange: currentState.selectedRange
+            )
+        )
     }
 
     /// Saves all current clipboard contents for later restoration.
@@ -353,6 +398,17 @@ enum InsertionResult {
         }
 
         let hadFocusedTextField = autoEnter && hasFocusedTextField()
+
+        if preserveClipboard,
+           let focusedElement = getFocusedTextElement(),
+           insertTextAtAndVerifyChange(element: focusedElement, text: text) {
+            if hadFocusedTextField {
+                try? await Task.sleep(for: .milliseconds(50))
+                simulateReturn()
+            }
+            return .pasted
+        }
+
         let pasteboard = pasteboardProvider()
         let savedItems = preserveClipboard ? saveClipboard(from: pasteboard) : []
 
@@ -589,7 +645,17 @@ enum InsertionResult {
     }
 
     private func captureFocusedTextState(for element: AXUIElement) -> FocusedTextState? {
-        FocusedTextState(
+        if let focusedTextStateOverride {
+            guard let snapshot = focusedTextStateOverride(element) else { return nil }
+            return FocusedTextState(
+                element: element,
+                value: snapshot.value,
+                selectedText: snapshot.selectedText,
+                selectedRange: snapshot.selectedRange
+            )
+        }
+
+        return FocusedTextState(
             element: element,
             value: stringAttribute(kAXValueAttribute as CFString, from: element),
             selectedText: stringAttribute(kAXSelectedTextAttribute as CFString, from: element),

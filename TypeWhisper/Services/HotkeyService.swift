@@ -66,6 +66,7 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
     case pushToTalk
     case toggle
     case promptPalette
+    case recentTranscriptions
 
     var defaultsKey: String {
         switch self {
@@ -73,13 +74,13 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
         case .pushToTalk: return UserDefaultsKeys.pttHotkey
         case .toggle: return UserDefaultsKeys.toggleHotkey
         case .promptPalette: return UserDefaultsKeys.promptPaletteHotkey
+        case .recentTranscriptions: return UserDefaultsKeys.recentTranscriptionsHotkey
         }
     }
 }
 
 /// Manages global hotkeys for dictation with three independent slots:
 /// hybrid (short=toggle, long=push-to-talk), push-to-talk, and toggle.
-@MainActor
 final class HotkeyService: ObservableObject {
     enum HotkeyEventSource: Sendable {
         case eventTap
@@ -107,18 +108,27 @@ final class HotkeyService: ObservableObject {
         case toggle
     }
 
+    private enum FnTriggerMode {
+        case pressThenRelease
+        case releaseOnly
+    }
+
     @Published private(set) var currentMode: HotkeyMode?
 
     var onDictationStart: (() -> Void)?
     var onDictationStop: (() -> Void)?
     var onPromptPaletteToggle: (() -> Void)?
+    var onRecentTranscriptionsToggle: (() -> Void)?
     var onProfileDictationStart: ((UUID) -> Void)?
     var onCancelPressed: (() -> Void)?
+    var onPushToTalkInterruption: (() -> Void)?
+    var discardPushToTalkRecordingOnExtraKeyPress = false
 
     private var keyDownTime: Date?
     private var isActive = false
     private var activeSlotType: HotkeySlotType?
     private(set) var activeProfileId: UUID?
+    private var pushToTalkInterruptionSignaled = false
 
     private static let toggleThreshold: TimeInterval = 1.0
     private static let doubleTapThreshold: TimeInterval = 0.4
@@ -155,6 +165,7 @@ final class HotkeyService: ObservableObject {
         .pushToTalk: SlotState(),
         .toggle: SlotState(),
         .promptPalette: SlotState(),
+        .recentTranscriptions: SlotState(),
     ]
 
     // MARK: - Per-Profile Hotkey State
@@ -253,6 +264,7 @@ final class HotkeyService: ObservableObject {
         activeProfileId = nil
         currentMode = nil
         keyDownTime = nil
+        pushToTalkInterruptionSignaled = false
     }
 
     // MARK: - Profile Hotkeys
@@ -330,15 +342,11 @@ final class HotkeyService: ObservableObject {
         }
 
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
-            Task { @MainActor [weak self] in
-                _ = self?.handleEvent(event, source: .monitor)
-            }
+            _ = self?.handleEvent(event, source: .monitor)
         }
 
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
-            Task { @MainActor [weak self] in
-                _ = self?.handleEvent(event, source: .monitor)
-            }
+            _ = self?.handleEvent(event, source: .monitor)
             return event
         }
     }
@@ -386,17 +394,13 @@ final class HotkeyService: ObservableObject {
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
 
         // @convention(c) callback - must not capture context. Uses userInfo to access HotkeyService.
-        // Runs on the main thread (tap is added to main run loop), so MainActor.assumeIsolated is safe.
+        // The tap source is attached to the main run loop, but this callback does not execute as a
+        // MainActor task. Avoid MainActor runtime assumptions and route through unsafe main-thread-only helpers.
         let callback: CGEventTapCallBack = { _, type, event, userInfo in
             if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
                 if let userInfo {
-                    MainActor.assumeIsolated {
-                        let service = Unmanaged<HotkeyService>.fromOpaque(userInfo).takeUnretainedValue()
-                        if let tap = service.eventTap {
-                            CGEvent.tapEnable(tap: tap, enable: true)
-                        }
-                        service.logger.warning("CGEventTap was disabled by system, re-enabling")
-                    }
+                    let service = Unmanaged<HotkeyService>.fromOpaque(userInfo).takeUnretainedValue()
+                    service.reenableEventTapAfterSystemDisable()
                 }
                 return Unmanaged.passUnretained(event)
             }
@@ -405,12 +409,8 @@ final class HotkeyService: ObservableObject {
                 return Unmanaged.passUnretained(event)
             }
 
-            let shouldSuppress: Bool = MainActor.assumeIsolated {
-                guard let nsEvent = NSEvent(cgEvent: event) else { return false }
-                let service = Unmanaged<HotkeyService>.fromOpaque(userInfo).takeUnretainedValue()
-                return service.handleEventTapEvent(nsEvent)
-            }
-
+            let service = Unmanaged<HotkeyService>.fromOpaque(userInfo).takeUnretainedValue()
+            let shouldSuppress = service.handleEventTapCallback(event)
             return shouldSuppress ? nil : Unmanaged.passUnretained(event)
         }
 
@@ -433,6 +433,18 @@ final class HotkeyService: ObservableObject {
         return true
     }
 
+    private func reenableEventTapAfterSystemDisable() {
+        if let tap = eventTap {
+            CGEvent.tapEnable(tap: tap, enable: true)
+        }
+        logger.warning("CGEventTap was disabled by system, re-enabling")
+    }
+
+    private func handleEventTapCallback(_ event: CGEvent) -> Bool {
+        guard let nsEvent = NSEvent(cgEvent: event) else { return false }
+        return handleEventTapEvent(nsEvent)
+    }
+
     /// Processes event for CGEventTap: matches hotkeys synchronously, dispatches handling asynchronously.
     /// Returns true if the event should be suppressed (consumed by TypeWhisper).
     private func handleEventTapEvent(_ event: NSEvent) -> Bool {
@@ -445,28 +457,29 @@ final class HotkeyService: ObservableObject {
     private func handleEvent(_ event: NSEvent, source: HotkeyEventSource) -> Bool {
         // Escape key cancels active recording/transcription
         if event.type == .keyDown && event.keyCode == 0x35 {
-            if source == .eventTap {
-                Task { @MainActor [weak self] in
-                    self?.onCancelPressed?()
-                }
-            } else {
-                onCancelPressed?()
-            }
+            onCancelPressed?()
             return false
         }
 
+        signalPushToTalkInterruptionIfNeeded(for: event)
         updateCapsLockOriginTracker(for: event)
         var shouldSuppress = false
 
         // Global slots
         for slotType in HotkeySlotType.allCases {
             guard var state = slots[slotType], let hotkey = state.hotkey else { continue }
+            let fnTriggerMode: FnTriggerMode = slotType == .toggle ? .releaseOnly : .pressThenRelease
             if shouldSuppressForCapsLockOrigin(event, hotkey: hotkey, keyWasDown: state.keyWasDown) {
                 state.resetTransientState()
                 slots[slotType] = state
                 continue
             }
-            let (keyDown, keyUp, isMatch) = processKeyEvent(event, hotkey: hotkey, state: &state)
+            let (keyDown, keyUp, isMatch) = processKeyEvent(
+                event,
+                hotkey: hotkey,
+                state: &state,
+                fnTriggerMode: fnTriggerMode
+            )
             slots[slotType] = state
             if isMatch { shouldSuppress = true }
             dispatchGlobalMatch(
@@ -491,7 +504,12 @@ final class HotkeyService: ObservableObject {
                                   modifierWasDown: pState.modifierWasDown, keyWasDown: pState.keyWasDown,
                                   mouseButtonWasDown: pState.mouseButtonWasDown,
                                   lastTapUpTime: pState.lastTapUpTime, tapCount: pState.tapCount)
-            let (keyDown, keyUp, isMatch) = processKeyEvent(event, hotkey: pState.hotkey, state: &state)
+            let (keyDown, keyUp, isMatch) = processKeyEvent(
+                event,
+                hotkey: pState.hotkey,
+                state: &state,
+                fnTriggerMode: .pressThenRelease
+            )
             pState.fnWasDown = state.fnWasDown
             pState.fnComboKeyPressed = state.fnComboKeyPressed
             pState.modifierWasDown = state.modifierWasDown
@@ -562,23 +580,17 @@ final class HotkeyService: ObservableObject {
             hotkey: hotkey,
             source: source
         ) {
-            if source == .eventTap {
-                Task { @MainActor [weak self] in self?.handleKeyDown(slotType: slotType) }
-            } else {
+            if source != .eventTap {
                 logFallbackMatchIfNeeded(hotkey: hotkey, source: source)
-                handleKeyDown(slotType: slotType)
             }
+            handleKeyDown(slotType: slotType)
         } else if keyUp, shouldDispatch(
             target: .slot(slotType),
             phase: .up,
             hotkey: hotkey,
             source: source
         ) {
-            if source == .eventTap {
-                Task { @MainActor [weak self] in self?.handleKeyUp(slotType: slotType) }
-            } else {
-                handleKeyUp(slotType: slotType)
-            }
+            handleKeyUp(slotType: slotType)
         }
     }
 
@@ -595,23 +607,44 @@ final class HotkeyService: ObservableObject {
             hotkey: hotkey,
             source: source
         ) {
-            if source == .eventTap {
-                Task { @MainActor [weak self] in self?.handleProfileKeyDown(profileId: profileId) }
-            } else {
+            if source != .eventTap {
                 logFallbackMatchIfNeeded(hotkey: hotkey, source: source)
-                handleProfileKeyDown(profileId: profileId)
             }
+            handleProfileKeyDown(profileId: profileId)
         } else if keyUp, shouldDispatch(
             target: .profile(profileId),
             phase: .up,
             hotkey: hotkey,
             source: source
         ) {
-            if source == .eventTap {
-                Task { @MainActor [weak self] in self?.handleProfileKeyUp(profileId: profileId) }
-            } else {
-                handleProfileKeyUp(profileId: profileId)
-            }
+            handleProfileKeyUp(profileId: profileId)
+        }
+    }
+
+    private func signalPushToTalkInterruptionIfNeeded(for event: NSEvent) {
+        guard discardPushToTalkRecordingOnExtraKeyPress,
+              !pushToTalkInterruptionSignaled,
+              isActive,
+              activeSlotType == .pushToTalk,
+              activeProfileId == nil,
+              event.type == .keyDown,
+              let hotkey = slots[.pushToTalk]?.hotkey,
+              isExtraKeyDuringActivePushToTalk(event, hotkey: hotkey) else {
+            return
+        }
+
+        pushToTalkInterruptionSignaled = true
+        onPushToTalkInterruption?()
+    }
+
+    private func isExtraKeyDuringActivePushToTalk(_ event: NSEvent, hotkey: UnifiedHotkey) -> Bool {
+        switch hotkey.kind {
+        case .modifierCombo, .modifierOnly, .fn:
+            return true
+        case .keyWithModifiers, .bareKey:
+            return event.keyCode != hotkey.keyCode
+        case .mouseButton:
+            return false
         }
     }
 
@@ -659,9 +692,12 @@ final class HotkeyService: ObservableObject {
         case modifierRelease // Modifiers no longer match, but key is still physically down
     }
 
-    /// Processes a key event against a hotkey, updating state booleans.
-    /// Returns (keyDown, keyUp, shouldSuppress) flags.
-    private func processKeyEvent(_ event: NSEvent, hotkey: UnifiedHotkey, state: inout SlotState) -> (keyDown: Bool, keyUp: Bool, shouldSuppress: Bool) {
+    private func processKeyEvent(
+        _ event: NSEvent,
+        hotkey: UnifiedHotkey,
+        state: inout SlotState,
+        fnTriggerMode: FnTriggerMode
+    ) -> (keyDown: Bool, keyUp: Bool, shouldSuppress: Bool) {
         // Mouse button hotkeys - self-contained path (no modifier interplay)
         if hotkey.kind == .mouseButton {
             guard event.type == .otherMouseDown || event.type == .otherMouseUp else {
@@ -703,33 +739,68 @@ final class HotkeyService: ObservableObject {
             return (false, false, false)
         }
 
-        // Fn hotkeys fire on release to avoid conflicts with Fn+key combos
-        // (e.g. Fn+Backspace = forward delete, Fn+Arrow = page navigation)
+        // Fn hotkeys can run in two modes:
+        // - releaseOnly: keep current toggle behavior (start on release)
+        // - pressThenRelease: Hybrid/PTT/profiles should start on press and stop on release
         if hotkey.kind == .fn {
-            if state.fnWasDown && event.type == .keyDown {
-                state.fnComboKeyPressed = true
-                return (false, false, false)
-            }
-            guard event.type == .flagsChanged else { return (false, false, false) }
-            let fnDown = event.modifierFlags.contains(.function)
-            if fnDown, !state.fnWasDown {
-                state.fnWasDown = true
+            switch fnTriggerMode {
+            case .pressThenRelease:
+                if state.fnWasDown && event.type == .keyDown {
+                    state.fnComboKeyPressed = true
+                    return (false, false, false)
+                }
+
+                guard event.type == .flagsChanged else {
+                    return (false, false, false)
+                }
+
+                let fnDown = event.modifierFlags.contains(.function)
+                if fnDown, !state.fnWasDown {
+                    state.fnWasDown = true
+                    state.fnComboKeyPressed = false
+                    return (true, false, true)
+                }
+                guard !fnDown, state.fnWasDown else {
+                    return (false, false, false)
+                }
+                state.fnWasDown = false
+                let wasComboed = state.fnComboKeyPressed
                 state.fnComboKeyPressed = false
-                return (false, false, false)
+                if wasComboed { return (false, false, false) }
+                if hotkey.isDoubleTap {
+                    return (false, false, true)
+                }
+                return (false, true, true)
+
+            case .releaseOnly:
+                if state.fnWasDown && event.type == .keyDown {
+                    state.fnComboKeyPressed = true
+                    return (false, false, false)
+                }
+                guard event.type == .flagsChanged else { return (false, false, false) }
+                let fnDown = event.modifierFlags.contains(.function)
+                if fnDown, !state.fnWasDown {
+                    state.fnWasDown = true
+                    state.fnComboKeyPressed = false
+                    return (false, false, false)
+                }
+                guard !fnDown, state.fnWasDown else { return (false, false, false) }
+                state.fnWasDown = false
+                let wasComboed = state.fnComboKeyPressed
+                state.fnComboKeyPressed = false
+                if wasComboed { return (false, false, false) }
+                guard hotkey.isDoubleTap else { return (true, false, true) }
+                if state.tapCount == 1,
+                   let lastUp = state.lastTapUpTime,
+                   Date().timeIntervalSince(lastUp) < Self.doubleTapThreshold {
+                    state.tapCount = 0
+                    state.lastTapUpTime = nil
+                    return (true, false, true)
+                }
+                state.tapCount = 1
+                state.lastTapUpTime = Date()
+                return (false, false, true)
             }
-            guard !fnDown, state.fnWasDown else { return (false, false, false) }
-            state.fnWasDown = false
-            let wasComboed = state.fnComboKeyPressed
-            state.fnComboKeyPressed = false
-            if wasComboed { return (false, false, false) }
-            guard hotkey.isDoubleTap else { return (true, false, true) }
-            if state.tapCount == 1, let lastUp = state.lastTapUpTime,
-               Date().timeIntervalSince(lastUp) < Self.doubleTapThreshold {
-                state.tapCount = 0; state.lastTapUpTime = nil
-                return (true, false, true)
-            }
-            state.tapCount = 1; state.lastTapUpTime = Date()
-            return (false, false, true)
         }
 
         let result = detectKeyEvent(
@@ -833,14 +904,12 @@ final class HotkeyService: ObservableObject {
             let relevantMask: NSEvent.ModifierFlags = [.command, .option, .control, .shift, .function]
             let current = event.modifierFlags.intersection(relevantMask)
             let allDown = current.contains(requiredFlags)
+            let anyRequiredStillDown = !current.intersection(requiredFlags).isEmpty
             if allDown, !modifierWasDown { return .down }
-            if !allDown, modifierWasDown {
-                // If the sentinel keyCode (0xFFFF) is used, we have no physical key to track.
-                // Otherwise, we'd need to track which modifiers are still down.
-                // For now, modifier-only combos don't have a 'base key'.
-                return .up
-            }
             if allDown, modifierWasDown { return .repeatDown }
+            if modifierWasDown {
+                return anyRequiredStillDown ? .repeatDown : .up
+            }
 
         case .keyWithModifiers:
             let requiredFlags = NSEvent.ModifierFlags(rawValue: hotkey.modifierFlags)
@@ -886,6 +955,10 @@ final class HotkeyService: ObservableObject {
             onPromptPaletteToggle?()
             return
         }
+        if slotType == .recentTranscriptions {
+            onRecentTranscriptionsToggle?()
+            return
+        }
 
         if isActive {
             // Any hotkey stops active recording
@@ -894,12 +967,14 @@ final class HotkeyService: ObservableObject {
             activeProfileId = nil
             currentMode = nil
             keyDownTime = nil
+            pushToTalkInterruptionSignaled = false
             onDictationStop?()
         } else {
             activeSlotType = slotType
             activeProfileId = nil
             keyDownTime = Date()
             isActive = true
+            pushToTalkInterruptionSignaled = false
             currentMode = slotType == .toggle ? .toggle : .pushToTalk
             onDictationStart?()
         }
@@ -918,6 +993,7 @@ final class HotkeyService: ObservableObject {
                 activeSlotType = nil
                 currentMode = nil
                 keyDownTime = nil
+                pushToTalkInterruptionSignaled = false
                 onDictationStop?()
             }
         case .pushToTalk:
@@ -925,10 +1001,13 @@ final class HotkeyService: ObservableObject {
             activeSlotType = nil
             currentMode = nil
             keyDownTime = nil
+            pushToTalkInterruptionSignaled = false
             onDictationStop?()
         case .toggle:
             break
         case .promptPalette:
+            break // handled on keyDown only
+        case .recentTranscriptions:
             break // handled on keyDown only
         }
     }
@@ -943,12 +1022,14 @@ final class HotkeyService: ObservableObject {
             activeProfileId = nil
             currentMode = nil
             keyDownTime = nil
+            pushToTalkInterruptionSignaled = false
             onDictationStop?()
         } else {
             activeProfileId = profileId
             activeSlotType = nil
             keyDownTime = Date()
             isActive = true
+            pushToTalkInterruptionSignaled = false
             currentMode = .pushToTalk // hybrid behavior
             onProfileDictationStart?(profileId)
         }
@@ -967,6 +1048,7 @@ final class HotkeyService: ObservableObject {
             activeProfileId = nil
             currentMode = nil
             keyDownTime = nil
+            pushToTalkInterruptionSignaled = false
             onDictationStop?()
         }
     }

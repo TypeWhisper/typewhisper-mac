@@ -12,6 +12,7 @@ final class ServiceContainer: ObservableObject {
     let hotkeyService: HotkeyService
     let textInsertionService: TextInsertionService
     let historyService: HistoryService
+    let recentTranscriptionStore: RecentTranscriptionStore
     let textDiffService: TextDiffService
     let profileService: ProfileService
     let translationService: AnyObject? // TranslationService (macOS 15+)
@@ -66,6 +67,7 @@ final class ServiceContainer: ObservableObject {
         hotkeyService = HotkeyService()
         textInsertionService = TextInsertionService()
         historyService = HistoryService()
+        recentTranscriptionStore = RecentTranscriptionStore()
         textDiffService = TextDiffService()
         profileService = ProfileService()
         #if canImport(Translation)
@@ -117,6 +119,7 @@ final class ServiceContainer: ObservableObject {
             modelManager: modelManagerService,
             settingsViewModel: settingsViewModel,
             historyService: historyService,
+            recentTranscriptionStore: recentTranscriptionStore,
             profileService: profileService,
             translationService: translationService,
             audioDuckingService: audioDuckingService,
@@ -138,7 +141,15 @@ final class ServiceContainer: ObservableObject {
 
         // HTTP API
         let router = APIRouter()
-        let handlers = APIHandlers(modelManager: modelManagerService, audioFileService: audioFileService, translationService: translationService, historyService: historyService, profileService: profileService, dictationViewModel: dictationViewModel)
+        let handlers = APIHandlers(
+            modelManager: modelManagerService,
+            audioFileService: audioFileService,
+            translationService: translationService,
+            historyService: historyService,
+            profileService: profileService,
+            dictionaryService: dictionaryService,
+            dictationViewModel: dictationViewModel
+        )
         handlers.register(on: router)
         httpServer = HTTPServer(router: router)
         apiServerViewModel = APIServerViewModel(httpServer: httpServer)
@@ -160,7 +171,10 @@ final class ServiceContainer: ObservableObject {
             promptProcessingService: promptProcessingService
         )
         audioRecorderViewModel = AudioRecorderViewModel(recorderService: audioRecorderService, modelManager: modelManagerService, dictionaryService: dictionaryService)
-        watchFolderViewModel = WatchFolderViewModel(watchFolderService: watchFolderService)
+        watchFolderViewModel = WatchFolderViewModel(
+            watchFolderService: watchFolderService,
+            modelManager: modelManagerService
+        )
 
         // Set shared references
         FileTranscriptionViewModel._shared = fileTranscriptionViewModel
@@ -187,7 +201,9 @@ final class ServiceContainer: ObservableObject {
         TermPackRegistryService.shared = termPackRegistryService
 
         modelManagerService.observePluginManager()
+        promptProcessingService.observePluginManager()
         settingsViewModel.observePluginManager()
+        watchFolderViewModel.observePluginManager()
     }
 
     func initialize() async {
@@ -202,22 +218,17 @@ final class ServiceContainer: ObservableObject {
             apiServerViewModel.startServer()
         }
 
-        pluginManager.setProfileNamesProvider { [weak self] in
+        pluginManager.setRuleNamesProvider { [weak self] in
             self?.profileService.profiles.map(\.name) ?? []
         }
         pluginManager.scanAndLoadPlugins()
 
         // Re-restore provider selection now that plugins are loaded
         modelManagerService.restoreProviderSelection()
+        watchFolderViewModel.reconcileSelectionWithAvailablePlugins()
 
         // Validate LLM provider selection against loaded plugins
         promptProcessingService.validateSelectionAfterPluginLoad()
-
-        // Check for plugin updates in background
-        pluginRegistryService.checkForUpdatesInBackground()
-
-        // Check for term pack updates in background
-        termPackRegistryService.checkForUpdatesInBackground()
 
         // Start memory service
         memoryService.startListening()

@@ -22,7 +22,7 @@ jobs:
   build:
     runs-on: macos-15
     concurrency:
-      group: plugin-release-${{ github.ref_name }}
+      group: plugin-release-${{ github.event_name == 'workflow_dispatch' && format('{0}-v{1}', inputs.plugin_name, inputs.plugin_version) || github.ref_name }}
       cancel-in-progress: true
     steps:
       - name: Parse tag
@@ -54,6 +54,7 @@ jobs:
             gemini) TARGET="GeminiPlugin" ;;
             whisperkit) TARGET="WhisperKitPlugin" ;;
             parakeet) TARGET="ParakeetPlugin" ;;
+            gemma4) TARGET="Gemma4Plugin" ;;
             speechanalyzer) TARGET="SpeechAnalyzerPlugin" ;;
             openai-compatible) TARGET="OpenAICompatiblePlugin" ;;
             voxtral) TARGET="VoxtralPlugin" ;;
@@ -69,25 +70,27 @@ jobs:
             fireworks) TARGET="FireworksPlugin" ;;
             gladia) TARGET="GladiaPlugin" ;;
             elevenlabs) TARGET="ElevenLabsPlugin" ;;
+            google-cloud-stt) TARGET="GoogleCloudSTTPlugin" ;;
             claude) TARGET="ClaudePlugin" ;;
             cerebras) TARGET="CerebrasPlugin" ;;
             openrouter) TARGET="OpenRouterPlugin" ;;
             soniox) TARGET="SonioxPlugin" ;;
             cohere) TARGET="CoherePlugin" ;;
             speechmatics) TARGET="SpeechmaticsPlugin" ;;
+            system-tts) TARGET="SystemTTSPlugin" ;;
             *) echo "Unknown plugin: $PLUGIN_NAME" && exit 1 ;;
           esac
           # Set deployment target and Swift embedding per plugin
           # All plugins use Xcode 26.2 (mlx-audio-swift requires Swift 6.2 for package resolution,
           # and workspace-state.json v7 from Xcode 26.2 is incompatible with Xcode 16.2)
           # - SpeechAnalyzer: macOS 26 deployment target
-          # - Qwen3/Voxtral: macOS 14 + embed Swift compat libs (MLX uses Swift 6.2 features)
+          # - Qwen3/Voxtral/Granite/Gemma4: macOS 14 + embed Swift compat libs (MLX uses Swift 6.2 features)
           # - All others: macOS 14, no compat libs needed (simple Foundation/SDK code)
           EMBED_SWIFT_LIBS="NO"
           XCODE_VERSION="26.2"
           if [ "$TARGET" = "SpeechAnalyzerPlugin" ]; then
             DEPLOY_TARGET="26.0"
-          elif [ "$TARGET" = "Qwen3Plugin" ] || [ "$TARGET" = "VoxtralPlugin" ] || [ "$TARGET" = "GranitePlugin" ]; then
+          elif [ "$TARGET" = "Qwen3Plugin" ] || [ "$TARGET" = "VoxtralPlugin" ] || [ "$TARGET" = "GranitePlugin" ] || [ "$TARGET" = "Gemma4Plugin" ]; then
             DEPLOY_TARGET="14.0"
             EMBED_SWIFT_LIBS="YES"
           else
@@ -217,12 +220,34 @@ jobs:
             --title "${TARGET} v${PLUGIN_VERSION}" \
             --notes ""
 
-      - name: Update plugins.json
+      - name: Update Plugin Registry
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           DOWNLOAD_URL="https://github.com/TypeWhisper/typewhisper-mac/releases/download/${TAG}/${TARGET}.zip"
           MANIFEST_PATH=$(find Plugins -name manifest.json -path "*${TARGET}*" 2>/dev/null | head -1)
+          TARGET_REGISTRY=$(python3 << PYEOF
+          import json, os
+
+          manifest_path = "$MANIFEST_PATH"
+          src_manifest = os.path.join("$GITHUB_WORKSPACE", manifest_path) if manifest_path else ""
+          if not src_manifest or not os.path.exists(src_manifest):
+              print("")
+          else:
+              with open(src_manifest) as mf:
+                  manifest = json.load(mf)
+              sdk_compat = manifest.get("sdkCompatibilityVersion")
+              print(f"plugins-{sdk_compat}.json" if sdk_compat else "plugins.json")
+          PYEOF
+          )
+
+          if [ -z "$TARGET_REGISTRY" ]; then
+            echo "Warning: No manifest found for ${TARGET}; skipping registry update"
+            exit 0
+          fi
+
+          export TARGET_REGISTRY
+          echo "Updating registry file: $TARGET_REGISTRY"
 
           git fetch origin gh-pages
           git worktree add -B gh-pages /tmp/gh-pages origin/gh-pages
@@ -233,73 +258,175 @@ jobs:
             git reset --hard origin/gh-pages
 
             python3 << PYEOF
-          import json, sys, os
+          import json, os, re, sys, tempfile
 
-          with open("/tmp/gh-pages/plugins.json", "r") as f:
-              registry = json.load(f)
+          target_registry = os.environ["TARGET_REGISTRY"]
+          target_path = os.path.join("/tmp/gh-pages", target_registry)
+          if os.path.exists(target_path):
+              with open(target_path, "r") as f:
+                  registry = json.load(f)
+          else:
+              registry = {
+                  "schemaVersion": 1,
+                  "plugins": []
+              }
 
-          plugin_name = "$PLUGIN_NAME"
           version = "$PLUGIN_VERSION"
           size = int("$ZIP_SIZE")
           download_url = "$DOWNLOAD_URL"
           manifest_path = "$MANIFEST_PATH"
+          src_manifest = os.path.join("$GITHUB_WORKSPACE", manifest_path) if manifest_path else ""
+
+          if not src_manifest or not os.path.exists(src_manifest):
+              print(f"Warning: No manifest found at {src_manifest}")
+              sys.exit(0)
+
+          with open(src_manifest) as mf:
+              manifest = json.load(mf)
+
+          registry.setdefault("schemaVersion", 1)
+
+          # Semver-tolerant version sort key. Accepts "1.2.3", "1.2.3-beta.4",
+          # "1.2.3+build.5" etc. Pre-release tags sort before matching release
+          # versions (1.2.3-rc < 1.2.3). See release review M8.
+          _numeric_part = re.compile(r"(\d+)")
+          def version_key(value):
+              core, _, pre = str(value).partition("-")
+              core = core.split("+", 1)[0]
+              core_tuple = tuple(int(p) if p.isdigit() else 0 for p in core.split("."))
+              if not pre:
+                  # No pre-release: rank higher than any pre-release of same core.
+                  return (core_tuple, 1, ())
+              # Pre-release: split tokens; numeric tokens sort before alpha.
+              pre_tokens = []
+              for token in pre.replace("+", ".").split("."):
+                  if token.isdigit():
+                      pre_tokens.append((0, int(token)))
+                  else:
+                      pre_tokens.append((1, token))
+              return (core_tuple, 0, tuple(pre_tokens))
+
+          def sync_plugin_metadata(plugin):
+              plugin["id"] = manifest["id"]
+              plugin["name"] = manifest["name"]
+              plugin["author"] = manifest.get("author", plugin.get("author", "TypeWhisper"))
+              plugin["description"] = manifest.get("description", plugin.get("description", ""))
+              plugin["descriptions"] = manifest.get("descriptions", plugin.get("descriptions", {}))
+              plugin["category"] = manifest.get("category", plugin.get("category", "utility"))
+              plugin["downloadCount"] = plugin.get("downloadCount", 0)
+
+              for field in ["iconSystemName", "requiresAPIKey"]:
+                  if field in manifest and manifest[field] is not None:
+                      plugin[field] = manifest[field]
+                  else:
+                      plugin.pop(field, None)
+
+          def build_release():
+              release = {
+                  "version": version,
+                  "minHostVersion": manifest.get("minHostVersion", "0.9.0"),
+                  "sdkCompatibilityVersion": manifest.get("sdkCompatibilityVersion"),
+                  "size": size,
+                  "downloadURL": download_url,
+              }
+              for field in ["minOSVersion", "supportedArchitectures"]:
+                  if field in manifest and manifest[field] is not None:
+                      release[field] = manifest[field]
+              return release
+
+          def migrate_legacy_release(plugin):
+              if plugin.get("releases"):
+                  return plugin["releases"]
+
+              version_value = plugin.get("version")
+              min_host = plugin.get("minHostVersion")
+              sdk_compat = plugin.get("sdkCompatibilityVersion")
+              size_value = plugin.get("size")
+              download_value = plugin.get("downloadURL")
+              if not all([version_value, min_host, size_value, download_value]):
+                  return []
+
+              legacy = {
+                  "version": version_value,
+                  "minHostVersion": min_host,
+                  "sdkCompatibilityVersion": sdk_compat,
+                  "size": size_value,
+                  "downloadURL": download_value,
+              }
+              for field in ["minOSVersion", "supportedArchitectures"]:
+                  if field in plugin and plugin[field] is not None:
+                      legacy[field] = plugin[field]
+              return [legacy]
+
+          def sync_legacy_fields(plugin, release):
+              plugin["version"] = release["version"]
+              plugin["minHostVersion"] = release["minHostVersion"]
+              if release.get("sdkCompatibilityVersion") is not None:
+                  plugin["sdkCompatibilityVersion"] = release["sdkCompatibilityVersion"]
+              else:
+                  plugin.pop("sdkCompatibilityVersion", None)
+              plugin["size"] = release["size"]
+              plugin["downloadURL"] = release["downloadURL"]
+
+              for field in ["minOSVersion", "supportedArchitectures"]:
+                  if field in release and release[field] is not None:
+                      plugin[field] = release[field]
+                  else:
+                      plugin.pop(field, None)
 
           updated = False
           for plugin in registry["plugins"]:
-              if plugin_name in plugin["id"]:
-                  plugin["version"] = version
-                  plugin["size"] = size
-                  plugin["downloadURL"] = download_url
+              if plugin["id"] == manifest["id"]:
+                  releases = migrate_legacy_release(plugin)
+                  sync_plugin_metadata(plugin)
+                  releases = [release for release in releases if release.get("version") != version]
+                  releases.append(build_release())
+                  plugin["releases"] = sorted(releases, key=lambda release: version_key(release["version"]), reverse=True)
+                  sync_legacy_fields(plugin, plugin["releases"][0])
                   updated = True
-                  print(f"Updated {plugin['id']} to v{version}")
+                  print(f"Updated {plugin['id']} release set with v{version}")
                   break
 
           if not updated:
-              # Read manifest.json to create a new registry entry
-              src_manifest = os.path.join("$GITHUB_WORKSPACE", manifest_path) if manifest_path else ""
-              if src_manifest and os.path.exists(src_manifest):
-                  with open(src_manifest) as mf:
-                      manifest = json.load(mf)
-                  new_entry = {
-                      "id": manifest["id"],
-                      "name": manifest["name"],
-                      "version": version,
-                      "minHostVersion": manifest.get("minHostVersion", "0.9.0"),
-                      "author": manifest.get("author", "TypeWhisper"),
-                      "description": manifest.get("description", ""),
-                      "descriptions": manifest.get("descriptions", {}),
-                      "category": manifest.get("category", "utility"),
-                      "size": size,
-                      "downloadURL": download_url
-                  }
-                  if manifest.get("minOSVersion"):
-                      new_entry["minOSVersion"] = manifest["minOSVersion"]
-                  if manifest.get("iconSystemName"):
-                      new_entry["iconSystemName"] = manifest["iconSystemName"]
-                  if manifest.get("requiresAPIKey"):
-                      new_entry["requiresAPIKey"] = manifest["requiresAPIKey"]
-                  registry["plugins"].append(new_entry)
-                  print(f"Added new plugin {manifest['id']} v{version}")
-              else:
-                  print(f"Warning: No manifest found at {src_manifest}")
-                  sys.exit(0)
+              new_entry = {}
+              sync_plugin_metadata(new_entry)
+              new_entry["releases"] = [build_release()]
+              sync_legacy_fields(new_entry, new_entry["releases"][0])
+              registry["plugins"].append(new_entry)
+              print(f"Added new plugin {manifest['id']} v{version}")
 
-          with open("/tmp/gh-pages/plugins.json", "w") as f:
-              json.dump(registry, f, indent=2)
-              f.write("\n")
+          # Atomic write: write to a temp file in the same directory, fsync,
+          # then rename into place. Prevents a half-written registry file from
+          # ending up on gh-pages if the job is killed mid-write and keeps
+          # concurrent readers consistent.
+          target_dir = os.path.dirname(target_path)
+          fd, tmp_path = tempfile.mkstemp(prefix=f"{target_registry}.", dir=target_dir)
+          try:
+              with os.fdopen(fd, "w") as f:
+                  json.dump(registry, f, indent=2)
+                  f.write("\n")
+                  f.flush()
+                  os.fsync(f.fileno())
+              os.replace(tmp_path, target_path)
+          except Exception:
+              try:
+                  os.unlink(tmp_path)
+              except OSError:
+                  pass
+              raise
           PYEOF
 
-            git add plugins.json
+            git add "$TARGET_REGISTRY"
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git diff --cached --quiet || git commit -m "Update ${TARGET} to v${PLUGIN_VERSION}"
+            git diff --cached --quiet || git commit -m "Update ${TARGET} to v${PLUGIN_VERSION} in ${TARGET_REGISTRY}"
             git push origin gh-pages
           }
 
           # Retry up to 5 times to handle concurrent pushes
           for i in 1 2 3 4 5; do
             if update_registry; then
-              echo "Successfully updated plugins.json (attempt $i)"
+              echo "Successfully updated ${TARGET_REGISTRY} (attempt $i)"
               break
             fi
             echo "Push failed (attempt $i), retrying in ${i}s..."

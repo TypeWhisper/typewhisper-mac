@@ -7,31 +7,102 @@ import os
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhisper-mac", category: "AudioDeviceService")
 
+enum AudioInputDeviceCompatibilityIssue: Sendable, Equatable {
+    case cannotSetDevice
+    case invalidInputFormat
+    case engineStartFailed
+
+    var badgeText: String {
+        localizedAppText("Not compatible", de: "Nicht kompatibel")
+    }
+
+    var detailText: String {
+        switch self {
+        case .cannotSetDevice, .invalidInputFormat, .engineStartFailed:
+            return localizedAppText(
+                "This microphone can't be used by TypeWhisper for preview or recording.",
+                de: "Dieses Mikrofon kann von TypeWhisper nicht für Test oder Aufnahme verwendet werden."
+            )
+        }
+    }
+}
+
+enum AudioInputDeviceCompatibility: Sendable, Equatable {
+    case unknown
+    case compatible
+    case incompatible(AudioInputDeviceCompatibilityIssue)
+}
+
+enum SelectedInputDeviceError: LocalizedError, Sendable, Equatable {
+    case unavailable
+    case incompatible(AudioInputDeviceCompatibilityIssue)
+    case routingConflict
+
+    var errorDescription: String? {
+        switch self {
+        case .unavailable:
+            return localizedAppText(
+                "Selected input device is no longer available.",
+                de: "Das ausgewählte Eingabegerät ist nicht mehr verfügbar."
+            )
+        case .incompatible(let issue):
+            return issue.detailText
+        case .routingConflict:
+            return localizedAppText(
+                "The selected microphone conflicts with your current audio routing. Disconnect Bluetooth or choose a different input.",
+                de: "Das ausgewählte Mikrofon kollidiert mit deiner aktuellen Audio-Route. Trenne Bluetooth oder wähle ein anderes Eingabegerät."
+            )
+        }
+    }
+}
+
 struct AudioInputDevice: Identifiable, Equatable {
     let deviceID: AudioDeviceID
     let name: String
     let uid: String
+    var compatibility: AudioInputDeviceCompatibility = .unknown
 
     var id: String { uid }
 }
 
 final class AudioDeviceService: ObservableObject, @unchecked Sendable {
+    /// Serial OperationQueue used by the preview configuration-change
+    /// observer. Its `underlyingQueue` is set to `previewRecoveryQueue` in
+    /// `init` so that `AVAudioEngineConfigurationChange` notifications are
+    /// serialized onto the same queue the recovery coordinator runs on,
+    /// preserving the thread-confinement invariants of
+    /// `AudioEngineRecoveryCoordinator`. Mirrors the pattern used by
+    /// `AudioRecordingService.recoveryNotificationQueue`.
+    private let previewNotificationQueue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.name = "com.typewhisper.preview-recovery.notifications"
+        queue.maxConcurrentOperationCount = 1
+        return queue
+    }()
 
     @Published var inputDevices: [AudioInputDevice] = []
     @Published var selectedDeviceUID: String? {
         didSet {
-            if selectedDeviceUID != oldValue {
-                UserDefaults.standard.set(selectedDeviceUID, forKey: UserDefaultsKeys.selectedInputDeviceUID)
-            }
+            guard selectedDeviceUID != oldValue else { return }
+            handleSelectedDeviceSelectionChange(from: oldValue, to: selectedDeviceUID)
         }
     }
     @Published var disconnectedDeviceName: String?
     @Published var isPreviewActive: Bool = false
     @Published var previewAudioLevel: Float = 0
     @Published var previewRawLevel: Float = 0
+    @Published private(set) var previewError: SelectedInputDeviceError?
+
+    var hasMicrophonePermissionOverride: Bool?
+    var audioDeviceIDResolverOverride: ((String) -> AudioDeviceID?)?
+    var selectionValidationOverride: ((AudioDeviceID?) throws -> Void)?
+    var startPreviewOverride: ((AudioDeviceID?) throws -> Void)?
 
     var selectedDeviceID: AudioDeviceID? {
         guard let uid = selectedDeviceUID else { return nil }
+        if let audioDeviceIDResolverOverride {
+            return audioDeviceIDResolverOverride(uid)
+        }
         return audioDeviceID(fromUID: uid)
     }
 
@@ -44,30 +115,68 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     private let previewLock = NSLock()
     private let previewRecoveryQueue = DispatchQueue(label: "com.typewhisper.preview-recovery", qos: .userInitiated)
     private let previewRecoveryCoordinator = AudioEngineRecoveryCoordinator()
+    /// Retains the outgoing preview `AVAudioEngine` for a short interval after
+    /// teardown so CoreAudio's internal callbacks cannot outlive the object
+    /// they still reference. Mirrors `AudioRecordingService.engineTeardownRetainer`.
+    /// See issue #332.
+    private let previewEngineTeardownRetainer = DelayedReleaseRetainer<AVAudioEngine>(label: "com.typewhisper.preview-engine-teardown")
+    private static let previewEngineTeardownRetentionInterval: TimeInterval = 0.3
     private var activePreviewDeviceID: AudioDeviceID?
+    private var compatibilityCache: [String: AudioInputDeviceCompatibility] = [:]
+    private var isApplyingValidatedSelection = false
+    private var isInitializingSelection = false
 
-    init() {
+    private var hasMicrophonePermission: Bool {
+        if let hasMicrophonePermissionOverride {
+            return hasMicrophonePermissionOverride
+        }
+        return AVAudioApplication.shared.recordPermission == .granted
+    }
+
+    var selectedDevice: AudioInputDevice? {
+        guard let selectedDeviceUID else { return nil }
+        return inputDevices.first(where: { $0.uid == selectedDeviceUID })
+    }
+
+    var selectedDeviceCompatibility: AudioInputDeviceCompatibility? {
+        selectedDevice?.compatibility
+    }
+
+    var selectedDeviceStatusMessage: String? {
+        guard let selectedDevice else { return nil }
+        switch selectedDevice.compatibility {
+        case .incompatible(let issue):
+            return "\(selectedDevice.name): \(issue.detailText)"
+        case .unknown, .compatible:
+            return nil
+        }
+    }
+
+    init(
+        initialInputDevices: [AudioInputDevice]? = nil,
+        monitorDeviceChanges: Bool = true,
+        probeCompatibilities: Bool = false
+    ) {
+        previewNotificationQueue.underlyingQueue = previewRecoveryQueue
+        isInitializingSelection = true
         selectedDeviceUID = UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedInputDeviceUID)
-        inputDevices = listInputDevices()
-        installDeviceListener()
+        inputDevices = applyCompatibilityCache(to: initialInputDevices ?? listInputDevices())
+        if monitorDeviceChanges {
+            installDeviceListener()
+        }
+        if probeCompatibilities, let selectedDeviceUID {
+            compatibilityCache[selectedDeviceUID] = .unknown
+        }
 
-        deviceChangeSubject
-            .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
-            .sink { [weak self] in
-                self?.handleDeviceChange()
-            }
-            .store(in: &cancellables)
-
-        $selectedDeviceUID
-            .removeDuplicates()
-            .dropFirst()
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                guard let self, self.isPreviewActive else { return }
-                self.stopPreview()
-                self.startPreview()
-            }
-            .store(in: &cancellables)
+        if monitorDeviceChanges {
+            deviceChangeSubject
+                .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
+                .sink { [weak self] in
+                    self?.handleDeviceChange()
+                }
+                .store(in: &cancellables)
+        }
+        isInitializingSelection = false
     }
 
     deinit {
@@ -80,14 +189,33 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
 
     func startPreview() {
         guard !isPreviewActive else { return }
-        guard AVAudioApplication.shared.recordPermission == .granted else {
+        previewError = nil
+        guard hasMicrophonePermission else {
             logger.warning("Microphone permission not granted, cannot start preview")
             return
         }
 
-        let engine = AVAudioEngine()
         let preferredDeviceID = selectedDeviceID
+        if let selectionError = selectedInputDeviceError(for: preferredDeviceID) {
+            previewError = selectionError
+            return
+        }
 
+        if let startPreviewOverride {
+            do {
+                try startPreviewOverride(preferredDeviceID)
+                isPreviewActive = true
+            } catch let error as SelectedInputDeviceError {
+                previewError = error
+                isPreviewActive = false
+            } catch {
+                previewError = selectedDeviceUID == nil ? nil : .incompatible(.engineStartFailed)
+                isPreviewActive = false
+            }
+            return
+        }
+
+        let engine = AVAudioEngine()
         previewLock.withLock {
             previewEngine = engine
             activePreviewDeviceID = preferredDeviceID
@@ -97,6 +225,9 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
 
         do {
             try startPreviewEngineWithRecovery(engine, preferredDeviceID: preferredDeviceID, label: "preview")
+            if selectedDeviceUID != nil {
+                markSelectedDeviceCompatibility(.compatible)
+            }
 
             if previewRecoveryCoordinator.finishStartingSuccessfully() == .performImmediateRecovery {
                 logger.warning("Preview engine configuration changed while starting, restarting with fresh input format")
@@ -105,8 +236,18 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             }
 
             isPreviewActive = true
+        } catch let error as SelectedInputDeviceError {
+            if case .incompatible(let issue) = error {
+                markSelectedDeviceCompatibility(.incompatible(issue))
+            }
+            previewError = error
+            cleanupAfterFailedPreviewStart(engine)
         } catch {
             logger.error("Failed to start preview engine: \(error.localizedDescription)")
+            if selectedDeviceUID != nil {
+                markSelectedDeviceCompatibility(.incompatible(.engineStartFailed))
+                previewError = .incompatible(.engineStartFailed)
+            }
             cleanupAfterFailedPreviewStart(engine)
         }
     }
@@ -122,10 +263,20 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         }
         if let engine {
             teardownPreviewEngine(engine)
+            previewEngineTeardownRetainer.retain(engine, for: Self.previewEngineTeardownRetentionInterval)
         }
         isPreviewActive = false
         previewAudioLevel = 0
         previewRawLevel = 0
+    }
+
+    func displayName(for device: AudioInputDevice) -> String {
+        switch device.compatibility {
+        case .incompatible(let issue):
+            return "\(device.name) (\(issue.badgeText))"
+        case .unknown, .compatible:
+            return device.name
+        }
     }
 
     private func processPreviewBuffer(_ buffer: AVAudioPCMBuffer) {
@@ -150,10 +301,15 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     }
 
     private func schedulePreviewRecoveryIfNeeded(_ action: AudioEngineRecoveryAction) {
-        guard case .schedule(let generation, let delay) = action else { return }
-
-        previewRecoveryQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
-            self?.performScheduledPreviewRecovery(generation: generation)
+        switch action {
+        case .none, .performImmediateRecovery:
+            return
+        case .schedule(let generation, let delay):
+            previewRecoveryQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.performScheduledPreviewRecovery(generation: generation)
+            }
+        case .fail(let failure):
+            handlePreviewRecoveryFailure(failure)
         }
     }
 
@@ -177,12 +333,45 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         }
     }
 
+    private func handlePreviewRecoveryFailure(_ failure: AudioEngineRecoveryFailure) {
+        let error: SelectedInputDeviceError
+        switch failure {
+        case .configurationChangeBurstLimitExceeded:
+            logger.error("Preview recovery circuit breaker tripped after repeated configuration changes")
+            error = .routingConflict
+        }
+
+        failActivePreviewDueToRecovery(error)
+    }
+
+    private func failActivePreviewDueToRecovery(_ error: SelectedInputDeviceError) {
+        previewRecoveryCoordinator.transitionToIdle()
+        removePreviewConfigurationObserver()
+        let engine: AVAudioEngine? = previewLock.withLock {
+            let engine = previewEngine
+            previewEngine = nil
+            activePreviewDeviceID = nil
+            return engine
+        }
+        if let engine {
+            teardownPreviewEngine(engine)
+            previewEngineTeardownRetainer.retain(engine, for: Self.previewEngineTeardownRetentionInterval)
+        }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.isPreviewActive = false
+            self.previewAudioLevel = 0
+            self.previewRawLevel = 0
+            self.previewError = error
+        }
+    }
+
     private func installPreviewConfigurationObserver(for engine: AVAudioEngine) {
         removePreviewConfigurationObserver()
         previewConfigChangeObserver = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange,
             object: engine,
-            queue: nil
+            queue: previewNotificationQueue
         ) { [weak self] _ in
             self?.handlePreviewConfigurationChangeNotification()
         }
@@ -200,12 +389,18 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         preferredDeviceID: AudioDeviceID?,
         label: String
     ) throws {
-        for (attempt, delay) in AudioEngineRecoveryPolicy.retryBackoff.enumerated() {
+        // Main-thread callers get a bounded backoff to keep UI responsive; the
+        // observer path uses the full schedule. See M1 in the release review.
+        let backoff = AudioEngineRecoveryPolicy.retryBackoffForCurrentThread()
+        for (attempt, delay) in backoff.enumerated() {
             do {
                 try configureAndStartPreviewEngine(engine, preferredDeviceID: preferredDeviceID, label: label)
                 return
             } catch {
                 guard AudioEngineRecoveryPolicy.isRetryable(error: error) else {
+                    if preferredDeviceID != nil {
+                        throw SelectedInputDeviceError.incompatible(.engineStartFailed)
+                    }
                     throw error
                 }
 
@@ -214,7 +409,16 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             }
         }
 
-        try configureAndStartPreviewEngine(engine, preferredDeviceID: preferredDeviceID, label: label)
+        do {
+            try configureAndStartPreviewEngine(engine, preferredDeviceID: preferredDeviceID, label: label)
+        } catch let error as SelectedInputDeviceError {
+            throw error
+        } catch {
+            if preferredDeviceID != nil {
+                throw SelectedInputDeviceError.incompatible(.engineStartFailed)
+            }
+            throw error
+        }
     }
 
     private func restartPreviewEngineWithRecovery(
@@ -222,8 +426,22 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         preferredDeviceID: AudioDeviceID?,
         label: String
     ) throws {
+        // Swap in a fresh AVAudioEngine instead of reusing the stuck one.
+        // Reusing the same engine after CoreAudio flagged its AUHAL mid-switch
+        // causes `AudioUnitSetProperty` to return 'nope'
+        // (kAudioHardwareIllegalOperationError). See issue #332.
+        guard let replacementEngine = replacePreviewAudioEngineForRecoveryIfNeeded(engine) else { return }
+
+        installPreviewConfigurationObserver(for: replacementEngine)
         teardownPreviewEngine(engine)
-        try startPreviewEngineWithRecovery(engine, preferredDeviceID: preferredDeviceID, label: label)
+        previewEngineTeardownRetainer.retain(engine, for: Self.previewEngineTeardownRetentionInterval)
+
+        do {
+            try startPreviewEngineWithRecovery(replacementEngine, preferredDeviceID: preferredDeviceID, label: label)
+        } catch {
+            cleanupAfterFailedPreviewStart(replacementEngine)
+            throw error
+        }
     }
 
     private func configureAndStartPreviewEngine(
@@ -232,32 +450,80 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         label: String
     ) throws {
         if let preferredDeviceID {
-            if !setInputDevice(preferredDeviceID, on: engine, label: label) {
-                logger.error("Failed to set \(label, privacy: .public) input device (\(preferredDeviceID)), falling back to system default")
-            }
+            try configureExplicitInputDevice(preferredDeviceID, on: engine, label: label)
         }
 
         let inputNode = engine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
         logger.info("\(label, privacy: .public) input format: sampleRate=\(format.sampleRate), channels=\(format.channelCount)")
-        guard format.sampleRate > 0, format.channelCount > 0 else {
-            throw NSError(
-                domain: "AudioDeviceService",
-                code: 0,
-                userInfo: [NSLocalizedDescriptionKey: "No audio input available for preview"]
-            )
-        }
+        try validateInputFormat(format, for: preferredDeviceID)
 
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
-            self?.processPreviewBuffer(buffer)
+        // Re-read the format immediately before installTap and reject the
+        // install if it has drifted (e.g. Bluetooth flipping from A2DP to HFP
+        // between `configureExplicitInputDevice` and here). Mirrors
+        // `AudioRecordingService.validateTapInstallationPreconditions`.
+        // See issue #332.
+        let currentFormat = inputNode.outputFormat(forBus: 0)
+        try validatePreviewTapInstallationPreconditions(expected: format, current: currentFormat)
+
+        // Wrap installTap so NSException (e.g. AVAudioSession incompatible format)
+        // is converted into a Swift error instead of crashing the app. See K2.
+        do {
+            _ = try ObjCExceptionCatcher.catching {
+                inputNode.installTap(onBus: 0, bufferSize: 1024, format: currentFormat) { [weak self] buffer, _ in
+                    self?.processPreviewBuffer(buffer)
+                }
+            }
+        } catch {
+            let tapError = error as NSError? ?? NSError(
+                domain: AudioEngineRecoveryErrorDomains.avfException,
+                code: 0,
+                userInfo: [NSLocalizedDescriptionKey: "installTap raised NSException"]
+            )
+            let exceptionName = tapError.userInfo[AudioEngineRecoveryErrorUserInfoKeys.exceptionName] as? String ?? "NSException"
+            logger.error("\(label, privacy: .public) preview installTap raised \(exceptionName, privacy: .public): \(tapError.localizedDescription, privacy: .public)")
+            throw tapError
         }
 
         do {
             try engine.start()
+            // Open the post-start quiescence window. Without this, the
+            // observer armed on this engine catches the config-change
+            // triggered by our own `AudioUnitSetProperty(...CurrentDevice)`
+            // write and schedules another restart — indefinitely.
+            // See issue #332.
+            previewRecoveryCoordinator.noteEngineStarted()
         } catch {
             inputNode.removeTap(onBus: 0)
             engine.stop()
             throw error
+        }
+    }
+
+    @discardableResult
+    private func replacePreviewAudioEngineForRecoveryIfNeeded(_ engine: AVAudioEngine) -> AVAudioEngine? {
+        let replacementEngine = AVAudioEngine()
+        let didReplace = previewLock.withLock { () -> Bool in
+            guard previewEngine === engine else { return false }
+            previewEngine = replacementEngine
+            return true
+        }
+        return didReplace ? replacementEngine : nil
+    }
+
+    private func validatePreviewTapInstallationPreconditions(expected: AVAudioFormat, current: AVAudioFormat) throws {
+        let currentSampleRate = current.sampleRate
+        let currentChannelCount = current.channelCount
+        let matchesExpected = currentSampleRate == expected.sampleRate && currentChannelCount == expected.channelCount
+
+        guard currentSampleRate > 0, currentChannelCount > 0, matchesExpected else {
+            throw NSError(
+                domain: AudioEngineRecoveryErrorDomains.transientFormatMismatch,
+                code: 0,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Format mismatch before preview installTap: expected \(expected.sampleRate) Hz/\(expected.channelCount) ch, got \(current.sampleRate) Hz/\(current.channelCount) ch"
+                ]
+            )
         }
     }
 
@@ -276,6 +542,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             }
         }
         teardownPreviewEngine(engine)
+        previewEngineTeardownRetainer.retain(engine, for: Self.previewEngineTeardownRetentionInterval)
         isPreviewActive = false
         previewAudioLevel = 0
         previewRawLevel = 0
@@ -459,8 +726,12 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
 
     private func handleDeviceChange() {
         let oldDevices = inputDevices
-        let newDevices = listInputDevices()
+        let newDevices = applyCompatibilityCache(to: listInputDevices())
         inputDevices = newDevices
+        compatibilityCache = compatibilityCache.filter { uid, _ in
+            newDevices.contains(where: { $0.uid == uid })
+        }
+        inputDevices = applyCompatibilityCache(to: newDevices)
 
         if let uid = selectedDeviceUID,
            !newDevices.contains(where: { $0.uid == uid }) {
@@ -477,7 +748,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
 
                 guard let currentUID = self.selectedDeviceUID, currentUID == uid else { return }
 
-                let refreshedDevices = self.listInputDevices()
+                let refreshedDevices = self.applyCompatibilityCache(to: self.listInputDevices())
                 if refreshedDevices.contains(where: { $0.uid == uid }) {
                     logger.info("Device reappeared after reconfiguration: \(deviceName ?? uid)")
                     self.inputDevices = refreshedDevices
@@ -493,6 +764,141 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             // Selected device still present - cancel any pending disconnect verification
             disconnectVerificationTask?.cancel()
             disconnectVerificationTask = nil
+        }
+    }
+
+    private func applyCompatibilityCache(to devices: [AudioInputDevice]) -> [AudioInputDevice] {
+        devices.map { device in
+            var device = device
+            device.compatibility = compatibilityCache[device.uid] ?? device.compatibility
+            return device
+        }
+    }
+
+    func markSelectedDeviceCompatibility(_ compatibility: AudioInputDeviceCompatibility) {
+        guard let selectedDeviceUID else { return }
+        compatibilityCache[selectedDeviceUID] = compatibility
+        inputDevices = applyCompatibilityCache(to: inputDevices)
+    }
+
+    private func handleSelectedDeviceSelectionChange(from oldValue: String?, to newValue: String?) {
+        if isInitializingSelection {
+            return
+        }
+
+        if isApplyingValidatedSelection {
+            persistSelectedDeviceUID()
+            return
+        }
+
+        previewError = nil
+
+        guard let newValue else {
+            persistSelectedDeviceUID()
+            if isPreviewActive {
+                stopPreview()
+                startPreview()
+            }
+            return
+        }
+
+        do {
+            try validateDeviceSelection(uid: newValue)
+            compatibilityCache[newValue] = .compatible
+            inputDevices = applyCompatibilityCache(to: inputDevices)
+            persistSelectedDeviceUID()
+
+            if isPreviewActive {
+                stopPreview()
+                startPreview()
+            }
+        } catch let error as SelectedInputDeviceError {
+            if case .incompatible(let issue) = error {
+                compatibilityCache[newValue] = .incompatible(issue)
+                inputDevices = applyCompatibilityCache(to: inputDevices)
+            }
+            previewError = error
+            revertSelectedDeviceUID(to: oldValue)
+        } catch {
+            compatibilityCache[newValue] = .incompatible(.engineStartFailed)
+            inputDevices = applyCompatibilityCache(to: inputDevices)
+            previewError = .incompatible(.engineStartFailed)
+            revertSelectedDeviceUID(to: oldValue)
+        }
+    }
+
+    private func validateDeviceSelection(uid: String) throws {
+        guard let deviceID = audioDeviceIDResolverOverride?(uid) ?? audioDeviceID(fromUID: uid) else {
+            throw SelectedInputDeviceError.unavailable
+        }
+
+        if let selectionValidationOverride {
+            try selectionValidationOverride(deviceID)
+            return
+        }
+
+        let engine = AVAudioEngine()
+        let inputNode = engine.inputNode
+
+        // Single cleanup path guarded by a flag to avoid the double-teardown that
+        // used to happen when engine.start() threw after the defer was already armed
+        // (release review K1). Tap installation is also wrapped in
+        // ObjCExceptionCatcher so NSException crashes on incompatible devices are
+        // converted into throws (K2).
+        var tapInstalled = false
+        defer {
+            if tapInstalled {
+                inputNode.removeTap(onBus: 0)
+            }
+            engine.stop()
+        }
+
+        do {
+            try configureExplicitInputDevice(deviceID, on: engine, label: "selection")
+            let format = inputNode.outputFormat(forBus: 0)
+            try validateInputFormat(format, for: deviceID)
+            do {
+                _ = try ObjCExceptionCatcher.catching {
+                    inputNode.installTap(onBus: 0, bufferSize: 256, format: format) { _, _ in }
+                }
+                tapInstalled = true
+            } catch {
+                let tapError = error as NSError? ?? NSError(
+                    domain: AudioEngineRecoveryErrorDomains.avfException,
+                    code: 0,
+                    userInfo: [NSLocalizedDescriptionKey: "installTap raised NSException"]
+                )
+                let exceptionName = tapError.userInfo[AudioEngineRecoveryErrorUserInfoKeys.exceptionName] as? String ?? "NSException"
+                logger.error("selection installTap raised \(exceptionName, privacy: .public): \(tapError.localizedDescription, privacy: .public)")
+                throw SelectedInputDeviceError.incompatible(.engineStartFailed)
+            }
+            try engine.start()
+        } catch let error as SelectedInputDeviceError {
+            throw error
+        } catch {
+            throw SelectedInputDeviceError.incompatible(.engineStartFailed)
+        }
+    }
+
+    private func revertSelectedDeviceUID(to value: String?) {
+        isApplyingValidatedSelection = true
+        selectedDeviceUID = value
+        isApplyingValidatedSelection = false
+    }
+
+    private func persistSelectedDeviceUID() {
+        UserDefaults.standard.set(selectedDeviceUID, forKey: UserDefaultsKeys.selectedInputDeviceUID)
+    }
+
+    private func selectedInputDeviceError(for preferredDeviceID: AudioDeviceID?) -> SelectedInputDeviceError? {
+        guard let selectedDeviceUID else { return nil }
+        guard preferredDeviceID != nil else { return .unavailable }
+
+        switch compatibilityCache[selectedDeviceUID] ?? selectedDevice?.compatibility ?? .unknown {
+        case .incompatible(let issue):
+            return .incompatible(issue)
+        case .unknown, .compatible:
+            return nil
         }
     }
 }
@@ -546,6 +952,29 @@ func setInputDevice(_ deviceID: AudioDeviceID, on engine: AVAudioEngine, label: 
     return true
 }
 
+func configureExplicitInputDevice(_ deviceID: AudioDeviceID, on engine: AVAudioEngine, label: String) throws {
+    guard AudioDeviceService.isInputDeviceAvailable(deviceID) else {
+        throw SelectedInputDeviceError.unavailable
+    }
+
+    guard setInputDevice(deviceID, on: engine, label: label) else {
+        throw SelectedInputDeviceError.incompatible(.cannotSetDevice)
+    }
+}
+
+func validateInputFormat(_ format: AVAudioFormat, for preferredDeviceID: AudioDeviceID?) throws {
+    guard format.sampleRate > 0, format.channelCount > 0 else {
+        if preferredDeviceID != nil {
+            throw SelectedInputDeviceError.incompatible(.invalidInputFormat)
+        }
+        throw NSError(
+            domain: "AudioDeviceService",
+            code: 0,
+            userInfo: [NSLocalizedDescriptionKey: "No audio input available for preview"]
+        )
+    }
+}
+
 private func audioStatusString(_ status: OSStatus) -> String {
     let bytes: [UInt8] = [
         UInt8((status >> 24) & 0xFF),
@@ -558,3 +987,31 @@ private func audioStatusString(_ status: OSStatus) -> String {
     }
     return "\(status)"
 }
+
+#if DEBUG
+extension AudioDeviceService {
+    @discardableResult
+    func testingReplacePreviewEngineForRecoveryIfNeeded(_ engine: AVAudioEngine) -> AVAudioEngine? {
+        replacePreviewAudioEngineForRecoveryIfNeeded(engine)
+    }
+
+    func testingSetPreviewEngine(_ engine: AVAudioEngine?, activeDeviceID: AudioDeviceID? = nil) {
+        previewLock.withLock {
+            previewEngine = engine
+            activePreviewDeviceID = activeDeviceID
+        }
+    }
+
+    func testingCurrentPreviewEngine() -> AVAudioEngine? {
+        previewLock.withLock { previewEngine }
+    }
+
+    func testingCurrentPreviewDeviceID() -> AudioDeviceID? {
+        previewLock.withLock { activePreviewDeviceID }
+    }
+
+    func testingValidatePreviewTapInstallationPreconditions(expected: AVAudioFormat, current: AVAudioFormat) throws {
+        try validatePreviewTapInstallationPreconditions(expected: expected, current: current)
+    }
+}
+#endif

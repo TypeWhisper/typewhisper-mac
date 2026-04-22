@@ -6,11 +6,40 @@ enum AudioEngineRecoveryAction: Equatable {
     case none
     case performImmediateRecovery
     case schedule(generation: UInt64, delay: TimeInterval)
+    case fail(AudioEngineRecoveryFailure)
+}
+
+enum AudioEngineRecoveryFailure: Equatable {
+    case configurationChangeBurstLimitExceeded
 }
 
 enum AudioEngineRecoveryPolicy {
     static let configurationDebounce: TimeInterval = 0.15
+    // Real BT-default/headset repros continue posting self-induced config
+    // changes ~700ms after each successful restart, so the filter needs to
+    // cover more than the initial engine.start() call itself. We defer a
+    // single recovery until this window expires instead of immediately
+    // re-entering the startup path.
+    static let configurationChangeQuiescence: TimeInterval = 1.0
+    static let configurationChangeBurstWindow: TimeInterval = 5.0
+    static let configurationChangeBurstLimit = 4
+
+    /// Backoff schedule used by the asynchronous observer-based recovery path,
+    /// which runs on a dedicated dispatch queue. Blocking sleeps here are
+    /// safe because they do not stall the main thread.
     static let retryBackoff: [TimeInterval] = [0.15, 0.30, 0.50]
+
+    /// Bounded backoff used when the retry loop executes on the main thread
+    /// (e.g. from `AudioRecordingService.startRecording()` or the selected
+    /// input device validation). A single short wait keeps UI responsive;
+    /// longer recovery is delegated to the observer path on the recovery
+    /// queue. See release review M1.
+    static let mainThreadRetryBackoff: [TimeInterval] = [0.05]
+
+    /// Returns the appropriate backoff schedule for the current thread.
+    static func retryBackoffForCurrentThread() -> [TimeInterval] {
+        Thread.isMainThread ? mainThreadRetryBackoff : retryBackoff
+    }
 
     private static let retryableOSStatusCodes: Set<OSStatus> = [
         kAudioUnitErr_FormatNotSupported,
@@ -19,6 +48,11 @@ enum AudioEngineRecoveryPolicy {
 
     static func isRetryable(error: Error) -> Bool {
         let nsError = error as NSError
+        if nsError.domain == AudioEngineRecoveryErrorDomains.avfException
+            || nsError.domain == AudioEngineRecoveryErrorDomains.transientFormatMismatch {
+            return true
+        }
+
         let detail = nsError.localizedDescription
         return isRetryable(detail: detail, osStatus: extractOSStatus(from: error))
     }
@@ -48,6 +82,39 @@ enum AudioEngineRecoveryPolicy {
     }
 }
 
+enum AudioEngineRecoveryErrorDomains {
+    static let avfException = "com.typewhisper.AVFException"
+    static let transientFormatMismatch = "com.typewhisper.AudioRecordingRecovery"
+}
+
+enum AudioEngineRecoveryErrorUserInfoKeys {
+    static let exceptionName = "NSExceptionName"
+    static let exceptionUserInfo = "NSExceptionUserInfo"
+}
+
+final class DelayedReleaseRetainer<Object: AnyObject>: @unchecked Sendable {
+    private final class RetainedObjectBox: @unchecked Sendable {
+        let object: Object
+
+        init(_ object: Object) {
+            self.object = object
+        }
+    }
+
+    private let queue: DispatchQueue
+
+    init(label: String, qos: DispatchQoS = .utility) {
+        queue = DispatchQueue(label: label, qos: qos)
+    }
+
+    func retain(_ object: Object, for duration: TimeInterval) {
+        let retainedObject = RetainedObjectBox(object)
+        queue.asyncAfter(deadline: .now() + duration) {
+            withExtendedLifetime(retainedObject) {}
+        }
+    }
+}
+
 final class AudioEngineRecoveryCoordinator: @unchecked Sendable {
     private enum LifecycleState {
         case idle
@@ -60,9 +127,16 @@ final class AudioEngineRecoveryCoordinator: @unchecked Sendable {
         var pendingConfigurationChange = false
         var recoveryInFlight = false
         var generation: UInt64 = 0
+        var lastEngineStartTimestamp: TimeInterval?
+        var scheduledRecoveryTimestamps: [TimeInterval] = []
     }
 
+    private let now: @Sendable () -> TimeInterval
     private let state = OSAllocatedUnfairLock(initialState: State())
+
+    init(now: @escaping @Sendable () -> TimeInterval = { Date().timeIntervalSinceReferenceDate }) {
+        self.now = now
+    }
 
     func beginStarting() {
         state.withLock { state in
@@ -70,6 +144,14 @@ final class AudioEngineRecoveryCoordinator: @unchecked Sendable {
             state.pendingConfigurationChange = false
             state.recoveryInFlight = false
             state.generation &+= 1
+            state.lastEngineStartTimestamp = nil
+            state.scheduledRecoveryTimestamps.removeAll(keepingCapacity: false)
+        }
+    }
+
+    func noteEngineStarted() {
+        state.withLock { state in
+            state.lastEngineStartTimestamp = now()
         }
     }
 
@@ -100,8 +182,7 @@ final class AudioEngineRecoveryCoordinator: @unchecked Sendable {
                     return .none
                 }
 
-                state.generation &+= 1
-                return .schedule(generation: state.generation, delay: AudioEngineRecoveryPolicy.configurationDebounce)
+                return makeScheduledRecoveryAction(for: &state)
             }
         }
     }
@@ -128,8 +209,7 @@ final class AudioEngineRecoveryCoordinator: @unchecked Sendable {
                 return .none
             }
 
-            state.generation &+= 1
-            return .schedule(generation: state.generation, delay: AudioEngineRecoveryPolicy.configurationDebounce)
+            return makeScheduledRecoveryAction(for: &state)
         }
     }
 
@@ -139,6 +219,35 @@ final class AudioEngineRecoveryCoordinator: @unchecked Sendable {
             state.pendingConfigurationChange = false
             state.recoveryInFlight = false
             state.generation &+= 1
+            state.lastEngineStartTimestamp = nil
+            state.scheduledRecoveryTimestamps.removeAll(keepingCapacity: false)
         }
+    }
+
+    private func makeScheduledRecoveryAction(for state: inout State) -> AudioEngineRecoveryAction {
+        pruneScheduledRecoveryTimestamps(in: &state)
+        if state.scheduledRecoveryTimestamps.count >= AudioEngineRecoveryPolicy.configurationChangeBurstLimit - 1 {
+            state.pendingConfigurationChange = false
+            return .fail(.configurationChangeBurstLimitExceeded)
+        }
+
+        state.generation &+= 1
+        state.scheduledRecoveryTimestamps.append(now())
+        return .schedule(generation: state.generation, delay: recoveryDelay(for: state))
+    }
+
+    private func recoveryDelay(for state: State) -> TimeInterval {
+        guard let lastEngineStartTimestamp = state.lastEngineStartTimestamp else {
+            return AudioEngineRecoveryPolicy.configurationDebounce
+        }
+
+        let elapsedSinceStart = now() - lastEngineStartTimestamp
+        let remainingQuiescence = AudioEngineRecoveryPolicy.configurationChangeQuiescence - elapsedSinceStart
+        return max(AudioEngineRecoveryPolicy.configurationDebounce, remainingQuiescence)
+    }
+
+    private func pruneScheduledRecoveryTimestamps(in state: inout State) {
+        let cutoff = now() - AudioEngineRecoveryPolicy.configurationChangeBurstWindow
+        state.scheduledRecoveryTimestamps.removeAll { $0 < cutoff }
     }
 }

@@ -1,8 +1,23 @@
 import SwiftUI
+import AppKit
 
 enum SettingsTab: Hashable {
     case home, general, recording, hotkeys, recorder
     case fileTranscription, history, dictionary, snippets, profiles, prompts, integrations, advanced, license, about
+}
+
+private struct SettingsDestination: Identifiable, Hashable {
+    let tab: SettingsTab
+    let title: String
+    let systemImage: String
+    let badge: Int?
+
+    var id: SettingsTab { tab }
+}
+
+private struct SettingsDestinationSection: Identifiable {
+    let id: String
+    let destinations: [SettingsDestination]
 }
 
 struct SettingsView: View {
@@ -11,69 +26,56 @@ struct SettingsView: View {
     @ObservedObject private var registryService = PluginRegistryService.shared
     @ObservedObject private var homeViewModel = HomeViewModel.shared
     @ObservedObject private var promptActionsViewModel = PromptActionsViewModel.shared
-    @AppStorage(UserDefaultsKeys.showRecorderTab) private var showRecorderTab = false
+    @ObservedObject private var settingsNavigation = SettingsNavigationCoordinator.shared
+
+    private var destinations: [SettingsDestination] {
+        [
+            SettingsDestination(tab: .home, title: String(localized: "Home"), systemImage: "house", badge: nil),
+            SettingsDestination(tab: .general, title: String(localized: "General"), systemImage: "gear", badge: nil),
+            SettingsDestination(tab: .recording, title: String(localized: "Recording"), systemImage: "mic.fill", badge: nil),
+            SettingsDestination(tab: .hotkeys, title: String(localized: "Hotkeys"), systemImage: "keyboard", badge: nil),
+            SettingsDestination(
+                tab: .recorder,
+                title: String(localized: "settings.tab.recorder"),
+                systemImage: "waveform.circle",
+                badge: nil
+            ),
+            SettingsDestination(tab: .fileTranscription, title: String(localized: "File Transcription"), systemImage: "doc.text", badge: nil),
+            SettingsDestination(tab: .history, title: String(localized: "History"), systemImage: "clock.arrow.circlepath", badge: nil),
+            SettingsDestination(tab: .dictionary, title: String(localized: "Dictionary"), systemImage: "book.closed", badge: nil),
+            SettingsDestination(tab: .snippets, title: String(localized: "Snippets"), systemImage: "text.badge.plus", badge: nil),
+            SettingsDestination(tab: .profiles, title: localizedAppText("Rules", de: "Regeln"), systemImage: "point.3.connected.trianglepath.dotted", badge: nil),
+            SettingsDestination(tab: .prompts, title: String(localized: "Prompts"), systemImage: "sparkles", badge: nil),
+            SettingsDestination(
+                tab: .integrations,
+                title: String(localized: "Integrations"),
+                systemImage: "puzzlepiece.extension",
+                badge: registryService.availableUpdatesCount > 0 ? registryService.availableUpdatesCount : nil
+            ),
+            SettingsDestination(tab: .advanced, title: String(localized: "Advanced"), systemImage: "gearshape.2", badge: nil),
+            SettingsDestination(tab: .license, title: String(localized: "License"), systemImage: "key", badge: nil),
+            SettingsDestination(tab: .about, title: String(localized: "About"), systemImage: "info.circle", badge: nil)
+        ]
+    }
+
+    private var destinationSections: [SettingsDestinationSection] {
+        settingsDestinationSections(destinations)
+    }
 
     var body: some View {
         Group {
             if #available(macOS 15, *) {
-                TabView(selection: $selectedTab) {
-                    SettingsMainTabs(pluginUpdatesBadge: registryService.availableUpdatesCount, showRecorderTab: showRecorderTab)
-                }
-                .tabViewStyle(.sidebarAdaptable)
+                SettingsModernShell(
+                    selectedTab: $selectedTab,
+                    sections: destinationSections,
+                    detail: { tab in AnyView(settingsDetail(for: tab)) }
+                )
             } else {
-                TabView(selection: $selectedTab) {
-                    Group {
-                        HomeSettingsView()
-                            .tabItem { Label(String(localized: "Home"), systemImage: "house") }
-                            .tag(SettingsTab.home)
-                        GeneralSettingsView()
-                            .tabItem { Label(String(localized: "General"), systemImage: "gear") }
-                            .tag(SettingsTab.general)
-                        RecordingSettingsView()
-                            .tabItem { Label(String(localized: "Recording"), systemImage: "mic.fill") }
-                            .tag(SettingsTab.recording)
-                        HotkeySettingsView()
-                            .tabItem { Label(String(localized: "Hotkeys"), systemImage: "keyboard") }
-                            .tag(SettingsTab.hotkeys)
-                        FileTranscriptionView()
-                            .tabItem { Label(String(localized: "File Transcription"), systemImage: "doc.text") }
-                            .tag(SettingsTab.fileTranscription)
-                        HistoryView()
-                            .tabItem { Label(String(localized: "History"), systemImage: "clock.arrow.circlepath") }
-                            .tag(SettingsTab.history)
-                    }
-                    Group {
-                        if showRecorderTab {
-                            AudioRecorderView(viewModel: AudioRecorderViewModel.shared)
-                                .tabItem { Label(String(localized: "settings.tab.recorder"), systemImage: "waveform.circle") }
-                                .tag(SettingsTab.recorder)
-                        }
-                        DictionarySettingsView()
-                            .tabItem { Label(String(localized: "Dictionary"), systemImage: "book.closed") }
-                            .tag(SettingsTab.dictionary)
-                        SnippetsSettingsView()
-                            .tabItem { Label(String(localized: "Snippets"), systemImage: "text.badge.plus") }
-                            .tag(SettingsTab.snippets)
-                        ProfilesSettingsView()
-                            .tabItem { Label(String(localized: "Profiles"), systemImage: "person.crop.rectangle.stack") }
-                            .tag(SettingsTab.profiles)
-                        PromptActionsSettingsView()
-                            .tabItem { Label(String(localized: "Prompts"), systemImage: "sparkles") }
-                            .tag(SettingsTab.prompts)
-                        PluginSettingsView()
-                            .tabItem { Label(String(localized: "Integrations"), systemImage: "puzzlepiece.extension") }
-                            .tag(SettingsTab.integrations)
-                        AdvancedSettingsView()
-                            .tabItem { Label(String(localized: "Advanced"), systemImage: "gearshape.2") }
-                            .tag(SettingsTab.advanced)
-                        LicenseSettingsView()
-                            .tabItem { Label(String(localized: "License"), systemImage: "key") }
-                            .tag(SettingsTab.license)
-                        AboutSettingsView()
-                            .tabItem { Label(String(localized: "About"), systemImage: "info.circle") }
-                            .tag(SettingsTab.about)
-                    }
-                }
+                SettingsSidebarShell(
+                    selectedTab: $selectedTab,
+                    sections: destinationSections,
+                    detail: settingsDetail(for:)
+                )
             }
         }
         .frame(minWidth: 950, idealWidth: 1050, minHeight: 550, idealHeight: 600)
@@ -93,6 +95,9 @@ struct SettingsView: View {
                 promptActionsViewModel.navigateToIntegrations = false
             }
         }
+        .onReceive(settingsNavigation.$request.compactMap { $0 }) { request in
+            selectedTab = request.tab
+        }
     }
 
     private func navigateToFileTranscriptionIfNeeded() {
@@ -100,76 +105,245 @@ struct SettingsView: View {
             selectedTab = .fileTranscription
         }
     }
-}
 
-@available(macOS 15, *)
-private struct SettingsMainTabs: TabContent {
-    var pluginUpdatesBadge: Int
-    var showRecorderTab: Bool
-    var body: some TabContent<SettingsTab> {
-        Tab(String(localized: "Home"), systemImage: "house", value: SettingsTab.home) {
+    @ViewBuilder
+    private func settingsDetail(for tab: SettingsTab) -> some View {
+        switch tab {
+        case .home:
             HomeSettingsView()
-        }
-        Tab(String(localized: "General"), systemImage: "gear", value: SettingsTab.general) {
+        case .general:
             GeneralSettingsView()
-        }
-        Tab(String(localized: "Recording"), systemImage: "mic.fill", value: SettingsTab.recording) {
+        case .recording:
             RecordingSettingsView()
-        }
-        Tab(String(localized: "Hotkeys"), systemImage: "keyboard", value: SettingsTab.hotkeys) {
+        case .hotkeys:
             HotkeySettingsView()
-        }
-        Tab(String(localized: "File Transcription"), systemImage: "doc.text", value: SettingsTab.fileTranscription) {
+        case .recorder:
+            AudioRecorderView(viewModel: AudioRecorderViewModel.shared)
+        case .fileTranscription:
             FileTranscriptionView()
-        }
-        if showRecorderTab {
-            Tab(String(localized: "settings.tab.recorder"), systemImage: "waveform.circle", value: SettingsTab.recorder) {
-                AudioRecorderView(viewModel: AudioRecorderViewModel.shared)
-            }
-        }
-        Tab(String(localized: "History"), systemImage: "clock.arrow.circlepath", value: SettingsTab.history) {
+        case .history:
             HistoryView()
-        }
-        SettingsExtraTabs(pluginUpdatesBadge: pluginUpdatesBadge)
-    }
-}
-
-@available(macOS 15, *)
-private struct SettingsExtraTabs: TabContent {
-    var pluginUpdatesBadge: Int
-    var body: some TabContent<SettingsTab> {
-        Tab(String(localized: "Dictionary"), systemImage: "book.closed", value: SettingsTab.dictionary) {
+        case .dictionary:
             DictionarySettingsView()
-        }
-        Tab(String(localized: "Snippets"), systemImage: "text.badge.plus", value: SettingsTab.snippets) {
+        case .snippets:
             SnippetsSettingsView()
-        }
-        Tab(String(localized: "Profiles"), systemImage: "person.crop.rectangle.stack", value: SettingsTab.profiles) {
+        case .profiles:
             ProfilesSettingsView()
-        }
-        Tab(String(localized: "Prompts"), systemImage: "sparkles", value: SettingsTab.prompts) {
+        case .prompts:
             PromptActionsSettingsView()
-        }
-        Tab(String(localized: "Integrations"), systemImage: "puzzlepiece.extension", value: SettingsTab.integrations) {
+        case .integrations:
             PluginSettingsView()
-        }
-        .badge(self.pluginUpdatesBadge)
-        SettingsBottomTabs()
-    }
-}
-
-@available(macOS 15, *)
-private struct SettingsBottomTabs: TabContent {
-    var body: some TabContent<SettingsTab> {
-        Tab(String(localized: "Advanced"), systemImage: "gearshape.2", value: SettingsTab.advanced) {
+        case .advanced:
             AdvancedSettingsView()
-        }
-        Tab(String(localized: "License"), systemImage: "key", value: SettingsTab.license) {
+        case .license:
             LicenseSettingsView()
-        }
-        Tab(String(localized: "About"), systemImage: "info.circle", value: SettingsTab.about) {
+        case .about:
             AboutSettingsView()
         }
+    }
+}
+
+@available(macOS 15, *)
+private struct SettingsModernShell: View {
+    @Binding var selectedTab: SettingsTab
+    let sections: [SettingsDestinationSection]
+    let detail: (SettingsTab) -> AnyView
+
+    @State private var sidebarSearchText = ""
+    @State private var splitViewVisibility: NavigationSplitViewVisibility = .all
+
+    private var filteredSections: [SettingsDestinationSection] {
+        let query = sidebarSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return sections }
+
+        return sections
+            .map { section in
+                SettingsDestinationSection(
+                    id: section.id,
+                    destinations: section.destinations.filter { destination in
+                        destination.title.localizedCaseInsensitiveContains(query)
+                    }
+                )
+            }
+            .filter { !$0.destinations.isEmpty }
+    }
+
+    var body: some View {
+        NavigationSplitView(columnVisibility: $splitViewVisibility) {
+            List(selection: $selectedTab) {
+                ForEach(filteredSections) { section in
+                    Section {
+                        ForEach(section.destinations) { destination in
+                            SettingsSidebarRow(destination: destination)
+                                .tag(destination.tab)
+                        }
+                    }
+                }
+            }
+            .listStyle(.sidebar)
+            .searchable(
+                text: $sidebarSearchText,
+                placement: .sidebar,
+                prompt: Text(localizedAppText("Search Settings", de: "Einstellungen durchsuchen"))
+            )
+            .navigationSplitViewColumnWidth(min: 240, ideal: 270, max: 320)
+        } detail: {
+            detail(selectedTab)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button(action: toggleSidebar) {
+                    Image(systemName: "sidebar.leading")
+                }
+                .help(localizedAppText("Toggle Sidebar", de: "Seitenleiste ein-/ausblenden"))
+                .accessibilityLabel(localizedAppText("Toggle Sidebar", de: "Seitenleiste ein-/ausblenden"))
+            }
+        }
+    }
+
+    private func toggleSidebar() {
+        splitViewVisibility = splitViewVisibility == .detailOnly ? .all : .detailOnly
+    }
+}
+
+private func settingsDestination(_ destinations: [SettingsDestination], _ tab: SettingsTab) -> SettingsDestination {
+    destinations.first(where: { $0.tab == tab })!
+}
+
+private func settingsTitle(_ destinations: [SettingsDestination], _ tab: SettingsTab) -> String {
+    settingsDestination(destinations, tab).title
+}
+
+private func settingsSystemImage(_ destinations: [SettingsDestination], _ tab: SettingsTab) -> String {
+    settingsDestination(destinations, tab).systemImage
+}
+
+private func settingsBadge(_ destinations: [SettingsDestination], _ tab: SettingsTab) -> Int? {
+    settingsDestination(destinations, tab).badge
+}
+
+private func settingsDestinationSections(_ destinations: [SettingsDestination]) -> [SettingsDestinationSection] {
+    [
+        SettingsDestinationSection(
+            id: "home",
+            destinations: [settingsDestination(destinations, .home)]
+        ),
+        SettingsDestinationSection(
+            id: "core",
+            destinations: [
+                settingsDestination(destinations, .general),
+                settingsDestination(destinations, .recording),
+                settingsDestination(destinations, .hotkeys),
+                settingsDestination(destinations, .fileTranscription),
+                settingsDestination(destinations, .recorder)
+            ]
+        ),
+        SettingsDestinationSection(
+            id: "workspace",
+            destinations: [
+                settingsDestination(destinations, .history),
+                settingsDestination(destinations, .dictionary),
+                settingsDestination(destinations, .snippets),
+                settingsDestination(destinations, .profiles),
+                settingsDestination(destinations, .prompts),
+                settingsDestination(destinations, .integrations)
+            ]
+        ),
+        SettingsDestinationSection(
+            id: "system",
+            destinations: [
+                settingsDestination(destinations, .advanced),
+                settingsDestination(destinations, .license),
+                settingsDestination(destinations, .about)
+            ]
+        )
+    ]
+}
+
+private struct SettingsSidebarShell<DetailContent: View>: View {
+    @Binding var selectedTab: SettingsTab
+    let sections: [SettingsDestinationSection]
+    let detail: (SettingsTab) -> DetailContent
+
+    @State private var isSidebarVisible = true
+
+    var body: some View {
+        HStack(spacing: 0) {
+            if isSidebarVisible {
+                List(selection: $selectedTab) {
+                    ForEach(sections) { section in
+                        Section {
+                            ForEach(section.destinations) { destination in
+                                SettingsSidebarRow(destination: destination)
+                                    .tag(destination.tab)
+                            }
+                        }
+                    }
+                }
+                .listStyle(.sidebar)
+                .frame(width: 240)
+
+                Divider()
+            }
+
+            detail(selectedTab)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        // macOS 14 glitches when the default NavigationSplitView sidebar reveal animates.
+        // Use a custom zero-duration toggle instead.
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button(action: toggleSidebar) {
+                    Image(systemName: "sidebar.leading")
+                }
+                .help(localizedAppText("Toggle Sidebar", de: "Seitenleiste ein-/ausblenden"))
+                .accessibilityLabel(localizedAppText("Toggle Sidebar", de: "Seitenleiste ein-/ausblenden"))
+            }
+        }
+    }
+
+    private func toggleSidebar() {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0
+            context.allowsImplicitAnimation = false
+            withAnimation(nil) {
+                isSidebarVisible.toggle()
+            }
+        }
+    }
+}
+
+private struct SettingsSidebarRow: View {
+    let destination: SettingsDestination
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Label(destination.title, systemImage: destination.systemImage)
+
+            Spacer(minLength: 8)
+
+            if let badge = destination.badge {
+                SettingsSidebarBadge(title: destination.title, count: badge)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+}
+
+private struct SettingsSidebarBadge: View {
+    let title: String
+    let count: Int
+
+    var body: some View {
+        Text("\(count)")
+            .font(.caption2.weight(.semibold))
+            .monospacedDigit()
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(.tertiary, in: Capsule())
+            .foregroundStyle(.secondary)
+            .accessibilityLabel("\(title), \(count) updates")
     }
 }
 
@@ -240,8 +414,14 @@ struct RecordingSettingsView: View {
                     Text(String(localized: "System Default")).tag(nil as String?)
                     Divider()
                     ForEach(audioDevice.inputDevices) { device in
-                        Text(device.name).tag(device.uid as String?)
+                        Text(audioDevice.displayName(for: device)).tag(device.uid as String?)
                     }
+                }
+
+                if let message = audioDevice.selectedDeviceStatusMessage {
+                    Label(message, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                        .font(.caption)
                 }
 
                 if audioDevice.isPreviewActive {
@@ -280,6 +460,12 @@ struct RecordingSettingsView: View {
                     }
                 }
                 .disabled(!audioDevice.isPreviewActive && dictation.needsMicPermission)
+
+                if let error = audioDevice.previewError {
+                    Label(error.localizedDescription, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                }
 
                 if let name = audioDevice.disconnectedDeviceName {
                     Label(

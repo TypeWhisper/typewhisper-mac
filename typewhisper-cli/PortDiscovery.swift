@@ -17,3 +17,15 @@ enum PortDiscovery {
         return port
     }
 }
+
+struct CLITranscribeLanguageOptions: Equatable {
+    var language: String?
+    var languageHints: [String] = []
+
+    func validationError() -> String? {
+        if language != nil, !languageHints.isEmpty {
+            return "Error: --language and --language-hint cannot be used together."
+        }
+        return nil
+    }
+}

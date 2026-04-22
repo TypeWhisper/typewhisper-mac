@@ -16,50 +16,118 @@ final class DictationShortSpeechTests: XCTestCase {
     }
 
     func testEmptyBuffer_isDiscardedAsTooShort() {
-        XCTAssertEqual(classifyShortSpeech(rawDuration: 0, peakLevel: 0, hasPreviewText: false), .discardTooShort)
+        XCTAssertEqual(classifyShortSpeech(rawDuration: 0, peakLevel: 0, hasConfirmedText: false), .discardTooShort)
     }
 
     func testThirtyMsHighPeak_isStillTooShort() {
-        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.03, peakLevel: 0.2, hasPreviewText: false), .discardTooShort)
+        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.03, peakLevel: 0.2, hasConfirmedText: false), .discardTooShort)
     }
 
     func testThirtyMsPreviewText_isStillTooShort() {
-        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.03, peakLevel: 0.2, hasPreviewText: true), .discardTooShort)
+        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.03, peakLevel: 0.2, hasConfirmedText: true), .discardTooShort)
     }
 
     func testEightyMsSpeechAtPointZeroZeroEight_transcribesAndPadsToZeroPointSevenFive() {
         let samples = makeSamples(duration: 0.08)
 
-        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.08, peakLevel: 0.008, hasPreviewText: false), .transcribe)
+        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.08, peakLevel: 0.008, hasConfirmedText: false), .transcribe)
 
         let paddedSamples = paddedSamplesForFinalTranscription(samples, rawDuration: 0.08)
         XCTAssertEqual(paddedSamples.count, 12_000)
         XCTAssertEqual(Double(paddedSamples.count) / AudioRecordingService.targetSampleRate, 0.75, accuracy: 0.0001)
     }
 
-    func testOneHundredTwentyMsQuietClip_isNoSpeech() {
-        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.12, peakLevel: 0.0049, hasPreviewText: false), .discardNoSpeech)
+    func testOneHundredTwentyMsVeryQuietClip_isNoSpeech() {
+        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.12, peakLevel: 0.0029, hasConfirmedText: false), .discardNoSpeech)
     }
 
-    func testOneHundredTwentyMsQuietClip_withPreviewText_transcribes() {
-        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.12, peakLevel: 0.0049, hasPreviewText: true), .transcribe)
+    func testOneHundredTwentyMsBorderlineQuietClip_nowTranscribes() {
+        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.12, peakLevel: 0.0034, hasConfirmedText: false), .transcribe)
     }
 
-    func testFourHundredMsSpeech_usesRelaxedShortClipThresholdAndNoMinimumPad() {
-        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.4, peakLevel: 0.0049, hasPreviewText: false), .discardNoSpeech)
-        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.4, peakLevel: 0.009, hasPreviewText: false), .transcribe)
+    func testOneHundredTwentyMsQuietClip_transcribesWhenAggressivePolicyEnabled() {
+        XCTAssertEqual(
+            classifyShortSpeech(
+                rawDuration: 0.12,
+                peakLevel: 0.0034,
+                hasConfirmedText: false,
+                transcribeShortQuietClipsAggressively: true
+            ),
+            .transcribe
+        )
+    }
+
+    func testOneHundredTwentyMsQuietClip_withConfirmedText_transcribes() {
+        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.12, peakLevel: 0.0029, hasConfirmedText: true), .transcribe)
+    }
+
+    func testFourHundredMsSpeech_usesLoweredShortClipThresholdAndNoMinimumPad() {
+        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.4, peakLevel: 0.0029, hasConfirmedText: false), .discardNoSpeech)
+        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.4, peakLevel: 0.0034, hasConfirmedText: false), .transcribe)
 
         let paddedSamples = paddedSamplesForFinalTranscription(makeSamples(duration: 0.4), rawDuration: 0.4)
         XCTAssertEqual(paddedSamples.count, 12_000)
         XCTAssertEqual(Double(paddedSamples.count) / AudioRecordingService.targetSampleRate, 0.75, accuracy: 0.0001)
     }
 
-    func testFourHundredMsQuietClip_withPreviewText_transcribes() {
-        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.4, peakLevel: 0.0049, hasPreviewText: true), .transcribe)
+    func testFourHundredMsQuietClip_withConfirmedText_transcribes() {
+        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.4, peakLevel: 0.0029, hasConfirmedText: true), .transcribe)
+    }
+
+    func testThirtyMsQuietClip_staysTooShortEvenWhenAggressivePolicyEnabled() {
+        XCTAssertEqual(
+            classifyShortSpeech(
+                rawDuration: 0.03,
+                peakLevel: 0.2,
+                hasConfirmedText: false,
+                transcribeShortQuietClipsAggressively: true
+            ),
+            .discardTooShort
+        )
     }
 
     func testEightHundredEightyFiveMsClip_withLowSpeechPeakStillTranscribes() {
-        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.885, peakLevel: 0.0069, hasPreviewText: false), .transcribe)
+        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.885, peakLevel: 0.0069, hasConfirmedText: false), .transcribe)
+    }
+
+    func testOnePointTwoSecondsVeryQuietClip_isNoSpeech() {
+        XCTAssertEqual(classifyShortSpeech(rawDuration: 1.2, peakLevel: 0.0059, hasConfirmedText: false), .discardNoSpeech)
+    }
+
+    func testOnePointTwoSecondsBorderlineQuietClip_nowTranscribes() {
+        XCTAssertEqual(classifyShortSpeech(rawDuration: 1.2, peakLevel: 0.0061, hasConfirmedText: false), .transcribe)
+    }
+
+    func testOnePointTwoSecondsVeryQuietClip_withConfirmedText_transcribes() {
+        XCTAssertEqual(classifyShortSpeech(rawDuration: 1.2, peakLevel: 0.0059, hasConfirmedText: true), .transcribe)
+    }
+
+    func testConfirmedTranscriptionResultText_requiresNonEmptyResult() {
+        XCTAssertFalse(hasConfirmedTranscriptionResultText(nil))
+        XCTAssertFalse(hasConfirmedTranscriptionResultText(TranscriptionResult(
+            text: "",
+            detectedLanguage: nil,
+            duration: 1.2,
+            processingTime: 0.1,
+            engineUsed: "whisper",
+            segments: []
+        )))
+        XCTAssertFalse(hasConfirmedTranscriptionResultText(TranscriptionResult(
+            text: "   ",
+            detectedLanguage: nil,
+            duration: 1.2,
+            processingTime: 0.1,
+            engineUsed: "whisper",
+            segments: []
+        )))
+        XCTAssertTrue(hasConfirmedTranscriptionResultText(TranscriptionResult(
+            text: "hello",
+            detectedLanguage: "en",
+            duration: 1.2,
+            processingTime: 0.1,
+            engineUsed: "whisper",
+            segments: []
+        )))
     }
 
     func testFinalizeShortSpeechPolicy_waitsOnlyWhenBufferedDurationIsBelowFiveHundredths() {

@@ -21,12 +21,102 @@
         }
       }
     },
+    "ChatGPT Login" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ChatGPT-Login"
+          }
+        }
+      }
+    },
+    "ChatGPT login connected" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ChatGPT-Login verbunden"
+          }
+        }
+      }
+    },
+    "ChatGPT login connected." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ChatGPT-Login verbunden."
+          }
+        }
+      }
+    },
+    "ChatGPT login exposes only the supported ChatGPT/Codex models." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der ChatGPT-Login zeigt nur die unterstuetzten ChatGPT-/Codex-Modelle an."
+          }
+        }
+      }
+    },
+    "Complete the OpenAI login in your browser. TypeWhisper will finish the connection automatically." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schliessen Sie den OpenAI-Login im Browser ab. TypeWhisper verbindet den Account danach automatisch."
+          }
+        }
+      }
+    },
+    "Connected plan: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbundener Plan: %@"
+          }
+        }
+      }
+    },
+    "Connection Method" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbindungsmethode"
+          }
+        }
+      }
+    },
     "GPT-4o models do not support Whisper Translate (translation to English)." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "GPT-4o-Modelle unterstützen Whisper Translate (Übersetzung ins Englische) nicht."
+          }
+        }
+      }
+    },
+    "Imported your existing Codex login." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bestehender Codex-Login importiert."
+          }
+        }
+      }
+    },
+    "Import Codex Login" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Codex-Login importieren"
           }
         }
       }
@@ -41,12 +131,62 @@
         }
       }
     },
-    "Model" : {
+    "LLM Model" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Modell"
+            "value" : "LLM-Modell"
+          }
+        }
+      }
+    },
+    "Controls how much thinking time the model spends before answering." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Steuert, wie viel Denkzeit sich das Modell vor der Antwort nimmt."
+          }
+        }
+      }
+    },
+    "High" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hoch"
+          }
+        }
+      }
+    },
+    "Low" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Niedrig"
+          }
+        }
+      }
+    },
+    "Medium" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mittel"
+          }
+        }
+      }
+    },
+    "Refresh" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktualisieren"
           }
         }
       }
@@ -61,12 +201,62 @@
         }
       }
     },
+    "Reasoning Effort" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Denkaufwand"
+          }
+        }
+      }
+    },
     "Save" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sichern"
+          }
+        }
+      }
+    },
+    "Sign In In Browser" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Im Browser anmelden"
+          }
+        }
+      }
+    },
+    "Transcription Model" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transkriptionsmodell"
+          }
+        }
+      }
+    },
+    "Use your existing ChatGPT Plus/Pro or Codex login for prompt processing. Transcription still requires an API key." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nutzen Sie Ihren bestehenden ChatGPT-Plus-/Pro- oder Codex-Login fuer Prompt-Verarbeitung. Fuer Transkription ist weiterhin ein API-Schluessel noetig."
+          }
+        }
+      }
+    },
+    "Using default models. Press Refresh to fetch all available models." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standardmodelle werden verwendet. Klicken Sie auf Aktualisieren, um alle verfuegbaren Modelle abzurufen."
           }
         }
       }
@@ -87,6 +277,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Wird überprüft ..."
+          }
+        }
+      }
+    },
+    "Waiting for OpenAI login..." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Warte auf OpenAI-Login ..."
           }
         }
       }

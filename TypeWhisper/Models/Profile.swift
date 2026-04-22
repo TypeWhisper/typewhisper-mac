@@ -34,6 +34,15 @@ final class Profile {
         }
     }
 
+    var inputLanguageSelection: LanguageSelection {
+        get {
+            LanguageSelection(storedValue: inputLanguage, nilBehavior: .inheritGlobal)
+        }
+        set {
+            inputLanguage = newValue.storedValue(nilBehavior: .inheritGlobal)
+        }
+    }
+
     init(
         id: UUID = UUID(),
         name: String,

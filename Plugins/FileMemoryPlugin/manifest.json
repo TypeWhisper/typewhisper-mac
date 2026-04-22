@@ -3,6 +3,7 @@
     "name": "File Memory",
     "version": "1.0.0",
     "minHostVersion": "0.14.0",
+    "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
     "description": "Store memories as local JSON files with text-based search. Fully offline, no API key required.",

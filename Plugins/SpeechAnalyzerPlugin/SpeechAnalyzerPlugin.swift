@@ -9,9 +9,11 @@ import os
 
 @available(macOS 26, *)
 @objc(SpeechAnalyzerPlugin)
-final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActivityReporting, @unchecked Sendable {
+final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.speechanalyzer"
     static let pluginName = "Apple Speech"
+    private static let logger = Logger(subsystem: "com.typewhisper.speechanalyzer", category: "Plugin")
+    private static let maxContextualTerms = 100
 
     fileprivate var host: HostServices?
     fileprivate var currentLocale: Locale?
@@ -27,8 +29,10 @@ final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, PluginSet
 
     func activate(host: HostServices) {
         self.host = host
-        Task { await populateModels() }
-        Task { await restoreLoadedModel() }
+        Task {
+            await populateModels()
+            await restoreLoadedModel(allowDownloads: false)
+        }
     }
 
     func deactivate() {
@@ -57,6 +61,18 @@ final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, PluginSet
             .map { PluginModelInfo(id: $0.id, displayName: $0.displayName, sizeDescription: "System-managed", languageCount: 1) }
     }
 
+    var availableModels: [PluginModelInfo] {
+        cachedModels.map { def in
+            PluginModelInfo(
+                id: def.id,
+                displayName: def.displayName,
+                sizeDescription: "System-managed",
+                languageCount: 1,
+                loaded: def.id == loadedModelId
+            )
+        }
+    }
+
     var selectedModelId: String? { loadedModelId }
 
     func selectModel(_ modelId: String) {
@@ -68,6 +84,8 @@ final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, PluginSet
 
     var supportsTranslation: Bool { false }
     var supportsStreaming: Bool { true }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
+    var dictionaryTermsBudget: DictionaryTermsBudget { DictionaryTermsBudget(maxTerms: Self.maxContextualTerms) }
 
     var supportedLanguages: [String] {
         let codes = Set(cachedModels.compactMap { model -> String? in
@@ -92,6 +110,7 @@ final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, PluginSet
 
         let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
         let analyzer = SpeechAnalyzer(modules: [transcriber])
+        try await analyzer.setContext(Self.analysisContext(from: prompt))
 
         let buffer = await Self.prepareBuffer(audio.samples, for: [transcriber])
 
@@ -141,6 +160,7 @@ final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, PluginSet
             attributeOptions: []
         )
         let analyzer = SpeechAnalyzer(modules: [transcriber])
+        try await analyzer.setContext(Self.analysisContext(from: prompt))
 
         let buffer = await Self.prepareBuffer(audio.samples, for: [transcriber])
 
@@ -171,6 +191,37 @@ final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, PluginSet
             text: text.trimmingCharacters(in: .whitespacesAndNewlines),
             detectedLanguage: locale.language.languageCode?.identifier
         )
+    }
+
+    static func analysisContext(from prompt: String?) -> AnalysisContext {
+        let context = AnalysisContext()
+        let terms = PluginDictionaryTerms.terms(fromPrompt: prompt)
+        let limitedTerms = Array(terms.prefix(Self.maxContextualTerms))
+        if limitedTerms.count < terms.count {
+            logger.warning("Apple Speech limited dictionary terms to \(Self.maxContextualTerms) entries")
+        }
+        if !limitedTerms.isEmpty {
+            context.contextualStrings[.general] = limitedTerms
+        }
+        return context
+    }
+
+    func createLiveTranscriptionSession(
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        guard let locale = currentLocale else {
+            throw PluginTranscriptionError.notConfigured
+        }
+        if translate {
+            throw PluginTranscriptionError.apiError("Apple Speech does not support translation")
+        }
+
+        let session = SpeechAnalyzerLiveSession(locale: locale, prompt: prompt, onProgress: onProgress)
+        try await session.start()
+        return session
     }
 
     // MARK: - Model Management
@@ -228,7 +279,7 @@ final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, PluginSet
     }
 
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
-    @objc func triggerRestoreModel() { Task { await restoreLoadedModel() } }
+    @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: true) } }
 
     func unloadModel(clearPersistence: Bool = true) {
         if let locale = currentLocale {
@@ -244,12 +295,29 @@ final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, PluginSet
         host?.notifyCapabilitiesChanged()
     }
 
-    func restoreLoadedModel() async {
+    func restoreLoadedModel(allowDownloads: Bool = true) async {
+        if cachedModels.isEmpty {
+            await populateModels()
+        }
+
         guard let savedId = host?.userDefault(forKey: "loadedModel") as? String,
               let modelDef = cachedModels.first(where: { $0.id == savedId }) else {
             return
         }
+        if !allowDownloads {
+            let hasInstalledAssets = await self.hasInstalledAssets(for: modelDef)
+            guard hasInstalledAssets else { return }
+        }
         await loadModel(modelDef)
+    }
+
+    private func hasInstalledAssets(for modelDef: SpeechModelDef) async -> Bool {
+        let transcriber = SpeechTranscriber(locale: modelDef.locale, preset: .transcription)
+        do {
+            return try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) == nil
+        } catch {
+            return false
+        }
     }
 
     // MARK: - Audio Helpers
@@ -264,7 +332,7 @@ final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, PluginSet
         return buffer
     }
 
-    private static func prepareBuffer(
+    fileprivate static func prepareBuffer(
         _ samples: [Float],
         for modules: [SpeechTranscriber]
     ) async -> AVAudioPCMBuffer {
@@ -335,6 +403,87 @@ final class SpeechAnalyzerPlugin: NSObject, TranscriptionEnginePlugin, PluginSet
 
     var settingsView: AnyView? {
         AnyView(SpeechAnalyzerSettingsView(plugin: self))
+    }
+}
+
+@available(macOS 26, *)
+private actor SpeechAnalyzerLiveSession: LiveTranscriptionSession {
+    private let locale: Locale
+    private let prompt: String?
+    private let onProgress: @Sendable (String) -> Bool
+    private let transcriber: SpeechTranscriber
+    private let analyzer: SpeechAnalyzer
+    private let stream: AsyncStream<AnalyzerInput>
+    private let continuation: AsyncStream<AnalyzerInput>.Continuation
+    private let resultTask: Task<String, Error>
+    private var didFinish = false
+
+    init(locale: Locale, prompt: String?, onProgress: @escaping @Sendable (String) -> Bool) {
+        self.locale = locale
+        self.prompt = prompt
+        self.onProgress = onProgress
+        let transcriber = SpeechTranscriber(
+            locale: locale,
+            transcriptionOptions: [],
+            reportingOptions: [.volatileResults],
+            attributeOptions: []
+        )
+        self.transcriber = transcriber
+        self.analyzer = SpeechAnalyzer(modules: [transcriber])
+        let streamParts = AsyncStream<AnalyzerInput>.makeStream()
+        self.stream = streamParts.stream
+        self.continuation = streamParts.continuation
+        let progressHandler = onProgress
+        self.resultTask = Task<String, Error> {
+            var fullText = ""
+            for try await result in transcriber.results {
+                let text = String(result.text.characters)
+                if result.isFinal {
+                    fullText += text
+                } else {
+                    let combined = fullText + text
+                    if !progressHandler(combined) { break }
+                }
+            }
+            return fullText
+        }
+    }
+
+    func start() async throws {
+        try await analyzer.setContext(SpeechAnalyzerPlugin.analysisContext(from: prompt))
+        try await analyzer.start(inputSequence: stream)
+    }
+
+    func appendAudio(samples: [Float]) async throws {
+        guard !didFinish, !samples.isEmpty else { return }
+        let buffer = await SpeechAnalyzerPlugin.prepareBuffer(samples, for: [transcriber])
+        continuation.yield(AnalyzerInput(buffer: buffer))
+    }
+
+    func finish() async throws -> PluginTranscriptionResult {
+        guard !didFinish else {
+            let text = try await resultTask.value
+            return PluginTranscriptionResult(
+                text: text.trimmingCharacters(in: .whitespacesAndNewlines),
+                detectedLanguage: locale.language.languageCode?.identifier
+            )
+        }
+
+        didFinish = true
+        continuation.finish()
+        try await analyzer.finalizeAndFinishThroughEndOfInput()
+        let text = try await resultTask.value
+
+        return PluginTranscriptionResult(
+            text: text.trimmingCharacters(in: .whitespacesAndNewlines),
+            detectedLanguage: locale.language.languageCode?.identifier
+        )
+    }
+
+    func cancel() async {
+        didFinish = true
+        continuation.finish()
+        resultTask.cancel()
     }
 }
 

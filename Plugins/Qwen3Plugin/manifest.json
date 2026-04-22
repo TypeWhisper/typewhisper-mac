@@ -1,9 +1,13 @@
 {
     "id": "com.typewhisper.qwen3",
     "name": "Qwen3 ASR",
-    "version": "1.0.14",
-    "minHostVersion": "0.11.0",
+    "version": "1.0.16",
+    "minHostVersion": "1.2.1",
+    "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
+    "supportedArchitectures": [
+        "arm64"
+    ],
     "author": "TypeWhisper",
     "description": "Local speech-to-text powered by MLX on Apple Silicon. 30 languages, no API key required.",
     "descriptions": {

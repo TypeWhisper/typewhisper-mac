@@ -8,8 +8,6 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhis
 
 @MainActor
 final class PromptPaletteHandler {
-    private let promptPaletteController = PromptPaletteController()
-
     private enum InsertionOutcome {
         case failed
         case insertedViaAccessibility
@@ -26,12 +24,12 @@ final class PromptPaletteHandler {
     }
     private var paletteContext: PaletteContext?
 
+    private let promptPaletteController: any PromptPaletteControlling
     private let textInsertionService: TextInsertionService
     private let promptActionService: PromptActionService
     private let promptProcessingService: PromptProcessingService
     private let soundService: SoundService
     private let accessibilityAnnouncementService: AccessibilityAnnouncementService
-    private let speechFeedbackService: SpeechFeedbackService
 
     var onShowNotchFeedback: ((String, String, TimeInterval, Bool, String?) -> Void)?
     var onShowError: ((String) -> Void)?
@@ -48,14 +46,14 @@ final class PromptPaletteHandler {
         promptProcessingService: PromptProcessingService,
         soundService: SoundService,
         accessibilityAnnouncementService: AccessibilityAnnouncementService,
-        speechFeedbackService: SpeechFeedbackService
+        promptPaletteController: any PromptPaletteControlling = PromptPaletteController()
     ) {
+        self.promptPaletteController = promptPaletteController
         self.textInsertionService = textInsertionService
         self.promptActionService = promptActionService
         self.promptProcessingService = promptProcessingService
         self.soundService = soundService
         self.accessibilityAnnouncementService = accessibilityAnnouncementService
-        self.speechFeedbackService = speechFeedbackService
     }
 
     func hide() {
@@ -70,14 +68,12 @@ final class PromptPaletteHandler {
         }
         guard currentState == .idle else { return }
 
-        guard promptProcessingService.isCurrentProviderReady else {
-            soundService.play(.error, enabled: soundFeedbackEnabled)
-            onShowError?(String(localized: "noLLMProvider"))
-            return
-        }
-
         let actions = promptActionService.getEnabledActions()
         guard !actions.isEmpty else { return }
+
+        // Palette presentation should not depend on the currently selected provider.
+        // Individual actions may override the provider, and readiness is validated
+        // when the chosen action actually runs.
 
         // Capture active app BEFORE the palette steals focus
         let activeApp = textInsertionService.captureActiveApp()
@@ -123,6 +119,11 @@ final class PromptPaletteHandler {
                     )
                 } else {
                     logger.info("[PromptPalette] No text available, aborting")
+                    let message = "Please select or copy some text first."
+                    soundService.play(.error, enabled: soundFeedbackEnabled)
+                    self.accessibilityAnnouncementService.announceError(message)
+                    self.onShowNotchFeedback?(message, "xmark.circle.fill", 2.5, true, "prompt")
+                    self.onShowError?(message)
                 }
             }
         }
@@ -158,7 +159,6 @@ final class PromptPaletteHandler {
 
         onShowNotchFeedback?(action.name + "...", "ellipsis.circle", 30, false, nil)
         accessibilityAnnouncementService.announcePromptProcessing(action.name)
-        speechFeedbackService.announceEvent(.promptProcessing)
 
         Task { [weak self] in
             guard let self else { return }
@@ -167,7 +167,8 @@ final class PromptPaletteHandler {
                     prompt: action.prompt,
                     text: ctx.text,
                     providerOverride: action.providerType,
-                    cloudModelOverride: action.cloudModel
+                    cloudModelOverride: action.cloudModel,
+                    temperatureDirective: action.temperatureDirective
                 )
                 guard !Task.isCancelled else { return }
 
@@ -184,7 +185,6 @@ final class PromptPaletteHandler {
                     )
                     soundService.play(.transcriptionSuccess, enabled: soundFeedbackEnabled)
                     self.accessibilityAnnouncementService.announcePromptComplete()
-                    self.speechFeedbackService.announceEvent(.promptComplete)
                     let feedback = getActionFeedback?() ?? (message: nil, icon: nil, duration: 3.5)
                     onShowNotchFeedback?(
                         feedback.0 ?? "Done",
@@ -233,7 +233,6 @@ final class PromptPaletteHandler {
 
                 soundService.play(.transcriptionSuccess, enabled: soundFeedbackEnabled)
                 self.accessibilityAnnouncementService.announcePromptComplete()
-                self.speechFeedbackService.announceEvent(.promptComplete)
                 let feedbackMessage: String
                 let feedbackIcon: String
                 if insertionOutcome == .failed && preserveClipboard {
@@ -251,7 +250,6 @@ final class PromptPaletteHandler {
                 guard !Task.isCancelled else { return }
                 soundService.play(.error, enabled: soundFeedbackEnabled)
                 self.accessibilityAnnouncementService.announceError(error.localizedDescription)
-                self.speechFeedbackService.announceEvent(.error(reason: error.localizedDescription))
                 onShowNotchFeedback?(error.localizedDescription, "xmark.circle.fill", 2.5, true, "prompt")
             }
         }
