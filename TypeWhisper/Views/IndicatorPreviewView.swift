@@ -3,10 +3,16 @@ import SwiftUI
 struct IndicatorPreviewView: View {
     @ObservedObject private var dictation = DictationViewModel.shared
     private let previewNotchWidth: CGFloat = 185
+    private let notchPreviewBaseHeight: CGFloat = 110
+    private let notchPreviewBaseBodyHeight: CGFloat = 38
+    private let notchPreviewBaseFontSize: CGFloat = 11
+    private let overlayPreviewCollapsedHeight: CGFloat = 82
+    private let overlayPreviewBaseHeight: CGFloat = 110
+    private let overlayPreviewBaseFontSize: CGFloat = 12
 
     private let streamingText = String(localized: "Hello, this is a live preview of the streaming text...")
     private var showTranscriptPreview: Bool {
-        dictation.indicatorTranscriptPreviewEnabled && dictation.indicatorStyle != .minimal
+        dictation.indicatorTranscriptPreviewEnabled && dictation.indicatorStyle.supportsTranscriptPreview
     }
     private var notchClosedWidth: CGFloat {
         NotchIndicatorLayout.closedWidth(hasNotch: true, notchWidth: previewNotchWidth)
@@ -33,16 +39,24 @@ struct IndicatorPreviewView: View {
     private var previewHeight: CGFloat {
         switch dictation.indicatorStyle {
         case .notch:
-            return 110
+            return showTranscriptPreview ? notchPreviewBaseHeight + (notchPreviewBodyHeight - notchPreviewBaseBodyHeight) : notchPreviewBaseHeight
         case .overlay:
-            return showTranscriptPreview ? 110 : 82
+            return showTranscriptPreview ? scaledPreviewMetric(overlayPreviewBaseHeight, for: .overlay) : overlayPreviewCollapsedHeight
         case .minimal:
             return 72
         }
     }
 
     private var notchPreviewBodyHeight: CGFloat {
-        showTranscriptPreview ? 38 : 0
+        showTranscriptPreview ? scaledPreviewMetric(notchPreviewBaseBodyHeight, for: .notch) : 0
+    }
+
+    private var notchPreviewFontSize: CGFloat {
+        scaledPreviewMetric(notchPreviewBaseFontSize, for: .notch)
+    }
+
+    private var overlayPreviewFontSize: CGFloat {
+        scaledPreviewMetric(overlayPreviewBaseFontSize, for: .overlay)
     }
 
     var body: some View {
@@ -67,6 +81,7 @@ struct IndicatorPreviewView: View {
         .animation(.easeInOut(duration: 0.2), value: dictation.notchIndicatorLeftContent)
         .animation(.easeInOut(duration: 0.2), value: dictation.notchIndicatorRightContent)
         .animation(.easeInOut(duration: 0.2), value: dictation.indicatorTranscriptPreviewEnabled)
+        .animation(.easeInOut(duration: 0.2), value: dictation.indicatorTranscriptPreviewFontSizeOffset)
         .accessibilityHidden(true)
     }
 
@@ -107,7 +122,7 @@ struct IndicatorPreviewView: View {
 
     private var notchPreviewBody: some View {
         Text(streamingText)
-            .font(.system(size: 11))
+            .font(.system(size: notchPreviewFontSize))
             .foregroundStyle(.white.opacity(0.7))
             .lineLimit(2)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -134,7 +149,7 @@ struct IndicatorPreviewView: View {
 
             if showTranscriptPreview {
                 Text(streamingText)
-                    .font(.system(size: 12))
+                    .font(.system(size: overlayPreviewFontSize))
                     .foregroundStyle(.white.opacity(0.7))
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -214,6 +229,11 @@ struct IndicatorPreviewView: View {
         case .none:
             Color.clear.frame(width: 0)
         }
+    }
+
+    private func scaledPreviewMetric(_ baseMetric: CGFloat, for style: IndicatorStyle) -> CGFloat {
+        let fontSize = dictation.indicatorTranscriptPreviewFontSize(for: style)
+        return style.scaledTranscriptPreviewMetric(baseMetric, fontSize: fontSize)
     }
 }
 

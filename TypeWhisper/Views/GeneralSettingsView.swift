@@ -23,7 +23,7 @@ struct GeneralSettingsView: View {
     @ObservedObject private var dictation = DictationViewModel.shared
 
     private var supportsTranscriptPreview: Bool {
-        dictation.indicatorStyle != .minimal
+        dictation.indicatorStyle.supportsTranscriptPreview
     }
 
     private var supportsPositionSelection: Bool {
@@ -67,6 +67,17 @@ struct GeneralSettingsView: View {
         case .dockWhileWindowOpen:
             "TypeWhisper hides both icons until a window opens. To reopen Settings later, launch TypeWhisper from Spotlight or the Applications folder."
         }
+    }
+
+    private var indicatorTranscriptPreviewSliderValue: Binding<Double> {
+        Binding(
+            get: { Double(dictation.indicatorTranscriptPreviewFontSizeOffset) },
+            set: { dictation.indicatorTranscriptPreviewFontSizeOffset = Int($0.rounded()) }
+        )
+    }
+
+    private var indicatorTranscriptPreviewSizeLabel: String {
+        "\(Int(dictation.indicatorTranscriptPreviewFontSize(for: dictation.indicatorStyle))) pt"
     }
 
     var body: some View {
@@ -151,6 +162,19 @@ struct GeneralSettingsView: View {
 
                 if supportsTranscriptPreview {
                     Toggle(String(localized: "Show live transcript preview"), isOn: $dictation.indicatorTranscriptPreviewEnabled)
+
+                    LabeledContent(String(localized: "Live transcript size")) {
+                        HStack(spacing: 12) {
+                            Slider(value: indicatorTranscriptPreviewSliderValue, in: 0...8, step: 1)
+                                .frame(width: 180)
+
+                            Text(verbatim: indicatorTranscriptPreviewSizeLabel)
+                                .font(.system(.body, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 54, alignment: .trailing)
+                        }
+                    }
+                    .disabled(!dictation.indicatorTranscriptPreviewEnabled)
 
                     if !dictation.indicatorTranscriptPreviewEnabled {
                         Text(String(localized: "When disabled, TypeWhisper skips live transcript requests for the indicator and only runs the final transcription after you stop recording."))
