@@ -205,7 +205,6 @@ private struct SettingsModernShell: View {
     let detail: (SettingsTab) -> AnyView
 
     @State private var sidebarSearchText = ""
-    @State private var splitViewVisibility: NavigationSplitViewVisibility = .all
 
     private var filteredSections: [SettingsDestinationSection] {
         let query = sidebarSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -224,7 +223,7 @@ private struct SettingsModernShell: View {
     }
 
     var body: some View {
-        NavigationSplitView(columnVisibility: $splitViewVisibility) {
+        NavigationSplitView {
             List(selection: $selectedTab) {
                 ForEach(filteredSections) { section in
                     Section {
@@ -246,19 +245,6 @@ private struct SettingsModernShell: View {
             detail(selectedTab)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button(action: toggleSidebar) {
-                    Image(systemName: "sidebar.leading")
-                }
-                .help(localizedAppText("Toggle Sidebar", de: "Seitenleiste ein-/ausblenden"))
-                .accessibilityLabel(localizedAppText("Toggle Sidebar", de: "Seitenleiste ein-/ausblenden"))
-            }
-        }
-    }
-
-    private func toggleSidebar() {
-        splitViewVisibility = splitViewVisibility == .detailOnly ? .all : .detailOnly
     }
 }
 
