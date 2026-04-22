@@ -6781,6 +6781,16 @@
         }
       }
     },
+    "Live transcript size" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schriftgröße des Live-Transkripts"
+          }
+        }
+      }
+    },
     "Show menu bar icon" : {
       "extractionState" : "stale",
       "localizations" : {

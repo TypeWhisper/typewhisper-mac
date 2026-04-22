@@ -25,8 +25,8 @@ struct IndicatorSizing {
         profileFontSize: 9,
         profilePaddingH: 5,
         profilePaddingV: 2,
-        textFontSize: 12,
-        textExpandedHeight: 80
+        textFontSize: IndicatorStyle.notch.transcriptPreviewBaseFontSize,
+        textExpandedHeight: IndicatorStyle.notch.transcriptPreviewBaseExpandedHeight
     )
 
     static let overlay = IndicatorSizing(
@@ -39,8 +39,8 @@ struct IndicatorSizing {
         profileFontSize: 11,
         profilePaddingH: 6,
         profilePaddingV: 3,
-        textFontSize: 13,
-        textExpandedHeight: 100
+        textFontSize: IndicatorStyle.overlay.transcriptPreviewBaseFontSize,
+        textExpandedHeight: IndicatorStyle.overlay.transcriptPreviewBaseExpandedHeight
     )
 
     static let minimal = IndicatorSizing(
@@ -198,7 +198,8 @@ struct IndicatorRecordingContent: View {
 
 struct IndicatorExpandableText: View {
     let text: String
-    let sizing: IndicatorSizing
+    let fontSize: CGFloat
+    let expandedHeight: CGFloat
     let expanded: Bool
     let contentPadding: CGFloat
 
@@ -206,14 +207,14 @@ struct IndicatorExpandableText: View {
         ScrollViewReader { proxy in
             ScrollView(.vertical, showsIndicators: true) {
                 Text(text)
-                    .font(.system(size: sizing.textFontSize))
+                    .font(.system(size: fontSize))
                     .foregroundStyle(.white.opacity(0.85))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, contentPadding)
                     .padding(.vertical, 14)
                     .id("bottom")
             }
-            .frame(height: expanded ? sizing.textExpandedHeight : 0)
+            .frame(height: expanded ? expandedHeight : 0)
             .clipped()
             .onChange(of: text) {
                 withAnimation(nil) {

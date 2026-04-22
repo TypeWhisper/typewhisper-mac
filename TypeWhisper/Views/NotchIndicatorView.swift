@@ -72,7 +72,11 @@ struct NotchIndicatorView: View {
     }
 
     private var transcriptBodyHeight: CGFloat {
-        hasTranscriptSection && textExpanded ? sizing.textExpandedHeight : 0
+        hasTranscriptSection && textExpanded ? viewModel.indicatorTranscriptPreviewExpandedHeight(for: .notch) : 0
+    }
+
+    private var transcriptFontSize: CGFloat {
+        viewModel.indicatorTranscriptPreviewFontSize(for: .notch)
     }
 
     private var expandedBodyHeight: CGFloat {
@@ -210,7 +214,8 @@ struct NotchIndicatorView: View {
         } else if hasTranscriptSection {
             IndicatorExpandableText(
                 text: viewModel.partialText,
-                sizing: sizing,
+                fontSize: transcriptFontSize,
+                expandedHeight: viewModel.indicatorTranscriptPreviewExpandedHeight(for: .notch),
                 expanded: true,
                 contentPadding: 34
             )

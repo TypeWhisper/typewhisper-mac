@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 enum IndicatorStyle: String, CaseIterable {
@@ -29,4 +30,40 @@ enum NotchIndicatorDisplay: String, CaseIterable {
 enum OverlayPosition: String, CaseIterable {
     case top
     case bottom
+}
+
+extension IndicatorStyle {
+    var supportsTranscriptPreview: Bool {
+        self != .minimal
+    }
+
+    var transcriptPreviewBaseFontSize: CGFloat {
+        switch self {
+        case .notch:
+            12
+        case .overlay:
+            13
+        case .minimal:
+            12
+        }
+    }
+
+    var transcriptPreviewBaseExpandedHeight: CGFloat {
+        switch self {
+        case .notch:
+            80
+        case .overlay:
+            100
+        case .minimal:
+            0
+        }
+    }
+
+    func scaledTranscriptPreviewMetric(_ baseMetric: CGFloat, fontSize: CGFloat) -> CGFloat {
+        guard supportsTranscriptPreview, transcriptPreviewBaseFontSize > 0 else {
+            return 0
+        }
+
+        return (baseMetric * fontSize / transcriptPreviewBaseFontSize).rounded(.up)
+    }
 }

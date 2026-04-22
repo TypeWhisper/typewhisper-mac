@@ -39,6 +39,34 @@ final class DictationViewModelIndicatorSettingsTests: XCTestCase {
         XCTAssertTrue(DictationViewModel.loadIndicatorTranscriptPreviewEnabled(defaults: defaults))
     }
 
+    func testIndicatorTranscriptPreviewFontSizeOffsetDefaultsToZero() {
+        XCTAssertEqual(DictationViewModel.loadIndicatorTranscriptPreviewFontSizeOffset(defaults: defaults), 0)
+    }
+
+    func testIndicatorTranscriptPreviewFontSizeOffsetPersistsClampedValue() {
+        DictationViewModel.persistIndicatorTranscriptPreviewFontSizeOffset(99, defaults: defaults)
+
+        XCTAssertEqual(defaults.object(forKey: UserDefaultsKeys.indicatorTranscriptPreviewFontSizeOffset) as? Int, 8)
+        XCTAssertEqual(DictationViewModel.loadIndicatorTranscriptPreviewFontSizeOffset(defaults: defaults), 8)
+    }
+
+    func testMissingIndicatorTranscriptPreviewFontSizeOffsetFallsBackToZero() {
+        defaults.removeObject(forKey: UserDefaultsKeys.indicatorTranscriptPreviewFontSizeOffset)
+
+        XCTAssertEqual(DictationViewModel.loadIndicatorTranscriptPreviewFontSizeOffset(defaults: defaults), 0)
+    }
+
+    func testInvalidIndicatorTranscriptPreviewFontSizeOffsetFallsBackToZero() {
+        defaults.set("large", forKey: UserDefaultsKeys.indicatorTranscriptPreviewFontSizeOffset)
+
+        XCTAssertEqual(DictationViewModel.loadIndicatorTranscriptPreviewFontSizeOffset(defaults: defaults), 0)
+    }
+
+    func testIndicatorTranscriptPreviewFontSizeDefaultsMatchCurrentStyles() {
+        XCTAssertEqual(DictationViewModel.indicatorTranscriptPreviewFontSize(for: .notch, offset: 0), 12)
+        XCTAssertEqual(DictationViewModel.indicatorTranscriptPreviewFontSize(for: .overlay, offset: 0), 13)
+    }
+
     func testIndicatorStyleDefaultsToNotch() {
         defaults.removeObject(forKey: UserDefaultsKeys.indicatorStyle)
 

@@ -42,6 +42,14 @@ struct OverlayIndicatorView: View {
         viewModel.overlayPosition == .top
     }
 
+    private var transcriptFontSize: CGFloat {
+        viewModel.indicatorTranscriptPreviewFontSize(for: .overlay)
+    }
+
+    private var transcriptExpandedHeight: CGFloat {
+        viewModel.indicatorTranscriptPreviewExpandedHeight(for: .overlay)
+    }
+
     var body: some View {
         VStack(alignment: .center, spacing: 0) {
             if isTop {
@@ -116,7 +124,8 @@ struct OverlayIndicatorView: View {
             if viewModel.state == .recording, showTranscriptPreview {
                 IndicatorExpandableText(
                     text: viewModel.partialText,
-                    sizing: sizing,
+                    fontSize: transcriptFontSize,
+                    expandedHeight: transcriptExpandedHeight,
                     expanded: textExpanded,
                     contentPadding: contentPadding
                 )
@@ -155,7 +164,8 @@ struct OverlayIndicatorView: View {
             if viewModel.state == .recording, showTranscriptPreview {
                 IndicatorExpandableText(
                     text: viewModel.partialText,
-                    sizing: sizing,
+                    fontSize: transcriptFontSize,
+                    expandedHeight: transcriptExpandedHeight,
                     expanded: textExpanded,
                     contentPadding: contentPadding
                 )
