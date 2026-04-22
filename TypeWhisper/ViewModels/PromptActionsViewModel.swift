@@ -2,6 +2,12 @@ import Foundation
 import Combine
 import TypeWhisperPluginSDK
 
+struct PromptRuleAssignmentStatus: Equatable {
+    let ruleCount: Int
+
+    var isAssigned: Bool { ruleCount > 0 }
+}
+
 @MainActor
 class PromptActionsViewModel: ObservableObject {
     nonisolated(unsafe) static var _shared: PromptActionsViewModel?
@@ -15,6 +21,7 @@ class PromptActionsViewModel: ObservableObject {
     @Published var promptActions: [PromptAction] = []
     @Published var error: String?
     @Published var navigateToIntegrations = false
+    @Published var pendingRuleAssignmentPromptId: String?
 
     // Editor state
     @Published var isEditing = false
@@ -34,6 +41,7 @@ class PromptActionsViewModel: ObservableObject {
     @Published var manualPromptOverride = false
 
     private let promptActionService: PromptActionService
+    private let profileService: ProfileService?
     var promptProcessingService: PromptProcessingService
     private var cancellables = Set<AnyCancellable>()
     private var selectedAction: PromptAction?
@@ -52,9 +60,22 @@ class PromptActionsViewModel: ObservableObject {
         }
         return suggestedPromptName
     }
+    var pendingRuleAssignmentPrompt: PromptAction? {
+        guard let pendingRuleAssignmentPromptId else { return nil }
+        return promptActionService.action(byId: pendingRuleAssignmentPromptId)
+    }
+    var shouldShowRuleAssignmentCallout: Bool {
+        guard let action = pendingRuleAssignmentPrompt else { return false }
+        return !assignmentStatus(for: action).isAssigned
+    }
 
-    init(promptActionService: PromptActionService, promptProcessingService: PromptProcessingService) {
+    init(
+        promptActionService: PromptActionService,
+        promptProcessingService: PromptProcessingService,
+        profileService: ProfileService? = nil
+    ) {
         self.promptActionService = promptActionService
+        self.profileService = profileService
         self.promptProcessingService = promptProcessingService
         self.promptActions = promptActionService.promptActions
         setupBindings()
@@ -66,6 +87,15 @@ class PromptActionsViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] actions in
                 self?.promptActions = actions
+            }
+            .store(in: &cancellables)
+
+        profileService?.$profiles
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.refreshPendingRuleAssignmentCalloutState()
+                self?.objectWillChange.send()
             }
             .store(in: &cancellables)
     }
@@ -136,8 +166,9 @@ class PromptActionsViewModel: ObservableObject {
             regeneratePromptFromWizardSelections()
         }
 
+        let savedAction: PromptAction?
         if isCreatingNew {
-            promptActionService.addAction(
+            savedAction = promptActionService.addAction(
                 name: resolvedName,
                 prompt: editPrompt,
                 icon: editIcon,
@@ -149,7 +180,7 @@ class PromptActionsViewModel: ObservableObject {
                 targetActionPluginId: editTargetActionPluginId
             )
         } else if let action = selectedAction {
-            promptActionService.updateAction(
+            savedAction = promptActionService.updateAction(
                 action,
                 name: resolvedName,
                 prompt: editPrompt,
@@ -161,12 +192,18 @@ class PromptActionsViewModel: ObservableObject {
                 temperatureValue: editTemperatureMode == .custom ? editTemperatureValue : nil,
                 targetActionPluginId: editTargetActionPluginId
             )
+        } else {
+            savedAction = nil
         }
 
+        updatePendingRuleAssignment(for: savedAction)
         cancelEditing()
     }
 
     func deleteAction(_ action: PromptAction) {
+        if pendingRuleAssignmentPromptId == action.id.uuidString {
+            pendingRuleAssignmentPromptId = nil
+        }
         promptActionService.deleteAction(action)
     }
 
@@ -192,6 +229,56 @@ class PromptActionsViewModel: ObservableObject {
 
     func clearError() {
         error = nil
+    }
+
+    func assignmentStatus(for action: PromptAction) -> PromptRuleAssignmentStatus {
+        PromptRuleAssignmentStatus(ruleCount: ruleCount(forPromptActionId: action.id.uuidString))
+    }
+
+    func assignmentSummary(for action: PromptAction) -> String {
+        let status = assignmentStatus(for: action)
+        if status.isAssigned {
+            let ruleCount = status.ruleCount
+            return localizedAppText(
+                "Used in \(ruleCount) rule\(ruleCount == 1 ? "" : "s")",
+                de: "In \(ruleCount) Regel\(ruleCount == 1 ? "" : "n") verwendet"
+            )
+        }
+
+        return localizedAppText(
+            "Not used in any rules",
+            de: "Nicht in Regeln verwendet"
+        )
+    }
+
+    func rulesUsing(_ action: PromptAction) -> [Profile] {
+        profilesForAssignmentStatus.filter { $0.promptActionId == action.id.uuidString }
+    }
+
+    func showRules(for action: PromptAction) {
+        pendingRuleAssignmentPromptId = nil
+        ProfilesViewModel.shared.focusRules(usingPromptActionId: action.id.uuidString)
+        SettingsNavigationCoordinator.shared.navigate(to: .profiles)
+    }
+
+    func openRule(_ profile: Profile) {
+        if let promptActionId = profile.promptActionId {
+            ProfilesViewModel.shared.focusRules(usingPromptActionId: promptActionId)
+        } else {
+            ProfilesViewModel.shared.clearPromptRuleFocus()
+        }
+        ProfilesViewModel.shared.prepareEditProfile(profile)
+        SettingsNavigationCoordinator.shared.navigate(to: .profiles)
+    }
+
+    func createRule(for action: PromptAction) {
+        pendingRuleAssignmentPromptId = nil
+        ProfilesViewModel.shared.prepareNewProfile(prefilledPromptActionId: action.id.uuidString)
+        SettingsNavigationCoordinator.shared.navigate(to: .profiles)
+    }
+
+    func dismissRuleAssignmentCallout() {
+        pendingRuleAssignmentPromptId = nil
     }
 
     func setWizardGoal(_ goal: PromptWizardGoal) {
@@ -369,6 +456,37 @@ class PromptActionsViewModel: ObservableObject {
 
     func defaultTemperatureValue(for providerId: String?) -> Double {
         providerId == "Gemma 4 (MLX)" ? 0.1 : 0.3
+    }
+
+    private var profilesForAssignmentStatus: [Profile] {
+        profileService?.profiles ?? ProfilesViewModel._shared?.profiles ?? []
+    }
+
+    private func ruleCount(forPromptActionId promptActionId: String) -> Int {
+        profilesForAssignmentStatus.filter { $0.promptActionId == promptActionId }.count
+    }
+
+    private func updatePendingRuleAssignment(for action: PromptAction?) {
+        guard let action else {
+            pendingRuleAssignmentPromptId = nil
+            return
+        }
+
+        pendingRuleAssignmentPromptId = assignmentStatus(for: action).isAssigned
+            ? nil
+            : action.id.uuidString
+    }
+
+    private func refreshPendingRuleAssignmentCalloutState() {
+        guard let pendingRuleAssignmentPromptId else { return }
+        guard let action = promptActionService.action(byId: pendingRuleAssignmentPromptId) else {
+            self.pendingRuleAssignmentPromptId = nil
+            return
+        }
+
+        if assignmentStatus(for: action).isAssigned {
+            self.pendingRuleAssignmentPromptId = nil
+        }
     }
 
     private func syncEditorFieldsFromWizardDraft(resetName: Bool) {

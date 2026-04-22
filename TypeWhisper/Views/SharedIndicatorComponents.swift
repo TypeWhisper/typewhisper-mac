@@ -183,7 +183,7 @@ struct IndicatorRecordingContent: View {
                     .padding(.horizontal, sizing.profilePaddingH)
                     .padding(.vertical, sizing.profilePaddingV)
                     .background(.white.opacity(0.2), in: Capsule())
-                    .accessibilityLabel("Active rule")
+                    .accessibilityLabel(localizedAppText("Active workflow", de: "Aktiver Workflow"))
                     .accessibilityValue(name)
             } else {
                 Color.clear.frame(width: 0, height: 0)

@@ -46,10 +46,10 @@ struct HotkeySettingsView: View {
                 )
             }
 
-            Section(String(localized: "Prompt Palette")) {
+            Section(localizedAppText("Workflow Palette", de: "Workflow-Palette")) {
                 HotkeyRecorderView(
                     label: dictation.promptPaletteHotkeyLabel,
-                    title: String(localized: "Palette shortcut"),
+                    title: localizedAppText("Palette shortcut", de: "Palette-Shortcut"),
                     onRecord: { hotkey in
                         if let conflict = dictation.isHotkeyAssigned(hotkey, excluding: .promptPalette) {
                             dictation.clearHotkey(for: conflict)
@@ -59,7 +59,10 @@ struct HotkeySettingsView: View {
                     onClear: { dictation.clearHotkey(for: .promptPalette) }
                 )
 
-                Text(String(localized: "Select text in any app, press the shortcut, and choose a prompt to process the text."))
+                Text(localizedAppText(
+                    "Select text in any app, press the shortcut, and choose a workflow to process the text.",
+                    de: "Markiere Text in einer App, drücke den Shortcut und wähle einen Workflow für die Verarbeitung."
+                ))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

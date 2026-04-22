@@ -149,6 +149,9 @@ final class PromptPaletteHandlerTests: XCTestCase {
     func testTriggerSelectionStillOpensPaletteWhenCurrentProviderIsNotReady() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
+        let previousPluginManager = PluginManager.shared
+        PluginManager.shared = PluginManager()
+        defer { PluginManager.shared = previousPluginManager }
 
         let textInsertionService = TextInsertionService()
         textInsertionService.accessibilityGrantedOverride = true
@@ -160,11 +163,12 @@ final class PromptPaletteHandlerTests: XCTestCase {
             )
         }
 
-        let promptActionService = PromptActionService(appSupportDirectory: appSupportDirectory)
-        promptActionService.addAction(
+        let workflowService = WorkflowService(appSupportDirectory: appSupportDirectory)
+        _ = workflowService.addWorkflow(
             name: "Translate",
-            prompt: "Translate the selected text.",
-            providerType: "Groq"
+            template: .translation,
+            trigger: .hotkey(UnifiedHotkey(keyCode: 17, modifierFlags: 0, isFn: false)),
+            behavior: WorkflowBehavior(settings: ["targetLanguage": "German"])
         )
 
         let promptProcessingService = PromptProcessingService()
@@ -173,7 +177,7 @@ final class PromptPaletteHandlerTests: XCTestCase {
         let controller = PromptPaletteControllerSpy()
         let handler = PromptPaletteHandler(
             textInsertionService: textInsertionService,
-            promptActionService: promptActionService,
+            workflowService: workflowService,
             promptProcessingService: promptProcessingService,
             soundService: SoundService(),
             accessibilityAnnouncementService: AccessibilityAnnouncementService(),
@@ -186,7 +190,7 @@ final class PromptPaletteHandlerTests: XCTestCase {
         handler.triggerSelection(currentState: .idle, soundFeedbackEnabled: false)
 
         XCTAssertTrue(controller.isVisible)
-        XCTAssertEqual(controller.lastActions?.map(\.name), ["Translate"])
+        XCTAssertEqual(controller.lastWorkflows?.map(\.name), ["Translate"])
         XCTAssertEqual(controller.lastSourceText, "Selected text")
         XCTAssertNil(shownError)
     }
@@ -279,13 +283,13 @@ final class SelectionPaletteInteractionModelTests: XCTestCase {
 @MainActor
 private final class PromptPaletteControllerSpy: PromptPaletteControlling {
     private(set) var isVisible = false
-    private(set) var lastActions: [PromptAction]?
+    private(set) var lastWorkflows: [Workflow]?
     private(set) var lastSourceText: String?
-    private var onSelect: ((PromptAction) -> Void)?
+    private var onSelect: ((Workflow) -> Void)?
 
-    func show(actions: [PromptAction], sourceText: String, onSelect: @escaping (PromptAction) -> Void) {
+    func show(workflows: [Workflow], sourceText: String, onSelect: @escaping (Workflow) -> Void) {
         isVisible = true
-        lastActions = actions
+        lastWorkflows = workflows
         lastSourceText = sourceText
         self.onSelect = onSelect
     }

@@ -70,7 +70,7 @@ See the [release readiness guide](docs/release-readiness.md), [support matrix](d
 
 ### AI Processing
 
-- **Custom prompts** - Process transcriptions (or any text) with LLM prompts. 8 presets included (Translate, Formal, Summarize, Fix Grammar, Email, List, Shorter, Explain). Standalone Prompt Palette via global hotkey - a floating panel for AI text processing independent of dictation
+- **Custom prompts** - Build reusable LLM prompts for translation, rewriting, extraction, and formatting. Automatic prompt processing during dictation runs through Rules; without a Rule, prompts stay available from the standalone Prompt Palette via global hotkey
 - **LLM providers** - Apple Intelligence (macOS 26+), Groq, OpenAI / ChatGPT, Gemini, and OpenAI Compatible with per-prompt provider and model override
 - **Local prompt processing** - Gemma 4 via MLX runs on-device on Apple Silicon, with the current verified release path limited to the E2B/E4B 4-bit models
 - **Translation** - Translate transcriptions on-device using Apple Translate
@@ -372,7 +372,7 @@ Rules let you configure transcription settings per application or website. For e
 - **github.com** - English language (matches in any browser)
 - **docs.google.com** - German language, translate to English
 
-Create rules in Settings > Regeln. Assign apps and/or URL patterns, set language/task/engine overrides, assign a custom prompt for automatic post-processing, optionally configure a manual rule shortcut, enable auto-submit (automatically sends text in chat apps), and adjust priority. Spoken language can be left on full auto-detect, fixed to one exact language, or restricted to a shortlist of likely languages for better detection accuracy. URL patterns support subdomain matching - e.g. `google.com` also matches `docs.google.com`. The domain autocomplete suggests domains from your transcription history.
+Create rules in Settings > Regeln. Assign apps and/or URL patterns, set language/task/engine overrides, assign a custom prompt for automatic post-processing, optionally configure a manual rule shortcut, enable auto-submit (automatically sends text in chat apps), and adjust priority. Spoken language can be left on full auto-detect, fixed to one exact language, or restricted to a shortlist of likely languages for better detection accuracy. URL patterns support subdomain matching - e.g. `google.com` also matches `docs.google.com`. The domain autocomplete suggests domains from your transcription history. If you want a prompt to run for normal dictation, assign it to a Rule; otherwise it remains a manual Prompt Palette action.
 
 When you start dictating, TypeWhisper matches the active app and browser URL against your rules with the following priority:
 1. **App + URL match** - highest specificity (e.g. Chrome + github.com)

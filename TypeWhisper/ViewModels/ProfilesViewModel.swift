@@ -244,6 +244,7 @@ final class ProfilesViewModel: ObservableObject {
     }
 
     @Published var profiles: [Profile] = []
+    @Published private(set) var focusedPromptActionId: String?
 
     // Editor state
     @Published var showingEditor = false
@@ -283,6 +284,7 @@ final class ProfilesViewModel: ObservableObject {
     @Published var editorDetectedDomain: String?
     @Published var editorDetectedIsSupportedBrowser = false
     @Published var showingWebsiteScope = false
+    @Published private(set) var editorPromptActionWasPrefilled = false
     var availableDomains: [String] = []
 
     private let profileService: ProfileService
@@ -306,6 +308,25 @@ final class ProfilesViewModel: ObservableObject {
         return installedApps.filter {
             $0.name.lowercased().contains(query) || $0.id.lowercased().contains(query)
         }
+    }
+
+    var isFilteringRulesByPrompt: Bool {
+        focusedPromptActionId != nil
+    }
+
+    var focusedPromptAction: PromptAction? {
+        guard let focusedPromptActionId else { return nil }
+        return availablePromptActions.first { $0.id.uuidString == focusedPromptActionId }
+    }
+
+    var editorPromptAction: PromptAction? {
+        guard let editorPromptActionId else { return nil }
+        return availablePromptActions.first { $0.id.uuidString == editorPromptActionId }
+    }
+
+    var visibleProfiles: [Profile] {
+        guard let focusedPromptActionId else { return profiles }
+        return profiles.filter { $0.promptActionId == focusedPromptActionId }
     }
 
     var suggestedRuleName: String {
@@ -339,6 +360,12 @@ final class ProfilesViewModel: ObservableObject {
         case .behavior, .review:
             return true
         }
+    }
+    var shouldShowPrefilledPromptFallbackNotice: Bool {
+        editorPromptActionWasPrefilled &&
+        editorPromptActionId != nil &&
+        editorBundleIdentifiers.isEmpty &&
+        editorUrlPatterns.isEmpty
     }
 
     // MARK: - CRUD
@@ -431,8 +458,9 @@ final class ProfilesViewModel: ObservableObject {
 
     // MARK: - Editor
 
-    func prepareNewProfile() {
+    func prepareNewProfile(prefilledPromptActionId: String? = nil) {
         editingProfile = nil
+        focusedPromptActionId = prefilledPromptActionId
         editorStep = .scope
         editorIsEnabled = true
         showingAdvancedSettings = false
@@ -446,7 +474,7 @@ final class ProfilesViewModel: ObservableObject {
         editorSelectedTask = nil
         editorEngineOverride = nil
         editorCloudModelOverride = nil
-        editorPromptActionId = nil
+        editorPromptActionId = prefilledPromptActionId
         editorMemoryEnabled = false
         editorOutputFormat = nil
         editorInlineCommandsEnabled = false
@@ -454,6 +482,7 @@ final class ProfilesViewModel: ObservableObject {
         editorHotkey = nil
         editorHotkeyLabel = ""
         editorPriority = 0
+        editorPromptActionWasPrefilled = prefilledPromptActionId != nil
         urlPatternInput = ""
         domainSuggestions = []
         editorDetectedAppName = nil
@@ -506,6 +535,7 @@ final class ProfilesViewModel: ObservableObject {
         editorDetectedDomain = nil
         editorDetectedIsSupportedBrowser = false
         showingWebsiteScope = !profile.urlPatterns.isEmpty
+        editorPromptActionWasPrefilled = false
         loadAvailableDomains()
         refreshEditorContext()
         showingEditor = true
@@ -517,6 +547,31 @@ final class ProfilesViewModel: ObservableObject {
         } else {
             editorBundleIdentifiers.append(bundleId)
         }
+    }
+
+    func focusRules(usingPromptActionId promptActionId: String) {
+        focusedPromptActionId = promptActionId
+        showingEditor = false
+    }
+
+    func clearPromptRuleFocus() {
+        focusedPromptActionId = nil
+    }
+
+    func promptAction(for profile: Profile) -> PromptAction? {
+        guard let promptActionId = profile.promptActionId else { return nil }
+        return availablePromptActions.first { $0.id.uuidString == promptActionId }
+    }
+
+    func editPrompt(for profile: Profile) {
+        guard let promptAction = promptAction(for: profile) else { return }
+        editPrompt(promptActionId: promptAction.id.uuidString)
+    }
+
+    func editPrompt(promptActionId: String) {
+        guard let promptAction = availablePromptActions.first(where: { $0.id.uuidString == promptActionId }) else { return }
+        PromptActionsViewModel.shared.startEditing(promptAction)
+        SettingsNavigationCoordinator.shared.navigate(to: .prompts)
     }
 
     // MARK: - App Scanner
@@ -962,5 +1017,11 @@ final class ProfilesViewModel: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+    }
+}
+
+private extension ProfilesViewModel {
+    var availablePromptActions: [PromptAction] {
+        PromptActionsViewModel._shared?.promptActions ?? []
     }
 }

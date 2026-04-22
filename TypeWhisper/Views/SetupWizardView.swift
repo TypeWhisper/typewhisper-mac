@@ -1099,7 +1099,7 @@ struct SetupWizardView: View {
         case .hybrid: return String(localized: "Hybrid")
         case .pushToTalk: return String(localized: "Push-to-Talk")
         case .toggle: return String(localized: "Toggle")
-        case .promptPalette: return String(localized: "Prompt Palette")
+        case .promptPalette: return localizedAppText("Workflow Palette", de: "Workflow-Palette")
         case .recentTranscriptions: return String(localized: "Recent Transcriptions")
         }
     }

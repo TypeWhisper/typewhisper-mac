@@ -3,7 +3,7 @@ import AppKit
 
 enum SettingsTab: Hashable {
     case home, general, recording, hotkeys, recorder
-    case fileTranscription, history, dictionary, snippets, profiles, prompts, integrations, advanced, license, about
+    case fileTranscription, history, dictionary, snippets, workflows, legacyWorkflows, profiles, prompts, integrations, advanced, license, about
 }
 
 private struct SettingsDestination: Identifiable, Hashable {
@@ -27,9 +27,10 @@ struct SettingsView: View {
     @ObservedObject private var homeViewModel = HomeViewModel.shared
     @ObservedObject private var promptActionsViewModel = PromptActionsViewModel.shared
     @ObservedObject private var settingsNavigation = SettingsNavigationCoordinator.shared
+    @ObservedObject private var legacyWorkflowService = ServiceContainer.shared.legacyWorkflowService
 
     private var destinations: [SettingsDestination] {
-        [
+        var items = [
             SettingsDestination(tab: .home, title: String(localized: "Home"), systemImage: "house", badge: nil),
             SettingsDestination(tab: .general, title: String(localized: "General"), systemImage: "gear", badge: nil),
             SettingsDestination(tab: .recording, title: String(localized: "Recording"), systemImage: "mic.fill", badge: nil),
@@ -44,18 +45,40 @@ struct SettingsView: View {
             SettingsDestination(tab: .history, title: String(localized: "History"), systemImage: "clock.arrow.circlepath", badge: nil),
             SettingsDestination(tab: .dictionary, title: String(localized: "Dictionary"), systemImage: "book.closed", badge: nil),
             SettingsDestination(tab: .snippets, title: String(localized: "Snippets"), systemImage: "text.badge.plus", badge: nil),
-            SettingsDestination(tab: .profiles, title: localizedAppText("Rules", de: "Regeln"), systemImage: "point.3.connected.trianglepath.dotted", badge: nil),
-            SettingsDestination(tab: .prompts, title: String(localized: "Prompts"), systemImage: "sparkles", badge: nil),
             SettingsDestination(
-                tab: .integrations,
-                title: String(localized: "Integrations"),
-                systemImage: "puzzlepiece.extension",
-                badge: registryService.availableUpdatesCount > 0 ? registryService.availableUpdatesCount : nil
-            ),
-            SettingsDestination(tab: .advanced, title: String(localized: "Advanced"), systemImage: "gearshape.2", badge: nil),
-            SettingsDestination(tab: .license, title: String(localized: "License"), systemImage: "key", badge: nil),
-            SettingsDestination(tab: .about, title: String(localized: "About"), systemImage: "info.circle", badge: nil)
+                tab: .workflows,
+                title: localizedAppText("Workflows", de: "Workflows"),
+                systemImage: "point.3.connected.trianglepath.dotted",
+                badge: nil
+            )
         ]
+
+        if !legacyWorkflowService.items.isEmpty {
+            items.append(
+                SettingsDestination(
+                    tab: .legacyWorkflows,
+                    title: localizedAppText("Legacy", de: "Legacy"),
+                    systemImage: "archivebox",
+                    badge: legacyWorkflowService.items.count
+                )
+            )
+        }
+
+        items.append(
+            contentsOf: [
+                SettingsDestination(
+                    tab: .integrations,
+                    title: String(localized: "Integrations"),
+                    systemImage: "puzzlepiece.extension",
+                    badge: registryService.availableUpdatesCount > 0 ? registryService.availableUpdatesCount : nil
+                ),
+                SettingsDestination(tab: .advanced, title: String(localized: "Advanced"), systemImage: "gearshape.2", badge: nil),
+                SettingsDestination(tab: .license, title: String(localized: "License"), systemImage: "key", badge: nil),
+                SettingsDestination(tab: .about, title: String(localized: "About"), systemImage: "info.circle", badge: nil)
+            ]
+        )
+
+        return items
     }
 
     private var destinationSections: [SettingsDestinationSection] {
@@ -96,7 +119,35 @@ struct SettingsView: View {
             }
         }
         .onReceive(settingsNavigation.$request.compactMap { $0 }) { request in
-            selectedTab = request.tab
+            switch request.tab {
+            case .profiles:
+                if legacyWorkflowService.items.isEmpty {
+                    selectedTab = .workflows
+                    WorkflowsNavigationCoordinator.shared.showMine()
+                } else {
+                    selectedTab = .legacyWorkflows
+                    WorkflowsNavigationCoordinator.shared.showLegacy(focus: .rule)
+                }
+            case .prompts:
+                if legacyWorkflowService.items.isEmpty {
+                    selectedTab = .workflows
+                    WorkflowsNavigationCoordinator.shared.showMine()
+                } else {
+                    selectedTab = .legacyWorkflows
+                    WorkflowsNavigationCoordinator.shared.showLegacy(focus: .prompt)
+                }
+            case .workflows:
+                selectedTab = .workflows
+                WorkflowsNavigationCoordinator.shared.showMine()
+            default:
+                selectedTab = request.tab
+            }
+        }
+        .onChange(of: legacyWorkflowService.items.count) { _, count in
+            if count == 0 && selectedTab == .legacyWorkflows {
+                selectedTab = .workflows
+                WorkflowsNavigationCoordinator.shared.showMine()
+            }
         }
     }
 
@@ -127,10 +178,14 @@ struct SettingsView: View {
             DictionarySettingsView()
         case .snippets:
             SnippetsSettingsView()
+        case .workflows:
+            WorkflowsSettingsView()
+        case .legacyWorkflows:
+            LegacyWorkflowsSettingsView()
         case .profiles:
-            ProfilesSettingsView()
+            WorkflowsSettingsView()
         case .prompts:
-            PromptActionsSettingsView()
+            LegacyWorkflowsSettingsView()
         case .integrations:
             PluginSettingsView()
         case .advanced:
@@ -224,7 +279,20 @@ private func settingsBadge(_ destinations: [SettingsDestination], _ tab: Setting
 }
 
 private func settingsDestinationSections(_ destinations: [SettingsDestination]) -> [SettingsDestinationSection] {
-    [
+    var workspaceDestinations = [
+        settingsDestination(destinations, .history),
+        settingsDestination(destinations, .dictionary),
+        settingsDestination(destinations, .snippets),
+        settingsDestination(destinations, .workflows)
+    ]
+
+    if let legacyDestination = destinations.first(where: { $0.tab == .legacyWorkflows }) {
+        workspaceDestinations.append(legacyDestination)
+    }
+
+    workspaceDestinations.append(settingsDestination(destinations, .integrations))
+
+    return [
         SettingsDestinationSection(
             id: "home",
             destinations: [settingsDestination(destinations, .home)]
@@ -241,14 +309,7 @@ private func settingsDestinationSections(_ destinations: [SettingsDestination]) 
         ),
         SettingsDestinationSection(
             id: "workspace",
-            destinations: [
-                settingsDestination(destinations, .history),
-                settingsDestination(destinations, .dictionary),
-                settingsDestination(destinations, .snippets),
-                settingsDestination(destinations, .profiles),
-                settingsDestination(destinations, .prompts),
-                settingsDestination(destinations, .integrations)
-            ]
+            destinations: workspaceDestinations
         ),
         SettingsDestinationSection(
             id: "system",

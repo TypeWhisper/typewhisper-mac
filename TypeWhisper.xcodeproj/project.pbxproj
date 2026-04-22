@@ -21,10 +21,16 @@
 		A10000000000000000000002 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000002 /* manifest.json */; };
 		A10000000000000000000003 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000044 /* TypeWhisperPluginSDK */; };
 		A10000000000000000000005 /* SpeechFeedbackServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* SpeechFeedbackServiceTests.swift */; };
+		A10000000000000000000006 /* WorkflowServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000005 /* WorkflowServiceTests.swift */; };
+		A10000000000000000000007 /* LegacyWorkflowServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000006 /* LegacyWorkflowServiceTests.swift */; };
 		AA00000000000000000350 /* ObjCExceptionCatcher.m in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000351 /* ObjCExceptionCatcher.m */; };
 		AA00000000000000000353 /* PostUpdatePromptCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000353 /* PostUpdatePromptCoordinator.swift */; };
 		AA00000000000000000354 /* SettingsNavigationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000354 /* SettingsNavigationCoordinator.swift */; };
 		AA00000000000000000355 /* PostUpdateLicensePromptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000355 /* PostUpdateLicensePromptView.swift */; };
+		AA00000000000000000356 /* Workflow.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000356 /* Workflow.swift */; };
+		AA00000000000000000357 /* WorkflowService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000357 /* WorkflowService.swift */; };
+		AA00000000000000000358 /* LegacyWorkflowService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000358 /* LegacyWorkflowService.swift */; };
+		AA00000000000000000359 /* WorkflowsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000359 /* WorkflowsSettingsView.swift */; };
 		C23000000000000000000001 /* OpenAIPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000139 /* OpenAIPlugin.swift */; };
 		C23000000000000000000002 /* Qwen3ContextBiasFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000321 /* Qwen3ContextBiasFormatter.swift */; };
 		C23000000000000000000003 /* Gemma4Plugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000295 /* Gemma4Plugin.swift */; };
@@ -411,6 +417,8 @@
 		8E39448D561C47B16EEF4C6B /* HTTPRequestParserTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HTTPRequestParserTests.swift; sourceTree = "<group>"; };
 		A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PostUpdatePromptCoordinatorTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000004 /* SpeechFeedbackServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeechFeedbackServiceTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000005 /* WorkflowServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkflowServiceTests.swift; sourceTree = "<group>"; };
+		B10000000000000000000006 /* LegacyWorkflowServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LegacyWorkflowServiceTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000001 /* TypeWhisperApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypeWhisperApp.swift; sourceTree = "<group>"; };
 		BB00000000000000000002 /* ServiceContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceContainer.swift; sourceTree = "<group>"; };
 		BB00000000000000000005 /* TranscriptionResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionResult.swift; sourceTree = "<group>"; };
@@ -433,6 +441,10 @@
 		BB00000000000000000353 /* PostUpdatePromptCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostUpdatePromptCoordinator.swift; sourceTree = "<group>"; };
 		BB00000000000000000354 /* SettingsNavigationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsNavigationCoordinator.swift; sourceTree = "<group>"; };
 		BB00000000000000000355 /* PostUpdateLicensePromptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostUpdateLicensePromptView.swift; sourceTree = "<group>"; };
+		BB00000000000000000356 /* Workflow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Workflow.swift; sourceTree = "<group>"; };
+		BB00000000000000000357 /* WorkflowService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowService.swift; sourceTree = "<group>"; };
+		BB00000000000000000358 /* LegacyWorkflowService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyWorkflowService.swift; sourceTree = "<group>"; };
+		BB00000000000000000359 /* WorkflowsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowsSettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000040 /* HTTPResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPResponse.swift; sourceTree = "<group>"; };
 		BB00000000000000000041 /* HTTPRequestParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPRequestParser.swift; sourceTree = "<group>"; };
 		BB00000000000000000042 /* APIRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIRouter.swift; sourceTree = "<group>"; };
@@ -1116,6 +1128,7 @@
 				BB00000000000000000005 /* TranscriptionResult.swift */,
 				BB00000000000000000060 /* TranscriptionRecord.swift */,
 				BB00000000000000000065 /* Profile.swift */,
+				BB00000000000000000356 /* Workflow.swift */,
 				BB00000000000000000077 /* DictionaryEntry.swift */,
 				BB00000000000000000078 /* TermPack.swift */,
 				BB00000000000000000080 /* Snippet.swift */,
@@ -1146,6 +1159,8 @@
 				B91F00000000000000000002 /* RecentTranscriptionStore.swift */,
 				BB00000000000000000062 /* TextDiffService.swift */,
 				BB00000000000000000066 /* ProfileService.swift */,
+				BB00000000000000000357 /* WorkflowService.swift */,
+				BB00000000000000000358 /* LegacyWorkflowService.swift */,
 				BB00000000000000000073 /* TranslationService.swift */,
 				BB00000000000000000074 /* AudioDuckingService.swift */,
 				BB00000000000000000273 /* MediaPlaybackService.swift */,
@@ -1204,14 +1219,15 @@
 			CC00000000000000000008 /* Views */ = {
 				isa = PBXGroup;
 				children = (
-					BB00000000000000000198 /* OverlayIndicatorPanel.swift */,
-					BB00000000000000000195 /* OverlayIndicatorView.swift */,
-					BB00000000000000000310 /* MinimalIndicatorPanel.swift */,
-					BB00000000000000000309 /* MinimalIndicatorView.swift */,
-					BB00000000000000000197 /* SharedIndicatorComponents.swift */,
-					BB00000000000000000014 /* MenuBarView.swift */,
-					BB00000000000000000016 /* FileTranscriptionView.swift */,
+				BB00000000000000000198 /* OverlayIndicatorPanel.swift */,
+				BB00000000000000000195 /* OverlayIndicatorView.swift */,
+				BB00000000000000000310 /* MinimalIndicatorPanel.swift */,
+				BB00000000000000000309 /* MinimalIndicatorView.swift */,
+				BB00000000000000000197 /* SharedIndicatorComponents.swift */,
+				BB00000000000000000014 /* MenuBarView.swift */,
+				BB00000000000000000016 /* FileTranscriptionView.swift */,
 				BB00000000000000000017 /* SettingsView.swift */,
+				BB00000000000000000359 /* WorkflowsSettingsView.swift */,
 				BB00000000000000000046 /* AdvancedSettingsView.swift */,
 				BB00000000000000000051 /* GeneralSettingsView.swift */,
 				BB00000000000000000064 /* HistoryView.swift */,
@@ -1747,6 +1763,8 @@
 				2A7B3C4D5E6F708192A3B4C5 /* PromptWizardComposerTests.swift */,
 				2A7B3C4D5E6F708192A3B4C6 /* PromptWizardInferenceServiceTests.swift */,
 				F41BD305007A3A158038C75C /* ProfileServiceTests.swift */,
+				B10000000000000000000005 /* WorkflowServiceTests.swift */,
+				B10000000000000000000006 /* LegacyWorkflowServiceTests.swift */,
 				B10000000000000000000004 /* SpeechFeedbackServiceTests.swift */,
 				7D2E4F50617283946C1F7A8B /* SoundServiceTests.swift */,
 				BE6B6611B899F649B097A726 /* SnippetServiceTests.swift */,
@@ -2938,6 +2956,8 @@
 				1F7A2C3D4E5B60718293A4C5 /* PromptWizardComposerTests.swift in Sources */,
 				1F7A2C3D4E5B60718293A4C6 /* PromptWizardInferenceServiceTests.swift in Sources */,
 				86F4253D3CDE30E859D0F219 /* ProfileServiceTests.swift in Sources */,
+				A10000000000000000000006 /* WorkflowServiceTests.swift in Sources */,
+				A10000000000000000000007 /* LegacyWorkflowServiceTests.swift in Sources */,
 				A10000000000000000000005 /* SpeechFeedbackServiceTests.swift in Sources */,
 				6C1F7A8B9D2E4F5061728394 /* SoundServiceTests.swift in Sources */,
 				A47BC06842DCB0BB47A2D938 /* SnippetServiceTests.swift in Sources */,
@@ -3002,7 +3022,10 @@
 				AA00000000000000000063 /* HistoryViewModel.swift in Sources */,
 				AA00000000000000000064 /* HistoryView.swift in Sources */,
 				AA00000000000000000065 /* Profile.swift in Sources */,
+				AA00000000000000000356 /* Workflow.swift in Sources */,
 				AA00000000000000000066 /* ProfileService.swift in Sources */,
+				AA00000000000000000357 /* WorkflowService.swift in Sources */,
+				AA00000000000000000358 /* LegacyWorkflowService.swift in Sources */,
 				AA00000000000000000067 /* ProfilesViewModel.swift in Sources */,
 				AA00000000000000000068 /* ProfilesSettingsView.swift in Sources */,
 				AA00000000000000000070 /* UpdateChecker.swift in Sources */,
@@ -3042,6 +3065,7 @@
 				AA00000000000000000116 /* PromptActionsViewModel.swift in Sources */,
 				AA00000000000000000315 /* PromptWizardSupport.swift in Sources */,
 				AA00000000000000000117 /* PromptActionsSettingsView.swift in Sources */,
+				AA00000000000000000359 /* WorkflowsSettingsView.swift in Sources */,
 				AA00000000000000000118 /* PromptPalettePanel.swift in Sources */,
 				A91F00000000000000000001 /* SelectionPalettePanel.swift in Sources */,
 				AA00000000000000000217 /* IndicatorPreviewView.swift in Sources */,

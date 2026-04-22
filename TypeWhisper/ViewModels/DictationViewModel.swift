@@ -137,6 +137,7 @@ final class DictationViewModel: ObservableObject {
     private let historyService: HistoryService
     private let recentTranscriptionStore: RecentTranscriptionStore
     private let profileService: ProfileService
+    private let workflowService: WorkflowService
     private let translationService: AnyObject? // TranslationService (macOS 15+)
     private let audioDuckingService: AudioDuckingService
     private let dictionaryService: DictionaryService
@@ -150,9 +151,12 @@ final class DictationViewModel: ObservableObject {
     private let errorLogService: ErrorLogService
     private let mediaPlaybackService: MediaPlaybackService
     private let postProcessingPipeline: PostProcessingPipeline
+    private var matchedWorkflow: Workflow?
+    private var activeWorkflowMatch: WorkflowMatchResult?
     private var matchedProfile: Profile?
     private var activeRuleMatch: RuleMatchResult?
     private var forcedProfileId: UUID?
+    private var forcedWorkflowId: UUID?
     private var capturedActiveApp: (name: String?, bundleId: String?, url: String?)?
     private var capturedSelectedText: String?
 
@@ -203,6 +207,7 @@ final class DictationViewModel: ObservableObject {
         historyService: HistoryService,
         recentTranscriptionStore: RecentTranscriptionStore,
         profileService: ProfileService,
+        workflowService: WorkflowService,
         translationService: AnyObject?,
         audioDuckingService: AudioDuckingService,
         dictionaryService: DictionaryService,
@@ -225,6 +230,7 @@ final class DictationViewModel: ObservableObject {
         self.historyService = historyService
         self.recentTranscriptionStore = recentTranscriptionStore
         self.profileService = profileService
+        self.workflowService = workflowService
         self.translationService = translationService
         self.audioDuckingService = audioDuckingService
         self.dictionaryService = dictionaryService
@@ -256,7 +262,7 @@ final class DictationViewModel: ObservableObject {
         )
         self.promptPaletteHandler = PromptPaletteHandler(
             textInsertionService: textInsertionService,
-            promptActionService: promptActionService,
+            workflowService: workflowService,
             promptProcessingService: promptProcessingService,
             soundService: soundService,
             accessibilityAnnouncementService: accessibilityAnnouncementService
@@ -270,7 +276,8 @@ final class DictationViewModel: ObservableObject {
             hotkeyService: hotkeyService,
             audioRecordingService: audioRecordingService,
             textInsertionService: textInsertionService,
-            profileService: profileService
+            profileService: profileService,
+            workflowService: workflowService
         )
         self.audioDuckingEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.audioDuckingEnabled)
         self.audioDuckingLevel = UserDefaults.standard.object(forKey: UserDefaultsKeys.audioDuckingLevel) as? Double ?? 0.2
@@ -503,6 +510,10 @@ final class DictationViewModel: ObservableObject {
             self?.startRecording(forcedProfileId: profileId)
         }
 
+        hotkeyService.onWorkflowDictationStart = { [weak self] workflowId in
+            self?.startRecording(forcedWorkflowId: workflowId)
+        }
+
         hotkeyService.onCancelPressed = { [weak self] in
             self?.handleCancelHotkey()
         }
@@ -518,6 +529,14 @@ final class DictationViewModel: ObservableObject {
             .sink { [weak self] profiles in
                 guard let self else { return }
                 self.settingsHandler.syncProfileHotkeys(profiles)
+            }
+            .store(in: &cancellables)
+
+        workflowService.$workflows
+            .dropFirst()
+            .sink { [weak self] workflows in
+                guard let self else { return }
+                self.settingsHandler.syncWorkflowHotkeys(workflows)
             }
             .store(in: &cancellables)
 
@@ -613,7 +632,11 @@ final class DictationViewModel: ObservableObject {
         }
     }
 
-    private func startRecording(forcedProfileId: UUID? = nil, sessionID: UUID = UUID()) {
+    private func startRecording(
+        forcedProfileId: UUID? = nil,
+        forcedWorkflowId: UUID? = nil,
+        sessionID: UUID = UUID()
+    ) {
         let startTimestamp = CFAbsoluteTimeGetCurrent()
 
         // Dismiss prompt palette if active
@@ -639,6 +662,7 @@ final class DictationViewModel: ObservableObject {
         urlResolutionTask = nil
 
         self.forcedProfileId = forcedProfileId
+        self.forcedWorkflowId = forcedWorkflowId
         beginDictationSession(id: sessionID)
 
         guard canDictate else {
@@ -661,9 +685,14 @@ final class DictationViewModel: ObservableObject {
         capturedSelectedText = nil
         activeAppIcon = nil
 
-        if let forcedProfileId,
+        if let forcedWorkflowId,
+           let forcedWorkflow = workflowService.workflows.first(where: { $0.id == forcedWorkflowId && $0.isEnabled }) {
+            applyWorkflowMatch(workflowService.forcedWorkflowMatch(for: forcedWorkflow), activeApp: activeApp)
+        } else if let forcedProfileId,
            let forcedProfile = profileService.profiles.first(where: { $0.id == forcedProfileId && $0.isEnabled }) {
             applyRuleMatch(profileService.forcedRuleMatch(for: forcedProfile), activeApp: activeApp)
+        } else if let workflowMatch = workflowService.matchWorkflow(bundleIdentifier: activeApp.bundleId, url: nil) {
+            applyWorkflowMatch(workflowMatch, activeApp: activeApp)
         } else {
             applyRuleMatch(profileService.matchRule(bundleIdentifier: activeApp.bundleId, url: nil), activeApp: activeApp)
         }
@@ -695,7 +724,11 @@ final class DictationViewModel: ObservableObject {
                 appName: capturedActiveApp?.name,
                 bundleIdentifier: capturedActiveApp?.bundleId
             )))
-            scheduleDeferredRecordingMetadataCapture(activeApp: activeApp, forcedProfileId: forcedProfileId)
+            scheduleDeferredRecordingMetadataCapture(
+                activeApp: activeApp,
+                forcedProfileId: forcedProfileId,
+                forcedWorkflowId: forcedWorkflowId
+            )
 
             let totalStartMs = (CFAbsoluteTimeGetCurrent() - startTimestamp) * 1000
             logger.info(
@@ -724,7 +757,8 @@ final class DictationViewModel: ObservableObject {
 
     private func scheduleDeferredRecordingMetadataCapture(
         activeApp: (name: String?, bundleId: String?, url: String?),
-        forcedProfileId: UUID?
+        forcedProfileId: UUID?,
+        forcedWorkflowId: UUID?
     ) {
         let metadataStartTimestamp = CFAbsoluteTimeGetCurrent()
 
@@ -752,7 +786,7 @@ final class DictationViewModel: ObservableObject {
         // Resolve browser URL asynchronously after recording has already started.
         // If a more specific URL rule matches, update the active rule on the fly.
         // Skip URL resolution when a forced rule is set (manual rule shortcut overrides app matching).
-        guard forcedProfileId == nil, let bundleId = activeApp.bundleId else { return }
+        guard forcedProfileId == nil, forcedWorkflowId == nil, let bundleId = activeApp.bundleId else { return }
         urlResolutionTask = Task { [weak self] in
             guard let self else { return }
             logger.info("URL resolution: starting for bundleId=\(bundleId)")
@@ -773,12 +807,24 @@ final class DictationViewModel: ObservableObject {
                 logger.info("URL resolution: no URL resolved")
                 return
             }
-            guard let refinedRule = profileService.matchRule(bundleIdentifier: bundleId, url: resolvedURL) else {
-                logger.info("URL resolution: no rule matched for URL \(resolvedURL)")
+
+            if let workflowMatch = workflowService.matchWorkflow(bundleIdentifier: bundleId, url: resolvedURL) {
+                logger.info("URL resolution: matched workflow '\(workflowMatch.workflow.name)'")
+                applyWorkflowMatch(workflowMatch, activeApp: capturedActiveApp)
+                refreshLiveStreamingIfParamsChanged()
                 return
             }
 
-            logger.info("URL resolution: matched rule '\(refinedRule.profile.name)'")
+            guard matchedWorkflow == nil else {
+                logger.info("URL resolution: keeping existing workflow match")
+                return
+            }
+            guard let refinedRule = profileService.matchRule(bundleIdentifier: bundleId, url: resolvedURL) else {
+                logger.info("URL resolution: no legacy rule matched for URL \(resolvedURL)")
+                return
+            }
+
+            logger.info("URL resolution: matched legacy rule '\(refinedRule.profile.name)'")
             applyRuleMatch(refinedRule, activeApp: capturedActiveApp)
             refreshLiveStreamingIfParamsChanged()
         }
@@ -833,11 +879,30 @@ final class DictationViewModel: ObservableObject {
         matchedProfile?.cloudModelOverride
     }
 
+    private var effectiveRuleName: String? {
+        matchedWorkflow?.name ?? matchedProfile?.name
+    }
+
     private var effectivePromptAction: PromptAction? {
         if let actionId = matchedProfile?.promptActionId {
             return promptActionService.action(byId: actionId)
         }
         return nil
+    }
+
+    private var effectiveOutputFormat: String? {
+        matchedWorkflow?.output.format ?? matchedProfile?.outputFormat
+    }
+
+    private var effectiveActionPluginId: String? {
+        matchedWorkflow?.output.targetActionPluginId ?? effectivePromptAction?.targetActionPluginId
+    }
+
+    private var effectiveAutoEnterEnabled: Bool {
+        if let matchedWorkflow {
+            return matchedWorkflow.output.autoEnter
+        }
+        return matchedProfile?.autoEnterEnabled == true
     }
 
     private func stopDictation() {
@@ -1002,7 +1067,11 @@ final class DictationViewModel: ObservableObject {
 
                 // Post-processing pipeline (priority-based)
                 let llmStepName: String? = if llmHandler != nil {
-                    (self.effectivePromptAction != nil || self.matchedProfile?.inlineCommandsEnabled == true) ? "Prompt" : "Translation"
+                    if self.matchedWorkflow != nil {
+                        "Workflow"
+                    } else {
+                        (self.effectivePromptAction != nil || self.matchedProfile?.inlineCommandsEnabled == true) ? "Prompt" : "Translation"
+                    }
                 } else {
                     nil
                 }
@@ -1013,12 +1082,12 @@ final class DictationViewModel: ObservableObject {
                     bundleIdentifier: activeApp.bundleId,
                     url: activeApp.url,
                     language: language,
-                    ruleName: self.matchedProfile?.name,
+                    ruleName: self.effectiveRuleName,
                     selectedText: self.capturedSelectedText
                 )
                 let ppResult = try await postProcessingPipeline.process(
                     text: text, context: ppContext, llmHandler: llmHandler,
-                    outputFormat: self.matchedProfile?.outputFormat,
+                    outputFormat: self.effectiveOutputFormat,
                     llmStepName: llmStepName
                 )
                 text = ppResult.text
@@ -1035,7 +1104,7 @@ final class DictationViewModel: ObservableObject {
                 partialText = ""
 
                 // Route to action plugin or insert text
-                if let actionPluginId = self.effectivePromptAction?.targetActionPluginId,
+                if let actionPluginId = self.effectiveActionPluginId,
                    let actionPlugin = PluginManager.shared.actionPlugin(for: actionPluginId) {
                     try await executeActionPlugin(
                         actionPlugin, pluginId: actionPluginId, text: text,
@@ -1045,7 +1114,7 @@ final class DictationViewModel: ObservableObject {
                     _ = try await textInsertionService.insertText(
                         text,
                         preserveClipboard: preserveClipboard,
-                        autoEnter: self.matchedProfile?.autoEnterEnabled == true
+                        autoEnter: self.effectiveAutoEnterEnabled
                     )
                     EventBus.shared.emit(.textInserted(TextInsertedPayload(
                         text: text,
@@ -1086,7 +1155,7 @@ final class DictationViewModel: ObservableObject {
                     appName: activeApp.name,
                     bundleIdentifier: activeApp.bundleId,
                     url: activeApp.url,
-                    ruleName: self.matchedProfile?.name
+                    ruleName: self.effectiveRuleName
                 )))
 
                 soundService.play(.transcriptionSuccess, enabled: soundFeedbackEnabled)
@@ -1151,9 +1220,12 @@ final class DictationViewModel: ObservableObject {
         DictationSettingsHandler.loadHotkeyLabel(for: slotType)
     }
 
-    /// Register profile hotkeys after app is fully initialized.
+    /// Register profile/workflow hotkeys after app is fully initialized.
     /// Called from ServiceContainer.initialize() to avoid early monitor setup.
-    func registerInitialProfileHotkeys() { settingsHandler.registerInitialProfileHotkeys() }
+    func registerInitialTriggerHotkeys() { settingsHandler.registerInitialTriggerHotkeys() }
+
+    @available(*, deprecated, renamed: "registerInitialTriggerHotkeys")
+    func registerInitialProfileHotkeys() { registerInitialTriggerHotkeys() }
 
     private func resetDictationState() {
         errorResetTask?.cancel()
@@ -1187,10 +1259,27 @@ final class DictationViewModel: ObservableObject {
         pendingPushToTalkDiscardMessage = String(localized: "Recording discarded because additional keys were pressed")
     }
 
+    private func applyWorkflowMatch(
+        _ match: WorkflowMatchResult?,
+        activeApp: (name: String?, bundleId: String?, url: String?)?
+    ) {
+        activeWorkflowMatch = match
+        matchedWorkflow = match?.workflow
+        matchedProfile = nil
+        activeRuleMatch = nil
+        forcedProfileId = nil
+        activeRuleName = match?.workflow.name
+        activeRuleReasonLabel = match?.kind.label
+        activeRuleExplanation = match.map { workflowExplanation(for: $0, activeApp: activeApp) }
+    }
+
     private func applyRuleMatch(
         _ match: RuleMatchResult?,
         activeApp: (name: String?, bundleId: String?, url: String?)?
     ) {
+        activeWorkflowMatch = nil
+        matchedWorkflow = nil
+        forcedWorkflowId = nil
         activeRuleMatch = match
         matchedProfile = match?.profile
         activeRuleName = match?.profile.name
@@ -1245,12 +1334,54 @@ final class DictationViewModel: ObservableObject {
     }
 
     private func clearActiveRuleState() {
+        matchedWorkflow = nil
+        activeWorkflowMatch = nil
         matchedProfile = nil
         activeRuleMatch = nil
         forcedProfileId = nil
+        forcedWorkflowId = nil
         activeRuleName = nil
         activeRuleReasonLabel = nil
         activeRuleExplanation = nil
+    }
+
+    private func workflowExplanation(
+        for match: WorkflowMatchResult,
+        activeApp: (name: String?, bundleId: String?, url: String?)?
+    ) -> String {
+        let appDescriptor = activeApp?.name ?? activeApp?.bundleId ?? "the active app"
+
+        let base: String
+        switch match.kind {
+        case .website:
+            if let domain = match.matchedDomain {
+                base = localizedAppText(
+                    "This workflow applies because \(domain) was detected.",
+                    de: "Dieser Workflow greift, weil \(domain) erkannt wurde."
+                )
+            } else {
+                base = localizedAppText(
+                    "This workflow applies because the current website was detected.",
+                    de: "Dieser Workflow greift, weil die aktuelle Website erkannt wurde."
+                )
+            }
+        case .app:
+            base = localizedAppText(
+                "This workflow applies because \(appDescriptor) was detected.",
+                de: "Dieser Workflow greift, weil \(appDescriptor) erkannt wurde."
+            )
+        case .manualOverride:
+            base = localizedAppText(
+                "This workflow was manually triggered via its keyboard shortcut.",
+                de: "Dieser Workflow wurde manuell ueber seine Tastenkombination ausgeloest."
+            )
+        }
+
+        guard match.wonBySortOrder else { return base }
+        return base + localizedAppText(
+            " Among multiple matching workflows, the one higher in the list wins here.",
+            de: " Unter mehreren passenden Workflows gewinnt hier der weiter oben stehende Eintrag."
+        )
     }
 
     private func ruleExplanation(
@@ -1312,12 +1443,31 @@ final class DictationViewModel: ObservableObject {
     // MARK: - Shared Helpers
 
     /// Builds an LLM handler for the post-processing pipeline.
-    /// Priority: inline commands > prompt action > translation > nil.
+    /// Priority: workflow > legacy inline/prompt action > translation > nil.
     private func buildLLMHandler(
         translationTarget: String?,
         detectedLanguage: String?,
         configuredLanguage: String?
     ) -> ((String) async throws -> String)? {
+        if let matchedWorkflow,
+           let systemPrompt = matchedWorkflow.systemPrompt(
+                fallbackTranslationTarget: translationTarget,
+                detectedLanguage: detectedLanguage,
+                configuredLanguage: configuredLanguage
+           ) {
+            let pps = promptProcessingService
+            let behavior = matchedWorkflow.behavior
+            return { text in
+                try await pps.process(
+                    prompt: systemPrompt,
+                    text: text,
+                    providerOverride: behavior.providerId,
+                    cloudModelOverride: behavior.cloudModel,
+                    temperatureDirective: behavior.temperatureDirective
+                )
+            }
+        }
+
         // Inline commands compose with profile prompt; otherwise use prompt action directly
         let inlineEnabled = matchedProfile?.inlineCommandsEnabled == true
         if inlineEnabled || effectivePromptAction != nil {
@@ -1420,14 +1570,14 @@ final class DictationViewModel: ObservableObject {
         )))
     }
 
-    // MARK: - Standalone Prompt Palette
+    // MARK: - Workflow Palette
 
     func readBackLastTranscription() {
         guard let text = lastTranscribedText else { return }
         speechFeedbackService.readBack(text: text, language: lastTranscriptionLanguage)
     }
 
-    func triggerStandalonePromptSelection() {
+    func triggerWorkflowPalette() {
         recentTranscriptionPaletteHandler.hide()
         promptPaletteHandler.triggerSelection(currentState: state, soundFeedbackEnabled: soundFeedbackEnabled)
     }

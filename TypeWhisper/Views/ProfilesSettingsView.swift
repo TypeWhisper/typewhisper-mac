@@ -20,8 +20,14 @@ struct ProfilesSettingsView: View {
                         )
                     }
 
+                    if viewModel.isFilteringRulesByPrompt {
+                        PromptRuleFilterBanner(viewModel: viewModel)
+                    }
+
                     if viewModel.profiles.isEmpty {
                         emptyState
+                    } else if viewModel.visibleProfiles.isEmpty {
+                        filteredEmptyState
                     } else {
                         rulesList
                     }
@@ -89,8 +95,28 @@ struct ProfilesSettingsView: View {
         }
     }
 
+    private var filteredEmptyState: some View {
+        ContentUnavailableView {
+            Label(localizedAppText("No Matching Rules", de: "Keine passenden Regeln"), systemImage: "line.3.horizontal.decrease.circle")
+        } description: {
+            Text(localizedAppText(
+                "No rules currently use the selected prompt.",
+                de: "Aktuell nutzt keine Regel den ausgewählten Prompt."
+            ))
+        } actions: {
+            Button(localizedAppText("Show All Rules", de: "Alle Regeln anzeigen")) {
+                viewModel.clearPromptRuleFocus()
+            }
+            .buttonStyle(.bordered)
+        }
+        .frame(maxWidth: .infinity, minHeight: 220)
+        .background {
+            groupedListSurface(cornerRadius: 16)
+        }
+    }
+
     private var rulesList: some View {
-        let indexedProfiles = Array(viewModel.profiles.enumerated())
+        let indexedProfiles = Array(viewModel.visibleProfiles.enumerated())
 
         return LazyVStack(spacing: 0) {
             ForEach(indexedProfiles, id: \.element.id) { index, profile in
@@ -148,6 +174,49 @@ private struct ActiveRuleBanner: View {
     }
 }
 
+private struct PromptRuleFilterBanner: View {
+    @ObservedObject var viewModel: ProfilesViewModel
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "line.3.horizontal.decrease.circle.fill")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(localizedAppText("Showing rules linked to this prompt.", de: "Es werden Regeln zu diesem Prompt gezeigt."))
+                    .font(.subheadline.weight(.semibold))
+
+                if let promptAction = viewModel.focusedPromptAction {
+                    RulePromptChip(action: promptAction)
+                }
+            }
+
+            Spacer()
+
+            HStack(spacing: 8) {
+                if let promptAction = viewModel.focusedPromptAction {
+                    Button(localizedAppText("Open Prompt", de: "Prompt öffnen")) {
+                        viewModel.editPrompt(promptActionId: promptAction.id.uuidString)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+
+                Button(localizedAppText("Show All", de: "Alle anzeigen")) {
+                    viewModel.clearPromptRuleFocus()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+        }
+        .padding(16)
+        .background {
+            groupedListSurface(cornerRadius: 16)
+        }
+    }
+}
+
 private struct RuleRow: View {
     let profile: Profile
     @ObservedObject var viewModel: ProfilesViewModel
@@ -183,6 +252,16 @@ private struct RuleRow: View {
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                    if let promptAction = viewModel.promptAction(for: profile) {
+                        Button {
+                            viewModel.editPrompt(for: profile)
+                        } label: {
+                            RulePromptChip(action: promptAction)
+                        }
+                        .buttonStyle(.plain)
+                        .help(localizedAppText("Open prompt", de: "Prompt öffnen"))
+                    }
                 }
 
                 Spacer()
@@ -279,6 +358,22 @@ private struct RuleRow: View {
                 isPressingReorderHandle = isPressing
             }
             .help(localizedAppText("Change order via drag and drop", de: "Reihenfolge per Drag & Drop ändern"))
+    }
+}
+
+private struct RulePromptChip: View {
+    let action: PromptAction
+
+    var body: some View {
+        Label(
+            localizedAppText("Prompt: \(action.name)", de: "Prompt: \(action.name)"),
+            systemImage: action.icon
+        )
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.accent)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color.accentColor.opacity(0.14), in: Capsule())
     }
 }
 
@@ -533,6 +628,35 @@ private struct RuleScopeStep: View {
                 ))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+            }
+
+            if viewModel.shouldShowPrefilledPromptFallbackNotice {
+                HStack(alignment: .top, spacing: 12) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color.orange.opacity(0.16))
+                            .frame(width: 36, height: 36)
+
+                        Image(systemName: "sparkles")
+                            .foregroundStyle(.orange)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(String(localized: "Prompt already selected"))
+                            .font(.subheadline.weight(.semibold))
+                        Text(String(localized: "Saving without an app or website creates a global fallback rule with this prompt."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+                }
+                .padding(16)
+                .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(Color.orange.opacity(0.18), lineWidth: 1)
+                }
             }
 
             card(
@@ -864,11 +988,21 @@ private struct RuleBehaviorStep: View {
                         title: localizedAppText("Prompt", de: "Prompt"),
                         description: localizedAppText("Optional post-processing step for this rule.", de: "Optionaler Nachbearbeitungsschritt für diese Regel.")
                     ) {
-                        Picker(localizedAppText("Prompt", de: "Prompt"), selection: $viewModel.editorPromptActionId) {
-                            Text(localizedAppText("None", de: "Keiner")).tag(nil as String?)
-                            Divider()
-                            ForEach(PromptActionsViewModel.shared.promptActions.filter(\.isEnabled)) { action in
-                                Label(action.name, systemImage: action.icon).tag(action.id.uuidString as String?)
+                        HStack(spacing: 10) {
+                            Picker(localizedAppText("Prompt", de: "Prompt"), selection: $viewModel.editorPromptActionId) {
+                                Text(localizedAppText("None", de: "Keiner")).tag(nil as String?)
+                                Divider()
+                                ForEach(PromptActionsViewModel.shared.promptActions.filter(\.isEnabled)) { action in
+                                    Label(action.name, systemImage: action.icon).tag(action.id.uuidString as String?)
+                                }
+                            }
+
+                            if let editorPromptAction = viewModel.editorPromptAction {
+                                Button(localizedAppText("Edit Prompt", de: "Prompt bearbeiten")) {
+                                    viewModel.editPrompt(promptActionId: editorPromptAction.id.uuidString)
+                                }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
                             }
                         }
                     }
