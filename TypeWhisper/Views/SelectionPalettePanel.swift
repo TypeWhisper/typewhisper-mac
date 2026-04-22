@@ -315,7 +315,7 @@ private final class SelectionPalettePanel: NSPanel {
         )
 
         level = .floating
-        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        collectionBehavior = FloatingPanelSpacePolicy.selectionPaletteCollectionBehavior
         isOpaque = false
         backgroundColor = .clear
         hasShadow = false
