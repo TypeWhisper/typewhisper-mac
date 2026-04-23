@@ -22,6 +22,57 @@ final class NotchIndicatorLayoutTests: XCTestCase {
         XCTAssertEqual(NotchIndicatorLayout.closedWidth(hasNotch: false, notchWidth: 0), 200)
     }
 
+    func testRecordingClosedWidthKeepsBaselineWhenRecordingContentIsEmpty() {
+        XCTAssertEqual(
+            NotchIndicatorLayout.recordingClosedWidth(
+                hasNotch: true,
+                notchWidth: 185,
+                leftContent: .none,
+                rightContent: .none,
+                recordingDuration: 3,
+                activeRuleName: nil
+            ),
+            NotchIndicatorLayout.closedWidth(hasNotch: true, notchWidth: 185)
+        )
+    }
+
+    func testRecordingClosedWidthExpandsForTimerAndWaveform() {
+        let baseline = NotchIndicatorLayout.closedWidth(hasNotch: true, notchWidth: 185)
+        let recordingWidth = NotchIndicatorLayout.recordingClosedWidth(
+            hasNotch: true,
+            notchWidth: 185,
+            leftContent: .timer,
+            rightContent: .waveform,
+            recordingDuration: 83,
+            activeRuleName: nil
+        )
+
+        XCTAssertGreaterThan(recordingWidth, baseline)
+    }
+
+    func testReservedTimerTextUsesTwoMinuteDigitsBelowOneHundredMinutes() {
+        XCTAssertEqual(NotchIndicatorLayout.reservedTimerText(for: 3), "00:00")
+    }
+
+    func testReservedTimerTextKeepsTwoMinuteDigitsBelowOneHundredMinutesAtUpperBoundary() {
+        XCTAssertEqual(NotchIndicatorLayout.reservedTimerText(for: 3599), "00:00")
+    }
+
+    func testReservedTimerTextUsesThreeMinuteDigitsAtOneHundredMinutes() {
+        XCTAssertEqual(NotchIndicatorLayout.reservedTimerText(for: 6000), "000:00")
+    }
+
+    func testProfileChipWidthIsClampedToConfiguredMaximum() {
+        XCTAssertEqual(
+            NotchIndicatorLayout.recordingContentWidth(
+                .profile,
+                recordingDuration: 0,
+                activeRuleName: "A very long workflow name that should definitely be truncated in the notch"
+            ),
+            NotchIndicatorLayout.profileChipMaxWidth
+        )
+    }
+
     func testContainerWidthClosedUsesClosedWidth() {
         XCTAssertEqual(NotchIndicatorLayout.containerWidth(closedWidth: 305, mode: .closed), 305)
     }
