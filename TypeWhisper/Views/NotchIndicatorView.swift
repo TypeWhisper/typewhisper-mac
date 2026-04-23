@@ -17,7 +17,31 @@ struct NotchIndicatorView: View {
     private let feedbackBodyHeight: CGFloat = 52
 
     private var closedWidth: CGFloat {
-        NotchIndicatorLayout.closedWidth(hasNotch: geometry.hasNotch, notchWidth: geometry.notchWidth)
+        if case .recording = viewModel.state {
+            return NotchIndicatorLayout.recordingClosedWidth(
+                hasNotch: geometry.hasNotch,
+                notchWidth: geometry.notchWidth,
+                leftContent: viewModel.notchIndicatorLeftContent,
+                rightContent: viewModel.notchIndicatorRightContent,
+                recordingDuration: viewModel.recordingDuration,
+                activeRuleName: viewModel.activeRuleName
+            )
+        }
+
+        return NotchIndicatorLayout.closedWidth(hasNotch: geometry.hasNotch, notchWidth: geometry.notchWidth)
+    }
+
+    private var leftStatusSpacing: CGFloat {
+        guard case .recording = viewModel.state else {
+            return 0
+        }
+
+        let leftContentWidth = NotchIndicatorLayout.recordingContentWidth(
+            viewModel.notchIndicatorLeftContent,
+            recordingDuration: viewModel.recordingDuration,
+            activeRuleName: viewModel.activeRuleName
+        )
+        return leftContentWidth > 0 ? NotchIndicatorLayout.leftContentSpacing : 0
     }
 
     private var suppressStreamingText: Bool {
@@ -242,7 +266,7 @@ struct NotchIndicatorView: View {
     @ViewBuilder
     private var statusBar: some View {
         HStack(spacing: 0) {
-            HStack(spacing: 6) {
+            HStack(spacing: leftStatusSpacing) {
                 IndicatorLeftStatus(
                     viewModel: viewModel,
                     sizing: sizing,
@@ -252,7 +276,7 @@ struct NotchIndicatorView: View {
                 leftContent
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            .padding(.leading, 20)
+            .padding(.leading, NotchIndicatorLayout.leadingInset)
 
             if geometry.hasNotch {
                 Color.clear
@@ -261,7 +285,7 @@ struct NotchIndicatorView: View {
 
             rightContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-                .padding(.trailing, 34)
+                .padding(.trailing, NotchIndicatorLayout.trailingInset)
         }
     }
 

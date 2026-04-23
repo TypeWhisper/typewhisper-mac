@@ -9,13 +9,22 @@ struct IndicatorPreviewView: View {
     private let overlayPreviewCollapsedHeight: CGFloat = 82
     private let overlayPreviewBaseHeight: CGFloat = 110
     private let overlayPreviewBaseFontSize: CGFloat = 12
+    private let notchPreviewRecordingDuration: TimeInterval = 83
+    private let notchPreviewActiveRuleName = "Workflow"
 
     private let streamingText = String(localized: "Hello, this is a live preview of the streaming text...")
     private var showTranscriptPreview: Bool {
         dictation.indicatorTranscriptPreviewEnabled && dictation.indicatorStyle.supportsTranscriptPreview
     }
     private var notchClosedWidth: CGFloat {
-        NotchIndicatorLayout.closedWidth(hasNotch: true, notchWidth: previewNotchWidth)
+        NotchIndicatorLayout.recordingClosedWidth(
+            hasNotch: true,
+            notchWidth: previewNotchWidth,
+            leftContent: dictation.notchIndicatorLeftContent,
+            rightContent: dictation.notchIndicatorRightContent,
+            recordingDuration: notchPreviewRecordingDuration,
+            activeRuleName: notchPreviewActiveRuleName
+        )
     }
     private var notchHeight: CGFloat {
         NotchIndicatorLayout.closedHeight(hasNotch: true)
@@ -57,6 +66,15 @@ struct IndicatorPreviewView: View {
 
     private var overlayPreviewFontSize: CGFloat {
         scaledPreviewMetric(overlayPreviewBaseFontSize, for: .overlay)
+    }
+
+    private var notchPreviewLeftSpacing: CGFloat {
+        let leftContentWidth = NotchIndicatorLayout.recordingContentWidth(
+            dictation.notchIndicatorLeftContent,
+            recordingDuration: notchPreviewRecordingDuration,
+            activeRuleName: notchPreviewActiveRuleName
+        )
+        return leftContentWidth > 0 ? NotchIndicatorLayout.leftContentSpacing : 0
     }
 
     var body: some View {
@@ -102,19 +120,19 @@ struct IndicatorPreviewView: View {
 
     private var notchPreviewCap: some View {
         HStack(spacing: 0) {
-            HStack(spacing: 5) {
+            HStack(spacing: notchPreviewLeftSpacing) {
                 appIconPlaceholder(size: 14, cornerRadius: 3)
                 contentLabel(dictation.notchIndicatorLeftContent, size: 9)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            .padding(.leading, 20)
+            .padding(.leading, NotchIndicatorLayout.leadingInset)
 
             Color.clear
                 .frame(width: previewNotchWidth)
 
             contentLabel(dictation.notchIndicatorRightContent, size: 9)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-                .padding(.trailing, 30)
+                .padding(.trailing, NotchIndicatorLayout.trailingInset)
         }
         .frame(width: notchPreviewWidth, height: notchHeight)
         .frame(maxWidth: .infinity)
@@ -205,9 +223,11 @@ struct IndicatorPreviewView: View {
                 .fill(Color.red)
                 .frame(width: size * 0.7, height: size * 0.7)
         case .timer:
-            Text("1:23")
+            Text(formatDuration(notchPreviewRecordingDuration))
                 .font(.system(size: size, weight: .medium).monospacedDigit())
                 .foregroundStyle(.white.opacity(0.6))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
         case .waveform:
             HStack(spacing: 1.5) {
                 ForEach(0..<5, id: \.self) { i in
@@ -218,13 +238,14 @@ struct IndicatorPreviewView: View {
             }
             .frame(height: 14)
         case .profile:
-            Text(localizedAppText("Workflow", de: "Workflow"))
+            Text(notchPreviewActiveRuleName)
                 .font(.system(size: size * 0.85, weight: .medium))
                 .foregroundStyle(.white)
                 .lineLimit(1)
-                .fixedSize()
+                .truncationMode(.tail)
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
+                .frame(maxWidth: NotchIndicatorLayout.profileChipMaxWidth, alignment: .leading)
                 .background(.white.opacity(0.2), in: Capsule())
         case .none:
             Color.clear.frame(width: 0)
