@@ -203,6 +203,18 @@ final class ModelManagerService: ObservableObject {
         plugin.selectModel(previousId)
     }
 
+    nonisolated private static func makeAudioData(from audioSamples: [Float]) async -> AudioData {
+        let wavData = await Task.detached(priority: .userInitiated) {
+            WavEncoder.encode(audioSamples)
+        }.value
+
+        return AudioData(
+            samples: audioSamples,
+            wavData: wavData,
+            duration: Double(audioSamples.count) / 16000.0
+        )
+    }
+
     func createLiveTranscriptionSession(
         language: String?,
         task: TranscriptionTask,
@@ -333,14 +345,7 @@ final class ModelManagerService: ObservableObject {
         defer { restoreCloudModelOverride(plugin: plugin, previousId: overrideRestoreId) }
 
         let startTime = CFAbsoluteTimeGetCurrent()
-        let wavData = WavEncoder.encode(audioSamples)
-        let audioDuration = Double(audioSamples.count) / 16000.0
-
-        let audio = AudioData(
-            samples: audioSamples,
-            wavData: wavData,
-            duration: audioDuration
-        )
+        let audio = await Self.makeAudioData(from: audioSamples)
 
         let result = try await transcribeWithResolvedLanguageSelection(
             plugin: plugin,
@@ -357,7 +362,7 @@ final class ModelManagerService: ObservableObject {
         return TranscriptionResult(
             text: result.text,
             detectedLanguage: result.detectedLanguage,
-            duration: audioDuration,
+            duration: audio.duration,
             processingTime: processingTime,
             engineUsed: providerId,
             segments: result.segments.map { TranscriptionSegment(text: $0.text, start: $0.start, end: $0.end) }
@@ -410,14 +415,7 @@ final class ModelManagerService: ObservableObject {
         defer { restoreCloudModelOverride(plugin: plugin, previousId: overrideRestoreId) }
 
         let startTime = CFAbsoluteTimeGetCurrent()
-        let wavData = WavEncoder.encode(audioSamples)
-        let audioDuration = Double(audioSamples.count) / 16000.0
-
-        let audio = AudioData(
-            samples: audioSamples,
-            wavData: wavData,
-            duration: audioDuration
-        )
+        let audio = await Self.makeAudioData(from: audioSamples)
 
         let result = try await transcribeWithResolvedLanguageSelection(
             plugin: plugin,
@@ -435,7 +433,7 @@ final class ModelManagerService: ObservableObject {
         return TranscriptionResult(
             text: result.text,
             detectedLanguage: result.detectedLanguage,
-            duration: audioDuration,
+            duration: audio.duration,
             processingTime: processingTime,
             engineUsed: providerId,
             segments: result.segments.map { TranscriptionSegment(text: $0.text, start: $0.start, end: $0.end) }

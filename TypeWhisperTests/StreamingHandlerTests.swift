@@ -1,4 +1,5 @@
 import XCTest
+import os
 import TypeWhisperPluginSDK
 @testable import TypeWhisper
 
@@ -27,6 +28,48 @@ final class StreamingHandlerTests: XCTestCase {
             transcribeCallCount += 1
             lastPrompt = prompt
             return PluginTranscriptionResult(text: "final", detectedLanguage: language)
+        }
+    }
+
+    private final class MockStreamingFallbackPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.streaming-fallback" }
+        static var pluginName: String { "Mock Streaming Fallback" }
+
+        var providerId: String { "mock-streaming-fallback" }
+        var providerDisplayName: String { "Mock Streaming Fallback" }
+        var isConfigured: Bool { true }
+        var transcriptionModels: [PluginModelInfo] { [] }
+        var selectedModelId: String? { nil }
+        var supportsTranslation: Bool { false }
+        var supportsStreaming: Bool { true }
+        var supportedLanguages: [String] { ["en"] }
+        private(set) var transcribeCallCount = 0
+        private(set) var recordedSampleCounts: [Int] = []
+        private(set) var lastPrompt: String?
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+        func selectModel(_ modelId: String) {}
+
+        func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+            transcribeCallCount += 1
+            recordedSampleCounts.append(audio.samples.count)
+            lastPrompt = prompt
+            return PluginTranscriptionResult(text: "fallback-\(audio.samples.count)", detectedLanguage: language)
+        }
+
+        func transcribe(
+            audio: AudioData,
+            language: String?,
+            translate: Bool,
+            prompt: String?,
+            onProgress: @Sendable @escaping (String) -> Bool
+        ) async throws -> PluginTranscriptionResult {
+            transcribeCallCount += 1
+            recordedSampleCounts.append(audio.samples.count)
+            lastPrompt = prompt
+            _ = onProgress("preview-\(audio.samples.count)")
+            return PluginTranscriptionResult(text: "fallback-\(audio.samples.count)", detectedLanguage: language)
         }
     }
 
@@ -227,6 +270,7 @@ final class StreamingHandlerTests: XCTestCase {
         let handler = StreamingHandler(
             modelManager: modelManager,
             bufferProvider: { Array(repeating: 0.5, count: 16_000) },
+            recentBufferProvider: { _ in Array(repeating: 0.5, count: 16_000) },
             bufferDeltaProvider: { _ in ([], 0) },
             bufferedDurationProvider: { 1.0 }
         )
@@ -277,6 +321,7 @@ final class StreamingHandlerTests: XCTestCase {
         let handler = StreamingHandler(
             modelManager: modelManager,
             bufferProvider: { Array(repeating: 0.5, count: 16_000) },
+            recentBufferProvider: { _ in Array(repeating: 0.5, count: 16_000) },
             bufferDeltaProvider: { _ in ([], 0) },
             bufferedDurationProvider: { 1.0 }
         )
@@ -294,6 +339,173 @@ final class StreamingHandlerTests: XCTestCase {
 
         try await Task.sleep(for: .milliseconds(700))
         XCTAssertEqual(plugin.transcribeCallCount, 0)
+    }
+
+    func testStreamingFallbackDoesNotPreviewBeforeThreeSeconds() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockStreamingFallbackPlugin()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.streaming-fallback",
+                    name: "Mock Streaming Fallback",
+                    version: "1.0.0",
+                    principalClass: "MockStreamingFallbackPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+
+        let handler = StreamingHandler(
+            modelManager: modelManager,
+            bufferProvider: {
+                XCTFail("full buffer provider should not be used for fallback previews")
+                return Array(repeating: 0.5, count: 160_000)
+            },
+            recentBufferProvider: { _ in Array(repeating: 0.5, count: 16_000) },
+            bufferDeltaProvider: { _ in ([], 0) },
+            bufferedDurationProvider: { 10.0 }
+        )
+
+        handler.start(
+            streamPrompt: "Fallback Terms",
+            engineOverrideId: plugin.providerId,
+            selectedProviderId: plugin.providerId,
+            languageSelection: .exact("en"),
+            task: .transcribe,
+            cloudModelOverride: nil,
+            allowLiveTranscription: true,
+            stateCheck: { true }
+        )
+
+        try await Task.sleep(for: .milliseconds(2500))
+        handler.stop()
+
+        XCTAssertEqual(plugin.transcribeCallCount, 0)
+    }
+
+    func testStreamingFallbackCallsPreviewAfterThreeSecondsEvenWithoutLiveSession() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockStreamingFallbackPlugin()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.streaming-fallback",
+                    name: "Mock Streaming Fallback",
+                    version: "1.0.0",
+                    principalClass: "MockStreamingFallbackPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+
+        let handler = StreamingHandler(
+            modelManager: modelManager,
+            bufferProvider: {
+                XCTFail("full buffer provider should not be used for fallback previews")
+                return Array(repeating: 0.5, count: 160_000)
+            },
+            recentBufferProvider: { _ in Array(repeating: 0.5, count: 16_000) },
+            bufferDeltaProvider: { _ in ([], 0) },
+            bufferedDurationProvider: { 10.0 }
+        )
+
+        handler.start(
+            streamPrompt: "Fallback Terms",
+            engineOverrideId: plugin.providerId,
+            selectedProviderId: plugin.providerId,
+            languageSelection: .exact("en"),
+            task: .transcribe,
+            cloudModelOverride: nil,
+            allowLiveTranscription: true,
+            stateCheck: { true }
+        )
+
+        try await Task.sleep(for: .milliseconds(3400))
+        handler.stop()
+
+        XCTAssertEqual(plugin.transcribeCallCount, 1)
+        XCTAssertEqual(plugin.lastPrompt, "Fallback Terms")
+    }
+
+    func testStreamingFallbackUsesRecentWindowProviderInsteadOfFullBuffer() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockStreamingFallbackPlugin()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.streaming-fallback",
+                    name: "Mock Streaming Fallback",
+                    version: "1.0.0",
+                    principalClass: "MockStreamingFallbackPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+
+        let requestedWindowLock = OSAllocatedUnfairLock(initialState: Optional<TimeInterval>.none)
+
+        let handler = StreamingHandler(
+            modelManager: modelManager,
+            bufferProvider: {
+                XCTFail("full buffer provider should not be used for fallback previews")
+                return Array(repeating: 0.5, count: 160_000)
+            },
+            recentBufferProvider: { window in
+                requestedWindowLock.withLock { requestedWindow in
+                    requestedWindow = window
+                }
+                return Array(repeating: 0.5, count: 16_000)
+            },
+            bufferDeltaProvider: { _ in ([], 0) },
+            bufferedDurationProvider: { 10.0 }
+        )
+
+        handler.start(
+            streamPrompt: "Fallback Terms",
+            engineOverrideId: plugin.providerId,
+            selectedProviderId: plugin.providerId,
+            languageSelection: .exact("en"),
+            task: .transcribe,
+            cloudModelOverride: nil,
+            allowLiveTranscription: true,
+            stateCheck: { true }
+        )
+
+        try await Task.sleep(for: .milliseconds(3400))
+        handler.stop()
+
+        let finalRequestedWindow = requestedWindowLock.withLock { $0 }
+
+        XCTAssertEqual(finalRequestedWindow, 10)
+        XCTAssertEqual(plugin.recordedSampleCounts, [16_000])
     }
 
     func testLiveSessionConsumesOnlyIncrementalAudioDeltas() async throws {
@@ -333,6 +545,7 @@ final class StreamingHandlerTests: XCTestCase {
         let handler = StreamingHandler(
             modelManager: modelManager,
             bufferProvider: { [] },
+            recentBufferProvider: { _ in [] },
             bufferDeltaProvider: { _ in
                 indexLock.lock()
                 defer { indexLock.unlock() }
@@ -465,6 +678,7 @@ final class StreamingHandlerTests: XCTestCase {
         let handler = StreamingHandler(
             modelManager: modelManager,
             bufferProvider: { [] },
+            recentBufferProvider: { _ in [] },
             bufferDeltaProvider: { _ in (Array(repeating: 0.1, count: 4000), 4000) },
             bufferedDurationProvider: { 0.25 }
         )
