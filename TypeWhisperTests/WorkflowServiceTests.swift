@@ -223,3 +223,148 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertFalse(match.wonBySortOrder)
     }
 }
+
+final class WatchFolderExportTests: XCTestCase {
+    func testWatchFolderOutputFormatSupportsStoredValuesAndFallback() {
+        XCTAssertEqual(WatchFolderOutputFormat.markdown.rawValue, "md")
+        XCTAssertEqual(WatchFolderOutputFormat.plainText.rawValue, "txt")
+        XCTAssertEqual(WatchFolderOutputFormat.srt.rawValue, "srt")
+        XCTAssertEqual(WatchFolderOutputFormat.vtt.rawValue, "vtt")
+
+        XCTAssertEqual(WatchFolderOutputFormat(storedValue: "md"), .markdown)
+        XCTAssertEqual(WatchFolderOutputFormat(storedValue: "txt"), .plainText)
+        XCTAssertEqual(WatchFolderOutputFormat(storedValue: "srt"), .srt)
+        XCTAssertEqual(WatchFolderOutputFormat(storedValue: "vtt"), .vtt)
+        XCTAssertEqual(WatchFolderOutputFormat(storedValue: "unexpected"), .markdown)
+        XCTAssertEqual(WatchFolderOutputFormat(storedValue: nil), .markdown)
+    }
+
+    func testWatchFolderExportBuilderProducesMarkdownAndPlainText() throws {
+        let result = makeTranscriptionResult()
+
+        let markdown = try WatchFolderExportBuilder.build(
+            format: .markdown,
+            result: result,
+            fileName: "meeting.m4a",
+            engineName: "WhisperKit",
+            date: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        XCTAssertEqual(markdown.fileExtension, "md")
+        XCTAssertTrue(markdown.content.contains("# Transcription: meeting.m4a"))
+        XCTAssertTrue(markdown.content.contains("- Date:"))
+        XCTAssertTrue(markdown.content.contains("- Engine: WhisperKit"))
+        XCTAssertTrue(markdown.content.contains("Hello world"))
+
+        let plainText = try WatchFolderExportBuilder.build(
+            format: .plainText,
+            result: result,
+            fileName: "meeting.m4a",
+            engineName: "WhisperKit",
+            date: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        XCTAssertEqual(plainText.fileExtension, "txt")
+        XCTAssertEqual(plainText.content, "Hello world")
+    }
+
+    func testWatchFolderExportBuilderProducesSubtitleFormats() throws {
+        let result = makeTranscriptionResult()
+
+        let srt = try WatchFolderExportBuilder.build(
+            format: .srt,
+            result: result,
+            fileName: "meeting.m4a",
+            engineName: "WhisperKit",
+            date: .distantPast
+        )
+        XCTAssertEqual(srt.fileExtension, "srt")
+        XCTAssertEqual(
+            srt.content,
+            """
+            1
+            00:00:00,250 --> 00:00:01,500
+            Hello
+
+            2
+            00:00:01,500 --> 00:00:02,750
+            world
+            """
+        )
+
+        let vtt = try WatchFolderExportBuilder.build(
+            format: .vtt,
+            result: result,
+            fileName: "meeting.m4a",
+            engineName: "WhisperKit",
+            date: .distantPast
+        )
+        XCTAssertEqual(vtt.fileExtension, "vtt")
+        XCTAssertEqual(
+            vtt.content,
+            """
+            WEBVTT
+
+            1
+            00:00:00.250 --> 00:00:01.500
+            Hello
+
+            2
+            00:00:01.500 --> 00:00:02.750
+            world
+
+            """
+        )
+    }
+
+    func testWatchFolderExportBuilderRejectsSubtitleFormatsWithoutSegments() {
+        let result = TranscriptionResult(
+            text: "Hello world",
+            detectedLanguage: "en",
+            duration: 2.75,
+            processingTime: 0.3,
+            engineUsed: "whisperkit",
+            segments: []
+        )
+
+        XCTAssertThrowsError(
+            try WatchFolderExportBuilder.build(
+                format: .srt,
+                result: result,
+                fileName: "meeting.m4a",
+                engineName: "WhisperKit",
+                date: .distantPast
+            )
+        ) { error in
+            guard case WatchFolderExportBuilder.Error.missingSubtitleSegments = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+
+        XCTAssertThrowsError(
+            try WatchFolderExportBuilder.build(
+                format: .vtt,
+                result: result,
+                fileName: "meeting.m4a",
+                engineName: "WhisperKit",
+                date: .distantPast
+            )
+        ) { error in
+            guard case WatchFolderExportBuilder.Error.missingSubtitleSegments = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+    }
+
+    private func makeTranscriptionResult() -> TranscriptionResult {
+        TranscriptionResult(
+            text: "Hello world",
+            detectedLanguage: "en",
+            duration: 2.75,
+            processingTime: 0.3,
+            engineUsed: "whisperkit",
+            segments: [
+                TranscriptionSegment(text: "Hello", start: 0.25, end: 1.5),
+                TranscriptionSegment(text: "world", start: 1.5, end: 2.75)
+            ]
+        )
+    }
+}
