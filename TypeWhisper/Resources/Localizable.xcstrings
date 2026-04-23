@@ -1810,6 +1810,26 @@
         }
       }
     },
+    "Copy Last Transcription" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Letzte Transkription kopieren"
+          }
+        }
+      }
+    },
+    "Copy last transcription shortcut" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tastenkürzel für das Kopieren der letzten Transkription"
+          }
+        }
+      }
+    },
     "Copy original" : {
       "localizations" : {
         "de" : {
@@ -1826,6 +1846,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Verarbeitet kopieren"
+          }
+        }
+      }
+    },
+    "Copy your latest transcription to the clipboard." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kopiere deine letzte Transkription in die Zwischenablage."
           }
         }
       }

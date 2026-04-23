@@ -1865,6 +1865,84 @@ final class APIRouterAndHandlersTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testCopyLastTranscriptionToClipboardUsesNewestSessionEntry() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        let pasteboard = NSPasteboard.withUniqueName()
+        context.dictationViewModel.pasteboardProvider = { pasteboard }
+
+        context.recentTranscriptionStore.recordTranscription(
+            id: UUID(),
+            finalText: "Newest session text",
+            timestamp: Date(),
+            appName: "Notes",
+            appBundleIdentifier: "com.apple.Notes"
+        )
+
+        context.dictationViewModel.copyLastTranscriptionToClipboard()
+
+        XCTAssertEqual(pasteboard.string(forType: .string), "Newest session text")
+    }
+
+    @MainActor
+    func testCopyLastTranscriptionToClipboardFallsBackToHistory() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        let pasteboard = NSPasteboard.withUniqueName()
+        context.dictationViewModel.pasteboardProvider = { pasteboard }
+
+        context.historyService.addRecord(
+            id: UUID(),
+            rawText: "raw history text",
+            finalText: "History fallback text",
+            appName: "Safari",
+            appBundleIdentifier: "com.apple.Safari",
+            durationSeconds: 1,
+            language: "en",
+            engineUsed: "mock"
+        )
+
+        context.dictationViewModel.copyLastTranscriptionToClipboard()
+
+        XCTAssertEqual(pasteboard.string(forType: .string), "History fallback text")
+    }
+
+    @MainActor
+    func testCopyLastTranscriptionToClipboardIsNoOpWithoutEntries() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        let pasteboard = NSPasteboard.withUniqueName()
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+        context.dictationViewModel.pasteboardProvider = { pasteboard }
+
+        context.dictationViewModel.copyLastTranscriptionToClipboard()
+
+        XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
+    }
+
     private final class DictationContext: @unchecked Sendable {
         let dictationViewModel: DictationViewModel
         let audioRecordingService: AudioRecordingService
@@ -1872,6 +1950,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let audioDeviceService: AudioDeviceService
         let audioDuckingService: AudioDuckingService
         let textInsertionService: TextInsertionService
+        let historyService: HistoryService
+        let recentTranscriptionStore: RecentTranscriptionStore
         let profileService: ProfileService
         let ttsProvider: MockTTSProviderPlugin
         private let retainedObjects: [AnyObject]
@@ -1883,6 +1963,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
             audioDeviceService: AudioDeviceService,
             audioDuckingService: AudioDuckingService,
             textInsertionService: TextInsertionService,
+            historyService: HistoryService,
+            recentTranscriptionStore: RecentTranscriptionStore,
             profileService: ProfileService,
             ttsProvider: MockTTSProviderPlugin,
             retainedObjects: [AnyObject]
@@ -1893,6 +1975,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
             self.audioDeviceService = audioDeviceService
             self.audioDuckingService = audioDuckingService
             self.textInsertionService = textInsertionService
+            self.historyService = historyService
+            self.recentTranscriptionStore = recentTranscriptionStore
             self.profileService = profileService
             self.ttsProvider = ttsProvider
             self.retainedObjects = retainedObjects
@@ -2000,6 +2084,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
             audioDeviceService: audioDeviceService,
             audioDuckingService: audioDuckingService,
             textInsertionService: textInsertionService,
+            historyService: historyService,
+            recentTranscriptionStore: recentTranscriptionStore,
             profileService: profileService,
             ttsProvider: ttsProvider,
             retainedObjects: [
@@ -2010,6 +2096,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
                 hotkeyService,
                 textInsertionService,
                 historyService,
+                recentTranscriptionStore,
                 profileService,
                 audioDuckingService,
                 dictionaryService,
@@ -3423,6 +3510,82 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testCopyLastTranscriptionHotkeyInvokesDedicatedCallbackOnKeyDown() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(commandShiftCHotkey(), for: .copyLastTranscription)
+
+        var callbackCount = 0
+        var startCount = 0
+        service.onCopyLastTranscription = { callbackCount += 1 }
+        service.onDictationStart = { startCount += 1 }
+
+        let keyDown = try makeKeyboardEvent(keyCode: 0x08, keyDown: true, flags: [.maskCommand, .maskShift])
+
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertEqual(callbackCount, 1)
+        XCTAssertEqual(startCount, 0)
+        XCTAssertNil(service.currentMode)
+    }
+
+    @MainActor
+    func testCopyLastTranscriptionHotkeyDoesNotStopActiveDictation() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(spaceHotkey(), for: .toggle)
+        service.setHotkeyForTesting(commandShiftCHotkey(), for: .copyLastTranscription)
+
+        var startCount = 0
+        var stopCount = 0
+        var callbackCount = 0
+        service.onDictationStart = { startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+        service.onCopyLastTranscription = { callbackCount += 1 }
+
+        let toggleDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
+        let copyDown = try makeKeyboardEvent(keyCode: 0x08, keyDown: true, flags: [.maskCommand, .maskShift])
+
+        XCTAssertTrue(service.processEventForTesting(toggleDown, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+
+        XCTAssertTrue(service.processEventForTesting(copyDown, source: .monitor))
+        XCTAssertEqual(callbackCount, 1)
+        XCTAssertEqual(stopCount, 0)
+        XCTAssertEqual(service.currentMode, .toggle)
+    }
+
+    @MainActor
+    func testMenuShortcutDescriptorSupportsPrintableKeyboardShortcut() {
+        let descriptor = HotkeyService.menuShortcutDescriptor(for: commandShiftCHotkey())
+
+        XCTAssertEqual(descriptor?.keyEquivalent, "c")
+        XCTAssertEqual(descriptor?.modifiers, [.command, .shift])
+    }
+
+    @MainActor
+    func testMenuShortcutDescriptorSupportsFunctionKeyShortcut() {
+        let hotkey = UnifiedHotkey(
+            keyCode: 0x64,
+            modifierFlags: NSEvent.ModifierFlags.function.rawValue,
+            isFn: false
+        )
+
+        let descriptor = HotkeyService.menuShortcutDescriptor(for: hotkey)
+
+        XCTAssertEqual(descriptor?.keyEquivalent, Character(UnicodeScalar(NSF8FunctionKey)!))
+        XCTAssertEqual(descriptor?.modifiers, [.function])
+    }
+
+    @MainActor
+    func testMenuShortcutDescriptorSkipsUnsupportedModifierOnlyShortcut() {
+        let descriptor = HotkeyService.menuShortcutDescriptor(for: fnHotkey())
+
+        XCTAssertNil(descriptor)
+    }
+
+    @MainActor
     func testWorkflowHotkeyInvokesDedicatedWorkflowCallback() throws {
         let service = HotkeyService()
         service.suspendMonitoring()
@@ -3509,6 +3672,15 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         UnifiedHotkey(
             keyCode: 0x00,
             modifierFlags: NSEvent.ModifierFlags([.command, .option]).rawValue,
+            isFn: false
+        )
+    }
+
+    @MainActor
+    private func commandShiftCHotkey() -> UnifiedHotkey {
+        UnifiedHotkey(
+            keyCode: 0x08,
+            modifierFlags: NSEvent.ModifierFlags([.command, .shift]).rawValue,
             isFn: false
         )
     }

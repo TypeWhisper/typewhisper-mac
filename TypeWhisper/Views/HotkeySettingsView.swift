@@ -71,6 +71,7 @@ struct HotkeySettingsView: View {
                 HotkeyRecorderView(
                     label: dictation.recentTranscriptionsHotkeyLabel,
                     title: String(localized: "Recent transcription shortcut"),
+                    subtitle: String(localized: "Open your latest transcriptions and insert one into the focused app."),
                     onRecord: { hotkey in
                         if let conflict = dictation.isHotkeyAssigned(hotkey, excluding: .recentTranscriptions) {
                             dictation.clearHotkey(for: conflict)
@@ -80,9 +81,18 @@ struct HotkeySettingsView: View {
                     onClear: { dictation.clearHotkey(for: .recentTranscriptions) }
                 )
 
-                Text(String(localized: "Open your latest transcriptions and insert one into the focused app."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HotkeyRecorderView(
+                    label: dictation.copyLastTranscriptionHotkeyLabel,
+                    title: String(localized: "Copy last transcription shortcut"),
+                    subtitle: String(localized: "Copy your latest transcription to the clipboard."),
+                    onRecord: { hotkey in
+                        if let conflict = dictation.isHotkeyAssigned(hotkey, excluding: .copyLastTranscription) {
+                            dictation.clearHotkey(for: conflict)
+                        }
+                        dictation.setHotkey(hotkey, for: .copyLastTranscription)
+                    },
+                    onClear: { dictation.clearHotkey(for: .copyLastTranscription) }
+                )
             }
         }
         .formStyle(.grouped)

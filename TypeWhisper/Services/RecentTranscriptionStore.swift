@@ -82,4 +82,8 @@ final class RecentTranscriptionStore: ObservableObject {
         }
         return deduped
     }
+
+    func latestEntry(historyRecords: [TranscriptionRecord]) -> Entry? {
+        mergedEntries(historyRecords: historyRecords, limit: 1).first
+    }
 }

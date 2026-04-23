@@ -1091,6 +1091,7 @@ struct SetupWizardView: View {
         case .toggle: return dictation.toggleHotkeyLabel
         case .promptPalette: return dictation.promptPaletteHotkeyLabel
         case .recentTranscriptions: return dictation.recentTranscriptionsHotkeyLabel
+        case .copyLastTranscription: return dictation.copyLastTranscriptionHotkeyLabel
         }
     }
 
@@ -1101,6 +1102,7 @@ struct SetupWizardView: View {
         case .toggle: return String(localized: "Toggle")
         case .promptPalette: return localizedAppText("Workflow Palette", de: "Workflow-Palette")
         case .recentTranscriptions: return String(localized: "Recent Transcriptions")
+        case .copyLastTranscription: return String(localized: "Copy Last Transcription")
         }
     }
 }

@@ -67,6 +67,7 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
     case toggle
     case promptPalette
     case recentTranscriptions
+    case copyLastTranscription
 
     var defaultsKey: String {
         switch self {
@@ -75,13 +76,18 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
         case .toggle: return UserDefaultsKeys.toggleHotkey
         case .promptPalette: return UserDefaultsKeys.promptPaletteHotkey
         case .recentTranscriptions: return UserDefaultsKeys.recentTranscriptionsHotkey
+        case .copyLastTranscription: return UserDefaultsKeys.copyLastTranscriptionHotkey
         }
     }
 }
 
-/// Manages global hotkeys for dictation with three independent slots:
-/// hybrid (short=toggle, long=push-to-talk), push-to-talk, and toggle.
+/// Manages global hotkeys for dictation and standalone app actions.
 final class HotkeyService: ObservableObject {
+    struct MenuShortcutDescriptor: Equatable, Sendable {
+        let keyEquivalent: Character
+        let modifiers: NSEvent.ModifierFlags
+    }
+
     enum HotkeyEventSource: Sendable {
         case eventTap
         case monitor
@@ -120,6 +126,7 @@ final class HotkeyService: ObservableObject {
     var onDictationStop: (() -> Void)?
     var onPromptPaletteToggle: (() -> Void)?
     var onRecentTranscriptionsToggle: (() -> Void)?
+    var onCopyLastTranscription: (() -> Void)?
     var onProfileDictationStart: ((UUID) -> Void)?
     var onWorkflowDictationStart: ((UUID) -> Void)?
     var onCancelPressed: (() -> Void)?
@@ -169,6 +176,7 @@ final class HotkeyService: ObservableObject {
         .toggle: SlotState(),
         .promptPalette: SlotState(),
         .recentTranscriptions: SlotState(),
+        .copyLastTranscription: SlotState(),
     ]
 
     // MARK: - Per-Profile Hotkey State
@@ -1088,6 +1096,10 @@ final class HotkeyService: ObservableObject {
             onRecentTranscriptionsToggle?()
             return
         }
+        if slotType == .copyLastTranscription {
+            onCopyLastTranscription?()
+            return
+        }
 
         if isActive {
             // Any hotkey stops active recording
@@ -1139,6 +1151,8 @@ final class HotkeyService: ObservableObject {
         case .promptPalette:
             break // handled on keyDown only
         case .recentTranscriptions:
+            break // handled on keyDown only
+        case .copyLastTranscription:
             break // handled on keyDown only
         }
     }
@@ -1231,6 +1245,24 @@ final class HotkeyService: ObservableObject {
 
     // MARK: - Display Name
 
+    nonisolated static func menuShortcutDescriptor(for hotkey: UnifiedHotkey) -> MenuShortcutDescriptor? {
+        guard !hotkey.isDoubleTap,
+              hotkey.mouseButton == nil,
+              !hotkey.isFn,
+              hotkey.kind == .keyWithModifiers || hotkey.kind == .bareKey,
+              let keyEquivalent = menuKeyEquivalent(for: hotkey.keyCode) else {
+            return nil
+        }
+
+        let relevantModifiers = NSEvent.ModifierFlags(rawValue: hotkey.modifierFlags)
+            .intersection([.command, .option, .control, .shift, .function])
+
+        return MenuShortcutDescriptor(
+            keyEquivalent: keyEquivalent,
+            modifiers: relevantModifiers
+        )
+    }
+
     nonisolated static func displayName(for hotkey: UnifiedHotkey) -> String {
         if let button = hotkey.mouseButton {
             let baseName = mouseButtonName(for: button)
@@ -1296,6 +1328,50 @@ final class HotkeyService: ObservableObject {
         if let name = qwertyFallback[keyCode] { return name }
 
         return "Key \(keyCode)"
+    }
+
+    private nonisolated static func menuKeyEquivalent(for keyCode: UInt16) -> Character? {
+        let specialKeys: [UInt16: UInt32] = [
+            0x24: 0x000D,
+            0x30: 0x0009,
+            0x31: 0x0020,
+            0x33: 0x0008,
+            0x35: 0x001B,
+            0x60: UInt32(NSF5FunctionKey),
+            0x61: UInt32(NSF6FunctionKey),
+            0x62: UInt32(NSF7FunctionKey),
+            0x63: UInt32(NSF3FunctionKey),
+            0x64: UInt32(NSF8FunctionKey),
+            0x65: UInt32(NSF9FunctionKey),
+            0x67: UInt32(NSF11FunctionKey),
+            0x69: UInt32(NSF13FunctionKey),
+            0x6B: UInt32(NSF14FunctionKey),
+            0x6D: UInt32(NSF10FunctionKey),
+            0x6F: UInt32(NSF12FunctionKey),
+            0x71: UInt32(NSF15FunctionKey),
+            0x76: UInt32(NSF4FunctionKey),
+            0x78: UInt32(NSF2FunctionKey),
+            0x7A: UInt32(NSF1FunctionKey),
+            0x7B: UInt32(NSLeftArrowFunctionKey),
+            0x7C: UInt32(NSRightArrowFunctionKey),
+            0x7D: UInt32(NSDownArrowFunctionKey),
+            0x7E: UInt32(NSUpArrowFunctionKey),
+        ]
+        if let scalarValue = specialKeys[keyCode], let scalar = UnicodeScalar(scalarValue) {
+            return Character(scalar)
+        }
+
+        guard let character = characterForKeyCode(keyCode),
+              character.count == 1,
+              let scalar = character.unicodeScalars.first else {
+            return nil
+        }
+
+        if CharacterSet.letters.contains(scalar) {
+            return Character(character.lowercased())
+        }
+
+        return Character(String(scalar))
     }
 
     /// Resolves the character for a keyCode using the current keyboard input source.
