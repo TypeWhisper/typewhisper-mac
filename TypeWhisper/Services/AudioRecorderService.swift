@@ -9,64 +9,6 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhis
 /// Records audio from microphone and/or system audio to file.
 /// Uses AVAudioEngine for mic and ScreenCaptureKit for system audio.
 final class AudioRecorderService: ObservableObject, @unchecked Sendable {
-
-    private struct TranscriptionBufferState {
-        var micSamples: [Float] = []
-        var systemSamples: [Float] = []
-
-        mutating func reset() {
-            micSamples.removeAll(keepingCapacity: false)
-            systemSamples.removeAll(keepingCapacity: false)
-        }
-
-        func mixedBuffer(
-            micEnabled: Bool,
-            systemAudioEnabled: Bool,
-            micDuckingMode: MicDuckingMode
-        ) -> [Float] {
-            switch (micEnabled, systemAudioEnabled) {
-            case (true, false):
-                return micSamples
-            case (false, true):
-                return systemSamples
-            case (true, true):
-                return Self.mix(
-                    micSamples: micSamples,
-                    systemSamples: systemSamples,
-                    micDuckingMode: micDuckingMode
-                )
-            case (false, false):
-                return []
-            }
-        }
-
-        static func mix(
-            micSamples: [Float],
-            systemSamples: [Float],
-            micDuckingMode: MicDuckingMode
-        ) -> [Float] {
-            let sampleCount = max(micSamples.count, systemSamples.count)
-            guard sampleCount > 0 else { return [] }
-
-            let duckingProfile = AudioRecorderService.buildMicDuckingProfile(
-                frameCount: sampleCount,
-                sampleRate: AudioRecorderService.transcriptionSampleRate,
-                mode: micDuckingMode
-            ) { index in
-                index < systemSamples.count ? systemSamples[index] : 0
-            }
-
-            var mixed = [Float](repeating: 0, count: sampleCount)
-            for index in 0..<sampleCount {
-                let micSample = index < micSamples.count ? micSamples[index] : 0
-                let systemSample = index < systemSamples.count ? systemSamples[index] : 0
-                let micGain = duckingProfile?.gains[index] ?? 1
-                mixed[index] = max(-1, min(1, (systemSample + (micSample * micGain)) * 0.5))
-            }
-            return mixed
-        }
-    }
-
     private struct MicDuckingProfile {
         let gains: [Float]
         let minimumGain: Float
@@ -166,7 +108,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     var micDuckingMode: MicDuckingMode = .aggressive
 
     // 16kHz mono buffer for streaming transcription
-    private let transcriptionBufferLock = OSAllocatedUnfairLock<TranscriptionBufferState>(initialState: TranscriptionBufferState())
+    private let transcriptionBufferLock = OSAllocatedUnfairLock<RecorderTranscriptionBuffer>(initialState: RecorderTranscriptionBuffer())
     private static let transcriptionSampleRate: Double = 16000
 
     static let recordingsDirectoryName = "TypeWhisper Recordings"
@@ -183,11 +125,18 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         let micEnabled = self.micEnabled
         let systemAudioEnabled = self.systemAudioEnabled
         let micDuckingMode = self.micDuckingMode
-        return transcriptionBufferLock.withLock { state in
-            state.mixedBuffer(
+        return transcriptionBufferLock.withLock { buffer in
+            buffer.currentBuffer(
                 micEnabled: micEnabled,
                 systemAudioEnabled: systemAudioEnabled,
-                micDuckingMode: micDuckingMode
+                mixer: { range, micSamples, systemSamples in
+                    Self.mixTranscriptionBuffer(
+                        in: range,
+                        micSamples: micSamples,
+                        systemSamples: systemSamples,
+                        micDuckingMode: micDuckingMode
+                    )
+                }
             )
         }
     }
@@ -197,15 +146,21 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         let micEnabled = self.micEnabled
         let systemAudioEnabled = self.systemAudioEnabled
         let micDuckingMode = self.micDuckingMode
-        return transcriptionBufferLock.withLock { state in
-            let buffer = state.mixedBuffer(
+        let maxSampleCount = Int(maxDuration * Self.transcriptionSampleRate)
+        return transcriptionBufferLock.withLock { buffer in
+            buffer.recentBuffer(
+                maxSampleCount: maxSampleCount,
                 micEnabled: micEnabled,
                 systemAudioEnabled: systemAudioEnabled,
-                micDuckingMode: micDuckingMode
+                mixer: { range, micSamples, systemSamples in
+                    Self.mixTranscriptionBuffer(
+                        in: range,
+                        micSamples: micSamples,
+                        systemSamples: systemSamples,
+                        micDuckingMode: micDuckingMode
+                    )
+                }
             )
-            let maxSamples = Int(maxDuration * Self.transcriptionSampleRate)
-            if buffer.count <= maxSamples { return buffer }
-            return Array(buffer.suffix(maxSamples))
         }
     }
 
@@ -214,29 +169,27 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         let micEnabled = self.micEnabled
         let systemAudioEnabled = self.systemAudioEnabled
         let micDuckingMode = self.micDuckingMode
-        return transcriptionBufferLock.withLock { state in
-            let buffer = state.mixedBuffer(
+        return transcriptionBufferLock.withLock { buffer in
+            buffer.delta(
+                since: sampleOffset,
                 micEnabled: micEnabled,
                 systemAudioEnabled: systemAudioEnabled,
-                micDuckingMode: micDuckingMode
+                mixer: { range, micSamples, systemSamples in
+                    Self.mixTranscriptionBuffer(
+                        in: range,
+                        micSamples: micSamples,
+                        systemSamples: systemSamples,
+                        micDuckingMode: micDuckingMode
+                    )
+                }
             )
-            let clampedOffset = max(0, min(sampleOffset, buffer.count))
-            return (Array(buffer.dropFirst(clampedOffset)), buffer.count)
         }
     }
 
     /// Total duration of transcription buffer in seconds.
     var totalBufferDuration: TimeInterval {
-        let micEnabled = self.micEnabled
-        let systemAudioEnabled = self.systemAudioEnabled
-        let micDuckingMode = self.micDuckingMode
-        return transcriptionBufferLock.withLock { state in
-            let buffer = state.mixedBuffer(
-                micEnabled: micEnabled,
-                systemAudioEnabled: systemAudioEnabled,
-                micDuckingMode: micDuckingMode
-            )
-            return Double(buffer.count) / Self.transcriptionSampleRate
+        return transcriptionBufferLock.withLock { buffer in
+            Double(buffer.mixedSampleCount) / Self.transcriptionSampleRate
         }
     }
 
@@ -907,13 +860,40 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     }
 
     private func appendMicTranscriptionSamples(_ samples: [Float]) {
-        guard !samples.isEmpty else { return }
-        transcriptionBufferLock.withLock { $0.micSamples.append(contentsOf: samples) }
+        transcriptionBufferLock.withLock { $0.appendMic(samples) }
     }
 
     private func appendSystemTranscriptionSamples(_ samples: [Float]) {
-        guard !samples.isEmpty else { return }
-        transcriptionBufferLock.withLock { $0.systemSamples.append(contentsOf: samples) }
+        transcriptionBufferLock.withLock { $0.appendSystem(samples) }
+    }
+
+    private static func mixTranscriptionBuffer(
+        in range: Range<Int>,
+        micSamples: [Float],
+        systemSamples: [Float],
+        micDuckingMode: MicDuckingMode
+    ) -> [Float] {
+        guard !range.isEmpty else { return [] }
+
+        let duckingProfile = buildMicDuckingProfile(
+            frameCount: range.count,
+            sampleRate: transcriptionSampleRate,
+            mode: micDuckingMode
+        ) { relativeIndex in
+            let absoluteIndex = range.lowerBound + relativeIndex
+            return absoluteIndex < systemSamples.count ? systemSamples[absoluteIndex] : 0
+        }
+
+        var mixed = [Float](repeating: 0, count: range.count)
+        for relativeIndex in 0..<range.count {
+            let absoluteIndex = range.lowerBound + relativeIndex
+            let micSample = absoluteIndex < micSamples.count ? micSamples[absoluteIndex] : 0
+            let systemSample = absoluteIndex < systemSamples.count ? systemSamples[absoluteIndex] : 0
+            let micGain = duckingProfile?.gains[relativeIndex] ?? 1
+            mixed[relativeIndex] = max(-1, min(1, (systemSample + (micSample * micGain)) * 0.5))
+        }
+
+        return mixed
     }
 
     private func rollbackFailedStart() async {

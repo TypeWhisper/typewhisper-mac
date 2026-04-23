@@ -3,16 +3,24 @@ import os
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhisper-mac", category: "StreamingHandler")
 
-@MainActor
-final class StreamingHandler {
+final class StreamingHandler: @unchecked Sendable {
+    private struct SharedState {
+        var confirmedStreamingText = ""
+        var liveSessionHandle: ModelManagerService.LiveTranscriptionSessionHandle?
+        var sampleCursor = 0
+    }
+
+    private static let liveSessionPollInterval: Duration = .milliseconds(350)
+    private static let fallbackPollInterval: Duration = .seconds(3)
+    private static let fallbackPreviewWindowDuration: TimeInterval = 10
+
     private var streamingTask: Task<Void, Never>?
-    private var confirmedStreamingText = ""
     private let progressText = OSAllocatedUnfairLock(initialState: "")
-    private var liveSessionHandle: ModelManagerService.LiveTranscriptionSessionHandle?
-    private var sampleCursor = 0
+    private let sharedState = OSAllocatedUnfairLock(initialState: SharedState())
 
     private let modelManager: ModelManagerService
     private let bufferProvider: () -> [Float]
+    private let recentBufferProvider: (TimeInterval) -> [Float]
     private let bufferDeltaProvider: (Int) -> (samples: [Float], nextOffset: Int)
     private let bufferedDurationProvider: () -> Double
 
@@ -22,15 +30,18 @@ final class StreamingHandler {
     init(
         modelManager: ModelManagerService,
         bufferProvider: @escaping () -> [Float],
+        recentBufferProvider: @escaping (TimeInterval) -> [Float],
         bufferDeltaProvider: @escaping (Int) -> (samples: [Float], nextOffset: Int),
         bufferedDurationProvider: @escaping () -> Double
     ) {
         self.modelManager = modelManager
         self.bufferProvider = bufferProvider
+        self.recentBufferProvider = recentBufferProvider
         self.bufferDeltaProvider = bufferDeltaProvider
         self.bufferedDurationProvider = bufferedDurationProvider
     }
 
+    @MainActor
     func start(
         streamPrompt: String,
         engineOverrideId: String?,
@@ -39,7 +50,7 @@ final class StreamingHandler {
         task: TranscriptionTask,
         cloudModelOverride: String?,
         allowLiveTranscription: Bool,
-        stateCheck: @escaping () -> Bool
+        stateCheck: @escaping @MainActor @Sendable () -> Bool
     ) {
         stop()
 
@@ -47,18 +58,13 @@ final class StreamingHandler {
 
         let providerId = engineOverrideId ?? selectedProviderId
         guard let providerId,
-              let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else { return }
+              PluginManager.shared.transcriptionEngine(for: providerId) != nil else { return }
 
-        confirmedStreamingText = ""
-        progressText.withLock { $0 = "" }
-        sampleCursor = 0
+        resetStreamingState()
         onStreamingStateChange?(true)
-
-        let pollInterval: Duration = plugin.supportsStreaming ? .milliseconds(350) : .seconds(3)
 
         streamingTask = Task { [weak self] in
             guard let self else { return }
-            let progressText = self.progressText
 
             if let handle = try? await self.modelManager.createLiveTranscriptionSession(
                 languageSelection: languageSelection,
@@ -68,92 +74,43 @@ final class StreamingHandler {
                 prompt: streamPrompt,
                 onProgress: { [weak self] text in
                     guard let self else { return false }
-                    let confirmed = progressText.withLock { $0 }
+                    let confirmed = self.progressText.withLock { $0 }
                     let stable = Self.stabilizeText(confirmed: confirmed, new: text)
+                    self.progressText.withLock { $0 = stable }
+                    self.sharedState.withLock { $0.confirmedStreamingText = stable }
                     Task { @MainActor [weak self] in
-                        progressText.withLock { $0 = stable }
-                        self?.confirmedStreamingText = stable
                         self?.onPartialTextUpdate?(stable)
                     }
                     return true
                 }
             ) {
-                self.liveSessionHandle = handle
-
-                while !Task.isCancelled, stateCheck() {
-                    let delta = self.bufferDeltaProvider(self.sampleCursor)
-                    self.sampleCursor = delta.nextOffset
-
-                    if !delta.samples.isEmpty {
-                        do {
-                            try await handle.session.appendAudio(samples: delta.samples)
-                        } catch {
-                            logger.warning("Live transcription append failed: \(error.localizedDescription)")
-                            break
-                        }
-                    }
-
-                    try? await Task.sleep(for: pollInterval)
-                }
+                self.sharedState.withLock { $0.liveSessionHandle = handle }
+                await self.runLiveSessionLoop(stateCheck: stateCheck)
                 return
             }
 
-            try? await Task.sleep(for: pollInterval)
-
-            while !Task.isCancelled, stateCheck() {
-                let buffer = self.bufferProvider()
-                let bufferDuration = Double(buffer.count) / 16000.0
-
-                if bufferDuration > 0.5 {
-                    do {
-                        let confirmed = self.confirmedStreamingText
-                        let result = try await self.modelManager.transcribe(
-                            audioSamples: buffer,
-                            languageSelection: languageSelection,
-                            task: task,
-                            engineOverrideId: engineOverrideId,
-                            cloudModelOverride: cloudModelOverride,
-                            prompt: streamPrompt,
-                            onProgress: { [weak self] text in
-                                guard let self, !Task.isCancelled else { return false }
-                                let stable = Self.stabilizeText(confirmed: confirmed, new: text)
-                                Task { @MainActor [weak self] in
-                                    self?.onPartialTextUpdate?(stable)
-                                }
-                                return true
-                            }
-                        )
-                        let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !text.isEmpty {
-                            let stable = Self.stabilizeText(confirmed: confirmed, new: text)
-                            self.onPartialTextUpdate?(stable)
-                            self.confirmedStreamingText = stable
-                        }
-                    } catch {
-                        logger.warning("Streaming preview error: \(error.localizedDescription)")
-                    }
-                }
-
-                try? await Task.sleep(for: pollInterval)
-            }
+            await self.runFallbackLoop(
+                streamPrompt: streamPrompt,
+                engineOverrideId: engineOverrideId,
+                languageSelection: languageSelection,
+                task: task,
+                cloudModelOverride: cloudModelOverride,
+                stateCheck: stateCheck
+            )
         }
     }
 
+    @MainActor
     func finish() async -> TranscriptionResult? {
         streamingTask?.cancel()
         streamingTask = nil
 
-        guard let handle = liveSessionHandle else {
-            liveSessionHandle = nil
-            onStreamingStateChange?(false)
-            confirmedStreamingText = ""
-            progressText.withLock { $0 = "" }
-            sampleCursor = 0
+        guard let handle = sharedState.withLock({ $0.liveSessionHandle }) else {
+            clearStreamingState(notifyStreamingStopped: true)
             return nil
         }
 
-        let delta = bufferDeltaProvider(sampleCursor)
-        sampleCursor = delta.nextOffset
+        let delta = nextBufferDelta()
 
         do {
             if !delta.samples.isEmpty {
@@ -163,40 +120,137 @@ final class StreamingHandler {
                 handle,
                 bufferedDuration: bufferedDurationProvider()
             )
-            liveSessionHandle = nil
-            onStreamingStateChange?(false)
-            confirmedStreamingText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            let finalText = confirmedStreamingText
+            clearStreamingState(notifyStreamingStopped: true)
+
+            let finalText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
             progressText.withLock { $0 = finalText }
-            sampleCursor = 0
+            sharedState.withLock { $0.confirmedStreamingText = finalText }
             return result
         } catch {
             logger.warning("Finalizing live transcription failed: \(error.localizedDescription)")
             await handle.session.cancel()
-            liveSessionHandle = nil
-            onStreamingStateChange?(false)
-            confirmedStreamingText = ""
-            progressText.withLock { $0 = "" }
-            sampleCursor = 0
+            clearStreamingState(notifyStreamingStopped: true)
             return nil
         }
     }
 
+    @MainActor
     func stop() {
         streamingTask?.cancel()
         streamingTask = nil
 
-        if let handle = liveSessionHandle {
+        let handle = sharedState.withLock { state in
+            let handle = state.liveSessionHandle
+            state.liveSessionHandle = nil
+            return handle
+        }
+        if let handle {
             Task {
                 await handle.session.cancel()
             }
         }
 
-        liveSessionHandle = nil
-        onStreamingStateChange?(false)
-        confirmedStreamingText = ""
+        clearStreamingState(notifyStreamingStopped: true)
+    }
+
+    private func runLiveSessionLoop(stateCheck: @escaping @MainActor @Sendable () -> Bool) async {
+        while !Task.isCancelled {
+            guard await stateCheck() else { break }
+            let delta = nextBufferDelta()
+
+            if !delta.samples.isEmpty,
+               let handle = sharedState.withLock({ $0.liveSessionHandle }) {
+                do {
+                    try await handle.session.appendAudio(samples: delta.samples)
+                } catch {
+                    logger.warning("Live transcription append failed: \(error.localizedDescription)")
+                    break
+                }
+            }
+
+            try? await Task.sleep(for: Self.liveSessionPollInterval)
+        }
+    }
+
+    private func runFallbackLoop(
+        streamPrompt: String,
+        engineOverrideId: String?,
+        languageSelection: LanguageSelection,
+        task: TranscriptionTask,
+        cloudModelOverride: String?,
+        stateCheck: @escaping @MainActor @Sendable () -> Bool
+    ) async {
+        try? await Task.sleep(for: Self.fallbackPollInterval)
+
+        while !Task.isCancelled {
+            guard await stateCheck() else { break }
+            let buffer = recentBufferProvider(Self.fallbackPreviewWindowDuration)
+            let bufferDuration = Double(buffer.count) / 16000.0
+
+            if bufferDuration > 0.5 {
+                do {
+                    let result = try await modelManager.transcribe(
+                        audioSamples: buffer,
+                        languageSelection: languageSelection,
+                        task: task,
+                        engineOverrideId: engineOverrideId,
+                        cloudModelOverride: cloudModelOverride,
+                        prompt: streamPrompt,
+                        onProgress: { [weak self] text in
+                            guard let self, !Task.isCancelled else { return false }
+                            let confirmed = self.progressText.withLock { $0 }
+                            let stable = Self.stabilizeText(confirmed: confirmed, new: text)
+                            Task { @MainActor [weak self] in
+                                self?.onPartialTextUpdate?(stable)
+                            }
+                            return true
+                        }
+                    )
+                    let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !text.isEmpty {
+                        let confirmed = confirmedStreamingText()
+                        let stable = Self.stabilizeText(confirmed: confirmed, new: text)
+                        progressText.withLock { $0 = stable }
+                        sharedState.withLock { $0.confirmedStreamingText = stable }
+                        await MainActor.run { [weak self] in
+                            self?.onPartialTextUpdate?(stable)
+                        }
+                    }
+                } catch {
+                    logger.warning("Streaming preview error: \(error.localizedDescription)")
+                }
+            }
+
+            try? await Task.sleep(for: Self.fallbackPollInterval)
+        }
+    }
+
+    private func nextBufferDelta() -> (samples: [Float], nextOffset: Int) {
+        let sampleCursor = sharedState.withLock { $0.sampleCursor }
+        let delta = bufferDeltaProvider(sampleCursor)
+        sharedState.withLock { $0.sampleCursor = delta.nextOffset }
+        return delta
+    }
+
+    private func resetStreamingState() {
+        sharedState.withLock { state in
+            state.confirmedStreamingText = ""
+            state.liveSessionHandle = nil
+            state.sampleCursor = 0
+        }
         progressText.withLock { $0 = "" }
-        sampleCursor = 0
+    }
+
+    @MainActor
+    private func clearStreamingState(notifyStreamingStopped: Bool) {
+        resetStreamingState()
+        if notifyStreamingStopped {
+            onStreamingStateChange?(false)
+        }
+    }
+
+    private func confirmedStreamingText() -> String {
+        sharedState.withLock { $0.confirmedStreamingText }
     }
 
     /// Keeps confirmed text stable and only appends new content.

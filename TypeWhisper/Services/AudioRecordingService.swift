@@ -183,7 +183,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     /// Thread-safe snapshot of the current recording buffer for streaming transcription.
     func getCurrentBuffer() -> [Float] {
         bufferLock.lock()
-        let copy = sampleBuffer
+        let copy = Array(sampleBuffer)
         bufferLock.unlock()
         return copy
     }

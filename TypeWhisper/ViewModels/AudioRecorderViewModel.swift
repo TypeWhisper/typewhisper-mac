@@ -99,6 +99,9 @@ final class AudioRecorderViewModel: ObservableObject {
             bufferProvider: { [weak recorderService] in
                 recorderService?.getCurrentBuffer() ?? []
             },
+            recentBufferProvider: { [weak recorderService] maxDuration in
+                recorderService?.getRecentBuffer(maxDuration: maxDuration) ?? []
+            },
             bufferDeltaProvider: { [weak recorderService] offset in
                 recorderService?.getBufferDelta(since: offset) ?? ([], offset)
             },
