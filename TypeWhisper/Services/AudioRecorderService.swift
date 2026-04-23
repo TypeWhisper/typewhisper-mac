@@ -971,7 +971,7 @@ private final class SystemAudioStreamOutput: NSObject, SCStreamOutput, SCStreamD
     var audioFile: AVAudioFile?
     var fileLock: OSAllocatedUnfairLock<AVAudioFile?>?
     var levelCallback: ((Float) -> Void)?
-    var transcriptionBufferCallback: (([Float]) -> Void)?
+    var transcriptionBufferCallback: (@Sendable ([Float]) -> Void)?
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .audio else { return }
@@ -1051,26 +1051,28 @@ private final class SystemAudioStreamOutput: NSObject, SCStreamOutput, SCStreamD
             let decimationFactor = Int(sampleRate / 16000)
             guard decimationFactor > 0 else { return }
 
+            // Convert pointer to Sendable array for async dispatch
+            let audioData: [Float]?
             if isFloat && bytesPerSample == 4 {
                 let floatPtr = UnsafeRawPointer(dataPointer).bindMemory(to: Float.self, capacity: sampleCount * channelCount)
-                var mono16k: [Float] = []
-                mono16k.reserveCapacity(sampleCount / decimationFactor)
-                for i in stride(from: 0, to: sampleCount, by: decimationFactor) {
-                    var sample: Float = 0
-                    for ch in 0..<channelCount {
-                        sample += floatPtr[i * channelCount + ch]
-                    }
-                    mono16k.append(sample / Float(channelCount))
-                }
-                callback(mono16k)
+                audioData = Array(UnsafeBufferPointer(start: floatPtr, count: sampleCount * channelCount))
             } else if bytesPerSample == 2 {
                 let int16Ptr = UnsafeRawPointer(dataPointer).bindMemory(to: Int16.self, capacity: sampleCount * channelCount)
+                audioData = Array(UnsafeBufferPointer(start: int16Ptr, count: sampleCount * channelCount)).map { Float($0) }
+            } else {
+                audioData = nil
+            }
+            
+            guard let audioData else { return }
+            
+            // Process on utility queue to avoid blocking main thread
+            DispatchQueue.global(qos: .utility).async {
                 var mono16k: [Float] = []
                 mono16k.reserveCapacity(sampleCount / decimationFactor)
                 for i in stride(from: 0, to: sampleCount, by: decimationFactor) {
                     var sample: Float = 0
                     for ch in 0..<channelCount {
-                        sample += Float(int16Ptr[i * channelCount + ch]) / Float(Int16.max)
+                        sample += audioData[i * channelCount + ch]
                     }
                     mono16k.append(sample / Float(channelCount))
                 }
