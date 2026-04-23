@@ -24,6 +24,10 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
     // Vocabulary Boosting
     fileprivate var ctcModels: CtcModels?
     fileprivate var ctcTokenizer: CtcTokenizer?
+    fileprivate var ctcSpotter: CtcKeywordSpotter?
+    fileprivate var customVocabulary: CustomVocabularyContext?
+    fileprivate var vocabularyRescorer: VocabularyRescorer?
+    fileprivate var vocabSizeConfig: ContextBiasingConstants.VocabSizeConfig?
     fileprivate var vocabularyBoostingEnabled: Bool = false
     fileprivate var ctcModelState: CtcModelState = .notDownloaded
     fileprivate var lastConfiguredPrompt: String?
@@ -44,14 +48,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
     }
 
     func deactivate() {
-        if let manager = asrManager {
-            Task { await manager.disableVocabularyBoosting() }
-        }
-        ctcModels = nil
-        ctcTokenizer = nil
-        ctcModelState = .notDownloaded
-        lastConfiguredPrompt = nil
-        lastBoostingTermCount = 0
+        clearVocabularyBoostingState(resetModelState: true)
         asrManager = nil
         loadedModelId = nil
         modelState = .notLoaded
@@ -122,35 +119,58 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
             minimumDuration: 1.0,
             sampleRate: 16_000
         )
-        let result = try await asrManager.transcribe(normalizedSamples, source: .system)
-        let trimmedText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fluidLanguage = Self.fluidAudioLanguage(for: language)
+        var decoderState = TdtDecoderState.make(decoderLayers: await asrManager.decoderLayerCount)
+        let result = try await asrManager.transcribe(
+            normalizedSamples,
+            decoderState: &decoderState,
+            language: fluidLanguage
+        )
+        let finalResult = await applyVocabularyRescoringIfNeeded(
+            to: result,
+            audioSamples: normalizedSamples
+        )
+        let trimmedText = finalResult.text.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if audio.duration < Self.shortClipConfidenceGateDuration {
             Self.logger.info(
-                "Short clip transcription: rawDuration=\(String(format: "%.3f", audio.duration), privacy: .public)s, confidence=\(String(format: "%.3f", result.confidence), privacy: .public), textLength=\(trimmedText.count, privacy: .public)"
+                "Short clip transcription: rawDuration=\(String(format: "%.3f", audio.duration), privacy: .public)s, confidence=\(String(format: "%.3f", finalResult.confidence), privacy: .public), textLength=\(trimmedText.count, privacy: .public)"
             )
         }
 
         guard PluginAudioUtils.shouldAcceptShortClipTranscription(
             audioDuration: audio.duration,
-            confidence: result.confidence,
+            confidence: finalResult.confidence,
             minimumDuration: Self.shortClipConfidenceGateDuration,
             minimumConfidence: Self.shortClipConfidenceThreshold
         ) else {
             Self.logger.info(
-                "Discarding low-confidence short clip: rawDuration=\(String(format: "%.3f", audio.duration), privacy: .public)s, confidence=\(String(format: "%.3f", result.confidence), privacy: .public)"
+                "Discarding low-confidence short clip: rawDuration=\(String(format: "%.3f", audio.duration), privacy: .public)s, confidence=\(String(format: "%.3f", finalResult.confidence), privacy: .public)"
             )
             return PluginTranscriptionResult(text: "", detectedLanguage: nil, segments: [])
         }
 
         let segments: [PluginTranscriptionSegment]
-        if let tokenTimings = result.tokenTimings, !tokenTimings.isEmpty {
+        if let tokenTimings = finalResult.tokenTimings, !tokenTimings.isEmpty {
             segments = Self.groupTokensIntoSegments(tokenTimings)
         } else {
             segments = []
         }
 
-        return PluginTranscriptionResult(text: result.text, detectedLanguage: nil, segments: segments)
+        return PluginTranscriptionResult(text: finalResult.text, detectedLanguage: nil, segments: segments)
+    }
+
+    private static func fluidAudioLanguage(for language: String?) -> Language? {
+        guard let language else { return nil }
+        let primaryCode = language
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .split(whereSeparator: { $0 == "-" || $0 == "_" })
+            .first
+            .map(String.init)
+
+        guard let primaryCode, !primaryCode.isEmpty else { return nil }
+        return Language(rawValue: primaryCode)
     }
     // MARK: - Token-to-Segment Grouping
 
@@ -245,14 +265,13 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
     }
 
     private func configureBoostingIfNeeded(prompt: String?) async {
-        guard vocabularyBoostingEnabled, let asrManager else { return }
+        guard vocabularyBoostingEnabled else { return }
 
         if prompt == lastConfiguredPrompt { return }
         lastConfiguredPrompt = prompt
 
         guard let prompt, !prompt.isEmpty else {
-            await asrManager.disableVocabularyBoosting()
-            lastBoostingTermCount = 0
+            clearConfiguredVocabulary()
             return
         }
 
@@ -275,19 +294,84 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
         }
 
         guard !terms.isEmpty else {
-            await asrManager.disableVocabularyBoosting()
-            lastBoostingTermCount = 0
+            clearConfiguredVocabulary()
             return
         }
 
         let cappedTerms = Array(terms.prefix(256))
         let vocab = CustomVocabularyContext(terms: cappedTerms)
+        let blankId = ctcModels.vocabulary.count
+        let spotter = CtcKeywordSpotter(models: ctcModels, blankId: blankId)
+        let ctcModelDir = CtcModels.defaultCacheDirectory(for: ctcModels.variant)
         do {
-            try await asrManager.configureVocabularyBoosting(vocabulary: vocab, ctcModels: ctcModels)
+            let rescorer = try await VocabularyRescorer.create(
+                spotter: spotter,
+                vocabulary: vocab,
+                ctcModelDirectory: ctcModelDir
+            )
+            customVocabulary = vocab
+            ctcSpotter = spotter
+            vocabularyRescorer = rescorer
+            vocabSizeConfig = ContextBiasingConstants.rescorerConfig(forVocabSize: cappedTerms.count)
             lastBoostingTermCount = cappedTerms.count
         } catch {
+            clearConfiguredVocabulary()
             lastBoostingTermCount = 0
             lastConfiguredPrompt = nil
+        }
+    }
+
+    private func applyVocabularyRescoringIfNeeded(
+        to result: ASRResult,
+        audioSamples: [Float]
+    ) async -> ASRResult {
+        guard vocabularyBoostingEnabled,
+              let spotter = ctcSpotter,
+              let rescorer = vocabularyRescorer,
+              let vocab = customVocabulary,
+              let tokenTimings = result.tokenTimings,
+              !tokenTimings.isEmpty
+        else {
+            return result
+        }
+
+        do {
+            let spotResult = try await spotter.spotKeywordsWithLogProbs(
+                audioSamples: audioSamples,
+                customVocabulary: vocab,
+                minScore: nil
+            )
+            guard !spotResult.logProbs.isEmpty else { return result }
+
+            let vocabConfig = vocabSizeConfig
+                ?? ContextBiasingConstants.rescorerConfig(forVocabSize: vocab.terms.count)
+            let rescoreOutput = rescorer.ctcTokenRescore(
+                transcript: result.text,
+                tokenTimings: tokenTimings,
+                logProbs: spotResult.logProbs,
+                frameDuration: spotResult.frameDuration,
+                cbw: vocabConfig.cbw,
+                marginSeconds: 0.5,
+                minSimilarity: max(vocabConfig.minSimilarity, vocab.minSimilarity)
+            )
+
+            guard rescoreOutput.wasModified else { return result }
+
+            let detectedTerms = spotResult.detections.map(\.term.text)
+            let appliedTerms = rescoreOutput.replacements.compactMap { replacement in
+                replacement.shouldReplace ? replacement.replacementWord : nil
+            }
+            Self.logger.info(
+                "Vocabulary rescoring applied \(rescoreOutput.replacements.count) replacement(s)"
+            )
+            return result.withRescoring(
+                text: rescoreOutput.text,
+                detected: detectedTerms,
+                applied: appliedTerms
+            )
+        } catch {
+            Self.logger.warning("Vocabulary rescoring failed: \(error.localizedDescription)")
+            return result
         }
     }
 
@@ -295,11 +379,25 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
         vocabularyBoostingEnabled = enabled
         host?.setUserDefault(enabled, forKey: "vocabularyBoostingEnabled")
         if !enabled {
-            if let manager = asrManager {
-                Task { await manager.disableVocabularyBoosting() }
-            }
-            lastConfiguredPrompt = nil
-            lastBoostingTermCount = 0
+            clearConfiguredVocabulary()
+        }
+    }
+
+    private func clearConfiguredVocabulary() {
+        ctcSpotter = nil
+        customVocabulary = nil
+        vocabularyRescorer = nil
+        vocabSizeConfig = nil
+        lastConfiguredPrompt = nil
+        lastBoostingTermCount = 0
+    }
+
+    private func clearVocabularyBoostingState(resetModelState: Bool = false) {
+        clearConfiguredVocabulary()
+        ctcModels = nil
+        ctcTokenizer = nil
+        if resetModelState {
+            ctcModelState = .notDownloaded
         }
     }
 
@@ -314,7 +412,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
             downloadProgress = 0.7
 
             let manager = AsrManager(config: .default)
-            try await manager.initialize(models: models)
+            try await manager.loadModels(models)
             downloadProgress = 1.0
 
             asrManager = manager
@@ -341,14 +439,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
     @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: true) } }
 
     func unloadModel(clearPersistence: Bool = true) {
-        if let manager = asrManager {
-            Task { await manager.disableVocabularyBoosting() }
-        }
-        ctcModels = nil
-        ctcTokenizer = nil
-        ctcModelState = .notDownloaded
-        lastConfiguredPrompt = nil
-        lastBoostingTermCount = 0
+        clearVocabularyBoostingState(resetModelState: true)
         asrManager = nil
         loadedModelId = nil
         modelState = .notLoaded
