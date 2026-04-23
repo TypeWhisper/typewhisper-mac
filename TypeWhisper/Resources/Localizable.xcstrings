@@ -8428,6 +8428,22 @@
         }
       }
     },
+    "watchFolder.export.subtitleSegmentsRequired" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das gewaehlte Untertitel-Format benoetigt Zeitstempel, aber die Engine hat keine Segmente geliefert."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The selected subtitle format requires timestamps, but the engine returned no segments."
+          }
+        }
+      }
+    },
     "watchFolder.plainText" : {
       "localizations" : {
         "de" : {

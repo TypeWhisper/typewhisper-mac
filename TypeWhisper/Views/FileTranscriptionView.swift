@@ -120,8 +120,10 @@ struct FileTranscriptionView: View {
 
                 Section(String(localized: "watchFolder.settings")) {
                     Picker(String(localized: "watchFolder.outputFormat"), selection: $watchFolder.outputFormat) {
-                        Text("Markdown (.md)").tag("md")
-                        Text(String(localized: "watchFolder.plainText")).tag("txt")
+                        Text(WatchFolderOutputFormat.markdown.displayName).tag(WatchFolderOutputFormat.markdown)
+                        Text(WatchFolderOutputFormat.plainText.displayName).tag(WatchFolderOutputFormat.plainText)
+                        Text(WatchFolderOutputFormat.srt.displayName).tag(WatchFolderOutputFormat.srt)
+                        Text(WatchFolderOutputFormat.vtt.displayName).tag(WatchFolderOutputFormat.vtt)
                     }
 
                     Toggle(String(localized: "watchFolder.deleteSource"), isOn: $watchFolder.deleteSourceFiles)

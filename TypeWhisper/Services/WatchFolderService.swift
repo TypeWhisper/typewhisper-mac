@@ -2,6 +2,108 @@ import Foundation
 import os
 import Combine
 
+enum WatchFolderOutputFormat: String, CaseIterable {
+    case markdown = "md"
+    case plainText = "txt"
+    case srt = "srt"
+    case vtt = "vtt"
+
+    init(storedValue: String?) {
+        self = WatchFolderOutputFormat(rawValue: storedValue ?? "") ?? .markdown
+    }
+
+    var fileExtension: String {
+        rawValue
+    }
+
+    var isSubtitleFormat: Bool {
+        switch self {
+        case .srt, .vtt:
+            true
+        case .markdown, .plainText:
+            false
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .markdown:
+            String(localized: "Markdown (.md)")
+        case .plainText:
+            String(localized: "watchFolder.plainText")
+        case .srt:
+            String(localized: "SRT")
+        case .vtt:
+            String(localized: "VTT")
+        }
+    }
+}
+
+struct WatchFolderExportArtifact {
+    let fileExtension: String
+    let content: String
+}
+
+enum WatchFolderExportBuilder {
+    enum Error: LocalizedError {
+        case missingSubtitleSegments
+
+        var errorDescription: String? {
+            switch self {
+            case .missingSubtitleSegments:
+                String(localized: "watchFolder.export.subtitleSegmentsRequired")
+            }
+        }
+    }
+
+    static func build(
+        format: WatchFolderOutputFormat,
+        result: TranscriptionResult,
+        fileName: String,
+        engineName: String,
+        date: Date
+    ) throws -> WatchFolderExportArtifact {
+        switch format {
+        case .markdown:
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateStyle = .medium
+            dateFormatter.timeStyle = .medium
+            let dateString = dateFormatter.string(from: date)
+
+            let content = """
+            # Transcription: \(fileName)
+            - Date: \(dateString)
+            - Engine: \(engineName)
+
+            \(result.text)
+            """
+
+            return WatchFolderExportArtifact(fileExtension: format.fileExtension, content: content)
+
+        case .plainText:
+            return WatchFolderExportArtifact(fileExtension: format.fileExtension, content: result.text)
+
+        case .srt:
+            guard !result.segments.isEmpty else {
+                throw Error.missingSubtitleSegments
+            }
+            return WatchFolderExportArtifact(
+                fileExtension: format.fileExtension,
+                content: SubtitleExporter.exportSRT(segments: result.segments)
+            )
+
+        case .vtt:
+            guard !result.segments.isEmpty else {
+                throw Error.missingSubtitleSegments
+            }
+            return WatchFolderExportArtifact(
+                fileExtension: format.fileExtension,
+                content: SubtitleExporter.exportVTT(segments: result.segments)
+            )
+        }
+    }
+}
+
 @MainActor
 final class WatchFolderService: ObservableObject {
     @Published var isWatching: Bool = false
@@ -128,7 +230,9 @@ final class WatchFolderService: ObservableObject {
 
         guard !audioFiles.isEmpty else { return }
 
-        let outputFormat = UserDefaults.standard.string(forKey: UserDefaultsKeys.watchFolderOutputFormat) ?? "md"
+        let outputFormat = WatchFolderOutputFormat(
+            storedValue: UserDefaults.standard.string(forKey: UserDefaultsKeys.watchFolderOutputFormat)
+        )
         let deleteSource = UserDefaults.standard.bool(forKey: UserDefaultsKeys.watchFolderDeleteSource)
         let overrides = WatchFolderViewModel.shared.transcriptionOverrides
 
@@ -176,7 +280,7 @@ final class WatchFolderService: ObservableObject {
         url: URL,
         fingerprint: String,
         outputFolder: URL,
-        format: String,
+        format: WatchFolderOutputFormat,
         overrides: WatchFolderViewModel.TranscriptionOverrides,
         deleteSource: Bool
     ) async {
@@ -194,16 +298,7 @@ final class WatchFolderService: ObservableObject {
             )
 
             let outputName = url.deletingPathExtension().lastPathComponent
-            let outputExt = format == "md" ? "md" : "txt"
-            let outputURL = outputFolder
-                .appendingPathComponent(outputName)
-                .appendingPathExtension(outputExt)
-
-            let content: String
-            let dateFormatter = DateFormatter()
-            dateFormatter.dateStyle = .medium
-            dateFormatter.timeStyle = .medium
-            let dateString = dateFormatter.string(from: Date())
+            let exportDate = Date()
             let engineName: String
             if let overrideId = overrides.engineId,
                let engine = PluginManager.shared.transcriptionEngine(for: overrideId) {
@@ -212,19 +307,18 @@ final class WatchFolderService: ObservableObject {
                 engineName = modelManagerService.activeEngineName ?? "Unknown"
             }
 
-            if format == "md" {
-                content = """
-                # Transcription: \(fileName)
-                - Date: \(dateString)
-                - Engine: \(engineName)
+            let artifact = try WatchFolderExportBuilder.build(
+                format: format,
+                result: result,
+                fileName: fileName,
+                engineName: engineName,
+                date: exportDate
+            )
+            let outputURL = outputFolder
+                .appendingPathComponent(outputName)
+                .appendingPathExtension(artifact.fileExtension)
 
-                \(result.text)
-                """
-            } else {
-                content = result.text
-            }
-
-            try content.write(to: outputURL, atomically: true, encoding: .utf8)
+            try artifact.content.write(to: outputURL, atomically: true, encoding: .utf8)
 
             if deleteSource {
                 try? FileManager.default.removeItem(at: url)

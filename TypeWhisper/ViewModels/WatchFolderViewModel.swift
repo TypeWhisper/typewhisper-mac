@@ -15,8 +15,8 @@ final class WatchFolderViewModel: ObservableObject {
 
     @Published var watchFolderPath: String?
     @Published var outputFolderPath: String?
-    @Published var outputFormat: String = "md" {
-        didSet { UserDefaults.standard.set(outputFormat, forKey: UserDefaultsKeys.watchFolderOutputFormat) }
+    @Published var outputFormat: WatchFolderOutputFormat = .markdown {
+        didSet { UserDefaults.standard.set(outputFormat.rawValue, forKey: UserDefaultsKeys.watchFolderOutputFormat) }
     }
     @Published var deleteSourceFiles: Bool = false {
         didSet { UserDefaults.standard.set(deleteSourceFiles, forKey: UserDefaultsKeys.watchFolderDeleteSource) }
@@ -154,7 +154,9 @@ final class WatchFolderViewModel: ObservableObject {
     // MARK: - Private
 
     private func loadSettings() {
-        outputFormat = UserDefaults.standard.string(forKey: UserDefaultsKeys.watchFolderOutputFormat) ?? "md"
+        outputFormat = WatchFolderOutputFormat(
+            storedValue: UserDefaults.standard.string(forKey: UserDefaultsKeys.watchFolderOutputFormat)
+        )
         deleteSourceFiles = UserDefaults.standard.bool(forKey: UserDefaultsKeys.watchFolderDeleteSource)
         autoStartOnLaunch = UserDefaults.standard.bool(forKey: UserDefaultsKeys.watchFolderAutoStart)
         languageSelection = LanguageSelection(
