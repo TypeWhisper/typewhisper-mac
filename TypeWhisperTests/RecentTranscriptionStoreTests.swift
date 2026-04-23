@@ -83,6 +83,43 @@ final class RecentTranscriptionStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testLatestEntryMatchesFirstMergedEntry() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
+        let store = RecentTranscriptionStore()
+        let now = Date()
+
+        historyService.addRecord(
+            id: UUID(),
+            rawText: "Older history",
+            finalText: "Older history",
+            appName: "Notes",
+            appBundleIdentifier: "com.apple.Notes",
+            durationSeconds: 1,
+            language: "en",
+            engineUsed: "mock"
+        )
+        let historyRecord = try XCTUnwrap(historyService.records.first)
+        historyRecord.timestamp = now.addingTimeInterval(-120)
+        historyService.updateRecord(historyRecord, finalText: historyRecord.finalText)
+
+        store.recordTranscription(
+            id: UUID(),
+            finalText: "Newest session",
+            timestamp: now.addingTimeInterval(-15),
+            appName: "Mail",
+            appBundleIdentifier: "com.apple.mail"
+        )
+
+        let mergedFirst = try XCTUnwrap(store.mergedEntries(historyRecords: historyService.records).first)
+        let latest = try XCTUnwrap(store.latestEntry(historyRecords: historyService.records))
+
+        XCTAssertEqual(latest, mergedFirst)
+    }
+
+    @MainActor
     func testSessionBufferIsLimitedToTwentyEntries() {
         let store = RecentTranscriptionStore()
 

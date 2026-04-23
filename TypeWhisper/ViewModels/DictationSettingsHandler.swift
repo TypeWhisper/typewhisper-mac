@@ -55,12 +55,21 @@ final class DictationSettingsHandler {
         hotkeyService.isHotkeyAssigned(hotkey, excluding: excluding)
     }
 
-    static func loadHotkeyLabel(for slotType: HotkeySlotType) -> String {
-        if let data = UserDefaults.standard.data(forKey: slotType.defaultsKey),
-           let hotkey = try? JSONDecoder().decode(UnifiedHotkey.self, from: data) {
-            return HotkeyService.displayName(for: hotkey)
+    static func loadHotkey(for slotType: HotkeySlotType) -> UnifiedHotkey? {
+        guard let data = UserDefaults.standard.data(forKey: slotType.defaultsKey) else {
+            return nil
         }
-        return ""
+        return try? JSONDecoder().decode(UnifiedHotkey.self, from: data)
+    }
+
+    static func loadHotkeyLabel(for slotType: HotkeySlotType) -> String {
+        guard let hotkey = loadHotkey(for: slotType) else { return "" }
+        return HotkeyService.displayName(for: hotkey)
+    }
+
+    static func loadMenuShortcutDescriptor(for slotType: HotkeySlotType) -> HotkeyService.MenuShortcutDescriptor? {
+        guard let hotkey = loadHotkey(for: slotType) else { return nil }
+        return HotkeyService.menuShortcutDescriptor(for: hotkey)
     }
 
     func registerInitialTriggerHotkeys() {

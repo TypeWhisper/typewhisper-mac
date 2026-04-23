@@ -106,6 +106,7 @@ final class DictationViewModel: ObservableObject {
     var toggleHotkeyLabel: String { Self.loadHotkeyLabel(for: .toggle) }
     var promptPaletteHotkeyLabel: String { Self.loadHotkeyLabel(for: .promptPalette) }
     var recentTranscriptionsHotkeyLabel: String { Self.loadHotkeyLabel(for: .recentTranscriptions) }
+    var copyLastTranscriptionHotkeyLabel: String { Self.loadHotkeyLabel(for: .copyLastTranscription) }
     @Published var activeRuleName: String?
     @Published var activeRuleReasonLabel: String?
     @Published var activeRuleExplanation: String?
@@ -184,6 +185,7 @@ final class DictationViewModel: ObservableObject {
     @Published private(set) var recordingCancelWarningActive: Bool = false
     private var urlResolutionTask: Task<Void, Never>?
     private var metadataCaptureTask: Task<Void, Never>?
+    var pasteboardProvider: () -> NSPasteboard = { .general }
     /// Snapshot of the streaming params used in the most recent `streamingHandler.start(...)`.
     /// Used to detect when an on-the-fly rule refinement (e.g. browser URL resolution)
     /// changes the effective engine/language selection/task/cloud-model so the live
@@ -1623,6 +1625,20 @@ final class DictationViewModel: ObservableObject {
     }
 
     // MARK: - Workflow Palette
+
+    var canCopyLastTranscription: Bool {
+        recentTranscriptionStore.latestEntry(historyRecords: historyService.records) != nil
+    }
+
+    func copyLastTranscriptionToClipboard() {
+        guard let entry = recentTranscriptionStore.latestEntry(historyRecords: historyService.records) else { return }
+        let text = entry.finalText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+
+        let pasteboard = pasteboardProvider()
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
+    }
 
     func readBackLastTranscription() {
         guard let text = lastTranscribedText else { return }

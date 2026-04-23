@@ -8,15 +8,26 @@ private final class MenuBarState: ObservableObject {
     @Published var statusText: String
     @Published var statusImage: String
     @Published var isModelReady: Bool
+    @Published var hasRecentTranscriptions: Bool
+    @Published var canCopyLastTranscription: Bool
+    @Published var recentTranscriptionsMenuShortcut: HotkeyService.MenuShortcutDescriptor?
+    @Published var copyLastTranscriptionMenuShortcut: HotkeyService.MenuShortcutDescriptor?
 
     private var cancellables = Set<AnyCancellable>()
 
     init() {
         let dictation = DictationViewModel.shared
         let modelManager = ServiceContainer.shared.modelManagerService
+        let historyService = ServiceContainer.shared.historyService
+        let recentTranscriptionStore = ServiceContainer.shared.recentTranscriptionStore
 
         // Set initial values immediately
         self.isModelReady = modelManager.isModelReady
+        let hasRecentTranscriptions = recentTranscriptionStore.latestEntry(historyRecords: historyService.records) != nil
+        self.hasRecentTranscriptions = hasRecentTranscriptions
+        self.canCopyLastTranscription = hasRecentTranscriptions
+        self.recentTranscriptionsMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .recentTranscriptions)
+        self.copyLastTranscriptionMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .copyLastTranscription)
         if let name = modelManager.activeModelName, modelManager.isModelReady {
             self.statusText = String(localized: "\(name) ready")
             self.statusImage = "checkmark.circle.fill"
@@ -47,6 +58,27 @@ private final class MenuBarState: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+
+        recentTranscriptionStore.$sessionEntries
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.refreshCopyAvailability()
+            }
+            .store(in: &cancellables)
+
+        historyService.$records
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.refreshCopyAvailability()
+            }
+            .store(in: &cancellables)
+
+        dictation.$hotkeyLabelsVersion
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.refreshMenuShortcuts()
+            }
+            .store(in: &cancellables)
     }
 
     private func update(state: DictationViewModel.State) {
@@ -68,6 +100,19 @@ private final class MenuBarState: ObservableObject {
             }
         }
         isModelReady = modelManager.isModelReady
+    }
+
+    private func refreshCopyAvailability() {
+        let historyService = ServiceContainer.shared.historyService
+        let recentTranscriptionStore = ServiceContainer.shared.recentTranscriptionStore
+        let hasRecentTranscriptions = recentTranscriptionStore.latestEntry(historyRecords: historyService.records) != nil
+        self.hasRecentTranscriptions = hasRecentTranscriptions
+        canCopyLastTranscription = hasRecentTranscriptions
+    }
+
+    private func refreshMenuShortcuts() {
+        recentTranscriptionsMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .recentTranscriptions)
+        copyLastTranscriptionMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .copyLastTranscription)
     }
 }
 
@@ -113,6 +158,22 @@ struct MenuBarView: View {
             .disabled(!status.isModelReady)
 
             Button {
+                DictationViewModel.shared.triggerRecentTranscriptionsPalette()
+            } label: {
+                Label(String(localized: "Recent Transcriptions"), systemImage: "clock.arrow.circlepath")
+            }
+            .keyboardShortcut(keyboardShortcut(from: status.recentTranscriptionsMenuShortcut))
+            .disabled(!status.hasRecentTranscriptions)
+
+            Button {
+                DictationViewModel.shared.copyLastTranscriptionToClipboard()
+            } label: {
+                Label(String(localized: "Copy Last Transcription"), systemImage: "doc.on.doc")
+            }
+            .keyboardShortcut(keyboardShortcut(from: status.copyLastTranscriptionMenuShortcut))
+            .disabled(!status.canCopyLastTranscription)
+
+            Button {
                 DictationViewModel.shared.readBackLastTranscription()
             } label: {
                 Label(String(localized: "Read Back Last Transcription"), systemImage: "speaker.wave.2")
@@ -140,5 +201,25 @@ struct MenuBarView: View {
 
     private func openManagedWindow(_ id: String) {
         ManagedAppWindowOpener.shared.open(id: id)
+    }
+
+    private func keyboardShortcut(
+        from descriptor: HotkeyService.MenuShortcutDescriptor?
+    ) -> KeyboardShortcut? {
+        guard let descriptor else { return nil }
+        return KeyboardShortcut(
+            KeyEquivalent(descriptor.keyEquivalent),
+            modifiers: eventModifiers(from: descriptor.modifiers)
+        )
+    }
+
+    private func eventModifiers(from flags: NSEvent.ModifierFlags) -> EventModifiers {
+        var modifiers: EventModifiers = []
+        if flags.contains(.command) { modifiers.insert(.command) }
+        if flags.contains(.option) { modifiers.insert(.option) }
+        if flags.contains(.control) { modifiers.insert(.control) }
+        if flags.contains(.shift) { modifiers.insert(.shift) }
+        if flags.contains(.function) { modifiers.insert(EventModifiers(rawValue: 1 << 23)) }
+        return modifiers
     }
 }
