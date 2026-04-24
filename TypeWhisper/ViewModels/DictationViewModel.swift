@@ -1424,6 +1424,11 @@ final class DictationViewModel: ObservableObject {
                 "This workflow applies because \(appDescriptor) was detected.",
                 de: "Dieser Workflow greift, weil \(appDescriptor) erkannt wurde."
             )
+        case .globalFallback:
+            base = localizedAppText(
+                "This workflow applies because no more specific workflow matched.",
+                de: "Dieser Workflow greift, weil kein spezifischerer Workflow gepasst hat."
+            )
         case .manualOverride:
             base = localizedAppText(
                 "This workflow was manually triggered via its keyboard shortcut.",

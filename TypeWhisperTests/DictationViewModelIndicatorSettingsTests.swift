@@ -261,6 +261,30 @@ final class DockIconVisibilityTests: XCTestCase {
     }
 }
 
+final class MenuBarGroupingTests: XCTestCase {
+    func testMenuBarSectionsUseExpectedOrderAndLocalizedKeys() {
+        XCTAssertEqual(
+            MenuBarMenuSection.allCases.map(\.titleLocalizationKey),
+            ["General", "Transcription", "Updates"]
+        )
+    }
+
+    func testMenuBarSectionsContainExpectedItems() {
+        XCTAssertEqual(
+            MenuBarMenuSection.general.items,
+            [.settings, .history, .errorLog]
+        )
+        XCTAssertEqual(
+            MenuBarMenuSection.transcription.items,
+            [.transcribeFile, .recentTranscriptions, .copyLastTranscription, .readBackLastTranscription]
+        )
+        XCTAssertEqual(
+            MenuBarMenuSection.updates.items,
+            [.checkForUpdates]
+        )
+    }
+}
+
 final class LanguageLocalizationTests: XCTestCase {
     private var originalPreferredAppLanguage: String?
 
