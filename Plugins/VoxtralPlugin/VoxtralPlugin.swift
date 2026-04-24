@@ -45,7 +45,7 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         self.host = host
         _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
             ?? Self.availableModels.first?.id
-        _hfToken = host.loadSecret(key: "hf-token")
+        _hfToken = PluginHuggingFaceTokenHelper.loadToken(from: host)
 
         Task { await restoreLoadedModel(allowDownloads: false) }
     }
@@ -165,9 +165,7 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
             try? FileManager.default.createDirectory(at: modelsDir, withIntermediateDirectories: true)
 
             let cache = HubCache(cacheDirectory: modelsDir)
-            if let token = _hfToken, !token.isEmpty {
-                setenv("HF_TOKEN", token, 1)
-            }
+            PluginHuggingFaceTokenHelper.applyTokenToEnvironment(_hfToken)
             guard let repoID = Repo.ID(rawValue: modelDef.repoId) else {
                 throw NSError(
                     domain: "VoxtralPlugin", code: 1,
@@ -248,46 +246,19 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     }
 
     func setHuggingFaceToken(_ token: String) {
-        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
-        _hfToken = trimmed.isEmpty ? nil : trimmed
-        try? host?.storeSecret(key: "hf-token", value: trimmed)
+        _hfToken = PluginHuggingFaceTokenHelper.saveToken(token, to: host)
     }
 
     func clearHuggingFaceToken() {
         _hfToken = nil
-        try? host?.storeSecret(key: "hf-token", value: "")
+        PluginHuggingFaceTokenHelper.clearToken(from: host)
     }
 
     func validateHuggingFaceToken(
         _ token: String,
         dataFetcher: @escaping @Sendable (URLRequest) async throws -> (Data, URLResponse) = PluginHTTPClient.data
     ) async -> Bool {
-        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty,
-              let url = URL(string: "https://huggingface.co/api/whoami-v2") else {
-            return false
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue("Bearer \(trimmed)", forHTTPHeaderField: "Authorization")
-        request.timeoutInterval = 15
-
-        do {
-            let (data, response) = try await dataFetcher(request)
-            guard let httpResponse = response as? HTTPURLResponse,
-                  httpResponse.statusCode == 200 else {
-                return false
-            }
-
-            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                return false
-            }
-
-            return json["name"] != nil || json["type"] != nil || json["auth"] != nil
-        } catch {
-            return false
-        }
+        await PluginHuggingFaceTokenHelper.validateToken(token, dataFetcher: dataFetcher)
     }
 
     // MARK: - Model Definitions
