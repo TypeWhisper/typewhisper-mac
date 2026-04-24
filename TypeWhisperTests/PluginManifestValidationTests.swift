@@ -366,6 +366,85 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         XCTAssertFalse(isValid)
     }
 
+    func testParakeetActivationLoadsStoredHuggingFaceToken() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let host = MockHostServices(
+            pluginDataDirectory: appSupportDirectory,
+            secrets: ["hf-token": "hf_parakeet_saved"]
+        )
+        let plugin = ParakeetPlugin()
+
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.huggingFaceToken, "hf_parakeet_saved")
+    }
+
+    func testParakeetStoresAndClearsHuggingFaceTokenSecret() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let host = MockHostServices(pluginDataDirectory: appSupportDirectory)
+        let plugin = ParakeetPlugin()
+        plugin.activate(host: host)
+
+        plugin.setHuggingFaceToken("  hf_parakeet_saved  ")
+        XCTAssertEqual(plugin.huggingFaceToken, "hf_parakeet_saved")
+        XCTAssertEqual(host.loadSecret(key: "hf-token"), "hf_parakeet_saved")
+
+        plugin.clearHuggingFaceToken()
+        XCTAssertNil(plugin.huggingFaceToken)
+        XCTAssertEqual(host.loadSecret(key: "hf-token"), "")
+    }
+
+    func testParakeetValidatesHuggingFaceTokenAgainstWhoAmIEndpoint() async throws {
+        let plugin = ParakeetPlugin()
+        let requestRecorder = RequestRecorder()
+
+        let isValid = await plugin.validateHuggingFaceToken("hf_parakeet_test") { request in
+            await requestRecorder.set(request)
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            let data = Data(#"{"name":"typewhisper","type":"user"}"#.utf8)
+            return (data, response)
+        }
+
+        XCTAssertTrue(isValid)
+        let maybeRequest = await requestRecorder.get()
+        let request = try XCTUnwrap(maybeRequest)
+        XCTAssertEqual(request.url?.absoluteString, "https://huggingface.co/api/whoami-v2")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer hf_parakeet_test")
+        XCTAssertEqual(request.httpMethod, "GET")
+    }
+
+    func testParakeetAppliesStoredHuggingFaceTokenToEnvironment() throws {
+        let originalToken = getenv("HF_TOKEN").map { String(cString: $0) }
+        defer {
+            if let originalToken {
+                setenv("HF_TOKEN", originalToken, 1)
+            } else {
+                unsetenv("HF_TOKEN")
+            }
+        }
+
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let host = MockHostServices(pluginDataDirectory: appSupportDirectory)
+        let plugin = ParakeetPlugin()
+        plugin.activate(host: host)
+        plugin.setHuggingFaceToken("hf_env_parakeet")
+
+        plugin.applyHuggingFaceTokenToEnvironment()
+
+        XCTAssertEqual(getenv("HF_TOKEN").map { String(cString: $0) }, "hf_env_parakeet")
+    }
+
     func testWhisperKitValidatesHuggingFaceTokenAgainstWhoAmIEndpoint() async throws {
         let plugin = WhisperKitPlugin()
         let requestRecorder = RequestRecorder()

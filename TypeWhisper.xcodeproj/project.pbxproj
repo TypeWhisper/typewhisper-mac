@@ -48,6 +48,8 @@
 		C2300000000000000000000C /* MLXAudioCore in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000013 /* MLXAudioCore */; };
 		C2300000000000000000000D /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000015 /* WhisperKit */; };
 		C2300000000000000000000E /* WhisperKitPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000154 /* WhisperKitPlugin.swift */; };
+		C23000000000000000000011 /* ParakeetPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000157 /* ParakeetPlugin.swift */; };
+		C23000000000000000000012 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000017 /* FluidAudio */; };
 		C2300000000000000000000F /* SpeechAnalyzerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000160 /* SpeechAnalyzerPlugin.swift */; };
 		C23000000000000000000010 /* DeepgramPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000200 /* DeepgramPlugin.swift */; };
 		2F4D6A8B0C1E3F5A7B9D2C4E /* DictationViewModelIndicatorSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F4D6A8B0C1E3F5A7B9D2C4F /* DictationViewModelIndicatorSettingsTests.swift */; };
@@ -733,6 +735,7 @@
 				C2300000000000000000000B /* MLXAudioSTT in Frameworks */,
 				C2300000000000000000000C /* MLXAudioCore in Frameworks */,
 				C2300000000000000000000D /* WhisperKit in Frameworks */,
+				C23000000000000000000012 /* FluidAudio in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1813,6 +1816,7 @@
 				PP00000000000000000012 /* MLXAudioSTT */,
 				PP00000000000000000013 /* MLXAudioCore */,
 				PP00000000000000000015 /* WhisperKit */,
+				PP00000000000000000017 /* FluidAudio */,
 			);
 			productName = TypeWhisperTests;
 			productReference = E6F8E5940EF4832A7B8D735D /* TypeWhisperTests.xctest */;
@@ -2958,6 +2962,7 @@
 				C23000000000000000000009 /* VoxtralPlugin.swift in Sources */,
 				C2300000000000000000000A /* GranitePlugin.swift in Sources */,
 				C2300000000000000000000E /* WhisperKitPlugin.swift in Sources */,
+				C23000000000000000000011 /* ParakeetPlugin.swift in Sources */,
 				C2300000000000000000000F /* SpeechAnalyzerPlugin.swift in Sources */,
 				C23000000000000000000010 /* DeepgramPlugin.swift in Sources */,
 				C23000000000000000000003 /* Gemma4Plugin.swift in Sources */,

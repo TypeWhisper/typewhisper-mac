@@ -20,6 +20,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
     fileprivate var modelState: ParakeetModelState = .notLoaded
     fileprivate var downloadProgress: Double = 0
     fileprivate var selectedVersion: ParakeetVersion = .v3
+    fileprivate var _hfToken: String?
 
     // Vocabulary Boosting
     fileprivate var ctcModels: CtcModels?
@@ -39,6 +40,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
 
     func activate(host: HostServices) {
         self.host = host
+        _hfToken = host.loadSecret(key: "hf-token")
         vocabularyBoostingEnabled = host.userDefault(forKey: "vocabularyBoostingEnabled") as? Bool ?? false
         if let versionString = host.userDefault(forKey: "selectedVersion") as? String,
            let version = ParakeetVersion(rawValue: versionString) {
@@ -52,6 +54,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
         asrManager = nil
         loadedModelId = nil
         modelState = .notLoaded
+        _hfToken = nil
         host = nil
     }
 
@@ -253,6 +256,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
     fileprivate func downloadCtcModel() async {
         ctcModelState = .downloading
         do {
+            applyHuggingFaceTokenToEnvironment()
             let models = try await CtcModels.downloadAndLoad(variant: .ctc110m)
             let cacheDir = CtcModels.defaultCacheDirectory(for: .ctc110m)
             let tokenizer = try await CtcTokenizer.load(from: cacheDir)
@@ -408,6 +412,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
         downloadProgress = 0.1
 
         do {
+            applyHuggingFaceTokenToEnvironment()
             let models = try await AsrModels.downloadAndLoad(version: selectedVersion.asrModelVersion)
             downloadProgress = 0.7
 
@@ -494,6 +499,71 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
 
     var settingsView: AnyView? {
         AnyView(ParakeetSettingsView(plugin: self))
+    }
+
+    var huggingFaceToken: String? { _hfToken }
+
+    func setHuggingFaceToken(_ token: String) {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        _hfToken = trimmed.isEmpty ? nil : trimmed
+        try? host?.storeSecret(key: "hf-token", value: trimmed)
+    }
+
+    func clearHuggingFaceToken() {
+        _hfToken = nil
+        try? host?.storeSecret(key: "hf-token", value: "")
+    }
+
+    func validateHuggingFaceToken(
+        _ token: String,
+        dataFetcher: @escaping @Sendable (URLRequest) async throws -> (Data, URLResponse) = PluginHTTPClient.data
+    ) async -> Bool {
+        let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let url = URL(string: "https://huggingface.co/api/whoami-v2") else {
+            return false
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(trimmed)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 15
+
+        do {
+            let (data, response) = try await dataFetcher(request)
+            guard let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200 else {
+                return false
+            }
+
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return false
+            }
+
+            return json["name"] != nil || json["type"] != nil || json["auth"] != nil
+        } catch {
+            return false
+        }
+    }
+
+    func applyHuggingFaceTokenToEnvironment() {
+        let envKeys = [
+            "HF_TOKEN",
+            "HUGGING_FACE_HUB_TOKEN",
+            "HUGGINGFACEHUB_API_TOKEN",
+        ]
+
+        guard let token = _hfToken?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !token.isEmpty else {
+            for key in envKeys {
+                unsetenv(key)
+            }
+            return
+        }
+
+        for key in envKeys {
+            setenv(key, token, 1)
+        }
     }
 }
 
@@ -588,11 +658,27 @@ private struct ParakeetSettingsView: View {
     @State private var modelState: ParakeetModelState = .notLoaded
     @State private var downloadProgress: Double = 0
     @State private var isPolling = false
+    @State private var hfTokenInput = ""
+    @State private var showHfToken = false
+    @State private var isValidatingToken = false
+    @State private var tokenValidationResult: Bool?
     @State private var boostingEnabled: Bool = false
     @State private var ctcModelState: CtcModelState = .notDownloaded
     @State private var boostingTermCount: Int = 0
 
     private let pollTimer = Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()
+
+    private var trimmedHfTokenInput: String {
+        hfTokenInput.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var storedHfToken: String {
+        plugin._hfToken?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    private var hasStoredHfToken: Bool {
+        !storedHfToken.isEmpty
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -602,6 +688,75 @@ private struct ParakeetSettingsView: View {
             Text(selectedVersion.settingsDescription(bundle: bundle))
                 .font(.callout)
                 .foregroundStyle(.secondary)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Hugging Face Token", bundle: bundle)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+
+                Text("Optional. Increases download rate limits. Free at huggingface.co/settings/tokens", bundle: bundle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                HStack {
+                    if showHfToken {
+                        TextField("hf_...", text: $hfTokenInput)
+                            .textFieldStyle(.roundedBorder)
+                    } else {
+                        SecureField("hf_...", text: $hfTokenInput)
+                            .textFieldStyle(.roundedBorder)
+                    }
+
+                    Button {
+                        showHfToken.toggle()
+                    } label: {
+                        Image(systemName: showHfToken ? "eye.slash" : "eye")
+                    }
+                    .buttonStyle(.borderless)
+
+                    if hasStoredHfToken {
+                        Button(String(localized: "Remove", bundle: bundle)) {
+                            hfTokenInput = ""
+                            tokenValidationResult = nil
+                            isValidatingToken = false
+                            plugin.clearHuggingFaceToken()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+
+                    Button(String(localized: "Save", bundle: bundle)) {
+                        validateAndSaveHuggingFaceToken()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(trimmedHfTokenInput.isEmpty || isValidatingToken)
+                }
+
+                if isValidatingToken {
+                    HStack(spacing: 4) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Validating token...", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else if let tokenValidationResult {
+                    HStack(spacing: 4) {
+                        Image(systemName: tokenValidationResult ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .foregroundStyle(tokenValidationResult ? .green : .red)
+                        Text(
+                            tokenValidationResult
+                                ? String(localized: "Valid Hugging Face Token", bundle: bundle)
+                                : String(localized: "Invalid Hugging Face Token", bundle: bundle)
+                        )
+                        .font(.caption)
+                        .foregroundStyle(tokenValidationResult ? .green : .red)
+                    }
+                }
+            }
 
             Divider()
 
@@ -711,6 +866,9 @@ private struct ParakeetSettingsView: View {
             boostingEnabled = plugin.vocabularyBoostingEnabled
             ctcModelState = plugin.ctcModelState
             boostingTermCount = plugin.lastBoostingTermCount
+            if let token = plugin._hfToken, !token.isEmpty {
+                hfTokenInput = token
+            }
             if case .downloading = plugin.modelState { isPolling = true }
         }
         .onChange(of: selectedVersion) { _, newVersion in
@@ -742,6 +900,12 @@ private struct ParakeetSettingsView: View {
             boostingTermCount = plugin.lastBoostingTermCount
             if case .ready = pluginState { isPolling = false }
             else if case .error = pluginState { isPolling = false }
+        }
+        .onChange(of: hfTokenInput) { _, newValue in
+            let trimmedValue = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedValue != storedHfToken {
+                tokenValidationResult = nil
+            }
         }
     }
 
@@ -825,6 +989,26 @@ private struct ParakeetSettingsView: View {
                         .buttonStyle(.bordered)
                         .controlSize(.mini)
                     }
+                }
+            }
+        }
+    }
+
+    private func validateAndSaveHuggingFaceToken() {
+        let trimmedToken = trimmedHfTokenInput
+        guard !trimmedToken.isEmpty else { return }
+
+        isValidatingToken = true
+        tokenValidationResult = nil
+
+        Task {
+            let isValid = await plugin.validateHuggingFaceToken(trimmedToken)
+            await MainActor.run {
+                isValidatingToken = false
+                tokenValidationResult = isValid
+                if isValid {
+                    plugin.setHuggingFaceToken(trimmedToken)
+                    hfTokenInput = trimmedToken
                 }
             }
         }
