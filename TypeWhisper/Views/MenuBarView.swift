@@ -116,6 +116,49 @@ private final class MenuBarState: ObservableObject {
     }
 }
 
+enum MenuBarMenuItem: Hashable {
+    case settings
+    case history
+    case errorLog
+    case transcribeFile
+    case recentTranscriptions
+    case copyLastTranscription
+    case readBackLastTranscription
+    case checkForUpdates
+}
+
+enum MenuBarMenuSection: String, CaseIterable, Hashable {
+    case general = "General"
+    case transcription = "Transcription"
+    case updates = "Updates"
+
+    var titleLocalizationKey: String {
+        rawValue
+    }
+
+    var titleResource: LocalizedStringResource {
+        switch self {
+        case .general:
+            "General"
+        case .transcription:
+            "Transcription"
+        case .updates:
+            "Updates"
+        }
+    }
+
+    var items: [MenuBarMenuItem] {
+        switch self {
+        case .general:
+            [.settings, .history, .errorLog]
+        case .transcription:
+            [.transcribeFile, .recentTranscriptions, .copyLastTranscription, .readBackLastTranscription]
+        case .updates:
+            [.checkForUpdates]
+        }
+    }
+}
+
 struct MenuBarView: View {
     @Environment(\.openWindow) private var openWindow
     @StateObject private var status = MenuBarState()
@@ -128,63 +171,13 @@ struct MenuBarView: View {
 
             Divider()
 
-            Button {
-                openManagedWindow("settings")
-            } label: {
-                Label(String(localized: "Settings..."), systemImage: "gear")
-            }
-            .keyboardShortcut(",")
-
-            Button {
-                openManagedWindow("history")
-            } label: {
-                Label(String(localized: "History"), systemImage: "clock.arrow.circlepath")
-            }
-
-            Button {
-                openManagedWindow("errors")
-            } label: {
-                Label(String(localized: "Error Log"), systemImage: "exclamationmark.triangle")
-            }
-
-            Button {
-                openManagedWindow("settings")
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    FileTranscriptionViewModel.shared.showFilePickerFromMenu = true
+            ForEach(MenuBarMenuSection.allCases, id: \.self) { section in
+                Section(String(localized: section.titleResource)) {
+                    ForEach(section.items, id: \.self) { item in
+                        menuItem(for: item)
+                    }
                 }
-            } label: {
-                Label(String(localized: "Transcribe File..."), systemImage: "doc.text")
             }
-            .disabled(!status.isModelReady)
-
-            Button {
-                DictationViewModel.shared.triggerRecentTranscriptionsPalette()
-            } label: {
-                Label(String(localized: "Recent Transcriptions"), systemImage: "clock.arrow.circlepath")
-            }
-            .keyboardShortcut(keyboardShortcut(from: status.recentTranscriptionsMenuShortcut))
-            .disabled(!status.hasRecentTranscriptions)
-
-            Button {
-                DictationViewModel.shared.copyLastTranscriptionToClipboard()
-            } label: {
-                Label(String(localized: "Copy Last Transcription"), systemImage: "doc.on.doc")
-            }
-            .keyboardShortcut(keyboardShortcut(from: status.copyLastTranscriptionMenuShortcut))
-            .disabled(!status.canCopyLastTranscription)
-
-            Button {
-                DictationViewModel.shared.readBackLastTranscription()
-            } label: {
-                Label(String(localized: "Read Back Last Transcription"), systemImage: "speaker.wave.2")
-            }
-            .keyboardShortcut("r", modifiers: [.command, .shift])
-            .disabled(DictationViewModel.shared.lastTranscribedText == nil)
-
-            Button(String(localized: "Check for Updates...")) {
-                UpdateChecker.shared?.checkForUpdates()
-            }
-            .disabled(UpdateChecker.shared?.canCheckForUpdates() != true)
 
             Divider()
 
@@ -201,6 +194,77 @@ struct MenuBarView: View {
 
     private func openManagedWindow(_ id: String) {
         ManagedAppWindowOpener.shared.open(id: id)
+    }
+
+    @ViewBuilder
+    private func menuItem(for item: MenuBarMenuItem) -> some View {
+        switch item {
+        case .settings:
+            Button {
+                openManagedWindow("settings")
+            } label: {
+                Label(String(localized: "Settings..."), systemImage: "gear")
+            }
+            .keyboardShortcut(",")
+
+        case .history:
+            Button {
+                openManagedWindow("history")
+            } label: {
+                Label(String(localized: "History"), systemImage: "clock.arrow.circlepath")
+            }
+
+        case .errorLog:
+            Button {
+                openManagedWindow("errors")
+            } label: {
+                Label(String(localized: "Error Log"), systemImage: "exclamationmark.triangle")
+            }
+
+        case .transcribeFile:
+            Button {
+                openManagedWindow("settings")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    FileTranscriptionViewModel.shared.showFilePickerFromMenu = true
+                }
+            } label: {
+                Label(String(localized: "Transcribe File..."), systemImage: "doc.text")
+            }
+            .disabled(!status.isModelReady)
+
+        case .recentTranscriptions:
+            Button {
+                DictationViewModel.shared.triggerRecentTranscriptionsPalette()
+            } label: {
+                Label(String(localized: "Recent Transcriptions"), systemImage: "clock.arrow.circlepath")
+            }
+            .keyboardShortcut(keyboardShortcut(from: status.recentTranscriptionsMenuShortcut))
+            .disabled(!status.hasRecentTranscriptions)
+
+        case .copyLastTranscription:
+            Button {
+                DictationViewModel.shared.copyLastTranscriptionToClipboard()
+            } label: {
+                Label(String(localized: "Copy Last Transcription"), systemImage: "doc.on.doc")
+            }
+            .keyboardShortcut(keyboardShortcut(from: status.copyLastTranscriptionMenuShortcut))
+            .disabled(!status.canCopyLastTranscription)
+
+        case .readBackLastTranscription:
+            Button {
+                DictationViewModel.shared.readBackLastTranscription()
+            } label: {
+                Label(String(localized: "Read Back Last Transcription"), systemImage: "speaker.wave.2")
+            }
+            .keyboardShortcut("r", modifiers: [.command, .shift])
+            .disabled(DictationViewModel.shared.lastTranscribedText == nil)
+
+        case .checkForUpdates:
+            Button(String(localized: "Check for Updates...")) {
+                UpdateChecker.shared?.checkForUpdates()
+            }
+            .disabled(UpdateChecker.shared?.canCheckForUpdates() != true)
+        }
     }
 
     private func keyboardShortcut(
