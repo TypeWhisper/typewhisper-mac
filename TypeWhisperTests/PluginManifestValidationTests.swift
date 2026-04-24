@@ -423,12 +423,23 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
     }
 
     func testParakeetAppliesStoredHuggingFaceTokenToEnvironment() throws {
-        let originalToken = getenv("HF_TOKEN").map { String(cString: $0) }
+        let envKeys = [
+            "HF_TOKEN",
+            "HUGGING_FACE_HUB_TOKEN",
+            "HUGGINGFACEHUB_API_TOKEN",
+        ]
+        let originalTokens = Dictionary(
+            uniqueKeysWithValues: envKeys.map { key in
+                (key, getenv(key).map { String(cString: $0) })
+            }
+        )
         defer {
-            if let originalToken {
-                setenv("HF_TOKEN", originalToken, 1)
-            } else {
-                unsetenv("HF_TOKEN")
+            for key in envKeys {
+                if let originalToken = originalTokens[key] ?? nil {
+                    setenv(key, originalToken, 1)
+                } else {
+                    unsetenv(key)
+                }
             }
         }
 
@@ -442,7 +453,9 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
 
         plugin.applyHuggingFaceTokenToEnvironment()
 
-        XCTAssertEqual(getenv("HF_TOKEN").map { String(cString: $0) }, "hf_env_parakeet")
+        for key in envKeys {
+            XCTAssertEqual(getenv(key).map { String(cString: $0) }, "hf_env_parakeet")
+        }
     }
 
     func testWhisperKitValidatesHuggingFaceTokenAgainstWhoAmIEndpoint() async throws {
