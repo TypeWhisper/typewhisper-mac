@@ -59,6 +59,20 @@ final class APIRouterAndHandlersTests: XCTestCase {
         }
     }
 
+    @MainActor
+    private final class ProcessActivityManagerSpy: ProcessActivityManaging {
+        private(set) var reasons: [String] = []
+
+        func withActivity<T>(
+            options: ProcessInfo.ActivityOptions,
+            reason: String,
+            operation: () async throws -> T
+        ) async rethrows -> T {
+            reasons.append(reason)
+            return try await operation()
+        }
+    }
+
     @objc(APIRouterMockLegacyLLMProviderPlugin)
     private final class MockLegacyLLMProviderPlugin: NSObject, LLMProviderPlugin, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.legacy-llm" }
@@ -2366,7 +2380,91 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
-    func testPromptProcessingRequiresForegroundActivationOnlyForLocalProviders() {
+    func testPromptProcessingUsesHighPriorityActivityForLocalProviders() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockLLMProviderPlugin()
+        plugin.configuredProviderName = "Gemma 4 (MLX)"
+        plugin.requiresExternalCredentials = false
+
+        let manifest = PluginManifest(
+            id: "com.typewhisper.mock.local-llm",
+            name: "Mock Local LLM",
+            version: "1.0.0",
+            principalClass: "APIRouterMockLLMProviderPlugin"
+        )
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: manifest,
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let service = PromptProcessingService()
+        let activityManager = ProcessActivityManagerSpy()
+        service.processActivityManager = activityManager
+
+        let result = try await service.process(
+            prompt: "Fix grammar",
+            text: "hello world",
+            providerOverride: "Gemma 4 (MLX)"
+        )
+
+        XCTAssertEqual(result, "processed")
+        XCTAssertEqual(activityManager.reasons, ["Local prompt processing with Gemma 4 (MLX)"])
+    }
+
+    @MainActor
+    func testPromptProcessingSkipsHighPriorityActivityForRemoteProviders() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockLLMProviderPlugin()
+        plugin.configuredProviderName = "Gemini"
+        plugin.requiresExternalCredentials = true
+
+        let manifest = PluginManifest(
+            id: "com.typewhisper.mock.llm",
+            name: "Mock LLM",
+            version: "1.0.0",
+            principalClass: "APIRouterMockLLMProviderPlugin"
+        )
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: manifest,
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let service = PromptProcessingService()
+        let activityManager = ProcessActivityManagerSpy()
+        service.processActivityManager = activityManager
+
+        let result = try await service.process(
+            prompt: "Fix grammar",
+            text: "hello world",
+            providerOverride: "Gemini"
+        )
+
+        XCTAssertEqual(result, "processed")
+        XCTAssertTrue(activityManager.reasons.isEmpty)
+    }
+
+    @MainActor
+    func testPromptProcessingRequiresProcessActivityOnlyForLocalProviders() {
         let remotePlugin = MockLLMProviderPlugin()
         remotePlugin.requiresExternalCredentials = true
 
@@ -2375,9 +2473,9 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         let legacyPlugin = MockLegacyLLMProviderPlugin()
 
-        XCTAssertFalse(PromptProcessingService.requiresForegroundActivation(for: remotePlugin))
-        XCTAssertTrue(PromptProcessingService.requiresForegroundActivation(for: localPlugin))
-        XCTAssertFalse(PromptProcessingService.requiresForegroundActivation(for: legacyPlugin))
+        XCTAssertFalse(PromptProcessingService.requiresProcessActivityBudget(for: remotePlugin))
+        XCTAssertTrue(PromptProcessingService.requiresProcessActivityBudget(for: localPlugin))
+        XCTAssertFalse(PromptProcessingService.requiresProcessActivityBudget(for: legacyPlugin))
     }
 
     @MainActor

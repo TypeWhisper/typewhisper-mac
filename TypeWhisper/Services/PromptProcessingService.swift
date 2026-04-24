@@ -7,6 +7,31 @@ import os.log
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "PromptProcessingService")
 
 @MainActor
+protocol ProcessActivityManaging {
+    func withActivity<T>(
+        options: ProcessInfo.ActivityOptions,
+        reason: String,
+        operation: () async throws -> T
+    ) async rethrows -> T
+}
+
+@MainActor
+struct DefaultProcessActivityManager: ProcessActivityManaging {
+    func withActivity<T>(
+        options: ProcessInfo.ActivityOptions,
+        reason: String,
+        operation: () async throws -> T
+    ) async rethrows -> T {
+        let activity = ProcessInfo.processInfo.beginActivity(options: options, reason: reason)
+        defer {
+            ProcessInfo.processInfo.endActivity(activity)
+        }
+
+        return try await operation()
+    }
+}
+
+@MainActor
 class PromptProcessingService: ObservableObject {
     @Published var selectedProviderId: String {
         didSet {
@@ -27,6 +52,7 @@ class PromptProcessingService: ObservableObject {
     weak var memoryService: MemoryService?
     private var appleIntelligenceProvider: LLMProvider?
     private var cancellables = Set<AnyCancellable>()
+    var processActivityManager: any ProcessActivityManaging = DefaultProcessActivityManager()
 
     static let appleIntelligenceId = "appleIntelligence"
 
@@ -135,7 +161,7 @@ class PromptProcessingService: ObservableObject {
         )
     }
 
-    static func requiresForegroundActivation(for plugin: any LLMProviderPlugin) -> Bool {
+    static func requiresProcessActivityBudget(for plugin: any LLMProviderPlugin) -> Bool {
         guard let setupStatus = plugin as? any LLMProviderSetupStatusProviding else {
             return false
         }
@@ -193,7 +219,7 @@ class PromptProcessingService: ObservableObject {
             persistGlobalSelection: false
         )
         logger.info("Processing prompt with plugin \(effectiveId)")
-        let result = try await withForegroundActivationIfNeeded(for: plugin, providerId: effectiveId) {
+        let result = try await withProcessActivityIfNeeded(for: plugin, providerId: effectiveId) {
             try await processWithPlugin(
                 plugin,
                 prompt: effectivePrompt,
@@ -229,27 +255,24 @@ class PromptProcessingService: ObservableObject {
         )
     }
 
-    private func withForegroundActivationIfNeeded<T>(
+    private func withProcessActivityIfNeeded<T>(
         for plugin: any LLMProviderPlugin,
         providerId: String,
         operation: () async throws -> T
     ) async throws -> T {
-        guard Self.requiresForegroundActivation(for: plugin) else {
+        guard Self.requiresProcessActivityBudget(for: plugin) else {
             return try await operation()
         }
 
         // Keep local prompt processing on a high-priority activity budget, but do not
         // activate the app window. Stealing focus here breaks insertion because the
         // original target text field is no longer frontmost once the LLM step finishes.
-        let activity = ProcessInfo.processInfo.beginActivity(
+        return try await processActivityManager.withActivity(
             options: [.userInitiated, .latencyCritical],
             reason: "Local prompt processing with \(providerId)"
-        )
-        defer {
-            ProcessInfo.processInfo.endActivity(activity)
+        ) {
+            try await operation()
         }
-
-        return try await operation()
     }
 
     private func normalizeSelectedCloudModelIfNeeded(for providerId: String) {
