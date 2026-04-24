@@ -67,6 +67,8 @@ final class PromptPaletteController: PromptPaletteControlling {
             triggerSummary = "\(trigger.kind.paletteLabel): \(trigger.websitePatterns.joined(separator: ", "))"
         case .hotkey:
             triggerSummary = "\(trigger.kind.paletteLabel): \(trigger.hotkeys.map(HotkeyService.displayName(for:)).joined(separator: ", "))"
+        case .global:
+            triggerSummary = trigger.kind.paletteLabel
         }
 
         if workflow.name.localizedCaseInsensitiveCompare(workflow.definition.name) == .orderedSame {

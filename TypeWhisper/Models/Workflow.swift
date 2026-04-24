@@ -115,6 +115,7 @@ enum WorkflowTriggerKind: String, CaseIterable, Codable, Sendable {
     case app
     case website
     case hotkey
+    case global
 }
 
 struct WorkflowTrigger: Codable, Equatable, Sendable {
@@ -159,6 +160,10 @@ struct WorkflowTrigger: Codable, Equatable, Sendable {
         WorkflowTrigger(kind: .hotkey, hotkeys: hotkeys)
     }
 
+    static func global() -> WorkflowTrigger {
+        WorkflowTrigger(kind: .global)
+    }
+
     var appBundleIdentifier: String? {
         appBundleIdentifiers.first
     }
@@ -179,6 +184,8 @@ struct WorkflowTrigger: Codable, Equatable, Sendable {
             !websitePatterns.isEmpty
         case .hotkey:
             !hotkeys.isEmpty
+        case .global:
+            true
         }
     }
 }
@@ -277,6 +284,8 @@ final class Workflow {
                     return nil
                 }
                 return .hotkey(hotkey)
+            case .global:
+                return .global()
             }
         }
         set {
@@ -305,6 +314,10 @@ final class Workflow {
                 triggerAppBundleIdentifier = nil
                 triggerWebsitePattern = nil
                 triggerHotkeyData = newValue.hotkeys.first.flatMap { try? JSONEncoder().encode($0) }
+            case .global:
+                triggerAppBundleIdentifier = nil
+                triggerWebsitePattern = nil
+                triggerHotkeyData = nil
             }
         }
     }
@@ -369,6 +382,8 @@ extension WorkflowTriggerKind {
             localizedAppText("Website", de: "Website")
         case .hotkey:
             localizedAppText("Hotkey", de: "Hotkey")
+        case .global:
+            localizedAppText("Always", de: "Immer")
         }
     }
 }
