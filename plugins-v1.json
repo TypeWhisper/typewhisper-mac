@@ -327,6 +327,17 @@
       "iconSystemName": "cpu",
       "releases": [
         {
+          "version": "1.0.23",
+          "minHostVersion": "1.2.1",
+          "sdkCompatibilityVersion": "v1",
+          "size": 18923332,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-qwen3-v1.0.23/Qwen3Plugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        },
+        {
           "version": "1.0.22",
           "minHostVersion": "1.2.1",
           "sdkCompatibilityVersion": "v1",
@@ -363,11 +374,11 @@
           "downloadCount": 2
         }
       ],
-      "version": "1.0.22",
+      "version": "1.0.23",
       "minHostVersion": "1.2.1",
       "sdkCompatibilityVersion": "v1",
-      "size": 18926759,
-      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-qwen3-v1.0.22/Qwen3Plugin.zip",
+      "size": 18923332,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-qwen3-v1.0.23/Qwen3Plugin.zip",
       "minOSVersion": "14.0",
       "supportedArchitectures": [
         "arm64"
