@@ -222,6 +222,140 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(match.competingWorkflowCount, 0)
         XCTAssertFalse(match.wonBySortOrder)
     }
+
+    func testWorkflowServicePersistsGlobalTrigger() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory)
+        service.addWorkflow(
+            name: "Always Cleanup",
+            template: .custom,
+            trigger: try globalTrigger(),
+            behavior: WorkflowBehavior(settings: ["instruction": "Clean up every transcript."])
+        )
+
+        let reloaded = WorkflowService(appSupportDirectory: appSupportDirectory)
+        let workflow = try XCTUnwrap(reloaded.workflows.first)
+
+        XCTAssertEqual(workflow.trigger?.kind.rawValue, "global")
+        XCTAssertEqual(workflow.trigger, try globalTrigger())
+    }
+
+    func testMatchWorkflowUsesGlobalAsFallback() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory)
+        _ = service.addWorkflow(
+            name: "Always Cleanup",
+            template: .custom,
+            trigger: try globalTrigger(),
+            behavior: WorkflowBehavior(settings: ["instruction": "Clean up every transcript."])
+        )
+
+        let match = try XCTUnwrap(service.matchWorkflow(bundleIdentifier: "com.apple.TextEdit", url: nil))
+
+        XCTAssertEqual(match.workflow.name, "Always Cleanup")
+        XCTAssertEqual(match.kind.rawValue, "globalFallback")
+        XCTAssertNil(match.matchedDomain)
+        XCTAssertEqual(match.competingWorkflowCount, 0)
+        XCTAssertFalse(match.wonBySortOrder)
+    }
+
+    func testMatchWorkflowPrefersWebsiteAndAppBeforeGlobalFallback() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory)
+        _ = service.addWorkflow(
+            name: "Always Cleanup",
+            template: .custom,
+            trigger: try globalTrigger(),
+            sortOrder: 0
+        )
+        _ = service.addWorkflow(
+            name: "Mail Cleanup",
+            template: .cleanedText,
+            trigger: .app("com.apple.mail"),
+            sortOrder: 1
+        )
+        _ = service.addWorkflow(
+            name: "Docs Summary",
+            template: .summary,
+            trigger: .website("docs.github.com"),
+            sortOrder: 2
+        )
+
+        let appMatch = try XCTUnwrap(service.matchWorkflow(
+            bundleIdentifier: "com.apple.mail",
+            url: "https://example.com"
+        ))
+        XCTAssertEqual(appMatch.workflow.name, "Mail Cleanup")
+        XCTAssertEqual(appMatch.kind, .app)
+
+        let websiteMatch = try XCTUnwrap(service.matchWorkflow(
+            bundleIdentifier: "com.apple.mail",
+            url: "https://docs.github.com/en/actions"
+        ))
+        XCTAssertEqual(websiteMatch.workflow.name, "Docs Summary")
+        XCTAssertEqual(websiteMatch.kind, .website)
+    }
+
+    func testMatchWorkflowIgnoresDisabledGlobalFallback() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory)
+        _ = service.addWorkflow(
+            name: "Disabled Always Cleanup",
+            template: .custom,
+            trigger: try globalTrigger(),
+            isEnabled: false
+        )
+
+        XCTAssertNil(service.matchWorkflow(bundleIdentifier: "com.apple.TextEdit", url: nil))
+    }
+
+    func testMatchWorkflowUsesSortOrderForMultipleGlobalFallbacks() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory)
+        _ = service.addWorkflow(
+            name: "Lower Always Cleanup",
+            template: .custom,
+            trigger: try globalTrigger(),
+            sortOrder: 5
+        )
+        _ = service.addWorkflow(
+            name: "Top Always Cleanup",
+            template: .custom,
+            trigger: try globalTrigger(),
+            sortOrder: 0
+        )
+
+        let match = try XCTUnwrap(service.matchWorkflow(bundleIdentifier: nil, url: nil))
+
+        XCTAssertEqual(match.workflow.name, "Top Always Cleanup")
+        XCTAssertEqual(match.kind.rawValue, "globalFallback")
+        XCTAssertEqual(match.competingWorkflowCount, 1)
+        XCTAssertTrue(match.wonBySortOrder)
+    }
+}
+
+private func globalTrigger(
+    file: StaticString = #filePath,
+    line: UInt = #line
+) throws -> WorkflowTrigger {
+    let kind = try XCTUnwrap(
+        WorkflowTriggerKind(rawValue: "global"),
+        "WorkflowTriggerKind.global should decode from the persisted raw value.",
+        file: file,
+        line: line
+    )
+    XCTAssertEqual(kind, .global, file: file, line: line)
+    return .global()
 }
 
 final class WatchFolderExportTests: XCTestCase {

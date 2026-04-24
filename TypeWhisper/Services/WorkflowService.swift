@@ -11,6 +11,7 @@ private let workflowLogger = Logger(
 enum WorkflowMatchKind: String, Sendable {
     case website
     case app
+    case globalFallback
     case manualOverride
 
     var label: String {
@@ -19,6 +20,8 @@ enum WorkflowMatchKind: String, Sendable {
             localizedAppText("Website", de: "Website")
         case .app:
             localizedAppText("App", de: "App")
+        case .globalFallback:
+            localizedAppText("Always", de: "Immer")
         case .manualOverride:
             localizedAppText("Manually triggered", de: "Manuell ausgeloest")
         }
@@ -167,6 +170,13 @@ final class WorkflowService: ObservableObject {
             if let result = bestMatch(from: matches, kind: .app, matchedDomain: nil) {
                 return result
             }
+        }
+
+        let globalMatches = enabled.filter { workflow in
+            workflow.trigger?.kind == .global
+        }
+        if let result = bestMatch(from: globalMatches, kind: .globalFallback, matchedDomain: nil) {
+            return result
         }
 
         return nil

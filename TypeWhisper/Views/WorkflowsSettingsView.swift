@@ -1032,8 +1032,8 @@ private struct WorkflowEditorPage: View {
         WorkflowSectionCard(
             title: localizedAppText("Trigger", de: "Trigger"),
             description: localizedAppText(
-                "Choose one trigger category. Inside it, you can add multiple apps, websites, or shortcuts.",
-                de: "Wähle eine Trigger-Kategorie. Darin kannst du mehrere Apps, Websites oder Shortcuts ergänzen."
+                "Choose how this workflow starts. Always runs when no specific workflow matches.",
+                de: "Wähle, wie dieser Workflow startet. Immer greift, wenn kein spezifischer Workflow passt."
             )
         ) {
             VStack(alignment: .leading, spacing: 14) {
@@ -1041,6 +1041,7 @@ private struct WorkflowEditorPage: View {
                     Text(localizedAppText("App", de: "App")).tag(WorkflowTriggerKind.app)
                     Text(localizedAppText("Website", de: "Website")).tag(WorkflowTriggerKind.website)
                     Text(localizedAppText("Hotkey", de: "Hotkey")).tag(WorkflowTriggerKind.hotkey)
+                    Text(localizedAppText("Always", de: "Immer")).tag(WorkflowTriggerKind.global)
                 }
                 .pickerStyle(.segmented)
 
@@ -1051,6 +1052,8 @@ private struct WorkflowEditorPage: View {
                     websiteTriggerEditor
                 case .hotkey:
                     hotkeyTriggerEditor
+                case .global:
+                    alwaysTriggerEditor
                 }
             }
         }
@@ -1189,6 +1192,34 @@ private struct WorkflowEditorPage: View {
                 onClear: {}
             )
         }
+    }
+
+    private var alwaysTriggerEditor: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "infinity")
+                .foregroundStyle(.secondary)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(localizedAppText("Always", de: "Immer"))
+                    .font(.subheadline.weight(.medium))
+
+                Text(
+                    localizedAppText(
+                        "Runs when no app, website, or hotkey workflow matches.",
+                        de: "Läuft, wenn kein App-, Website- oder Hotkey-Workflow passt."
+                    )
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(workflowsGroupedSurface(cornerRadius: 12))
     }
 
     private var websiteSuggestions: [String] {
@@ -1754,6 +1785,11 @@ private struct WorkflowDraft {
                 self.appBundleIdentifiers = []
                 self.websitePatterns = []
                 self.hotkeys = trigger.hotkeys
+            case .global:
+                self.triggerKind = .global
+                self.appBundleIdentifiers = []
+                self.websitePatterns = []
+                self.hotkeys = []
             }
         } else {
             self.triggerKind = .app
@@ -1769,7 +1805,14 @@ private struct WorkflowDraft {
     }
 
     var reviewText: String {
-        localizedAppText(
+        if triggerKind == .global {
+            return localizedAppText(
+                "\(resolvedName) runs always as \(template.definition.name).",
+                de: "\(resolvedName) läuft immer als \(template.definition.name)."
+            )
+        }
+
+        return localizedAppText(
             "\(resolvedName) runs as \(template.definition.name) via \(triggerReviewText).",
             de: "\(resolvedName) läuft als \(template.definition.name) über \(triggerReviewText)."
         )
@@ -1859,6 +1902,8 @@ private struct WorkflowDraft {
                     )
                 }
             }
+        case .global:
+            break
         }
 
         if template == .translation && translationTargetLanguage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -1893,6 +1938,8 @@ private struct WorkflowDraft {
         case .hotkey:
             guard !hotkeys.isEmpty else { return nil }
             return .hotkeys(hotkeys)
+        case .global:
+            return .global()
         }
     }
 
@@ -1962,6 +2009,8 @@ private struct WorkflowDraft {
                 )
             }
             return localizedAppText("a hotkey", de: "einen Hotkey")
+        case .global:
+            return localizedAppText("always", de: "immer")
         }
     }
 
@@ -2022,6 +2071,8 @@ private func workflowTriggerSummary(for workflow: Workflow) -> String {
         return trigger.hotkeys.count == 1
             ? localizedAppText("Hotkey", de: "Hotkey")
             : localizedAppText("Hotkeys", de: "Hotkeys")
+    case .global:
+        return localizedAppText("Always", de: "Immer")
     }
 }
 
@@ -2035,6 +2086,8 @@ private func workflowTriggerDetail(for workflow: Workflow) -> String {
         return workflowCompactList(trigger.websitePatterns)
     case .hotkey:
         return workflowCompactList(trigger.hotkeys.map(HotkeyService.displayName(for:)))
+    case .global:
+        return ""
     }
 }
 
@@ -2042,6 +2095,13 @@ private func workflowReviewText(for workflow: Workflow) -> String {
     let summary = workflowSummaryText(for: workflow)
     let triggerSummary = workflowTriggerSummary(for: workflow)
     let triggerDetail = workflowTriggerDetail(for: workflow)
+
+    if workflow.trigger?.kind == .global {
+        return localizedAppText(
+            "\(summary) runs always",
+            de: "\(summary) läuft immer"
+        )
+    }
 
     if triggerDetail.isEmpty {
         return localizedAppText(
