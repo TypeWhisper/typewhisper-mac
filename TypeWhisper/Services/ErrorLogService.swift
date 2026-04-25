@@ -40,6 +40,23 @@ private struct DiagnosticsReport: Encodable {
         let remoteAccessAllowed: Bool
     }
 
+    struct AudioOutputInfo: Encodable {
+        let deviceID: UInt32
+        let uid: String?
+        let name: String?
+        let volume: Float
+        let transportType: String?
+    }
+
+    struct AudioInfo: Encodable {
+        let selectedInputDeviceUID: String?
+        let selectedInputDeviceName: String?
+        let audioDuckingEnabled: Bool
+        let audioDuckingLevel: Double
+        let mediaPauseEnabled: Bool
+        let defaultOutput: AudioOutputInfo?
+    }
+
     struct PluginInfo: Encodable {
         let id: String
         let name: String
@@ -91,6 +108,7 @@ private struct DiagnosticsReport: Encodable {
     let permissions: PermissionsInfo
     let model: ModelInfo
     let api: APIInfo
+    let audio: AudioInfo
     let plugins: [PluginInfo]
     let settings: SettingsSnapshot
     let counts: Counts
@@ -141,6 +159,7 @@ final class ErrorLogService: ObservableObject {
         let container = ServiceContainer.shared
         let defaults = UserDefaults.standard
         let pluginManager = PluginManager.shared ?? container.pluginManager
+        let outputSnapshot = CoreAudioOutputVolumeController().defaultOutputSnapshot()
 
         return DiagnosticsReport(
             exportedAt: Date(),
@@ -173,6 +192,22 @@ final class ErrorLogService: ObservableObject {
                 port: container.apiServerViewModel.port,
                 loopbackOnly: true,
                 remoteAccessAllowed: false
+            ),
+            audio: .init(
+                selectedInputDeviceUID: defaults.string(forKey: UserDefaultsKeys.selectedInputDeviceUID),
+                selectedInputDeviceName: container.audioDeviceService.selectedDevice?.name,
+                audioDuckingEnabled: defaults.bool(forKey: UserDefaultsKeys.audioDuckingEnabled),
+                audioDuckingLevel: defaults.object(forKey: UserDefaultsKeys.audioDuckingLevel) as? Double ?? 0.2,
+                mediaPauseEnabled: defaults.bool(forKey: UserDefaultsKeys.mediaPauseEnabled),
+                defaultOutput: outputSnapshot.map {
+                    .init(
+                        deviceID: $0.deviceID,
+                        uid: $0.deviceUID,
+                        name: $0.deviceName,
+                        volume: $0.volume,
+                        transportType: $0.transportType
+                    )
+                }
             ),
             plugins: pluginManager.loadedPlugins.map {
                 .init(

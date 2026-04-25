@@ -461,3 +461,227 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         XCTAssertFalse(service.testingConsumeStartupConfigurationChangeGuardIfMatching(for: engine, liveFormat: expectedFormat))
     }
 }
+
+final class AudioOutputVolumeGuardTests: XCTestCase {
+    func testRestoreIfRaisedRestoresCurrentOutputToCapturedUserVolume() {
+        let controller = FakeAudioOutputVolumeController(
+            defaultDeviceID: AudioDeviceID(1),
+            snapshots: [
+                AudioDeviceID(1): AudioOutputVolumeSnapshot(
+                    deviceID: AudioDeviceID(1),
+                    deviceUID: "airpods-output",
+                    deviceName: "AirPods Pro",
+                    volume: 0.10
+                )
+            ]
+        )
+        let guardService = AudioOutputVolumeGuard(volumeController: controller)
+
+        guardService.captureBaseline()
+        controller.updateVolume(0.42, for: AudioDeviceID(1))
+        guardService.restoreIfRaised(reason: "test")
+
+        XCTAssertEqual(controller.setCalls, [
+            .init(deviceID: AudioDeviceID(1), volume: 0.10)
+        ])
+    }
+
+    func testRestoreIfRaisedDoesNotIncreaseLowerCurrentVolume() {
+        let controller = FakeAudioOutputVolumeController(
+            defaultDeviceID: AudioDeviceID(1),
+            snapshots: [
+                AudioDeviceID(1): AudioOutputVolumeSnapshot(
+                    deviceID: AudioDeviceID(1),
+                    deviceUID: "speakers",
+                    deviceName: "Speakers",
+                    volume: 0.50
+                )
+            ]
+        )
+        let guardService = AudioOutputVolumeGuard(volumeController: controller)
+
+        guardService.captureBaseline()
+        controller.updateVolume(0.20, for: AudioDeviceID(1))
+        guardService.restoreIfRaised(reason: "test")
+
+        XCTAssertTrue(controller.setCalls.isEmpty)
+    }
+
+    func testRestoreIfRaisedTargetsCurrentDefaultOutputAfterDeviceSwitch() {
+        let controller = FakeAudioOutputVolumeController(
+            defaultDeviceID: AudioDeviceID(1),
+            snapshots: [
+                AudioDeviceID(1): AudioOutputVolumeSnapshot(
+                    deviceID: AudioDeviceID(1),
+                    deviceUID: "airpods-output",
+                    deviceName: "AirPods Pro",
+                    volume: 0.12
+                ),
+                AudioDeviceID(2): AudioOutputVolumeSnapshot(
+                    deviceID: AudioDeviceID(2),
+                    deviceUID: "built-in-output",
+                    deviceName: "MacBook Pro Speakers",
+                    volume: 0.46
+                )
+            ]
+        )
+        let guardService = AudioOutputVolumeGuard(volumeController: controller)
+
+        guardService.captureBaseline()
+        controller.defaultDeviceID = AudioDeviceID(2)
+        guardService.restoreIfRaised(reason: "test")
+
+        XCTAssertEqual(controller.setCalls, [
+            .init(deviceID: AudioDeviceID(2), volume: 0.12)
+        ])
+    }
+
+    func testClearPreventsLaterVolumeWrites() {
+        let controller = FakeAudioOutputVolumeController(
+            defaultDeviceID: AudioDeviceID(1),
+            snapshots: [
+                AudioDeviceID(1): AudioOutputVolumeSnapshot(
+                    deviceID: AudioDeviceID(1),
+                    deviceUID: "airpods-output",
+                    deviceName: "AirPods Pro",
+                    volume: 0.10
+                )
+            ]
+        )
+        let guardService = AudioOutputVolumeGuard(volumeController: controller)
+
+        guardService.captureBaseline()
+        guardService.clear()
+        controller.updateVolume(0.40, for: AudioDeviceID(1))
+        guardService.restoreIfRaised(reason: "test")
+
+        XCTAssertTrue(controller.setCalls.isEmpty)
+    }
+}
+
+final class AudioOutputVolumeIntegrationTests: XCTestCase {
+    func testStartRecordingRestoresOutputVolumeRaisedDuringAudioStart() {
+        let controller = FakeAudioOutputVolumeController.airPods(volume: 0.10)
+        let guardService = AudioOutputVolumeGuard(volumeController: controller)
+        let service = AudioRecordingService(outputVolumeGuard: guardService)
+        service.hasMicrophonePermissionOverride = true
+        service.inputAvailabilityOverride = { _ in true }
+        service.startRecordingOverride = {
+            controller.updateVolume(0.40, for: AudioDeviceID(1))
+        }
+
+        XCTAssertNoThrow(try service.startRecording())
+
+        XCTAssertEqual(controller.setCalls, [
+            .init(deviceID: AudioDeviceID(1), volume: 0.10)
+        ])
+    }
+
+    func testStopRecordingRestoresRaisedOutputVolumeAndClearsGuard() async {
+        let controller = FakeAudioOutputVolumeController.airPods(volume: 0.10)
+        let guardService = AudioOutputVolumeGuard(volumeController: controller)
+        let service = AudioRecordingService(outputVolumeGuard: guardService)
+        service.hasMicrophonePermissionOverride = true
+        service.inputAvailabilityOverride = { _ in true }
+        service.startRecordingOverride = {}
+        service.stopRecordingOverride = { _ in
+            controller.updateVolume(0.70, for: AudioDeviceID(1))
+            return []
+        }
+
+        XCTAssertNoThrow(try service.startRecording())
+        controller.updateVolume(0.45, for: AudioDeviceID(1))
+        _ = await service.stopRecording(policy: .immediate)
+
+        XCTAssertEqual(controller.setCalls, [
+            .init(deviceID: AudioDeviceID(1), volume: 0.45)
+        ])
+    }
+
+    @MainActor
+    func testStartPreviewRestoresOutputVolumeRaisedDuringPreviewStart() {
+        let controller = FakeAudioOutputVolumeController.airPods(volume: 0.10)
+        let guardService = AudioOutputVolumeGuard(volumeController: controller)
+        let service = AudioDeviceService(
+            initialInputDevices: [],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false,
+            outputVolumeGuard: guardService
+        )
+        service.hasMicrophonePermissionOverride = true
+        service.startPreviewOverride = { _ in
+            controller.updateVolume(0.40, for: AudioDeviceID(1))
+        }
+
+        service.startPreview()
+
+        XCTAssertEqual(controller.setCalls, [
+            .init(deviceID: AudioDeviceID(1), volume: 0.10)
+        ])
+    }
+
+    @MainActor
+    func testAudioDuckingUsesCurrentOutputVolumeAsBaseline() {
+        let controller = FakeAudioOutputVolumeController.airPods(volume: 0.10)
+        let service = AudioDuckingService(volumeController: controller)
+
+        service.duckAudio(to: 0.20)
+        service.restoreAudio()
+
+        XCTAssertEqual(controller.setCalls.count, 2)
+        XCTAssertEqual(controller.setCalls[0].deviceID, AudioDeviceID(1))
+        XCTAssertEqual(controller.setCalls[0].volume, 0.02, accuracy: 0.0001)
+        XCTAssertEqual(controller.setCalls[1], .init(deviceID: AudioDeviceID(1), volume: 0.10))
+    }
+}
+
+private final class FakeAudioOutputVolumeController: AudioOutputVolumeControlling {
+    struct SetCall: Equatable {
+        let deviceID: AudioDeviceID
+        let volume: Float
+    }
+
+    var defaultDeviceID: AudioDeviceID?
+    private var snapshots: [AudioDeviceID: AudioOutputVolumeSnapshot]
+    private(set) var setCalls: [SetCall] = []
+
+    init(defaultDeviceID: AudioDeviceID?, snapshots: [AudioDeviceID: AudioOutputVolumeSnapshot]) {
+        self.defaultDeviceID = defaultDeviceID
+        self.snapshots = snapshots
+    }
+
+    static func airPods(volume: Float) -> FakeAudioOutputVolumeController {
+        FakeAudioOutputVolumeController(
+            defaultDeviceID: AudioDeviceID(1),
+            snapshots: [
+                AudioDeviceID(1): AudioOutputVolumeSnapshot(
+                    deviceID: AudioDeviceID(1),
+                    deviceUID: "airpods-output",
+                    deviceName: "AirPods Pro",
+                    volume: volume
+                )
+            ]
+        )
+    }
+
+    func defaultOutputSnapshot() -> AudioOutputVolumeSnapshot? {
+        guard let defaultDeviceID else { return nil }
+        return snapshots[defaultDeviceID]
+    }
+
+    func setVolume(_ volume: Float, for deviceID: AudioDeviceID) -> Bool {
+        setCalls.append(.init(deviceID: deviceID, volume: volume))
+        updateVolume(volume, for: deviceID)
+        return true
+    }
+
+    func updateVolume(_ volume: Float, for deviceID: AudioDeviceID) {
+        guard let snapshot = snapshots[deviceID] else { return }
+        snapshots[deviceID] = AudioOutputVolumeSnapshot(
+            deviceID: snapshot.deviceID,
+            deviceUID: snapshot.deviceUID,
+            deviceName: snapshot.deviceName,
+            volume: volume
+        )
+    }
+}
