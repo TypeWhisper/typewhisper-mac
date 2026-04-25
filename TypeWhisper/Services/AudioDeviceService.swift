@@ -121,6 +121,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     /// See issue #332.
     private let previewEngineTeardownRetainer = DelayedReleaseRetainer<AVAudioEngine>(label: "com.typewhisper.preview-engine-teardown")
     private static let previewEngineTeardownRetentionInterval: TimeInterval = 0.3
+    private let outputVolumeGuard: AudioOutputVolumeGuard
     private var activePreviewDeviceID: AudioDeviceID?
     private var compatibilityCache: [String: AudioInputDeviceCompatibility] = [:]
     private var isApplyingValidatedSelection = false
@@ -155,8 +156,10 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     init(
         initialInputDevices: [AudioInputDevice]? = nil,
         monitorDeviceChanges: Bool = true,
-        probeCompatibilities: Bool = false
+        probeCompatibilities: Bool = false,
+        outputVolumeGuard: AudioOutputVolumeGuard = AudioOutputVolumeGuard()
     ) {
+        self.outputVolumeGuard = outputVolumeGuard
         previewNotificationQueue.underlyingQueue = previewRecoveryQueue
         isInitializingSelection = true
         selectedDeviceUID = UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedInputDeviceUID)
@@ -201,14 +204,22 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             return
         }
 
+        outputVolumeGuard.captureBaseline()
+
         if let startPreviewOverride {
             do {
                 try startPreviewOverride(preferredDeviceID)
+                outputVolumeGuard.restoreIfRaised(reason: "preview-start-override")
+                outputVolumeGuard.clear()
                 isPreviewActive = true
             } catch let error as SelectedInputDeviceError {
+                outputVolumeGuard.restoreIfRaised(reason: "preview-start-override-failed")
+                outputVolumeGuard.clear()
                 previewError = error
                 isPreviewActive = false
             } catch {
+                outputVolumeGuard.restoreIfRaised(reason: "preview-start-override-failed")
+                outputVolumeGuard.clear()
                 previewError = selectedDeviceUID == nil ? nil : .incompatible(.engineStartFailed)
                 isPreviewActive = false
             }
@@ -235,6 +246,8 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
                 schedulePreviewRecoveryIfNeeded(previewRecoveryCoordinator.finishRecovery())
             }
 
+            outputVolumeGuard.restoreIfRaised(reason: "preview-start")
+            outputVolumeGuard.clear()
             isPreviewActive = true
         } catch let error as SelectedInputDeviceError {
             if case .incompatible(let issue) = error {
@@ -262,9 +275,12 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             return engine
         }
         if let engine {
+            outputVolumeGuard.captureBaseline()
             teardownPreviewEngine(engine)
             previewEngineTeardownRetainer.retain(engine, for: Self.previewEngineTeardownRetentionInterval)
+            outputVolumeGuard.restoreIfRaised(reason: "preview-stop")
         }
+        outputVolumeGuard.clear()
         isPreviewActive = false
         previewAudioLevel = 0
         previewRawLevel = 0
@@ -347,6 +363,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     private func failActivePreviewDueToRecovery(_ error: SelectedInputDeviceError) {
         previewRecoveryCoordinator.transitionToIdle()
         removePreviewConfigurationObserver()
+        outputVolumeGuard.captureBaselineIfNeeded()
         let engine: AVAudioEngine? = previewLock.withLock {
             let engine = previewEngine
             previewEngine = nil
@@ -357,6 +374,8 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             teardownPreviewEngine(engine)
             previewEngineTeardownRetainer.retain(engine, for: Self.previewEngineTeardownRetentionInterval)
         }
+        outputVolumeGuard.restoreIfRaised(reason: "preview-recovery-failure")
+        outputVolumeGuard.clear()
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.isPreviewActive = false
@@ -426,11 +445,16 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         preferredDeviceID: AudioDeviceID?,
         label: String
     ) throws {
+        outputVolumeGuard.captureBaselineIfNeeded()
         // Swap in a fresh AVAudioEngine instead of reusing the stuck one.
         // Reusing the same engine after CoreAudio flagged its AUHAL mid-switch
         // causes `AudioUnitSetProperty` to return 'nope'
         // (kAudioHardwareIllegalOperationError). See issue #332.
         guard let replacementEngine = replacePreviewAudioEngineForRecoveryIfNeeded(engine) else { return }
+        defer {
+            outputVolumeGuard.restoreIfRaised(reason: "\(label)-engine-restart")
+            outputVolumeGuard.clear()
+        }
 
         installPreviewConfigurationObserver(for: replacementEngine)
         teardownPreviewEngine(engine)
@@ -543,6 +567,8 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         }
         teardownPreviewEngine(engine)
         previewEngineTeardownRetainer.retain(engine, for: Self.previewEngineTeardownRetentionInterval)
+        outputVolumeGuard.restoreIfRaised(reason: "preview-start-failed")
+        outputVolumeGuard.clear()
         isPreviewActive = false
         previewAudioLevel = 0
         previewRawLevel = 0

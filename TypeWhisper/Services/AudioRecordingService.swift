@@ -135,13 +135,15 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private let recoveryQueue = DispatchQueue(label: "com.typewhisper.audio-recovery", qos: .userInitiated)
     private let engineTeardownRetainer = DelayedReleaseRetainer<AVAudioEngine>(label: "com.typewhisper.audio-engine-teardown")
     private let recoveryCoordinator = AudioEngineRecoveryCoordinator()
+    private let outputVolumeGuard: AudioOutputVolumeGuard
     private var _lastStopGraceCaptureApplied = false
 
     static let targetSampleRate: Double = 16000
     private static let captureTapFrames: AVAudioFrameCount = 1024
     private static let engineTeardownRetentionInterval: TimeInterval = 0.3
 
-    init() {
+    init(outputVolumeGuard: AudioOutputVolumeGuard = AudioOutputVolumeGuard()) {
+        self.outputVolumeGuard = outputVolumeGuard
         recoveryNotificationQueue.underlyingQueue = recoveryQueue
     }
 
@@ -244,14 +246,23 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         recoveryError = nil
 
         try validateRecordingInputAvailability()
+        outputVolumeGuard.captureBaseline()
 
         if let startRecordingOverride {
             bufferLock.lock()
             sampleBuffer.removeAll()
             _peakRawAudioLevel = 0
             bufferLock.unlock()
-            try startRecordingOverride()
-            isRecording = true
+            do {
+                try startRecordingOverride()
+                outputVolumeGuard.restoreIfRaised(reason: "recording-start-override")
+                outputVolumeGuard.clear()
+                isRecording = true
+            } catch {
+                outputVolumeGuard.restoreIfRaised(reason: "recording-start-override-failed")
+                outputVolumeGuard.clear()
+                throw error
+            }
             return
         }
 
@@ -281,6 +292,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 scheduleRecoveryIfNeeded(recoveryCoordinator.finishRecovery())
             }
 
+            outputVolumeGuard.restoreIfRaised(reason: "recording-start")
+            outputVolumeGuard.clear()
             isRecording = true
         } catch {
             cleanupAfterFailedStart(engine)
@@ -290,7 +303,10 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
     func stopRecording(policy: StopPolicy) async -> [Float] {
         if let stopRecordingOverride {
+            outputVolumeGuard.captureBaseline()
             let samples = await stopRecordingOverride(policy)
+            outputVolumeGuard.restoreIfRaised(reason: "recording-stop-override")
+            outputVolumeGuard.clear()
             let rms: Float
             if samples.isEmpty {
                 rms = 0
@@ -319,7 +335,10 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             startupConfigurationChangeGuard = nil
             return e
         }
-        guard let engine else { return [] }
+        guard let engine else {
+            outputVolumeGuard.clear()
+            return []
+        }
 
         let bufferedDuration = totalBufferDuration
         var graceApplied = false
@@ -338,10 +357,13 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         recoveryCoordinator.transitionToIdle()
 
         removeConfigurationObserver()
+        outputVolumeGuard.captureBaseline()
         teardownEngine(engine)
         // Keep the engine alive briefly so CoreAudio's internal teardown callbacks
         // cannot outlive the AVAudioEngine objects they still reference.
         engineTeardownRetainer.retain(engine, for: Self.engineTeardownRetentionInterval)
+        outputVolumeGuard.restoreIfRaised(reason: "recording-stop")
+        outputVolumeGuard.clear()
 
         // Flush pending audio processing before grabbing the buffer
         processingQueue.sync { }
@@ -416,6 +438,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private func failActiveRecordingDueToRecovery(_ error: AudioRecordingError) {
         recoveryCoordinator.transitionToIdle()
         removeConfigurationObserver()
+        outputVolumeGuard.captureBaselineIfNeeded()
         let engine: AVAudioEngine? = engineLock.withLock {
             let engine = audioEngine
             audioEngine = nil
@@ -426,6 +449,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             teardownEngine(engine)
             engineTeardownRetainer.retain(engine, for: Self.engineTeardownRetentionInterval)
         }
+        outputVolumeGuard.restoreIfRaised(reason: "recording-recovery-failure")
+        outputVolumeGuard.clear()
         clearRecordingBuffer()
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
@@ -496,7 +521,12 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private func restartEngineWithRecovery(_ engine: AVAudioEngine, label: String) throws {
+        outputVolumeGuard.captureBaselineIfNeeded()
         guard let replacementEngine = replaceAudioEngineForRecoveryIfNeeded(engine) else { return }
+        defer {
+            outputVolumeGuard.restoreIfRaised(reason: "\(label)-engine-restart")
+            outputVolumeGuard.clear()
+        }
 
         installConfigurationObserver(for: replacementEngine)
         teardownEngine(engine)
@@ -607,6 +637,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
         teardownEngine(engine)
         engineTeardownRetainer.retain(engine, for: Self.engineTeardownRetentionInterval)
+        outputVolumeGuard.restoreIfRaised(reason: "recording-start-failed")
+        outputVolumeGuard.clear()
         DispatchQueue.main.async { [weak self] in
             self?.isRecording = false
             self?.audioLevel = 0
