@@ -287,10 +287,12 @@ final class MenuBarGroupingTests: XCTestCase {
 
 final class LanguageLocalizationTests: XCTestCase {
     private var originalPreferredAppLanguage: String?
+    private var originalPluginManager: PluginManager?
 
     override func setUp() {
         super.setUp()
         originalPreferredAppLanguage = UserDefaults.standard.string(forKey: UserDefaultsKeys.preferredAppLanguage)
+        originalPluginManager = PluginManager.shared
     }
 
     override func tearDown() {
@@ -299,6 +301,8 @@ final class LanguageLocalizationTests: XCTestCase {
         } else {
             UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.preferredAppLanguage)
         }
+        PluginManager.shared = originalPluginManager
+        originalPluginManager = nil
         super.tearDown()
     }
 
@@ -318,5 +322,19 @@ final class LanguageLocalizationTests: XCTestCase {
 
         XCTAssertTrue(searchTerms.contains(where: { $0.localizedCaseInsensitiveContains("english") }))
         XCTAssertTrue(searchTerms.contains(where: { $0.localizedCaseInsensitiveContains("englisch") }))
+    }
+
+    @MainActor
+    func testSettingsLanguageOptionsDoNotGoEmptyBeforePluginsLoad() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "LanguageFallbackTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let settingsViewModel = SettingsViewModel(modelManager: ModelManagerService())
+        let codes = Set(settingsViewModel.availableLanguages.map(\.code))
+
+        XCTAssertTrue(codes.contains("en"))
+        XCTAssertTrue(codes.contains("de"))
+        XCTAssertTrue(codes.contains("fr"))
     }
 }

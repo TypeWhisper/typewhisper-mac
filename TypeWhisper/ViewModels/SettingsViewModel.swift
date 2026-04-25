@@ -237,6 +237,9 @@ final class SettingsViewModel: ObservableObject {
                 codes.insert(code)
             }
         }
+        if codes.isEmpty {
+            codes = Set(defaultSpokenLanguageCodes)
+        }
         return localizedAppLanguageOptions(for: Array(codes))
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             .map { (code: $0.code, name: $0.name) }
