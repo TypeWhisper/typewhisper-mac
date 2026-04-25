@@ -3,7 +3,7 @@ set -euo pipefail
 
 # =============================================================================
 # TypeWhisper Screenshot Automation
-# Takes screenshots of all Settings tabs + Notch Indicator
+# Takes screenshots of the 1.3 Settings tabs + indicator window
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -21,14 +21,18 @@ TABS=(
     "Home:home"
     "General:general"
     "Recording:recording"
+    "Hotkeys:hotkeys"
     "File Transcription:file-transcription"
+    "Recorder:recorder"
     "History:history"
     "Dictionary:dictionary"
     "Snippets:snippets"
-    "Profiles:profiles"
-    "Prompts:prompts"
+    "Workflows:workflows"
+    "Legacy:legacy"
     "Integrations:plugins"
     "Advanced:advanced"
+    "License:license"
+    "About:about"
 )
 
 # ---------------------------------------------------------------------------

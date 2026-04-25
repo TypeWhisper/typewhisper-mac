@@ -2,21 +2,21 @@
 
 This document defines the release gates for the current `1.x` product path leading into the stable `1.3.0` release.
 
-TypeWhisper `1.x` is a stable direct-download release line for macOS. The Mac App Store remains out of scope. For `1.3`, the focus is spoken feedback, per-request engine control, multilingual hints, hotkey robustness, and streaming-dictionary support in plugins.
+TypeWhisper `1.x` is a stable direct-download release line for macOS. The Mac App Store remains out of scope. For `1.3`, the focus is unified workflows, spoken feedback, per-request engine control, multilingual hints, hotkey robustness, and streaming-dictionary support in plugins.
 
 ## Audience
 
 - macOS users who want system-wide dictation with their own engine choice
 - Users who want to transcribe audio or video files locally or through the API
-- Power users who need prompt processing, profiles, plugins, and local automation
+- Power users who need workflows, plugins, and local automation
 - Automation users who drive TypeWhisper through the HTTP API or CLI
 
 ## Officially Supported Core
 
 - System-wide dictation with a global hotkey and text insertion
 - File transcription, including batch processing and export
-- Prompt processing with bundled presets and custom actions
-- Profiles for app- and URL-based control, with a default fallback profile
+- Workflow processing with bundled prompt presets and custom actions
+- Workflows for app-, URL-, hotkey-, and global fallback control, with legacy prompt/profile compatibility
 - History, Dictionary, and Snippets
 - Bundled default integrations and bundled plugins
 
@@ -50,7 +50,7 @@ These surfaces remain part of `1.x`, but they are positioned as advanced or auto
 - Documented endpoints under `/v1/*` remain stable for `1.x`.
 - Response fields must not be removed before `2.0` without deprecation.
 - The API is loopback-only, disabled by default, and intended for local automation.
-- Per-request `engine` and `model` parameters fall back to the active profile defaults when omitted.
+- Per-request `engine` and `model` parameters fall back to the active workflow or legacy profile defaults when omitted.
 
 ### CLI
 
@@ -91,12 +91,12 @@ These surfaces remain part of `1.x`, but they are positioned as advanced or auto
 - Permission flow: microphone, accessibility, recovery after revoked access
 - First successful dictation
 - File transcription
-- Prompt action from the app
-- Prompt wizard flow across tabs
+- Workflow prompt action from the app
+- Workflow setup flow across tabs
 - History edit/export
 - History entry shows both STT and AI-processed text where applicable
-- Profile matching for app and URL, including the default fallback profile
-- Auto Enter profile behavior
+- Workflow matching for app, URL, hotkey, and global fallback triggers
+- Auto-submit workflow behavior and legacy Auto Enter profile compatibility
 - Plugin enable/disable
 - Community term pack download and apply
 - Sound feedback settings and sound switching
@@ -112,7 +112,7 @@ These surfaces remain part of `1.x`, but they are positioned as advanced or auto
 - Dictionary terms streamed through AssemblyAI, Soniox, and SpeechAnalyzer without session breakage
 - Very short speech clips and streaming-preview/no-speech guard behavior
 - Audio preview and recording after device changes, especially AirPods/Bluetooth profile switches; no crash during Bluetooth route changes
-- Upgrade from `1.2.2` with History, Profiles, Dictionary, Snippets, hotkeys, enabled plugins, and update channel preserved
+- Upgrade from `1.2.2` with History, legacy prompts/profiles, Workflows, Dictionary, Snippets, hotkeys, enabled plugins, and update channel preserved
 
 ## Release Outputs
 
