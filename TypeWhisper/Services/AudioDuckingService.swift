@@ -237,7 +237,12 @@ class AudioDuckingService {
 
         savedSnapshot = current
         let targetVolume = max(0, min(1, current.volume * factor))
-        volumeController.setVolume(targetVolume, for: current.deviceID)
+        guard volumeController.setVolume(targetVolume, for: current.deviceID) else {
+            savedSnapshot = nil
+            logger.warning("Could not duck audio output volume")
+            return
+        }
+
         isDucked = true
         logger.info("Audio ducked: \(current.volume, privacy: .public) -> \(targetVolume, privacy: .public)")
     }
@@ -247,8 +252,11 @@ class AudioDuckingService {
         guard isDucked, let savedSnapshot else { return }
 
         let restoreDeviceID = volumeController.defaultOutputSnapshot()?.deviceID ?? savedSnapshot.deviceID
-        volumeController.setVolume(savedSnapshot.volume, for: restoreDeviceID)
-        logger.info("Audio restored to \(savedSnapshot.volume, privacy: .public)")
+        if volumeController.setVolume(savedSnapshot.volume, for: restoreDeviceID) {
+            logger.info("Audio restored to \(savedSnapshot.volume, privacy: .public)")
+        } else {
+            logger.warning("Could not restore audio output volume")
+        }
         self.savedSnapshot = nil
         isDucked = false
     }
