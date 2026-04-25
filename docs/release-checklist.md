@@ -21,13 +21,13 @@
 - Permission recovery
 - First dictation
 - File transcription
-- Prompt action
-- Prompt wizard step (cross-tab navigation)
-- Prompt drag-and-drop reordering
+- Workflow prompt action
+- Workflow setup step (cross-tab navigation)
+- Legacy prompt drag-and-drop reordering
 - History edit/export
 - Post-processing transparency in history and indicators
-- Profile matching for app and URL
-- Default profile fallback when no app- or URL-specific profile matches
+- Workflow matching for app, URL, hotkey, and fallback triggers
+- Global fallback workflow when no app-, URL-, or hotkey-specific workflow matches
 - Notch, Overlay, and Minimal indicator styles
 - Transcript preview toggle for Notch and Overlay
 - Plugin enable/disable
@@ -50,7 +50,7 @@
 - Fn hotkey in both press-and-release and press-and-hold strategies
 - Audio preview and recording after input-device changes, especially AirPods and Bluetooth profile switches
 - Audio recovery after Bluetooth route changes (verify no crash)
-- Auto Enter profile setting (enable in profile, verify Enter is sent after dictation)
+- Auto-submit workflow behavior and legacy Auto Enter profile compatibility
 - Disable history saving (toggle off, dictate, verify no entry created)
 - STT and AI-processed text both shown in the history entry
 - Spoken feedback (TTS)
@@ -64,7 +64,7 @@
   - Open the language picker, search, select multiple languages, verify the selected count
   - Run a dictation and confirm the hints reach the engine
 - Verify CLI and HTTP API locally
-- Upgrade from `1.2.2`
+- Upgrade from `1.2.2` with legacy prompts/profiles preserved and 1.3 Workflows available
 
 ## Before `1.3.0`
 

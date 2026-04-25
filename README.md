@@ -4,9 +4,9 @@
 [![macOS](https://img.shields.io/badge/macOS-14.0%2B-black.svg)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-6-orange.svg)](https://swift.org)
 
-Speech-to-text and AI text processing for macOS. Transcribe audio using on-device AI models or cloud APIs (Groq, OpenAI), then process the result with custom LLM prompts. Your voice data stays on your Mac with local models - or use cloud APIs for faster processing.
+Speech-to-text and AI text processing for macOS. Transcribe audio using on-device AI models or cloud APIs (Groq, OpenAI), then transform the result with reusable workflows. Your voice data stays on your Mac with local models - or use cloud APIs for faster processing.
 
-TypeWhisper `1.2` is the current stable direct-download release for macOS. It includes system-wide dictation, file transcription, prompt processing, rules, history, dictionary, snippets, and bundled integrations. Advanced surfaces like the HTTP API, CLI, widgets, watch folders, and the plugin SDK remain supported for power users and automation.
+TypeWhisper `1.3` is the current stable direct-download release for macOS. It includes system-wide dictation, file transcription, unified workflows, history, dictionary, snippets, legacy migration tools, and bundled integrations. Advanced surfaces like the HTTP API, CLI, widgets, watch folders, and the plugin SDK remain supported for power users and automation.
 
 See the [release readiness guide](docs/release-readiness.md), [support matrix](docs/support-matrix.md), and [release checklist](docs/release-checklist.md) for the current release definition and ship gates.
 
@@ -19,13 +19,13 @@ See the [release readiness guide](docs/release-readiness.md), [support matrix](d
 <p align="center">
   <a href=".github/screenshots/home.png"><img src=".github/screenshots/home.png" width="270" alt="Home Dashboard"></a>
   <a href=".github/screenshots/recording.png"><img src=".github/screenshots/recording.png" width="270" alt="Recording & Hotkeys"></a>
-  <a href=".github/screenshots/prompts.png"><img src=".github/screenshots/prompts.png" width="270" alt="Custom Prompts"></a>
+  <a href=".github/screenshots/workflows.png"><img src=".github/screenshots/workflows.png" width="270" alt="Workflows"></a>
 </p>
 
 <p align="center">
   <a href=".github/screenshots/history.png"><img src=".github/screenshots/history.png" width="270" alt="Transcription History"></a>
   <a href=".github/screenshots/dictionary.png"><img src=".github/screenshots/dictionary.png" width="270" alt="Dictionary"></a>
-  <a href=".github/screenshots/profiles.png"><img src=".github/screenshots/profiles.png" width="270" alt="Rules"></a>
+  <a href=".github/screenshots/legacy.png"><img src=".github/screenshots/legacy.png" width="270" alt="Legacy Rules and Prompts"></a>
 </p>
 
 <p align="center">
@@ -39,15 +39,15 @@ See the [release readiness guide](docs/release-readiness.md), [support matrix](d
   <a href=".github/screenshots/advanced.png"><img src=".github/screenshots/advanced.png" width="270" alt="Advanced Settings"></a>
 </p>
 
-## What's New in 1.2
+## What's New in 1.3
 
-- **Minimal indicator** - A compact power-user status view alongside the existing Notch and Overlay styles
-- **Transcript preview toggle** - Live preview can now be disabled for Notch and Overlay indicators
-- **Faster dictation start** - Metadata capture and URL resolution move off the critical start path
-- **Short-clip improvements** - Better handling for brief utterances, especially with streaming preview and Parakeet
-- **Audio recovery fixes** - More resilient recording and preview after device switches, AirPods profile changes, and `AVAudioEngine` reconfiguration
-- **MLX plugin setup** - Qwen3, Granite, and Voxtral now support an optional HuggingFace token in settings for higher download limits
-- **Localized term packs** - Built-in term pack metadata now renders in English and German
+- **Unified Workflows** - Prompt actions and matching rules now live in one dedicated workflow surface with a native editor and guided creation flow
+- **Always fallback trigger** - Create a global workflow that runs when no more specific app, website, or hotkey workflow matches
+- **Safer prompt boundaries** - Workflow prompts treat dictated text as source content to transform, not instructions to execute
+- **Focus-safe local processing** - On-device workflows keep focus in the original target app instead of foregrounding TypeWhisper unexpectedly
+- **Snippets and dictionary polish** - Snippets are first-class settings, dictionary term packs are easier to review, and corrections stay engine-aware
+- **Integration refresh** - Bundled transcription, LLM, and action plugins are easier to inspect and activate
+- **Legacy cleanup** - Existing rules and prompts remain available in a dedicated Legacy area while the workflow migration is underway
 
 ## Features
 
@@ -70,14 +70,14 @@ See the [release readiness guide](docs/release-readiness.md), [support matrix](d
 
 ### AI Processing
 
-- **Custom prompts** - Build reusable LLM prompts for translation, rewriting, extraction, and formatting. Automatic prompt processing during dictation runs through Rules; without a Rule, prompts stay available from the standalone Prompt Palette via global hotkey
+- **Workflows** - Build reusable transformations for translation, rewriting, extraction, formatting, and app-specific automation. Workflows can run automatically by app or website, from a dedicated hotkey, or as a global fallback
 - **LLM providers** - Apple Intelligence (macOS 26+), Groq, OpenAI / ChatGPT, Gemini, and OpenAI Compatible with per-prompt provider and model override
 - **Local prompt processing** - Gemma 4 via MLX runs on-device on Apple Silicon, with the current verified release path limited to the E2B/E4B 4-bit models
 - **Translation** - Translate transcriptions on-device using Apple Translate
 
 ### Personalization
 
-- **Rules** - Per-app and per-website overrides for language, task, engine, prompt, hotkey, and auto-submit. Match by app (bundle ID) and/or domain with subdomain support
+- **Workflow triggers** - Per-app, per-website, hotkey, and global fallback triggers for language, task, engine, prompt, and auto-submit behavior. Website matching supports subdomains
 - **Dictionary** - Terms improve cloud recognition accuracy. Corrections fix common transcription mistakes automatically. Auto-learns from manual corrections. Includes importable term packs
 - **Localized term packs** - Built-in term pack names and descriptions are localized in English and German
 - **Snippets** - Text shortcuts with trigger/replacement. Supports placeholders like `{{DATE}}`, `{{TIME}}`, and `{{CLIPBOARD}}`
@@ -112,7 +112,7 @@ brew install --cask typewhisper/tap/typewhisper
 
 Download the latest DMG from [GitHub Releases](https://github.com/TypeWhisper/typewhisper-mac/releases/latest).
 
-Stable direct-download releases use the default Sparkle channel. Release candidates such as `1.2.0-rc*` and daily builds are published as GitHub prereleases, update the shared Sparkle appcast on their own channels, and are excluded from Homebrew.
+Stable direct-download releases use the default Sparkle channel. Release candidates such as `1.3.0-rc*` and daily builds are published as GitHub prereleases, update the shared Sparkle appcast on their own channels, and are excluded from Homebrew.
 Installed builds can switch channels in `Settings -> About` via the `Update Channel` picker.
 
 ## Quick Start
@@ -291,13 +291,13 @@ curl "http://localhost:8978/v1/history?q=meeting&limit=10&offset=0"
 curl -X DELETE "http://localhost:8978/v1/history?id=<uuid>"
 ```
 
-### Rules
+### Workflows
 
 ```bash
-# List all rules
+# List all workflow-backed rules
 curl http://localhost:8978/v1/rules
 
-# Toggle a rule on/off
+# Toggle a workflow-backed rule on/off
 curl -X PUT "http://localhost:8978/v1/rules/toggle?id=<uuid>"
 ```
 
@@ -362,26 +362,27 @@ typewhisper transcribe meeting.m4a --json | jq -r '.text'
 
 The CLI requires the API server to be running (Settings > Advanced) and follows the documented command and flag surface for the current stable release.
 
-## Rules
+## Workflows
 
-Rules let you configure transcription settings per application or website. For example:
+Workflows let you configure transcription, transformation, and automation behavior per application, website, hotkey, or global fallback. For example:
 
 - **Mail** - German language, Whisper Large v3
 - **Slack** - English language, Parakeet TDT v3
 - **Terminal** - English language, auto-submit enabled
-- **github.com** - English language (matches in any browser)
-- **docs.google.com** - German language, translate to English
+- **github.com** - English cleanup workflow that matches in any browser
+- **docs.google.com** - German dictation workflow that translates to English
 
-Create rules in Settings > Regeln. Assign apps and/or URL patterns, set language/task/engine overrides, assign a custom prompt for automatic post-processing, optionally configure a manual rule shortcut, enable auto-submit (automatically sends text in chat apps), and adjust priority. Spoken language can be left on full auto-detect, fixed to one exact language, or restricted to a shortlist of likely languages for better detection accuracy. URL patterns support subdomain matching - e.g. `google.com` also matches `docs.google.com`. The domain autocomplete suggests domains from your transcription history. If you want a prompt to run for normal dictation, assign it to a Rule; otherwise it remains a manual Prompt Palette action.
+Create workflows in Settings > Workflows. Choose a template, assign an app, website, hotkey, or Always trigger, then configure language/task/engine overrides, prompt processing, auto-submit behavior, and priority. Spoken language can be left on full auto-detect, fixed to one exact language, or restricted to a shortlist of likely languages for better detection accuracy. Website patterns support subdomain matching - e.g. `google.com` also matches `docs.google.com`.
 
-When you start dictating, TypeWhisper matches the active app and browser URL against your rules with the following priority:
+When you start dictating, TypeWhisper matches the active app and browser URL against enabled workflows with the following priority:
 1. **App + URL match** - highest specificity (e.g. Chrome + github.com)
-2. **URL-only match** - cross-browser rules (e.g. github.com in any browser)
-3. **App-only match** - generic app rules (e.g. all of Chrome)
+2. **URL-only match** - cross-browser workflows (e.g. github.com in any browser)
+3. **App-only match** - generic app workflows (e.g. all of Chrome)
+4. **Always fallback** - global workflow when no more specific workflow matches
 
-The active rule name is shown as a badge in the notch indicator, together with a short explanation of why it matched.
+The active workflow name is shown as a badge in the indicator, together with a short explanation of why it matched.
 
-Multiple engines can be loaded simultaneously for instant switching between profiles. Note that loading multiple local models increases memory usage. Cloud engines (Groq, OpenAI) have negligible memory overhead.
+Existing rules and prompts remain visible in Settings > Legacy so they can be reviewed and cleaned up during the migration. Multiple engines can be loaded simultaneously for instant switching between workflows. Note that loading multiple local models increases memory usage. Cloud engines (Groq, OpenAI) have negligible memory overhead.
 
 ## Plugins
 
@@ -412,11 +413,12 @@ TypeWhisper/
 │   ├── AudioFileService    # Audio/video - 16kHz PCM conversion
 │   ├── HotkeyService
 │   ├── TextInsertionService
-│   ├── ProfileService      # Per-app profile matching and persistence
+│   ├── WorkflowService     # Workflow matching and persistence
+│   ├── LegacyWorkflowService # Read-only access to old rules and prompts
 │   ├── HistoryService      # Transcription history persistence (SwiftData)
 │   ├── DictionaryService   # Custom term corrections
 │   ├── SnippetService      # Text snippets with placeholders
-│   ├── PromptActionService # Custom prompt management (SwiftData)
+│   ├── PromptActionService # Legacy prompt management (SwiftData)
 │   ├── PromptProcessingService # LLM orchestration for prompt execution
 │   ├── PluginManager       # Plugin discovery, loading, and lifecycle
 │   ├── PluginRegistryService # Plugin marketplace (download, install, update)

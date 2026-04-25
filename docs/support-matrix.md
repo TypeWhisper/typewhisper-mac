@@ -17,9 +17,9 @@ This matrix describes the officially supported direct-download path for the curr
 | --- | --- | --- | --- | --- |
 | System-wide dictation | Yes | Yes | Yes | Core workflow in the current stable release |
 | File transcription | Yes | Yes | Yes | Core workflow in the current stable release |
-| Prompt processing | Yes | Yes | Yes | Core workflow in the current stable release |
-| Profiles, History, Dictionary, Snippets | Yes | Yes | Yes | Core workflow in the current stable release |
-| Notch, Overlay, and Minimal indicators | Yes | Yes | Yes | User-facing status surfaces in `1.2` |
+| Workflow processing | Yes | Yes | Yes | Core workflow in the current stable release |
+| Workflows, History, Dictionary, Snippets | Yes | Yes | Yes | Core workflow in the current stable release |
+| Notch, Overlay, and Minimal indicators | Yes | Yes | Yes | User-facing status surfaces in `1.3` |
 | Widgets | Yes | Yes | Yes | Supported advanced surface |
 | HTTP API | Yes | Yes | Yes | Loopback-only, disabled by default |
 | CLI | Yes | Yes | Yes | Requires the local API server to be running |
