@@ -5,21 +5,21 @@
     <language>en</language>
     <description>Stable, release candidate, and daily updates for TypeWhisper.</description>
     <item>
+      <title>Version 1.3.0-daily.20260426</title>
+      <pubDate>Sun, 26 Apr 2026 06:31:22 +0000</pubDate>
+      <sparkle:version>673</sparkle:version>
+      <sparkle:shortVersionString>1.3.0-daily.20260426</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:channel>daily</sparkle:channel>
+      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.3.0-daily.20260426/TypeWhisper-v1.3.0-daily.20260426.zip" sparkle:edSignature="/vjTbQJA1HmIMgK2NI+f9P4/WMpSIJ7s5wRkKhe8ZpyXaDG5j/vRpbwrKCgXCmk3VDH7meTwQgyVRtC/AyNBAA==" length="11415134" type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.3.0</title>
       <pubDate>Sat, 25 Apr 2026 11:59:19 +0000</pubDate>
       <sparkle:version>671</sparkle:version>
       <sparkle:shortVersionString>1.3.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.3.0/TypeWhisper-v1.3.0.zip" sparkle:edSignature="J0gqXQgOuIeeAoHjdqrNHWRkcYxAW4D8LSclS3mW1IMcNIDi4hdcn3IxSx4LcRVVbyr0FwweMa6bSsO/zUyJDA==" length="11377254" type="application/octet-stream" />
-    </item>
-    <item>
-      <title>Version 1.3.0-daily.20260425</title>
-      <pubDate>Sat, 25 Apr 2026 06:13:04 +0000</pubDate>
-      <sparkle:version>670</sparkle:version>
-      <sparkle:shortVersionString>1.3.0-daily.20260425</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:channel>daily</sparkle:channel>
-      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.3.0-daily.20260425/TypeWhisper-v1.3.0-daily.20260425.zip" sparkle:edSignature="TpB1XkayRX3nkkg4Ic66gw1cdNYO2FvIlKMB1E8S8d2VaSn/4V29QS5zpLtwEj+P260R8oRFdS4DIGFsK27TAw==" length="11377309" type="application/octet-stream" />
     </item>
     <item>
       <title>Version 1.3.0-rc5</title>
