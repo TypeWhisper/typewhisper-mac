@@ -184,6 +184,8 @@ final class DictationViewModel: ObservableObject {
     private var transcriptionTask: Task<Void, Never>?
     private var errorResetTask: Task<Void, Never>?
     private var insertingResetTask: Task<Void, Never>?
+    private var rawTranscriptForFallback: String?
+    private var aiPostProcessingActive: Bool = false
     @Published private(set) var recordingCancelWarningActive: Bool = false
     private var urlResolutionTask: Task<Void, Never>?
     private var metadataCaptureTask: Task<Void, Never>?
@@ -677,14 +679,68 @@ final class DictationViewModel: ObservableObject {
         case .recording:
             guard !isStopInFlight else { return }
             abortActiveRecordingImmediately(sessionMessage: cancelledMessage)
-            showNotchFeedback(message: cancelledMessage, icon: "xmark.circle", duration: 1.5)
+            showNotchFeedback(message: indicatorStyle != .minimal ? cancelledMessage : nil, icon: "xmark", duration: 1.5, isError: true)
         case .processing:
-            cancelActiveDictationSessionIfNeeded(message: cancelledMessage)
-            transcriptionTask?.cancel()
-            transcriptionTask = nil
-            showNotchFeedback(message: cancelledMessage, icon: "xmark.circle", duration: 1.5)
+            if aiPostProcessingActive, let rawText = rawTranscriptForFallback {
+                // Cancel the AI task and fall back to inserting the raw local transcript
+                transcriptionTask?.cancel()
+                transcriptionTask = nil
+                aiPostProcessingActive = false
+                rawTranscriptForFallback = nil
+                insertRawFallbackTranscript(rawText)
+            } else {
+                cancelActiveDictationSessionIfNeeded(message: cancelledMessage)
+                transcriptionTask?.cancel()
+                transcriptionTask = nil
+                showNotchFeedback(message: indicatorStyle != .minimal ? cancelledMessage : nil, icon: "xmark", duration: 1.5, isError: true)
+            }
         default:
             break
+        }
+    }
+
+    /// Runs the local insertion pipeline on the raw transcript and inserts it.
+    /// Called when the user presses Esc to abort AI post-processing.
+    private func insertRawFallbackTranscript(_ rawText: String) {
+        let sessionID = activeDictationSessionID
+        let activeApp = capturedActiveApp ?? textInsertionService.captureActiveApp()
+        let autoEnter = effectiveAutoEnterEnabled
+        let preserveClip = preserveClipboard
+
+        // Mark session failed (cancelled by user) before we re-insert
+        cancelActiveDictationSessionIfNeeded(message: String(localized: "Cancelled"))
+
+        Task {
+            guard !Task.isCancelled else { return }
+            let autoSpacingOn = UserDefaults.standard.bool(forKey: UserDefaultsKeys.autoSpacingAroundDictatedText)
+            let insertionText = autoSpacingOn
+                ? textInsertionService.applyAutoSpacing(to: rawText)
+                : rawText
+
+            do {
+                _ = try await textInsertionService.insertText(
+                    insertionText,
+                    preserveClipboard: preserveClip,
+                    autoEnter: autoEnter
+                )
+            } catch {
+                logger.error("[FALLBACK] Text insertion failed: \(error.localizedDescription, privacy: .public)")
+            }
+
+            EventBus.shared.emit(.textInserted(TextInsertedPayload(
+                text: rawText,
+                appName: activeApp.name,
+                bundleIdentifier: activeApp.bundleId
+            )))
+
+            partialText = ""
+            state = .inserting
+            insertingResetTask?.cancel()
+            insertingResetTask = Task {
+                try? await Task.sleep(for: .seconds(1.5))
+                guard !Task.isCancelled else { return }
+                resetDictationState()
+            }
         }
     }
 
@@ -1191,6 +1247,13 @@ final class DictationViewModel: ObservableObject {
 
                 self.processingPhase = String(localized: "Processing...")
                 await metadataCaptureTask?.value
+
+                // Save raw transcript before AI runs so Esc can fall back to it
+                if llmHandler != nil {
+                    self.rawTranscriptForFallback = text
+                    self.aiPostProcessingActive = true
+                }
+
                 let ppContext = PostProcessingContext(
                     appName: activeApp.name,
                     bundleIdentifier: activeApp.bundleId,
@@ -1212,6 +1275,13 @@ final class DictationViewModel: ObservableObject {
                     outputFormat: self.effectiveOutputFormat,
                     llmStepName: llmStepName
                 )
+
+                // AI completed — clear fallback state before insertion to prevent duplicate
+                self.aiPostProcessingActive = false
+                self.rawTranscriptForFallback = nil
+
+                // Bail out if Esc was pressed while AI was finishing (task just got cancelled)
+                guard !Task.isCancelled else { return }
 
                 let ppMs = (CFAbsoluteTimeGetCurrent() - ppStart) * 1000
                 logger.info("[PERF] AI post-processing finished in \(String(format: "%.0f", ppMs), privacy: .public) ms")
@@ -1408,6 +1478,8 @@ final class DictationViewModel: ObservableObject {
         capturedCursorContext = nil
         activeAppIcon = nil
         processingPhase = nil
+        rawTranscriptForFallback = nil
+        aiPostProcessingActive = false
         actionFeedbackMessage = nil
         actionFeedbackIcon = nil
         actionFeedbackIsError = false
