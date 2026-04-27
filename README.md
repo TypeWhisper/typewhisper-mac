@@ -43,6 +43,7 @@ See the [release readiness guide](docs/release-readiness.md), [support matrix](d
 
 - **Unified Workflows** - Prompt actions and matching rules now live in one dedicated workflow surface with a native editor and guided creation flow
 - **Always fallback trigger** - Create a global workflow that runs when no more specific app, website, or hotkey workflow matches
+- **Manual workflow palette** - Keep workflows out of automatic dictation matching and run them from one global Workflow Palette shortcut
 - **Safer prompt boundaries** - Workflow prompts treat dictated text as source content to transform, not instructions to execute
 - **Focus-safe local processing** - On-device workflows keep focus in the original target app instead of foregrounding TypeWhisper unexpectedly
 - **Snippets and dictionary polish** - Snippets are first-class settings, dictionary term packs are easier to review, and corrections stay engine-aware
@@ -70,14 +71,14 @@ See the [release readiness guide](docs/release-readiness.md), [support matrix](d
 
 ### AI Processing
 
-- **Workflows** - Build reusable transformations for translation, rewriting, extraction, formatting, and app-specific automation. Workflows can run automatically by app or website, from a dedicated hotkey, or as a global fallback
+- **Workflows** - Build reusable transformations for translation, rewriting, extraction, formatting, and app-specific automation. Workflows can run automatically by app or website, from a dedicated hotkey, as a global fallback, or manually from the Workflow Palette
 - **LLM providers** - Apple Intelligence (macOS 26+), Groq, OpenAI / ChatGPT, Gemini, and OpenAI Compatible with per-prompt provider and model override
 - **Local prompt processing** - Gemma 4 via MLX runs on-device on Apple Silicon, with the current verified release path limited to the E2B/E4B 4-bit models
 - **Translation** - Translate transcriptions on-device using Apple Translate
 
 ### Personalization
 
-- **Workflow triggers** - Per-app, per-website, hotkey, and global fallback triggers for language, task, engine, prompt, and auto-submit behavior. Website matching supports subdomains
+- **Workflow triggers** - Per-app, per-website, hotkey, global fallback, and manual palette-only triggers for language, task, engine, prompt, and auto-submit behavior. Website matching supports subdomains
 - **Dictionary** - Terms improve cloud recognition accuracy. Corrections fix common transcription mistakes automatically. Auto-learns from manual corrections. Includes importable term packs
 - **Localized term packs** - Built-in term pack names and descriptions are localized in English and German
 - **Snippets** - Text shortcuts with trigger/replacement. Supports placeholders like `{{DATE}}`, `{{TIME}}`, and `{{CLIPBOARD}}`
@@ -364,7 +365,7 @@ The CLI requires the API server to be running (Settings > Advanced) and follows 
 
 ## Workflows
 
-Workflows let you configure transcription, transformation, and automation behavior per application, website, hotkey, or global fallback. For example:
+Workflows let you configure transcription, transformation, and automation behavior per application, website, hotkey, global fallback, or manual palette-only workflow. For example:
 
 - **Mail** - German language, Whisper Large v3
 - **Slack** - English language, Parakeet TDT v3
@@ -372,13 +373,15 @@ Workflows let you configure transcription, transformation, and automation behavi
 - **github.com** - English cleanup workflow that matches in any browser
 - **docs.google.com** - German dictation workflow that translates to English
 
-Create workflows in Settings > Workflows. Choose a template, assign an app, website, hotkey, or Always trigger, then configure language/task/engine overrides, prompt processing, auto-submit behavior, and priority. Spoken language can be left on full auto-detect, fixed to one exact language, or restricted to a shortlist of likely languages for better detection accuracy. Website patterns support subdomain matching - e.g. `google.com` also matches `docs.google.com`.
+Create workflows in Settings > Workflows. Choose a template, assign an app, website, hotkey, Always, or Manual trigger, then configure language/task/engine overrides, prompt processing, auto-submit behavior, and priority. Spoken language can be left on full auto-detect, fixed to one exact language, or restricted to a shortlist of likely languages for better detection accuracy. Website patterns support subdomain matching - e.g. `google.com` also matches `docs.google.com`.
 
 When you start dictating, TypeWhisper matches the active app and browser URL against enabled workflows with the following priority:
 1. **App + URL match** - highest specificity (e.g. Chrome + github.com)
 2. **URL-only match** - cross-browser workflows (e.g. github.com in any browser)
 3. **App-only match** - generic app workflows (e.g. all of Chrome)
 4. **Always fallback** - global workflow when no more specific workflow matches
+
+Manual workflows are excluded from automatic dictation matching. They appear only in the Workflow Palette and use the existing Workflow Palette hotkey.
 
 The active workflow name is shown as a badge in the indicator, together with a short explanation of why it matched.
 

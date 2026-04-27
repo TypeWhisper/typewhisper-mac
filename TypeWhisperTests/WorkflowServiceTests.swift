@@ -312,6 +312,24 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(workflow.trigger, try globalTrigger())
     }
 
+    func testWorkflowServicePersistsManualTrigger() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory)
+        service.addWorkflow(
+            name: "Manual Summary",
+            template: .summary,
+            trigger: try manualTrigger()
+        )
+
+        let reloaded = WorkflowService(appSupportDirectory: appSupportDirectory)
+        let workflow = try XCTUnwrap(reloaded.workflows.first)
+
+        XCTAssertEqual(workflow.trigger?.kind.rawValue, "manual")
+        XCTAssertEqual(workflow.trigger, try manualTrigger())
+    }
+
     func testMatchWorkflowUsesGlobalAsFallback() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
         defer { TestSupport.remove(appSupportDirectory) }
@@ -387,6 +405,32 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertNil(service.matchWorkflow(bundleIdentifier: "com.apple.TextEdit", url: nil))
     }
 
+    func testMatchWorkflowNeverUsesManualTrigger() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory)
+        _ = service.addWorkflow(
+            name: "Manual Summary",
+            template: .summary,
+            trigger: try manualTrigger(),
+            sortOrder: 0
+        )
+
+        XCTAssertNil(service.matchWorkflow(bundleIdentifier: "com.apple.TextEdit", url: nil))
+
+        _ = service.addWorkflow(
+            name: "Always Cleanup",
+            template: .custom,
+            trigger: try globalTrigger(),
+            sortOrder: 1
+        )
+
+        let match = try XCTUnwrap(service.matchWorkflow(bundleIdentifier: "com.apple.TextEdit", url: nil))
+        XCTAssertEqual(match.workflow.name, "Always Cleanup")
+        XCTAssertEqual(match.kind, .globalFallback)
+    }
+
     func testMatchWorkflowUsesSortOrderForMultipleGlobalFallbacks() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
         defer { TestSupport.remove(appSupportDirectory) }
@@ -426,6 +470,20 @@ private func globalTrigger(
     )
     XCTAssertEqual(kind, .global, file: file, line: line)
     return .global()
+}
+
+private func manualTrigger(
+    file: StaticString = #filePath,
+    line: UInt = #line
+) throws -> WorkflowTrigger {
+    let kind = try XCTUnwrap(
+        WorkflowTriggerKind(rawValue: "manual"),
+        "WorkflowTriggerKind.manual should decode from the persisted raw value.",
+        file: file,
+        line: line
+    )
+    XCTAssertEqual(kind, .manual, file: file, line: line)
+    return .manual()
 }
 
 final class WatchFolderExportTests: XCTestCase {
