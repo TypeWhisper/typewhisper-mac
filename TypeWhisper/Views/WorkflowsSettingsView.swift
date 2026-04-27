@@ -1032,12 +1032,13 @@ private struct WorkflowEditorPage: View {
         WorkflowSectionCard(
             title: localizedAppText("Trigger", de: "Trigger"),
             description: localizedAppText(
-                "Choose how this workflow starts. Always runs when no specific workflow matches.",
-                de: "Wähle, wie dieser Workflow startet. Immer greift, wenn kein spezifischer Workflow passt."
+                "Choose how this workflow starts. Manual workflows are available from the Workflow Palette only.",
+                de: "Wähle, wie dieser Workflow startet. Manuelle Workflows sind nur über die Workflow-Palette verfügbar."
             )
         ) {
             VStack(alignment: .leading, spacing: 14) {
                 Picker(localizedAppText("Trigger", de: "Trigger"), selection: $draft.triggerKind) {
+                    Text(localizedAppText("Manual", de: "Manuell")).tag(WorkflowTriggerKind.manual)
                     Text(localizedAppText("App", de: "App")).tag(WorkflowTriggerKind.app)
                     Text(localizedAppText("Website", de: "Website")).tag(WorkflowTriggerKind.website)
                     Text(localizedAppText("Hotkey", de: "Hotkey")).tag(WorkflowTriggerKind.hotkey)
@@ -1046,6 +1047,8 @@ private struct WorkflowEditorPage: View {
                 .pickerStyle(.segmented)
 
                 switch draft.triggerKind {
+                case .manual:
+                    manualTriggerEditor
                 case .app:
                     appTriggerEditor
                 case .website:
@@ -1074,6 +1077,34 @@ private struct WorkflowEditorPage: View {
                         .fill(Color.accentColor.opacity(0.08))
                 }
         }
+    }
+
+    private var manualTriggerEditor: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "list.bullet.rectangle")
+                .foregroundStyle(.secondary)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(localizedAppText("Manual", de: "Manuell"))
+                    .font(.subheadline.weight(.medium))
+
+                Text(
+                    localizedAppText(
+                        "Available from the Workflow Palette. It never runs automatically after dictation.",
+                        de: "Verfügbar über die Workflow-Palette. Läuft nach dem Diktat nie automatisch."
+                    )
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(workflowsGroupedSurface(cornerRadius: 12))
     }
 
     private var appTriggerEditor: some View {
@@ -1732,7 +1763,7 @@ private struct WorkflowDraft {
         self.name = template.definition.name
         self.isEnabled = true
         self.template = template
-        self.triggerKind = .hotkey
+        self.triggerKind = .manual
         self.appBundleIdentifiers = []
         self.websitePatterns = []
         self.hotkeys = []
@@ -1790,9 +1821,14 @@ private struct WorkflowDraft {
                 self.appBundleIdentifiers = []
                 self.websitePatterns = []
                 self.hotkeys = []
+            case .manual:
+                self.triggerKind = .manual
+                self.appBundleIdentifiers = []
+                self.websitePatterns = []
+                self.hotkeys = []
             }
         } else {
-            self.triggerKind = .app
+            self.triggerKind = .manual
             self.appBundleIdentifiers = []
             self.websitePatterns = []
             self.hotkeys = []
@@ -1805,6 +1841,13 @@ private struct WorkflowDraft {
     }
 
     var reviewText: String {
+        if triggerKind == .manual {
+            return localizedAppText(
+                "\(resolvedName) is available as \(template.definition.name) from the Workflow Palette.",
+                de: "\(resolvedName) ist als \(template.definition.name) über die Workflow-Palette verfügbar."
+            )
+        }
+
         if triggerKind == .global {
             return localizedAppText(
                 "\(resolvedName) runs always as \(template.definition.name).",
@@ -1902,7 +1945,7 @@ private struct WorkflowDraft {
                     )
                 }
             }
-        case .global:
+        case .global, .manual:
             break
         }
 
@@ -1940,6 +1983,8 @@ private struct WorkflowDraft {
             return .hotkeys(hotkeys)
         case .global:
             return .global()
+        case .manual:
+            return .manual()
         }
     }
 
@@ -2011,6 +2056,8 @@ private struct WorkflowDraft {
             return localizedAppText("a hotkey", de: "einen Hotkey")
         case .global:
             return localizedAppText("always", de: "immer")
+        case .manual:
+            return localizedAppText("the Workflow Palette", de: "die Workflow-Palette")
         }
     }
 
@@ -2059,6 +2106,8 @@ private func workflowTriggerSummary(for workflow: Workflow) -> String {
     }
 
     switch trigger.kind {
+    case .manual:
+        return localizedAppText("Manual", de: "Manuell")
     case .app:
         return trigger.appBundleIdentifiers.count == 1
             ? localizedAppText("App", de: "App")
@@ -2080,6 +2129,8 @@ private func workflowTriggerDetail(for workflow: Workflow) -> String {
     guard let trigger = workflow.trigger else { return "" }
 
     switch trigger.kind {
+    case .manual:
+        return localizedAppText("Workflow Palette", de: "Workflow-Palette")
     case .app:
         return workflowCompactList(trigger.appBundleIdentifiers.map(workflowAppDisplayName(for:)))
     case .website:
@@ -2100,6 +2151,13 @@ private func workflowReviewText(for workflow: Workflow) -> String {
         return localizedAppText(
             "\(summary) runs always",
             de: "\(summary) läuft immer"
+        )
+    }
+
+    if workflow.trigger?.kind == .manual {
+        return localizedAppText(
+            "\(summary) is available from the Workflow Palette",
+            de: "\(summary) ist über die Workflow-Palette verfügbar"
         )
     }
 

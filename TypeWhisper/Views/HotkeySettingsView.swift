@@ -60,8 +60,8 @@ struct HotkeySettingsView: View {
                 )
 
                 Text(localizedAppText(
-                    "Select text in any app, press the shortcut, and choose a workflow to process the text.",
-                    de: "Markiere Text in einer App, drücke den Shortcut und wähle einen Workflow für die Verarbeitung."
+                    "Select or copy text in any app, press the shortcut, and choose a manual workflow to process the text.",
+                    de: "Markiere oder kopiere Text in einer App, drücke den Shortcut und wähle einen manuellen Workflow für die Verarbeitung."
                 ))
                     .font(.caption)
                     .foregroundStyle(.secondary)

@@ -142,6 +142,44 @@ final class RecentTranscriptionPaletteHandlerTests: XCTestCase {
         XCTAssertEqual(returnCount, 0)
         XCTAssertEqual(pasteboard.string(forType: .string), "Insert me")
     }
+
+    func testWorkflowPaletteIncludesManualWorkflows() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let textInsertionService = TextInsertionService()
+        textInsertionService.accessibilityGrantedOverride = true
+        textInsertionService.captureActiveAppOverride = { ("Notes", nil, nil) }
+        textInsertionService.textSelectionOverride = {
+            TextInsertionService.TextSelection(
+                text: "Selected text",
+                element: AXUIElementCreateSystemWide()
+            )
+        }
+
+        let workflowService = WorkflowService(appSupportDirectory: appSupportDirectory)
+        _ = workflowService.addWorkflow(
+            name: "Manual Summary",
+            template: .summary,
+            trigger: .manual()
+        )
+
+        let controller = PromptPaletteControllerSpy()
+        let handler = PromptPaletteHandler(
+            textInsertionService: textInsertionService,
+            workflowService: workflowService,
+            promptProcessingService: PromptProcessingService(),
+            soundService: SoundService(),
+            accessibilityAnnouncementService: AccessibilityAnnouncementService(),
+            promptPaletteController: controller
+        )
+
+        handler.triggerSelection(currentState: .idle, soundFeedbackEnabled: false)
+
+        XCTAssertTrue(controller.isVisible)
+        XCTAssertEqual(controller.lastWorkflows?.map(\.name), ["Manual Summary"])
+        XCTAssertEqual(controller.lastSourceText, "Selected text")
+    }
 }
 
 @MainActor
