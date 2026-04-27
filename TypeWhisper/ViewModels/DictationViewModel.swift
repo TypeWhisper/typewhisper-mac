@@ -1608,15 +1608,25 @@ final class DictationViewModel: ObservableObject {
     // MARK: - Shared Helpers
 
     private static func enhanceWithCursorContext(text: String, context: CursorContext) -> String {
-        var parts: [String] = [text, "\n\nContext:"]
+        var contextBody = ""
         if let left = context.leftContext {
-            parts.append("\nText before cursor:\n\(left)")
+            contextBody += "Text before cursor:\n\(left)"
         }
         if let right = context.rightContext {
-            parts.append("\nText after cursor:\n\(right)")
+            if !contextBody.isEmpty { contextBody += "\n\n" }
+            contextBody += "Text after cursor:\n\(right)"
         }
-        return parts.joined()
+        guard !contextBody.isEmpty else { return text }
+        return "\(text)\n\n<context>\n\(contextBody)\n</context>"
     }
+
+    /// Instruction appended to any system prompt when cursor context is injected into the user message.
+    /// Prevents the model from echoing or summarizing the <context> block.
+    private static let cursorContextSystemInstruction = """
+        \nIf the user message contains a <context> block, treat it only as surrounding document context \
+        to improve your response. Do not repeat, summarize, reference, or output the <context> block or its tags. \
+        Return only the final enhanced text.
+        """
 
     /// Builds an LLM handler for the post-processing pipeline.
     /// Priority: workflow > legacy inline/prompt action > translation > nil.
@@ -1625,6 +1635,9 @@ final class DictationViewModel: ObservableObject {
         detectedLanguage: String?,
         configuredLanguage: String?
     ) -> ((String) async throws -> String)? {
+        let contextEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.useSurroundingCursorContext)
+        let hasCapturedContext = capturedCursorContext != nil
+
         if let matchedWorkflow,
            let systemPrompt = matchedWorkflow.systemPrompt(
                 fallbackTranslationTarget: translationTarget,
@@ -1633,9 +1646,12 @@ final class DictationViewModel: ObservableObject {
            ) {
             let pps = promptProcessingService
             let behavior = matchedWorkflow.behavior
+            let finalPrompt = contextEnabled && hasCapturedContext
+                ? systemPrompt + Self.cursorContextSystemInstruction
+                : systemPrompt
             return { text in
                 try await pps.process(
-                    prompt: systemPrompt,
+                    prompt: finalPrompt,
                     text: text,
                     providerOverride: behavior.providerId,
                     cloudModelOverride: behavior.cloudModel,
@@ -1649,14 +1665,17 @@ final class DictationViewModel: ObservableObject {
         if inlineEnabled || effectivePromptAction != nil {
             let pps = promptProcessingService
             let promptAction = effectivePromptAction
-            let prompt = inlineEnabled
+            let basePrompt = inlineEnabled
                 ? Self.buildInlineCommandSystemPrompt(baseContext: promptAction?.prompt)
                 : promptAction!.prompt
+            let finalPrompt = contextEnabled && hasCapturedContext
+                ? basePrompt + Self.cursorContextSystemInstruction
+                : basePrompt
             let providerOverride = promptAction?.providerType
             let modelOverride = promptAction?.cloudModel
             return { text in
                 try await pps.process(
-                    prompt: prompt, text: text,
+                    prompt: finalPrompt, text: text,
                     providerOverride: providerOverride,
                     cloudModelOverride: modelOverride,
                     temperatureDirective: promptAction?.temperatureDirective ?? .inheritProviderSetting

@@ -132,7 +132,8 @@ final class CursorContextCaptureTests: XCTestCase {
         let context = CursorContext(leftContext: "left text", rightContext: "right text")
         let result = DictationViewModelTestHelper.enhanceWithCursorContext(text: "my dictation", context: context)
         XCTAssertTrue(result.hasPrefix("my dictation"))
-        XCTAssertTrue(result.contains("\n\nContext:"))
+        XCTAssertTrue(result.contains("<context>"))
+        XCTAssertTrue(result.contains("</context>"))
         XCTAssertTrue(result.contains("Text before cursor:\nleft text"))
         XCTAssertTrue(result.contains("Text after cursor:\nright text"))
     }
@@ -140,6 +141,7 @@ final class CursorContextCaptureTests: XCTestCase {
     func testEnhanceWithCursorContext_leftOnly_noRightSection() {
         let context = CursorContext(leftContext: "left text", rightContext: nil)
         let result = DictationViewModelTestHelper.enhanceWithCursorContext(text: "my dictation", context: context)
+        XCTAssertTrue(result.contains("<context>"))
         XCTAssertTrue(result.contains("Text before cursor:\nleft text"))
         XCTAssertFalse(result.contains("Text after cursor:"))
     }
@@ -147,6 +149,7 @@ final class CursorContextCaptureTests: XCTestCase {
     func testEnhanceWithCursorContext_rightOnly_noLeftSection() {
         let context = CursorContext(leftContext: nil, rightContext: "right text")
         let result = DictationViewModelTestHelper.enhanceWithCursorContext(text: "my dictation", context: context)
+        XCTAssertTrue(result.contains("<context>"))
         XCTAssertFalse(result.contains("Text before cursor:"))
         XCTAssertTrue(result.contains("Text after cursor:\nright text"))
     }
@@ -155,13 +158,15 @@ final class CursorContextCaptureTests: XCTestCase {
 /// Exposes the private static helper for testing via a thin wrapper.
 enum DictationViewModelTestHelper {
     static func enhanceWithCursorContext(text: String, context: CursorContext) -> String {
-        var parts: [String] = [text, "\n\nContext:"]
+        var contextBody = ""
         if let left = context.leftContext {
-            parts.append("\nText before cursor:\n\(left)")
+            contextBody += "Text before cursor:\n\(left)"
         }
         if let right = context.rightContext {
-            parts.append("\nText after cursor:\n\(right)")
+            if !contextBody.isEmpty { contextBody += "\n\n" }
+            contextBody += "Text after cursor:\n\(right)"
         }
-        return parts.joined()
+        guard !contextBody.isEmpty else { return text }
+        return "\(text)\n\n<context>\n\(contextBody)\n</context>"
     }
 }
