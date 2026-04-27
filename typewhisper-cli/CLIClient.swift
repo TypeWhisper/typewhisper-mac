@@ -46,8 +46,26 @@ enum CLIError: Error {
 }
 
 struct CLIClient {
+    typealias Transport = @Sendable (URLRequest) async throws -> (Data, URLResponse)
+
     let port: UInt16
+    private let transport: Transport
+    private let stdinReader: @Sendable () -> Data
     private var baseURL: String { "http://127.0.0.1:\(port)" }
+
+    init(
+        port: UInt16,
+        transport: @escaping Transport = { request in
+            try await URLSession.shared.data(for: request)
+        },
+        stdinReader: @escaping @Sendable () -> Data = {
+            FileHandle.standardInput.readDataToEndOfFile()
+        }
+    ) {
+        self.port = port
+        self.transport = transport
+        self.stdinReader = stdinReader
+    }
 
     func status() async throws -> Data {
         try await get("/v1/status")
@@ -67,23 +85,25 @@ struct CLIClient {
         model: String? = nil,
         awaitDownload: Bool = false
     ) async throws -> Data {
-        let audioData: Data
-        let filename: String
-
         if let fileURL {
             guard FileManager.default.fileExists(atPath: fileURL.path) else {
                 throw CLIError.fileNotFound(fileURL.path)
             }
-            audioData = try Data(contentsOf: fileURL)
-            filename = fileURL.lastPathComponent
-        } else {
-            // Read from stdin
-            let stdinData = FileHandle.standardInput.readDataToEndOfFile()
-            guard !stdinData.isEmpty else {
-                throw CLIError.stdinEmpty
-            }
-            audioData = stdinData
-            filename = "audio.wav"
+            return try await transcribeLocalFile(
+                fileURL: fileURL,
+                language: language,
+                languageHints: languageHints,
+                task: task,
+                targetLanguage: targetLanguage,
+                engine: engine,
+                model: model,
+                awaitDownload: awaitDownload
+            )
+        }
+
+        let audioData = stdinReader()
+        guard !audioData.isEmpty else {
+            throw CLIError.stdinEmpty
         }
 
         let boundary = UUID().uuidString
@@ -91,7 +111,7 @@ struct CLIClient {
 
         // File field
         body.append("--\(boundary)\r\n")
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n")
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\n")
         body.append("Content-Type: application/octet-stream\r\n\r\n")
         body.append(audioData)
         body.append("\r\n")
@@ -134,6 +154,52 @@ struct CLIClient {
 
     // MARK: - Private
 
+    private func transcribeLocalFile(
+        fileURL: URL,
+        language: String?,
+        languageHints: [String],
+        task: String?,
+        targetLanguage: String?,
+        engine: String?,
+        model: String?,
+        awaitDownload: Bool
+    ) async throws -> Data {
+        var payload: [String: Any] = [
+            "path": fileURL.path
+        ]
+        if let language {
+            payload["language"] = language
+        }
+        if !languageHints.isEmpty {
+            payload["language_hints"] = languageHints
+        }
+        if let task {
+            payload["task"] = task
+        }
+        if let targetLanguage {
+            payload["target_language"] = targetLanguage
+        }
+        if let engine {
+            payload["engine"] = engine
+        }
+        if let model {
+            payload["model"] = model
+        }
+
+        var transcribePath = "/v1/transcribe/local-file"
+        if awaitDownload {
+            transcribePath += "?await_download=1"
+        }
+        let url = URL(string: "\(baseURL)\(transcribePath)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+        request.timeoutInterval = 300
+
+        return try await performRequest(request)
+    }
+
     private func get(_ path: String) async throws -> Data {
         let url = URL(string: "\(baseURL)\(path)")!
         var request = URLRequest(url: url)
@@ -145,7 +211,7 @@ struct CLIClient {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await URLSession.shared.data(for: request)
+            (data, response) = try await transport(request)
         } catch {
             throw CLIError.connectionFailed(port: port)
         }

@@ -263,6 +263,8 @@ Optional parameters:
 - `task` - `transcribe` (default) or `translate` (translates to English, WhisperKit only).
 - `target_language` - ISO 639-1 code for translation target language (e.g., `es`, `fr`). Uses Apple Translate.
 
+Uploads to `/v1/transcribe` are limited to 256 MiB, including stdin uploads from the CLI. Requests above that size return `413 Payload Too Large`. Local CLI file paths use a direct handoff to the running TypeWhisper app instead of uploading the file bytes.
+
 ### List Models
 
 ```bash
@@ -361,6 +363,8 @@ typewhisper transcribe meeting.m4a --json | jq -r '.text'
 ```
 
 The CLI requires the API server to be running (Settings > Advanced) and follows the documented command and flag surface for the current stable release.
+
+Local file paths are handed to the running TypeWhisper app directly, so large files do not need to fit inside an HTTP upload body. Stdin usage (`typewhisper transcribe -`) still uses the regular `/v1/transcribe` upload endpoint and is limited to 256 MiB.
 
 ## Workflows
 

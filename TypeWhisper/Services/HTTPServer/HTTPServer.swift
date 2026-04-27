@@ -83,6 +83,9 @@ final class HTTPServer: @unchecked Sendable {
                 } else {
                     self.receiveData(on: connection, buffer: accumulated)
                 }
+            } catch HTTPParseError.bodyTooLarge {
+                let response = HTTPResponse.error(status: 413, message: "Payload too large. Maximum request body size is 256 MiB.")
+                self.send(response, on: connection)
             } catch {
                 let response = HTTPResponse.error(status: 400, message: "Malformed request")
                 self.send(response, on: connection)
