@@ -15,7 +15,7 @@
       "size": 17579600,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-qwen3-v1.0.16/Qwen3Plugin.zip",
       "iconSystemName": "cpu",
-      "downloadCount": 1871,
+      "downloadCount": 1907,
       "minOSVersion": "14.0",
       "supportedArchitectures": [
         "arm64"
@@ -53,7 +53,7 @@
       "size": 206232,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-webhook-v1.0.9/WebhookPlugin.zip",
       "iconSystemName": "arrow.up.forward.app",
-      "downloadCount": 613,
+      "downloadCount": 622,
       "minOSVersion": "14.0"
     },
     {
@@ -71,7 +71,7 @@
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-groq-v1.0.15/GroqPlugin.zip",
       "iconSystemName": "bolt.fill",
       "requiresAPIKey": true,
-      "downloadCount": 4278,
+      "downloadCount": 4408,
       "minOSVersion": "14.0"
     },
     {
@@ -89,7 +89,7 @@
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-v1.1.1/OpenAIPlugin.zip",
       "iconSystemName": "brain",
       "requiresAPIKey": false,
-      "downloadCount": 1092,
+      "downloadCount": 1127,
       "minOSVersion": "14.0"
     },
     {
@@ -107,7 +107,7 @@
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gemini-v1.0.12/GeminiPlugin.zip",
       "iconSystemName": "sparkles",
       "requiresAPIKey": true,
-      "downloadCount": 870,
+      "downloadCount": 887,
       "minOSVersion": "14.0"
     },
     {
@@ -124,7 +124,7 @@
       "size": 2957909,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-whisperkit-v1.0.16/WhisperKitPlugin.zip",
       "iconSystemName": "waveform",
-      "downloadCount": 5508,
+      "downloadCount": 5671,
       "minOSVersion": "14.0",
       "supportedArchitectures": [
         "arm64"
@@ -144,7 +144,7 @@
       "size": 3367668,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-parakeet-v1.2.4/ParakeetPlugin.zip",
       "iconSystemName": "bird",
-      "downloadCount": 13941,
+      "downloadCount": 14369,
       "minOSVersion": "14.0",
       "supportedArchitectures": [
         "arm64"
@@ -164,7 +164,7 @@
       "size": 183236,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-compatible-v1.0.10/OpenAICompatiblePlugin.zip",
       "iconSystemName": "server.rack",
-      "downloadCount": 1092,
+      "downloadCount": 1127,
       "minOSVersion": "14.0"
     },
     {
@@ -181,7 +181,7 @@
       "size": 178518,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-speechanalyzer-v1.0.9/SpeechAnalyzerPlugin.zip",
       "iconSystemName": "apple.logo",
-      "downloadCount": 4711,
+      "downloadCount": 4871,
       "minOSVersion": "26.0"
     },
     {
@@ -198,7 +198,7 @@
       "size": 161818,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-obsidian-v1.0.0/ObsidianPlugin.zip",
       "iconSystemName": "doc.text",
-      "downloadCount": 705,
+      "downloadCount": 726,
       "minOSVersion": "14.0"
     },
     {
@@ -216,7 +216,7 @@
       "size": 223519,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-script-v1.1.0/ScriptPlugin.zip",
       "iconSystemName": "terminal",
-      "downloadCount": 331
+      "downloadCount": 341
     },
     {
       "id": "com.typewhisper.granite",
@@ -232,7 +232,7 @@
       "size": 6708285,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-granite-v1.0.2/GranitePlugin.zip",
       "iconSystemName": "cpu",
-      "downloadCount": 473,
+      "downloadCount": 481,
       "minOSVersion": "14.0",
       "supportedArchitectures": [
         "arm64"
@@ -252,7 +252,7 @@
       "size": 17254487,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-voxtral-v1.0.6/VoxtralPlugin.zip",
       "iconSystemName": "cpu",
-      "downloadCount": 746,
+      "downloadCount": 771,
       "minOSVersion": "14.0",
       "supportedArchitectures": [
         "arm64"
@@ -271,7 +271,7 @@
       "category": "transcription",
       "iconSystemName": "flame.fill",
       "requiresAPIKey": true,
-      "downloadCount": 59,
+      "downloadCount": 61,
       "size": 181196,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-fireworks-v1.0.1/FireworksPlugin.zip",
       "minOSVersion": "14.0"
@@ -292,7 +292,7 @@
       "minOSVersion": "14.0",
       "iconSystemName": "globe",
       "requiresAPIKey": true,
-      "downloadCount": 322
+      "downloadCount": 334
     },
     {
       "id": "com.typewhisper.cerebras",
@@ -310,7 +310,7 @@
       "minOSVersion": "14.0",
       "iconSystemName": "bolt.fill",
       "requiresAPIKey": true,
-      "downloadCount": 142
+      "downloadCount": 145
     },
     {
       "id": "com.typewhisper.claude",
@@ -329,7 +329,7 @@
       "minOSVersion": "14.0",
       "iconSystemName": "brain.head.profile",
       "requiresAPIKey": true,
-      "downloadCount": 393
+      "downloadCount": 406
     },
     {
       "id": "com.typewhisper.gemma4",
@@ -346,7 +346,7 @@
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gemma4-v1.0.1/Gemma4Plugin.zip",
       "minOSVersion": "14.0",
       "iconSystemName": "cpu",
-      "downloadCount": 1485
+      "downloadCount": 1567
     }
   ]
 }
