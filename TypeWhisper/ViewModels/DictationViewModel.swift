@@ -1104,9 +1104,10 @@ final class DictationViewModel: ObservableObject {
                         failDictationSession(id: sessionID, error: errorMessage)
                     }
                     showNotchFeedback(
-                        message: errorMessage,
-                        icon: "text.magnifyingglass",
-                        duration: 2.0
+                        message: indicatorStyle != .minimal ? errorMessage : nil,
+                        icon: "xmark",
+                        duration: 2.0,
+                        isError: true
                     )
                     soundService.play(.error, enabled: soundFeedbackEnabled)
                     return
@@ -1661,14 +1662,14 @@ final class DictationViewModel: ObservableObject {
         recentTranscriptionPaletteHandler.triggerSelection(currentState: state)
     }
 
-    private func showNotchFeedback(message: String, icon: String, duration: TimeInterval = 2.5, isError: Bool = false, errorCategory: String = "general") {
+    private func showNotchFeedback(message: String? = nil, icon: String, duration: TimeInterval = 2.5, isError: Bool = false, errorCategory: String = "general") {
         actionFeedbackMessage = message
         actionFeedbackIcon = icon
         actionFeedbackIsError = isError
         actionDisplayDuration = duration
         state = .inserting
 
-        if isError {
+        if isError, let message {
             errorLogService.addEntry(message: message, category: errorCategory)
         }
 

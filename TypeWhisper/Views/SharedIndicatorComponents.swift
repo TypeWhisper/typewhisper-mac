@@ -113,6 +113,10 @@ struct IndicatorLeftStatus: View {
         case .inserting:
             if hasActionFeedback {
                 Color.clear.frame(width: 0, height: 0)
+            } else if let feedbackIcon = viewModel.actionFeedbackIcon {
+                Image(systemName: feedbackIcon)
+                    .foregroundStyle(viewModel.actionFeedbackIsError ? .red : .green)
+                    .font(.system(size: sizing.symbolSize))
             } else if let icon = viewModel.activeAppIcon {
                 IndicatorAppIconView(icon: icon, sizing: sizing)
             } else {
