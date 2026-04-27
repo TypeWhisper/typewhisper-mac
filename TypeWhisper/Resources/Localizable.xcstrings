@@ -878,6 +878,9 @@
         }
       }
     },
+    "AI Context" : {
+
+    },
     "AI enhanced" : {
       "localizations" : {
         "de" : {
@@ -1194,6 +1197,9 @@
         }
       }
     },
+    "Auto add spacing around dictated text" : {
+
+    },
     "Auto Enter" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1235,6 +1241,9 @@
           }
         }
       }
+    },
+    "Automatically adds a space before or after inserted text when the adjacent character is not whitespace, preventing words from merging." : {
+
     },
     "Automatically extracts facts, preferences and patterns from your transcriptions using an LLM. Memories are injected into prompt context." : {
       "localizations" : {
@@ -7445,6 +7454,9 @@
         }
       }
     },
+    "Text Insertion" : {
+
+    },
     "Text replaced" : {
       "localizations" : {
         "de" : {
@@ -8199,6 +8211,9 @@
         }
       }
     },
+    "Use surrounding cursor context" : {
+
+    },
     "User Type" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -8817,6 +8832,9 @@
       }
     },
     "When disabled, TypeWhisper skips live transcript requests for the indicator and only runs the final transcription after you stop recording." : {
+
+    },
+    "When enabled, nearby text around your cursor is sent to your selected AI provider to improve context-aware responses." : {
 
     },
     "When enabled, transcriptions from this profile are stored as memories and used as context for prompts." : {

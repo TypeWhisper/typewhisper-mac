@@ -7,6 +7,11 @@ import os.log
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "TextInsertionService")
 
+struct CursorContext {
+    let leftContext: String?
+    let rightContext: String?
+}
+
 /// Inserts transcribed text into the active application via clipboard + simulated Cmd+V.
 @MainActor
 final class TextInsertionService {
@@ -23,6 +28,7 @@ final class TextInsertionService {
     var returnSimulatorOverride: (() -> Void)?
     var captureActiveAppOverride: (() -> (name: String?, bundleId: String?, url: String?))?
     var selectedTextOverride: (() -> String?)?
+    var surroundingContextOverride: (() -> CursorContext?)?
 
 enum InsertionResult {
         case pasted
@@ -682,6 +688,105 @@ enum InsertionResult {
             return nil
         }
         return NSRange(location: range.location, length: range.length)
+    }
+
+    // MARK: - Surrounding Cursor Context
+
+    func captureSurroundingCursorContext() -> CursorContext? {
+        if let surroundingContextOverride { return surroundingContextOverride() }
+        guard isAccessibilityGranted else { return nil }
+        guard let element = getFocusedTextElement() else { return nil }
+
+        let fullText = (stringAttribute(kAXValueAttribute as CFString, from: element) ?? "") as NSString
+        guard let range = selectedRangeAttribute(from: element) else { return nil }
+
+        let cursorLocation = range.location
+        let selectionEnd = range.location + range.length
+
+        let leftContext: String?
+        if cursorLocation > 0, cursorLocation <= fullText.length {
+            let raw = fullText.substring(to: cursorLocation)
+            // Bounded to last 500 chars (nearest to cursor)
+            leftContext = raw.isEmpty ? nil : String(raw.suffix(500))
+        } else {
+            leftContext = nil
+        }
+
+        let rightContext: String?
+        if selectionEnd < fullText.length {
+            let raw = fullText.substring(from: selectionEnd)
+            // Bounded to first 500 chars (nearest to cursor)
+            rightContext = raw.isEmpty ? nil : String(raw.prefix(500))
+        } else {
+            rightContext = nil
+        }
+
+        guard leftContext != nil || rightContext != nil else { return nil }
+        return CursorContext(leftContext: leftContext, rightContext: rightContext)
+    }
+
+    // MARK: - Auto Spacing
+
+    func applyAutoSpacing(to text: String) -> String {
+        guard !text.isEmpty, isAccessibilityGranted else { return text }
+        guard let element = getFocusedTextElement() else { return text }
+
+        let snapshot: FocusedTextSnapshot
+        if let override = focusedTextStateOverride {
+            guard let s = override(element) else { return text }
+            snapshot = s
+        } else {
+            snapshot = (
+                value: stringAttribute(kAXValueAttribute as CFString, from: element),
+                selectedText: stringAttribute(kAXSelectedTextAttribute as CFString, from: element),
+                selectedRange: selectedRangeAttribute(from: element)
+            )
+        }
+
+        guard let fullString = snapshot.value, let range = snapshot.selectedRange else { return text }
+        let nsText = fullString as NSString
+        let cursorLocation = range.location
+        let selectionEnd = range.location + range.length
+
+        var result = text
+
+        // Right side: checked first (index-independent from left side)
+        if selectionEnd < nsText.length, !(result.last?.isWhitespace ?? false) {
+            let ch = nsText.character(at: selectionEnd)
+            if shouldAddRightSpace(for: ch) {
+                result += " "
+            }
+        }
+
+        // Left side
+        if cursorLocation > 0, cursorLocation <= nsText.length, !(result.first?.isWhitespace ?? false) {
+            let ch = nsText.character(at: cursorLocation - 1)
+            if shouldAddLeftSpace(for: ch) {
+                result = " " + result
+            }
+        }
+
+        return result
+    }
+
+    // Returns true if a space should be prepended before inserted text when this character is to the left of the cursor.
+    private func shouldAddLeftSpace(for unichar: unichar) -> Bool {
+        guard let scalar = Unicode.Scalar(unichar) else { return false }
+        let ch = Character(scalar)
+        // Do NOT add space after: opening brackets, slashes, newline, whitespace
+        if ch.isWhitespace || ch == "\n" || ch == "\r" { return false }
+        if "([{/\\".contains(ch) { return false }
+        return true
+    }
+
+    // Returns true if a space should be appended after inserted text when this character is to the right of the cursor.
+    private func shouldAddRightSpace(for unichar: unichar) -> Bool {
+        guard let scalar = Unicode.Scalar(unichar) else { return false }
+        let ch = Character(scalar)
+        // Do NOT add space before: closing punctuation, sentence-ending punctuation, whitespace, newline
+        if ch.isWhitespace || ch == "\n" || ch == "\r" { return false }
+        if ",.:;!?)]}\\'\"".contains(ch) { return false }
+        return true
     }
 
 }

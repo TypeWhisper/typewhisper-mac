@@ -172,6 +172,7 @@ final class DictationViewModel: ObservableObject {
     private var forcedWorkflowId: UUID?
     private var capturedActiveApp: (name: String?, bundleId: String?, url: String?)?
     private var capturedSelectedText: String?
+    private var capturedCursorContext: CursorContext?
 
     private var cancellables = Set<AnyCancellable>()
     private var recordingTimer: Timer?
@@ -738,6 +739,9 @@ final class DictationViewModel: ObservableObject {
         let activeApp = textInsertionService.captureActiveApp()
         capturedActiveApp = activeApp
         capturedSelectedText = nil
+        capturedCursorContext = UserDefaults.standard.bool(forKey: UserDefaultsKeys.useSurroundingCursorContext)
+            ? textInsertionService.captureSurroundingCursorContext()
+            : nil
         activeAppIcon = nil
 
         if let forcedWorkflowId,
@@ -1113,11 +1117,24 @@ final class DictationViewModel: ObservableObject {
                     return
                 }
 
-                let llmHandler = buildLLMHandler(
+                let baseLLMHandler = buildLLMHandler(
                     translationTarget: translationTarget,
                     detectedLanguage: result.detectedLanguage,
                     configuredLanguage: language
                 )
+
+                let capturedContext = capturedCursorContext
+                let llmHandler: ((String) async throws -> String)? = {
+                    guard let base = baseLLMHandler,
+                          UserDefaults.standard.bool(forKey: UserDefaultsKeys.useSurroundingCursorContext),
+                          let ctx = capturedContext,
+                          ctx.leftContext != nil || ctx.rightContext != nil else {
+                        return baseLLMHandler
+                    }
+                    return { [ctx] userText in
+                        try await base(Self.enhanceWithCursorContext(text: userText, context: ctx))
+                    }
+                }()
 
                 guard !Task.isCancelled else { return }
 
@@ -1167,8 +1184,11 @@ final class DictationViewModel: ObservableObject {
                         activeApp: activeApp, language: language, originalText: result.text
                     )
                 } else {
+                    let insertionText = UserDefaults.standard.bool(forKey: UserDefaultsKeys.autoSpacingAroundDictatedText)
+                        ? textInsertionService.applyAutoSpacing(to: text)
+                        : text
                     _ = try await textInsertionService.insertText(
-                        text,
+                        insertionText,
                         preserveClipboard: preserveClipboard,
                         autoEnter: self.effectiveAutoEnterEnabled
                     )
@@ -1302,6 +1322,7 @@ final class DictationViewModel: ObservableObject {
         clearActiveRuleState()
         capturedActiveApp = nil
         capturedSelectedText = nil
+        capturedCursorContext = nil
         activeAppIcon = nil
         processingPhase = nil
         actionFeedbackMessage = nil
@@ -1502,6 +1523,17 @@ final class DictationViewModel: ObservableObject {
     }
 
     // MARK: - Shared Helpers
+
+    private static func enhanceWithCursorContext(text: String, context: CursorContext) -> String {
+        var parts: [String] = [text, "\n\nContext:"]
+        if let left = context.leftContext {
+            parts.append("\nText before cursor:\n\(left)")
+        }
+        if let right = context.rightContext {
+            parts.append("\nText after cursor:\n\(right)")
+        }
+        return parts.joined()
+    }
 
     /// Builds an LLM handler for the post-processing pipeline.
     /// Priority: workflow > legacy inline/prompt action > translation > nil.

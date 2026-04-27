@@ -16,9 +16,18 @@ struct AdvancedSettingsView: View {
     @AppStorage(UserDefaultsKeys.historyEnabled) private var historyEnabled: Bool = true
     @AppStorage(UserDefaultsKeys.historyRetentionDays) private var historyRetentionDays: Int = 0
     @AppStorage(UserDefaultsKeys.saveAudioWithHistory) private var saveAudioWithHistory: Bool = false
+    @AppStorage(UserDefaultsKeys.useSurroundingCursorContext) private var useSurroundingCursorContext: Bool = false
 
     var body: some View {
         Form {
+            // MARK: - AI Context
+            Section(String(localized: "AI Context")) {
+                Toggle(String(localized: "Use surrounding cursor context"), isOn: $useSurroundingCursorContext)
+                Text(String(localized: "When enabled, nearby text around your cursor is sent to your selected AI provider to improve context-aware responses."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             // MARK: - Memory
             Section(String(localized: "Memory")) {
                 Toggle(String(localized: "Enable Memory"), isOn: $memoryService.isEnabled)

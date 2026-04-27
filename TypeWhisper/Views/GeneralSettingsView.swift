@@ -17,6 +17,7 @@ struct GeneralSettingsView: View {
     }()
     @State private var showRestartAlert = false
     @AppStorage(UserDefaultsKeys.showMenuBarIcon) private var showMenuBarIcon = true
+    @AppStorage(UserDefaultsKeys.autoSpacingAroundDictatedText) private var autoSpacingAroundDictatedText: Bool = true
     @AppStorage(UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden) private var dockIconBehaviorRawValue = DockIconBehavior.keepVisible.rawValue
     @ObservedObject private var pluginManager = PluginManager.shared
     @ObservedObject private var settings = SettingsViewModel.shared
@@ -132,6 +133,13 @@ struct GeneralSettingsView: View {
                     }
 
                 Text(String(localized: "TypeWhisper will start automatically when you log in."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section(String(localized: "Text Insertion")) {
+                Toggle(String(localized: "Auto add spacing around dictated text"), isOn: $autoSpacingAroundDictatedText)
+                Text(String(localized: "Automatically adds a space before or after inserted text when the adjacent character is not whitespace, preventing words from merging."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -80,6 +80,12 @@ enum UserDefaultsKeys {
     static let memoryMinTextLength = "memoryMinTextLength"
     static let memoryExtractionPrompt = "memoryExtractionPrompt"
 
+    // MARK: - Text Insertion
+    static let autoSpacingAroundDictatedText = "autoSpacingAroundDictatedText"
+
+    // MARK: - AI Context
+    static let useSurroundingCursorContext = "useSurroundingCursorContext"
+
     // MARK: - Formatting
     static let appFormattingEnabled = "appFormattingEnabled"
 
