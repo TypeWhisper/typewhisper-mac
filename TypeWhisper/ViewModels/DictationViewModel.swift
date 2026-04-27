@@ -107,6 +107,7 @@ final class DictationViewModel: ObservableObject {
     var promptPaletteHotkeyLabel: String { Self.loadHotkeyLabel(for: .promptPalette) }
     var recentTranscriptionsHotkeyLabel: String { Self.loadHotkeyLabel(for: .recentTranscriptions) }
     var copyLastTranscriptionHotkeyLabel: String { Self.loadHotkeyLabel(for: .copyLastTranscription) }
+    var recorderToggleHotkeyLabel: String { Self.loadHotkeyLabel(for: .recorderToggle) }
     @Published var activeRuleName: String?
     @Published var activeRuleReasonLabel: String?
     @Published var activeRuleExplanation: String?

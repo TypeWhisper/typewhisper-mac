@@ -395,6 +395,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         ServiceContainer.shared.hotkeyService.onCopyLastTranscription = {
             DictationViewModel.shared.copyLastTranscriptionToClipboard()
         }
+        ServiceContainer.shared.hotkeyService.onRecorderToggle = {
+            AudioRecorderViewModel.shared.toggleRecording()
+        }
 
         // Auto-open Settings with setup wizard when microphone permission is not yet granted
         if AVAudioApplication.shared.recordPermission != .granted {

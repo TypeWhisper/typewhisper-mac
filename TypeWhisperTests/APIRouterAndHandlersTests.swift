@@ -3779,6 +3779,53 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testRecorderToggleHotkeyInvokesDedicatedCallbackOnKeyDown() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(commandOptionAHotkey(), for: .recorderToggle)
+
+        var callbackCount = 0
+        var startCount = 0
+        service.onRecorderToggle = { callbackCount += 1 }
+        service.onDictationStart = { startCount += 1 }
+
+        let keyDown = try makeKeyboardEvent(keyCode: 0x00, keyDown: true, flags: [.maskCommand, .maskAlternate])
+
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertEqual(callbackCount, 1)
+        XCTAssertEqual(startCount, 0)
+        XCTAssertNil(service.currentMode)
+    }
+
+    @MainActor
+    func testRecorderToggleHotkeyDoesNotStopActiveDictation() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(spaceHotkey(), for: .toggle)
+        service.setHotkeyForTesting(commandOptionAHotkey(), for: .recorderToggle)
+
+        var startCount = 0
+        var stopCount = 0
+        var callbackCount = 0
+        service.onDictationStart = { startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+        service.onRecorderToggle = { callbackCount += 1 }
+
+        let toggleDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
+        let recorderDown = try makeKeyboardEvent(keyCode: 0x00, keyDown: true, flags: [.maskCommand, .maskAlternate])
+
+        XCTAssertTrue(service.processEventForTesting(toggleDown, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+
+        XCTAssertTrue(service.processEventForTesting(recorderDown, source: .monitor))
+        XCTAssertEqual(callbackCount, 1)
+        XCTAssertEqual(stopCount, 0)
+        XCTAssertEqual(service.currentMode, .toggle)
+    }
+
+    @MainActor
     func testMenuShortcutDescriptorSupportsPrintableKeyboardShortcut() {
         let descriptor = HotkeyService.menuShortcutDescriptor(for: commandShiftCHotkey())
 

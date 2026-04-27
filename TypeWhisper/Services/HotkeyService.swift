@@ -68,6 +68,7 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
     case promptPalette
     case recentTranscriptions
     case copyLastTranscription
+    case recorderToggle
 
     var defaultsKey: String {
         switch self {
@@ -77,6 +78,7 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
         case .promptPalette: return UserDefaultsKeys.promptPaletteHotkey
         case .recentTranscriptions: return UserDefaultsKeys.recentTranscriptionsHotkey
         case .copyLastTranscription: return UserDefaultsKeys.copyLastTranscriptionHotkey
+        case .recorderToggle: return UserDefaultsKeys.recorderToggleHotkey
         }
     }
 }
@@ -127,6 +129,7 @@ final class HotkeyService: ObservableObject {
     var onPromptPaletteToggle: (() -> Void)?
     var onRecentTranscriptionsToggle: (() -> Void)?
     var onCopyLastTranscription: (() -> Void)?
+    var onRecorderToggle: (() -> Void)?
     var onProfileDictationStart: ((UUID) -> Void)?
     var onWorkflowDictationStart: ((UUID) -> Void)?
     var onCancelPressed: (() -> Void)?
@@ -177,6 +180,7 @@ final class HotkeyService: ObservableObject {
         .promptPalette: SlotState(),
         .recentTranscriptions: SlotState(),
         .copyLastTranscription: SlotState(),
+        .recorderToggle: SlotState(),
     ]
 
     // MARK: - Per-Profile Hotkey State
@@ -1100,6 +1104,10 @@ final class HotkeyService: ObservableObject {
             onCopyLastTranscription?()
             return
         }
+        if slotType == .recorderToggle {
+            onRecorderToggle?()
+            return
+        }
 
         if isActive {
             // Any hotkey stops active recording
@@ -1153,6 +1161,8 @@ final class HotkeyService: ObservableObject {
         case .recentTranscriptions:
             break // handled on keyDown only
         case .copyLastTranscription:
+            break // handled on keyDown only
+        case .recorderToggle:
             break // handled on keyDown only
         }
     }
