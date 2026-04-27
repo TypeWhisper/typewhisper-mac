@@ -2202,13 +2202,7 @@ private func workflowCompactList(_ values: [String], conjunction: String = local
 }
 
 private func workflowHotkeysConflict(_ lhs: UnifiedHotkey, _ rhs: UnifiedHotkey) -> Bool {
-    lhs == rhs || (
-        lhs.keyCode == rhs.keyCode
-            && lhs.modifierFlags == rhs.modifierFlags
-            && lhs.isFn == rhs.isFn
-            && lhs.mouseButton == rhs.mouseButton
-            && lhs.isDoubleTap != rhs.isDoubleTap
-    )
+    lhs.conflicts(with: rhs)
 }
 
 private func workflowNormalizedDomainFromInput(_ value: String) -> String {

@@ -9,6 +9,9 @@ struct UnifiedHotkey: Equatable, Hashable, Sendable, Codable {
     let modifierFlags: UInt
     let isFn: Bool
     let isDoubleTap: Bool
+    /// Physical modifier key codes for side-specific modifier combos.
+    /// Empty means legacy/generic matching by modifier flags only.
+    let modifierKeyCodes: Set<UInt16>
     /// nil = keyboard hotkey; 0..N = mouse button number (macOS convention: 2=middle, 3=back, 4=forward)
     let mouseButton: UInt16?
 
@@ -34,11 +37,18 @@ struct UnifiedHotkey: Equatable, Hashable, Sendable, Codable {
         return .bareKey
     }
 
-    init(keyCode: UInt16, modifierFlags: UInt, isFn: Bool, isDoubleTap: Bool = false) {
+    init(
+        keyCode: UInt16,
+        modifierFlags: UInt,
+        isFn: Bool,
+        isDoubleTap: Bool = false,
+        modifierKeyCodes: Set<UInt16> = []
+    ) {
         self.keyCode = keyCode
         self.modifierFlags = modifierFlags
         self.isFn = isFn
         self.isDoubleTap = isDoubleTap
+        self.modifierKeyCodes = modifierKeyCodes
         self.mouseButton = nil
     }
 
@@ -47,17 +57,37 @@ struct UnifiedHotkey: Equatable, Hashable, Sendable, Codable {
         self.modifierFlags = 0
         self.isFn = false
         self.isDoubleTap = isDoubleTap
+        self.modifierKeyCodes = []
         self.mouseButton = mouseButton
     }
 
-    // Backward-compatible decoding: old hotkeys without isDoubleTap/mouseButton decode correctly
+    // Backward-compatible decoding: old hotkeys without isDoubleTap/modifierKeyCodes/mouseButton decode correctly
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         keyCode = try container.decode(UInt16.self, forKey: .keyCode)
         modifierFlags = try container.decode(UInt.self, forKey: .modifierFlags)
         isFn = try container.decode(Bool.self, forKey: .isFn)
         isDoubleTap = try container.decodeIfPresent(Bool.self, forKey: .isDoubleTap) ?? false
+        modifierKeyCodes = try container.decodeIfPresent(Set<UInt16>.self, forKey: .modifierKeyCodes) ?? []
         mouseButton = try container.decodeIfPresent(UInt16.self, forKey: .mouseButton)
+    }
+
+    func conflicts(with other: UnifiedHotkey) -> Bool {
+        if self == other { return true }
+        guard keyCode == other.keyCode,
+              modifierFlags == other.modifierFlags,
+              isFn == other.isFn,
+              mouseButton == other.mouseButton else {
+            return false
+        }
+
+        if kind == .modifierCombo, other.kind == .modifierCombo {
+            return modifierKeyCodes.isEmpty
+                || other.modifierKeyCodes.isEmpty
+                || modifierKeyCodes == other.modifierKeyCodes
+        }
+
+        return isDoubleTap != other.isDoubleTap
     }
 }
 
@@ -275,12 +305,7 @@ final class HotkeyService: ObservableObject {
     func isHotkeyAssigned(_ hotkey: UnifiedHotkey, excluding: HotkeySlotType) -> HotkeySlotType? {
         for slotType in HotkeySlotType.allCases where slotType != excluding {
             guard let existing = slots[slotType]?.hotkey else { continue }
-            if existing == hotkey { return slotType }
-            if existing.keyCode == hotkey.keyCode
-                && existing.modifierFlags == hotkey.modifierFlags
-                && existing.isFn == hotkey.isFn
-                && existing.mouseButton == hotkey.mouseButton
-                && existing.isDoubleTap != hotkey.isDoubleTap {
+            if existing.conflicts(with: hotkey) {
                 return slotType
             }
         }
@@ -327,12 +352,7 @@ final class HotkeyService: ObservableObject {
 
     func isHotkeyAssignedToProfile(_ hotkey: UnifiedHotkey, excludingProfileId: UUID?) -> UUID? {
         for (id, state) in profileSlots where id != excludingProfileId {
-            if state.hotkey == hotkey { return id }
-            if state.hotkey.keyCode == hotkey.keyCode
-                && state.hotkey.modifierFlags == hotkey.modifierFlags
-                && state.hotkey.isFn == hotkey.isFn
-                && state.hotkey.mouseButton == hotkey.mouseButton
-                && state.hotkey.isDoubleTap != hotkey.isDoubleTap {
+            if state.hotkey.conflicts(with: hotkey) {
                 return id
             }
         }
@@ -342,12 +362,7 @@ final class HotkeyService: ObservableObject {
     func isHotkeyAssignedToWorkflow(_ hotkey: UnifiedHotkey, excludingWorkflowId: UUID?) -> UUID? {
         for (id, states) in workflowSlots where id != excludingWorkflowId {
             for state in states {
-                if state.hotkey == hotkey { return id }
-                if state.hotkey.keyCode == hotkey.keyCode
-                    && state.hotkey.modifierFlags == hotkey.modifierFlags
-                    && state.hotkey.isFn == hotkey.isFn
-                    && state.hotkey.mouseButton == hotkey.mouseButton
-                    && state.hotkey.isDoubleTap != hotkey.isDoubleTap {
+                if state.hotkey.conflicts(with: hotkey) {
                     return id
                 }
             }
@@ -358,12 +373,7 @@ final class HotkeyService: ObservableObject {
     func isHotkeyAssignedToGlobalSlot(_ hotkey: UnifiedHotkey) -> HotkeySlotType? {
         for slotType in HotkeySlotType.allCases {
             guard let existing = slots[slotType]?.hotkey else { continue }
-            if existing == hotkey { return slotType }
-            if existing.keyCode == hotkey.keyCode
-                && existing.modifierFlags == hotkey.modifierFlags
-                && existing.isFn == hotkey.isFn
-                && existing.mouseButton == hotkey.mouseButton
-                && existing.isDoubleTap != hotkey.isDoubleTap {
+            if existing.conflicts(with: hotkey) {
                 return slotType
             }
         }
@@ -1040,8 +1050,13 @@ final class HotkeyService: ObservableObject {
             let requiredFlags = NSEvent.ModifierFlags(rawValue: hotkey.modifierFlags)
             let relevantMask: NSEvent.ModifierFlags = [.command, .option, .control, .shift, .function]
             let current = event.modifierFlags.intersection(relevantMask)
-            let allDown = current.contains(requiredFlags)
-            let anyRequiredStillDown = !current.intersection(requiredFlags).isEmpty
+            let activeModifierKeyCodes = Self.modifierKeyCodes(from: event.modifierFlags)
+            let physicalModifiersMatch = hotkey.modifierKeyCodes.isEmpty
+                || hotkey.modifierKeyCodes.isSubset(of: activeModifierKeyCodes)
+            let allDown = current.contains(requiredFlags) && physicalModifiersMatch
+            let anyRequiredStillDown = hotkey.modifierKeyCodes.isEmpty
+                ? !current.intersection(requiredFlags).isEmpty
+                : !activeModifierKeyCodes.intersection(hotkey.modifierKeyCodes).isEmpty
             if allDown, !modifierWasDown { return .down }
             if allDown, modifierWasDown { return .repeatDown }
             if modifierWasDown {
@@ -1270,6 +1285,14 @@ final class HotkeyService: ObservableObject {
         }
         if hotkey.isFn { return hotkey.isDoubleTap ? "Fn x2" : "Fn" }
 
+        if hotkey.kind == .modifierCombo, !hotkey.modifierKeyCodes.isEmpty {
+            let baseName = displayName(
+                forModifierKeyCodes: hotkey.modifierKeyCodes,
+                modifierFlags: NSEvent.ModifierFlags(rawValue: hotkey.modifierFlags)
+            )
+            return hotkey.isDoubleTap ? "\(baseName) x2" : baseName
+        }
+
         var parts: [String] = []
 
         let flags = NSEvent.ModifierFlags(rawValue: hotkey.modifierFlags)
@@ -1420,13 +1443,66 @@ final class HotkeyService: ObservableObject {
 
     // MARK: - Helpers
 
-    private static func modifierFlagForKeyCode(_ keyCode: UInt16) -> NSEvent.ModifierFlags? {
+    nonisolated static func displayName(forModifierKeyCodes keyCodes: Set<UInt16>) -> String {
+        keyCodes
+            .sorted(by: modifierKeyCodeComesBefore)
+            .map(keyName(for:))
+            .joined(separator: " + ")
+    }
+
+    nonisolated static func displayName(
+        forModifierKeyCodes keyCodes: Set<UInt16>,
+        modifierFlags: NSEvent.ModifierFlags
+    ) -> String {
+        var parts: [String] = []
+        if modifierFlags.contains(.function) { parts.append("Fn") }
+        parts.append(contentsOf: keyCodes.sorted(by: modifierKeyCodeComesBefore).map(keyName(for:)))
+        return parts.joined(separator: " + ")
+    }
+
+    nonisolated static func modifierKeyCodes(from flags: NSEvent.ModifierFlags) -> Set<UInt16> {
+        let rawValue = flags.rawValue
+        return Set(deviceModifierKeyMasks.compactMap { entry in
+            rawValue & entry.mask == entry.mask ? entry.keyCode : nil
+        })
+    }
+
+    nonisolated static func modifierFlagForKeyCode(_ keyCode: UInt16) -> NSEvent.ModifierFlags? {
         switch keyCode {
         case 0x37, 0x36: return .command
         case 0x38, 0x3C: return .shift
         case 0x3A, 0x3D: return .option
         case 0x3B, 0x3E: return .control
         default: return nil
+        }
+    }
+
+    private nonisolated static let deviceModifierKeyMasks: [(mask: UInt, keyCode: UInt16)] = [
+        (0x00000008, 0x37), // Left Command
+        (0x00000010, 0x36), // Right Command
+        (0x00000002, 0x38), // Left Shift
+        (0x00000004, 0x3C), // Right Shift
+        (0x00000020, 0x3A), // Left Option
+        (0x00000040, 0x3D), // Right Option
+        (0x00000001, 0x3B), // Left Control
+        (0x00002000, 0x3E), // Right Control
+    ]
+
+    private nonisolated static func modifierKeyCodeComesBefore(_ lhs: UInt16, _ rhs: UInt16) -> Bool {
+        modifierKeyCodeSortIndex(lhs) < modifierKeyCodeSortIndex(rhs)
+    }
+
+    private nonisolated static func modifierKeyCodeSortIndex(_ keyCode: UInt16) -> Int {
+        switch keyCode {
+        case 0x37: return 0 // Left Command
+        case 0x36: return 1 // Right Command
+        case 0x3A: return 2 // Left Option
+        case 0x3D: return 3 // Right Option
+        case 0x3B: return 4 // Left Control
+        case 0x3E: return 5 // Right Control
+        case 0x38: return 6 // Left Shift
+        case 0x3C: return 7 // Right Shift
+        default: return Int(keyCode) + 100
         }
     }
 }

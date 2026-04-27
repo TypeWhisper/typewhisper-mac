@@ -10,6 +10,8 @@ struct HotkeyRecorderView: View {
     @State private var isRecording = false
     @State private var pendingModifiers: NSEvent.ModifierFlags = []
     @State private var peakModifiers: NSEvent.ModifierFlags = []
+    @State private var pendingModifierKeyCodes: Set<UInt16> = []
+    @State private var peakModifierKeyCodes: Set<UInt16> = []
     @State private var localMonitor: Any?
     @State private var globalMonitor: Any?
     @State private var modifierReleaseTimer: DispatchWorkItem?
@@ -83,6 +85,13 @@ struct HotkeyRecorderView: View {
     }
 
     private var pendingModifierString: String {
+        if !pendingModifierKeyCodes.isEmpty {
+            return HotkeyService.displayName(
+                forModifierKeyCodes: pendingModifierKeyCodes,
+                modifierFlags: pendingModifiers
+            )
+        }
+
         var parts: [String] = []
         if pendingModifiers.contains(.function) { parts.append("Fn") }
         if pendingModifiers.contains(.control) { parts.append("⌃") }
@@ -100,6 +109,8 @@ struct HotkeyRecorderView: View {
         isRecording = true
         pendingModifiers = []
         peakModifiers = []
+        pendingModifierKeyCodes = []
+        peakModifierKeyCodes = []
         ServiceContainer.shared.hotkeyService.suspendMonitoring()
 
         // Local monitor - can swallow events (return nil)
@@ -123,10 +134,12 @@ struct HotkeyRecorderView: View {
         if event.type == .flagsChanged {
             let relevantMask: NSEvent.ModifierFlags = [.command, .option, .control, .shift, .function]
             let current = event.modifierFlags.intersection(relevantMask)
+            let currentModifierKeyCodes = modifierKeyCodes(for: event, currentModifiers: current)
 
             // Track peak modifier set (most modifiers held simultaneously)
             if current.isSuperset(of: peakModifiers) {
                 peakModifiers = current
+                peakModifierKeyCodes.formUnion(currentModifierKeyCodes)
             }
 
             if current.isEmpty, !pendingModifiers.isEmpty {
@@ -136,7 +149,12 @@ struct HotkeyRecorderView: View {
                 // Build the candidate single-tap hotkey for this release
                 let candidateHotkey: UnifiedHotkey?
                 if peakCount > 1 {
-                    candidateHotkey = UnifiedHotkey(keyCode: UnifiedHotkey.modifierComboKeyCode, modifierFlags: peakModifiers.rawValue, isFn: false)
+                    candidateHotkey = UnifiedHotkey(
+                        keyCode: UnifiedHotkey.modifierComboKeyCode,
+                        modifierFlags: peakModifiers.rawValue,
+                        isFn: false,
+                        modifierKeyCodes: modifierKeyCodesForRecordedCombo()
+                    )
                 } else if peakModifiers.contains(.function) {
                     candidateHotkey = UnifiedHotkey(keyCode: 0, modifierFlags: 0, isFn: true)
                 } else if HotkeyService.modifierKeyCodes.contains(event.keyCode) {
@@ -151,7 +169,13 @@ struct HotkeyRecorderView: View {
                         // Second tap - finish as double-tap
                         doubleTapTimer?.cancel()
                         doubleTapTimer = nil
-                        let doubleTapHotkey = UnifiedHotkey(keyCode: candidate.keyCode, modifierFlags: candidate.modifierFlags, isFn: candidate.isFn, isDoubleTap: true)
+                        let doubleTapHotkey = UnifiedHotkey(
+                            keyCode: candidate.keyCode,
+                            modifierFlags: candidate.modifierFlags,
+                            isFn: candidate.isFn,
+                            isDoubleTap: true,
+                            modifierKeyCodes: candidate.modifierKeyCodes
+                        )
                         let work = DispatchWorkItem { [self] in
                             finishRecording(doubleTapHotkey)
                         }
@@ -174,11 +198,14 @@ struct HotkeyRecorderView: View {
                     }
                     pendingModifiers = []
                     peakModifiers = []
+                    pendingModifierKeyCodes = []
+                    peakModifierKeyCodes = []
                     return true
                 }
             }
 
             pendingModifiers = current
+            pendingModifierKeyCodes = currentModifierKeyCodes
             return true
         }
 
@@ -247,6 +274,8 @@ struct HotkeyRecorderView: View {
         isRecording = false
         pendingModifiers = []
         peakModifiers = []
+        pendingModifierKeyCodes = []
+        peakModifierKeyCodes = []
         removeMonitors()
         ServiceContainer.shared.hotkeyService.resumeMonitoring()
         onRecord(hotkey)
@@ -265,6 +294,8 @@ struct HotkeyRecorderView: View {
         isRecording = false
         pendingModifiers = []
         peakModifiers = []
+        pendingModifierKeyCodes = []
+        peakModifierKeyCodes = []
         removeMonitors()
         ServiceContainer.shared.hotkeyService.resumeMonitoring()
     }
@@ -278,5 +309,50 @@ struct HotkeyRecorderView: View {
             NSEvent.removeMonitor(monitor)
             globalMonitor = nil
         }
+    }
+
+    private func modifierKeyCodes(
+        for event: NSEvent,
+        currentModifiers: NSEvent.ModifierFlags
+    ) -> Set<UInt16> {
+        let deviceKeyCodes = HotkeyService.modifierKeyCodes(from: event.modifierFlags)
+        if !deviceKeyCodes.isEmpty || currentModifiers.isEmpty {
+            return deviceKeyCodes
+        }
+
+        var updated = pendingModifierKeyCodes
+        if HotkeyService.modifierKeyCodes.contains(event.keyCode),
+           let flag = HotkeyService.modifierFlagForKeyCode(event.keyCode) {
+            if currentModifiers.contains(flag) {
+                updated.insert(event.keyCode)
+            } else {
+                updated.remove(event.keyCode)
+            }
+        }
+
+        return updated.filter { keyCode in
+            guard let flag = HotkeyService.modifierFlagForKeyCode(keyCode) else { return false }
+            return currentModifiers.contains(flag)
+        }
+    }
+
+    private func modifierKeyCodesForRecordedCombo() -> Set<UInt16> {
+        let sideAwareFlags: [NSEvent.ModifierFlags] = [.command, .option, .control, .shift]
+        let expectedKeyCodeCount = sideAwareFlags.filter { peakModifiers.contains($0) }.count
+        guard expectedKeyCodeCount > 0,
+              peakModifierKeyCodes.count == expectedKeyCodeCount else {
+            return []
+        }
+
+        let recordedFlagRawValues = Set(peakModifierKeyCodes.compactMap {
+            HotkeyService.modifierFlagForKeyCode($0)?.rawValue
+        })
+        guard recordedFlagRawValues.count == expectedKeyCodeCount,
+              recordedFlagRawValues.allSatisfy({
+                  peakModifiers.contains(NSEvent.ModifierFlags(rawValue: $0))
+              }) else {
+            return []
+        }
+        return peakModifierKeyCodes
     }
 }

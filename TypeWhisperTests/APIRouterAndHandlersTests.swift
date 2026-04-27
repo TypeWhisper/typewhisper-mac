@@ -3437,6 +3437,157 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testRightSpecificModifierComboDoesNotTriggerFromLeftSide() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(try rightCommandRightOptionComboHotkey(), for: .pushToTalk)
+
+        var startCount = 0
+        service.onDictationStart = { startCount += 1 }
+
+        let leftCommandDown = try makeFlagsChangedEvent(
+            keyCode: 0x37,
+            modifierFlags: flags(generic: [.command], deviceKeyCodes: [0x37])
+        )
+        let leftOptionDown = try makeFlagsChangedEvent(
+            keyCode: 0x3A,
+            modifierFlags: flags(generic: [.command, .option], deviceKeyCodes: [0x37, 0x3A])
+        )
+
+        XCTAssertFalse(service.processEventForTesting(leftCommandDown, source: .monitor))
+        XCTAssertFalse(service.processEventForTesting(leftOptionDown, source: .monitor))
+        XCTAssertEqual(startCount, 0)
+    }
+
+    @MainActor
+    func testRightSpecificModifierComboTriggersFromRightSide() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(try rightCommandRightOptionComboHotkey(), for: .pushToTalk)
+
+        var startCount = 0
+        var stopCount = 0
+        service.onDictationStart = { startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+
+        let rightCommandDown = try makeFlagsChangedEvent(
+            keyCode: 0x36,
+            modifierFlags: flags(generic: [.command], deviceKeyCodes: [0x36])
+        )
+        let rightOptionDown = try makeFlagsChangedEvent(
+            keyCode: 0x3D,
+            modifierFlags: flags(generic: [.command, .option], deviceKeyCodes: [0x36, 0x3D])
+        )
+        let finalRelease = try makeFlagsChangedEvent(keyCode: 0x36, modifierFlags: [])
+
+        XCTAssertFalse(service.processEventForTesting(rightCommandDown, source: .monitor))
+        XCTAssertTrue(service.processEventForTesting(rightOptionDown, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+
+        XCTAssertTrue(service.processEventForTesting(finalRelease, source: .monitor))
+        XCTAssertEqual(stopCount, 1)
+    }
+
+    @MainActor
+    func testRightSpecificModifierComboDoesNotTriggerFromMixedSides() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(try rightCommandRightOptionComboHotkey(), for: .pushToTalk)
+
+        var startCount = 0
+        service.onDictationStart = { startCount += 1 }
+
+        let rightCommandDown = try makeFlagsChangedEvent(
+            keyCode: 0x36,
+            modifierFlags: flags(generic: [.command], deviceKeyCodes: [0x36])
+        )
+        let leftOptionDown = try makeFlagsChangedEvent(
+            keyCode: 0x3A,
+            modifierFlags: flags(generic: [.command, .option], deviceKeyCodes: [0x36, 0x3A])
+        )
+
+        XCTAssertFalse(service.processEventForTesting(rightCommandDown, source: .monitor))
+        XCTAssertFalse(service.processEventForTesting(leftOptionDown, source: .monitor))
+        XCTAssertEqual(startCount, 0)
+    }
+
+    @MainActor
+    func testLegacyGenericModifierComboStillTriggersFromLeftAndRightSides() throws {
+        let leftService = HotkeyService()
+        leftService.suspendMonitoring()
+        leftService.setHotkeyForTesting(try legacyCommandOptionComboHotkey(), for: .toggle)
+
+        var leftStartCount = 0
+        leftService.onDictationStart = { leftStartCount += 1 }
+
+        let leftOptionDown = try makeFlagsChangedEvent(
+            keyCode: 0x3A,
+            modifierFlags: flags(generic: [.command, .option], deviceKeyCodes: [0x37, 0x3A])
+        )
+        XCTAssertTrue(leftService.processEventForTesting(leftOptionDown, source: .monitor))
+        XCTAssertEqual(leftStartCount, 1)
+
+        let rightService = HotkeyService()
+        rightService.suspendMonitoring()
+        rightService.setHotkeyForTesting(try legacyCommandOptionComboHotkey(), for: .toggle)
+
+        var rightStartCount = 0
+        rightService.onDictationStart = { rightStartCount += 1 }
+
+        let rightOptionDown = try makeFlagsChangedEvent(
+            keyCode: 0x3D,
+            modifierFlags: flags(generic: [.command, .option], deviceKeyCodes: [0x36, 0x3D])
+        )
+        XCTAssertTrue(rightService.processEventForTesting(rightOptionDown, source: .monitor))
+        XCTAssertEqual(rightStartCount, 1)
+    }
+
+    @MainActor
+    func testSideSpecificModifierComboDisplayNameIncludesSides() throws {
+        let hotkey = try rightCommandRightOptionComboHotkey()
+
+        XCTAssertEqual(HotkeyService.displayName(for: hotkey), "Right Command + Right Option")
+    }
+
+    @MainActor
+    func testSideSpecificModifierComboDisplayNameKeepsFnModifier() throws {
+        let hotkey = UnifiedHotkey(
+            keyCode: UnifiedHotkey.modifierComboKeyCode,
+            modifierFlags: NSEvent.ModifierFlags([.function, .command]).rawValue,
+            isFn: false,
+            modifierKeyCodes: [0x36]
+        )
+
+        XCTAssertEqual(HotkeyService.displayName(for: hotkey), "Fn + Right Command")
+    }
+
+    @MainActor
+    func testGenericModifierComboConflictsWithSideSpecificCombo() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(try legacyCommandOptionComboHotkey(), for: .toggle)
+
+        XCTAssertEqual(
+            service.isHotkeyAssigned(try rightCommandRightOptionComboHotkey(), excluding: .pushToTalk),
+            .toggle
+        )
+    }
+
+    @MainActor
+    func testDistinctSideSpecificModifierCombosDoNotConflict() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(try leftCommandLeftOptionComboHotkey(), for: .toggle)
+
+        XCTAssertNil(service.isHotkeyAssigned(try rightCommandRightOptionComboHotkey(), excluding: .pushToTalk))
+    }
+
+    @MainActor
     func testPushToTalkExtraKeyInterruptionSignalsDiscardWithoutImmediateStop() throws {
         let service = HotkeyService()
         service.suspendMonitoring()
@@ -3889,6 +4040,32 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         )
     }
 
+    private func rightCommandRightOptionComboHotkey() throws -> UnifiedHotkey {
+        try decodedCommandOptionComboHotkey(modifierKeyCodes: [0x36, 0x3D])
+    }
+
+    private func leftCommandLeftOptionComboHotkey() throws -> UnifiedHotkey {
+        try decodedCommandOptionComboHotkey(modifierKeyCodes: [0x37, 0x3A])
+    }
+
+    private func legacyCommandOptionComboHotkey() throws -> UnifiedHotkey {
+        try decodedCommandOptionComboHotkey(modifierKeyCodes: nil)
+    }
+
+    private func decodedCommandOptionComboHotkey(modifierKeyCodes: [UInt16]?) throws -> UnifiedHotkey {
+        var payload: [String: Any] = [
+            "keyCode": Int(UnifiedHotkey.modifierComboKeyCode),
+            "modifierFlags": Int(NSEvent.ModifierFlags([.command, .option]).rawValue),
+            "isFn": false,
+            "isDoubleTap": false,
+        ]
+        if let modifierKeyCodes {
+            payload["modifierKeyCodes"] = modifierKeyCodes.map(Int.init)
+        }
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        return try JSONDecoder().decode(UnifiedHotkey.self, from: data)
+    }
+
     @MainActor
     private func commandOptionAHotkey() -> UnifiedHotkey {
         UnifiedHotkey(
@@ -3955,6 +4132,30 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
                 keyCode: keyCode
             )
         )
+    }
+
+    private func flags(
+        generic: NSEvent.ModifierFlags,
+        deviceKeyCodes: [UInt16]
+    ) -> NSEvent.ModifierFlags {
+        let deviceRawValue = deviceKeyCodes.reduce(UInt(0)) { partial, keyCode in
+            partial | deviceModifierMask(for: keyCode)
+        }
+        return NSEvent.ModifierFlags(rawValue: generic.rawValue | deviceRawValue)
+    }
+
+    private func deviceModifierMask(for keyCode: UInt16) -> UInt {
+        switch keyCode {
+        case 0x37: return 0x00000008
+        case 0x36: return 0x00000010
+        case 0x38: return 0x00000002
+        case 0x3C: return 0x00000004
+        case 0x3A: return 0x00000020
+        case 0x3D: return 0x00000040
+        case 0x3B: return 0x00000001
+        case 0x3E: return 0x00002000
+        default: return 0
+        }
     }
 
     private func makeFnEvent(isDown: Bool) throws -> NSEvent {
