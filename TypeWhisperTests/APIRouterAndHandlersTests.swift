@@ -778,6 +778,130 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertNil(MockTranscriptionPlugin.lastLanguageSelection.requestedLanguage)
     }
 
+    func testTranscribeLocalFileEndpointTranscribesTemporaryWavFile() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let audioDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+            TestSupport.remove(audioDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        context = await MainActor.run {
+            Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+        }
+
+        let fileURL = audioDirectory.appendingPathComponent("large-file.wav")
+        try WavEncoder.encode(Array(repeating: Float(0), count: 1600)).write(to: fileURL)
+
+        let response = try Self.jsonObject(await XCTUnwrap(context?.router).route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe/local-file",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: try JSONSerialization.data(withJSONObject: ["path": fileURL.path])
+            )
+        ))
+
+        XCTAssertEqual(response["text"] as? String, "transcribed")
+        XCTAssertEqual(MockTranscriptionPlugin.lastLanguageSelection.languageHints, [])
+        XCTAssertNil(MockTranscriptionPlugin.lastLanguageSelection.requestedLanguage)
+    }
+
+    func testTranscribeLocalFileEndpointUsesLanguageHintsAndEngineModelOverrides() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let audioDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+            TestSupport.remove(audioDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        context = await MainActor.run {
+            Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+        }
+
+        let fileURL = audioDirectory.appendingPathComponent("hinted.wav")
+        try WavEncoder.encode(Array(repeating: Float(0), count: 1600)).write(to: fileURL)
+
+        let body: [String: Any] = [
+            "path": fileURL.path,
+            "language_hints": ["de", "en"],
+            "task": "transcribe",
+            "engine": "mock",
+            "model": "tiny"
+        ]
+        let response = try Self.jsonObject(await XCTUnwrap(context?.router).route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe/local-file",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: try JSONSerialization.data(withJSONObject: body)
+            )
+        ))
+
+        XCTAssertEqual(response["text"] as? String, "transcribed")
+        XCTAssertEqual(response["engine"] as? String, "mock")
+        XCTAssertEqual(response["model"] as? String, "tiny")
+        XCTAssertEqual(MockTranscriptionPlugin.lastLanguageSelection.languageHints, ["de", "en"])
+        XCTAssertNil(MockTranscriptionPlugin.lastLanguageSelection.requestedLanguage)
+    }
+
+    func testTranscribeLocalFileEndpointRejectsMissingAndUnsupportedFiles() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let audioDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+            TestSupport.remove(audioDirectory)
+        }
+
+        context = await MainActor.run {
+            Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+        }
+        let router = try XCTUnwrap(context?.router)
+
+        let missingResponse = await router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe/local-file",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: try JSONSerialization.data(withJSONObject: [
+                    "path": audioDirectory.appendingPathComponent("missing.wav").path
+                ])
+            )
+        )
+        let missingJSON = try Self.jsonObject(missingResponse)
+
+        XCTAssertEqual(missingResponse.status, 400)
+        XCTAssertEqual((missingJSON["error"] as? [String: Any])?["message"] as? String, "File not found")
+
+        let unsupportedURL = audioDirectory.appendingPathComponent("notes.txt")
+        try "not audio".write(to: unsupportedURL, atomically: true, encoding: .utf8)
+
+        let unsupportedResponse = await router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe/local-file",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: try JSONSerialization.data(withJSONObject: ["path": unsupportedURL.path])
+            )
+        )
+        let unsupportedJSON = try Self.jsonObject(unsupportedResponse)
+
+        XCTAssertEqual(unsupportedResponse.status, 400)
+        XCTAssertEqual((unsupportedJSON["error"] as? [String: Any])?["message"] as? String, "Unsupported audio format")
+    }
+
     func testTranscribeEndpointRejectsMixedLanguageAndHints() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var context: APIContext?

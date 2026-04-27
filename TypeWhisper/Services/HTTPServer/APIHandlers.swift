@@ -32,6 +32,7 @@ final class APIHandlers: @unchecked Sendable {
 
     func register(on router: APIRouter) {
         router.register("POST", "/v1/transcribe", handler: handleTranscribe)
+        router.register("POST", "/v1/transcribe/local-file", handler: handleTranscribeLocalFile)
         router.register("GET", "/v1/status", handler: handleStatus)
         router.register("GET", "/v1/models", handler: handleModels)
         router.register("GET", "/v1/history", handler: handleGetHistory)
@@ -51,17 +52,46 @@ final class APIHandlers: @unchecked Sendable {
 
     // MARK: - POST /v1/transcribe
 
+    private struct TranscribeOptions {
+        var language: String? = nil
+        var languageHints: [String] = []
+        var task: TranscriptionTask = .transcribe
+        var targetLanguage: String? = nil
+        var responseFormat = "json"
+        var requestPrompt: String? = nil
+        var engineOverride: String? = nil
+        var modelOverride: String? = nil
+        var awaitDownload = false
+    }
+
+    private struct LocalFileTranscribeRequest: Decodable {
+        let path: String
+        let language: String?
+        let languageHints: [String]?
+        let task: String?
+        let targetLanguage: String?
+        let responseFormat: String?
+        let prompt: String?
+        let engine: String?
+        let model: String?
+
+        enum CodingKeys: String, CodingKey {
+            case path
+            case language
+            case languageHints = "language_hints"
+            case task
+            case targetLanguage = "target_language"
+            case responseFormat = "response_format"
+            case prompt
+            case engine
+            case model
+        }
+    }
+
     private func handleTranscribe(_ request: HTTPRequest) async -> HTTPResponse {
         let audioData: Data
         var fileExtension = "wav"
-        var language: String?
-        var languageHints: [String] = []
-        var task: TranscriptionTask = .transcribe
-        var targetLanguage: String?
-        var responseFormat = "json"
-        var requestPrompt: String?
-        var engineOverride: String?
-        var modelOverride: String?
+        var options = TranscribeOptions(awaitDownload: request.queryParams["await_download"] == "1")
 
         let contentType = request.headers["content-type"] ?? ""
 
@@ -84,10 +114,10 @@ final class APIHandlers: @unchecked Sendable {
             if let langPart = parts.first(where: { $0.name == "language" }),
                let val = String(data: langPart.data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
                !val.isEmpty {
-                language = val
+                options.language = val
             }
 
-            languageHints = parts
+            options.languageHints = parts
                 .filter { $0.name == "language_hint" }
                 .compactMap { String(data: $0.data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty }
@@ -95,64 +125,64 @@ final class APIHandlers: @unchecked Sendable {
             if let taskPart = parts.first(where: { $0.name == "task" }),
                let val = String(data: taskPart.data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
                let parsed = TranscriptionTask(rawValue: val) {
-                task = parsed
+                options.task = parsed
             }
 
             if let targetPart = parts.first(where: { $0.name == "target_language" }),
                let val = String(data: targetPart.data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
                !val.isEmpty {
-                targetLanguage = val
+                options.targetLanguage = val
             }
 
             if let formatPart = parts.first(where: { $0.name == "response_format" }),
                let val = String(data: formatPart.data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
                !val.isEmpty {
-                responseFormat = val
+                options.responseFormat = val
             }
 
             if let promptPart = parts.first(where: { $0.name == "prompt" }),
                let val = String(data: promptPart.data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
                !val.isEmpty {
-                requestPrompt = val
+                options.requestPrompt = val
             }
 
             if let enginePart = parts.first(where: { $0.name == "engine" }),
                let val = String(data: enginePart.data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
                !val.isEmpty {
-                engineOverride = val
+                options.engineOverride = val
             }
 
             if let modelPart = parts.first(where: { $0.name == "model" }),
                let val = String(data: modelPart.data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
                !val.isEmpty {
-                modelOverride = val
+                options.modelOverride = val
             }
         } else if !request.body.isEmpty {
             audioData = request.body
             fileExtension = extensionFromMIME(contentType)
-            language = request.headers["x-language"]
-            languageHints = request.headers["x-language-hints"]?
+            options.language = request.headers["x-language"]
+            options.languageHints = request.headers["x-language-hints"]?
                 .split(separator: ",")
                 .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
                 .filter { !$0.isEmpty } ?? []
             if let taskStr = request.headers["x-task"], let parsed = TranscriptionTask(rawValue: taskStr) {
-                task = parsed
+                options.task = parsed
             }
-            targetLanguage = request.headers["x-target-language"]
+            options.targetLanguage = request.headers["x-target-language"]
             if let format = request.headers["x-response-format"], !format.isEmpty {
-                responseFormat = format
+                options.responseFormat = format
             }
             if let prompt = request.headers["x-prompt"]?.trimmingCharacters(in: .whitespacesAndNewlines),
                !prompt.isEmpty {
-                requestPrompt = prompt
+                options.requestPrompt = prompt
             }
             if let engine = request.headers["x-engine"]?.trimmingCharacters(in: .whitespacesAndNewlines),
                !engine.isEmpty {
-                engineOverride = engine
+                options.engineOverride = engine
             }
             if let model = request.headers["x-model"]?.trimmingCharacters(in: .whitespacesAndNewlines),
                !model.isEmpty {
-                modelOverride = model
+                options.modelOverride = model
             }
         } else {
             return .error(status: 400, message: "No audio data provided")
@@ -162,14 +192,72 @@ final class APIHandlers: @unchecked Sendable {
             return .error(status: 400, message: "Empty audio data")
         }
 
-        if language != nil, !languageHints.isEmpty {
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".\(fileExtension)")
+
+        do {
+            try audioData.write(to: tempURL)
+            defer { try? FileManager.default.removeItem(at: tempURL) }
+            let samples = try await audioFileService.loadAudioSamples(from: tempURL)
+            return await transcribeLoadedSamples(samples, options: options)
+        } catch {
+            return .error(status: 500, message: "Transcription failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func handleTranscribeLocalFile(_ request: HTTPRequest) async -> HTTPResponse {
+        guard !request.body.isEmpty else {
+            return .error(status: 400, message: "Missing JSON body")
+        }
+
+        let payload: LocalFileTranscribeRequest
+        do {
+            payload = try JSONDecoder().decode(LocalFileTranscribeRequest.self, from: request.body)
+        } catch {
+            return .error(status: 400, message: "Invalid JSON body")
+        }
+
+        let fileURL = URL(fileURLWithPath: payload.path)
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            return .error(status: 400, message: "File not found")
+        }
+
+        guard AudioFileService.supportedExtensions.contains(fileURL.pathExtension.lowercased()) else {
+            return .error(status: 400, message: "Unsupported audio format")
+        }
+
+        var options = TranscribeOptions(awaitDownload: request.queryParams["await_download"] == "1")
+        options.language = payload.language?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        options.languageHints = payload.languageHints?.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty } ?? []
+        if let task = payload.task.flatMap(TranscriptionTask.init(rawValue:)) {
+            options.task = task
+        }
+        options.targetLanguage = payload.targetLanguage?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        if let responseFormat = payload.responseFormat?.trimmingCharacters(in: .whitespacesAndNewlines), !responseFormat.isEmpty {
+            options.responseFormat = responseFormat
+        }
+        options.requestPrompt = payload.prompt?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        options.engineOverride = payload.engine?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        options.modelOverride = payload.model?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+
+        do {
+            let samples = try await audioFileService.loadAudioSamples(from: fileURL)
+            return await transcribeLoadedSamples(samples, options: options)
+        } catch {
+            return .error(status: 500, message: "Transcription failed: \(error.localizedDescription)")
+        }
+    }
+
+    private func transcribeLoadedSamples(_ samples: [Float], options: TranscribeOptions) async -> HTTPResponse {
+        if options.language != nil, !options.languageHints.isEmpty {
             return .error(status: 400, message: "Use either 'language' or 'language_hint', not both")
         }
 
-        let awaitDownload = (request.queryParams["await_download"] == "1")
-
         let resolvedOverride: ResolvedOverride
-        switch await resolveEngineModelOverride(engine: engineOverride, model: modelOverride, awaitDownload: awaitDownload) {
+        switch await resolveEngineModelOverride(
+            engine: options.engineOverride,
+            model: options.modelOverride,
+            awaitDownload: options.awaitDownload
+        ) {
         case .use(let value):
             resolvedOverride = value
         case .reject(let response):
@@ -183,13 +271,7 @@ final class APIHandlers: @unchecked Sendable {
             }
         }
 
-        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".\(fileExtension)")
-
         do {
-            try audioData.write(to: tempURL)
-            defer { try? FileManager.default.removeItem(at: tempURL) }
-
-            let samples = try await audioFileService.loadAudioSamples(from: tempURL)
             let effectiveProviderId: String?
             if let engineId = resolvedOverride.engineId {
                 effectiveProviderId = engineId
@@ -199,11 +281,11 @@ final class APIHandlers: @unchecked Sendable {
             let dictionaryPrompt = await MainActor.run {
                 dictionaryService.getTermsForPrompt(providerId: effectiveProviderId)
             }
-            let prompt = mergedPrompt(requestPrompt: requestPrompt, dictionaryPrompt: dictionaryPrompt)
+            let prompt = mergedPrompt(requestPrompt: options.requestPrompt, dictionaryPrompt: dictionaryPrompt)
             let languageSelection: LanguageSelection
-            if !languageHints.isEmpty {
-                languageSelection = LanguageSelection.auto.withSelectedCodes(languageHints, nilBehavior: .auto)
-            } else if let language {
+            if !options.languageHints.isEmpty {
+                languageSelection = LanguageSelection.auto.withSelectedCodes(options.languageHints, nilBehavior: .auto)
+            } else if let language = options.language {
                 languageSelection = .exact(language)
             } else {
                 languageSelection = .auto
@@ -211,14 +293,14 @@ final class APIHandlers: @unchecked Sendable {
             let result = try await modelManager.transcribe(
                 audioSamples: samples,
                 languageSelection: languageSelection,
-                task: task,
+                task: options.task,
                 engineOverrideId: resolvedOverride.engineId,
                 cloudModelOverride: resolvedOverride.modelId,
                 prompt: prompt
             )
 
             var finalText = result.text
-            if let targetCode = targetLanguage {
+            if let targetCode = options.targetLanguage {
                 #if canImport(Translation)
                 if #available(macOS 15, *), let ts = translationService as? TranslationService {
                     if let targetNormalized = TranslationService.normalizedLanguageIdentifier(from: targetCode) {
@@ -259,7 +341,7 @@ final class APIHandlers: @unchecked Sendable {
                 engineUsed: result.engineUsed
             )
 
-            if responseFormat == "verbose_json" {
+            if options.responseFormat == "verbose_json" {
                 struct SegmentEntry: Encodable {
                     let start: Double
                     let end: Double
@@ -848,5 +930,11 @@ final class APIHandlers: @unchecked Sendable {
         if lower.contains("ogg") { return "ogg" }
         if lower.contains("aac") { return "aac" }
         return "wav"
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
     }
 }

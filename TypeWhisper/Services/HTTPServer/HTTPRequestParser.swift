@@ -22,7 +22,7 @@ enum HTTPParseError: Error, Equatable {
 }
 
 enum HTTPRequestParser {
-    static let maxBodySize = 100 * 1024 * 1024 // 100 MB
+    static let maxBodySize = 256 * 1024 * 1024 // 256 MiB
 
     static func parse(_ data: Data) throws -> HTTPRequest {
         guard let headerEnd = data.findDoubleCRLF() else {

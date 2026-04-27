@@ -3,6 +3,10 @@ import XCTest
 @testable import TypeWhisper
 
 final class HTTPRequestParserTests: XCTestCase {
+    func testMaxBodySizeIs256MiB() {
+        XCTAssertEqual(HTTPRequestParser.maxBodySize, 256 * 1024 * 1024)
+    }
+
     func testParseExtractsHeadersQueryAndBody() throws {
         let body = Data("hello".utf8)
         let requestData = Data("""
