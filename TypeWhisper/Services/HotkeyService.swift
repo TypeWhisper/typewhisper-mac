@@ -271,6 +271,11 @@ final class HotkeyService: ObservableObject {
     private var recentEventTapDispatches: [HotkeyDispatchKey: Date] = [:]
     private var capsLockOriginSuppressionUntil: Date?
 
+    // Priority Esc tap — head-insert, only active during recording/processing so we
+    // receive Esc before apps like Raycast that also use head-insert taps.
+    private var priorityEscTap: CFMachPort?
+    private var priorityEscRunLoopSource: CFRunLoopSource?
+
     private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "HotkeyService")
 
     // Modifier keyCodes that generate flagsChanged instead of keyDown/keyUp
@@ -451,6 +456,7 @@ final class HotkeyService: ObservableObject {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
             runLoopSource = nil
         }
+        deactivatePriorityEscCapture()
         recentEventTapDispatches.removeAll()
         capsLockOriginSuppressionUntil = nil
     }
@@ -521,6 +527,79 @@ final class HotkeyService: ObservableObject {
             CGEvent.tapEnable(tap: tap, enable: true)
         }
         logger.warning("CGEventTap was disabled by system, re-enabling")
+    }
+
+    // MARK: - Priority Esc Tap
+
+    /// Installs a head-insert event tap that fires before all other apps' taps.
+    /// Call when TypeWhisper enters recording or processing so Esc is reliably captured
+    /// even when another app (e.g. Raycast) normally intercepts it first.
+    func activatePriorityEscCapture() {
+        guard priorityEscTap == nil else { return }
+
+        let eventMask: CGEventMask = 1 << CGEventType.keyDown.rawValue
+        let selfPtr = Unmanaged.passUnretained(self).toOpaque()
+
+        let callback: CGEventTapCallBack = { _, type, event, userInfo in
+            // Re-enable tap if macOS disabled it due to latency
+            if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+                if let userInfo {
+                    let service = Unmanaged<HotkeyService>.fromOpaque(userInfo).takeUnretainedValue()
+                    if let tap = service.priorityEscTap {
+                        CGEvent.tapEnable(tap: tap, enable: true)
+                    }
+                }
+                return Unmanaged.passUnretained(event)
+            }
+
+            guard let userInfo else {
+                return Unmanaged.passUnretained(event)
+            }
+
+            // Only intercept Esc (keyCode 53 = 0x35)
+            let keyCode = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
+            guard keyCode == 0x35 else {
+                return Unmanaged.passUnretained(event)
+            }
+
+            let service = Unmanaged<HotkeyService>.fromOpaque(userInfo).takeUnretainedValue()
+            service.logger.info("[ESC] priorityEscTap head-insert hit — consuming Esc")
+            service.onCancelPressed?()
+
+            // Return nil to suppress the event so other apps (Raycast etc.) never see it
+            return nil
+        }
+
+        guard let tap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: eventMask,
+            callback: callback,
+            userInfo: selfPtr
+        ) else {
+            logger.warning("[ESC] priorityEscTap creation failed — Accessibility permission may be needed")
+            return
+        }
+
+        priorityEscTap = tap
+        let source = CFMachPortCreateRunLoopSource(nil, tap, 0)
+        priorityEscRunLoopSource = source
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+        CGEvent.tapEnable(tap: tap, enable: true)
+        logger.info("[ESC] priorityEscTap installed (headInsert, session)")
+    }
+
+    /// Removes the priority Esc tap. Call when TypeWhisper returns to idle.
+    func deactivatePriorityEscCapture() {
+        guard let tap = priorityEscTap else { return }
+        CGEvent.tapEnable(tap: tap, enable: false)
+        if let source = priorityEscRunLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+            priorityEscRunLoopSource = nil
+        }
+        priorityEscTap = nil
+        logger.info("[ESC] priorityEscTap removed")
     }
 
     private func handleEventTapCallback(_ event: CGEvent) -> Bool {
