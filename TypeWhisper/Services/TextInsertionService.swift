@@ -694,8 +694,6 @@ enum InsertionResult {
 
     func captureSurroundingCursorContext() -> CursorContext? {
         if let surroundingContextOverride { return surroundingContextOverride() }
-        let t0 = CFAbsoluteTimeGetCurrent()
-        logger.info("[CURSOR] Capture started")
 
         guard isAccessibilityGranted else {
             logger.info("[CURSOR] Skipped: accessibility not granted")
@@ -707,13 +705,11 @@ enum InsertionResult {
         }
 
         let fullText = (stringAttribute(kAXValueAttribute as CFString, from: element) ?? "") as NSString
-        logger.info("[AX] Text length for cursor capture: \(fullText.length, privacy: .public)")
 
         guard let range = selectedRangeAttribute(from: element) else {
             logger.info("[CURSOR] Skipped: no selected range from AX")
             return nil
         }
-        logger.info("[AX] Selected range for cursor capture: {\(range.location, privacy: .public), \(range.length, privacy: .public)}")
 
         let cursorLocation = range.location
         let selectionEnd = range.location + range.length
@@ -741,36 +737,21 @@ enum InsertionResult {
             return nil
         }
 
-        let elapsedMs = (CFAbsoluteTimeGetCurrent() - t0) * 1000
-        logger.info("[CURSOR] Left context length: \(leftContext?.count ?? 0, privacy: .public), right context length: \(rightContext?.count ?? 0, privacy: .public)")
-        logger.info("[CURSOR] Capture finished in \(String(format: "%.1f", elapsedMs), privacy: .public) ms")
         return CursorContext(leftContext: leftContext, rightContext: rightContext)
     }
 
     // MARK: - Auto Spacing
 
     func applyAutoSpacing(to text: String) -> String {
-        let t0 = CFAbsoluteTimeGetCurrent()
-        let preview = String(text.prefix(120)).replacingOccurrences(of: "\n", with: "\\n")
-        logger.info("[SPACING] Evaluating — input length: \(text.count, privacy: .public), preview: \"\(preview, privacy: .public)\"")
-
-        guard !text.isEmpty else {
-            logger.info("[SPACING] Skipped: empty text")
-            return text
-        }
+        guard !text.isEmpty else { return text }
         guard isAccessibilityGranted else {
             logger.info("[SPACING] Skipped: accessibility not granted")
             return text
         }
-
-        logger.info("[AX] isAccessibilityGranted: true")
-
         guard let element = getFocusedTextElement() else {
             logger.info("[SPACING] Skipped: no focused text element")
-            logger.info("[AX] Focused element found: false")
             return text
         }
-        logger.info("[AX] Focused element found: true")
 
         let snapshot: FocusedTextSnapshot
         if let override = focusedTextStateOverride {
@@ -787,9 +768,6 @@ enum InsertionResult {
             )
         }
 
-        logger.info("[AX] Text value present: \(snapshot.value != nil, privacy: .public), text length: \(snapshot.value?.count ?? -1, privacy: .public)")
-        logger.info("[AX] Selected range present: \(snapshot.selectedRange != nil, privacy: .public)")
-
         guard let fullString = snapshot.value else {
             logger.info("[SPACING] Skipped: AX value attribute is nil (app may not expose text via Accessibility)")
             return text
@@ -803,47 +781,23 @@ enum InsertionResult {
         let cursorLocation = range.location
         let selectionEnd = range.location + range.length
 
-        logger.info("[SPACING] Cursor location: \(cursorLocation, privacy: .public), selection length: \(range.length, privacy: .public), full text length: \(nsText.length, privacy: .public)")
-        logger.info("[AX] Selected range: {\(cursorLocation, privacy: .public), \(range.length, privacy: .public)}")
-
         var result = text
-        var prependSpace = false
-        var appendSpace = false
-        var leftCharDesc = "nil (cursor at start)"
-        var rightCharDesc = "nil (cursor at end)"
 
         // Right side: checked first (index-independent from left side)
         if selectionEnd < nsText.length {
             let ch = nsText.character(at: selectionEnd)
-            if let scalar = Unicode.Scalar(ch) {
-                let rightChar = Character(scalar)
-                rightCharDesc = "\"\(rightChar == "\n" ? "\\n" : rightChar == "\r" ? "\\r" : String(rightChar))\""
-                if !(result.last?.isWhitespace ?? false) && shouldAddRightSpace(for: ch) {
-                    appendSpace = true
-                    result += " "
-                }
+            if !(result.last?.isWhitespace ?? false) && shouldAddRightSpace(for: ch) {
+                result += " "
             }
         }
 
         // Left side
         if cursorLocation > 0, cursorLocation <= nsText.length {
             let ch = nsText.character(at: cursorLocation - 1)
-            if let scalar = Unicode.Scalar(ch) {
-                let leftChar = Character(scalar)
-                leftCharDesc = "\"\(leftChar == "\n" ? "\\n" : leftChar == "\r" ? "\\r" : String(leftChar))\""
-                if !(result.first?.isWhitespace ?? false) && shouldAddLeftSpace(for: ch) {
-                    prependSpace = true
-                    result = " " + result
-                }
+            if !(result.first?.isWhitespace ?? false) && shouldAddLeftSpace(for: ch) {
+                result = " " + result
             }
         }
-
-        let finalPreview = String(result.prefix(120)).replacingOccurrences(of: "\n", with: "\\n")
-        let elapsedMs = (CFAbsoluteTimeGetCurrent() - t0) * 1000
-        logger.info("[SPACING] Left char: \(leftCharDesc, privacy: .public) | Right char: \(rightCharDesc, privacy: .public)")
-        logger.info("[SPACING] prependSpace=\(prependSpace, privacy: .public) | appendSpace=\(appendSpace, privacy: .public)")
-        logger.info("[SPACING] Final text length: \(result.count, privacy: .public), preview: \"\(finalPreview, privacy: .public)\"")
-        logger.info("[SPACING] Evaluation finished in \(String(format: "%.2f", elapsedMs), privacy: .public) ms")
 
         return result
     }

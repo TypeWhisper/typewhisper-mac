@@ -683,7 +683,7 @@ final class DictationViewModel: ObservableObject {
         case .recording:
             guard !isStopInFlight else { return }
             abortActiveRecordingImmediately(sessionMessage: cancelledMessage)
-            showNotchFeedback(message: indicatorStyle != .minimal ? cancelledMessage : nil, icon: "xmark", duration: 1.5, isError: true)
+            showNotchFeedback(message: indicatorStyle != .minimal ? cancelledMessage : nil, icon: "xmark", duration: 1.5)
         case .processing:
             if aiPostProcessingActive, let rawText = rawTranscriptForFallback {
                 logger.info("[ESC] AI post-processing active — cancelling AI task and inserting raw fallback transcript (\(rawText.count, privacy: .public) chars)")
@@ -697,7 +697,7 @@ final class DictationViewModel: ObservableObject {
                 cancelActiveDictationSessionIfNeeded(message: cancelledMessage)
                 transcriptionTask?.cancel()
                 transcriptionTask = nil
-                showNotchFeedback(message: indicatorStyle != .minimal ? cancelledMessage : nil, icon: "xmark", duration: 1.5, isError: true)
+                showNotchFeedback(message: indicatorStyle != .minimal ? cancelledMessage : nil, icon: "xmark", duration: 1.5)
             }
         default:
             break
@@ -725,8 +725,6 @@ final class DictationViewModel: ObservableObject {
                 ? textInsertionService.applyAutoSpacing(to: rawText)
                 : rawText
 
-            logger.info("[ESC] Fallback inserting text — autoSpacing: \(autoSpacingOn, privacy: .public), length: \(insertionText.count, privacy: .public)")
-
             do {
                 _ = try await textInsertionService.insertText(
                     insertionText,
@@ -734,15 +732,14 @@ final class DictationViewModel: ObservableObject {
                     autoEnter: autoEnter
                 )
                 logger.info("[ESC] Fallback insertion succeeded")
+                EventBus.shared.emit(.textInserted(TextInsertedPayload(
+                    text: rawText,
+                    appName: activeApp.name,
+                    bundleIdentifier: activeApp.bundleId
+                )))
             } catch {
                 logger.error("[ESC] Fallback insertion failed: \(error.localizedDescription, privacy: .public)")
             }
-
-            EventBus.shared.emit(.textInserted(TextInsertedPayload(
-                text: rawText,
-                appName: activeApp.name,
-                bundleIdentifier: activeApp.bundleId
-            )))
 
             insertingResetTask?.cancel()
             insertingResetTask = Task { @MainActor in
@@ -802,23 +799,12 @@ final class DictationViewModel: ObservableObject {
 
         // Match rule: forced manual override or app-based matching
         let activeApp = textInsertionService.captureActiveApp()
-        logger.info("[DICTATION] Recording started — app: \(activeApp.name ?? "unknown", privacy: .public), bundleId: \(activeApp.bundleId ?? "unknown", privacy: .public)")
-        let axGranted = textInsertionService.isAccessibilityGranted
-        logger.info("[AX] isAccessibilityGranted: \(axGranted, privacy: .public)")
         capturedActiveApp = activeApp
         capturedSelectedText = nil
         let cursorContextEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.useSurroundingCursorContext)
-        let autoSpacingEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.autoSpacingAroundDictatedText)
-        logger.info("[DICTATION] Feature flags — useSurroundingCursorContext: \(cursorContextEnabled, privacy: .public), autoSpacingAroundDictatedText: \(autoSpacingEnabled, privacy: .public)")
         capturedCursorContext = cursorContextEnabled
             ? textInsertionService.captureSurroundingCursorContext()
             : nil
-        let didCaptureCursorContext = capturedCursorContext != nil
-        if !cursorContextEnabled {
-            logger.info("[CURSOR] Skipped: feature disabled")
-        } else {
-            logger.info("[CURSOR] capturedCursorContext captured: \(didCaptureCursorContext, privacy: .public)")
-        }
         activeAppIcon = nil
 
         if let forcedWorkflowId,
@@ -1148,8 +1134,6 @@ final class DictationViewModel: ObservableObject {
         markActiveDictationSessionProcessingIfNeeded()
 
         let pipelineStartTime = CFAbsoluteTimeGetCurrent()
-        logger.info("[PERF] Recording stopped — pipeline starting")
-        logger.info("[DICTATION] Audio duration: \(String(format: "%.3f", audioDuration), privacy: .public)s, samples: \(samples.count, privacy: .public)")
 
         transcriptionTask = Task {
             do {
@@ -1167,10 +1151,6 @@ final class DictationViewModel: ObservableObject {
                     providerId: engineOverride ?? modelManager.selectedProviderId
                 )
 
-                let transcribeStart = CFAbsoluteTimeGetCurrent()
-                let usingLiveResult = liveSessionResult != nil
-                logger.info("[PERF] Transcription started — usingLiveResult: \(usingLiveResult, privacy: .public), engine: \(engineOverride ?? "default", privacy: .public), language: \(language ?? "auto", privacy: .public)")
-
                 let result = if let liveSessionResult {
                     liveSessionResult
                 } else {
@@ -1184,15 +1164,10 @@ final class DictationViewModel: ObservableObject {
                     )
                 }
 
-                let transcribeMs = (CFAbsoluteTimeGetCurrent() - transcribeStart) * 1000
-                logger.info("[PERF] Transcription finished in \(String(format: "%.0f", transcribeMs), privacy: .public) ms — engine: \(result.engineUsed, privacy: .public), detectedLanguage: \(result.detectedLanguage ?? "nil", privacy: .public)")
-
                 // Bail out if a new recording started while we were transcribing
                 guard !Task.isCancelled else { return }
 
                 var text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                let rawPreview = String(text.prefix(120)).replacingOccurrences(of: "\n", with: "\\n")
-                logger.info("[DICTATION] Raw transcription — length: \(text.count, privacy: .public), preview: \"\(rawPreview, privacy: .public)\"")
 
                 guard !text.isEmpty else {
                     logger.info("Transcription returned empty text (duration: \(String(format: "%.2f", result.duration))s, engine: \(result.engineUsed))")
@@ -1202,7 +1177,7 @@ final class DictationViewModel: ObservableObject {
                     }
                     showNotchFeedback(
                         message: indicatorStyle != .minimal ? errorMessage : nil,
-                        icon: "xmark",
+                        icon: "text.magnifyingglass",
                         duration: 2.0,
                         isError: true
                     )
@@ -1210,26 +1185,20 @@ final class DictationViewModel: ObservableObject {
                     return
                 }
 
+                let capturedContext = capturedCursorContext
+                let injectCursorContext = UserDefaults.standard.bool(forKey: UserDefaultsKeys.useSurroundingCursorContext)
+                    && capturedContext != nil
+
                 let baseLLMHandler = buildLLMHandler(
                     translationTarget: translationTarget,
                     detectedLanguage: result.detectedLanguage,
-                    configuredLanguage: language
+                    configuredLanguage: language,
+                    injectCursorContext: injectCursorContext
                 )
-
-                let capturedContext = capturedCursorContext
-                let cursorContextActive = UserDefaults.standard.bool(forKey: UserDefaultsKeys.useSurroundingCursorContext)
-                    && capturedContext != nil
-                    && (capturedContext?.leftContext != nil || capturedContext?.rightContext != nil)
-
-                logger.info("[AI] baseLLMHandler present: \(baseLLMHandler != nil, privacy: .public)")
-                logger.info("[AI] cursorContext will be injected: \(cursorContextActive, privacy: .public)")
-                if let ctx = capturedContext {
-                    logger.info("[AI] Cursor context — leftLength: \(ctx.leftContext?.count ?? 0, privacy: .public), rightLength: \(ctx.rightContext?.count ?? 0, privacy: .public)")
-                }
 
                 let llmHandler: ((String) async throws -> String)? = {
                     guard let base = baseLLMHandler,
-                          UserDefaults.standard.bool(forKey: UserDefaultsKeys.useSurroundingCursorContext),
+                          injectCursorContext,
                           let ctx = capturedContext,
                           ctx.leftContext != nil || ctx.rightContext != nil else {
                         return baseLLMHandler
@@ -1252,10 +1221,6 @@ final class DictationViewModel: ObservableObject {
                     nil
                 }
 
-                logger.info("[AI] llmHandler active: \(llmHandler != nil, privacy: .public), stepName: \(llmStepName ?? "none", privacy: .public)")
-                logger.info("[AI] Matched workflow: \(self.matchedWorkflow?.name ?? "none", privacy: .public)")
-                logger.info("[AI] Matched profile rule: \(self.effectiveRuleName ?? "none", privacy: .public)")
-
                 self.processingPhase = String(localized: "Processing...")
                 await metadataCaptureTask?.value
 
@@ -1263,7 +1228,6 @@ final class DictationViewModel: ObservableObject {
                 if llmHandler != nil {
                     self.rawTranscriptForFallback = text
                     self.aiPostProcessingActive = true
-                    logger.info("[ESC] aiPostProcessingActive set — fallback transcript saved (\(text.count, privacy: .public) chars)")
                 }
 
                 let ppContext = PostProcessingContext(
@@ -1274,13 +1238,6 @@ final class DictationViewModel: ObservableObject {
                     ruleName: self.effectiveRuleName,
                     selectedText: self.capturedSelectedText
                 )
-
-                let ppStart = CFAbsoluteTimeGetCurrent()
-                logger.info("[PERF] AI post-processing started — input length: \(text.count, privacy: .public)")
-                if llmHandler != nil {
-                    let inputPreview = String(text.prefix(120)).replacingOccurrences(of: "\n", with: "\\n")
-                    logger.info("[AI] Request text preview: \"\(inputPreview, privacy: .public)\"")
-                }
 
                 let ppResult = try await postProcessingPipeline.process(
                     text: text, context: ppContext, llmHandler: llmHandler,
@@ -1294,12 +1251,6 @@ final class DictationViewModel: ObservableObject {
 
                 // Bail out if Esc was pressed while AI was finishing (task just got cancelled)
                 guard !Task.isCancelled else { return }
-
-                let ppMs = (CFAbsoluteTimeGetCurrent() - ppStart) * 1000
-                logger.info("[PERF] AI post-processing finished in \(String(format: "%.0f", ppMs), privacy: .public) ms")
-                logger.info("[AI] Applied steps: \(ppResult.appliedSteps.joined(separator: ", "), privacy: .public)")
-                let ppPreview = String(ppResult.text.prefix(120)).replacingOccurrences(of: "\n", with: "\\n")
-                logger.info("[AI] Response length: \(ppResult.text.count, privacy: .public), preview: \"\(ppPreview, privacy: .public)\"")
 
                 text = ppResult.text
                 let transcriptionID = sessionID ?? UUID()
@@ -1324,34 +1275,14 @@ final class DictationViewModel: ObservableObject {
                     )
                 } else {
                     let autoSpacingOn = UserDefaults.standard.bool(forKey: UserDefaultsKeys.autoSpacingAroundDictatedText)
-                    logger.info("[INSERT] Raw text length: \(text.count, privacy: .public), preview: \"\(String(text.prefix(120)).replacingOccurrences(of: "\n", with: "\\n"), privacy: .public)\"")
-                    logger.info("[SPACING] Feature enabled: \(autoSpacingOn, privacy: .public)")
-
-                    let spacingStart = CFAbsoluteTimeGetCurrent()
-                    let insertionText: String
-                    if autoSpacingOn {
-                        logger.info("[SPACING] Calling applyAutoSpacing")
-                        insertionText = textInsertionService.applyAutoSpacing(to: text)
-                    } else {
-                        logger.info("[SPACING] Skipped: feature disabled")
-                        insertionText = text
-                    }
-                    let spacingMs = (CFAbsoluteTimeGetCurrent() - spacingStart) * 1000
-                    logger.info("[PERF] Auto spacing evaluation finished in \(String(format: "%.2f", spacingMs), privacy: .public) ms")
-
-                    let insertPreview = String(insertionText.prefix(120)).replacingOccurrences(of: "\n", with: "\\n")
-                    logger.info("[INSERT] After spacing — length: \(insertionText.count, privacy: .public), preview: \"\(insertPreview, privacy: .public)\"")
-                    logger.info("[INSERT] autoEnter: \(self.effectiveAutoEnterEnabled, privacy: .public), preserveClipboard: \(self.preserveClipboard, privacy: .public)")
-
-                    let insertStart = CFAbsoluteTimeGetCurrent()
-                    logger.info("[PERF] Text insertion started")
+                    let insertionText = autoSpacingOn
+                        ? textInsertionService.applyAutoSpacing(to: text)
+                        : text
                     _ = try await textInsertionService.insertText(
                         insertionText,
                         preserveClipboard: preserveClipboard,
                         autoEnter: self.effectiveAutoEnterEnabled
                     )
-                    let insertMs = (CFAbsoluteTimeGetCurrent() - insertStart) * 1000
-                    logger.info("[PERF] Text insertion finished in \(String(format: "%.0f", insertMs), privacy: .public) ms")
                     EventBus.shared.emit(.textInserted(TextInsertedPayload(
                         text: text,
                         appName: activeApp.name,
@@ -1718,11 +1649,9 @@ final class DictationViewModel: ObservableObject {
     private func buildLLMHandler(
         translationTarget: String?,
         detectedLanguage: String?,
-        configuredLanguage: String?
+        configuredLanguage: String?,
+        injectCursorContext: Bool = false
     ) -> ((String) async throws -> String)? {
-        let contextEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.useSurroundingCursorContext)
-        let hasCapturedContext = capturedCursorContext != nil
-
         if let matchedWorkflow,
            let systemPrompt = matchedWorkflow.systemPrompt(
                 fallbackTranslationTarget: translationTarget,
@@ -1731,7 +1660,7 @@ final class DictationViewModel: ObservableObject {
            ) {
             let pps = promptProcessingService
             let behavior = matchedWorkflow.behavior
-            let finalPrompt = contextEnabled && hasCapturedContext
+            let finalPrompt = injectCursorContext
                 ? systemPrompt + Self.cursorContextSystemInstruction
                 : systemPrompt
             return { text in
@@ -1753,7 +1682,7 @@ final class DictationViewModel: ObservableObject {
             let basePrompt = inlineEnabled
                 ? Self.buildInlineCommandSystemPrompt(baseContext: promptAction?.prompt)
                 : promptAction!.prompt
-            let finalPrompt = contextEnabled && hasCapturedContext
+            let finalPrompt = injectCursorContext
                 ? basePrompt + Self.cursorContextSystemInstruction
                 : basePrompt
             let providerOverride = promptAction?.providerType

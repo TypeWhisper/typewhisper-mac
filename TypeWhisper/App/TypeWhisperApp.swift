@@ -356,7 +356,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden: DockIconBehavior.keepVisible.rawValue,
             UserDefaultsKeys.updateChannel: AppConstants.defaultReleaseChannel.rawValue,
             UserDefaultsKeys.appFormattingEnabled: false,
-            UserDefaultsKeys.autoSpacingAroundDictatedText: true,
+            UserDefaultsKeys.autoSpacingAroundDictatedText: false,
             UserDefaultsKeys.useSurroundingCursorContext: false
         ])
     }
