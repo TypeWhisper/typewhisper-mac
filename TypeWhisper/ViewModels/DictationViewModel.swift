@@ -750,6 +750,37 @@ final class DictationViewModel: ObservableObject {
         }
     }
 
+    /// Runs raw transcript insertion after AI-stage failures while preserving existing error UX.
+    private func insertRawTranscriptFallbackAfterAIError(_ rawText: String) async {
+        let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        // Mark AI fallback state as consumed so racing paths cannot insert twice.
+        aiPostProcessingActive = false
+        rawTranscriptForFallback = nil
+
+        let activeApp = capturedActiveApp ?? textInsertionService.captureActiveApp()
+        let autoSpacingOn = UserDefaults.standard.bool(forKey: UserDefaultsKeys.autoSpacingAroundDictatedText)
+        let insertionText = autoSpacingOn
+            ? textInsertionService.applyAutoSpacing(to: trimmed)
+            : trimmed
+
+        do {
+            _ = try await textInsertionService.insertText(
+                insertionText,
+                preserveClipboard: preserveClipboard,
+                autoEnter: effectiveAutoEnterEnabled
+            )
+            EventBus.shared.emit(.textInserted(TextInsertedPayload(
+                text: trimmed,
+                appName: activeApp.name,
+                bundleIdentifier: activeApp.bundleId
+            )))
+        } catch {
+            logger.error("[AI FALLBACK] Raw transcript insertion failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
     private func startRecording(
         forcedProfileId: UUID? = nil,
         forcedWorkflowId: UUID? = nil,
@@ -1362,6 +1393,9 @@ final class DictationViewModel: ObservableObject {
                 }
             } catch {
                 guard !Task.isCancelled else { return }
+                let aiErrorFallbackText = aiPostProcessingActive
+                    ? rawTranscriptForFallback?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    : nil
                 let totalMs = (CFAbsoluteTimeGetCurrent() - pipelineStartTime) * 1000
                 logger.error("[ERROR] Pipeline failed after \(String(format: "%.0f", totalMs), privacy: .public) ms — \(error.localizedDescription, privacy: .public)")
                 EventBus.shared.emit(.transcriptionFailed(TranscriptionFailedPayload(
@@ -1374,6 +1408,10 @@ final class DictationViewModel: ObservableObject {
                 }
                 accessibilityAnnouncementService.announceError(error.localizedDescription)
                 showError(error.localizedDescription, category: "transcription")
+                if let rawText = aiErrorFallbackText, !rawText.isEmpty {
+                    logger.info("[AI FALLBACK] AI failed, inserting raw transcript")
+                    await insertRawTranscriptFallbackAfterAIError(rawText)
+                }
                 clearActiveRuleState()
                 capturedActiveApp = nil
                 activeAppIcon = nil
