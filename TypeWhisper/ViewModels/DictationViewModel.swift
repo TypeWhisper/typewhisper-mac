@@ -573,10 +573,8 @@ final class DictationViewModel: ObservableObject {
         }
 
         hotkeyService.onCancelPressed = { [weak self] in
-            logger.info("[ESC] onCancelPressed closure reached DictationViewModel")
-            DispatchQueue.main.async {
-                self?.handleCancelHotkey()
-            }
+            logger.info("[ESC] onCancelPressed called")
+            self?.handleCancelHotkey()
         }
 
         hotkeyService.onPushToTalkInterruption = { [weak self] in
