@@ -165,10 +165,10 @@ struct MinimalIndicatorView: View {
         }
         .padding(.horizontal, showsExpandedMessage ? 14 : 12)
         .padding(.vertical, showsExpandedMessage ? 9 : 10)
-        .background(.black.opacity(0.84), in: Capsule())
+        .background(.black.opacity(0.95), in: Capsule())
         .overlay(
             Capsule()
-                .stroke(strokeColor, lineWidth: 1)
+                .stroke(strokeColor, lineWidth: 0)
         )
         .shadow(color: shadowColor, radius: 10, y: 4)
     }
