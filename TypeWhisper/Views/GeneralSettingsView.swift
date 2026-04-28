@@ -18,6 +18,7 @@ struct GeneralSettingsView: View {
     @State private var showRestartAlert = false
     @AppStorage(UserDefaultsKeys.showMenuBarIcon) private var showMenuBarIcon = true
     @AppStorage(UserDefaultsKeys.autoSpacingAroundDictatedText) private var autoSpacingAroundDictatedText: Bool = false
+    @AppStorage(UserDefaultsKeys.minimalIndicatorCompactMode) private var minimalIndicatorCompactMode = true
     @AppStorage(UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden) private var dockIconBehaviorRawValue = DockIconBehavior.keepVisible.rawValue
     @ObservedObject private var pluginManager = PluginManager.shared
     @ObservedObject private var settings = SettingsViewModel.shared
@@ -208,6 +209,10 @@ struct GeneralSettingsView: View {
                         Text(String(localized: "Top")).tag(OverlayPosition.top)
                         Text(String(localized: "Bottom")).tag(OverlayPosition.bottom)
                     }
+                }
+
+                if dictation.indicatorStyle == .minimal {
+                    Toggle(String(localized: "Enable Compact Mode"), isOn: $minimalIndicatorCompactMode)
                 }
 
                 if dictation.indicatorStyle != .minimal {

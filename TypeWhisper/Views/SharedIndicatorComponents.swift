@@ -85,6 +85,7 @@ struct IndicatorLeftStatus: View {
     let sizing: IndicatorSizing
     let dotPulse: Bool
     let hasActionFeedback: Bool
+    var showActiveAppIcon: Bool = true
 
     var body: some View {
         statusContent
@@ -97,13 +98,13 @@ struct IndicatorLeftStatus: View {
         case .idle, .promptSelection, .promptProcessing:
             Color.clear.frame(width: 0, height: 0)
         case .recording:
-            if let icon = viewModel.activeAppIcon {
+            if showActiveAppIcon, let icon = viewModel.activeAppIcon {
                 IndicatorAppIconView(icon: icon, sizing: sizing)
             } else {
                 IndicatorDot(audioLevel: viewModel.audioLevel, dotPulse: dotPulse, sizing: sizing)
             }
         case .processing:
-            if let icon = viewModel.activeAppIcon {
+            if showActiveAppIcon, let icon = viewModel.activeAppIcon {
                 IndicatorAppIconView(icon: icon, sizing: sizing)
             } else {
                 ProgressView()
@@ -113,6 +114,10 @@ struct IndicatorLeftStatus: View {
         case .inserting:
             if hasActionFeedback {
                 Color.clear.frame(width: 0, height: 0)
+            } else if !showActiveAppIcon {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .font(.system(size: sizing.symbolSize))
             } else if let feedbackIcon = viewModel.actionFeedbackIcon {
                 Image(systemName: feedbackIcon)
                     .foregroundStyle(viewModel.actionFeedbackIsError ? .red : .green)
@@ -125,7 +130,7 @@ struct IndicatorLeftStatus: View {
                     .font(.system(size: sizing.symbolSize))
             }
         case .error:
-            if let icon = viewModel.activeAppIcon {
+            if showActiveAppIcon, let icon = viewModel.activeAppIcon {
                 IndicatorAppIconView(icon: icon, borderColor: .red, sizing: sizing)
             } else {
                 Image(systemName: "xmark.circle.fill")

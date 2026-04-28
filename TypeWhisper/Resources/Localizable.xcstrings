@@ -2579,6 +2579,16 @@
         }
       }
     },
+    "Enable Compact Mode" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kompaktmodus aktivieren"
+          }
+        }
+      }
+    },
     "Enable in System Settings" : {
       "localizations" : {
         "de" : {

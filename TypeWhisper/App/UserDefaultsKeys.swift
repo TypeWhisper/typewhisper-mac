@@ -63,6 +63,7 @@ enum UserDefaultsKeys {
 
     // MARK: - Notch Indicator
     static let overlayPosition = "overlayPosition"
+    static let minimalIndicatorCompactMode = "minimalIndicatorCompactMode"
     static let notchIndicatorVisibility = "notchIndicatorVisibility"
     static let notchIndicatorLeftContent = "notchIndicatorLeftContent"
     static let notchIndicatorRightContent = "notchIndicatorRightContent"

@@ -3,6 +3,7 @@ import SwiftUI
 /// Compact floating indicator for power users who only want essential status.
 struct MinimalIndicatorView: View {
     @ObservedObject private var viewModel = DictationViewModel.shared
+    @AppStorage(UserDefaultsKeys.minimalIndicatorCompactMode) private var compactModeEnabled = true
     @State private var dotPulse = false
 
     private let sizing: IndicatorSizing = .minimal
@@ -35,16 +36,19 @@ struct MinimalIndicatorView: View {
     }
 
     private var actionFeedbackMessage: String? {
+        guard !compactModeEnabled else { return nil }
         guard viewModel.state == .inserting else { return nil }
         return viewModel.actionFeedbackMessage
     }
 
     private var recordingCancelWarningMessage: String? {
+        guard !compactModeEnabled else { return nil }
         guard viewModel.state == .recording else { return nil }
         return viewModel.recordingCancelWarningMessage
     }
 
     private var errorMessage: String? {
+        guard !compactModeEnabled else { return nil }
         guard case let .error(message) = viewModel.state else { return nil }
         return message
     }
@@ -58,6 +62,17 @@ struct MinimalIndicatorView: View {
             return messageWidth
         }
 
+        if compactModeEnabled {
+            switch viewModel.state {
+            case .recording, .processing, .inserting:
+                return recordingWidth
+            case .idle, .promptSelection, .promptProcessing:
+                return idleWidth
+            case .error:
+                return insertingWidth
+            }
+        }
+
         switch viewModel.state {
         case .recording:
             return recordingWidth
@@ -68,7 +83,7 @@ struct MinimalIndicatorView: View {
         case .idle, .promptSelection, .promptProcessing:
             return idleWidth
         case .error:
-            return messageWidth
+            return compactModeEnabled ? insertingWidth : messageWidth
         }
     }
 
@@ -160,44 +175,71 @@ struct MinimalIndicatorView: View {
 
     @ViewBuilder
     private var compactStatus: some View {
-        switch viewModel.state {
-        case .recording:
-            HStack(spacing: viewModel.notchIndicatorRightContent == .none ? 0 : 8) {
+        if compactModeEnabled {
+            compactModeStatus
+        } else {
+            switch viewModel.state {
+            case .recording:
+                HStack(spacing: viewModel.notchIndicatorRightContent == .none ? 0 : 8) {
+                    IndicatorLeftStatus(
+                        viewModel: viewModel,
+                        sizing: sizing,
+                        dotPulse: dotPulse,
+                        hasActionFeedback: false,
+                        showActiveAppIcon: !compactModeEnabled
+                    )
+
+                    if viewModel.notchIndicatorRightContent != .none {
+                        IndicatorRecordingContent(
+                            viewModel: viewModel,
+                            content: viewModel.notchIndicatorRightContent,
+                            sizing: sizing,
+                            dotPulse: dotPulse
+                        )
+                    }
+                }
+            case .processing:
+                HStack(spacing: 8) {
+                    if !compactModeEnabled, let icon = viewModel.activeAppIcon {
+                        IndicatorAppIconView(icon: icon, sizing: sizing)
+                    }
+                    ProgressView()
+                        .controlSize(.mini)
+                        .tint(.white)
+                }
+            case .inserting:
                 IndicatorLeftStatus(
                     viewModel: viewModel,
                     sizing: sizing,
-                    dotPulse: dotPulse,
-                    hasActionFeedback: false
+                    dotPulse: false,
+                    hasActionFeedback: false,
+                    showActiveAppIcon: !compactModeEnabled
                 )
+            case .idle, .promptSelection, .promptProcessing:
+                Color.clear
+                    .frame(width: 1, height: 1)
+            case .error:
+                EmptyView()
+            }
+        }
+    }
 
-                if viewModel.notchIndicatorRightContent != .none {
-                    IndicatorRecordingContent(
-                        viewModel: viewModel,
-                        content: viewModel.notchIndicatorRightContent,
-                        sizing: sizing,
-                        dotPulse: dotPulse
-                    )
-                }
+    @ViewBuilder
+    private var compactModeStatus: some View {
+        switch viewModel.state {
+        case .recording, .processing, .inserting:
+            if viewModel.notchIndicatorRightContent != .none {
+                IndicatorRecordingContent(
+                    viewModel: viewModel,
+                    content: viewModel.notchIndicatorRightContent,
+                    sizing: sizing,
+                    dotPulse: dotPulse
+                )
+            } else {
+                Color.clear.frame(width: 1, height: 1)
             }
-        case .processing:
-            HStack(spacing: 8) {
-                if let icon = viewModel.activeAppIcon {
-                    IndicatorAppIconView(icon: icon, sizing: sizing)
-                }
-                ProgressView()
-                    .controlSize(.mini)
-                    .tint(.white)
-            }
-        case .inserting:
-            IndicatorLeftStatus(
-                viewModel: viewModel,
-                sizing: sizing,
-                dotPulse: false,
-                hasActionFeedback: false
-            )
         case .idle, .promptSelection, .promptProcessing:
-            Color.clear
-                .frame(width: 1, height: 1)
+            Color.clear.frame(width: 1, height: 1)
         case .error:
             EmptyView()
         }
