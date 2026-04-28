@@ -32,6 +32,11 @@ enum OverlayPosition: String, CaseIterable {
     case bottom
 }
 
+enum EscapeCancelMode: String, CaseIterable {
+    case doublePress
+    case singlePress
+}
+
 extension IndicatorStyle {
     var supportsTranscriptPreview: Bool {
         self != .minimal

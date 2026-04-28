@@ -2380,6 +2380,9 @@
         }
       }
     },
+    "Double Press to Cancel" : {
+
+    },
     "Downloading %@" : {
       "localizations" : {
         "de" : {
@@ -2706,6 +2709,9 @@
           }
         }
       }
+    },
+    "Escape Key Cancel Mode" : {
+
     },
     "EUR" : {
       "extractionState" : "stale",
@@ -6979,6 +6985,9 @@
           }
         }
       }
+    },
+    "Single Press to Cancel" : {
+
     },
     "Skip Setup" : {
       "comment" : "A button that lets users skip the setup wizard and go directly to the main app.",

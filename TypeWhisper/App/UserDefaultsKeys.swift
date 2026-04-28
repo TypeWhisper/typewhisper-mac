@@ -83,6 +83,7 @@ enum UserDefaultsKeys {
 
     // MARK: - Text Insertion
     static let autoSpacingAroundDictatedText = "autoSpacingAroundDictatedText"
+    static let escapeCancelMode = "escapeCancelMode"
 
     // MARK: - AI Context
     static let useSurroundingCursorContext = "useSurroundingCursorContext"

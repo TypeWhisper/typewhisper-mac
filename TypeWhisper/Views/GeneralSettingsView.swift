@@ -18,6 +18,7 @@ struct GeneralSettingsView: View {
     @State private var showRestartAlert = false
     @AppStorage(UserDefaultsKeys.showMenuBarIcon) private var showMenuBarIcon = true
     @AppStorage(UserDefaultsKeys.autoSpacingAroundDictatedText) private var autoSpacingAroundDictatedText: Bool = false
+    @AppStorage(UserDefaultsKeys.escapeCancelMode) private var escapeCancelModeRawValue = EscapeCancelMode.doublePress.rawValue
     @AppStorage(UserDefaultsKeys.minimalIndicatorCompactMode) private var minimalIndicatorCompactMode = true
     @AppStorage(UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden) private var dockIconBehaviorRawValue = DockIconBehavior.keepVisible.rawValue
     @ObservedObject private var pluginManager = PluginManager.shared
@@ -143,6 +144,16 @@ struct GeneralSettingsView: View {
                 Text(String(localized: "Automatically adds a space before or after inserted text when the adjacent character is not whitespace, preventing words from merging."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Picker(String(localized: "Escape Key Cancel Mode"), selection: Binding(
+                    get: { EscapeCancelMode(rawValue: escapeCancelModeRawValue) ?? .doublePress },
+                    set: { newMode in
+                        escapeCancelModeRawValue = newMode.rawValue
+                        dictation.escapeCancelMode = newMode
+                    }
+                )) {
+                    Text(String(localized: "Double Press to Cancel")).tag(EscapeCancelMode.doublePress)
+                    Text(String(localized: "Single Press to Cancel")).tag(EscapeCancelMode.singlePress)
+                }
             }
 
             Section(String(localized: "Appearance")) {

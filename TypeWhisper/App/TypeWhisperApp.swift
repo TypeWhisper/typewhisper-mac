@@ -357,6 +357,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             UserDefaultsKeys.updateChannel: AppConstants.defaultReleaseChannel.rawValue,
             UserDefaultsKeys.appFormattingEnabled: false,
             UserDefaultsKeys.autoSpacingAroundDictatedText: false,
+            UserDefaultsKeys.escapeCancelMode: EscapeCancelMode.doublePress.rawValue,
             UserDefaultsKeys.useSurroundingCursorContext: false
         ])
     }

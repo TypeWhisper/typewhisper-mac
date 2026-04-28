@@ -95,6 +95,9 @@ final class DictationViewModel: ObservableObject {
     @Published var transcribeShortQuietClipsAggressively: Bool {
         didSet { Self.persistTranscribeShortQuietClipsAggressively(transcribeShortQuietClipsAggressively) }
     }
+    @Published var escapeCancelMode: EscapeCancelMode {
+        didSet { UserDefaults.standard.set(escapeCancelMode.rawValue, forKey: UserDefaultsKeys.escapeCancelMode) }
+    }
     @Published var spokenFeedbackEnabled: Bool {
         didSet { speechFeedbackService.spokenFeedbackEnabled = spokenFeedbackEnabled }
     }
@@ -307,6 +310,8 @@ final class DictationViewModel: ObservableObject {
         self.preserveClipboard = UserDefaults.standard.bool(forKey: UserDefaultsKeys.preserveClipboard)
         self.mediaPauseEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.mediaPauseEnabled)
         self.transcribeShortQuietClipsAggressively = Self.loadTranscribeShortQuietClipsAggressively()
+        self.escapeCancelMode = UserDefaults.standard.string(forKey: UserDefaultsKeys.escapeCancelMode)
+            .flatMap { EscapeCancelMode(rawValue: $0) } ?? .doublePress
         self.spokenFeedbackEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.spokenFeedbackEnabled)
         self.indicatorStyle = Self.loadIndicatorStyle()
         self.notchIndicatorVisibility = UserDefaults.standard.string(forKey: UserDefaultsKeys.notchIndicatorVisibility)
@@ -655,6 +660,18 @@ final class DictationViewModel: ObservableObject {
 
     func handleCancelHotkey() {
         logger.info("[ESC] handleCancelHotkey — current state: \(String(describing: self.state), privacy: .public)")
+
+        if escapeCancelMode == .singlePress {
+            switch state {
+            case .recording, .processing:
+                recordingCancelWarningActive = false
+                cancelCurrentOperation()
+            default:
+                logger.info("[ESC] State is not .recording or .processing — no action taken")
+            }
+            return
+        }
+
         switch state {
         case .recording:
             if recordingCancelWarningActive {
