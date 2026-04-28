@@ -578,7 +578,7 @@ final class HotkeyService: ObservableObject {
             callback: callback,
             userInfo: selfPtr
         ) else {
-            logger.warning("[ESC] priorityEscTap creation failed — Accessibility permission may be needed")
+            logger.warning("[ESC] priority capture failed — Accessibility permission may be needed")
             return
         }
 
@@ -587,7 +587,7 @@ final class HotkeyService: ObservableObject {
         priorityEscRunLoopSource = source
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
-        logger.info("[ESC] priorityEscTap installed (headInsert, session)")
+        logger.info("[ESC] priority capture enabled (headInsert)")
     }
 
     /// Removes the priority Esc tap. Call when TypeWhisper returns to idle.
@@ -599,7 +599,7 @@ final class HotkeyService: ObservableObject {
             priorityEscRunLoopSource = nil
         }
         priorityEscTap = nil
-        logger.info("[ESC] priorityEscTap removed")
+        logger.info("[ESC] priority capture disabled")
     }
 
     private func handleEventTapCallback(_ event: CGEvent) -> Bool {
