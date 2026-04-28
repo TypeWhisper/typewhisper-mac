@@ -573,7 +573,10 @@ final class DictationViewModel: ObservableObject {
         }
 
         hotkeyService.onCancelPressed = { [weak self] in
-            self?.handleCancelHotkey()
+            logger.info("[ESC] onCancelPressed closure reached DictationViewModel")
+            DispatchQueue.main.async {
+                self?.handleCancelHotkey()
+            }
         }
 
         hotkeyService.onPushToTalkInterruption = { [weak self] in
@@ -653,6 +656,7 @@ final class DictationViewModel: ObservableObject {
     }
 
     func handleCancelHotkey() {
+        logger.info("[ESC] handleCancelHotkey — current state: \(String(describing: self.state), privacy: .public)")
         switch state {
         case .recording:
             if recordingCancelWarningActive {
@@ -664,6 +668,7 @@ final class DictationViewModel: ObservableObject {
         case .processing:
             cancelCurrentOperation()
         default:
+            logger.info("[ESC] State is not .recording or .processing — no action taken")
             break
         }
     }
@@ -673,6 +678,7 @@ final class DictationViewModel: ObservableObject {
     }
 
     private func cancelCurrentOperation() {
+        logger.info("[ESC] cancelCurrentOperation — state: \(String(describing: self.state), privacy: .public), aiPostProcessingActive: \(self.aiPostProcessingActive, privacy: .public), hasFallbackTranscript: \(self.rawTranscriptForFallback != nil, privacy: .public)")
         let cancelledMessage = String(localized: "Cancelled")
 
         switch state {
@@ -682,13 +688,14 @@ final class DictationViewModel: ObservableObject {
             showNotchFeedback(message: indicatorStyle != .minimal ? cancelledMessage : nil, icon: "xmark", duration: 1.5, isError: true)
         case .processing:
             if aiPostProcessingActive, let rawText = rawTranscriptForFallback {
-                // Cancel the AI task and fall back to inserting the raw local transcript
+                logger.info("[ESC] AI post-processing active — cancelling AI task and inserting raw fallback transcript (\(rawText.count, privacy: .public) chars)")
                 transcriptionTask?.cancel()
                 transcriptionTask = nil
                 aiPostProcessingActive = false
                 rawTranscriptForFallback = nil
                 insertRawFallbackTranscript(rawText)
             } else {
+                logger.info("[ESC] Not in AI stage — cancelling transcription task")
                 cancelActiveDictationSessionIfNeeded(message: cancelledMessage)
                 transcriptionTask?.cancel()
                 transcriptionTask = nil
@@ -702,20 +709,25 @@ final class DictationViewModel: ObservableObject {
     /// Runs the local insertion pipeline on the raw transcript and inserts it.
     /// Called when the user presses Esc to abort AI post-processing.
     private func insertRawFallbackTranscript(_ rawText: String) {
-        let sessionID = activeDictationSessionID
         let activeApp = capturedActiveApp ?? textInsertionService.captureActiveApp()
         let autoEnter = effectiveAutoEnterEnabled
         let preserveClip = preserveClipboard
 
-        // Mark session failed (cancelled by user) before we re-insert
-        cancelActiveDictationSessionIfNeeded(message: String(localized: "Cancelled"))
+        logger.info("[ESC] insertRawFallbackTranscript — inserting \(rawText.count, privacy: .public) chars")
 
-        Task {
-            guard !Task.isCancelled else { return }
+        // Cancel the session synchronously so duplicate insertion from the AI path is blocked
+        cancelActiveDictationSessionIfNeeded(message: String(localized: "Cancelled"))
+        // Transition state immediately so a second Esc press can't re-trigger this path
+        partialText = ""
+        state = .inserting
+
+        Task { @MainActor in
             let autoSpacingOn = UserDefaults.standard.bool(forKey: UserDefaultsKeys.autoSpacingAroundDictatedText)
             let insertionText = autoSpacingOn
                 ? textInsertionService.applyAutoSpacing(to: rawText)
                 : rawText
+
+            logger.info("[ESC] Fallback inserting text — autoSpacing: \(autoSpacingOn, privacy: .public), length: \(insertionText.count, privacy: .public)")
 
             do {
                 _ = try await textInsertionService.insertText(
@@ -723,8 +735,9 @@ final class DictationViewModel: ObservableObject {
                     preserveClipboard: preserveClip,
                     autoEnter: autoEnter
                 )
+                logger.info("[ESC] Fallback insertion succeeded")
             } catch {
-                logger.error("[FALLBACK] Text insertion failed: \(error.localizedDescription, privacy: .public)")
+                logger.error("[ESC] Fallback insertion failed: \(error.localizedDescription, privacy: .public)")
             }
 
             EventBus.shared.emit(.textInserted(TextInsertedPayload(
@@ -733,10 +746,8 @@ final class DictationViewModel: ObservableObject {
                 bundleIdentifier: activeApp.bundleId
             )))
 
-            partialText = ""
-            state = .inserting
             insertingResetTask?.cancel()
-            insertingResetTask = Task {
+            insertingResetTask = Task { @MainActor in
                 try? await Task.sleep(for: .seconds(1.5))
                 guard !Task.isCancelled else { return }
                 resetDictationState()
@@ -1252,6 +1263,7 @@ final class DictationViewModel: ObservableObject {
                 if llmHandler != nil {
                     self.rawTranscriptForFallback = text
                     self.aiPostProcessingActive = true
+                    logger.info("[ESC] aiPostProcessingActive set — fallback transcript saved (\(text.count, privacy: .public) chars)")
                 }
 
                 let ppContext = PostProcessingContext(

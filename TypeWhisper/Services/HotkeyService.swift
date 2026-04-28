@@ -419,10 +419,16 @@ final class HotkeyService: ObservableObject {
         }
 
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
+            if event.type == .keyDown && event.keyCode == 0x35 {
+                self?.logger.info("[ESC] globalMonitor path hit — keyDown Esc")
+            }
             _ = self?.handleEvent(event, source: .monitor)
         }
 
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
+            if event.type == .keyDown && event.keyCode == 0x35 {
+                self?.logger.info("[ESC] localMonitor path hit — keyDown Esc")
+            }
             _ = self?.handleEvent(event, source: .monitor)
             return event
         }
@@ -519,6 +525,9 @@ final class HotkeyService: ObservableObject {
 
     private func handleEventTapCallback(_ event: CGEvent) -> Bool {
         guard let nsEvent = NSEvent(cgEvent: event) else { return false }
+        if nsEvent.type == .keyDown && nsEvent.keyCode == 0x35 {
+            logger.info("[ESC] eventTap path hit — keyDown Esc")
+        }
         return handleEventTapEvent(nsEvent)
     }
 
@@ -534,6 +543,8 @@ final class HotkeyService: ObservableObject {
     private func handleEvent(_ event: NSEvent, source: HotkeyEventSource) -> Bool {
         // Escape key cancels active recording/transcription
         if event.type == .keyDown && event.keyCode == 0x35 {
+            let sourceName = source == .eventTap ? "eventTap" : "monitor"
+            logger.info("[ESC] handleEvent — source: \(sourceName), isActive: \(self.isActive)")
             onCancelPressed?()
             return false
         }
