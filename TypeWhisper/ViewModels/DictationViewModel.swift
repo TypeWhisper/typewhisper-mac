@@ -110,6 +110,7 @@ final class DictationViewModel: ObservableObject {
     var promptPaletteHotkeyLabel: String { Self.loadHotkeyLabel(for: .promptPalette) }
     var recentTranscriptionsHotkeyLabel: String { Self.loadHotkeyLabel(for: .recentTranscriptions) }
     var copyLastTranscriptionHotkeyLabel: String { Self.loadHotkeyLabel(for: .copyLastTranscription) }
+    var pasteLastTranscriptionHotkeyLabel: String { Self.loadHotkeyLabel(for: .pasteLastTranscription) }
     var recorderToggleHotkeyLabel: String { Self.loadHotkeyLabel(for: .recorderToggle) }
     @Published var activeRuleName: String?
     @Published var activeRuleReasonLabel: String?
@@ -1872,6 +1873,38 @@ final class DictationViewModel: ObservableObject {
         let pasteboard = pasteboardProvider()
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
+    }
+
+    func pasteLastTranscription() {
+        guard let entry = recentTranscriptionStore.latestEntry(historyRecords: historyService.records) else {
+            showNotchFeedback(message: String(localized: "No recent transcriptions"), icon: "clock.arrow.circlepath")
+            return
+        }
+
+        let text = entry.finalText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            showNotchFeedback(message: String(localized: "No recent transcriptions"), icon: "clock.arrow.circlepath")
+            return
+        }
+
+        Task { @MainActor in
+            do {
+                _ = try await textInsertionService.insertText(
+                    text,
+                    preserveClipboard: preserveClipboard,
+                    autoEnter: false
+                )
+                showNotchFeedback(message: String(localized: "Text inserted"), icon: "checkmark.circle.fill")
+            } catch {
+                showNotchFeedback(
+                    message: error.localizedDescription,
+                    icon: "xmark.circle.fill",
+                    duration: 3.0,
+                    isError: true,
+                    errorCategory: "recentTranscriptions"
+                )
+            }
+        }
     }
 
     func readBackLastTranscription() {

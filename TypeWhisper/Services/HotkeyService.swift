@@ -98,6 +98,7 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
     case promptPalette
     case recentTranscriptions
     case copyLastTranscription
+    case pasteLastTranscription
     case recorderToggle
 
     var defaultsKey: String {
@@ -108,6 +109,7 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
         case .promptPalette: return UserDefaultsKeys.promptPaletteHotkey
         case .recentTranscriptions: return UserDefaultsKeys.recentTranscriptionsHotkey
         case .copyLastTranscription: return UserDefaultsKeys.copyLastTranscriptionHotkey
+        case .pasteLastTranscription: return UserDefaultsKeys.pasteLastTranscriptionHotkey
         case .recorderToggle: return UserDefaultsKeys.recorderToggleHotkey
         }
     }
@@ -159,6 +161,7 @@ final class HotkeyService: ObservableObject {
     var onPromptPaletteToggle: (() -> Void)?
     var onRecentTranscriptionsToggle: (() -> Void)?
     var onCopyLastTranscription: (() -> Void)?
+    var onPasteLastTranscription: (() -> Void)?
     var onRecorderToggle: (() -> Void)?
     var onProfileDictationStart: ((UUID) -> Void)?
     var onWorkflowDictationStart: ((UUID) -> Void)?
@@ -210,6 +213,7 @@ final class HotkeyService: ObservableObject {
         .promptPalette: SlotState(),
         .recentTranscriptions: SlotState(),
         .copyLastTranscription: SlotState(),
+        .pasteLastTranscription: SlotState(),
         .recorderToggle: SlotState(),
     ]
 
@@ -1198,6 +1202,10 @@ final class HotkeyService: ObservableObject {
             onCopyLastTranscription?()
             return
         }
+        if slotType == .pasteLastTranscription {
+            onPasteLastTranscription?()
+            return
+        }
         if slotType == .recorderToggle {
             onRecorderToggle?()
             return
@@ -1255,6 +1263,8 @@ final class HotkeyService: ObservableObject {
         case .recentTranscriptions:
             break // handled on keyDown only
         case .copyLastTranscription:
+            break // handled on keyDown only
+        case .pasteLastTranscription:
             break // handled on keyDown only
         case .recorderToggle:
             break // handled on keyDown only

@@ -108,6 +108,22 @@ struct HotkeySettingsView: View {
                     },
                     onClear: { dictation.clearHotkey(for: .copyLastTranscription) }
                 )
+
+                HotkeyRecorderView(
+                    label: dictation.pasteLastTranscriptionHotkeyLabel,
+                    title: localizedAppText("Paste last transcription shortcut", de: "Letzte Transkription einfuegen Shortcut"),
+                    subtitle: localizedAppText(
+                        "Paste your latest transcription into the focused app.",
+                        de: "Fuege deine neueste Transkription in die fokussierte App ein."
+                    ),
+                    onRecord: { hotkey in
+                        if let conflict = dictation.isHotkeyAssigned(hotkey, excluding: .pasteLastTranscription) {
+                            dictation.clearHotkey(for: conflict)
+                        }
+                        dictation.setHotkey(hotkey, for: .pasteLastTranscription)
+                    },
+                    onClear: { dictation.clearHotkey(for: .pasteLastTranscription) }
+                )
             }
         }
         .formStyle(.grouped)
