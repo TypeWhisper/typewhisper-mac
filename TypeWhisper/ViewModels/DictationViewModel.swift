@@ -1518,12 +1518,10 @@ final class DictationViewModel: ObservableObject {
             let pps = promptProcessingService
             let behavior = matchedWorkflow.behavior
             return { text in
-                try await pps.process(
+                try await pps.processWorkflow(
                     prompt: systemPrompt,
                     text: text,
-                    providerOverride: behavior.providerId,
-                    cloudModelOverride: behavior.cloudModel,
-                    temperatureDirective: behavior.temperatureDirective
+                    behavior: behavior
                 )
             }
         }
