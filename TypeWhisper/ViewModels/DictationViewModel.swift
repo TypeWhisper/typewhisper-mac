@@ -1894,7 +1894,9 @@ final class DictationViewModel: ObservableObject {
                     preserveClipboard: preserveClipboard,
                     autoEnter: false
                 )
-                showNotchFeedback(message: String(localized: "Text inserted"), icon: "checkmark.circle.fill")
+                if !isMinimalCompactModeEnabled {
+                    showNotchFeedback(message: String(localized: "Text inserted"), icon: "checkmark.circle.fill")
+                }
             } catch {
                 showNotchFeedback(
                     message: error.localizedDescription,
