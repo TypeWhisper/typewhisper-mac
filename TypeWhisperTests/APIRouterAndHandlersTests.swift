@@ -7,7 +7,7 @@ import TypeWhisperPluginSDK
 
 final class APIRouterAndHandlersTests: XCTestCase {
     @objc(APIRouterMockLLMProviderPlugin)
-    private final class MockLLMProviderPlugin: NSObject, LLMProviderPlugin, LLMProviderSetupStatusProviding, LLMTemperatureControllableProvider, @unchecked Sendable {
+    private final class MockLLMProviderPlugin: NSObject, LLMProviderPlugin, LLMProviderSetupStatusProviding, LLMTemperatureControllableProvider, PluginSettingsActivityReporting, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.llm" }
         static var pluginName: String { "Mock LLM" }
 
@@ -18,8 +18,11 @@ final class APIRouterAndHandlersTests: XCTestCase {
         var configuredProviderName = "Gemini"
         var requiresExternalCredentials = true
         var unavailableReason: String?
+        var restoreMakesAvailable = false
         nonisolated(unsafe) private var _lastRequestedModel: String?
         nonisolated(unsafe) private var _lastTemperatureDirective: PluginLLMTemperatureDirective?
+        nonisolated(unsafe) private var _autoUnloadCount = 0
+        nonisolated(unsafe) private var _restoreCount = 0
 
         var lastRequestedModel: String? {
             requestLock.withLock { _lastRequestedModel }
@@ -27,6 +30,14 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         var lastTemperatureDirective: PluginLLMTemperatureDirective? {
             requestLock.withLock { _lastTemperatureDirective }
+        }
+
+        var autoUnloadCount: Int {
+            requestLock.withLock { _autoUnloadCount }
+        }
+
+        var restoreCount: Int {
+            requestLock.withLock { _restoreCount }
         }
 
         required override init() {}
@@ -37,6 +48,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         var providerName: String { configuredProviderName }
         var isAvailable: Bool { available }
         var supportedModels: [PluginModelInfo] { models }
+        var currentSettingsActivity: PluginSettingsActivity? { nil }
 
         func process(systemPrompt: String, userText: String, model: String?) async throws -> String {
             requestLock.withLock {
@@ -56,6 +68,21 @@ final class APIRouterAndHandlersTests: XCTestCase {
                 _lastTemperatureDirective = temperatureDirective
             }
             return responseText
+        }
+
+        @objc func triggerAutoUnload() {
+            requestLock.withLock {
+                _autoUnloadCount += 1
+            }
+        }
+
+        @objc func triggerRestoreModel() {
+            requestLock.withLock {
+                _restoreCount += 1
+            }
+            if restoreMakesAvailable {
+                available = true
+            }
         }
     }
 
@@ -2504,6 +2531,47 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    func testPromptProcessingRestoresLocalProviderBeforeProcessingWhenModelWasAutoUnloaded() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockLLMProviderPlugin()
+        plugin.available = false
+        plugin.configuredProviderName = "Gemma 4 (MLX)"
+        plugin.requiresExternalCredentials = false
+        plugin.restoreMakesAvailable = true
+        plugin.unavailableReason = "Load a Gemma 4 model in Integrations before using it for prompts."
+
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.local-llm",
+                    name: "Mock Local LLM",
+                    version: "1.0.0",
+                    principalClass: "APIRouterMockLLMProviderPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let service = PromptProcessingService()
+        let result = try await service.process(
+            prompt: "Fix grammar",
+            text: "hello world",
+            providerOverride: "Gemma 4 (MLX)"
+        )
+
+        XCTAssertEqual(result, "processed")
+        XCTAssertEqual(plugin.restoreCount, 1)
+    }
+
+    @MainActor
     func testPromptProcessingUsesHighPriorityActivityForLocalProviders() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -2543,6 +2611,162 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         XCTAssertEqual(result, "processed")
         XCTAssertEqual(activityManager.reasons, ["Local prompt processing with Gemma 4 (MLX)"])
+    }
+
+    @MainActor
+    func testPromptProcessingSchedulesImmediateAutoUnloadForLocalProvider() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        defer {
+            if let originalAutoUnload {
+                UserDefaults.standard.set(originalAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            }
+        }
+        UserDefaults.standard.set(-1, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockLLMProviderPlugin()
+        plugin.configuredProviderName = "Gemma 4 (MLX)"
+        plugin.requiresExternalCredentials = false
+
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.local-llm",
+                    name: "Mock Local LLM",
+                    version: "1.0.0",
+                    principalClass: "APIRouterMockLLMProviderPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        let service = PromptProcessingService()
+        service.modelManagerService = modelManager
+
+        let result = try await service.process(
+            prompt: "Fix grammar",
+            text: "hello world",
+            providerOverride: "Gemma 4 (MLX)"
+        )
+
+        XCTAssertEqual(result, "processed")
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(plugin.autoUnloadCount, 1)
+    }
+
+    @MainActor
+    func testPromptProcessingDoesNotAutoUnloadRemoteProvider() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        defer {
+            if let originalAutoUnload {
+                UserDefaults.standard.set(originalAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            }
+        }
+        UserDefaults.standard.set(-1, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockLLMProviderPlugin()
+        plugin.configuredProviderName = "Gemini"
+        plugin.requiresExternalCredentials = true
+
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.llm",
+                    name: "Mock LLM",
+                    version: "1.0.0",
+                    principalClass: "APIRouterMockLLMProviderPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        let service = PromptProcessingService()
+        service.modelManagerService = modelManager
+
+        let result = try await service.process(
+            prompt: "Fix grammar",
+            text: "hello world",
+            providerOverride: "Gemini"
+        )
+
+        XCTAssertEqual(result, "processed")
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(plugin.autoUnloadCount, 0)
+    }
+
+    @MainActor
+    func testPromptProcessingDoesNotAutoUnloadLocalProviderWhenDisabled() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        defer {
+            if let originalAutoUnload {
+                UserDefaults.standard.set(originalAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            }
+        }
+        UserDefaults.standard.set(0, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockLLMProviderPlugin()
+        plugin.configuredProviderName = "Gemma 4 (MLX)"
+        plugin.requiresExternalCredentials = false
+
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.local-llm",
+                    name: "Mock Local LLM",
+                    version: "1.0.0",
+                    principalClass: "APIRouterMockLLMProviderPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        let service = PromptProcessingService()
+        service.modelManagerService = modelManager
+
+        let result = try await service.process(
+            prompt: "Fix grammar",
+            text: "hello world",
+            providerOverride: "Gemma 4 (MLX)"
+        )
+
+        XCTAssertEqual(result, "processed")
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(plugin.autoUnloadCount, 0)
     }
 
     @MainActor

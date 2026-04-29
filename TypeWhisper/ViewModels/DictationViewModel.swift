@@ -1514,15 +1514,16 @@ final class DictationViewModel: ObservableObject {
                 fallbackTranslationTarget: translationTarget,
                 detectedLanguage: detectedLanguage,
                 configuredLanguage: configuredLanguage
-           ) {
+        ) {
             let pps = promptProcessingService
+            let workflowService = workflowService
             let behavior = matchedWorkflow.behavior
             return { text in
                 try await pps.process(
                     prompt: systemPrompt,
                     text: text,
-                    providerOverride: behavior.providerId,
-                    cloudModelOverride: behavior.cloudModel,
+                    providerOverride: workflowService.llmProviderId(for: matchedWorkflow),
+                    cloudModelOverride: workflowService.llmCloudModel(for: matchedWorkflow),
                     temperatureDirective: behavior.temperatureDirective
                 )
             }

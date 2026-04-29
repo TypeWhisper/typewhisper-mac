@@ -164,8 +164,8 @@ final class PromptPaletteHandler {
                     result = try await promptProcessingService.process(
                         prompt: systemPrompt,
                         text: ctx.text,
-                        providerOverride: workflow.behavior.providerId,
-                        cloudModelOverride: workflow.behavior.cloudModel,
+                        providerOverride: workflowService.llmProviderId(for: workflow),
+                        cloudModelOverride: workflowService.llmCloudModel(for: workflow),
                         temperatureDirective: workflow.behavior.temperatureDirective
                     )
                 } else {

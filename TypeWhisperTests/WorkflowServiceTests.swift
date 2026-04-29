@@ -58,6 +58,51 @@ final class WorkflowServiceTests: XCTestCase {
         )
     }
 
+    func testWorkflowServicePersistsDefaultLLMProviderAndModel() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let suiteName = "WorkflowServiceTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults)
+        service.defaultProviderId = "Gemma 4 (MLX)"
+        service.defaultCloudModel = "gemma-4-large"
+
+        let reloaded = WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults)
+
+        XCTAssertEqual(reloaded.defaultProviderId, "Gemma 4 (MLX)")
+        XCTAssertEqual(reloaded.defaultCloudModel, "gemma-4-large")
+    }
+
+    func testWorkflowServiceResolvesWorkflowDefaultLLMUnlessWorkflowOverridesIt() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let suiteName = "WorkflowServiceTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults)
+        service.defaultProviderId = "Gemma 4 (MLX)"
+        service.defaultCloudModel = "gemma-4-large"
+        let inheritedWorkflow = Workflow(
+            name: "Inherited",
+            template: .summary,
+            trigger: .manual()
+        )
+        let overrideWorkflow = Workflow(
+            name: "Override",
+            template: .summary,
+            trigger: .manual(),
+            behavior: WorkflowBehavior(providerId: "Groq", cloudModel: "llama-3.3")
+        )
+
+        XCTAssertEqual(service.llmProviderId(for: inheritedWorkflow), "Gemma 4 (MLX)")
+        XCTAssertEqual(service.llmCloudModel(for: inheritedWorkflow), "gemma-4-large")
+        XCTAssertEqual(service.llmProviderId(for: overrideWorkflow), "Groq")
+        XCTAssertEqual(service.llmCloudModel(for: overrideWorkflow), "llama-3.3")
+    }
+
     func testReorderWorkflowsUsesProvidedOrder() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
         defer { TestSupport.remove(appSupportDirectory) }

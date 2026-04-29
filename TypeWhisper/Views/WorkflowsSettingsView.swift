@@ -217,14 +217,14 @@ private struct MyWorkflowsPage: View {
                         .controlSize(.small)
                     }
                 } else {
-                    let models = promptProcessingService.modelsForProvider(promptProcessingService.selectedProviderId)
+                    let models = promptProcessingService.modelsForProvider(workflowService.defaultProviderId)
 
                     ViewThatFits(in: .horizontal) {
                         HStack(alignment: .top, spacing: 12) {
                             compactDefaultLLMField(title: localizedAppText("Provider", de: "Provider")) {
                                 Picker(
                                     localizedAppText("Provider", de: "Provider"),
-                                    selection: $promptProcessingService.selectedProviderId
+                                    selection: workflowDefaultProviderBinding
                                 ) {
                                     ForEach(providers, id: \.id) { provider in
                                         Text(provider.displayName).tag(provider.id)
@@ -236,8 +236,10 @@ private struct MyWorkflowsPage: View {
                                 compactDefaultLLMField(title: localizedAppText("Model", de: "Modell")) {
                                     Picker(
                                         localizedAppText("Model", de: "Modell"),
-                                        selection: $promptProcessingService.selectedCloudModel
+                                        selection: $workflowService.defaultCloudModel
                                     ) {
+                                        Text(localizedAppText("Provider Default", de: "Provider-Standard"))
+                                            .tag("")
                                         ForEach(models, id: \.id) { model in
                                             Text(model.displayName).tag(model.id)
                                         }
@@ -250,7 +252,7 @@ private struct MyWorkflowsPage: View {
                             compactDefaultLLMField(title: localizedAppText("Provider", de: "Provider")) {
                                 Picker(
                                     localizedAppText("Provider", de: "Provider"),
-                                    selection: $promptProcessingService.selectedProviderId
+                                    selection: workflowDefaultProviderBinding
                                 ) {
                                     ForEach(providers, id: \.id) { provider in
                                         Text(provider.displayName).tag(provider.id)
@@ -262,8 +264,10 @@ private struct MyWorkflowsPage: View {
                                 compactDefaultLLMField(title: localizedAppText("Model", de: "Modell")) {
                                     Picker(
                                         localizedAppText("Model", de: "Modell"),
-                                        selection: $promptProcessingService.selectedCloudModel
+                                        selection: $workflowService.defaultCloudModel
                                     ) {
+                                        Text(localizedAppText("Provider Default", de: "Provider-Standard"))
+                                            .tag("")
                                         ForEach(models, id: \.id) { model in
                                             Text(model.displayName).tag(model.id)
                                         }
@@ -275,7 +279,7 @@ private struct MyWorkflowsPage: View {
 
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
                         Text(
-                            promptProcessingService.isProviderReady(promptProcessingService.selectedProviderId)
+                            promptProcessingService.isProviderReady(workflowService.defaultProviderId)
                                 ? localizedAppText(
                                     "Ready for new workflows.",
                                     de: "Bereit für neue Workflows."
@@ -299,6 +303,20 @@ private struct MyWorkflowsPage: View {
                 }
             }
         }
+    }
+
+    private var workflowDefaultProviderBinding: Binding<String> {
+        Binding(
+            get: { workflowService.defaultProviderId },
+            set: { providerId in
+                workflowService.defaultProviderId = providerId
+                let models = promptProcessingService.modelsForProvider(providerId)
+                if !workflowService.defaultCloudModel.isEmpty,
+                   !models.contains(where: { $0.id == workflowService.defaultCloudModel }) {
+                    workflowService.defaultCloudModel = ""
+                }
+            }
+        )
     }
 
     @ViewBuilder
@@ -964,8 +982,8 @@ private struct WorkflowEditorPage: View {
                 ) {
                     Text(
                         localizedAppText(
-                            "Use Workflow Default (\(promptProcessingService.displayName(for: promptProcessingService.selectedProviderId)))",
-                            de: "Workflow-Standard verwenden (\(promptProcessingService.displayName(for: promptProcessingService.selectedProviderId)))"
+                            "Use Workflow Default (\(promptProcessingService.displayName(for: workflowService.defaultProviderId)))",
+                            de: "Workflow-Standard verwenden (\(promptProcessingService.displayName(for: workflowService.defaultProviderId)))"
                         )
                     )
                     .tag(nil as String?)

@@ -98,6 +98,7 @@ final class ServiceContainer: ObservableObject {
         appFormatterService = AppFormatterService()
         audioRecorderService = AudioRecorderService()
         promptProcessingService.memoryService = memoryService
+        promptProcessingService.modelManagerService = modelManagerService
         watchFolderService = WatchFolderService(audioFileService: audioFileService, modelManagerService: modelManagerService)
         accessibilityAnnouncementService = AccessibilityAnnouncementService()
         speechFeedbackService = SpeechFeedbackService()

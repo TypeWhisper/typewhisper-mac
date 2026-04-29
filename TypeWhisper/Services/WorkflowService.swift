@@ -39,11 +39,36 @@ struct WorkflowMatchResult {
 @MainActor
 final class WorkflowService: ObservableObject {
     @Published private(set) var workflows: [Workflow] = []
+    @Published var defaultProviderId: String {
+        didSet {
+            userDefaults.set(defaultProviderId, forKey: UserDefaultsKeys.workflowDefaultLLMProviderId)
+            if oldValue != defaultProviderId {
+                defaultCloudModel = ""
+            }
+        }
+    }
+    @Published var defaultCloudModel: String {
+        didSet {
+            userDefaults.set(defaultCloudModel, forKey: UserDefaultsKeys.workflowDefaultLLMCloudModel)
+        }
+    }
 
     private let modelContainer: ModelContainer
     private let modelContext: ModelContext
+    private let userDefaults: UserDefaults
 
-    init(appSupportDirectory: URL = AppConstants.appSupportDirectory) {
+    init(
+        appSupportDirectory: URL = AppConstants.appSupportDirectory,
+        userDefaults: UserDefaults = .standard
+    ) {
+        self.userDefaults = userDefaults
+        self.defaultProviderId = userDefaults.string(forKey: UserDefaultsKeys.workflowDefaultLLMProviderId)
+            ?? userDefaults.string(forKey: "llmProviderType")
+            ?? PromptProcessingService.appleIntelligenceId
+        self.defaultCloudModel = userDefaults.string(forKey: UserDefaultsKeys.workflowDefaultLLMCloudModel)
+            ?? userDefaults.string(forKey: "llmCloudModel")
+            ?? ""
+
         let schema = Schema([Workflow.self])
         let storeDir = appSupportDirectory
         try? FileManager.default.createDirectory(at: storeDir, withIntermediateDirectories: true)
@@ -143,6 +168,24 @@ final class WorkflowService: ObservableObject {
             competingWorkflowCount: 0,
             wonBySortOrder: false
         )
+    }
+
+    func llmProviderId(for workflow: Workflow) -> String? {
+        let providerId = workflow.behavior.providerId ?? defaultProviderId
+        let trimmed = providerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    func llmCloudModel(for workflow: Workflow) -> String? {
+        let modelId: String?
+        if workflow.behavior.providerId == nil {
+            modelId = defaultCloudModel
+        } else {
+            modelId = workflow.behavior.cloudModel
+        }
+
+        let trimmed = modelId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
     }
 
     func matchWorkflow(bundleIdentifier: String?, url: String? = nil) -> WorkflowMatchResult? {
