@@ -159,6 +159,7 @@ final class DictationViewModel: ObservableObject {
     private let audioDeviceService: AudioDeviceService
     private let promptActionService: PromptActionService
     private let promptProcessingService: PromptProcessingService
+    private let workflowTextProcessingService: WorkflowTextProcessingService
     private let speechFeedbackService: SpeechFeedbackService
     private let accessibilityAnnouncementService: AccessibilityAnnouncementService
     private let errorLogService: ErrorLogService
@@ -230,6 +231,7 @@ final class DictationViewModel: ObservableObject {
         audioDeviceService: AudioDeviceService,
         promptActionService: PromptActionService,
         promptProcessingService: PromptProcessingService,
+        workflowTextProcessingService: WorkflowTextProcessingService? = nil,
         appFormatterService: AppFormatterService,
         speechFeedbackService: SpeechFeedbackService,
         accessibilityAnnouncementService: AccessibilityAnnouncementService,
@@ -253,6 +255,12 @@ final class DictationViewModel: ObservableObject {
         self.audioDeviceService = audioDeviceService
         self.promptActionService = promptActionService
         self.promptProcessingService = promptProcessingService
+        self.workflowTextProcessingService = workflowTextProcessingService
+            ?? WorkflowTextProcessingService(
+                promptProcessingService: promptProcessingService,
+                translationService: translationService,
+                workflowService: workflowService
+            )
         self.speechFeedbackService = speechFeedbackService
         self.accessibilityAnnouncementService = accessibilityAnnouncementService
         self.errorLogService = errorLogService
@@ -281,6 +289,7 @@ final class DictationViewModel: ObservableObject {
             textInsertionService: textInsertionService,
             workflowService: workflowService,
             promptProcessingService: promptProcessingService,
+            workflowTextProcessingService: self.workflowTextProcessingService,
             soundService: soundService,
             accessibilityAnnouncementService: accessibilityAnnouncementService
         )
@@ -1509,25 +1518,12 @@ final class DictationViewModel: ObservableObject {
         detectedLanguage: String?,
         configuredLanguage: String?
     ) -> ((String) async throws -> String)? {
-        if let matchedWorkflow,
-           let systemPrompt = matchedWorkflow.systemPrompt(
-                fallbackTranslationTarget: translationTarget,
-                detectedLanguage: detectedLanguage,
-                configuredLanguage: configuredLanguage
+        if let workflowHandler = buildWorkflowTextProcessingHandler(
+            translationTarget: translationTarget,
+            detectedLanguage: detectedLanguage,
+            configuredLanguage: configuredLanguage
         ) {
-            let pps = promptProcessingService
-            let workflowService = workflowService
-            let behavior = matchedWorkflow.behavior
-            return { text in
-                try await pps.process(
-                    prompt: systemPrompt,
-                    text: text,
-                    providerOverride: workflowService.llmProviderId(for: matchedWorkflow),
-                    cloudModelOverride: workflowService.llmCloudModel(for: matchedWorkflow),
-                    temperatureDirective: behavior.temperatureDirective,
-                    skipMemoryInjection: true
-                )
-            }
+            return workflowHandler
         }
 
         // Inline commands compose with profile prompt; otherwise use prompt action directly
@@ -1581,6 +1577,34 @@ final class DictationViewModel: ObservableObject {
         #endif
 
         return nil
+    }
+
+    private func buildWorkflowTextProcessingHandler(
+        translationTarget: String?,
+        detectedLanguage: String?,
+        configuredLanguage: String?
+    ) -> ((String) async throws -> String)? {
+        guard let workflow = matchedWorkflow else { return nil }
+
+        let workflowProcessor = workflowTextProcessingService
+        guard workflowProcessor.canProcess(
+            workflow: workflow,
+            fallbackTranslationTarget: translationTarget,
+            detectedLanguage: detectedLanguage,
+            configuredLanguage: configuredLanguage
+        ) else {
+            return nil
+        }
+
+        return { text in
+            try await workflowProcessor.process(
+                workflow: workflow,
+                text: text,
+                fallbackTranslationTarget: translationTarget,
+                detectedLanguage: detectedLanguage,
+                configuredLanguage: configuredLanguage
+            )
+        }
     }
 
     /// Builds the system prompt for inline command detection.

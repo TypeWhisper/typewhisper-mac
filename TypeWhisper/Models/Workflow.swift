@@ -111,6 +111,20 @@ struct WorkflowTemplateDefinition: Identifiable, Equatable, Sendable {
     var id: WorkflowTemplate { template }
 }
 
+enum WorkflowTranslationProcessor: String, CaseIterable, Codable, Sendable {
+    case appleTranslate
+    case llmPrompt
+
+    var label: String {
+        switch self {
+        case .appleTranslate:
+            localizedAppText("Apple Translate (On-Device)", de: "Apple Translate (On-Device)")
+        case .llmPrompt:
+            localizedAppText("LLM Prompt", de: "LLM-Prompt")
+        }
+    }
+}
+
 enum WorkflowTriggerKind: String, CaseIterable, Codable, Sendable {
     case app
     case website
@@ -196,6 +210,9 @@ struct WorkflowTrigger: Codable, Equatable, Sendable {
 }
 
 struct WorkflowBehavior: Codable, Equatable, Sendable {
+    static let translationProcessorSettingKey = "translationProcessor"
+    static let targetLanguageSettingKey = "targetLanguage"
+
     var settings: [String: String]
     var fineTuning: String
     var providerId: String?
@@ -402,8 +419,25 @@ extension Workflow {
         template.definition
     }
 
+    var translationProcessor: WorkflowTranslationProcessor {
+        guard template == .translation else { return .llmPrompt }
+        let rawValue = behavior.settings[WorkflowBehavior.translationProcessorSettingKey]
+        return rawValue.flatMap(WorkflowTranslationProcessor.init(rawValue:)) ?? .llmPrompt
+    }
+
+    var translationTargetLanguage: String? {
+        let rawValue = behavior.settings[WorkflowBehavior.targetLanguageSettingKey]
+            ?? behavior.settings["target"]
+        let trimmed = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
+    }
+
+    var usesAppleTranslate: Bool {
+        template == .translation && translationProcessor == .appleTranslate
+    }
+
     var isManuallyRunnable: Bool {
-        systemPrompt() != nil || output.targetActionPluginId != nil
+        usesAppleTranslate || systemPrompt() != nil || output.targetActionPluginId != nil
     }
 
     func systemPrompt(
@@ -427,8 +461,10 @@ extension Workflow {
             \(inputBoundaryInstruction)\(languageHint)\(settingsInstruction)\(fineTuningInstruction)\(outputInstruction)
             """
         case .translation:
-            let targetLanguage = behavior.settings["targetLanguage"]
-                ?? behavior.settings["target"]
+            if usesAppleTranslate {
+                return nil
+            }
+            let targetLanguage = translationTargetLanguage
                 ?? fallbackTranslationTarget
                 ?? "English"
             return """

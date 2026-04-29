@@ -35,6 +35,7 @@
 		AA00000000000000000357 /* WorkflowService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000357 /* WorkflowService.swift */; };
 		AA00000000000000000358 /* LegacyWorkflowService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000358 /* LegacyWorkflowService.swift */; };
 		AA00000000000000000359 /* WorkflowsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000359 /* WorkflowsSettingsView.swift */; };
+		AA00000000000000000360 /* WorkflowTextProcessingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000360 /* WorkflowTextProcessingService.swift */; };
 		C23000000000000000000001 /* OpenAIPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000139 /* OpenAIPlugin.swift */; };
 		C23000000000000000000002 /* Qwen3ContextBiasFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000321 /* Qwen3ContextBiasFormatter.swift */; };
 		C23000000000000000000003 /* Gemma4Plugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000295 /* Gemma4Plugin.swift */; };
@@ -453,6 +454,7 @@
 		BB00000000000000000357 /* WorkflowService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowService.swift; sourceTree = "<group>"; };
 		BB00000000000000000358 /* LegacyWorkflowService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyWorkflowService.swift; sourceTree = "<group>"; };
 		BB00000000000000000359 /* WorkflowsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowsSettingsView.swift; sourceTree = "<group>"; };
+		BB00000000000000000360 /* WorkflowTextProcessingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowTextProcessingService.swift; sourceTree = "<group>"; };
 		BB00000000000000000040 /* HTTPResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPResponse.swift; sourceTree = "<group>"; };
 		BB00000000000000000041 /* HTTPRequestParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPRequestParser.swift; sourceTree = "<group>"; };
 		BB00000000000000000042 /* APIRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIRouter.swift; sourceTree = "<group>"; };
@@ -1174,6 +1176,7 @@
 				BB00000000000000000062 /* TextDiffService.swift */,
 				BB00000000000000000066 /* ProfileService.swift */,
 				BB00000000000000000357 /* WorkflowService.swift */,
+				BB00000000000000000360 /* WorkflowTextProcessingService.swift */,
 				BB00000000000000000358 /* LegacyWorkflowService.swift */,
 				BB00000000000000000073 /* TranslationService.swift */,
 				BB00000000000000000074 /* AudioDuckingService.swift */,
@@ -3051,6 +3054,7 @@
 				AA00000000000000000356 /* Workflow.swift in Sources */,
 				AA00000000000000000066 /* ProfileService.swift in Sources */,
 				AA00000000000000000357 /* WorkflowService.swift in Sources */,
+				AA00000000000000000360 /* WorkflowTextProcessingService.swift in Sources */,
 				AA00000000000000000358 /* LegacyWorkflowService.swift in Sources */,
 				AA00000000000000000067 /* ProfilesViewModel.swift in Sources */,
 				AA00000000000000000068 /* ProfilesSettingsView.swift in Sources */,

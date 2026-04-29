@@ -879,12 +879,7 @@ private struct WorkflowEditorPage: View {
                 }
 
                 if draft.template == .translation {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(localizedAppText("Target Language", de: "Zielsprache"))
-                            .font(.subheadline.weight(.semibold))
-                        TextField(localizedAppText("e.g. English", de: "z. B. Englisch"), text: $draft.translationTargetLanguage)
-                            .textFieldStyle(.roundedBorder)
-                    }
+                    translationProcessorSection
                 }
 
                 if draft.template == .custom {
@@ -898,14 +893,16 @@ private struct WorkflowEditorPage: View {
                     )
                 }
 
-                WorkflowTextEditorField(
-                    title: localizedAppText("Fine-Tuning", de: "Feinabstimmung"),
-                    placeholder: localizedAppText(
-                        "Optional: add tone, length, or wording hints.",
-                        de: "Optional: ergänze Hinweise zu Ton, Länge oder Formulierung."
-                    ),
-                    text: $draft.fineTuning
-                )
+                if !draft.usesAppleTranslate {
+                    WorkflowTextEditorField(
+                        title: localizedAppText("Fine-Tuning", de: "Feinabstimmung"),
+                        placeholder: localizedAppText(
+                            "Optional: add tone, length, or wording hints.",
+                            de: "Optional: ergänze Hinweise zu Ton, Länge oder Formulierung."
+                        ),
+                        text: $draft.fineTuning
+                    )
+                }
 
                 VStack(alignment: .leading, spacing: 0) {
                     Button {
@@ -931,9 +928,11 @@ private struct WorkflowEditorPage: View {
 
                     if isAdvancedExpanded {
                         VStack(alignment: .leading, spacing: 14) {
-                            workflowProviderOverrideSection
+                            if !draft.usesAppleTranslate {
+                                workflowProviderOverrideSection
 
-                            Divider()
+                                Divider()
+                            }
 
                             VStack(alignment: .leading, spacing: 6) {
                                 Text(localizedAppText("Output Format", de: "Ausgabeformat"))
@@ -946,6 +945,63 @@ private struct WorkflowEditorPage: View {
                         }
                         .padding(.top, 4)
                     }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var translationProcessorSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(localizedAppText("Translation Mode", de: "Übersetzungsmodus"))
+                    .font(.subheadline.weight(.semibold))
+                Picker(localizedAppText("Translation Mode", de: "Übersetzungsmodus"), selection: $draft.translationProcessor) {
+                    ForEach(WorkflowTranslationProcessor.allCases, id: \.self) { processor in
+                        Text(processor.label).tag(processor)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: draft.translationProcessor) { _, newValue in
+                    draft.normalizeTranslationTarget(for: newValue)
+                }
+            }
+
+            if draft.usesAppleTranslate {
+                #if canImport(Translation)
+                if #available(macOS 15, *) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(localizedAppText("Target Language", de: "Zielsprache"))
+                            .font(.subheadline.weight(.semibold))
+                        Picker(localizedAppText("Target Language", de: "Zielsprache"), selection: $draft.translationTargetLanguage) {
+                            ForEach(TranslationService.availableTargetLanguages, id: \.code) { language in
+                                Text(language.name).tag(language.code)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                    }
+                } else {
+                    Text(localizedAppText(
+                        "Apple Translate requires macOS 15 or later. Choose LLM Prompt on this Mac.",
+                        de: "Apple Translate benötigt macOS 15 oder neuer. Wähle auf diesem Mac LLM-Prompt."
+                    ))
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                }
+                #else
+                Text(localizedAppText(
+                    "Apple Translate is not available in this build. Choose LLM Prompt instead.",
+                    de: "Apple Translate ist in diesem Build nicht verfügbar. Wähle stattdessen LLM-Prompt."
+                ))
+                .font(.caption)
+                .foregroundStyle(.orange)
+                #endif
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(localizedAppText("Target Language", de: "Zielsprache"))
+                        .font(.subheadline.weight(.semibold))
+                    TextField(localizedAppText("e.g. English", de: "z. B. Englisch"), text: $draft.translationTargetLanguage)
+                        .textFieldStyle(.roundedBorder)
                 }
             }
         }
@@ -1766,6 +1822,7 @@ private struct WorkflowDraft {
     var hotkeys: [UnifiedHotkey]
     var fineTuning: String
     var translationTargetLanguage: String
+    var translationProcessor: WorkflowTranslationProcessor
     var customInstruction: String
     var outputFormat: String
     var autoEnter: Bool
@@ -1786,7 +1843,10 @@ private struct WorkflowDraft {
         self.websitePatterns = []
         self.hotkeys = []
         self.fineTuning = ""
-        self.translationTargetLanguage = template == .translation ? "English" : ""
+        self.translationProcessor = template == .translation ? Self.defaultTranslationProcessor : .llmPrompt
+        self.translationTargetLanguage = template == .translation
+            ? Self.defaultTranslationTargetLanguage(for: translationProcessor)
+            : ""
         self.customInstruction = ""
         self.outputFormat = ""
         self.autoEnter = false
@@ -1806,7 +1866,14 @@ private struct WorkflowDraft {
         self.isEnabled = workflow.isEnabled
         self.template = workflow.template
         self.fineTuning = behavior.fineTuning
-        self.translationTargetLanguage = behavior.settings["targetLanguage"] ?? behavior.settings["target"] ?? ""
+        self.translationProcessor = workflow.translationProcessor
+        let rawTranslationTargetLanguage = workflow.translationTargetLanguage ?? ""
+        if workflow.usesAppleTranslate,
+           let normalized = WorkflowTranslationLanguageNormalizer.normalizedLanguageIdentifier(from: rawTranslationTargetLanguage) {
+            self.translationTargetLanguage = normalized
+        } else {
+            self.translationTargetLanguage = rawTranslationTargetLanguage
+        }
         self.customInstruction = behavior.settings["instruction"] ?? behavior.settings["goal"] ?? behavior.settings["prompt"] ?? ""
         self.outputFormat = output.format ?? ""
         self.autoEnter = output.autoEnter
@@ -1858,6 +1925,10 @@ private struct WorkflowDraft {
         return trimmed.isEmpty ? template.definition.name : trimmed
     }
 
+    var usesAppleTranslate: Bool {
+        template == .translation && translationProcessor == .appleTranslate
+    }
+
     var reviewText: String {
         if triggerKind == .manual {
             return localizedAppText(
@@ -1890,9 +1961,13 @@ private struct WorkflowDraft {
         }
 
         if newTemplate != .translation {
+            translationProcessor = .llmPrompt
             translationTargetLanguage = ""
-        } else if translationTargetLanguage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            translationTargetLanguage = "English"
+        } else {
+            translationProcessor = Self.defaultTranslationProcessor
+            if translationTargetLanguage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                translationTargetLanguage = Self.defaultTranslationTargetLanguage(for: translationProcessor)
+            }
         }
 
         if newTemplate != .custom {
@@ -1974,6 +2049,23 @@ private struct WorkflowDraft {
             )
         }
 
+        if usesAppleTranslate {
+            #if canImport(Translation)
+            if #available(macOS 15, *) {
+            } else {
+                return localizedAppText(
+                    "Apple Translate workflows require macOS 15 or later.",
+                    de: "Apple-Translate-Workflows benötigen macOS 15 oder neuer."
+                )
+            }
+            #else
+            return localizedAppText(
+                "Apple Translate is not available in this build.",
+                de: "Apple Translate ist in diesem Build nicht verfügbar."
+            )
+            #endif
+        }
+
         if template == .custom {
             let hasCustomInstruction = !customInstruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             let hasFineTuning = !fineTuning.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -2010,13 +2102,15 @@ private struct WorkflowDraft {
         var settings = preservedBehaviorSettings
         settings.removeValue(forKey: "targetLanguage")
         settings.removeValue(forKey: "target")
+        settings.removeValue(forKey: WorkflowBehavior.translationProcessorSettingKey)
         settings.removeValue(forKey: "instruction")
         settings.removeValue(forKey: "goal")
         settings.removeValue(forKey: "prompt")
 
         let trimmedTargetLanguage = translationTargetLanguage.trimmingCharacters(in: .whitespacesAndNewlines)
         if template == .translation && !trimmedTargetLanguage.isEmpty {
-            settings["targetLanguage"] = trimmedTargetLanguage
+            settings[WorkflowBehavior.targetLanguageSettingKey] = trimmedTargetLanguage
+            settings[WorkflowBehavior.translationProcessorSettingKey] = translationProcessor.rawValue
         }
 
         let trimmedInstruction = customInstruction.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2090,15 +2184,56 @@ private struct WorkflowDraft {
             workflowHotkeysConflict(candidate, hotkey)
         }
     }
+
+    mutating func normalizeTranslationTarget(for processor: WorkflowTranslationProcessor) {
+        guard template == .translation else { return }
+        let current = translationTargetLanguage.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        switch processor {
+        case .appleTranslate:
+            if let normalized = WorkflowTranslationLanguageNormalizer.normalizedLanguageIdentifier(from: current) {
+                translationTargetLanguage = normalized
+            } else {
+                translationTargetLanguage = Self.defaultTranslationTargetLanguage(for: processor)
+            }
+        case .llmPrompt:
+            if current.isEmpty || current == "en" {
+                translationTargetLanguage = Self.defaultTranslationTargetLanguage(for: processor)
+            }
+        }
+    }
+
+    private static var defaultTranslationProcessor: WorkflowTranslationProcessor {
+        #if canImport(Translation)
+        if #available(macOS 15, *) {
+            return .appleTranslate
+        }
+        #endif
+        return .llmPrompt
+    }
+
+    private static func defaultTranslationTargetLanguage(for processor: WorkflowTranslationProcessor) -> String {
+        switch processor {
+        case .appleTranslate:
+            "en"
+        case .llmPrompt:
+            "English"
+        }
+    }
 }
 
 private func workflowSummaryText(for workflow: Workflow) -> String {
     let templateName = workflow.template.definition.name
     switch workflow.template {
     case .translation:
-        let targetLanguage = workflow.behavior.settings["targetLanguage"]
-            ?? workflow.behavior.settings["target"]
+        let targetLanguage = workflow.translationTargetLanguage
         if let targetLanguage, !targetLanguage.isEmpty {
+            if workflow.usesAppleTranslate {
+                return localizedAppText(
+                    "Apple Translate to \(localizedAppLanguageName(for: targetLanguage))",
+                    de: "Apple Translate nach \(localizedAppLanguageName(for: targetLanguage))"
+                )
+            }
             return localizedAppText(
                 "\(templateName) to \(targetLanguage)",
                 de: "\(templateName) nach \(targetLanguage)"
