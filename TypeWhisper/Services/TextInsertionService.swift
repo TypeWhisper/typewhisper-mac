@@ -1,7 +1,7 @@
-import Foundation
 import AppKit
 import ApplicationServices
 import Carbon.HIToolbox
+import Foundation
 import os
 import os.log
 
@@ -30,7 +30,7 @@ final class TextInsertionService {
     var selectedTextOverride: (() -> String?)?
     var surroundingContextOverride: (() -> CursorContext?)?
 
-enum InsertionResult {
+    enum InsertionResult {
         case pasted
     }
 
@@ -42,7 +42,7 @@ enum InsertionResult {
             switch self {
             case .accessibilityNotGranted:
                 "Accessibility permission not granted. Please enable it in System Settings → Privacy & Security → Accessibility."
-            case .pasteFailed(let detail):
+            case let .pasteFailed(detail):
                 "Failed to paste text: \(detail)"
             }
         }
@@ -90,7 +90,7 @@ enum InsertionResult {
         case safari, arc, chromiumBased, firefox, notABrowser
     }
 
-    nonisolated private static func identifyBrowser(_ bundleId: String) -> BrowserType {
+    private nonisolated static func identifyBrowser(_ bundleId: String) -> BrowserType {
         let normalized = bundleId.lowercased()
         if normalized.contains("wavebox") {
             return .chromiumBased
@@ -116,7 +116,7 @@ enum InsertionResult {
         }
     }
 
-    nonisolated private static func getBrowserURL(bundleId: String) -> String? {
+    private nonisolated static func getBrowserURL(bundleId: String) -> String? {
         let browserType = identifyBrowser(bundleId)
         guard browserType != .notABrowser else { return nil }
 
@@ -127,7 +127,6 @@ enum InsertionResult {
         let appName = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId)
             .flatMap { Bundle(url: $0)?.infoDictionary?["CFBundleName"] as? String }
             ?? bundleId
-
 
         let script: String
         switch browserType {
@@ -156,7 +155,7 @@ enum InsertionResult {
         return executeAppleScript(script, timeout: 2.5)
     }
 
-    nonisolated private static func getBrowserURLAndTitle(bundleId: String) -> (url: String?, title: String?) {
+    private nonisolated static func getBrowserURLAndTitle(bundleId: String) -> (url: String?, title: String?) {
         let browserType = identifyBrowser(bundleId)
         guard browserType != .notABrowser, browserType != .firefox else { return (nil, nil) }
 
@@ -199,8 +198,8 @@ enum InsertionResult {
         return (url, title?.isEmpty == true ? nil : title)
     }
 
-    nonisolated private static func executeAppleScript(_ source: String, timeout: TimeInterval, validateURL: Bool = true) -> String? {
-        let resultState = OSAllocatedUnfairLock(initialState: Optional<String>.none)
+    private nonisolated static func executeAppleScript(_ source: String, timeout: TimeInterval, validateURL: Bool = true) -> String? {
+        let resultState = OSAllocatedUnfairLock(initialState: String?.none)
         let semaphore = DispatchSemaphore(value: 0)
 
         DispatchQueue.global(qos: .userInitiated).async {
@@ -229,7 +228,7 @@ enum InsertionResult {
         return result
     }
 
-    nonisolated private static func isValidURL(_ string: String) -> Bool {
+    private nonisolated static func isValidURL(_ string: String) -> Bool {
         let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count > 3, trimmed.count < 2048 else { return false }
         return trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") || trimmed.hasPrefix("file://")
@@ -253,13 +252,6 @@ enum InsertionResult {
         let value: String?
         let selectedText: String?
         let selectedRange: NSRange?
-
-        static func == (lhs: FocusedTextState, rhs: FocusedTextState) -> Bool {
-            lhs.element == rhs.element &&
-            lhs.value == rhs.value &&
-            lhs.selectedText == rhs.selectedText &&
-            lhs.selectedRange == rhs.selectedRange
-        }
     }
 
     func getSelectedText() -> String? {
@@ -341,7 +333,8 @@ enum InsertionResult {
             return false
         }
         guard insertTextAt(element: element, text: text),
-              let currentState = captureFocusedTextState(for: element) else {
+              let currentState = captureFocusedTextState(for: element)
+        else {
             return false
         }
         return Self.focusedTextDidChange(
@@ -377,7 +370,8 @@ enum InsertionResult {
 
     func canRestoreClipboard(afterPasteUsing state: PasteVerificationState) -> Bool {
         guard let initialState = state.focusedTextState,
-              let currentState = captureFocusedTextState(for: initialState.element) else {
+              let currentState = captureFocusedTextState(for: initialState.element)
+        else {
             return false
         }
         return Self.focusedTextDidChange(
@@ -411,7 +405,8 @@ enum InsertionResult {
 
         if preserveClipboard,
            let focusedElement = getFocusedTextElement(),
-           insertTextAtAndVerifyChange(element: focusedElement, text: text) {
+           insertTextAtAndVerifyChange(element: focusedElement, text: text)
+        {
             if hadFocusedTextField {
                 try? await Task.sleep(for: .milliseconds(50))
                 simulateReturn()
@@ -568,7 +563,7 @@ enum InsertionResult {
         var chars = [UniChar](repeating: 0, count: 4)
         var length = 0
 
-        for keyCode: UInt16 in 0...127 {
+        for keyCode: UInt16 in 0 ... 127 {
             deadKeyState = 0
             let status = UCKeyTranslate(
                 keyLayoutPtr,
@@ -582,7 +577,7 @@ enum InsertionResult {
                 &length,
                 &chars
             )
-            if status == noErr && length > 0 {
+            if status == noErr, length > 0 {
                 let s = String(utf16CodeUnits: chars, count: length)
                 if s == character {
                     return CGKeyCode(keyCode)
@@ -645,8 +640,8 @@ enum InsertionResult {
         to currentState: (value: String?, selectedText: String?, selectedRange: NSRange?)
     ) -> Bool {
         initialState.value != currentState.value ||
-        initialState.selectedText != currentState.selectedText ||
-        initialState.selectedRange != currentState.selectedRange
+            initialState.selectedText != currentState.selectedText ||
+            initialState.selectedRange != currentState.selectedRange
     }
 
     private func captureFocusedTextState() -> FocusedTextState? {
@@ -682,13 +677,15 @@ enum InsertionResult {
     private func selectedRangeAttribute(from element: AXUIElement) -> NSRange? {
         var value: AnyObject?
         guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &value) == .success,
-              let rangeValue = value else {
+              let rangeValue = value
+        else {
             return nil
         }
 
         var range = CFRange()
         guard CFGetTypeID(rangeValue) == AXValueGetTypeID(),
-              AXValueGetValue(rangeValue as! AXValue, .cfRange, &range) else {
+              AXValueGetValue(rangeValue as! AXValue, .cfRange, &range)
+        else {
             return nil
         }
         return NSRange(location: range.location, length: range.length)
@@ -815,8 +812,16 @@ enum InsertionResult {
             return text
         }
 
-        // ALL CAPS preservation: first word fully uppercase and longer than one character
         let firstWord = String(text[firstCharIndex...].prefix(while: { !$0.isWhitespace }))
+
+        // Standalone "i" is always a pronoun — capitalize unconditionally
+        if firstWord.lowercased() == "i" {
+            var result = text
+            result.replaceSubrange(firstCharIndex ... firstCharIndex, with: "I")
+            return result
+        }
+
+        // ALL CAPS preservation: first word fully uppercase and longer than one character
         if firstWord.count > 1 && firstWord == firstWord.uppercased() {
             return text
         }
@@ -833,11 +838,11 @@ enum InsertionResult {
 
         // Mid-sentence continuation — lowercase only the first character
         var result = text
-        result.replaceSubrange(firstCharIndex...firstCharIndex, with: String(text[firstCharIndex]).lowercased())
+        result.replaceSubrange(firstCharIndex ... firstCharIndex, with: String(text[firstCharIndex]).lowercased())
         return result
     }
 
-    // Returns true if a space should be prepended before inserted text when this character is to the left of the cursor.
+    /// Returns true if a space should be prepended before inserted text when this character is to the left of the cursor.
     private func shouldAddLeftSpace(for unichar: unichar) -> Bool {
         guard let scalar = Unicode.Scalar(unichar) else { return false }
         let ch = Character(scalar)
@@ -847,7 +852,7 @@ enum InsertionResult {
         return true
     }
 
-    // Returns true if a space should be appended after inserted text when this character is to the right of the cursor.
+    /// Returns true if a space should be appended after inserted text when this character is to the right of the cursor.
     private func shouldAddRightSpace(for unichar: unichar) -> Bool {
         guard let scalar = Unicode.Scalar(unichar) else { return false }
         let ch = Character(scalar)
@@ -856,5 +861,4 @@ enum InsertionResult {
         if ",.:;!?)]}\\'\"".contains(ch) { return false }
         return true
     }
-
 }
