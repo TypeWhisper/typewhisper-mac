@@ -788,6 +788,16 @@
         }
       }
     },
+    "Adjust capitalization based on cursor context" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Groß- und Kleinschreibung basierend auf dem Cursor-Kontext anpassen"
+          }
+        }
+      }
+    },
     "Advanced" : {
       "localizations" : {
         "de" : {
@@ -3937,6 +3947,9 @@
           }
         }
       }
+    },
+    "Lowercases the first character of inserted text when the cursor is mid-sentence." : {
+
     },
     "M4A" : {
       "localizations" : {

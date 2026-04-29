@@ -397,11 +397,15 @@ enum InsertionResult {
     func insertText(
         _ text: String,
         preserveClipboard: Bool = false,
-        autoEnter: Bool = false
+        autoEnter: Bool = false,
+        cursorContext: CursorContext? = nil
     ) async throws -> InsertionResult {
         guard isAccessibilityGranted else {
             throw TextInsertionError.accessibilityNotGranted
         }
+
+        let resolvedContext = cursorContext ?? captureSurroundingCursorContext()
+        let text = applyContextAwareCapitalization(to: text, context: resolvedContext)
 
         let hadFocusedTextField = autoEnter && hasFocusedTextField()
 
@@ -799,6 +803,37 @@ enum InsertionResult {
             }
         }
 
+        return result
+    }
+
+    func applyContextAwareCapitalization(to text: String, context: CursorContext?) -> String {
+        guard UserDefaults.standard.bool(forKey: UserDefaultsKeys.adjustCapitalizationBasedOnContext) else {
+            return text
+        }
+
+        guard let firstCharIndex = text.firstIndex(where: { !$0.isWhitespace }) else {
+            return text
+        }
+
+        // ALL CAPS preservation: first word fully uppercase and longer than one character
+        let firstWord = String(text[firstCharIndex...].prefix(while: { !$0.isWhitespace }))
+        if firstWord.count > 1 && firstWord == firstWord.uppercased() {
+            return text
+        }
+
+        // No left context means start of document — preserve capitalization
+        guard let leftChar = context?.leftContext?.last(where: { !$0.isWhitespace }) else {
+            return text
+        }
+
+        // Sentence boundary — preserve capitalization
+        if ".!?".contains(leftChar) {
+            return text
+        }
+
+        // Mid-sentence continuation — lowercase only the first character
+        var result = text
+        result.replaceSubrange(firstCharIndex...firstCharIndex, with: String(text[firstCharIndex]).lowercased())
         return result
     }
 

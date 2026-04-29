@@ -19,6 +19,7 @@ struct GeneralSettingsView: View {
     @AppStorage(UserDefaultsKeys.showMenuBarIcon) private var showMenuBarIcon = true
     @AppStorage(UserDefaultsKeys.autoSpacingAroundDictatedText) private var autoSpacingAroundDictatedText: Bool = false
     @AppStorage(UserDefaultsKeys.escapeCancelMode) private var escapeCancelModeRawValue = EscapeCancelMode.doublePress.rawValue
+    @AppStorage(UserDefaultsKeys.adjustCapitalizationBasedOnContext) private var adjustCapitalizationBasedOnContext: Bool = false
     @AppStorage(UserDefaultsKeys.minimalIndicatorCompactMode) private var minimalIndicatorCompactMode = true
     @AppStorage(UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden) private var dockIconBehaviorRawValue = DockIconBehavior.keepVisible.rawValue
     @ObservedObject private var pluginManager = PluginManager.shared
@@ -154,6 +155,10 @@ struct GeneralSettingsView: View {
                     Text(String(localized: "Double Press to Cancel")).tag(EscapeCancelMode.doublePress)
                     Text(String(localized: "Single Press to Cancel")).tag(EscapeCancelMode.singlePress)
                 }
+                Toggle(String(localized: "Adjust capitalization based on cursor context"), isOn: $adjustCapitalizationBasedOnContext)
+                Text(String(localized: "Lowercases the first character of inserted text when the cursor is mid-sentence."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section(String(localized: "Appearance")) {
