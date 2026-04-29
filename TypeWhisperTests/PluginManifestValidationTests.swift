@@ -381,6 +381,74 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         XCTAssertEqual(plugin.huggingFaceToken, "hf_parakeet_saved")
     }
 
+    func testParakeetDictionaryTermsSupportReflectsStoredBoostingPreference() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let defaultHost = MockHostServices(pluginDataDirectory: appSupportDirectory)
+        let defaultPlugin = ParakeetPlugin()
+        defaultPlugin.activate(host: defaultHost)
+        XCTAssertEqual(defaultPlugin.dictionaryTermsSupport, .requiresPluginSetting)
+
+        let enabledHost = MockHostServices(
+            pluginDataDirectory: appSupportDirectory,
+            defaults: ["vocabularyBoostingEnabled": true]
+        )
+        let enabledPlugin = ParakeetPlugin()
+        enabledPlugin.activate(host: enabledHost)
+        XCTAssertEqual(enabledPlugin.dictionaryTermsSupport, .supported)
+    }
+
+    func testParakeetEnablingVocabularyBoostingPersistsAndNotifiesCapabilityChange() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let host = MockHostServices(pluginDataDirectory: appSupportDirectory)
+        let plugin = ParakeetPlugin()
+        plugin.activate(host: host)
+
+        plugin.setBoostingEnabled(true)
+
+        XCTAssertEqual(host.userDefault(forKey: "vocabularyBoostingEnabled") as? Bool, true)
+        XCTAssertEqual(plugin.dictionaryTermsSupport, .supported)
+        XCTAssertEqual(host.capabilitiesChangedCount, 1)
+
+        plugin.setBoostingEnabled(true)
+
+        XCTAssertEqual(host.capabilitiesChangedCount, 1)
+    }
+
+    func testParakeetDisablingVocabularyBoostingPersistsClearsVocabularyAndHidesCtcActivity() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let host = MockHostServices(
+            pluginDataDirectory: appSupportDirectory,
+            defaults: ["vocabularyBoostingEnabled": true]
+        )
+        let plugin = ParakeetPlugin()
+        plugin.activate(host: host)
+        plugin.lastConfiguredPrompt = "TypeWhisper Madison"
+        plugin.lastBoostingTermCount = 2
+        plugin.ctcModelState = .downloading
+        XCTAssertEqual(plugin.currentSettingsActivity?.message, "Downloading vocabulary model")
+
+        plugin.setBoostingEnabled(false)
+
+        XCTAssertEqual(host.userDefault(forKey: "vocabularyBoostingEnabled") as? Bool, false)
+        XCTAssertEqual(plugin.dictionaryTermsSupport, .requiresPluginSetting)
+        XCTAssertNil(plugin.lastConfiguredPrompt)
+        XCTAssertEqual(plugin.lastBoostingTermCount, 0)
+        XCTAssertNil(plugin.currentSettingsActivity)
+        plugin.ctcModelState = .error("Vocabulary model failed")
+        XCTAssertNil(plugin.currentSettingsActivity)
+        XCTAssertEqual(host.capabilitiesChangedCount, 1)
+
+        plugin.setBoostingEnabled(false)
+
+        XCTAssertEqual(host.capabilitiesChangedCount, 1)
+    }
+
     func testParakeetStoresAndClearsHuggingFaceTokenSecret() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

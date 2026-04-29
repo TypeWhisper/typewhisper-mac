@@ -30,9 +30,9 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
     fileprivate var vocabularyRescorer: VocabularyRescorer?
     fileprivate var vocabSizeConfig: ContextBiasingConstants.VocabSizeConfig?
     fileprivate var vocabularyBoostingEnabled: Bool = false
-    fileprivate var ctcModelState: CtcModelState = .notDownloaded
-    fileprivate var lastConfiguredPrompt: String?
-    fileprivate var lastBoostingTermCount: Int = 0
+    var ctcModelState: CtcModelState = .notDownloaded
+    var lastConfiguredPrompt: String?
+    var lastBoostingTermCount: Int = 0
 
     required override init() {
         super.init()
@@ -93,7 +93,9 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
     }
 
     var supportsTranslation: Bool { false }
-    var dictionaryTermsSupport: DictionaryTermsSupport { .requiresPluginSetting }
+    var dictionaryTermsSupport: DictionaryTermsSupport {
+        vocabularyBoostingEnabled ? .supported : .requiresPluginSetting
+    }
 
     var supportedLanguages: [String] {
         selectedVersion.supportedLanguages
@@ -379,12 +381,14 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
         }
     }
 
-    fileprivate func setBoostingEnabled(_ enabled: Bool) {
+    func setBoostingEnabled(_ enabled: Bool) {
+        guard vocabularyBoostingEnabled != enabled else { return }
         vocabularyBoostingEnabled = enabled
         host?.setUserDefault(enabled, forKey: "vocabularyBoostingEnabled")
         if !enabled {
             clearConfiguredVocabulary()
         }
+        host?.notifyCapabilitiesChanged()
     }
 
     private func clearConfiguredVocabulary() {
@@ -486,6 +490,8 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
         case .error(let message):
             return PluginSettingsActivity(message: message, isError: true)
         }
+
+        guard vocabularyBoostingEnabled else { return nil }
 
         switch ctcModelState {
         case .notDownloaded, .ready:
