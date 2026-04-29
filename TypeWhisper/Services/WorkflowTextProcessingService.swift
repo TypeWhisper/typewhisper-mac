@@ -41,7 +41,8 @@ struct WorkflowTextProcessingService {
                 text: text,
                 providerOverride: providerId,
                 cloudModelOverride: cloudModel,
-                temperatureDirective: temperatureDirective
+                temperatureDirective: temperatureDirective,
+                skipMemoryInjection: true
             )
         }
 

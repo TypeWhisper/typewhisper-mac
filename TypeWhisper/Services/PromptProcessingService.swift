@@ -16,6 +16,11 @@ protocol ProcessActivityManaging {
 }
 
 @MainActor
+protocol MemoryRetrieving: AnyObject {
+    func retrieveRelevantMemories(for text: String) async -> String
+}
+
+@MainActor
 struct DefaultProcessActivityManager: ProcessActivityManaging {
     func withActivity<T>(
         options: ProcessInfo.ActivityOptions,
@@ -49,7 +54,7 @@ class PromptProcessingService: ObservableObject {
         didSet { UserDefaults.standard.set(selectedCloudModel, forKey: "llmCloudModel") }
     }
 
-    weak var memoryService: MemoryService?
+    weak var memoryService: (any MemoryRetrieving)?
     private var appleIntelligenceProvider: LLMProvider?
     private var cancellables = Set<AnyCancellable>()
     var processActivityManager: any ProcessActivityManaging = DefaultProcessActivityManager()
@@ -161,6 +166,17 @@ class PromptProcessingService: ObservableObject {
         )
     }
 
+    func processWorkflow(prompt: String, text: String, behavior: WorkflowBehavior) async throws -> String {
+        try await process(
+            prompt: prompt,
+            text: text,
+            providerOverride: behavior.providerId,
+            cloudModelOverride: behavior.cloudModel,
+            temperatureDirective: behavior.temperatureDirective,
+            skipMemoryInjection: true
+        )
+    }
+
     static func requiresProcessActivityBudget(for plugin: any LLMProviderPlugin) -> Bool {
         guard let setupStatus = plugin as? any LLMProviderSetupStatusProviding else {
             return false
@@ -176,13 +192,19 @@ class PromptProcessingService: ObservableObject {
         temperatureDirective: PluginLLMTemperatureDirective = .inheritProviderSetting,
         skipMemoryInjection: Bool = false
     ) async throws -> String {
+        let totalStart = ContinuousClock.now
+
         // Inject memory context into prompt if available
         var effectivePrompt = prompt
         if !skipMemoryInjection, let memoryService {
+            let memoryStart = ContinuousClock.now
             let memoryContext = await memoryService.retrieveRelevantMemories(for: text)
+            logger.info("Prompt memory retrieval finished in \(ContinuousClock.now - memoryStart)")
             if !memoryContext.isEmpty {
                 effectivePrompt = memoryContext + "\n\n" + prompt
             }
+        } else if skipMemoryInjection {
+            logger.info("Prompt memory retrieval skipped")
         }
 
         let effectiveId = normalizeProviderId(providerOverride ?? selectedProviderId)
@@ -192,9 +214,17 @@ class PromptProcessingService: ObservableObject {
                 throw LLMError.notAvailable
             }
             logger.info("Processing prompt with Apple Intelligence")
-            let result = try await provider.process(systemPrompt: effectivePrompt, userText: text)
-            logger.info("Prompt processing complete, result length: \(result.count)")
-            return result
+            let providerStart = ContinuousClock.now
+            do {
+                let result = try await provider.process(systemPrompt: effectivePrompt, userText: text)
+                logger.info("Prompt provider call finished in \(ContinuousClock.now - providerStart)")
+                logger.info("Prompt processing complete in \(ContinuousClock.now - totalStart), result length: \(result.count)")
+                return result
+            } catch {
+                logger.error("Prompt provider call failed after \(ContinuousClock.now - providerStart): \(error.localizedDescription)")
+                logger.error("Prompt processing failed after \(ContinuousClock.now - totalStart): \(error.localizedDescription)")
+                throw error
+            }
         }
 
         // Plugin provider
@@ -219,17 +249,25 @@ class PromptProcessingService: ObservableObject {
             persistGlobalSelection: false
         )
         logger.info("Processing prompt with plugin \(effectiveId)")
-        let result = try await withProcessActivityIfNeeded(for: plugin, providerId: effectiveId) {
-            try await processWithPlugin(
-                plugin,
-                prompt: effectivePrompt,
-                text: text,
-                model: model,
-                temperatureDirective: temperatureDirective
-            )
+        let providerStart = ContinuousClock.now
+        do {
+            let result = try await withProcessActivityIfNeeded(for: plugin, providerId: effectiveId) {
+                try await processWithPlugin(
+                    plugin,
+                    prompt: effectivePrompt,
+                    text: text,
+                    model: model,
+                    temperatureDirective: temperatureDirective
+                )
+            }
+            logger.info("Prompt provider call finished in \(ContinuousClock.now - providerStart)")
+            logger.info("Prompt processing complete in \(ContinuousClock.now - totalStart), result length: \(result.count)")
+            return result
+        } catch {
+            logger.error("Prompt provider call failed after \(ContinuousClock.now - providerStart): \(error.localizedDescription)")
+            logger.error("Prompt processing failed after \(ContinuousClock.now - totalStart): \(error.localizedDescription)")
+            throw error
         }
-        logger.info("Prompt processing complete, result length: \(result.count)")
-        return result
     }
 
     private func processWithPlugin(

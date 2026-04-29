@@ -38,22 +38,63 @@ public extension HostServices {
     var availableProfileNames: [String] { availableRuleNames }
 }
 
-// MARK: - HTTP Client (Ephemeral Sessions)
+// MARK: - HTTP Client (Reusable Ephemeral Session)
 
-/// Drop-in replacement for `URLSession.shared.data(for:)` that creates a fresh ephemeral
-/// session per call. This prevents stale HTTP/2 connections after sleep/wake or network changes
-/// from hanging indefinitely.
+internal protocol PluginHTTPSession: AnyObject {
+    func data(for request: URLRequest) async throws -> (Data, URLResponse)
+    func finishTasksAndInvalidate()
+}
+
+extension URLSession: PluginHTTPSession {}
+
+/// Drop-in replacement for `URLSession.shared.data(for:)` that reuses one ephemeral
+/// session so fast plugin requests can keep DNS/TLS/HTTP connections warm.
 public enum PluginHTTPClient {
     private static let logger = Logger(subsystem: "com.typewhisper.sdk", category: "HTTP")
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var sharedSession: (any PluginHTTPSession)?
+    nonisolated(unsafe) private static var sessionFactory: (URLSessionConfiguration) -> any PluginHTTPSession = {
+        URLSession(configuration: $0)
+    }
 
     public static func data(for request: URLRequest) async throws -> (Data, URLResponse) {
-        let config = URLSessionConfiguration.ephemeral
-        let timeout = request.timeoutInterval > 0 ? request.timeoutInterval : 30
-        config.timeoutIntervalForRequest = timeout
-        config.timeoutIntervalForResource = max(timeout * 2, 90)
-        let session = URLSession(configuration: config)
-        defer { session.finishTasksAndInvalidate() }
+        try await data(for: request, allowsRetry: true)
+    }
 
+    public static func resetSharedSession(reason: String? = nil) {
+        let session = lock.withLock {
+            let existing = sharedSession
+            sharedSession = nil
+            return existing
+        }
+
+        session?.finishTasksAndInvalidate()
+        if let reason {
+            logger.info("Reset shared plugin HTTP session: \(reason)")
+        } else {
+            logger.info("Reset shared plugin HTTP session")
+        }
+    }
+
+    internal static func configureForTesting(_ factory: @escaping (URLSessionConfiguration) -> any PluginHTTPSession) {
+        resetSharedSession(reason: "test reconfiguration")
+        lock.withLock {
+            sessionFactory = factory
+        }
+    }
+
+    internal static func resetTestingHooks() {
+        resetSharedSession(reason: "test cleanup")
+        lock.withLock {
+            sessionFactory = { URLSession(configuration: $0) }
+        }
+    }
+
+    private static func data(
+        for request: URLRequest,
+        allowsRetry: Bool
+    ) async throws -> (Data, URLResponse) {
+        let session = sharedOrCreateSession()
         let method = request.httpMethod ?? "GET"
         let url = request.url?.absoluteString ?? "unknown"
         logger.info("\(method) \(url)")
@@ -67,8 +108,68 @@ public enum PluginHTTPClient {
             return (data, response)
         } catch {
             let elapsed = ContinuousClock.now - start
+            if allowsRetry, isTransientNetworkError(error) {
+                logger.warning("\(method) \(url) transient failure after \(elapsed), resetting session and retrying once: \(error.localizedDescription)")
+                resetSharedSession(matching: session, reason: "transient network error")
+                return try await data(for: request, allowsRetry: false)
+            }
+
             logger.error("\(method) \(url) failed after \(elapsed): \(error.localizedDescription)")
             throw error
+        }
+    }
+
+    private static func sharedOrCreateSession() -> any PluginHTTPSession {
+        lock.withLock {
+            if let sharedSession {
+                return sharedSession
+            }
+
+            let session = sessionFactory(makeConfiguration())
+            sharedSession = session
+            return session
+        }
+    }
+
+    private static func makeConfiguration() -> URLSessionConfiguration {
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForResource = 90
+        return config
+    }
+
+    private static func resetSharedSession(matching session: any PluginHTTPSession, reason: String) {
+        let didRemoveSharedSession = lock.withLock {
+            guard let current = sharedSession, current === session else {
+                return false
+            }
+            sharedSession = nil
+            return true
+        }
+
+        session.finishTasksAndInvalidate()
+        if didRemoveSharedSession {
+            logger.info("Reset shared plugin HTTP session: \(reason)")
+        } else {
+            logger.info("Invalidated plugin HTTP session after \(reason)")
+        }
+    }
+
+    private static func isTransientNetworkError(_ error: Error) -> Bool {
+        guard let urlError = error as? URLError else {
+            return false
+        }
+
+        switch urlError.code {
+        case .networkConnectionLost,
+             .timedOut,
+             .cannotConnectToHost,
+             .cannotFindHost,
+             .dnsLookupFailed,
+             .notConnectedToInternet:
+            return true
+        default:
+            return false
         }
     }
 }
