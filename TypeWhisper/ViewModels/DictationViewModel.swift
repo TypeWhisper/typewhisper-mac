@@ -1524,7 +1524,8 @@ final class DictationViewModel: ObservableObject {
                     text: text,
                     providerOverride: workflowService.llmProviderId(for: matchedWorkflow),
                     cloudModelOverride: workflowService.llmCloudModel(for: matchedWorkflow),
-                    temperatureDirective: behavior.temperatureDirective
+                    temperatureDirective: behavior.temperatureDirective,
+                    skipMemoryInjection: true
                 )
             }
         }

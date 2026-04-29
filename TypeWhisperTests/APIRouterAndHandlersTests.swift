@@ -19,10 +19,20 @@ final class APIRouterAndHandlersTests: XCTestCase {
         var requiresExternalCredentials = true
         var unavailableReason: String?
         var restoreMakesAvailable = false
+        nonisolated(unsafe) private var _lastSystemPrompt: String?
+        nonisolated(unsafe) private var _lastUserText: String?
         nonisolated(unsafe) private var _lastRequestedModel: String?
         nonisolated(unsafe) private var _lastTemperatureDirective: PluginLLMTemperatureDirective?
         nonisolated(unsafe) private var _autoUnloadCount = 0
         nonisolated(unsafe) private var _restoreCount = 0
+
+        var lastSystemPrompt: String? {
+            requestLock.withLock { _lastSystemPrompt }
+        }
+
+        var lastUserText: String? {
+            requestLock.withLock { _lastUserText }
+        }
 
         var lastRequestedModel: String? {
             requestLock.withLock { _lastRequestedModel }
@@ -52,6 +62,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         func process(systemPrompt: String, userText: String, model: String?) async throws -> String {
             requestLock.withLock {
+                _lastSystemPrompt = systemPrompt
+                _lastUserText = userText
                 _lastRequestedModel = model
             }
             return responseText
@@ -64,6 +76,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
             temperatureDirective: PluginLLMTemperatureDirective
         ) async throws -> String {
             requestLock.withLock {
+                _lastSystemPrompt = systemPrompt
+                _lastUserText = userText
                 _lastRequestedModel = model
                 _lastTemperatureDirective = temperatureDirective
             }
@@ -83,6 +97,21 @@ final class APIRouterAndHandlersTests: XCTestCase {
             if restoreMakesAvailable {
                 available = true
             }
+        }
+    }
+
+    @MainActor
+    private final class MemoryRetrieverSpy: MemoryRetrieving {
+        private(set) var requestedTexts: [String] = []
+        var context = """
+        <memory_context>
+        The user prefers concise wording.
+        </memory_context>
+        """
+
+        func retrieveRelevantMemories(for text: String) async -> String {
+            requestedTexts.append(text)
+            return context
         }
     }
 
@@ -2285,6 +2314,138 @@ final class APIRouterAndHandlersTests: XCTestCase {
     private static func jsonObject(_ response: HTTPResponse) throws -> [String: Any] {
         let object = try JSONSerialization.jsonObject(with: response.body)
         return try XCTUnwrap(object as? [String: Any])
+    }
+
+    @MainActor
+    func testPromptProcessingInjectsMemoryByDefault() async throws {
+        let providerKey = "llmProviderType"
+        let modelKey = "llmCloudModel"
+        let originalProvider = UserDefaults.standard.object(forKey: providerKey)
+        let originalModel = UserDefaults.standard.object(forKey: modelKey)
+        defer {
+            if let originalProvider {
+                UserDefaults.standard.set(originalProvider, forKey: providerKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: providerKey)
+            }
+            if let originalModel {
+                UserDefaults.standard.set(originalModel, forKey: modelKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: modelKey)
+            }
+        }
+
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockLLMProviderPlugin()
+        plugin.models = [PluginModelInfo(id: "gemini-2.5-flash", displayName: "Gemini 2.5 Flash")]
+
+        let manifest = PluginManifest(
+            id: "com.typewhisper.mock.llm",
+            name: "Mock LLM",
+            version: "1.0.0",
+            principalClass: "APIRouterMockLLMProviderPlugin"
+        )
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: manifest,
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let memoryRetriever = MemoryRetrieverSpy()
+        let service = PromptProcessingService()
+        service.memoryService = memoryRetriever
+
+        _ = try await service.process(
+            prompt: "Fix grammar.",
+            text: "hello world",
+            providerOverride: "Gemini"
+        )
+
+        XCTAssertEqual(memoryRetriever.requestedTexts, ["hello world"])
+        XCTAssertTrue(plugin.lastSystemPrompt?.contains("<memory_context>") == true)
+        XCTAssertTrue(plugin.lastSystemPrompt?.contains("The user prefers concise wording.") == true)
+        XCTAssertTrue(plugin.lastSystemPrompt?.contains("Fix grammar.") == true)
+        XCTAssertEqual(plugin.lastUserText, "hello world")
+    }
+
+    @MainActor
+    func testWorkflowPromptProcessingSkipsMemoryAndUsesWorkflowBehavior() async throws {
+        let providerKey = "llmProviderType"
+        let modelKey = "llmCloudModel"
+        let originalProvider = UserDefaults.standard.object(forKey: providerKey)
+        let originalModel = UserDefaults.standard.object(forKey: modelKey)
+        defer {
+            if let originalProvider {
+                UserDefaults.standard.set(originalProvider, forKey: providerKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: providerKey)
+            }
+            if let originalModel {
+                UserDefaults.standard.set(originalModel, forKey: modelKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: modelKey)
+            }
+        }
+
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockLLMProviderPlugin()
+        plugin.models = [
+            PluginModelInfo(id: "gemini-2.5-flash", displayName: "Gemini 2.5 Flash"),
+            PluginModelInfo(id: "gemini-2.5-pro", displayName: "Gemini 2.5 Pro")
+        ]
+
+        let manifest = PluginManifest(
+            id: "com.typewhisper.mock.llm",
+            name: "Mock LLM",
+            version: "1.0.0",
+            principalClass: "APIRouterMockLLMProviderPlugin"
+        )
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: manifest,
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let memoryRetriever = MemoryRetrieverSpy()
+        let service = PromptProcessingService()
+        service.memoryService = memoryRetriever
+
+        let behavior = WorkflowBehavior(
+            providerId: "Gemini",
+            cloudModel: "gemini-2.5-pro",
+            temperatureModeRaw: PluginLLMTemperatureMode.custom.rawValue,
+            temperatureValue: 0.8
+        )
+
+        _ = try await service.processWorkflow(
+            prompt: "Clean up the dictated text.",
+            text: "hello world",
+            behavior: behavior
+        )
+
+        XCTAssertTrue(memoryRetriever.requestedTexts.isEmpty)
+        XCTAssertEqual(plugin.lastSystemPrompt, "Clean up the dictated text.")
+        XCTAssertEqual(plugin.lastUserText, "hello world")
+        XCTAssertEqual(plugin.lastRequestedModel, "gemini-2.5-pro")
+        XCTAssertEqual(plugin.lastTemperatureDirective, .custom(0.8))
     }
 
     @MainActor

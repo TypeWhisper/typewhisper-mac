@@ -1,6 +1,7 @@
 import SwiftUI
 import AVFoundation
 import Combine
+import TypeWhisperPluginSDK
 @preconcurrency import Sparkle
 
 extension UserDefaults {
@@ -326,6 +327,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     private var menuBarIconObserver: NSKeyValueObservation?
     private var dockIconBehaviorObserver: NSKeyValueObservation?
     private var appActivationObserver: NSObjectProtocol?
+    private var workspaceWakeObserver: NSObjectProtocol?
     private var hasInteractiveForegroundContent = false
     private lazy var updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil)
 
@@ -434,6 +436,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             Task { @MainActor in
                 ActivationSourceTracker.shared.recordActivation(application)
             }
+        }
+
+        workspaceWakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            PluginHTTPClient.resetSharedSession(reason: "macOS wake")
         }
 
         // Observe settings window lifecycle
