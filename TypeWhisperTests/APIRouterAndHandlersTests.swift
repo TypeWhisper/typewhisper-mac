@@ -432,6 +432,20 @@ final class APIRouterAndHandlersTests: XCTestCase {
         }
     }
 
+    @MainActor
+    private final class MockSoundService: SoundService {
+        let onPlay: (SoundEvent, Bool) -> Void
+
+        init(onPlay: @escaping (SoundEvent, Bool) -> Void = { _, _ in }) {
+            self.onPlay = onPlay
+            super.init()
+        }
+
+        override func play(_ event: SoundEvent, enabled: Bool) {
+            onPlay(event, enabled)
+        }
+    }
+
     #if !APPSTORE
     private final class FakeMediaPlaybackController: MediaPlaybackControlling {
         var returnedSnapshot: (isPlaying: Bool, bundleIdentifier: String?) = (false, nil)
@@ -1426,6 +1440,134 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual(Array(events.prefix(3)), ["capture_app", "start_audio", "pause_media"])
     }
 
+    @MainActor
+    func testApiStartRecording_playsStartSoundAfterAudioStart() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var events: [String] = []
+        let soundService = MockSoundService { event, enabled in
+            guard event == .recordingStarted, enabled else { return }
+            events.append("start_sound")
+        }
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            soundService: soundService
+        )
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.soundFeedbackEnabled = true
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {
+            events.append("start_audio")
+        }
+
+        _ = context.dictationViewModel.apiStartRecording()
+
+        XCTAssertEqual(events, ["start_audio", "start_sound"])
+    }
+
+    @MainActor
+    func testApiStartRecording_skipsStartSoundForBluetoothInput() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var events: [String] = []
+        let bluetoothDeviceID = AudioDeviceID(409)
+        let soundService = MockSoundService { event, enabled in
+            guard event == .recordingStarted, enabled else { return }
+            events.append("start_sound")
+        }
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            soundService: soundService
+        )
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.soundFeedbackEnabled = true
+        context.audioDeviceService.inputDevices = [
+            AudioInputDevice(deviceID: bluetoothDeviceID, name: "AirPods Max", uid: "bt-input")
+        ]
+        context.audioDeviceService.selectionValidationOverride = { _ in }
+        context.audioDeviceService.audioDeviceIDResolverOverride = { uid in
+            uid == "bt-input" ? bluetoothDeviceID : nil
+        }
+        context.audioDeviceService.transportTypeResolverOverride = { deviceID in
+            XCTAssertEqual(deviceID, bluetoothDeviceID)
+            return kAudioDeviceTransportTypeBluetooth
+        }
+        context.audioDeviceService.selectedDeviceUID = "bt-input"
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { selectedDeviceID in
+            XCTAssertEqual(selectedDeviceID, bluetoothDeviceID)
+            return true
+        }
+        context.audioRecordingService.startRecordingOverride = {
+            XCTAssertTrue(context.audioRecordingService.selectedInputDeviceUsesBluetoothTransport)
+            events.append("start_audio")
+        }
+
+        _ = context.dictationViewModel.apiStartRecording()
+
+        XCTAssertEqual(events, ["start_audio"])
+        XCTAssertTrue(context.audioRecordingService.hasExplicitDeviceSelection)
+    }
+
+    @MainActor
+    func testApiStartRecording_keepsStartSoundForUSBInputAfterAudioStart() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var events: [String] = []
+        let usbDeviceID = AudioDeviceID(410)
+        let soundService = MockSoundService { event, enabled in
+            guard event == .recordingStarted, enabled else { return }
+            events.append("start_sound")
+        }
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            soundService: soundService
+        )
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.soundFeedbackEnabled = true
+        context.audioDeviceService.inputDevices = [
+            AudioInputDevice(deviceID: usbDeviceID, name: "USB Mic", uid: "usb-input")
+        ]
+        context.audioDeviceService.selectionValidationOverride = { _ in }
+        context.audioDeviceService.audioDeviceIDResolverOverride = { uid in
+            uid == "usb-input" ? usbDeviceID : nil
+        }
+        context.audioDeviceService.transportTypeResolverOverride = { deviceID in
+            XCTAssertEqual(deviceID, usbDeviceID)
+            return kAudioDeviceTransportTypeUSB
+        }
+        context.audioDeviceService.selectedDeviceUID = "usb-input"
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { selectedDeviceID in
+            XCTAssertEqual(selectedDeviceID, usbDeviceID)
+            return true
+        }
+        context.audioRecordingService.startRecordingOverride = {
+            XCTAssertFalse(context.audioRecordingService.selectedInputDeviceUsesBluetoothTransport)
+            events.append("start_audio")
+        }
+
+        _ = context.dictationViewModel.apiStartRecording()
+
+        XCTAssertEqual(events, ["start_audio", "start_sound"])
+    }
+
     #if !APPSTORE
     @MainActor
     func testMediaPlaybackServicePausesAndResumesFromOneShotTrackInfo() {
@@ -2125,7 +2267,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
     private static func makeDictationContext(
         appSupportDirectory: URL,
         audioDuckingService: AudioDuckingService? = nil,
-        mediaPlaybackService: MediaPlaybackService? = nil
+        mediaPlaybackService: MediaPlaybackService? = nil,
+        soundService: SoundService? = nil
     ) -> DictationContext {
         EventBus.shared = EventBus()
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
@@ -2175,7 +2318,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let audioDuckingService = audioDuckingService ?? AudioDuckingService()
         let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
         let snippetService = SnippetService(appSupportDirectory: appSupportDirectory)
-        let soundService = SoundService()
+        let soundService = soundService ?? SoundService()
         let audioDeviceService = AudioDeviceService()
         let promptActionService = PromptActionService(appSupportDirectory: appSupportDirectory)
         let promptProcessingService = PromptProcessingService()

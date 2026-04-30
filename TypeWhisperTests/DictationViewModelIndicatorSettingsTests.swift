@@ -86,8 +86,8 @@ final class DictationViewModelIndicatorSettingsTests: XCTestCase {
         XCTAssertEqual(DictationViewModel.loadIndicatorStyle(defaults: defaults), .notch)
     }
 
-    func testAggressiveShortSpeechTranscriptionDefaultsToDisabled() {
-        XCTAssertFalse(DictationViewModel.loadTranscribeShortQuietClipsAggressively(defaults: defaults))
+    func testAggressiveShortSpeechTranscriptionDefaultsToEnabled() {
+        XCTAssertTrue(DictationViewModel.loadTranscribeShortQuietClipsAggressively(defaults: defaults))
     }
 
     func testAggressiveShortSpeechTranscriptionPersistsWhenEnabled() {

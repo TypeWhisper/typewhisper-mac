@@ -405,7 +405,7 @@ final class DictationViewModel: ObservableObject {
     }
 
     nonisolated static func loadTranscribeShortQuietClipsAggressively(defaults: UserDefaults = .standard) -> Bool {
-        defaults.object(forKey: UserDefaultsKeys.transcribeShortQuietClipsAggressively) as? Bool ?? false
+        defaults.object(forKey: UserDefaultsKeys.transcribeShortQuietClipsAggressively) as? Bool ?? true
     }
 
     nonisolated static func persistTranscribeShortQuietClipsAggressively(_ enabled: Bool, defaults: UserDefaults = .standard) {
@@ -753,12 +753,16 @@ final class DictationViewModel: ObservableObject {
         let immediateContextMs = (CFAbsoluteTimeGetCurrent() - startTimestamp) * 1000
 
         do {
-            // Play start sound BEFORE engine setup - AVAudioEngine reconfigures
-            // audio hardware (aggregate device) which disrupts NSSound playback.
-            soundService.play(.recordingStarted, enabled: soundFeedbackEnabled)
             audioRecordingService.selectedDeviceID = audioDeviceService.selectedDeviceID
             audioRecordingService.hasExplicitDeviceSelection = audioDeviceService.selectedDeviceUID != nil
+            let selectedInputUsesBluetooth = audioDeviceService.selectedDeviceUsesBluetoothTransport
+            audioRecordingService.selectedInputDeviceUsesBluetoothTransport = selectedInputUsesBluetooth
             try audioRecordingService.startRecording()
+            if selectedInputUsesBluetooth {
+                logger.info("Skipping recording start sound for Bluetooth input device")
+            } else {
+                soundService.play(.recordingStarted, enabled: soundFeedbackEnabled)
+            }
             if mediaPauseEnabled { mediaPlaybackService.pauseIfPlaying() }
             if audioDuckingEnabled {
                 audioDuckingService.duckAudio(to: Float(audioDuckingLevel))
@@ -1731,7 +1735,7 @@ func classifyShortSpeech(
     rawDuration: TimeInterval,
     peakLevel: Float,
     hasConfirmedText: Bool,
-    transcribeShortQuietClipsAggressively: Bool = false
+    transcribeShortQuietClipsAggressively: Bool = true
 ) -> ShortSpeechDecision {
     guard rawDuration >= 0.04 else { return .discardTooShort }
     if hasConfirmedText { return .transcribe }
@@ -1745,9 +1749,7 @@ func classifyShortSpeech(
         return .transcribe
     }
 
-    if peakLevel < 0.006 {
-        return transcribeShortQuietClipsAggressively ? .transcribe : .discardNoSpeech
-    }
+    if peakLevel < 0.006 { return .discardNoSpeech }
     return .transcribe
 }
 

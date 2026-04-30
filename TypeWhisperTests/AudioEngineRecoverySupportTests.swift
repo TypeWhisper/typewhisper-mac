@@ -333,6 +333,81 @@ final class AudioDeviceServiceCompatibilityTests: XCTestCase {
             XCTAssertTrue(AudioEngineRecoveryPolicy.isRetryable(error: nsError))
         }
     }
+
+    func testBluetoothPreviewConfigurationChangesAreSuppressedDuringRouteSettleWindow() {
+        let service = AudioDeviceService(
+            initialInputDevices: [],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false
+        )
+
+        service.testingSetPreviewEngine(
+            nil,
+            activeDeviceID: AudioDeviceID(42),
+            usesBluetoothTransport: true
+        )
+        service.testingBeginBluetoothPreviewConfigurationChangeIgnoreWindow(now: 10)
+
+        XCTAssertTrue(service.testingShouldSuppressBluetoothPreviewConfigurationChange(now: 12.9))
+        XCTAssertFalse(service.testingShouldSuppressBluetoothPreviewConfigurationChange(now: 13.1))
+    }
+
+    func testNonBluetoothPreviewConfigurationChangesAreNotSuppressed() {
+        let service = AudioDeviceService(
+            initialInputDevices: [],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false
+        )
+
+        service.testingSetPreviewEngine(
+            nil,
+            activeDeviceID: AudioDeviceID(43),
+            usesBluetoothTransport: false
+        )
+        service.testingBeginBluetoothPreviewConfigurationChangeIgnoreWindow(now: 10)
+
+        XCTAssertFalse(service.testingShouldSuppressBluetoothPreviewConfigurationChange(now: 11))
+    }
+
+    @MainActor
+    func testStartPreviewPinsBluetoothInputAsDefaultUntilPreviewStops() {
+        let bluetoothDeviceID = AudioDeviceID(710)
+        let inputActivationGuard = FakeAudioInputDeviceActivator()
+        let service = AudioDeviceService(
+            initialInputDevices: [
+                AudioInputDevice(deviceID: bluetoothDeviceID, name: "AirPods Max", uid: "airpods-input")
+            ],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false,
+            inputActivationGuard: inputActivationGuard
+        )
+
+        service.hasMicrophonePermissionOverride = true
+        service.selectionValidationOverride = { _ in }
+        service.audioDeviceIDResolverOverride = { uid in
+            uid == "airpods-input" ? bluetoothDeviceID : nil
+        }
+        service.transportTypeResolverOverride = { deviceID in
+            XCTAssertEqual(deviceID, bluetoothDeviceID)
+            return kAudioDeviceTransportTypeBluetooth
+        }
+        service.selectedDeviceUID = "airpods-input"
+        service.startPreviewOverride = { preferredDeviceID in
+            XCTAssertEqual(preferredDeviceID, bluetoothDeviceID)
+        }
+
+        service.startPreview()
+
+        XCTAssertEqual(inputActivationGuard.activateCalls, [
+            .init(deviceID: bluetoothDeviceID, reason: "preview-start")
+        ])
+        XCTAssertTrue(inputActivationGuard.restoreCalls.isEmpty)
+        XCTAssertTrue(service.isPreviewActive)
+
+        service.stopPreview()
+
+        XCTAssertEqual(inputActivationGuard.restoreCalls, ["preview-stop"])
+    }
 }
 
 final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
@@ -392,6 +467,149 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         XCTAssertNoThrow(try service.startRecording())
         XCTAssertTrue(didReachStartOverride)
         XCTAssertTrue(service.isRecording)
+    }
+
+    func testSelectedDeviceUsesBluetoothTransport_resolvesTransportFromSelectedUID() {
+        let bluetoothDeviceID = AudioDeviceID(700)
+        let service = AudioDeviceService(
+            initialInputDevices: [
+                AudioInputDevice(deviceID: bluetoothDeviceID, name: "Jabra PRO 930", uid: "jabra-pro-930")
+            ],
+            monitorDeviceChanges: false
+        )
+
+        service.selectionValidationOverride = { _ in }
+        service.audioDeviceIDResolverOverride = { uid in
+            uid == "jabra-pro-930" ? bluetoothDeviceID : nil
+        }
+        service.transportTypeResolverOverride = { deviceID in
+            XCTAssertEqual(deviceID, bluetoothDeviceID)
+            return kAudioDeviceTransportTypeBluetoothLE
+        }
+
+        service.selectedDeviceUID = "jabra-pro-930"
+
+        XCTAssertTrue(service.selectedDeviceUsesBluetoothTransport)
+    }
+
+    func testSelectedDeviceUsesBluetoothTransport_returnsFalseForUSBAndDefaultInput() {
+        let usbDeviceID = AudioDeviceID(701)
+        let service = AudioDeviceService(
+            initialInputDevices: [
+                AudioInputDevice(deviceID: usbDeviceID, name: "USB Mic", uid: "usb-mic")
+            ],
+            monitorDeviceChanges: false
+        )
+
+        XCTAssertFalse(service.selectedDeviceUsesBluetoothTransport)
+
+        service.selectionValidationOverride = { _ in }
+        service.audioDeviceIDResolverOverride = { uid in
+            uid == "usb-mic" ? usbDeviceID : nil
+        }
+        service.transportTypeResolverOverride = { deviceID in
+            XCTAssertEqual(deviceID, usbDeviceID)
+            return kAudioDeviceTransportTypeUSB
+        }
+
+        service.selectedDeviceUID = "usb-mic"
+
+        XCTAssertFalse(service.selectedDeviceUsesBluetoothTransport)
+    }
+
+    func testBluetoothInputReadinessProbeTimesOutWithNoInitialInput() {
+        let service = AudioRecordingService()
+        service.hasExplicitDeviceSelection = true
+        service.selectedInputDeviceUsesBluetoothTransport = true
+        service.inputReadinessTimeoutOverride = 0.002
+        service.inputReadinessPollIntervalOverride = 0.001
+        service.inputReadinessProbeOverride = { false }
+
+        XCTAssertThrowsError(try service.testingWaitForInitialInputReadinessIfNeeded()) { error in
+            guard case AudioRecordingService.AudioRecordingError.noAudioData = error else {
+                return XCTFail("Expected noAudioData, got \(error)")
+            }
+        }
+    }
+
+    func testBluetoothInputReadinessProbeSucceedsWhenInitialInputArrives() {
+        let service = AudioRecordingService()
+        var probeCalls = 0
+        service.hasExplicitDeviceSelection = true
+        service.selectedInputDeviceUsesBluetoothTransport = true
+        service.inputReadinessTimeoutOverride = 0.05
+        service.inputReadinessPollIntervalOverride = 0.001
+        service.inputReadinessProbeOverride = {
+            probeCalls += 1
+            return probeCalls >= 2
+        }
+
+        XCTAssertNoThrow(try service.testingWaitForInitialInputReadinessIfNeeded())
+        XCTAssertGreaterThanOrEqual(probeCalls, 2)
+    }
+
+    func testBluetoothInputReadinessSucceedsWhenTapCallbackArrivesBeforeConvertedSamples() {
+        let service = AudioRecordingService()
+        service.hasExplicitDeviceSelection = true
+        service.selectedInputDeviceUsesBluetoothTransport = true
+        service.inputReadinessTimeoutOverride = 0.01
+        service.inputReadinessPollIntervalOverride = 0.001
+
+        service.testingMarkInitialInputTapSeen()
+
+        XCTAssertNoThrow(try service.testingWaitForInitialInputReadinessIfNeeded())
+    }
+
+    func testBluetoothInputReadinessProbeIsSkippedForNonBluetoothInput() {
+        let service = AudioRecordingService()
+        var probeCalls = 0
+        service.hasExplicitDeviceSelection = true
+        service.selectedInputDeviceUsesBluetoothTransport = false
+        service.inputReadinessProbeOverride = {
+            probeCalls += 1
+            return false
+        }
+
+        XCTAssertNoThrow(try service.testingWaitForInitialInputReadinessIfNeeded())
+        XCTAssertEqual(probeCalls, 0)
+    }
+
+    func testInputActivatorActivateIfNeededPinsBluetoothInput() {
+        let inputActivationGuard = FakeAudioInputDeviceActivator()
+
+        XCTAssertTrue(inputActivationGuard.activateIfNeeded(
+            deviceID: AudioDeviceID(720),
+            usesBluetoothTransport: true,
+            reason: "recording-start"
+        ))
+
+        XCTAssertEqual(inputActivationGuard.activateCalls, [
+            .init(deviceID: AudioDeviceID(720), reason: "recording-start")
+        ])
+    }
+
+    func testInputActivatorActivateIfNeededSkipsNonBluetoothInput() {
+        let inputActivationGuard = FakeAudioInputDeviceActivator()
+
+        XCTAssertTrue(inputActivationGuard.activateIfNeeded(
+            deviceID: AudioDeviceID(721),
+            usesBluetoothTransport: false,
+            reason: "recording-start"
+        ))
+
+        XCTAssertTrue(inputActivationGuard.activateCalls.isEmpty)
+    }
+
+    func testInputActivatorActivateIfNeededFailsWhenBluetoothDeviceIsMissing() {
+        let inputActivationGuard = FakeAudioInputDeviceActivator()
+
+        XCTAssertFalse(inputActivationGuard.activateIfNeeded(
+            deviceID: nil,
+            usesBluetoothTransport: true,
+            reason: "recording-start"
+        ))
+
+        XCTAssertTrue(inputActivationGuard.activateCalls.isEmpty)
     }
 
     func testRecoveryEngineSwap_replacesStoredEngineInstance() {
@@ -463,6 +681,46 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
 }
 
 final class AudioOutputVolumeGuardTests: XCTestCase {
+    func testInputActivationGuardRestoresPreviousDefaultInput() {
+        let controller = FakeAudioInputDeviceDefaultController(defaultInputDeviceID: AudioDeviceID(1))
+        let guardService = AudioInputDeviceActivationGuard(controller: controller)
+
+        XCTAssertTrue(guardService.activate(deviceID: AudioDeviceID(2), reason: "test"))
+        guardService.restore(reason: "test")
+
+        XCTAssertEqual(controller.setCalls, [AudioDeviceID(2), AudioDeviceID(1)])
+        XCTAssertEqual(controller.defaultInputDeviceID(), AudioDeviceID(1))
+    }
+
+    func testInputActivationGuardReferenceCountsSharedActivation() {
+        let controller = FakeAudioInputDeviceDefaultController(defaultInputDeviceID: AudioDeviceID(1))
+        let guardService = AudioInputDeviceActivationGuard(controller: controller)
+
+        XCTAssertTrue(guardService.activate(deviceID: AudioDeviceID(2), reason: "preview-start"))
+        XCTAssertTrue(guardService.activate(deviceID: AudioDeviceID(2), reason: "recording-start"))
+        guardService.restore(reason: "preview-stop")
+
+        XCTAssertEqual(controller.setCalls, [AudioDeviceID(2)])
+        XCTAssertEqual(controller.defaultInputDeviceID(), AudioDeviceID(2))
+
+        guardService.restore(reason: "recording-stop")
+
+        XCTAssertEqual(controller.setCalls, [AudioDeviceID(2), AudioDeviceID(1)])
+        XCTAssertEqual(controller.defaultInputDeviceID(), AudioDeviceID(1))
+    }
+
+    func testInputActivationGuardDoesNotRestoreAfterExternalInputChange() {
+        let controller = FakeAudioInputDeviceDefaultController(defaultInputDeviceID: AudioDeviceID(1))
+        let guardService = AudioInputDeviceActivationGuard(controller: controller)
+
+        XCTAssertTrue(guardService.activate(deviceID: AudioDeviceID(2), reason: "recording-start"))
+        controller.defaultInputDevice = AudioDeviceID(3)
+        guardService.restore(reason: "recording-stop")
+
+        XCTAssertEqual(controller.setCalls, [AudioDeviceID(2)])
+        XCTAssertEqual(controller.defaultInputDeviceID(), AudioDeviceID(3))
+    }
+
     func testRestoreIfRaisedRestoresCurrentOutputToCapturedUserVolume() {
         let controller = FakeAudioOutputVolumeController(
             defaultDeviceID: AudioDeviceID(1),
@@ -632,6 +890,45 @@ final class AudioOutputVolumeIntegrationTests: XCTestCase {
         XCTAssertEqual(controller.setCalls[0].deviceID, AudioDeviceID(1))
         XCTAssertEqual(controller.setCalls[0].volume, 0.02, accuracy: 0.0001)
         XCTAssertEqual(controller.setCalls[1], .init(deviceID: AudioDeviceID(1), volume: 0.10))
+    }
+}
+
+private final class FakeAudioInputDeviceActivator: AudioInputDeviceActivating {
+    struct ActivateCall: Equatable {
+        let deviceID: AudioDeviceID
+        let reason: String
+    }
+
+    var shouldActivate = true
+    private(set) var activateCalls: [ActivateCall] = []
+    private(set) var restoreCalls: [String] = []
+
+    func activate(deviceID: AudioDeviceID, reason: String) -> Bool {
+        activateCalls.append(.init(deviceID: deviceID, reason: reason))
+        return shouldActivate
+    }
+
+    func restore(reason: String) {
+        restoreCalls.append(reason)
+    }
+}
+
+private final class FakeAudioInputDeviceDefaultController: AudioInputDeviceDefaultControlling {
+    var defaultInputDevice: AudioDeviceID?
+    private(set) var setCalls: [AudioDeviceID] = []
+
+    init(defaultInputDeviceID: AudioDeviceID?) {
+        defaultInputDevice = defaultInputDeviceID
+    }
+
+    func defaultInputDeviceID() -> AudioDeviceID? {
+        defaultInputDevice
+    }
+
+    func setDefaultInputDeviceID(_ deviceID: AudioDeviceID) -> Bool {
+        setCalls.append(deviceID)
+        defaultInputDevice = deviceID
+        return true
     }
 }
 
