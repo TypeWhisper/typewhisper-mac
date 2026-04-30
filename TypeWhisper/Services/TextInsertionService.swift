@@ -18,6 +18,9 @@ final class TextInsertionService {
     typealias FocusedTextSnapshot = (value: String?, selectedText: String?, selectedRange: NSRange?)
 
     var accessibilityGrantedOverride: Bool?
+    // Cached flag — set to false when AX permission is revoked at runtime.
+    // Avoids repeated AX calls that hang the system after permission removal.
+    private var accessibilityAvailable = true
     var pasteboardProvider: () -> NSPasteboard = { .general }
     var focusedTextFieldOverride: (() -> Bool)?
     var focusedTextElementOverride: (() -> AXUIElement?)?
@@ -49,7 +52,23 @@ final class TextInsertionService {
     }
 
     var isAccessibilityGranted: Bool {
-        accessibilityGrantedOverride ?? AXIsProcessTrusted()
+        if let override = accessibilityGrantedOverride { return override }
+        guard accessibilityAvailable else { return false }
+        let granted = AXIsProcessTrusted()
+        if !granted {
+            accessibilityAvailable = false
+            logger.warning("Accessibility permission lost — disabling AX operations")
+        }
+        return granted
+    }
+
+    /// Call on app foreground to re-enable AX if permission was restored in System Settings.
+    func revalidateAccessibilityOnForeground() {
+        guard !accessibilityAvailable else { return }
+        if AXIsProcessTrusted() {
+            accessibilityAvailable = true
+            logger.info("Accessibility permission restored — re-enabling AX operations")
+        }
     }
 
     func requestAccessibilityPermission() {
@@ -317,6 +336,7 @@ final class TextInsertionService {
         if let insertTextAtOverride {
             return insertTextAtOverride(element, text)
         }
+        guard accessibilityAvailable else { return false }
 
         let result = AXUIElementSetAttributeValue(
             element,
@@ -449,6 +469,15 @@ final class TextInsertionService {
         let capitalized = applyContextAwareCapitalization(to: text, context: resolvedContext)
         let processedText = applyAutoSpacing(to: capitalized)
 
+        // When AX is unavailable, skip directly to a single clipboard paste — no AX steps, no retries.
+        guard accessibilityAvailable else {
+            let pasteboard = pasteboardProvider()
+            pasteboard.clearContents()
+            pasteboard.setString(processedText, forType: .string)
+            simulatePaste()
+            return .pasted
+        }
+
         let hadFocusedTextField = autoEnter && hasFocusedTextField()
 
         // Step 1: Verified AX insertion
@@ -485,7 +514,16 @@ final class TextInsertionService {
             return .pasted
         }
 
-        // Step 3: Retry paste once
+        // Step 3: Retry paste once (only if AX is still available for verification)
+        guard accessibilityAvailable else {
+            if preserveClipboard { restoreClipboard(savedItems, to: pasteboard) }
+            if hadFocusedTextField {
+                try? await Task.sleep(for: .milliseconds(50))
+                simulateReturn()
+            }
+            return .pasted
+        }
+
         try? await Task.sleep(for: .milliseconds(75))
 
         let preRetryState = capturePasteVerificationState()
@@ -508,6 +546,7 @@ final class TextInsertionService {
     }
 
     func focusedElementPosition() -> CGPoint? {
+        guard accessibilityAvailable else { return nil }
         let systemWide = AXUIElementCreateSystemWide()
 
         var focusedElement: AnyObject?

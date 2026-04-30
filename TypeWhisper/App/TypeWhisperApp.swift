@@ -457,6 +457,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         )
     }
 
+    func applicationDidBecomeActive(_ notification: Notification) {
+        ServiceContainer.shared.textInsertionService.revalidateAccessibilityOnForeground()
+    }
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         if !hasVisibleManagedWindow {
             openSettingsWindow()
