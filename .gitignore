@@ -38,6 +38,7 @@ fastlane/test_output/
 .claude/
 .agents/
 .skills/
+CLAUDE.md
 
 # Code signing config (developer-specific)
 CodeSigning.local.xcconfig
