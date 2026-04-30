@@ -130,23 +130,21 @@ final class SnippetService: ObservableObject {
     func applySnippets(to text: String) -> String {
         var result = text
 
-        for snippet in snippets where snippet.isEnabled {
-            let searchTrigger = snippet.caseSensitive ? snippet.trigger : snippet.trigger.lowercased()
-            let searchText = snippet.caseSensitive ? result : result.lowercased()
+        let activeSnippets = snippets
+            .filter { $0.isEnabled }
+            .sorted { $0.trigger.count > $1.trigger.count }
 
-            if searchText.contains(searchTrigger) {
-                let replacement = snippet.processedReplacement()
+        for snippet in activeSnippets {
+            let escapedTrigger = NSRegularExpression.escapedPattern(for: snippet.trigger)
+            let pattern = "\\b\(escapedTrigger)[.,!?;:]?(?=\\s|$)"
+            let safeReplacement = NSRegularExpression.escapedTemplate(for: snippet.processedReplacement())
 
-                if snippet.caseSensitive {
-                    result = result.replacingOccurrences(of: snippet.trigger, with: replacement)
-                } else {
-                    result = result.replacingOccurrences(
-                        of: snippet.trigger,
-                        with: replacement,
-                        options: .caseInsensitive
-                    )
-                }
+            var options: String.CompareOptions = [.regularExpression]
+            if !snippet.caseSensitive { options.insert(.caseInsensitive) }
 
+            let updated = result.replacingOccurrences(of: pattern, with: safeReplacement, options: options)
+            if updated != result {
+                result = updated
                 incrementUsageCount(for: snippet)
             }
         }
