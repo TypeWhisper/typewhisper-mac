@@ -11,11 +11,18 @@ struct PostProcessingResult {
 
 @MainActor
 final class PostProcessingPipeline {
+    private let fillerWordService: FillerWordService
     private let snippetService: SnippetService
     private let dictionaryService: DictionaryService
     private let appFormatterService: AppFormatterService?
 
-    init(snippetService: SnippetService, dictionaryService: DictionaryService, appFormatterService: AppFormatterService? = nil) {
+    init(
+        snippetService: SnippetService,
+        dictionaryService: DictionaryService,
+        appFormatterService: AppFormatterService? = nil,
+        fillerWordService: FillerWordService = FillerWordService()
+    ) {
+        self.fillerWordService = fillerWordService
         self.snippetService = snippetService
         self.dictionaryService = dictionaryService
         self.appFormatterService = appFormatterService
@@ -28,6 +35,12 @@ final class PostProcessingPipeline {
         outputFormat: String? = nil,
         llmStepName: String? = nil
     ) async throws -> PostProcessingResult {
+        var result = fillerWordService.removeFillerWordsIfEnabled(from: text)
+        var appliedSteps: [String] = []
+        if result != text {
+            appliedSteps.append("Filler Words")
+        }
+
         // Collect plugin processors with their priorities
         let plugins = PluginManager.shared.postProcessors
 
@@ -51,8 +64,6 @@ final class PostProcessingPipeline {
         steps.append((600, -3))
         steps.sort { $0.priority < $1.priority }
 
-        var result = text
-        var appliedSteps: [String] = []
         for step in steps {
             let before = result
             do {

@@ -1,5 +1,5 @@
-import SwiftUI
 import ServiceManagement
+import SwiftUI
 
 struct GeneralSettingsView: View {
     private enum AppVisibilityMode: String, CaseIterable {
@@ -15,9 +15,12 @@ struct GeneralSettingsView: View {
         }
         return Locale.preferredLanguages.first?.hasPrefix("de") == true ? "de" : "en"
     }()
+
     @State private var showRestartAlert = false
     @AppStorage(UserDefaultsKeys.showMenuBarIcon) private var showMenuBarIcon = true
     @AppStorage(UserDefaultsKeys.autoSpacingAroundDictatedText) private var autoSpacingAroundDictatedText: Bool = false
+    @AppStorage(UserDefaultsKeys.removeFillerWordsEnabled) private var removeFillerWordsEnabled: Bool = false
+    @AppStorage(UserDefaultsKeys.removeFillerWordsCustomList) private var removeFillerWordsCustomList: String = ""
     @AppStorage(UserDefaultsKeys.escapeCancelMode) private var escapeCancelModeRawValue = EscapeCancelMode.doublePress.rawValue
     @AppStorage(UserDefaultsKeys.adjustCapitalizationBasedOnContext) private var adjustCapitalizationBasedOnContext: Bool = false
     @AppStorage(UserDefaultsKeys.minimalIndicatorCompactMode) private var minimalIndicatorCompactMode = true
@@ -98,23 +101,23 @@ struct GeneralSettingsView: View {
             }
 
             #if canImport(Translation)
-            if #available(macOS 15, *) {
-                Section(String(localized: "Translation")) {
-                    Toggle(String(localized: "Enable translation"), isOn: $settings.translationEnabled)
+                if #available(macOS 15, *) {
+                    Section(String(localized: "Translation")) {
+                        Toggle(String(localized: "Enable translation"), isOn: $settings.translationEnabled)
 
-                    if settings.translationEnabled {
-                        Picker(String(localized: "Target language"), selection: $settings.translationTargetLanguage) {
-                            ForEach(TranslationService.availableTargetLanguages, id: \.code) { lang in
-                                Text(lang.name).tag(lang.code)
+                        if settings.translationEnabled {
+                            Picker(String(localized: "Target language"), selection: $settings.translationTargetLanguage) {
+                                ForEach(TranslationService.availableTargetLanguages, id: \.code) { lang in
+                                    Text(lang.name).tag(lang.code)
+                                }
                             }
                         }
-                    }
 
-                    Text(String(localized: "Uses Apple Translate (on-device)"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        Text(String(localized: "Uses Apple Translate (on-device)"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
-            }
             #endif
 
             Section(String(localized: "Language")) {
@@ -145,6 +148,14 @@ struct GeneralSettingsView: View {
                 Text(String(localized: "Automatically adds a space before or after inserted text when the adjacent character is not whitespace, preventing words from merging."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Toggle(String(localized: "Remove filler words"), isOn: $removeFillerWordsEnabled)
+                if removeFillerWordsEnabled {
+                    TextField(
+                        String(localized: "Custom filler words (single words, comma-separated)"),
+                        text: $removeFillerWordsCustomList
+                    )
+                    .textFieldStyle(.roundedBorder)
+                }
                 Picker(String(localized: "Escape Key Cancel Mode"), selection: Binding(
                     get: { EscapeCancelMode(rawValue: escapeCancelModeRawValue) ?? .doublePress },
                     set: { newMode in
@@ -190,7 +201,7 @@ struct GeneralSettingsView: View {
 
                     LabeledContent(String(localized: "Live transcript size")) {
                         HStack(spacing: 12) {
-                            Slider(value: indicatorTranscriptPreviewSliderValue, in: 0...8, step: 1)
+                            Slider(value: indicatorTranscriptPreviewSliderValue, in: 0 ... 8, step: 1)
                                 .frame(width: 180)
 
                             Text(verbatim: indicatorTranscriptPreviewSizeLabel)
@@ -255,7 +266,6 @@ struct GeneralSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-
         }
         .formStyle(.grouped)
         .padding()
@@ -347,14 +357,14 @@ struct LanguageSelectionEditor: View {
 
     private var featuredLanguages: [(code: String, name: String)] {
         let rankedLanguages: [(rank: Int, language: (code: String, name: String))] = filteredLanguages.compactMap { language in
-                guard let rank = featuredAppLanguageRank(for: language.code) else { return nil }
-                return (rank: rank, language: language)
-            }
+            guard let rank = featuredAppLanguageRank(for: language.code) else { return nil }
+            return (rank: rank, language: language)
+        }
         return rankedLanguages.sorted {
-                if $0.rank != $1.rank { return $0.rank < $1.rank }
-                return $0.language.name.localizedCaseInsensitiveCompare($1.language.name) == .orderedAscending
-            }
-            .map(\.language)
+            if $0.rank != $1.rank { return $0.rank < $1.rank }
+            return $0.language.name.localizedCaseInsensitiveCompare($1.language.name) == .orderedAscending
+        }
+        .map(\.language)
     }
 
     private var nonFeaturedLanguages: [(code: String, name: String)] {

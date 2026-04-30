@@ -86,6 +86,8 @@ enum UserDefaultsKeys {
     static let autoSpacingAroundDictatedText = "autoSpacingAroundDictatedText"
     static let escapeCancelMode = "escapeCancelMode"
     static let adjustCapitalizationBasedOnContext = "adjustCapitalizationBasedOnContext"
+    static let removeFillerWordsEnabled = "removeFillerWordsEnabled"
+    static let removeFillerWordsCustomList = "removeFillerWordsCustomList"
 
     // MARK: - AI Context
     static let useSurroundingCursorContext = "useSurroundingCursorContext"

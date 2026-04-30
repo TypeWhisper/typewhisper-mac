@@ -2020,6 +2020,16 @@
         }
       }
     },
+    "Custom filler words (single words, comma-separated)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Benutzerdefinierte, Füllwörter, (einzelne, Wörter, durch, Kommas, getrennt)"
+          }
+        }
+      }
+    },
     "Daily" : {
       "localizations" : {
         "de" : {
@@ -6426,6 +6436,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%1$@ entfernen"
+          }
+        }
+      }
+    },
+    "Remove filler words" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Füllwörter entfernen"
           }
         }
       }
