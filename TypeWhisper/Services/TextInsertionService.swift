@@ -436,6 +436,77 @@ final class TextInsertionService {
         return .pasted
     }
 
+    func insertTextReliably(
+        _ text: String,
+        preserveClipboard: Bool = false,
+        autoEnter: Bool = false
+    ) async throws -> InsertionResult {
+        guard isAccessibilityGranted else {
+            throw TextInsertionError.accessibilityNotGranted
+        }
+
+        let resolvedContext = captureSurroundingCursorContext()
+        let capitalized = applyContextAwareCapitalization(to: text, context: resolvedContext)
+        let processedText = applyAutoSpacing(to: capitalized)
+
+        let hadFocusedTextField = autoEnter && hasFocusedTextField()
+
+        // Step 1: Verified AX insertion
+        if let focusedElement = getFocusedTextElement(),
+           insertTextAtAndVerifyChange(element: focusedElement, text: processedText)
+        {
+            if hadFocusedTextField {
+                try? await Task.sleep(for: .milliseconds(50))
+                simulateReturn()
+            }
+            return .pasted
+        }
+
+        // Step 2: Clipboard paste with verification
+        let pasteboard = pasteboardProvider()
+        let savedItems = preserveClipboard ? saveClipboard(from: pasteboard) : []
+
+        let preState = capturePasteVerificationState()
+
+        pasteboard.clearContents()
+        pasteboard.setString(processedText, forType: .string)
+        simulatePaste()
+
+        try? await Task.sleep(for: .milliseconds(75))
+
+        if canRestoreClipboard(afterPasteUsing: preState) {
+            if preserveClipboard {
+                restoreClipboard(savedItems, to: pasteboard)
+            }
+            if hadFocusedTextField {
+                try? await Task.sleep(for: .milliseconds(50))
+                simulateReturn()
+            }
+            return .pasted
+        }
+
+        // Step 3: Retry paste once
+        try? await Task.sleep(for: .milliseconds(75))
+
+        let preRetryState = capturePasteVerificationState()
+        simulatePaste()
+
+        try? await Task.sleep(for: .milliseconds(75))
+
+        if preserveClipboard {
+            restoreClipboard(savedItems, to: pasteboard)
+        }
+
+        _ = canRestoreClipboard(afterPasteUsing: preRetryState)
+
+        if hadFocusedTextField {
+            try? await Task.sleep(for: .milliseconds(50))
+            simulateReturn()
+        }
+
+        return .pasted
+    }
+
     func focusedElementPosition() -> CGPoint? {
         let systemWide = AXUIElementCreateSystemWide()
 
