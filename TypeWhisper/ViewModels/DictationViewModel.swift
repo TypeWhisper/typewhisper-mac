@@ -364,6 +364,9 @@ final class DictationViewModel: ObservableObject {
         recentTranscriptionPaletteHandler.getPreserveClipboard = { [weak self] in
             self?.preserveClipboard ?? false
         }
+        recentTranscriptionPaletteHandler.getIsMinimalCompactModeEnabled = { [weak self] in
+            self?.isMinimalCompactModeEnabled ?? false
+        }
 
         settingsHandler.onObjectWillChange = { [weak self] in
             self?.objectWillChange.send()

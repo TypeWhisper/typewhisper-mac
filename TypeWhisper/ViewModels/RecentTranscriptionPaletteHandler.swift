@@ -10,6 +10,7 @@ final class RecentTranscriptionPaletteHandler {
 
     var onShowNotchFeedback: ((String, String, TimeInterval, Bool, String?) -> Void)?
     var getPreserveClipboard: (() -> Bool)?
+    var getIsMinimalCompactModeEnabled: (() -> Bool)?
 
     init(
         textInsertionService: TextInsertionService,
@@ -82,7 +83,10 @@ final class RecentTranscriptionPaletteHandler {
                 preserveClipboard: getPreserveClipboard?() ?? false,
                 autoEnter: false
             )
-            onShowNotchFeedback?(String(localized: "Text inserted"), "checkmark.circle.fill", 2.5, false, nil)
+            let suppressFeedback = getIsMinimalCompactModeEnabled?() ?? false
+            if !suppressFeedback {
+                onShowNotchFeedback?(String(localized: "Text inserted"), "checkmark.circle.fill", 2.5, false, nil)
+            }
         } catch {
             onShowNotchFeedback?(error.localizedDescription, "xmark.circle.fill", 2.5, true, "recentTranscriptions")
         }
