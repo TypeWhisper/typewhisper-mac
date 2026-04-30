@@ -15,6 +15,9 @@ final class FloatingPanelSpacePolicyTests: XCTestCase {
         XCTAssertFalse(
             FloatingPanelSpacePolicy.indicatorCollectionBehavior.contains(.fullScreenAuxiliary)
         )
+        XCTAssertTrue(
+            FloatingPanelSpacePolicy.indicatorCollectionBehavior.contains(.fullScreenNone)
+        )
     }
 
     func testSelectionPaletteStillSupportsFullscreenUsage() {

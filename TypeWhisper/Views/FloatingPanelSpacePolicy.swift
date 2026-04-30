@@ -8,6 +8,7 @@ enum FloatingPanelSpacePolicy {
 
     static let indicatorCollectionBehavior: NSWindow.CollectionBehavior = [
         .canJoinAllSpaces,
+        .fullScreenNone,
         .stationary,
         .ignoresCycle
     ]
