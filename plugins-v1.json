@@ -1457,6 +1457,33 @@
       "supportedArchitectures": [
         "arm64"
       ]
+    },
+    {
+      "id": "com.typewhisper.filler-words",
+      "name": "Filler Words",
+      "author": "TypeWhisper",
+      "description": "",
+      "descriptions": {},
+      "category": "post-processor",
+      "downloadCount": 0,
+      "iconSystemName": "text.badge.minus",
+      "requiresAPIKey": false,
+      "releases": [
+        {
+          "version": "1.0.0",
+          "minHostVersion": "1.0.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 78119,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-filler-words-v1.0.0/FillerWordsPlugin.zip",
+          "minOSVersion": "14.0"
+        }
+      ],
+      "version": "1.0.0",
+      "minHostVersion": "1.0.0",
+      "sdkCompatibilityVersion": "v1",
+      "size": 78119,
+      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-filler-words-v1.0.0/FillerWordsPlugin.zip",
+      "minOSVersion": "14.0"
     }
   ]
 }
