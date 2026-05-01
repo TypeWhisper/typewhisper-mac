@@ -73,6 +73,58 @@ final class StreamingHandlerTests: XCTestCase {
         }
     }
 
+    private actor SlowPreviewFallbackRecorder {
+        private var activeTranscriptions = 0
+        private var maxConcurrentTranscriptions = 0
+        private var prompts: [String?] = []
+
+        func begin(prompt: String?) {
+            activeTranscriptions += 1
+            maxConcurrentTranscriptions = max(maxConcurrentTranscriptions, activeTranscriptions)
+            prompts.append(prompt)
+        }
+
+        func end() {
+            activeTranscriptions -= 1
+        }
+
+        func snapshot() -> (callCount: Int, maxConcurrentTranscriptions: Int, prompts: [String?]) {
+            (prompts.count, maxConcurrentTranscriptions, prompts)
+        }
+    }
+
+    private final class MockPreviewFallbackOptOutPlugin: NSObject, TranscriptionEnginePlugin, TranscriptPreviewFallbackPolicyProviding, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.preview-opt-out" }
+        static var pluginName: String { "Mock Preview Opt Out" }
+
+        var providerId: String { "mock-preview-opt-out" }
+        var providerDisplayName: String { "Mock Preview Opt Out" }
+        var isConfigured: Bool { true }
+        var transcriptionModels: [PluginModelInfo] { [] }
+        var selectedModelId: String? { nil }
+        var supportsTranslation: Bool { false }
+        var supportsStreaming: Bool { false }
+        var supportedLanguages: [String] { ["en"] }
+        var allowsTranscriptPreviewFallback: Bool { false }
+
+        private let recorder = SlowPreviewFallbackRecorder()
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+        func selectModel(_ modelId: String) {}
+
+        func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+            await recorder.begin(prompt: prompt)
+            try await Task.sleep(for: .milliseconds(500))
+            await recorder.end()
+            return PluginTranscriptionResult(text: "final-\(prompt ?? "none")", detectedLanguage: language)
+        }
+
+        func snapshot() async -> (callCount: Int, maxConcurrentTranscriptions: Int, prompts: [String?]) {
+            await recorder.snapshot()
+        }
+    }
+
     private final class MockHintPlugin: NSObject, LanguageHintTranscriptionEnginePlugin, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.hints" }
         static var pluginName: String { "Mock Hints" }
@@ -506,6 +558,71 @@ final class StreamingHandlerTests: XCTestCase {
 
         XCTAssertEqual(finalRequestedWindow, 10)
         XCTAssertEqual(plugin.recordedSampleCounts, [16_000])
+    }
+
+    func testPreviewFallbackOptOutSkipsIntermediateWorkAndAllowsFinalTranscription() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockPreviewFallbackOptOutPlugin()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.preview-opt-out",
+                    name: "Mock Preview Opt Out",
+                    version: "1.0.0",
+                    principalClass: "MockPreviewFallbackOptOutPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+
+        let handler = StreamingHandler(
+            modelManager: modelManager,
+            bufferProvider: {
+                XCTFail("full buffer provider should not be used for fallback previews")
+                return Array(repeating: 0.5, count: 160_000)
+            },
+            recentBufferProvider: { _ in Array(repeating: 0.5, count: 16_000) },
+            bufferDeltaProvider: { _ in ([], 0) },
+            bufferedDurationProvider: { 10.0 }
+        )
+
+        handler.start(
+            streamPrompt: "Preview Terms",
+            engineOverrideId: plugin.providerId,
+            selectedProviderId: plugin.providerId,
+            languageSelection: .exact("en"),
+            task: .transcribe,
+            cloudModelOverride: nil,
+            allowLiveTranscription: true,
+            stateCheck: { true }
+        )
+
+        try await Task.sleep(for: .milliseconds(3400))
+        let liveResult = await handler.finish()
+        let finalResult = try await modelManager.transcribe(
+            audioSamples: Array(repeating: 0.5, count: 16_000),
+            languageSelection: .exact("en"),
+            task: .transcribe,
+            engineOverrideId: plugin.providerId,
+            cloudModelOverride: nil,
+            prompt: "Final Terms"
+        )
+        let snapshot = await plugin.snapshot()
+
+        XCTAssertNil(liveResult)
+        XCTAssertEqual(finalResult.text, "final-Final Terms")
+        XCTAssertEqual(snapshot.callCount, 1)
+        XCTAssertEqual(snapshot.maxConcurrentTranscriptions, 1)
+        XCTAssertEqual(snapshot.prompts, ["Final Terms"])
     }
 
     func testLiveSessionConsumesOnlyIncrementalAudioDeltas() async throws {

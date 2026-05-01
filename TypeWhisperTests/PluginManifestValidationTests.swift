@@ -381,6 +381,13 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         XCTAssertEqual(plugin.huggingFaceToken, "hf_parakeet_saved")
     }
 
+    func testParakeetDisablesTranscriptPreviewFallback() throws {
+        let plugin = ParakeetPlugin()
+        let fallbackPolicy = try XCTUnwrap(plugin as? any TranscriptPreviewFallbackPolicyProviding)
+
+        XCTAssertFalse(fallbackPolicy.allowsTranscriptPreviewFallback)
+    }
+
     func testParakeetDictionaryTermsSupportReflectsStoredBoostingPreference() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

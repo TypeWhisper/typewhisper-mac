@@ -144,6 +144,14 @@ final class ModelManagerService: ObservableObject {
         return loadedPlugin.manifest.requiresAPIKey == true
     }
 
+    func allowsTranscriptPreviewFallback(engineOverrideId: String? = nil, selectedProviderId: String? = nil) -> Bool {
+        guard let providerId = engineOverrideId ?? selectedProviderId ?? self.selectedProviderId,
+              let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
+            return false
+        }
+        return (plugin as? any TranscriptPreviewFallbackPolicyProviding)?.allowsTranscriptPreviewFallback ?? true
+    }
+
     /// Resolve display name for a given engine/model override combination
     func resolvedModelDisplayName(engineOverrideId: String? = nil, cloudModelOverride: String? = nil) -> String? {
         let providerId = engineOverrideId ?? selectedProviderId

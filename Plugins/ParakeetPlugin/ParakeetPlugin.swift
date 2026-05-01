@@ -7,7 +7,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(ParakeetPlugin)
-final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, @unchecked Sendable {
+final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, TranscriptPreviewFallbackPolicyProviding, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.parakeet"
     static let pluginName = "Parakeet"
     private static let logger = Logger(subsystem: "com.typewhisper.plugin.parakeet", category: "Transcription")
@@ -80,6 +80,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
     }
 
     var selectedModelId: String? { loadedModelId }
+    var allowsTranscriptPreviewFallback: Bool { false }
 
     func selectModel(_ modelId: String) {
         guard let version = ParakeetVersion.from(modelId: modelId) else { return }

@@ -388,6 +388,14 @@ public protocol TranscriptionModelCatalogProviding: TranscriptionEnginePlugin {
     var availableModels: [PluginModelInfo] { get }
 }
 
+public protocol TranscriptPreviewFallbackPolicyProviding: TranscriptionEnginePlugin {
+    var allowsTranscriptPreviewFallback: Bool { get }
+}
+
+public extension TranscriptPreviewFallbackPolicyProviding {
+    var allowsTranscriptPreviewFallback: Bool { true }
+}
+
 public extension TranscriptionEnginePlugin {
     var modelCatalog: [PluginModelInfo] {
         (self as? any TranscriptionModelCatalogProviding)?.availableModels ?? transcriptionModels
