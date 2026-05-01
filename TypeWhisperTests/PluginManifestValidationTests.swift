@@ -382,8 +382,7 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
     }
 
     func testParakeetDisablesTranscriptPreviewFallback() throws {
-        let plugin = ParakeetPlugin()
-        let fallbackPolicy = try XCTUnwrap(plugin as? any TranscriptPreviewFallbackPolicyProviding)
+        let fallbackPolicy: any TranscriptPreviewFallbackPolicyProviding = ParakeetPlugin()
 
         XCTAssertFalse(fallbackPolicy.allowsTranscriptPreviewFallback)
     }
