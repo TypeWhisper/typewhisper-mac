@@ -90,7 +90,6 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     @Published private(set) var recoveryError: AudioRecordingError?
     var hasMicrophonePermissionOverride: Bool?
     var inputAvailabilityOverride: ((AudioDeviceID?) -> Bool)?
-    var bluetoothRouteStabilizationOverride: ((AudioDeviceID?, AudioDeviceID?, String) throws -> Void)?
     var startRecordingOverride: (() throws -> Void)?
     var stopRecordingOverride: ((StopPolicy) async -> [Float])?
 
@@ -142,27 +141,25 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private let recoveryCoordinator = AudioEngineRecoveryCoordinator()
     private let outputVolumeGuard: AudioOutputVolumeGuard
     private let inputActivationGuard: AudioInputDeviceActivating
+    private let bluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing
+    private let inputReadinessChecker: AudioInputReadinessChecking
     private let initialInputTapSeenLock = OSAllocatedUnfairLock(initialState: false)
     private var _lastStopGraceCaptureApplied = false
 
     static let targetSampleRate: Double = 16000
     private static let captureTapFrames: AVAudioFrameCount = 1024
     private static let engineTeardownRetentionInterval: TimeInterval = 0.3
-    private static let bluetoothInputReadinessTimeout: TimeInterval = 1.0
-    private static let bluetoothInputReadinessPollInterval: TimeInterval = 0.01
-
-    #if DEBUG
-    var inputReadinessProbeOverride: (() -> Bool)?
-    var inputReadinessTimeoutOverride: TimeInterval?
-    var inputReadinessPollIntervalOverride: TimeInterval?
-    #endif
 
     init(
         outputVolumeGuard: AudioOutputVolumeGuard = AudioOutputVolumeGuard(),
-        inputActivationGuard: AudioInputDeviceActivating = AudioInputDeviceActivationGuard()
+        inputActivationGuard: AudioInputDeviceActivating = AudioInputDeviceActivationGuard(),
+        bluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing = CoreAudioBluetoothInputRouteStabilizer(),
+        inputReadinessChecker: AudioInputReadinessChecking = BluetoothInputReadinessChecker()
     ) {
         self.outputVolumeGuard = outputVolumeGuard
         self.inputActivationGuard = inputActivationGuard
+        self.bluetoothInputRouteStabilizer = bluetoothInputRouteStabilizer
+        self.inputReadinessChecker = inputReadinessChecker
         recoveryNotificationQueue.underlyingQueue = recoveryQueue
     }
 
@@ -283,7 +280,6 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         do {
             try waitForBluetoothRouteStabilizationIfNeeded(
                 inputDeviceID: routeActivationRequest.inputDeviceID,
-                outputDeviceID: nil,
                 usesBluetoothTransport: routeActivationRequest.usesBluetoothTransport,
                 reason: "recording-start"
             )
@@ -709,18 +705,13 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
     private func waitForBluetoothRouteStabilizationIfNeeded(
         inputDeviceID: AudioDeviceID?,
-        outputDeviceID: AudioDeviceID?,
         usesBluetoothTransport: Bool,
         reason: String
     ) throws {
         guard usesBluetoothTransport else { return }
-        if let bluetoothRouteStabilizationOverride {
-            try bluetoothRouteStabilizationOverride(inputDeviceID, outputDeviceID, reason)
-            return
-        }
 
-        guard BluetoothAudioRouteStabilizer.waitForActivatedDefaultRoute(
-            inputDeviceID: inputDeviceID,
+        guard bluetoothInputRouteStabilizer.waitForActivatedDefaultInput(
+            deviceID: inputDeviceID,
             reason: reason
         ) else {
             throw AudioRecordingError.audioRoutingConflict
@@ -733,47 +724,12 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     ) throws {
         guard requiresInitialInputReadiness else { return }
 
-        #if DEBUG
-        let timeout = inputReadinessTimeoutOverride ?? Self.bluetoothInputReadinessTimeout
-        let pollInterval = inputReadinessPollIntervalOverride ?? Self.bluetoothInputReadinessPollInterval
-        let probe = inputReadinessProbeOverride ?? { [weak self] in
-            self?.hasCapturedInitialInput ?? false
-        }
-        #else
-        let timeout = Self.bluetoothInputReadinessTimeout
-        let pollInterval = Self.bluetoothInputReadinessPollInterval
-        let probe = { [weak self] in
-            self?.hasCapturedInitialInput ?? false
-        }
-        #endif
-
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if probe() {
-                logger.info("\(label, privacy: .public) Bluetooth input delivered initial non-silent audio")
-                return
-            }
-            if let isEngineRunning, !isEngineRunning() {
-                throw makeBluetoothStartupRouteChangeError(label: label)
-            }
-            Thread.sleep(forTimeInterval: pollInterval)
-        }
-
-        if let isEngineRunning, !isEngineRunning() {
-            throw makeBluetoothStartupRouteChangeError(label: label)
-        }
-
-        logger.error("\(label, privacy: .public) Bluetooth input did not deliver audio within \(timeout, privacy: .public)s after engine start")
-        throw AudioRecordingError.noAudioData
-    }
-
-    private func makeBluetoothStartupRouteChangeError(label: String) -> NSError {
-        NSError(
-            domain: AudioEngineRecoveryErrorDomains.transientFormatMismatch,
-            code: 0,
-            userInfo: [
-                NSLocalizedDescriptionKey: "\(label) Bluetooth input route changed before initial audio"
-            ]
+        try inputReadinessChecker.waitForInitialInput(
+            label: label,
+            hasCapturedInitialInput: { [weak self] in
+                self?.hasCapturedInitialInput ?? false
+            },
+            isEngineRunning: isEngineRunning
         )
     }
 
@@ -999,6 +955,68 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             code: 0,
             userInfo: [
                 NSLocalizedDescriptionKey: "Format mismatch before installTap: expected \(expected.sampleRate) Hz/\(expected.channelCount) ch, got \(current.sampleRate) Hz/\(current.channelCount) ch"
+            ]
+        )
+    }
+}
+
+protocol AudioInputReadinessChecking: AnyObject {
+    func waitForInitialInput(
+        label: String,
+        hasCapturedInitialInput: () -> Bool,
+        isEngineRunning: (() -> Bool)?
+    ) throws
+}
+
+final class BluetoothInputReadinessChecker: AudioInputReadinessChecking {
+    private let timeout: TimeInterval
+    private let pollInterval: TimeInterval
+    private let now: () -> TimeInterval
+    private let sleep: (TimeInterval) -> Void
+
+    init(
+        timeout: TimeInterval = 1.0,
+        pollInterval: TimeInterval = 0.01,
+        now: @escaping () -> TimeInterval = { CFAbsoluteTimeGetCurrent() },
+        sleep: @escaping (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) }
+    ) {
+        self.timeout = timeout
+        self.pollInterval = pollInterval
+        self.now = now
+        self.sleep = sleep
+    }
+
+    func waitForInitialInput(
+        label: String,
+        hasCapturedInitialInput: () -> Bool,
+        isEngineRunning: (() -> Bool)?
+    ) throws {
+        let deadline = now() + timeout
+        while now() < deadline {
+            if hasCapturedInitialInput() {
+                logger.info("\(label, privacy: .public) Bluetooth input delivered initial non-silent audio")
+                return
+            }
+            if let isEngineRunning, !isEngineRunning() {
+                throw makeStartupRouteChangeError(label: label)
+            }
+            sleep(min(pollInterval, max(0, deadline - now())))
+        }
+
+        if let isEngineRunning, !isEngineRunning() {
+            throw makeStartupRouteChangeError(label: label)
+        }
+
+        logger.error("\(label, privacy: .public) Bluetooth input did not deliver audio within \(self.timeout, privacy: .public)s after engine start")
+        throw AudioRecordingService.AudioRecordingError.noAudioData
+    }
+
+    private func makeStartupRouteChangeError(label: String) -> NSError {
+        NSError(
+            domain: AudioEngineRecoveryErrorDomains.transientFormatMismatch,
+            code: 0,
+            userInfo: [
+                NSLocalizedDescriptionKey: "\(label) Bluetooth input route changed before initial audio"
             ]
         )
     }
