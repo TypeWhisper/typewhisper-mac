@@ -17,7 +17,7 @@ final class AudioRecorderViewModel: ObservableObject {
         return instance
     }
 
-    enum RecorderState {
+    enum RecorderState: Equatable {
         case idle, recording, finalizing
     }
 
@@ -82,6 +82,13 @@ final class AudioRecorderViewModel: ObservableObject {
     var isModelReady: Bool { modelManager.isModelReady }
     var supportsTranslation: Bool { modelManager.supportsTranslation }
     var selectedLanguage: String? { languageSelection.requestedLanguage }
+    var canToggleRecording: Bool {
+        Self.canToggleRecording(
+            state: state,
+            micEnabled: micEnabled,
+            systemAudioEnabled: systemAudioEnabled
+        )
+    }
 
     private let recorderService: AudioRecorderService
     private let modelManager: ModelManagerService
@@ -180,6 +187,34 @@ final class AudioRecorderViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] value in self?.systemLevel = value }
             .store(in: &cancellables)
+    }
+
+    nonisolated static func canToggleRecording(
+        state: RecorderState,
+        micEnabled: Bool,
+        systemAudioEnabled: Bool
+    ) -> Bool {
+        switch state {
+        case .idle:
+            micEnabled || systemAudioEnabled
+        case .recording:
+            true
+        case .finalizing:
+            false
+        }
+    }
+
+    func toggleRecording() {
+        guard canToggleRecording else { return }
+
+        switch state {
+        case .idle:
+            startRecording()
+        case .recording:
+            stopRecording()
+        case .finalizing:
+            break
+        }
     }
 
     func startRecording() {

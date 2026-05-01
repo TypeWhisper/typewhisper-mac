@@ -27,7 +27,7 @@ final class PromptPaletteHandler {
     private let promptPaletteController: any PromptPaletteControlling
     private let textInsertionService: TextInsertionService
     private let workflowService: WorkflowService
-    private let promptProcessingService: PromptProcessingService
+    private let workflowTextProcessingService: WorkflowTextProcessingService
     private let soundService: SoundService
     private let accessibilityAnnouncementService: AccessibilityAnnouncementService
 
@@ -44,6 +44,7 @@ final class PromptPaletteHandler {
         textInsertionService: TextInsertionService,
         workflowService: WorkflowService,
         promptProcessingService: PromptProcessingService,
+        workflowTextProcessingService: WorkflowTextProcessingService? = nil,
         soundService: SoundService,
         accessibilityAnnouncementService: AccessibilityAnnouncementService,
         promptPaletteController: any PromptPaletteControlling = PromptPaletteController()
@@ -51,7 +52,12 @@ final class PromptPaletteHandler {
         self.promptPaletteController = promptPaletteController
         self.textInsertionService = textInsertionService
         self.workflowService = workflowService
-        self.promptProcessingService = promptProcessingService
+        self.workflowTextProcessingService = workflowTextProcessingService
+            ?? WorkflowTextProcessingService(
+                promptProcessingService: promptProcessingService,
+                translationService: nil,
+                workflowService: workflowService
+            )
         self.soundService = soundService
         self.accessibilityAnnouncementService = accessibilityAnnouncementService
     }
@@ -159,18 +165,10 @@ final class PromptPaletteHandler {
         Task { [weak self] in
             guard let self else { return }
             do {
-                let result: String
-                if let systemPrompt = workflow.systemPrompt() {
-                    result = try await promptProcessingService.process(
-                        prompt: systemPrompt,
-                        text: ctx.text,
-                        providerOverride: workflow.behavior.providerId,
-                        cloudModelOverride: workflow.behavior.cloudModel,
-                        temperatureDirective: workflow.behavior.temperatureDirective
-                    )
-                } else {
-                    result = ctx.text
-                }
+                let result = try await workflowTextProcessingService.process(
+                    workflow: workflow,
+                    text: ctx.text
+                )
                 guard !Task.isCancelled else { return }
 
                 // Route to action plugin if configured

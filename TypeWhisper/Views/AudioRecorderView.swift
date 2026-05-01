@@ -23,11 +23,7 @@ struct AudioRecorderView: View {
 
                     // Record/Stop button
                     Button {
-                        if viewModel.state == .recording {
-                            viewModel.stopRecording()
-                        } else if viewModel.state == .idle {
-                            viewModel.startRecording()
-                        }
+                        viewModel.toggleRecording()
                     } label: {
                         HStack(spacing: 8) {
                             Image(systemName: viewModel.state == .recording ? "stop.fill" : "record.circle")
@@ -41,7 +37,7 @@ struct AudioRecorderView: View {
                     .buttonStyle(.borderedProminent)
                     .tint(viewModel.state == .recording ? .red : .accentColor)
                     .controlSize(.large)
-                    .disabled(viewModel.state == .finalizing || (!viewModel.micEnabled && !viewModel.systemAudioEnabled))
+                    .disabled(!viewModel.canToggleRecording)
 
                     // Level meters
                     if viewModel.state == .recording {

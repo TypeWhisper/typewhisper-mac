@@ -265,7 +265,7 @@ final class MenuBarGroupingTests: XCTestCase {
     func testMenuBarSectionsUseExpectedOrderAndLocalizedKeys() {
         XCTAssertEqual(
             MenuBarMenuSection.allCases.map(\.titleLocalizationKey),
-            ["General", "Transcription", "Updates"]
+            ["General", "Recorder", "Transcription", "Updates"]
         )
     }
 
@@ -275,12 +275,68 @@ final class MenuBarGroupingTests: XCTestCase {
             [.settings, .history, .errorLog]
         )
         XCTAssertEqual(
+            MenuBarMenuSection.recorder.items,
+            [.toggleRecorder]
+        )
+        XCTAssertEqual(
             MenuBarMenuSection.transcription.items,
             [.transcribeFile, .recentTranscriptions, .copyLastTranscription, .readBackLastTranscription]
         )
         XCTAssertEqual(
             MenuBarMenuSection.updates.items,
             [.checkForUpdates]
+        )
+    }
+}
+
+final class RecorderMenuActionStateTests: XCTestCase {
+    func testRecorderToggleIsEnabledWhenIdleAndMicIsEnabled() {
+        XCTAssertTrue(
+            AudioRecorderViewModel.canToggleRecording(
+                state: .idle,
+                micEnabled: true,
+                systemAudioEnabled: false
+            )
+        )
+    }
+
+    func testRecorderToggleIsEnabledWhenIdleAndSystemAudioIsEnabled() {
+        XCTAssertTrue(
+            AudioRecorderViewModel.canToggleRecording(
+                state: .idle,
+                micEnabled: false,
+                systemAudioEnabled: true
+            )
+        )
+    }
+
+    func testRecorderToggleIsEnabledWhileRecording() {
+        XCTAssertTrue(
+            AudioRecorderViewModel.canToggleRecording(
+                state: .recording,
+                micEnabled: false,
+                systemAudioEnabled: false
+            )
+        )
+    }
+
+    func testRecorderToggleIsDisabledWhileFinalizing() {
+        XCTAssertFalse(
+            AudioRecorderViewModel.canToggleRecording(
+                state: .finalizing,
+                micEnabled: true,
+                systemAudioEnabled: true
+            )
+        )
+    }
+
+    func testRecorderToggleIsDisabledWhenIdleWithoutEnabledSources() {
+        XCTAssertFalse(
+            AudioRecorderViewModel.canToggleRecording(
+                state: .idle,
+                micEnabled: false,
+                systemAudioEnabled: false
+            )
         )
     }
 }

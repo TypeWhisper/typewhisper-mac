@@ -6073,6 +6073,38 @@
         }
       }
     },
+    "recorder.shortcut.description" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Startet oder stoppt den Recorder mit deinen gespeicherten Mikrofon- und Systemaudio-Einstellungen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start or stop the Recorder with your saved microphone and system audio settings."
+          }
+        }
+      }
+    },
+    "recorder.shortcut.title" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recorder-Shortcut"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recorder shortcut"
+          }
+        }
+      }
+    },
     "recorder.systemAudio" : {
       "localizations" : {
         "de" : {

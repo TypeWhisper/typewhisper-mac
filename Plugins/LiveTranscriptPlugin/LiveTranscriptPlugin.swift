@@ -22,7 +22,7 @@ final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendab
     private var viewModel: LiveTranscriptViewModel?
     private var autoCloseTask: Task<Void, Never>?
 
-    fileprivate var _autoOpen: Bool = true
+    fileprivate var _autoOpen: Bool = false
     fileprivate var _fontSize: Double = 14.0
     private let autoCloseDelay: Double = 4.0
 
@@ -30,6 +30,7 @@ final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendab
     private var globalMonitor: Any?
     private var localMonitor: Any?
     private var hotkeyIsDown: Bool = false
+    private var streamingDisplayActive = false
 
     required override init() {
         super.init()
@@ -37,7 +38,7 @@ final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendab
 
     func activate(host: HostServices) {
         self.host = host
-        _autoOpen = host.userDefault(forKey: "autoOpen") as? Bool ?? true
+        _autoOpen = host.userDefault(forKey: "autoOpen") as? Bool ?? false
         _fontSize = host.userDefault(forKey: "fontSize") as? Double ?? 14.0
 
         if let data = host.userDefault(forKey: "toggleHotkey") as? Data {
@@ -49,7 +50,7 @@ final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendab
             await self?.handleEvent(event)
         }
 
-        host.setStreamingDisplayActive(true)
+        setStreamingDisplayActiveIfNeeded(_autoOpen)
     }
 
     func deactivate() {
@@ -57,7 +58,7 @@ final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendab
             host?.eventBus.unsubscribe(id: id)
             subscriptionId = nil
         }
-        host?.setStreamingDisplayActive(false)
+        setStreamingDisplayActiveIfNeeded(false)
         tearDownHotkeyMonitor()
         autoCloseTask?.cancel()
         Task { @MainActor [weak self] in
@@ -70,6 +71,24 @@ final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendab
 
     var settingsView: AnyView? {
         AnyView(LiveTranscriptSettingsView(plugin: self))
+    }
+
+    @MainActor
+    func updateAutoOpenPreference(_ enabled: Bool) {
+        _autoOpen = enabled
+        host?.setUserDefault(enabled, forKey: "autoOpen")
+        refreshStreamingDisplayActive()
+    }
+
+    private func setStreamingDisplayActiveIfNeeded(_ active: Bool) {
+        guard streamingDisplayActive != active else { return }
+        streamingDisplayActive = active
+        host?.setStreamingDisplayActive(active)
+    }
+
+    @MainActor
+    private func refreshStreamingDisplayActive() {
+        setStreamingDisplayActiveIfNeeded(_autoOpen || panel?.isVisible == true)
     }
 
     // MARK: - Event Handling
@@ -104,6 +123,7 @@ final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendab
             panel = LiveTranscriptPanel(viewModel: vm, fontSize: _fontSize)
         }
         panel?.orderFront(nil)
+        refreshStreamingDisplayActive()
     }
 
     @MainActor
@@ -112,6 +132,7 @@ final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendab
         if let panel, panel.isVisible {
             panel.close()
             self.panel = nil
+            refreshStreamingDisplayActive()
         } else {
             showPanel()
         }
@@ -125,6 +146,7 @@ final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendab
             guard !Task.isCancelled else { return }
             self?.panel?.close()
             self?.panel = nil
+            self?.refreshStreamingDisplayActive()
         }
     }
 
@@ -549,7 +571,7 @@ private struct ScrollWheelDetector: NSViewRepresentable {
 
 private struct LiveTranscriptSettingsView: View {
     let plugin: LiveTranscriptPlugin
-    @State private var autoOpen: Bool = true
+    @State private var autoOpen: Bool = false
     @State private var fontSize: Double = 14.0
     @State private var currentHotkey: PluginHotkey?
     @State private var isRecording: Bool = false
@@ -567,8 +589,7 @@ private struct LiveTranscriptSettingsView: View {
                 }
             }
             .onChange(of: autoOpen) { _, newValue in
-                plugin._autoOpen = newValue
-                plugin.host?.setUserDefault(newValue, forKey: "autoOpen")
+                plugin.updateAutoOpenPreference(newValue)
             }
 
             Divider()

@@ -7,7 +7,7 @@ import TypeWhisperPluginSDK
 
 final class APIRouterAndHandlersTests: XCTestCase {
     @objc(APIRouterMockLLMProviderPlugin)
-    private final class MockLLMProviderPlugin: NSObject, LLMProviderPlugin, LLMProviderSetupStatusProviding, LLMTemperatureControllableProvider, @unchecked Sendable {
+    private final class MockLLMProviderPlugin: NSObject, LLMProviderPlugin, LLMProviderSetupStatusProviding, LLMTemperatureControllableProvider, PluginSettingsActivityReporting, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.llm" }
         static var pluginName: String { "Mock LLM" }
 
@@ -18,8 +18,21 @@ final class APIRouterAndHandlersTests: XCTestCase {
         var configuredProviderName = "Gemini"
         var requiresExternalCredentials = true
         var unavailableReason: String?
+        var restoreMakesAvailable = false
+        nonisolated(unsafe) private var _lastSystemPrompt: String?
+        nonisolated(unsafe) private var _lastUserText: String?
         nonisolated(unsafe) private var _lastRequestedModel: String?
         nonisolated(unsafe) private var _lastTemperatureDirective: PluginLLMTemperatureDirective?
+        nonisolated(unsafe) private var _autoUnloadCount = 0
+        nonisolated(unsafe) private var _restoreCount = 0
+
+        var lastSystemPrompt: String? {
+            requestLock.withLock { _lastSystemPrompt }
+        }
+
+        var lastUserText: String? {
+            requestLock.withLock { _lastUserText }
+        }
 
         var lastRequestedModel: String? {
             requestLock.withLock { _lastRequestedModel }
@@ -27,6 +40,14 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         var lastTemperatureDirective: PluginLLMTemperatureDirective? {
             requestLock.withLock { _lastTemperatureDirective }
+        }
+
+        var autoUnloadCount: Int {
+            requestLock.withLock { _autoUnloadCount }
+        }
+
+        var restoreCount: Int {
+            requestLock.withLock { _restoreCount }
         }
 
         required override init() {}
@@ -37,9 +58,12 @@ final class APIRouterAndHandlersTests: XCTestCase {
         var providerName: String { configuredProviderName }
         var isAvailable: Bool { available }
         var supportedModels: [PluginModelInfo] { models }
+        var currentSettingsActivity: PluginSettingsActivity? { nil }
 
         func process(systemPrompt: String, userText: String, model: String?) async throws -> String {
             requestLock.withLock {
+                _lastSystemPrompt = systemPrompt
+                _lastUserText = userText
                 _lastRequestedModel = model
             }
             return responseText
@@ -52,10 +76,42 @@ final class APIRouterAndHandlersTests: XCTestCase {
             temperatureDirective: PluginLLMTemperatureDirective
         ) async throws -> String {
             requestLock.withLock {
+                _lastSystemPrompt = systemPrompt
+                _lastUserText = userText
                 _lastRequestedModel = model
                 _lastTemperatureDirective = temperatureDirective
             }
             return responseText
+        }
+
+        @objc func triggerAutoUnload() {
+            requestLock.withLock {
+                _autoUnloadCount += 1
+            }
+        }
+
+        @objc func triggerRestoreModel() {
+            requestLock.withLock {
+                _restoreCount += 1
+            }
+            if restoreMakesAvailable {
+                available = true
+            }
+        }
+    }
+
+    @MainActor
+    private final class MemoryRetrieverSpy: MemoryRetrieving {
+        private(set) var requestedTexts: [String] = []
+        var context = """
+        <memory_context>
+        The user prefers concise wording.
+        </memory_context>
+        """
+
+        func retrieveRelevantMemories(for text: String) async -> String {
+            requestedTexts.append(text)
+            return context
         }
     }
 
@@ -2426,6 +2482,138 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    func testPromptProcessingInjectsMemoryByDefault() async throws {
+        let providerKey = "llmProviderType"
+        let modelKey = "llmCloudModel"
+        let originalProvider = UserDefaults.standard.object(forKey: providerKey)
+        let originalModel = UserDefaults.standard.object(forKey: modelKey)
+        defer {
+            if let originalProvider {
+                UserDefaults.standard.set(originalProvider, forKey: providerKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: providerKey)
+            }
+            if let originalModel {
+                UserDefaults.standard.set(originalModel, forKey: modelKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: modelKey)
+            }
+        }
+
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockLLMProviderPlugin()
+        plugin.models = [PluginModelInfo(id: "gemini-2.5-flash", displayName: "Gemini 2.5 Flash")]
+
+        let manifest = PluginManifest(
+            id: "com.typewhisper.mock.llm",
+            name: "Mock LLM",
+            version: "1.0.0",
+            principalClass: "APIRouterMockLLMProviderPlugin"
+        )
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: manifest,
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let memoryRetriever = MemoryRetrieverSpy()
+        let service = PromptProcessingService()
+        service.memoryService = memoryRetriever
+
+        _ = try await service.process(
+            prompt: "Fix grammar.",
+            text: "hello world",
+            providerOverride: "Gemini"
+        )
+
+        XCTAssertEqual(memoryRetriever.requestedTexts, ["hello world"])
+        XCTAssertTrue(plugin.lastSystemPrompt?.contains("<memory_context>") == true)
+        XCTAssertTrue(plugin.lastSystemPrompt?.contains("The user prefers concise wording.") == true)
+        XCTAssertTrue(plugin.lastSystemPrompt?.contains("Fix grammar.") == true)
+        XCTAssertEqual(plugin.lastUserText, "hello world")
+    }
+
+    @MainActor
+    func testWorkflowPromptProcessingSkipsMemoryAndUsesWorkflowBehavior() async throws {
+        let providerKey = "llmProviderType"
+        let modelKey = "llmCloudModel"
+        let originalProvider = UserDefaults.standard.object(forKey: providerKey)
+        let originalModel = UserDefaults.standard.object(forKey: modelKey)
+        defer {
+            if let originalProvider {
+                UserDefaults.standard.set(originalProvider, forKey: providerKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: providerKey)
+            }
+            if let originalModel {
+                UserDefaults.standard.set(originalModel, forKey: modelKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: modelKey)
+            }
+        }
+
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockLLMProviderPlugin()
+        plugin.models = [
+            PluginModelInfo(id: "gemini-2.5-flash", displayName: "Gemini 2.5 Flash"),
+            PluginModelInfo(id: "gemini-2.5-pro", displayName: "Gemini 2.5 Pro")
+        ]
+
+        let manifest = PluginManifest(
+            id: "com.typewhisper.mock.llm",
+            name: "Mock LLM",
+            version: "1.0.0",
+            principalClass: "APIRouterMockLLMProviderPlugin"
+        )
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: manifest,
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let memoryRetriever = MemoryRetrieverSpy()
+        let service = PromptProcessingService()
+        service.memoryService = memoryRetriever
+
+        let behavior = WorkflowBehavior(
+            providerId: "Gemini",
+            cloudModel: "gemini-2.5-pro",
+            temperatureModeRaw: PluginLLMTemperatureMode.custom.rawValue,
+            temperatureValue: 0.8
+        )
+
+        _ = try await service.processWorkflow(
+            prompt: "Clean up the dictated text.",
+            text: "hello world",
+            behavior: behavior
+        )
+
+        XCTAssertTrue(memoryRetriever.requestedTexts.isEmpty)
+        XCTAssertEqual(plugin.lastSystemPrompt, "Clean up the dictated text.")
+        XCTAssertEqual(plugin.lastUserText, "hello world")
+        XCTAssertEqual(plugin.lastRequestedModel, "gemini-2.5-pro")
+        XCTAssertEqual(plugin.lastTemperatureDirective, .custom(0.8))
+    }
+
+    @MainActor
     func testPromptProcessingRepairsInvalidGlobalCloudModelBeforeRequest() async throws {
         let providerKey = "llmProviderType"
         let modelKey = "llmCloudModel"
@@ -2669,6 +2857,47 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    func testPromptProcessingRestoresLocalProviderBeforeProcessingWhenModelWasAutoUnloaded() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockLLMProviderPlugin()
+        plugin.available = false
+        plugin.configuredProviderName = "Gemma 4 (MLX)"
+        plugin.requiresExternalCredentials = false
+        plugin.restoreMakesAvailable = true
+        plugin.unavailableReason = "Load a Gemma 4 model in Integrations before using it for prompts."
+
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.local-llm",
+                    name: "Mock Local LLM",
+                    version: "1.0.0",
+                    principalClass: "APIRouterMockLLMProviderPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let service = PromptProcessingService()
+        let result = try await service.process(
+            prompt: "Fix grammar",
+            text: "hello world",
+            providerOverride: "Gemma 4 (MLX)"
+        )
+
+        XCTAssertEqual(result, "processed")
+        XCTAssertEqual(plugin.restoreCount, 1)
+    }
+
+    @MainActor
     func testPromptProcessingUsesHighPriorityActivityForLocalProviders() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -2708,6 +2937,162 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         XCTAssertEqual(result, "processed")
         XCTAssertEqual(activityManager.reasons, ["Local prompt processing with Gemma 4 (MLX)"])
+    }
+
+    @MainActor
+    func testPromptProcessingSchedulesImmediateAutoUnloadForLocalProvider() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        defer {
+            if let originalAutoUnload {
+                UserDefaults.standard.set(originalAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            }
+        }
+        UserDefaults.standard.set(-1, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockLLMProviderPlugin()
+        plugin.configuredProviderName = "Gemma 4 (MLX)"
+        plugin.requiresExternalCredentials = false
+
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.local-llm",
+                    name: "Mock Local LLM",
+                    version: "1.0.0",
+                    principalClass: "APIRouterMockLLMProviderPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        let service = PromptProcessingService()
+        service.modelManagerService = modelManager
+
+        let result = try await service.process(
+            prompt: "Fix grammar",
+            text: "hello world",
+            providerOverride: "Gemma 4 (MLX)"
+        )
+
+        XCTAssertEqual(result, "processed")
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(plugin.autoUnloadCount, 1)
+    }
+
+    @MainActor
+    func testPromptProcessingDoesNotAutoUnloadRemoteProvider() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        defer {
+            if let originalAutoUnload {
+                UserDefaults.standard.set(originalAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            }
+        }
+        UserDefaults.standard.set(-1, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockLLMProviderPlugin()
+        plugin.configuredProviderName = "Gemini"
+        plugin.requiresExternalCredentials = true
+
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.llm",
+                    name: "Mock LLM",
+                    version: "1.0.0",
+                    principalClass: "APIRouterMockLLMProviderPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        let service = PromptProcessingService()
+        service.modelManagerService = modelManager
+
+        let result = try await service.process(
+            prompt: "Fix grammar",
+            text: "hello world",
+            providerOverride: "Gemini"
+        )
+
+        XCTAssertEqual(result, "processed")
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(plugin.autoUnloadCount, 0)
+    }
+
+    @MainActor
+    func testPromptProcessingDoesNotAutoUnloadLocalProviderWhenDisabled() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        defer {
+            if let originalAutoUnload {
+                UserDefaults.standard.set(originalAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            }
+        }
+        UserDefaults.standard.set(0, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockLLMProviderPlugin()
+        plugin.configuredProviderName = "Gemma 4 (MLX)"
+        plugin.requiresExternalCredentials = false
+
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.local-llm",
+                    name: "Mock Local LLM",
+                    version: "1.0.0",
+                    principalClass: "APIRouterMockLLMProviderPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        let service = PromptProcessingService()
+        service.modelManagerService = modelManager
+
+        let result = try await service.process(
+            prompt: "Fix grammar",
+            text: "hello world",
+            providerOverride: "Gemma 4 (MLX)"
+        )
+
+        XCTAssertEqual(result, "processed")
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(plugin.autoUnloadCount, 0)
     }
 
     @MainActor
@@ -3602,6 +3987,157 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testRightSpecificModifierComboDoesNotTriggerFromLeftSide() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(try rightCommandRightOptionComboHotkey(), for: .pushToTalk)
+
+        var startCount = 0
+        service.onDictationStart = { startCount += 1 }
+
+        let leftCommandDown = try makeFlagsChangedEvent(
+            keyCode: 0x37,
+            modifierFlags: flags(generic: [.command], deviceKeyCodes: [0x37])
+        )
+        let leftOptionDown = try makeFlagsChangedEvent(
+            keyCode: 0x3A,
+            modifierFlags: flags(generic: [.command, .option], deviceKeyCodes: [0x37, 0x3A])
+        )
+
+        XCTAssertFalse(service.processEventForTesting(leftCommandDown, source: .monitor))
+        XCTAssertFalse(service.processEventForTesting(leftOptionDown, source: .monitor))
+        XCTAssertEqual(startCount, 0)
+    }
+
+    @MainActor
+    func testRightSpecificModifierComboTriggersFromRightSide() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(try rightCommandRightOptionComboHotkey(), for: .pushToTalk)
+
+        var startCount = 0
+        var stopCount = 0
+        service.onDictationStart = { startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+
+        let rightCommandDown = try makeFlagsChangedEvent(
+            keyCode: 0x36,
+            modifierFlags: flags(generic: [.command], deviceKeyCodes: [0x36])
+        )
+        let rightOptionDown = try makeFlagsChangedEvent(
+            keyCode: 0x3D,
+            modifierFlags: flags(generic: [.command, .option], deviceKeyCodes: [0x36, 0x3D])
+        )
+        let finalRelease = try makeFlagsChangedEvent(keyCode: 0x36, modifierFlags: [])
+
+        XCTAssertFalse(service.processEventForTesting(rightCommandDown, source: .monitor))
+        XCTAssertTrue(service.processEventForTesting(rightOptionDown, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+
+        XCTAssertTrue(service.processEventForTesting(finalRelease, source: .monitor))
+        XCTAssertEqual(stopCount, 1)
+    }
+
+    @MainActor
+    func testRightSpecificModifierComboDoesNotTriggerFromMixedSides() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(try rightCommandRightOptionComboHotkey(), for: .pushToTalk)
+
+        var startCount = 0
+        service.onDictationStart = { startCount += 1 }
+
+        let rightCommandDown = try makeFlagsChangedEvent(
+            keyCode: 0x36,
+            modifierFlags: flags(generic: [.command], deviceKeyCodes: [0x36])
+        )
+        let leftOptionDown = try makeFlagsChangedEvent(
+            keyCode: 0x3A,
+            modifierFlags: flags(generic: [.command, .option], deviceKeyCodes: [0x36, 0x3A])
+        )
+
+        XCTAssertFalse(service.processEventForTesting(rightCommandDown, source: .monitor))
+        XCTAssertFalse(service.processEventForTesting(leftOptionDown, source: .monitor))
+        XCTAssertEqual(startCount, 0)
+    }
+
+    @MainActor
+    func testLegacyGenericModifierComboStillTriggersFromLeftAndRightSides() throws {
+        let leftService = HotkeyService()
+        leftService.suspendMonitoring()
+        leftService.setHotkeyForTesting(try legacyCommandOptionComboHotkey(), for: .toggle)
+
+        var leftStartCount = 0
+        leftService.onDictationStart = { leftStartCount += 1 }
+
+        let leftOptionDown = try makeFlagsChangedEvent(
+            keyCode: 0x3A,
+            modifierFlags: flags(generic: [.command, .option], deviceKeyCodes: [0x37, 0x3A])
+        )
+        XCTAssertTrue(leftService.processEventForTesting(leftOptionDown, source: .monitor))
+        XCTAssertEqual(leftStartCount, 1)
+
+        let rightService = HotkeyService()
+        rightService.suspendMonitoring()
+        rightService.setHotkeyForTesting(try legacyCommandOptionComboHotkey(), for: .toggle)
+
+        var rightStartCount = 0
+        rightService.onDictationStart = { rightStartCount += 1 }
+
+        let rightOptionDown = try makeFlagsChangedEvent(
+            keyCode: 0x3D,
+            modifierFlags: flags(generic: [.command, .option], deviceKeyCodes: [0x36, 0x3D])
+        )
+        XCTAssertTrue(rightService.processEventForTesting(rightOptionDown, source: .monitor))
+        XCTAssertEqual(rightStartCount, 1)
+    }
+
+    @MainActor
+    func testSideSpecificModifierComboDisplayNameIncludesSides() throws {
+        let hotkey = try rightCommandRightOptionComboHotkey()
+
+        XCTAssertEqual(HotkeyService.displayName(for: hotkey), "Right Command + Right Option")
+    }
+
+    @MainActor
+    func testSideSpecificModifierComboDisplayNameKeepsFnModifier() throws {
+        let hotkey = UnifiedHotkey(
+            keyCode: UnifiedHotkey.modifierComboKeyCode,
+            modifierFlags: NSEvent.ModifierFlags([.function, .command]).rawValue,
+            isFn: false,
+            modifierKeyCodes: [0x36]
+        )
+
+        XCTAssertEqual(HotkeyService.displayName(for: hotkey), "Fn + Right Command")
+    }
+
+    @MainActor
+    func testGenericModifierComboConflictsWithSideSpecificCombo() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(try legacyCommandOptionComboHotkey(), for: .toggle)
+
+        XCTAssertEqual(
+            service.isHotkeyAssigned(try rightCommandRightOptionComboHotkey(), excluding: .pushToTalk),
+            .toggle
+        )
+    }
+
+    @MainActor
+    func testDistinctSideSpecificModifierCombosDoNotConflict() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(try leftCommandLeftOptionComboHotkey(), for: .toggle)
+
+        XCTAssertNil(service.isHotkeyAssigned(try rightCommandRightOptionComboHotkey(), excluding: .pushToTalk))
+    }
+
+    @MainActor
     func testPushToTalkExtraKeyInterruptionSignalsDiscardWithoutImmediateStop() throws {
         let service = HotkeyService()
         service.suspendMonitoring()
@@ -3944,6 +4480,53 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testRecorderToggleHotkeyInvokesDedicatedCallbackOnKeyDown() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(commandOptionAHotkey(), for: .recorderToggle)
+
+        var callbackCount = 0
+        var startCount = 0
+        service.onRecorderToggle = { callbackCount += 1 }
+        service.onDictationStart = { startCount += 1 }
+
+        let keyDown = try makeKeyboardEvent(keyCode: 0x00, keyDown: true, flags: [.maskCommand, .maskAlternate])
+
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertEqual(callbackCount, 1)
+        XCTAssertEqual(startCount, 0)
+        XCTAssertNil(service.currentMode)
+    }
+
+    @MainActor
+    func testRecorderToggleHotkeyDoesNotStopActiveDictation() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(spaceHotkey(), for: .toggle)
+        service.setHotkeyForTesting(commandOptionAHotkey(), for: .recorderToggle)
+
+        var startCount = 0
+        var stopCount = 0
+        var callbackCount = 0
+        service.onDictationStart = { startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+        service.onRecorderToggle = { callbackCount += 1 }
+
+        let toggleDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
+        let recorderDown = try makeKeyboardEvent(keyCode: 0x00, keyDown: true, flags: [.maskCommand, .maskAlternate])
+
+        XCTAssertTrue(service.processEventForTesting(toggleDown, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+
+        XCTAssertTrue(service.processEventForTesting(recorderDown, source: .monitor))
+        XCTAssertEqual(callbackCount, 1)
+        XCTAssertEqual(stopCount, 0)
+        XCTAssertEqual(service.currentMode, .toggle)
+    }
+
+    @MainActor
     func testMenuShortcutDescriptorSupportsPrintableKeyboardShortcut() {
         let descriptor = HotkeyService.menuShortcutDescriptor(for: commandShiftCHotkey())
 
@@ -4054,6 +4637,32 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         )
     }
 
+    private func rightCommandRightOptionComboHotkey() throws -> UnifiedHotkey {
+        try decodedCommandOptionComboHotkey(modifierKeyCodes: [0x36, 0x3D])
+    }
+
+    private func leftCommandLeftOptionComboHotkey() throws -> UnifiedHotkey {
+        try decodedCommandOptionComboHotkey(modifierKeyCodes: [0x37, 0x3A])
+    }
+
+    private func legacyCommandOptionComboHotkey() throws -> UnifiedHotkey {
+        try decodedCommandOptionComboHotkey(modifierKeyCodes: nil)
+    }
+
+    private func decodedCommandOptionComboHotkey(modifierKeyCodes: [UInt16]?) throws -> UnifiedHotkey {
+        var payload: [String: Any] = [
+            "keyCode": Int(UnifiedHotkey.modifierComboKeyCode),
+            "modifierFlags": Int(NSEvent.ModifierFlags([.command, .option]).rawValue),
+            "isFn": false,
+            "isDoubleTap": false,
+        ]
+        if let modifierKeyCodes {
+            payload["modifierKeyCodes"] = modifierKeyCodes.map(Int.init)
+        }
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        return try JSONDecoder().decode(UnifiedHotkey.self, from: data)
+    }
+
     @MainActor
     private func commandOptionAHotkey() -> UnifiedHotkey {
         UnifiedHotkey(
@@ -4120,6 +4729,30 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
                 keyCode: keyCode
             )
         )
+    }
+
+    private func flags(
+        generic: NSEvent.ModifierFlags,
+        deviceKeyCodes: [UInt16]
+    ) -> NSEvent.ModifierFlags {
+        let deviceRawValue = deviceKeyCodes.reduce(UInt(0)) { partial, keyCode in
+            partial | deviceModifierMask(for: keyCode)
+        }
+        return NSEvent.ModifierFlags(rawValue: generic.rawValue | deviceRawValue)
+    }
+
+    private func deviceModifierMask(for keyCode: UInt16) -> UInt {
+        switch keyCode {
+        case 0x37: return 0x00000008
+        case 0x36: return 0x00000010
+        case 0x38: return 0x00000002
+        case 0x3C: return 0x00000004
+        case 0x3A: return 0x00000020
+        case 0x3D: return 0x00000040
+        case 0x3B: return 0x00000001
+        case 0x3E: return 0x00002000
+        default: return 0
+        }
     }
 
     private func makeFnEvent(isDown: Bool) throws -> NSEvent {

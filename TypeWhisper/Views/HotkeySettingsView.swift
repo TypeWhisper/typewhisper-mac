@@ -67,6 +67,21 @@ struct HotkeySettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section(String(localized: "settings.tab.recorder")) {
+                HotkeyRecorderView(
+                    label: dictation.recorderToggleHotkeyLabel,
+                    title: String(localized: "recorder.shortcut.title"),
+                    subtitle: String(localized: "recorder.shortcut.description"),
+                    onRecord: { hotkey in
+                        if let conflict = dictation.isHotkeyAssigned(hotkey, excluding: .recorderToggle) {
+                            dictation.clearHotkey(for: conflict)
+                        }
+                        dictation.setHotkey(hotkey, for: .recorderToggle)
+                    },
+                    onClear: { dictation.clearHotkey(for: .recorderToggle) }
+                )
+            }
+
             Section(String(localized: "Recent Transcriptions")) {
                 HotkeyRecorderView(
                     label: dictation.recentTranscriptionsHotkeyLabel,

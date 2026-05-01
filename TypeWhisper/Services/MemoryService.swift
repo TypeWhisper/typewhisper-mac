@@ -5,7 +5,7 @@ import os.log
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "MemoryService")
 
 @MainActor
-final class MemoryService: ObservableObject {
+final class MemoryService: ObservableObject, MemoryRetrieving {
     @Published var isEnabled: Bool {
         didSet { UserDefaults.standard.set(isEnabled, forKey: UserDefaultsKeys.memoryEnabled) }
     }

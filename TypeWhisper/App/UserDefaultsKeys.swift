@@ -24,6 +24,7 @@ enum UserDefaultsKeys {
     static let promptPaletteHotkey = "promptPaletteHotkey"
     static let recentTranscriptionsHotkey = "recentTranscriptionsHotkey"
     static let copyLastTranscriptionHotkey = "copyLastTranscriptionHotkey"
+    static let recorderToggleHotkey = "recorderToggleHotkey"
 
     // MARK: - Model / Engine
     static let selectedEngine = "selectedEngine"
@@ -106,6 +107,10 @@ enum UserDefaultsKeys {
     static let watchFolderLanguage = "watchFolderLanguage"
     static let watchFolderEngine = "watchFolderEngine"
     static let watchFolderModel = "watchFolderModel"
+
+    // MARK: - Workflows
+    static let workflowDefaultLLMProviderId = "workflowDefaultLLMProviderId"
+    static let workflowDefaultLLMCloudModel = "workflowDefaultLLMCloudModel"
 
     // MARK: - Licensing
     static let usageIntent = "usageIntent"

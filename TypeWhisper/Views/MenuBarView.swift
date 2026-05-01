@@ -10,8 +10,11 @@ private final class MenuBarState: ObservableObject {
     @Published var isModelReady: Bool
     @Published var hasRecentTranscriptions: Bool
     @Published var canCopyLastTranscription: Bool
+    @Published var recorderState: AudioRecorderViewModel.RecorderState
+    @Published var canToggleRecorder: Bool
     @Published var recentTranscriptionsMenuShortcut: HotkeyService.MenuShortcutDescriptor?
     @Published var copyLastTranscriptionMenuShortcut: HotkeyService.MenuShortcutDescriptor?
+    @Published var recorderToggleMenuShortcut: HotkeyService.MenuShortcutDescriptor?
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -20,14 +23,18 @@ private final class MenuBarState: ObservableObject {
         let modelManager = ServiceContainer.shared.modelManagerService
         let historyService = ServiceContainer.shared.historyService
         let recentTranscriptionStore = ServiceContainer.shared.recentTranscriptionStore
+        let recorder = AudioRecorderViewModel.shared
 
         // Set initial values immediately
         self.isModelReady = modelManager.isModelReady
         let hasRecentTranscriptions = recentTranscriptionStore.latestEntry(historyRecords: historyService.records) != nil
         self.hasRecentTranscriptions = hasRecentTranscriptions
         self.canCopyLastTranscription = hasRecentTranscriptions
+        self.recorderState = recorder.state
+        self.canToggleRecorder = recorder.canToggleRecording
         self.recentTranscriptionsMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .recentTranscriptions)
         self.copyLastTranscriptionMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .copyLastTranscription)
+        self.recorderToggleMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .recorderToggle)
         if let name = modelManager.activeModelName, modelManager.isModelReady {
             self.statusText = String(localized: "\(name) ready")
             self.statusImage = "checkmark.circle.fill"
@@ -73,6 +80,21 @@ private final class MenuBarState: ObservableObject {
             }
             .store(in: &cancellables)
 
+        Publishers.CombineLatest3(
+            recorder.$state.removeDuplicates(),
+            recorder.$micEnabled.removeDuplicates(),
+            recorder.$systemAudioEnabled.removeDuplicates()
+        )
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] state, micEnabled, systemAudioEnabled in
+            self?.refreshRecorderToggle(
+                state: state,
+                micEnabled: micEnabled,
+                systemAudioEnabled: systemAudioEnabled
+            )
+        }
+        .store(in: &cancellables)
+
         dictation.$hotkeyLabelsVersion
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -110,9 +132,23 @@ private final class MenuBarState: ObservableObject {
         canCopyLastTranscription = hasRecentTranscriptions
     }
 
+    private func refreshRecorderToggle(
+        state: AudioRecorderViewModel.RecorderState,
+        micEnabled: Bool,
+        systemAudioEnabled: Bool
+    ) {
+        recorderState = state
+        canToggleRecorder = AudioRecorderViewModel.canToggleRecording(
+            state: state,
+            micEnabled: micEnabled,
+            systemAudioEnabled: systemAudioEnabled
+        )
+    }
+
     private func refreshMenuShortcuts() {
         recentTranscriptionsMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .recentTranscriptions)
         copyLastTranscriptionMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .copyLastTranscription)
+        recorderToggleMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .recorderToggle)
     }
 }
 
@@ -120,6 +156,7 @@ enum MenuBarMenuItem: Hashable {
     case settings
     case history
     case errorLog
+    case toggleRecorder
     case transcribeFile
     case recentTranscriptions
     case copyLastTranscription
@@ -129,6 +166,7 @@ enum MenuBarMenuItem: Hashable {
 
 enum MenuBarMenuSection: String, CaseIterable, Hashable {
     case general = "General"
+    case recorder = "Recorder"
     case transcription = "Transcription"
     case updates = "Updates"
 
@@ -140,6 +178,8 @@ enum MenuBarMenuSection: String, CaseIterable, Hashable {
         switch self {
         case .general:
             "General"
+        case .recorder:
+            "settings.tab.recorder"
         case .transcription:
             "Transcription"
         case .updates:
@@ -151,6 +191,8 @@ enum MenuBarMenuSection: String, CaseIterable, Hashable {
         switch self {
         case .general:
             [.settings, .history, .errorLog]
+        case .recorder:
+            [.toggleRecorder]
         case .transcription:
             [.transcribeFile, .recentTranscriptions, .copyLastTranscription, .readBackLastTranscription]
         case .updates:
@@ -221,6 +263,15 @@ struct MenuBarView: View {
                 Label(String(localized: "Error Log"), systemImage: "exclamationmark.triangle")
             }
 
+        case .toggleRecorder:
+            Button {
+                AudioRecorderViewModel.shared.toggleRecording()
+            } label: {
+                Label(recorderToggleTitle, systemImage: recorderToggleSystemImage)
+            }
+            .keyboardShortcut(keyboardShortcut(from: status.recorderToggleMenuShortcut))
+            .disabled(!status.canToggleRecorder)
+
         case .transcribeFile:
             Button {
                 openManagedWindow("settings")
@@ -264,6 +315,28 @@ struct MenuBarView: View {
                 UpdateChecker.shared?.checkForUpdates()
             }
             .disabled(UpdateChecker.shared?.canCheckForUpdates() != true)
+        }
+    }
+
+    private var recorderToggleTitle: String {
+        switch status.recorderState {
+        case .idle:
+            String(localized: "recorder.startRecording")
+        case .recording:
+            String(localized: "recorder.stopRecording")
+        case .finalizing:
+            String(localized: "recorder.transcribing")
+        }
+    }
+
+    private var recorderToggleSystemImage: String {
+        switch status.recorderState {
+        case .idle:
+            "record.circle"
+        case .recording:
+            "stop.fill"
+        case .finalizing:
+            "arrow.triangle.2.circlepath"
         }
     }
 
