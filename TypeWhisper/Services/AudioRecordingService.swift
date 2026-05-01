@@ -90,6 +90,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     @Published private(set) var recoveryError: AudioRecordingError?
     var hasMicrophonePermissionOverride: Bool?
     var inputAvailabilityOverride: ((AudioDeviceID?) -> Bool)?
+    var bluetoothRouteStabilizationOverride: ((AudioDeviceID?, AudioDeviceID?, String) throws -> Void)?
     var startRecordingOverride: (() throws -> Void)?
     var stopRecordingOverride: ((StopPolicy) async -> [Float])?
 
@@ -106,7 +107,6 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         get { configLock.withLock { _selectedInputDeviceUsesBluetoothTransport } }
         set { configLock.withLock { _selectedInputDeviceUsesBluetoothTransport = newValue } }
     }
-
     private var _selectedDeviceID: AudioDeviceID?
     private var _hasExplicitDeviceSelection = false
     private var _selectedInputDeviceUsesBluetoothTransport = false
@@ -265,7 +265,34 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         recoveryError = nil
 
         try validateRecordingInputAvailability()
+        clearRecordingBuffer()
+
+        let routeActivationRequest = selectedRouteActivationRequest
         outputVolumeGuard.captureBaseline()
+
+        guard inputActivationGuard.activateIfNeeded(
+            deviceID: routeActivationRequest.inputDeviceID,
+            usesBluetoothTransport: routeActivationRequest.usesBluetoothTransport,
+            reason: "recording-start"
+        ) else {
+            outputVolumeGuard.restoreIfRaised(reason: "recording-start-input-activation-failed")
+            outputVolumeGuard.clear()
+            throw AudioRecordingError.audioRoutingConflict
+        }
+
+        do {
+            try waitForBluetoothRouteStabilizationIfNeeded(
+                inputDeviceID: routeActivationRequest.inputDeviceID,
+                outputDeviceID: nil,
+                usesBluetoothTransport: routeActivationRequest.usesBluetoothTransport,
+                reason: "recording-start"
+            )
+        } catch {
+            outputVolumeGuard.restoreIfRaised(reason: "recording-start-route-stabilization-failed")
+            outputVolumeGuard.clear()
+            inputActivationGuard.restore(reason: "recording-start-route-stabilization-failed")
+            throw error
+        }
 
         if let startRecordingOverride {
             bufferLock.lock()
@@ -280,22 +307,10 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             } catch {
                 outputVolumeGuard.restoreIfRaised(reason: "recording-start-override-failed")
                 outputVolumeGuard.clear()
+                inputActivationGuard.restore(reason: "recording-start-override-failed")
                 throw error
             }
             return
-        }
-
-        clearRecordingBuffer()
-
-        let inputActivationRequest = selectedInputActivationRequest
-        guard inputActivationGuard.activateIfNeeded(
-            deviceID: inputActivationRequest.deviceID,
-            usesBluetoothTransport: inputActivationRequest.usesBluetoothTransport,
-            reason: "recording-start"
-        ) else {
-            outputVolumeGuard.restoreIfRaised(reason: "recording-start-input-activation-failed")
-            outputVolumeGuard.clear()
-            throw AudioRecordingError.audioRoutingConflict
         }
 
         let engine = AVAudioEngine()
@@ -326,7 +341,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             outputVolumeGuard.clear()
             isRecording = true
         } catch {
-            cleanupAfterFailedStart(engine)
+            let failedEngine = engineLock.withLock { audioEngine } ?? engine
+            cleanupAfterFailedStart(failedEngine)
             throw error
         }
     }
@@ -337,13 +353,14 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             let samples = await stopRecordingOverride(policy)
             outputVolumeGuard.restoreIfRaised(reason: "recording-stop-override")
             outputVolumeGuard.clear()
+            inputActivationGuard.restore(reason: "recording-stop-override")
             let rms: Float
             if samples.isEmpty {
                 rms = 0
             } else {
                 rms = sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(samples.count))
             }
-            let normalizedLevel = min(1.0, rms * 5)
+            let normalizedLevel = AudioLevelMeter.normalizedLevel(rms: rms)
 
             bufferLock.withLock {
                 _peakRawAudioLevel = rms
@@ -513,13 +530,15 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
     private func startEngineWithRecovery(_ engine: AVAudioEngine, label: String) throws {
         let explicitDeviceSelected = hasExplicitDeviceSelection
+        let selectedBluetoothDevice = requiresInitialInputReadiness
+        var currentEngine = engine
         // Main-thread callers (e.g. startRecording from hotkey) get a bounded
         // backoff to keep UI responsive; the observer-based recovery queue
         // uses the full schedule. See AudioEngineRecoveryPolicy.
         let backoff = AudioEngineRecoveryPolicy.retryBackoffForCurrentThread()
         for (attempt, delay) in backoff.enumerated() {
             do {
-                try configureAndStartEngine(engine, label: label)
+                try configureAndStartEngine(currentEngine, label: label)
                 return
             } catch let error as SelectedInputDeviceError {
                 throw mapSelectedInputDeviceError(error)
@@ -527,25 +546,31 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 throw error
             } catch {
                 guard AudioEngineRecoveryPolicy.isRetryable(error: error) else {
-                    if explicitDeviceSelected {
+                    if explicitDeviceSelected && !selectedBluetoothDevice {
                         throw AudioRecordingError.selectedInputDeviceIncompatible(.engineStartFailed)
                     }
                     throw AudioRecordingError.engineStartFailed(error.localizedDescription)
                 }
 
                 logger.warning("\(label, privacy: .public) audio engine start failed with retryable error, retry \(attempt + 1) in \(delay, privacy: .public)s: \(error.localizedDescription, privacy: .public)")
+                if let replacementEngine = replaceAudioEngineForRecoveryIfNeeded(currentEngine) {
+                    installConfigurationObserver(for: replacementEngine)
+                    teardownEngine(currentEngine)
+                    engineTeardownRetainer.retain(currentEngine, for: Self.engineTeardownRetentionInterval)
+                    currentEngine = replacementEngine
+                }
                 Thread.sleep(forTimeInterval: delay)
             }
         }
 
         do {
-            try configureAndStartEngine(engine, label: label)
+            try configureAndStartEngine(currentEngine, label: label)
         } catch let error as SelectedInputDeviceError {
             throw mapSelectedInputDeviceError(error)
         } catch let error as AudioRecordingError {
             throw error
         } catch {
-            if explicitDeviceSelected {
+            if explicitDeviceSelected && !selectedBluetoothDevice {
                 throw AudioRecordingError.selectedInputDeviceIncompatible(.engineStartFailed)
             }
             throw AudioRecordingError.engineStartFailed(error.localizedDescription)
@@ -573,16 +598,21 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private func configureAndStartEngine(_ engine: AVAudioEngine, label: String) throws {
-        // Set the input device before reading the format so each retry sees fresh hardware state.
-        if let deviceID = selectedDeviceID {
+        let inputRoute = selectedEngineInputRoute
+        // Set non-Bluetooth explicit inputs before reading the format so each retry sees fresh hardware state.
+        // Bluetooth inputs are first activated as the system default input and then left to AVAudioEngine's
+        // default aggregate route; setting the raw AirPods/Jabra input here can break mixed input/output routing.
+        if let deviceID = inputRoute.engineDeviceID {
             try configureExplicitInputDevice(deviceID, on: engine, label: label)
+        } else if inputRoute.selectedDeviceID != nil {
+            logger.info("\(label, privacy: .public) using default aggregate input route for selected Bluetooth input")
         }
 
         let inputNode = engine.inputNode
-        let inputFormat = inputNode.outputFormat(forBus: 0)
+        let inputFormat = try settledInputFormat(for: inputNode, preferredDeviceID: inputRoute.engineDeviceID, label: label)
         logger.info("\(label, privacy: .public) input format: sampleRate=\(inputFormat.sampleRate), channels=\(inputFormat.channelCount)")
 
-        try validateRecordingInputFormat(inputFormat)
+        try validateRecordingInputFormat(inputFormat, preferredDeviceID: inputRoute.engineDeviceID)
 
         guard let targetFormat = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
@@ -593,7 +623,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             throw AudioRecordingError.engineStartFailed("Cannot create target audio format")
         }
 
-        let currentInputFormat = inputNode.outputFormat(forBus: 0)
+        let currentInputFormat = try settledInputFormat(for: inputNode, preferredDeviceID: inputRoute.engineDeviceID, label: "\(label)-tap")
         try validateTapInstallationPreconditions(expected: inputFormat, current: currentInputFormat)
 
         let tapFormat = Self.monoTapFormat(for: currentInputFormat)
@@ -631,7 +661,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             // sequence (Bluetooth A2DP↔HFP renegotiation) are deferred
             // instead of driving an infinite restart loop. See issue #332.
             recoveryCoordinator.noteEngineStarted()
-            try waitForInitialInputReadinessIfNeeded(label: label)
+            try waitForInitialInputReadinessIfNeeded(label: label, isEngineRunning: { engine.isRunning })
             let elapsedMs = (CFAbsoluteTimeGetCurrent() - engineStartTime) * 1000
             logger.info("\(label, privacy: .public) audio engine started in \(String(format: "%.1f", elapsedMs), privacy: .public)ms")
         } catch {
@@ -647,9 +677,29 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
     }
 
-    private var selectedInputActivationRequest: (deviceID: AudioDeviceID?, usesBluetoothTransport: Bool) {
+    private var selectedRouteActivationRequest: (
+        inputDeviceID: AudioDeviceID?,
+        usesBluetoothTransport: Bool
+    ) {
         configLock.withLock {
-            (_selectedDeviceID, _hasExplicitDeviceSelection && _selectedInputDeviceUsesBluetoothTransport)
+            let usesBluetoothTransport = _hasExplicitDeviceSelection && _selectedInputDeviceUsesBluetoothTransport
+            return (
+                _selectedDeviceID,
+                usesBluetoothTransport
+            )
+        }
+    }
+
+    private var selectedEngineInputRoute: (selectedDeviceID: AudioDeviceID?, engineDeviceID: AudioDeviceID?) {
+        configLock.withLock {
+            let usesBluetoothTransport = _hasExplicitDeviceSelection && _selectedInputDeviceUsesBluetoothTransport
+            return (
+                _selectedDeviceID,
+                AudioEngineInputRoute.preferredDeviceIDForEngine(
+                    selectedDeviceID: _selectedDeviceID,
+                    usesBluetoothTransport: usesBluetoothTransport
+                )
+            )
         }
     }
 
@@ -657,7 +707,30 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         initialInputTapSeenLock.withLock { $0 }
     }
 
-    private func waitForInitialInputReadinessIfNeeded(label: String) throws {
+    private func waitForBluetoothRouteStabilizationIfNeeded(
+        inputDeviceID: AudioDeviceID?,
+        outputDeviceID: AudioDeviceID?,
+        usesBluetoothTransport: Bool,
+        reason: String
+    ) throws {
+        guard usesBluetoothTransport else { return }
+        if let bluetoothRouteStabilizationOverride {
+            try bluetoothRouteStabilizationOverride(inputDeviceID, outputDeviceID, reason)
+            return
+        }
+
+        guard BluetoothAudioRouteStabilizer.waitForActivatedDefaultRoute(
+            inputDeviceID: inputDeviceID,
+            reason: reason
+        ) else {
+            throw AudioRecordingError.audioRoutingConflict
+        }
+    }
+
+    private func waitForInitialInputReadinessIfNeeded(
+        label: String,
+        isEngineRunning: (() -> Bool)? = nil
+    ) throws {
         guard requiresInitialInputReadiness else { return }
 
         #if DEBUG
@@ -677,14 +750,31 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if probe() {
-                logger.info("\(label, privacy: .public) Bluetooth input delivered initial audio")
+                logger.info("\(label, privacy: .public) Bluetooth input delivered initial non-silent audio")
                 return
+            }
+            if let isEngineRunning, !isEngineRunning() {
+                throw makeBluetoothStartupRouteChangeError(label: label)
             }
             Thread.sleep(forTimeInterval: pollInterval)
         }
 
+        if let isEngineRunning, !isEngineRunning() {
+            throw makeBluetoothStartupRouteChangeError(label: label)
+        }
+
         logger.error("\(label, privacy: .public) Bluetooth input did not deliver audio within \(timeout, privacy: .public)s after engine start")
         throw AudioRecordingError.noAudioData
+    }
+
+    private func makeBluetoothStartupRouteChangeError(label: String) -> NSError {
+        NSError(
+            domain: AudioEngineRecoveryErrorDomains.transientFormatMismatch,
+            code: 0,
+            userInfo: [
+                NSLocalizedDescriptionKey: "\(label) Bluetooth input route changed before initial audio"
+            ]
+        )
     }
 
     private func teardownEngine(_ engine: AVAudioEngine) {
@@ -759,7 +849,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private func markInitialInputTapSeenIfNeeded(_ buffer: AVAudioPCMBuffer) {
-        guard buffer.frameLength > 0 else { return }
+        guard AudioInputSignal.containsSignal(buffer) else { return }
         initialInputTapSeenLock.withLock { $0 = true }
     }
 
@@ -809,7 +899,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
     private func processConvertedSamples(_ samples: [Float]) {
         let rms = sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(samples.count))
-        let normalizedLevel = min(1.0, rms * 5) // Scale up for visibility
+        let normalizedLevel = AudioLevelMeter.normalizedLevel(rms: rms)
 
         bufferLock.lock()
         sampleBuffer.append(contentsOf: samples)
@@ -837,9 +927,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         return samples
     }
 
-    private func validateRecordingInputFormat(_ format: AVAudioFormat) throws {
+    private func validateRecordingInputFormat(_ format: AVAudioFormat, preferredDeviceID: AudioDeviceID?) throws {
         do {
-            try validateInputFormat(format, for: hasExplicitDeviceSelection ? selectedDeviceID : nil)
+            try validateInputFormat(format, for: preferredDeviceID)
         } catch let error as SelectedInputDeviceError {
             throw mapSelectedInputDeviceError(error)
         } catch {
@@ -943,12 +1033,16 @@ extension AudioRecordingService {
         consumeStartupConfigurationChangeGuardIfMatching(for: engine, liveFormat: liveFormat)
     }
 
-    func testingWaitForInitialInputReadinessIfNeeded() throws {
-        try waitForInitialInputReadinessIfNeeded(label: "test")
+    func testingWaitForInitialInputReadinessIfNeeded(isEngineRunning: (() -> Bool)? = nil) throws {
+        try waitForInitialInputReadinessIfNeeded(label: "test", isEngineRunning: isEngineRunning)
     }
 
     func testingMarkInitialInputTapSeen() {
         initialInputTapSeenLock.withLock { $0 = true }
+    }
+
+    func testingMarkInitialInputTapSeen(_ buffer: AVAudioPCMBuffer) {
+        markInitialInputTapSeenIfNeeded(buffer)
     }
 }
 #endif

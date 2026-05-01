@@ -62,7 +62,9 @@ final class ServiceContainer: ObservableObject {
         let inputActivationGuard = AudioInputDeviceActivationGuard()
         modelManagerService = ModelManagerService()
         audioFileService = AudioFileService()
-        audioRecordingService = AudioRecordingService(inputActivationGuard: inputActivationGuard)
+        audioRecordingService = AudioRecordingService(
+            inputActivationGuard: inputActivationGuard
+        )
         hotkeyService = HotkeyService()
         textInsertionService = TextInsertionService()
         historyService = HistoryService()
@@ -89,7 +91,9 @@ final class ServiceContainer: ObservableObject {
         dictionaryService = DictionaryService()
         snippetService = SnippetService()
         soundService = SoundService()
-        audioDeviceService = AudioDeviceService(inputActivationGuard: inputActivationGuard)
+        audioDeviceService = AudioDeviceService(
+            inputActivationGuard: inputActivationGuard
+        )
         promptProcessingService = PromptProcessingService()
         pluginManager = PluginManager()
         pluginRegistryService = PluginRegistryService()

@@ -478,17 +478,14 @@ struct RecordingSettingsView: View {
                             .font(.caption)
 
                         GeometryReader { geo in
-                            let maxRms: Float = 0.15
-                            let levelWidth = max(0, geo.size.width * CGFloat(min(audioDevice.previewRawLevel, maxRms) / maxRms))
-
                             ZStack(alignment: .leading) {
                                 RoundedRectangle(cornerRadius: 3)
                                     .fill(.quaternary)
 
                                 RoundedRectangle(cornerRadius: 3)
                                     .fill(Color.green.gradient)
-                                    .frame(width: levelWidth)
-                                    .animation(.easeOut(duration: 0.08), value: audioDevice.previewRawLevel)
+                                    .frame(width: max(0, geo.size.width * CGFloat(audioDevice.previewAudioLevel)))
+                                    .animation(.easeOut(duration: 0.08), value: audioDevice.previewAudioLevel)
                             }
                         }
                         .frame(height: 6)

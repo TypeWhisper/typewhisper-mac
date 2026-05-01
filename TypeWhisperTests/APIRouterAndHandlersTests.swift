@@ -1443,6 +1443,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
     @MainActor
     func testApiStartRecording_playsStartSoundAfterAudioStart() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
         var events: [String] = []
         let soundService = MockSoundService { event, enabled in
             guard event == .recordingStarted, enabled else { return }
@@ -1452,6 +1454,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         defer {
             dictationContext = nil
             TestSupport.remove(appSupportDirectory)
+            Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
         }
 
         dictationContext = Self.makeDictationContext(
@@ -1474,6 +1477,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
     @MainActor
     func testApiStartRecording_skipsStartSoundForBluetoothInput() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
         var events: [String] = []
         let bluetoothDeviceID = AudioDeviceID(409)
         let soundService = MockSoundService { event, enabled in
@@ -1484,6 +1488,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         defer {
             dictationContext = nil
             TestSupport.remove(appSupportDirectory)
+            Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
         }
 
         dictationContext = Self.makeDictationContext(
@@ -1509,6 +1514,10 @@ final class APIRouterAndHandlersTests: XCTestCase {
             XCTAssertEqual(selectedDeviceID, bluetoothDeviceID)
             return true
         }
+        context.audioRecordingService.bluetoothRouteStabilizationOverride = { inputDeviceID, _, reason in
+            XCTAssertEqual(inputDeviceID, bluetoothDeviceID)
+            XCTAssertEqual(reason, "recording-start")
+        }
         context.audioRecordingService.startRecordingOverride = {
             XCTAssertTrue(context.audioRecordingService.selectedInputDeviceUsesBluetoothTransport)
             events.append("start_audio")
@@ -1523,6 +1532,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
     @MainActor
     func testApiStartRecording_keepsStartSoundForUSBInputAfterAudioStart() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
         var events: [String] = []
         let usbDeviceID = AudioDeviceID(410)
         let soundService = MockSoundService { event, enabled in
@@ -1533,6 +1543,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         defer {
             dictationContext = nil
             TestSupport.remove(appSupportDirectory)
+            Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
         }
 
         dictationContext = Self.makeDictationContext(
@@ -1711,7 +1722,10 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
         let snippetService = SnippetService(appSupportDirectory: appSupportDirectory)
         let soundService = SoundService()
+        let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
         let audioDeviceService = AudioDeviceService()
+        Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
         let promptActionService = PromptActionService(appSupportDirectory: appSupportDirectory)
         let promptProcessingService = PromptProcessingService()
         let appFormatterService = AppFormatterService()
@@ -2396,6 +2410,14 @@ final class APIRouterAndHandlersTests: XCTestCase {
                 dictationViewModel
             ]
         )
+    }
+
+    private static func restoreSelectedInputDeviceUID(_ value: Any?) {
+        if let value {
+            UserDefaults.standard.set(value, forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        } else {
+            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        }
     }
 
     private static func jsonObject(_ response: HTTPResponse) throws -> [String: Any] {
