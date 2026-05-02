@@ -71,7 +71,7 @@ See the [release readiness guide](docs/release-readiness.md), [support matrix](d
 
 ### AI Processing
 
-- **Workflows** - Build reusable transformations for translation, rewriting, extraction, formatting, and app-specific automation. Workflows can run automatically by app or website, from a dedicated hotkey, as a global fallback, or manually from the Workflow Palette
+- **Workflows** - Build reusable transformations for translation, rewriting, extraction, formatting, and app-specific automation. Workflows can run automatically by app or website, from a dedicated hotkey, as a global fallback, or manually from the Workflow Palette. Hotkey workflows can either start dictation or process the current selection/clipboard directly.
 - **LLM providers** - Apple Intelligence (macOS 26+), Groq, OpenAI / ChatGPT, Gemini, and OpenAI Compatible with per-prompt provider and model override
 - **Local prompt processing** - Gemma 4 via MLX runs on-device on Apple Silicon, with the current verified release path limited to the E2B/E4B 4-bit models
 - **Translation** - Translate transcriptions on-device using Apple Translate
@@ -377,7 +377,7 @@ Workflows let you configure transcription, transformation, and automation behavi
 - **github.com** - English cleanup workflow that matches in any browser
 - **docs.google.com** - German dictation workflow that translates to English
 
-Create workflows in Settings > Workflows. Choose a template, assign an app, website, hotkey, Always, or Manual trigger, then configure language/task/engine overrides, prompt processing, auto-submit behavior, and priority. Spoken language can be left on full auto-detect, fixed to one exact language, or restricted to a shortlist of likely languages for better detection accuracy. Website patterns support subdomain matching - e.g. `google.com` also matches `docs.google.com`.
+Create workflows in Settings > Workflows. Choose a template, assign an app, website, hotkey, Always, or Manual trigger, then configure language/task/engine overrides, prompt processing, auto-submit behavior, and priority. Hotkey workflows choose whether the shortcut starts dictation or processes the current selection/clipboard through the same insertion path as the Workflow Palette. Spoken language can be left on full auto-detect, fixed to one exact language, or restricted to a shortlist of likely languages for better detection accuracy. Website patterns support subdomain matching - e.g. `google.com` also matches `docs.google.com`.
 
 When you start dictating, TypeWhisper matches the active app and browser URL against enabled workflows with the following priority:
 1. **App + URL match** - highest specificity (e.g. Chrome + github.com)
