@@ -362,6 +362,7 @@ final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
 
     var supportedLanguages: [String] {
         [
+            "multi",
             "bg", "ca", "cs", "da", "de", "de-CH", "el", "en", "en-AU", "en-GB",
             "en-IN", "en-NZ", "en-US", "es", "es-419", "et", "fi", "fr", "fr-CA",
             "hi", "hu", "id", "it", "ja", "ko", "lt", "lv", "ms", "nl", "nl-BE",

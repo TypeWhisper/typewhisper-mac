@@ -23,6 +23,10 @@ func localizedAppLanguageName(for code: String) -> String {
         return localizedAppText("Auto-Detect", de: "Automatisch erkennen")
     }
 
+    if code == "multi" {
+        return localizedAppText("Multilingual", de: "Mehrsprachig")
+    }
+
     let locale = Locale(identifier: preferredAppLanguageCode())
     return locale.localizedString(forIdentifier: code) ?? code
 }
