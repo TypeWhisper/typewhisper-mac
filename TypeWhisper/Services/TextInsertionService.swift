@@ -23,6 +23,7 @@ final class TextInsertionService {
     var returnSimulatorOverride: (() -> Void)?
     var captureActiveAppOverride: (() -> (name: String?, bundleId: String?, url: String?))?
     var selectedTextOverride: (() -> String?)?
+    var textSelectionViaCopyOverride: (() -> String?)?
 
 enum InsertionResult {
         case pasted
@@ -584,6 +585,10 @@ enum InsertionResult {
 
     /// Attempts to get selected text by simulating Cmd+C. Saves and restores the clipboard.
     func getTextSelectionViaCopy() async -> String? {
+        if let textSelectionViaCopyOverride {
+            return textSelectionViaCopyOverride()
+        }
+
         let pasteboard = NSPasteboard.general
 
         // Save current clipboard contents (all types)

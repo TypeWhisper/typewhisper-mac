@@ -133,22 +133,80 @@ enum WorkflowTriggerKind: String, CaseIterable, Codable, Sendable {
     case manual
 }
 
+enum WorkflowHotkeyBehavior: String, CaseIterable, Codable, Hashable, Sendable {
+    case startDictation
+    case processSelectedText
+
+    var editorLabel: String {
+        switch self {
+        case .startDictation:
+            localizedAppText("Start Dictation", de: "Diktat starten")
+        case .processSelectedText:
+            localizedAppText("Process Selected Text", de: "Markierten Text verarbeiten")
+        }
+    }
+
+    var editorDescription: String {
+        switch self {
+        case .startDictation:
+            localizedAppText(
+                "Pressing the shortcut starts recording and applies this workflow to the dictation.",
+                de: "Der Shortcut startet eine Aufnahme und wendet diesen Workflow auf das Diktat an."
+            )
+        case .processSelectedText:
+            localizedAppText(
+                "Pressing the shortcut transforms the current selection or clipboard without recording.",
+                de: "Der Shortcut verarbeitet die aktuelle Auswahl oder Zwischenablage ohne Aufnahme."
+            )
+        }
+    }
+
+    var shortcutSubtitle: String {
+        switch self {
+        case .startDictation:
+            localizedAppText("Starts dictation", de: "Startet Diktat")
+        case .processSelectedText:
+            localizedAppText("Processes selected text", de: "Verarbeitet markierten Text")
+        }
+    }
+}
+
 struct WorkflowTrigger: Codable, Equatable, Sendable {
     let kind: WorkflowTriggerKind
     var appBundleIdentifiers: [String]
     var websitePatterns: [String]
     var hotkeys: [UnifiedHotkey]
+    var hotkeyBehavior: WorkflowHotkeyBehavior
 
     init(
         kind: WorkflowTriggerKind,
         appBundleIdentifiers: [String] = [],
         websitePatterns: [String] = [],
-        hotkeys: [UnifiedHotkey] = []
+        hotkeys: [UnifiedHotkey] = [],
+        hotkeyBehavior: WorkflowHotkeyBehavior = .startDictation
     ) {
         self.kind = kind
         self.appBundleIdentifiers = appBundleIdentifiers
         self.websitePatterns = websitePatterns
         self.hotkeys = hotkeys
+        self.hotkeyBehavior = hotkeyBehavior
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case kind
+        case appBundleIdentifiers
+        case websitePatterns
+        case hotkeys
+        case hotkeyBehavior
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.kind = try container.decode(WorkflowTriggerKind.self, forKey: .kind)
+        self.appBundleIdentifiers = try container.decodeIfPresent([String].self, forKey: .appBundleIdentifiers) ?? []
+        self.websitePatterns = try container.decodeIfPresent([String].self, forKey: .websitePatterns) ?? []
+        self.hotkeys = try container.decodeIfPresent([UnifiedHotkey].self, forKey: .hotkeys) ?? []
+        self.hotkeyBehavior = try container.decodeIfPresent(WorkflowHotkeyBehavior.self, forKey: .hotkeyBehavior) ?? .startDictation
     }
 
     static func app(_ bundleIdentifier: String) -> WorkflowTrigger {
@@ -167,12 +225,18 @@ struct WorkflowTrigger: Codable, Equatable, Sendable {
         WorkflowTrigger(kind: .website, websitePatterns: patterns)
     }
 
-    static func hotkey(_ hotkey: UnifiedHotkey) -> WorkflowTrigger {
-        hotkeys([hotkey])
+    static func hotkey(
+        _ hotkey: UnifiedHotkey,
+        behavior: WorkflowHotkeyBehavior = .startDictation
+    ) -> WorkflowTrigger {
+        hotkeys([hotkey], behavior: behavior)
     }
 
-    static func hotkeys(_ hotkeys: [UnifiedHotkey]) -> WorkflowTrigger {
-        WorkflowTrigger(kind: .hotkey, hotkeys: hotkeys)
+    static func hotkeys(
+        _ hotkeys: [UnifiedHotkey],
+        behavior: WorkflowHotkeyBehavior = .startDictation
+    ) -> WorkflowTrigger {
+        WorkflowTrigger(kind: .hotkey, hotkeys: hotkeys, hotkeyBehavior: behavior)
     }
 
     static func global() -> WorkflowTrigger {

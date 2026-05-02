@@ -58,6 +58,46 @@ final class WorkflowServiceTests: XCTestCase {
         )
     }
 
+    func testLegacyWorkflowTriggerWithoutHotkeyBehaviorDefaultsToStartDictation() throws {
+        let payload: [String: Any] = [
+            "kind": "hotkey",
+            "appBundleIdentifiers": [],
+            "websitePatterns": [],
+            "hotkeys": [
+                [
+                    "keyCode": 15,
+                    "modifierFlags": 0,
+                    "isFn": false
+                ]
+            ]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+
+        let trigger = try JSONDecoder().decode(WorkflowTrigger.self, from: data)
+
+        XCTAssertEqual(trigger.hotkeyBehavior, .startDictation)
+    }
+
+    func testWorkflowServicePersistsHotkeyTextProcessingBehavior() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory)
+        let hotkey = UnifiedHotkey(keyCode: 15, modifierFlags: 0, isFn: false)
+
+        service.addWorkflow(
+            name: "Direct Summary",
+            template: .summary,
+            trigger: .hotkeys([hotkey], behavior: .processSelectedText)
+        )
+
+        let reloaded = WorkflowService(appSupportDirectory: appSupportDirectory)
+        let workflow = try XCTUnwrap(reloaded.workflows.first)
+
+        XCTAssertEqual(workflow.trigger?.hotkeys, [hotkey])
+        XCTAssertEqual(workflow.trigger?.hotkeyBehavior, .processSelectedText)
+    }
+
     func testWorkflowServicePersistsDefaultLLMProviderAndModel() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
         defer { TestSupport.remove(appSupportDirectory) }

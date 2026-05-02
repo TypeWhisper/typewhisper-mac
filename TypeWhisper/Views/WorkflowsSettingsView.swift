@@ -1269,6 +1269,27 @@ private struct WorkflowEditorPage: View {
 
     private var hotkeyTriggerEditor: some View {
         VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(localizedAppText("Shortcut Behavior", de: "Shortcut-Verhalten"))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Picker(
+                    localizedAppText("Shortcut Behavior", de: "Shortcut-Verhalten"),
+                    selection: $draft.hotkeyBehavior
+                ) {
+                    ForEach(WorkflowHotkeyBehavior.allCases, id: \.self) { behavior in
+                        Text(behavior.editorLabel).tag(behavior)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Text(draft.hotkeyBehavior.editorDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             if draft.hotkeys.isEmpty {
                 Text(localizedAppText("No shortcuts recorded yet.", de: "Noch keine Shortcuts aufgenommen."))
                     .font(.subheadline)
@@ -1278,7 +1299,7 @@ private struct WorkflowEditorPage: View {
                     ForEach(draft.hotkeys, id: \.self) { hotkey in
                         WorkflowSelectionRow(
                             title: HotkeyService.displayName(for: hotkey),
-                            subtitle: localizedAppText("Workflow shortcut", de: "Workflow-Shortcut"),
+                            subtitle: draft.hotkeyBehavior.shortcutSubtitle,
                             iconSystemName: "keyboard"
                         ) {
                             draft.hotkeys.removeAll { $0 == hotkey }
@@ -1820,6 +1841,7 @@ private struct WorkflowDraft {
     var appBundleIdentifiers: [String]
     var websitePatterns: [String]
     var hotkeys: [UnifiedHotkey]
+    var hotkeyBehavior: WorkflowHotkeyBehavior
     var fineTuning: String
     var translationTargetLanguage: String
     var translationProcessor: WorkflowTranslationProcessor
@@ -1842,6 +1864,7 @@ private struct WorkflowDraft {
         self.appBundleIdentifiers = []
         self.websitePatterns = []
         self.hotkeys = []
+        self.hotkeyBehavior = .startDictation
         self.fineTuning = ""
         self.translationProcessor = template == .translation ? Self.defaultTranslationProcessor : .llmPrompt
         self.translationTargetLanguage = template == .translation
@@ -1877,6 +1900,7 @@ private struct WorkflowDraft {
         self.customInstruction = behavior.settings["instruction"] ?? behavior.settings["goal"] ?? behavior.settings["prompt"] ?? ""
         self.outputFormat = output.format ?? ""
         self.autoEnter = output.autoEnter
+        self.hotkeyBehavior = .startDictation
         self.preservedBehaviorSettings = behavior.settings
         self.providerId = behavior.providerId
         self.cloudModel = behavior.cloudModel
@@ -1901,6 +1925,7 @@ private struct WorkflowDraft {
                 self.appBundleIdentifiers = []
                 self.websitePatterns = []
                 self.hotkeys = trigger.hotkeys
+                self.hotkeyBehavior = trigger.hotkeyBehavior
             case .global:
                 self.triggerKind = .global
                 self.appBundleIdentifiers = []
@@ -2090,7 +2115,7 @@ private struct WorkflowDraft {
             return .websites(websitePatterns)
         case .hotkey:
             guard !hotkeys.isEmpty else { return nil }
-            return .hotkeys(hotkeys)
+            return .hotkeys(hotkeys, behavior: hotkeyBehavior)
         case .global:
             return .global()
         case .manual:
@@ -2160,10 +2185,22 @@ private struct WorkflowDraft {
             )
         case .hotkey:
             if !hotkeys.isEmpty {
-                return localizedAppText(
-                    "the shortcuts \(workflowCompactList(hotkeys.map(HotkeyService.displayName(for:)), conjunction: localizedAppText("and", de: "und")))",
-                    de: "die Shortcuts \(workflowCompactList(hotkeys.map(HotkeyService.displayName(for:)), conjunction: "und"))"
+                let shortcuts = workflowCompactList(
+                    hotkeys.map(HotkeyService.displayName(for:)),
+                    conjunction: localizedAppText("and", de: "und")
                 )
+                switch hotkeyBehavior {
+                case .startDictation:
+                    return localizedAppText(
+                        "the shortcuts \(shortcuts) to start dictation",
+                        de: "die Shortcuts \(shortcuts) zum Starten des Diktats"
+                    )
+                case .processSelectedText:
+                    return localizedAppText(
+                        "the shortcuts \(shortcuts) to process selected text",
+                        de: "die Shortcuts \(shortcuts) zum Verarbeiten markierten Texts"
+                    )
+                }
             }
             return localizedAppText("a hotkey", de: "einen Hotkey")
         case .global:
@@ -2289,7 +2326,9 @@ private func workflowTriggerDetail(for workflow: Workflow) -> String {
     case .website:
         return workflowCompactList(trigger.websitePatterns)
     case .hotkey:
-        return workflowCompactList(trigger.hotkeys.map(HotkeyService.displayName(for:)))
+        let shortcuts = workflowCompactList(trigger.hotkeys.map(HotkeyService.displayName(for:)))
+        guard !shortcuts.isEmpty else { return trigger.hotkeyBehavior.shortcutSubtitle }
+        return "\(shortcuts) · \(trigger.hotkeyBehavior.shortcutSubtitle)"
     case .global:
         return ""
     }

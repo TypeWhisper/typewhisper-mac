@@ -66,7 +66,7 @@ final class PromptPaletteController: PromptPaletteControlling {
         case .website:
             triggerSummary = "\(trigger.kind.paletteLabel): \(trigger.websitePatterns.joined(separator: ", "))"
         case .hotkey:
-            triggerSummary = "\(trigger.kind.paletteLabel): \(trigger.hotkeys.map(HotkeyService.displayName(for:)).joined(separator: ", "))"
+            triggerSummary = "\(trigger.kind.paletteLabel): \(trigger.hotkeys.map(HotkeyService.displayName(for:)).joined(separator: ", ")) · \(trigger.hotkeyBehavior.shortcutSubtitle)"
         case .global, .manual:
             triggerSummary = trigger.kind.paletteLabel
         }
@@ -85,6 +85,7 @@ final class PromptPaletteController: PromptPaletteControlling {
             tokens.append(contentsOf: trigger.appBundleIdentifiers)
             tokens.append(contentsOf: trigger.websitePatterns)
             tokens.append(contentsOf: trigger.hotkeys.map(HotkeyService.displayName(for:)))
+            tokens.append(trigger.hotkeyBehavior.shortcutSubtitle)
         }
         return tokens
     }

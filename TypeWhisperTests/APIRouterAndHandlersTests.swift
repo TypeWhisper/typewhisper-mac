@@ -4631,7 +4631,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         service.suspendMonitoring()
 
         let workflowId = UUID()
-        service.registerWorkflowHotkeys([(id: workflowId, hotkey: spaceHotkey())])
+        service.registerWorkflowHotkeys([(id: workflowId, hotkey: spaceHotkey(), behavior: .startDictation)])
 
         var startedWorkflowId: UUID?
         service.onWorkflowDictationStart = { startedWorkflowId = $0 }
@@ -4650,14 +4650,41 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testWorkflowHotkeyTextProcessingCallbackDoesNotStartDictation() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        let workflowId = UUID()
+        service.registerWorkflowHotkeys([(id: workflowId, hotkey: spaceHotkey(), behavior: .processSelectedText)])
+
+        var textWorkflowId: UUID?
+        var startedWorkflowId: UUID?
+        service.onWorkflowTextProcessing = { textWorkflowId = $0 }
+        service.onWorkflowDictationStart = { startedWorkflowId = $0 }
+
+        let keyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
+        let keyUp = try makeKeyboardEvent(keyCode: 0x31, keyDown: false)
+
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertEqual(textWorkflowId, workflowId)
+        XCTAssertNil(startedWorkflowId)
+        XCTAssertNil(service.currentMode)
+        XCTAssertNil(service.activeWorkflowId)
+
+        XCTAssertTrue(service.processEventForTesting(keyUp, source: .monitor))
+        XCTAssertNil(service.currentMode)
+        XCTAssertNil(service.activeWorkflowId)
+    }
+
+    @MainActor
     func testWorkflowCanRegisterMultipleHotkeysForSameWorkflow() throws {
         let service = HotkeyService()
         service.suspendMonitoring()
 
         let workflowId = UUID()
         service.registerWorkflowHotkeys([
-            (id: workflowId, hotkey: spaceHotkey()),
-            (id: workflowId, hotkey: alternateSpaceHotkey())
+            (id: workflowId, hotkey: spaceHotkey(), behavior: .startDictation),
+            (id: workflowId, hotkey: alternateSpaceHotkey(), behavior: .startDictation)
         ])
 
         var startedWorkflowIds: [UUID] = []

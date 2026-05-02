@@ -578,6 +578,10 @@ final class DictationViewModel: ObservableObject {
             self?.startRecording(forcedWorkflowId: workflowId)
         }
 
+        hotkeyService.onWorkflowTextProcessing = { [weak self] workflowId in
+            self?.processWorkflowHotkeyText(workflowId: workflowId)
+        }
+
         hotkeyService.onCancelPressed = { [weak self] in
             self?.handleCancelHotkey()
         }
@@ -1684,6 +1688,17 @@ final class DictationViewModel: ObservableObject {
     func triggerWorkflowPalette() {
         recentTranscriptionPaletteHandler.hide()
         promptPaletteHandler.triggerSelection(currentState: state, soundFeedbackEnabled: soundFeedbackEnabled)
+    }
+
+    func processWorkflowHotkeyText(workflowId: UUID) {
+        recentTranscriptionPaletteHandler.hide()
+        promptPaletteHandler.hide()
+        guard let workflow = workflowService.workflow(id: workflowId) else { return }
+        promptPaletteHandler.processWorkflowDirectly(
+            workflow: workflow,
+            currentState: state,
+            soundFeedbackEnabled: soundFeedbackEnabled
+        )
     }
 
     func triggerRecentTranscriptionsPalette() {
