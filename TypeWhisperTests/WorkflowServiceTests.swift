@@ -156,7 +156,7 @@ final class WorkflowServiceTests: XCTestCase {
     func testTemplateCatalogMatchesApprovedInitialOrder() {
         XCTAssertEqual(
             WorkflowTemplate.catalog.map(\.template),
-            [.cleanedText, .translation, .emailReply, .meetingNotes, .checklist, .json, .summary, .custom]
+            [.cleanedText, .translation, .emailReply, .meetingNotes, .checklist, .json, .summary, .dictation, .custom]
         )
     }
 
@@ -304,6 +304,55 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(workflow.translationProcessor, .appleTranslate)
         XCTAssertEqual(workflow.translationTargetLanguage, "en")
         XCTAssertTrue(workflow.usesAppleTranslate)
+    }
+
+    func testWorkflowServicePersistsExactInputLanguageSelection() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory)
+        service.addWorkflow(
+            name: "German Dictation",
+            template: .dictation,
+            trigger: .hotkey(UnifiedHotkey(keyCode: 5, modifierFlags: 0, isFn: false)),
+            behavior: WorkflowBehavior(settings: [
+                WorkflowBehavior.inputLanguageSettingKey: "de",
+            ])
+        )
+
+        let reloaded = WorkflowService(appSupportDirectory: appSupportDirectory)
+        let workflow = try XCTUnwrap(reloaded.workflows.first)
+
+        XCTAssertEqual(workflow.inputLanguageSelection, .exact("de"))
+        XCTAssertEqual(workflow.behavior.settings[WorkflowBehavior.inputLanguageSettingKey], "de")
+    }
+
+    func testWorkflowServicePersistsInputLanguageHintSelection() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory)
+        let workflow = Workflow(
+            name: "German English Dictation",
+            template: .dictation,
+            trigger: .hotkey(UnifiedHotkey(keyCode: 6, modifierFlags: 0, isFn: false))
+        )
+        workflow.inputLanguageSelection = .hints(["de", "en"])
+        service.addWorkflow(
+            name: workflow.name,
+            template: workflow.template,
+            trigger: try XCTUnwrap(workflow.trigger),
+            behavior: workflow.behavior
+        )
+
+        let reloaded = WorkflowService(appSupportDirectory: appSupportDirectory)
+        let persistedWorkflow = try XCTUnwrap(reloaded.workflows.first)
+
+        XCTAssertEqual(persistedWorkflow.inputLanguageSelection, .hints(["de", "en"]))
+        XCTAssertEqual(
+            persistedWorkflow.behavior.settings[WorkflowBehavior.inputLanguageSettingKey],
+            #"["de","en"]"#
+        )
     }
 
     func testWorkflowTextProcessingServiceUsesAppleTranslatorWithNormalizedLanguages() async throws {
@@ -454,6 +503,31 @@ final class WorkflowServiceTests: XCTestCase {
         )
 
         XCTAssertEqual(result, "Bonjour")
+    }
+
+    func testDictationOnlyWorkflowReturnsOriginalTextWithoutLLM() async throws {
+        let workflow = Workflow(
+            name: "Dictation Only",
+            template: .dictation,
+            trigger: .hotkey(UnifiedHotkey(keyCode: 7, modifierFlags: 0, isFn: false))
+        )
+
+        let service = WorkflowTextProcessingService(
+            promptProcessor: { _, _, _, _, _ in
+                XCTFail("Dictation-only workflows must not use the LLM prompt processor")
+                return ""
+            },
+            appleTranslator: { _, _, _ in
+                XCTFail("Dictation-only workflows must not use Apple Translate")
+                return ""
+            }
+        )
+
+        let result = try await service.process(workflow: workflow, text: "Raw transcript")
+
+        XCTAssertEqual(result, "Raw transcript")
+        XCTAssertNil(workflow.systemPrompt())
+        XCTAssertFalse(workflow.isManuallyRunnable)
     }
 
     func testMatchWorkflowSupportsMultipleAppsAndWebsitesPerWorkflow() throws {
@@ -899,5 +973,82 @@ final class WatchFolderExportTests: XCTestCase {
                 TranscriptionSegment(text: "world", start: 1.5, end: 2.75)
             ]
         )
+    }
+}
+
+@MainActor
+final class DictationLanguageResolverTests: XCTestCase {
+    func testWorkflowLanguageOverridesProfileAndGlobalLanguage() {
+        let workflow = Workflow(
+            name: "German Workflow",
+            template: .dictation,
+            trigger: .hotkey(UnifiedHotkey(keyCode: 5, modifierFlags: 0, isFn: false)),
+            behavior: WorkflowBehavior(settings: [
+                WorkflowBehavior.inputLanguageSettingKey: "de",
+            ])
+        )
+        let profile = Profile(name: "English Rule", inputLanguage: "en")
+
+        let resolved = DictationLanguageResolver.resolve(
+            workflow: workflow,
+            profile: profile,
+            globalLanguageSelection: .hints(["fr", "nl"])
+        )
+
+        XCTAssertEqual(resolved, .exact("de"))
+    }
+
+    func testWorkflowInheritFallsBackToProfileBeforeGlobalLanguage() {
+        let workflow = Workflow(
+            name: "Inherit Workflow",
+            template: .dictation,
+            trigger: .hotkey(UnifiedHotkey(keyCode: 6, modifierFlags: 0, isFn: false))
+        )
+        let profile = Profile(name: "Hint Rule", inputLanguage: #"["de","en"]"#)
+
+        let resolved = DictationLanguageResolver.resolve(
+            workflow: workflow,
+            profile: profile,
+            globalLanguageSelection: .exact("fr")
+        )
+
+        XCTAssertEqual(resolved, .hints(["de", "en"]))
+    }
+
+    func testWorkflowInheritFallsBackToGlobalWhenProfileAlsoInherits() {
+        let workflow = Workflow(
+            name: "Inherit Workflow",
+            template: .dictation,
+            trigger: .hotkey(UnifiedHotkey(keyCode: 7, modifierFlags: 0, isFn: false))
+        )
+        let profile = Profile(name: "Global Rule")
+
+        let resolved = DictationLanguageResolver.resolve(
+            workflow: workflow,
+            profile: profile,
+            globalLanguageSelection: .exact("fr")
+        )
+
+        XCTAssertEqual(resolved, .exact("fr"))
+    }
+
+    func testWorkflowAutoOverridesProfileAndGlobalLanguage() {
+        let workflow = Workflow(
+            name: "Auto Workflow",
+            template: .dictation,
+            trigger: .hotkey(UnifiedHotkey(keyCode: 8, modifierFlags: 0, isFn: false)),
+            behavior: WorkflowBehavior(settings: [
+                WorkflowBehavior.inputLanguageSettingKey: "auto",
+            ])
+        )
+        let profile = Profile(name: "German Rule", inputLanguage: "de")
+
+        let resolved = DictationLanguageResolver.resolve(
+            workflow: workflow,
+            profile: profile,
+            globalLanguageSelection: .exact("fr")
+        )
+
+        XCTAssertEqual(resolved, .auto)
     }
 }

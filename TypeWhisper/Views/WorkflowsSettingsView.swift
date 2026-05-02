@@ -94,6 +94,7 @@ private struct MyWorkflowsPage: View {
                 || workflow.template.definition.name.localizedCaseInsensitiveContains(trimmedQuery)
                 || workflowTriggerSummary(for: workflow).localizedCaseInsensitiveContains(trimmedQuery)
                 || workflowTriggerDetail(for: workflow).localizedCaseInsensitiveContains(trimmedQuery)
+                || workflowInputLanguageSummary(for: workflow.inputLanguageSelection).localizedCaseInsensitiveContains(trimmedQuery)
         }
     }
 
@@ -488,6 +489,12 @@ private struct WorkflowRow: View {
                             foreground: .secondary
                         )
                     }
+                    WorkflowBadge(
+                        title: workflowInputLanguageSummary(for: workflow.inputLanguageSelection),
+                        compact: true,
+                        tint: .secondary.opacity(0.12),
+                        foreground: .secondary
+                    )
                     Spacer(minLength: 0)
                 }
             }
@@ -759,6 +766,7 @@ private struct WorkflowEditorPage: View {
     @ObservedObject private var profilesViewModel = ServiceContainer.shared.profilesViewModel
     @ObservedObject private var historyService = ServiceContainer.shared.historyService
     @ObservedObject private var promptProcessingService = ServiceContainer.shared.promptProcessingService
+    @ObservedObject private var settingsViewModel = SettingsViewModel.shared
     @ObservedObject private var navigation = WorkflowsNavigationCoordinator.shared
 
     @State private var draft: WorkflowDraft
@@ -878,6 +886,10 @@ private struct WorkflowEditorPage: View {
                         .textFieldStyle(.roundedBorder)
                 }
 
+                if draft.template == .dictation {
+                    workflowInputLanguageEditor
+                }
+
                 if draft.template == .translation {
                     translationProcessorSection
                 }
@@ -893,7 +905,7 @@ private struct WorkflowEditorPage: View {
                     )
                 }
 
-                if !draft.usesAppleTranslate {
+                if draft.usesLLMProcessing {
                     WorkflowTextEditorField(
                         title: localizedAppText("Fine-Tuning", de: "Feinabstimmung"),
                         placeholder: localizedAppText(
@@ -928,17 +940,25 @@ private struct WorkflowEditorPage: View {
 
                     if isAdvancedExpanded {
                         VStack(alignment: .leading, spacing: 14) {
-                            if !draft.usesAppleTranslate {
-                                workflowProviderOverrideSection
+                            if draft.template != .dictation {
+                                workflowInputLanguageEditor
 
                                 Divider()
                             }
 
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(localizedAppText("Output Format", de: "Ausgabeformat"))
-                                    .font(.subheadline.weight(.semibold))
-                                TextField(localizedAppText("e.g. Markdown, JSON, plain text", de: "z. B. Markdown, JSON, Plain Text"), text: $draft.outputFormat)
-                                    .textFieldStyle(.roundedBorder)
+                            if draft.usesLLMProcessing {
+                                workflowProviderOverrideSection
+
+                                Divider()
+
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(localizedAppText("Output Format", de: "Ausgabeformat"))
+                                        .font(.subheadline.weight(.semibold))
+                                    TextField(localizedAppText("e.g. Markdown, JSON, plain text", de: "z. B. Markdown, JSON, Plain Text"), text: $draft.outputFormat)
+                                        .textFieldStyle(.roundedBorder)
+                                }
+
+                                Divider()
                             }
 
                             Toggle(localizedAppText("Press Enter after inserting", de: "Nach dem Einfügen Enter drücken"), isOn: $draft.autoEnter)
@@ -947,6 +967,19 @@ private struct WorkflowEditorPage: View {
                     }
                 }
             }
+        }
+    }
+
+    private var workflowInputLanguageEditor: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(localizedAppText("Spoken Language", de: "Gesprochene Sprache"))
+                .font(.subheadline.weight(.semibold))
+            LanguageSelectionEditor(
+                selection: $draft.inputLanguageSelection,
+                availableLanguages: settingsViewModel.availableLanguages,
+                nilBehavior: .inheritGlobal,
+                inheritTitle: localizedAppText("Global Setting", de: "Globale Einstellung")
+            )
         }
     }
 
@@ -1112,7 +1145,9 @@ private struct WorkflowEditorPage: View {
         ) {
             VStack(alignment: .leading, spacing: 14) {
                 Picker(localizedAppText("Trigger", de: "Trigger"), selection: $draft.triggerKind) {
-                    Text(localizedAppText("Manual", de: "Manuell")).tag(WorkflowTriggerKind.manual)
+                    if draft.template != .dictation {
+                        Text(localizedAppText("Manual", de: "Manuell")).tag(WorkflowTriggerKind.manual)
+                    }
                     Text(localizedAppText("App", de: "App")).tag(WorkflowTriggerKind.app)
                     Text(localizedAppText("Website", de: "Website")).tag(WorkflowTriggerKind.website)
                     Text(localizedAppText("Hotkey", de: "Hotkey")).tag(WorkflowTriggerKind.hotkey)
@@ -1821,6 +1856,7 @@ private struct WorkflowDraft {
     var websitePatterns: [String]
     var hotkeys: [UnifiedHotkey]
     var fineTuning: String
+    var inputLanguageSelection: LanguageSelection
     var translationTargetLanguage: String
     var translationProcessor: WorkflowTranslationProcessor
     var customInstruction: String
@@ -1838,11 +1874,12 @@ private struct WorkflowDraft {
         self.name = template.definition.name
         self.isEnabled = true
         self.template = template
-        self.triggerKind = .manual
+        self.triggerKind = template == .dictation ? .hotkey : .manual
         self.appBundleIdentifiers = []
         self.websitePatterns = []
         self.hotkeys = []
         self.fineTuning = ""
+        self.inputLanguageSelection = .inheritGlobal
         self.translationProcessor = template == .translation ? Self.defaultTranslationProcessor : .llmPrompt
         self.translationTargetLanguage = template == .translation
             ? Self.defaultTranslationTargetLanguage(for: translationProcessor)
@@ -1866,6 +1903,7 @@ private struct WorkflowDraft {
         self.isEnabled = workflow.isEnabled
         self.template = workflow.template
         self.fineTuning = behavior.fineTuning
+        self.inputLanguageSelection = workflow.inputLanguageSelection
         self.translationProcessor = workflow.translationProcessor
         let rawTranslationTargetLanguage = workflow.translationTargetLanguage ?? ""
         if workflow.usesAppleTranslate,
@@ -1918,6 +1956,10 @@ private struct WorkflowDraft {
             self.websitePatterns = []
             self.hotkeys = []
         }
+
+        if self.template == .dictation && self.triggerKind == .manual {
+            self.triggerKind = .hotkey
+        }
     }
 
     var resolvedName: String {
@@ -1929,24 +1971,33 @@ private struct WorkflowDraft {
         template == .translation && translationProcessor == .appleTranslate
     }
 
+    var usesLLMProcessing: Bool {
+        !usesAppleTranslate && template != .dictation
+    }
+
     var reviewText: String {
+        let languageSentence = localizedAppText(
+            " Spoken language: \(workflowInputLanguageSummary(for: inputLanguageSelection)).",
+            de: " Gesprochene Sprache: \(workflowInputLanguageSummary(for: inputLanguageSelection))."
+        )
+
         if triggerKind == .manual {
             return localizedAppText(
-                "\(resolvedName) is available as \(template.definition.name) from the Workflow Palette.",
-                de: "\(resolvedName) ist als \(template.definition.name) über die Workflow-Palette verfügbar."
+                "\(resolvedName) is available as \(template.definition.name) from the Workflow Palette.\(languageSentence)",
+                de: "\(resolvedName) ist als \(template.definition.name) über die Workflow-Palette verfügbar.\(languageSentence)"
             )
         }
 
         if triggerKind == .global {
             return localizedAppText(
-                "\(resolvedName) runs always as \(template.definition.name).",
-                de: "\(resolvedName) läuft immer als \(template.definition.name)."
+                "\(resolvedName) runs always as \(template.definition.name).\(languageSentence)",
+                de: "\(resolvedName) läuft immer als \(template.definition.name).\(languageSentence)"
             )
         }
 
         return localizedAppText(
-            "\(resolvedName) runs as \(template.definition.name) via \(triggerReviewText).",
-            de: "\(resolvedName) läuft als \(template.definition.name) über \(triggerReviewText)."
+            "\(resolvedName) runs as \(template.definition.name) via \(triggerReviewText).\(languageSentence)",
+            de: "\(resolvedName) läuft als \(template.definition.name) über \(triggerReviewText).\(languageSentence)"
         )
     }
 
@@ -1973,6 +2024,16 @@ private struct WorkflowDraft {
         if newTemplate != .custom {
             customInstruction = ""
         }
+
+        if newTemplate == .dictation {
+            fineTuning = ""
+            outputFormat = ""
+            providerId = nil
+            cloudModel = nil
+            if triggerKind == .manual {
+                triggerKind = .hotkey
+            }
+        }
     }
 
     @MainActor
@@ -1982,6 +2043,13 @@ private struct WorkflowDraft {
         profileService: ProfileService,
         existingWorkflowId: UUID?
     ) -> String? {
+        if template == .dictation && triggerKind == .manual {
+            return localizedAppText(
+                "Dictation Only workflows need a recording trigger.",
+                de: "Nur-Diktat-Workflows brauchen einen Aufnahme-Trigger."
+            )
+        }
+
         switch triggerKind {
         case .app:
             if appBundleIdentifiers.isEmpty {
@@ -2103,9 +2171,14 @@ private struct WorkflowDraft {
         settings.removeValue(forKey: "targetLanguage")
         settings.removeValue(forKey: "target")
         settings.removeValue(forKey: WorkflowBehavior.translationProcessorSettingKey)
+        settings.removeValue(forKey: WorkflowBehavior.inputLanguageSettingKey)
         settings.removeValue(forKey: "instruction")
         settings.removeValue(forKey: "goal")
         settings.removeValue(forKey: "prompt")
+
+        if let storedInputLanguage = inputLanguageSelection.storedValue(nilBehavior: .inheritGlobal) {
+            settings[WorkflowBehavior.inputLanguageSettingKey] = storedInputLanguage
+        }
 
         let trimmedTargetLanguage = translationTargetLanguage.trimmingCharacters(in: .whitespacesAndNewlines)
         if template == .translation && !trimmedTargetLanguage.isEmpty {
@@ -2123,9 +2196,9 @@ private struct WorkflowDraft {
 
         return WorkflowBehavior(
             settings: settings,
-            fineTuning: fineTuning.trimmingCharacters(in: .whitespacesAndNewlines),
-            providerId: trimmedProviderId?.isEmpty == false ? trimmedProviderId : nil,
-            cloudModel: trimmedCloudModel?.isEmpty == false ? trimmedCloudModel : nil,
+            fineTuning: usesLLMProcessing ? fineTuning.trimmingCharacters(in: .whitespacesAndNewlines) : "",
+            providerId: usesLLMProcessing && trimmedProviderId?.isEmpty == false ? trimmedProviderId : nil,
+            cloudModel: usesLLMProcessing && trimmedCloudModel?.isEmpty == false ? trimmedCloudModel : nil,
             temperatureModeRaw: temperatureModeRaw,
             temperatureValue: temperatureValue
         )
@@ -2134,9 +2207,9 @@ private struct WorkflowDraft {
     func resolvedOutput() -> WorkflowOutput {
         let trimmedFormat = outputFormat.trimmingCharacters(in: .whitespacesAndNewlines)
         return WorkflowOutput(
-            format: trimmedFormat.isEmpty ? nil : trimmedFormat,
+            format: usesLLMProcessing && !trimmedFormat.isEmpty ? trimmedFormat : nil,
             autoEnter: autoEnter,
-            targetActionPluginId: targetActionPluginId
+            targetActionPluginId: template == .dictation ? nil : targetActionPluginId
         )
     }
 
@@ -2253,6 +2326,47 @@ private func workflowSummaryText(for workflow: Workflow) -> String {
     }
 }
 
+private func workflowInputLanguageSummary(for selection: LanguageSelection) -> String {
+    switch selection {
+    case .inheritGlobal:
+        return localizedAppText("Global Setting", de: "Globale Einstellung")
+    case .auto:
+        return localizedAppText("Auto-detect", de: "Automatische Erkennung")
+    case .exact(let code):
+        return localizedAppLanguageName(for: code)
+    case .hints(let codes):
+        let normalizedCodes = LanguageSelection.hints(codes).selectedCodes
+        guard !normalizedCodes.isEmpty else {
+            return localizedAppText("Auto-detect", de: "Automatische Erkennung")
+        }
+        return localizedAppText(
+            "Auto-detect between \(workflowLanguageNameList(normalizedCodes))",
+            de: "Automatische Erkennung zwischen \(workflowLanguageNameList(normalizedCodes))"
+        )
+    }
+}
+
+private func workflowLanguageNameList(_ codes: [String]) -> String {
+    let names = localizedAppLanguageNames(for: codes)
+    switch names.count {
+    case 0:
+        return ""
+    case 1:
+        return names[0]
+    case 2:
+        return localizedAppText(
+            "\(names[0]) and \(names[1])",
+            de: "\(names[0]) und \(names[1])"
+        )
+    default:
+        let allButLast = names.dropLast().joined(separator: ", ")
+        return localizedAppText(
+            "\(allButLast), and \(names[names.count - 1])",
+            de: "\(allButLast) und \(names[names.count - 1])"
+        )
+    }
+}
+
 private func workflowTriggerSummary(for workflow: Workflow) -> String {
     guard let trigger = workflow.trigger else {
         return localizedAppText("No Trigger", de: "Kein Trigger")
@@ -2299,31 +2413,35 @@ private func workflowReviewText(for workflow: Workflow) -> String {
     let summary = workflowSummaryText(for: workflow)
     let triggerSummary = workflowTriggerSummary(for: workflow)
     let triggerDetail = workflowTriggerDetail(for: workflow)
+    let languageSentence = localizedAppText(
+        ". Spoken language: \(workflowInputLanguageSummary(for: workflow.inputLanguageSelection))",
+        de: ". Gesprochene Sprache: \(workflowInputLanguageSummary(for: workflow.inputLanguageSelection))"
+    )
 
     if workflow.trigger?.kind == .global {
         return localizedAppText(
-            "\(summary) runs always",
-            de: "\(summary) läuft immer"
+            "\(summary) runs always\(languageSentence)",
+            de: "\(summary) läuft immer\(languageSentence)"
         )
     }
 
     if workflow.trigger?.kind == .manual {
         return localizedAppText(
-            "\(summary) is available from the Workflow Palette",
-            de: "\(summary) ist über die Workflow-Palette verfügbar"
+            "\(summary) is available from the Workflow Palette\(languageSentence)",
+            de: "\(summary) ist über die Workflow-Palette verfügbar\(languageSentence)"
         )
     }
 
     if triggerDetail.isEmpty {
         return localizedAppText(
-            "\(summary) via \(triggerSummary)",
-            de: "\(summary) über \(triggerSummary)"
+            "\(summary) via \(triggerSummary)\(languageSentence)",
+            de: "\(summary) über \(triggerSummary)\(languageSentence)"
         )
     }
 
     return localizedAppText(
-        "\(summary) via \(triggerSummary): \(triggerDetail)",
-        de: "\(summary) über \(triggerSummary): \(triggerDetail)"
+        "\(summary) via \(triggerSummary): \(triggerDetail)\(languageSentence)",
+        de: "\(summary) über \(triggerSummary): \(triggerDetail)\(languageSentence)"
     )
 }
 

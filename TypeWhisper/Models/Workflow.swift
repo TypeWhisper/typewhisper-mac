@@ -10,6 +10,7 @@ enum WorkflowTemplate: String, CaseIterable, Codable, Sendable {
     case checklist
     case json
     case summary
+    case dictation
     case custom
 
     static var catalog: [WorkflowTemplateDefinition] {
@@ -18,6 +19,16 @@ enum WorkflowTemplate: String, CaseIterable, Codable, Sendable {
 
     var definition: WorkflowTemplateDefinition {
         switch self {
+        case .dictation:
+            WorkflowTemplateDefinition(
+                template: self,
+                name: localizedAppText("Dictation Only", de: "Nur Diktat"),
+                description: localizedAppText(
+                    "Transcribe and insert without LLM processing.",
+                    de: "Transkribiert und fuegt ohne LLM-Verarbeitung ein."
+                ),
+                systemImage: "mic"
+            )
         case .cleanedText:
             WorkflowTemplateDefinition(
                 template: self,
@@ -212,6 +223,7 @@ struct WorkflowTrigger: Codable, Equatable, Sendable {
 struct WorkflowBehavior: Codable, Equatable, Sendable {
     static let translationProcessorSettingKey = "translationProcessor"
     static let targetLanguageSettingKey = "targetLanguage"
+    static let inputLanguageSettingKey = "inputLanguage"
 
     var settings: [String: String]
     var fineTuning: String
@@ -436,6 +448,24 @@ extension Workflow {
         template == .translation && translationProcessor == .appleTranslate
     }
 
+    var inputLanguageSelection: LanguageSelection {
+        get {
+            LanguageSelection(
+                storedValue: behavior.settings[WorkflowBehavior.inputLanguageSettingKey],
+                nilBehavior: .inheritGlobal
+            )
+        }
+        set {
+            var updatedBehavior = behavior
+            if let storedValue = newValue.storedValue(nilBehavior: .inheritGlobal) {
+                updatedBehavior.settings[WorkflowBehavior.inputLanguageSettingKey] = storedValue
+            } else {
+                updatedBehavior.settings.removeValue(forKey: WorkflowBehavior.inputLanguageSettingKey)
+            }
+            behavior = updatedBehavior
+        }
+    }
+
     var isManuallyRunnable: Bool {
         usesAppleTranslate || systemPrompt() != nil || output.targetActionPluginId != nil
     }
@@ -455,6 +485,8 @@ extension Workflow {
         )
 
         switch template {
+        case .dictation:
+            return nil
         case .cleanedText:
             return """
             Clean up the dictated text for readability. Fix punctuation, grammar, and formatting while preserving the original meaning and language. Return only the cleaned text.
@@ -530,7 +562,7 @@ extension Workflow {
     private func workflowSettingsInstruction(for settings: [String: String]) -> String {
         let relevantSettings = settings
             .filter { key, value in
-                !["instruction", "goal", "prompt", "targetLanguage", "target"].contains(key)
+                !["instruction", "goal", "prompt", "targetLanguage", "target", WorkflowBehavior.inputLanguageSettingKey].contains(key)
                 && !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             }
             .sorted { $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }

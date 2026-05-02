@@ -35,6 +35,31 @@ struct DictationSessionSnapshot: Sendable, Equatable {
     let error: String?
 }
 
+@MainActor
+enum DictationLanguageResolver {
+    static func resolve(
+        workflow: Workflow?,
+        profile: Profile?,
+        globalLanguageSelection: LanguageSelection
+    ) -> LanguageSelection {
+        if let workflow {
+            let workflowSelection = workflow.inputLanguageSelection
+            if workflowSelection != .inheritGlobal {
+                return workflowSelection
+            }
+        }
+
+        if let profile {
+            let profileSelection = profile.inputLanguageSelection
+            if profileSelection != .inheritGlobal {
+                return profileSelection
+            }
+        }
+
+        return globalLanguageSelection
+    }
+}
+
 /// Orchestrates the dictation flow: recording → transcription → text insertion.
 @MainActor
 final class DictationViewModel: ObservableObject {
@@ -899,16 +924,11 @@ final class DictationViewModel: ObservableObject {
     }
 
     private var effectiveLanguageSelection: LanguageSelection {
-        if let profileLang = matchedProfile?.inputLanguage {
-            let profileSelection = LanguageSelection(
-                storedValue: profileLang,
-                nilBehavior: .inheritGlobal
-            )
-            if profileSelection != .inheritGlobal {
-                return profileSelection
-            }
-        }
-        return settingsViewModel.languageSelection
+        DictationLanguageResolver.resolve(
+            workflow: matchedWorkflow,
+            profile: matchedProfile,
+            globalLanguageSelection: settingsViewModel.languageSelection
+        )
     }
 
     private var effectiveLanguage: String? {
