@@ -388,4 +388,103 @@ final class NumberNormalizationServiceTests: XCTestCase {
         let result = service.normalize("She got percent of the shares twenty.")
         XCTAssertEqual(result, "She got percent of the shares 20.")
     }
+
+    // MARK: - Date Normalization
+
+    // Pattern 1: Month + Ordinal Day
+
+    func testAprilFifteenth() {
+        let result = service.normalize("april fifteenth")
+        XCTAssertEqual(result, "April 15")
+    }
+
+    func testJanuaryFirst() {
+        let result = service.normalize("january first")
+        XCTAssertEqual(result, "January 1")
+    }
+
+    func testDecemberThirtyFirst() {
+        let result = service.normalize("december thirty first")
+        XCTAssertEqual(result, "December 31")
+    }
+
+    func testMarchThirtyFirst() {
+        let result = service.normalize("march thirty first")
+        XCTAssertEqual(result, "March 31")
+    }
+
+    // Pattern 2: Month + Compound Ordinal
+
+    func testMarchTwentyFirst() {
+        let result = service.normalize("march twenty first")
+        XCTAssertEqual(result, "March 21")
+    }
+
+    // Pattern 2: Month + Cardinal Day
+
+    func testMarchTwentyThree() {
+        let result = service.normalize("march twenty three")
+        XCTAssertEqual(result, "March 23")
+    }
+
+    func testAprilFifteen() {
+        let result = service.normalize("april fifteen")
+        XCTAssertEqual(result, "April 15")
+    }
+
+    func testMarchTwentyOne() {
+        let result = service.normalize("march twenty one")
+        XCTAssertEqual(result, "March 21")
+    }
+
+    // Pattern 3: Month + Day + Year
+
+    func testAprilFifteenth2026() {
+        let result = service.normalize("april fifteenth twenty twenty six")
+        XCTAssertEqual(result, "April 15, 2026")
+    }
+
+    func testJanuaryFirst2001() {
+        let result = service.normalize("january first two thousand and one")
+        XCTAssertEqual(result, "January 1, 2001")
+    }
+
+    func testAprilFifteenthDigit2026() {
+        let result = service.normalize("april fifteenth 2026")
+        XCTAssertEqual(result, "April 15, 2026")
+    }
+
+    func testAprilFifteenthComma2026() {
+        let result = service.normalize("april fifteenth, 2026")
+        XCTAssertEqual(result, "April 15, 2026")
+    }
+
+    func testMarchTwentyFirstComma2026() {
+        let result = service.normalize("march twenty first, 2026")
+        XCTAssertEqual(result, "March 21, 2026")
+    }
+
+    func testMarchThirtyFirstComma2026() {
+        let result = service.normalize("march thirty first, 2026")
+        XCTAssertEqual(result, "March 31, 2026")
+    }
+
+    // Pattern 4: British Style
+
+    func testTheFifteenthOfApril() {
+        let result = service.normalize("the fifteenth of april")
+        XCTAssertEqual(result, "the 15th of April")
+    }
+
+    func testFifteenthOfApril() {
+        let result = service.normalize("fifteenth of april")
+        XCTAssertEqual(result, "15th of April")
+    }
+
+    // Non-conversion: standalone ordinals and non-date patterns
+
+    func testTheFifteenthStandalone() {
+        let result = service.normalize("the fifteenth")
+        XCTAssertEqual(result, "the fifteenth")
+    }
 }

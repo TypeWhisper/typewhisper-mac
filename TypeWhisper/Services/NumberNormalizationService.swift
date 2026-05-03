@@ -29,10 +29,18 @@ private let scales: [String: Int] = [
 
 private let numberWords: Set<String> = {
     var s = Set<String>()
-    for k in units.keys { s.insert(k) }
-    for k in teens.keys { s.insert(k) }
-    for k in tens.keys { s.insert(k) }
-    for k in scales.keys { s.insert(k) }
+    for k in units.keys {
+        s.insert(k)
+    }
+    for k in teens.keys {
+        s.insert(k)
+    }
+    for k in tens.keys {
+        s.insert(k)
+    }
+    for k in scales.keys {
+        s.insert(k)
+    }
     s.insert("and")
     s.insert("minus")
     s.insert("negative")
@@ -53,6 +61,27 @@ private let yearExclusionTokens: Set<String> = [
     "million", "thousand", "billion", "hundred",
     "dollar", "dollars", "euro", "euros", "rupee", "rupees",
     "pound", "pounds", "yen", "cent", "cents", "percent", "percentage",
+]
+
+// MARK: - Date Words
+
+private let monthNames: [String: Int] = [
+    "january": 1, "february": 2, "march": 3, "april": 4,
+    "may": 5, "june": 6, "july": 7, "august": 8,
+    "september": 9, "october": 10, "november": 11, "december": 12,
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4,
+    "jun": 6, "jul": 7, "aug": 8, "sep": 9, "sept": 9,
+    "oct": 10, "nov": 11, "dec": 12,
+]
+
+private let ordinalWords: [String: Int] = [
+    "first": 1, "second": 2, "third": 3, "fourth": 4,
+    "fifth": 5, "sixth": 6, "seventh": 7, "eighth": 8,
+    "ninth": 9, "tenth": 10,
+    "eleventh": 11, "twelfth": 12, "thirteenth": 13,
+    "fourteenth": 14, "fifteenth": 15, "sixteenth": 16,
+    "seventeenth": 17, "eighteenth": 18, "nineteenth": 19,
+    "twentieth": 20, "thirtieth": 30,
 ]
 
 // MARK: - Token Slot
@@ -104,6 +133,7 @@ final class NumberNormalizationService {
         case mixedDigitWordMerge = 15
         case cardinalNumbers = 20
         case currency = 40
+        case dateNormalization = 45
         case finalCleanup = 50
     }
 
@@ -112,30 +142,44 @@ final class NumberNormalizationService {
     private func needsITN(_ text: String) -> Bool {
         let lower = text.lowercased()
 
-        // Singular "cent" (as a standalone word) without "dollar"/"dollars"/
-        // "cents"/"per" and without scale words is ambiguous — could be a
-        // proper noun (e.g. "fifty cent" the rapper). Don't activate ITN in
-        // that narrow case.
+        // Tokenize and strip punctuation once — reuse for exact token matching.
+        // Prevents false positives from substring matching (e.g. "one" in "someone").
         let tokens = lower.split(separator: " ").map { token in
             let (core, _, _) = stripPunctuation(String(token))
             return core
         }
-        if tokens.contains("cent"),
-           !tokens.contains("cents"),
-           !tokens.contains("dollar"),
-           !tokens.contains("dollars"),
-           !tokens.contains("hundred"),
-           !tokens.contains("thousand"),
-           !tokens.contains("million"),
-           !tokens.contains("billion"),
-           !tokens.contains("per")
+        let tokenSet = Set(tokens)
+
+        // Singular "cent" (as a standalone word) without "dollar"/"dollars"/
+        // "cents"/"per" and without scale words is ambiguous — could be a
+        // proper noun (e.g. "fifty cent" the rapper). Don't activate ITN in
+        // that narrow case.
+        if tokenSet.contains("cent"),
+           !tokenSet.contains("cents"),
+           !tokenSet.contains("dollar"),
+           !tokenSet.contains("dollars"),
+           !tokenSet.contains("hundred"),
+           !tokenSet.contains("thousand"),
+           !tokenSet.contains("million"),
+           !tokenSet.contains("billion"),
+           !tokenSet.contains("per")
         {
             return false
         }
 
-        for word in numberWords {
-            if lower.contains(word) {
+        for token in tokens {
+            if numberWords.contains(token) {
                 return true
+            }
+            // Handle hyphenated compounds like "twenty-five"
+            if token.contains("-") {
+                let parts = token.split(separator: "-").map(String.init)
+                if parts.count == 2,
+                   numberWords.contains(parts[0]),
+                   numberWords.contains(parts[1])
+                {
+                    return true
+                }
             }
         }
         for word in currencyWords {
@@ -143,12 +187,17 @@ final class NumberNormalizationService {
             // too ambiguous (e.g. "fifty cent" the rapper), and dollar+cents
             // spans are already triggered by the "dollar" part.
             if word == "cent" || word == "cents" { continue }
-            if lower.contains(word) {
+            if tokenSet.contains(word) {
                 return true
             }
         }
         for word in timeWords {
-            if lower.contains(word) {
+            if tokenSet.contains(word) {
+                return true
+            }
+        }
+        for word in monthNames.keys {
+            if tokenSet.contains(word) {
                 return true
             }
         }
@@ -179,6 +228,8 @@ final class NumberNormalizationService {
                 try applyCardinalNumbers(&slots)
             case .currency:
                 try applyCurrency(&slots)
+            case .dateNormalization:
+                try applyDateNormalization(&slots)
             case .finalCleanup:
                 try applyFinalCleanup(&slots)
             }
@@ -189,7 +240,7 @@ final class NumberNormalizationService {
 
     // MARK: - Helpers
 
-    // Indian grouping: last 3 digits, then groups of 2 from right (e.g. 1300000 → "13,00,000")
+    /// Indian grouping: last 3 digits, then groups of 2 from right (e.g. 1300000 → "13,00,000")
     private func formatIndianNumber(_ value: Int) -> String {
         if value < 0 { return "-" + formatIndianNumber(-value) }
         if value < 1000 { return "\(value)" }
@@ -208,7 +259,7 @@ final class NumberNormalizationService {
         return groups.joined(separator: ",")
     }
 
-    // Replace "per cent" (two words, case-insensitive) with "percent" so the % pass fires.
+    /// Replace "per cent" (two words, case-insensitive) with "percent" so the % pass fires.
     private static let perCentRegex: NSRegularExpression? = try? NSRegularExpression(
         pattern: "\\bper\\s+cent\\b", options: .caseInsensitive
     )
@@ -446,9 +497,9 @@ final class NumberNormalizationService {
 
     // MARK: - Pass 0.5: Mixed Digit+Word Merge
 
-    // Handles ASR outputs like "100 twenty-three" where a round digit is followed by a sub-100
-    // word span. Merges them: 100 + 23 → 123. Only fires when following words are all <100
-    // (no scale words like thousand/lakh), preventing false merges like "100 million".
+    /// Handles ASR outputs like "100 twenty-three" where a round digit is followed by a sub-100
+    /// word span. Merges them: 100 + 23 → 123. Only fires when following words are all <100
+    /// (no scale words like thousand/lakh), preventing false merges like "100 million".
     private func applyMixedDigitWordMerge(_ slots: inout [ITNSlot]) throws {
         let n = slots.count
         var i = 0
@@ -552,7 +603,7 @@ final class NumberNormalizationService {
                     {
                         let w2 = resolvedWord(slots[i + 2].text)
                         let w3 = resolvedWord(slots[i + 3].text)
-                        if (w2 == "oh" || w2 == "o"), let v3 = units[w3] {
+                        if w2 == "oh" || w2 == "o", let v3 = units[w3] {
                             year += v3
                             tokenCount = 4
                         }
@@ -695,7 +746,7 @@ final class NumberNormalizationService {
                 // or if another number word follows. For bare scale words at start, skip.
                 if i + 1 < n {
                     let nextWord = resolvedWord(slots[i + 1].text)
-                    if !isNumberWord(nextWord) && parseNumericToken(nextWord) == nil {
+                    if !isNumberWord(nextWord), parseNumericToken(nextWord) == nil {
                         i += 1
                         continue
                     }
@@ -883,6 +934,14 @@ final class NumberNormalizationService {
                 if let val = parseNumericToken(core) {
                     numberValue = val
                     numberTokenIdx = prevIdx
+                } else if isNumberWord(core) {
+                    // Fallback: cardinal pass did not convert this span.
+                    // Log a warning so this does not become silent technical debt.
+                    itnLogger.warning("ITN currency fallback fired — cardinal pass may have missed span starting at index \(prevIdx)")
+                    if let span = parseNumberSpan([], startAt: prevIdx, in: slots) {
+                        numberValue = span.value
+                        numberTokenIdx = prevIdx
+                    }
                 } else if let val = parseNumericTokenAsDouble(core) {
                     // Decimal number like "0.5"
                     decimalValue = val
@@ -996,7 +1055,9 @@ final class NumberNormalizationService {
             if let centVal = parseNumericToken(numberCore) {
                 // Scan forward past any consumed slots to find "cent"/"cents"
                 var centsIdx = idx + 1
-                while centsIdx < n, slots[centsIdx].consumed { centsIdx += 1 }
+                while centsIdx < n, slots[centsIdx].consumed {
+                    centsIdx += 1
+                }
                 if centsIdx < n, !slots[centsIdx].consumed {
                     let centWord = resolvedWord(slots[centsIdx].text)
                     if centWord == "cent" || centWord == "cents" {
@@ -1064,29 +1125,33 @@ final class NumberNormalizationService {
         while i < n {
             guard !slots[i].consumed else { i += 1; continue }
 
-            // Must find a disambiguator first (am, pm, o'clock) to activate time conversion
             let word = resolvedWord(slots[i].text)
             let hasDisambiguator = (word == "am" || word == "pm" || word == "o'clock")
             guard hasDisambiguator else { i += 1; continue }
 
             if word == "o'clock" {
-                // <number> o'clock → <number>:00
-                if i > 0, !slots[i - 1].consumed {
-                    let prevWord = resolvedWord(slots[i - 1].text)
-                    if let hourVal = Int(slots[i - 1].text) {
-                        // Already a number
-                        let (_, leading, trailing) = stripPunctuation(slots[i - 1].text)
-                        slots[i - 1].text = leading + "\(hourVal):00" + trailing
+                // Scan backward past consumed slots — earlier passes may have consumed
+                // tokens between the hour and o'clock. Mirrors applyCurrency pattern.
+                var prevIdx = i - 1
+                while prevIdx >= 0, slots[prevIdx].consumed {
+                    prevIdx -= 1
+                }
+
+                if prevIdx >= 0 {
+                    let prevWord = resolvedWord(slots[prevIdx].text)
+                    if let hourVal = Int(slots[prevIdx].text) {
+                        let (_, leading, trailing) = stripPunctuation(slots[prevIdx].text)
+                        slots[prevIdx].text = leading + "\(hourVal):00" + trailing
                         slots[i].consumed = true
                         i += 1
                         continue
                     } else if isNumberWord(prevWord) {
-                        if let span = parseNumberSpan([], startAt: i - 1, in: slots) {
+                        if let span = parseNumberSpan([], startAt: prevIdx, in: slots) {
                             let hourVal = span.value
                             if hourVal > 0, hourVal <= 12 {
-                                let (_, leading, trailing) = stripPunctuation(slots[i - 1].text)
-                                slots[i - 1].text = leading + "\(hourVal):00" + trailing
-                                for j in i ..< span.endIndex {
+                                let (_, leading, trailing) = stripPunctuation(slots[prevIdx].text)
+                                slots[prevIdx].text = leading + "\(hourVal):00" + trailing
+                                for j in (prevIdx + 1) ..< span.endIndex {
                                     slots[j].consumed = true
                                 }
                                 slots[i].consumed = true
@@ -1096,31 +1161,48 @@ final class NumberNormalizationService {
                         }
                     }
                 }
+
             } else if word == "am" || word == "pm" {
-                let suffix = word
+                let suffix = word.uppercased()
+
+                // Scan backward past consumed slots — earlier passes (cardinal, year detection)
+                // may have consumed tokens between the hour and am/pm.
+                // This mirrors the pattern in applyCurrency.
+
+                // Collect up to 3 nearest non-consumed slots before i
+                var prevIndices: [Int] = []
+                var scan = i - 1
+                while scan >= 0, prevIndices.count < 3 {
+                    if !slots[scan].consumed {
+                        prevIndices.append(scan)
+                    }
+                    scan -= 1
+                }
+                // prevIndices[0] = nearest, [1] = one further back, [2] = two further back
+
                 // Pattern: <hour> oh <minute> am/pm
-                if i >= 3, !slots[i - 3].consumed, !slots[i - 2].consumed, !slots[i - 1].consumed {
-                    let ohWord = resolvedWord(slots[i - 2].text)
+                if prevIndices.count >= 3 {
+                    let minIdx = prevIndices[0]
+                    let ohIdx = prevIndices[1]
+                    let hourIdx = prevIndices[2]
+
+                    let ohWord = resolvedWord(slots[ohIdx].text)
+                    let hourWord = resolvedWord(slots[hourIdx].text)
+                    let minWord = resolvedWord(slots[minIdx].text)
+
                     if ohWord == "oh" || ohWord == "o" {
-                        let hourWord = resolvedWord(slots[i - 3].text)
-                        let minWord = resolvedWord(slots[i - 1].text)
                         var hourVal: Int?
-                        if let v = Int(slots[i - 3].text) {
-                            hourVal = v
-                        } else if let v = wordToValue(hourWord) {
-                            if v < 100 { hourVal = v }
-                        }
+                        if let v = Int(slots[hourIdx].text) { hourVal = v }
+                        else if let v = wordToValue(hourWord), v < 100 { hourVal = v }
+
                         var minVal: Int?
-                        if let v = Int(slots[i - 1].text) {
-                            minVal = v
-                        } else if let v = units[minWord] {
-                            minVal = v
-                        }
+                        if let v = Int(slots[minIdx].text) { minVal = v }
+                        else if let v = units[minWord] { minVal = v }
 
                         if let h = hourVal, let m = minVal, h > 0, h <= 12, m >= 0, m <= 9 {
-                            slots[i - 3].text = reattachPunctuation("\(h):0\(m)\(suffix)", from: slots[i - 3].text)
-                            slots[i - 2].consumed = true
-                            slots[i - 1].consumed = true
+                            slots[hourIdx].text = reattachPunctuation("\(h):0\(m) \(suffix)", from: slots[hourIdx].text)
+                            slots[ohIdx].consumed = true
+                            slots[minIdx].consumed = true
                             slots[i].consumed = true
                             i += 1
                             continue
@@ -1128,33 +1210,31 @@ final class NumberNormalizationService {
                     }
                 }
 
-                // Pattern: <hour> thirty/fifteen/forty-five am/pm
-                if i >= 2, !slots[i - 2].consumed, !slots[i - 1].consumed {
-                    let hourWord = resolvedWord(slots[i - 2].text)
-                    let minWord = resolvedWord(slots[i - 1].text)
-                    var hourVal: Int?
-                    if let v = Int(slots[i - 2].text) {
-                        hourVal = v
-                    } else if let v = wordToValue(hourWord) {
-                        if v < 100 { hourVal = v }
-                    }
+                // Pattern: <hour> <minute> am/pm
+                if prevIndices.count >= 2 {
+                    let minIdx = prevIndices[0]
+                    let hourIdx = prevIndices[1]
 
-                    let minuteMap: [String: Int] = ["thirty": 30, "fifteen": 15, "forty": 40, "five": 5, "ten": 10, "twenty": 20, "fifty": 50]
-                    // "forty-five" as a single token
+                    let hourWord = resolvedWord(slots[hourIdx].text)
+                    let minWord = resolvedWord(slots[minIdx].text)
+
+                    var hourVal: Int?
+                    if let v = Int(slots[hourIdx].text) { hourVal = v }
+                    else if let v = wordToValue(hourWord), v < 100 { hourVal = v }
+
+                    let minuteMap: [String: Int] = [
+                        "thirty": 30, "fifteen": 15, "forty": 40,
+                        "five": 5, "ten": 10, "twenty": 20, "fifty": 50,
+                    ]
                     var minVal: Int?
-                    if let v = minuteMap[minWord] {
-                        minVal = v
-                    } else if let v = Int(slots[i - 1].text) {
-                        minVal = v
-                    } else if let span = parseNumberSpan([], startAt: i - 1, in: slots) {
-                        if span.value > 0, span.value < 60 {
-                            minVal = span.value
-                        }
-                    }
+                    if let v = minuteMap[minWord] { minVal = v }
+                    else if let v = Int(slots[minIdx].text) { minVal = v }
+                    else if let span = parseNumberSpan([], startAt: minIdx, in: slots),
+                            span.value > 0, span.value < 60 { minVal = span.value }
 
                     if let h = hourVal, let m = minVal, h > 0, h <= 12, m >= 0, m < 60 {
-                        slots[i - 2].text = reattachPunctuation("\(h):\(String(format: "%02d", m))\(suffix)", from: slots[i - 2].text)
-                        slots[i - 1].consumed = true
+                        slots[hourIdx].text = reattachPunctuation("\(h):\(String(format: "%02d", m)) \(suffix)", from: slots[hourIdx].text)
+                        slots[minIdx].consumed = true
                         slots[i].consumed = true
                         i += 1
                         continue
@@ -1162,17 +1242,14 @@ final class NumberNormalizationService {
                 }
 
                 // Pattern: <hour> am/pm (bare hour)
-                if i >= 1, !slots[i - 1].consumed {
-                    let hourWord = resolvedWord(slots[i - 1].text)
+                if let hourIdx = prevIndices.first {
+                    let hourWord = resolvedWord(slots[hourIdx].text)
                     var hourVal: Int?
-                    if let v = Int(slots[i - 1].text) {
-                        hourVal = v
-                    } else if let v = wordToValue(hourWord) {
-                        if v < 100 { hourVal = v }
-                    }
+                    if let v = Int(slots[hourIdx].text) { hourVal = v }
+                    else if let v = wordToValue(hourWord), v < 100 { hourVal = v }
 
                     if let h = hourVal, h > 0, h <= 12 {
-                        slots[i - 1].text = reattachPunctuation("\(h)\(suffix)", from: slots[i - 1].text)
+                        slots[hourIdx].text = reattachPunctuation("\(h) \(suffix)", from: slots[hourIdx].text)
                         slots[i].consumed = true
                         i += 1
                         continue
@@ -1182,6 +1259,207 @@ final class NumberNormalizationService {
 
             i += 1
         }
+    }
+
+    // MARK: - Pass 5: Date Normalization
+
+    private func applyDateNormalization(_ slots: inout [ITNSlot]) throws {
+        let n = slots.count
+        var i = 0
+
+        while i < n {
+            guard !slots[i].consumed else { i += 1; continue }
+
+            let word = resolvedWord(slots[i].text)
+
+            // Pattern 4 (British): [the] ordinal + "of" + month
+            // Also handles compound ordinals split by cardinal pass:
+            //   "twenty first of april" → ["20", "first", "of", "april"]
+            //   → "21st of April"
+            if let ordinalVal = ordinalWords[word] {
+                if i + 2 < n,
+                   !slots[i + 1].consumed,
+                   resolvedWord(slots[i + 1].text) == "of",
+                   !slots[i + 2].consumed,
+                   matchMonth(slots[i + 2].text) != nil
+                {
+                    var adjustedVal = ordinalVal
+                    var consumedPrev = false
+                    // Look backward for a digit created by cardinal pass
+                    // from a compound ordinal like "twenty" (→20) + "first" (→1)
+                    if i > 0, !slots[i - 1].consumed {
+                        let prevWord = resolvedWord(slots[i - 1].text)
+                        if let prevDigit = Int(prevWord), prevDigit == 20 || prevDigit == 30 {
+                            let combined = prevDigit + ordinalVal
+                            if combined >= 1, combined <= 31 {
+                                adjustedVal = combined
+                                consumedPrev = true
+                            }
+                        }
+                    }
+
+                    let suffix = ordinalSuffix(for: adjustedVal)
+                    if consumedPrev {
+                        slots[i - 1].consumed = true
+                    }
+                    slots[i].text = reattachPunctuation("\(adjustedVal)\(suffix)", from: slots[i].text)
+                    let monthName = capitalizeMonthName(slots[i + 2].text)
+                    slots[i + 2].text = reattachPunctuation(monthName, from: slots[i + 2].text)
+                    i += 3
+                    continue
+                }
+                i += 1
+                continue
+            }
+
+            // Patterns 1/2/3: Month + Day [+ Year]
+            guard matchMonth(word) != nil else { i += 1; continue }
+            guard i + 1 < n, !slots[i + 1].consumed else { i += 1; continue }
+
+            let dayToken = resolvedWord(slots[i + 1].text)
+            var dayValue: Int?
+            var dayEndIndex = i + 1
+
+            // Ordinal day (e.g. "fifteenth")
+            if let ordVal = ordinalWords[dayToken] {
+                dayValue = ordVal
+                dayEndIndex = i + 1
+                // Digit day (already converted by cardinal pass, e.g. "23")
+            } else if let digitVal = Int(dayToken), digitVal >= 1, digitVal <= 31 {
+                dayValue = digitVal
+                dayEndIndex = i + 1
+                // Digit + ordinal: "20" + "first" → 21 (only combine 20/30)
+                if i + 2 < n, !slots[i + 2].consumed, digitVal == 20 || digitVal == 30 {
+                    let nextWord = resolvedWord(slots[i + 2].text)
+                    if let ordVal2 = ordinalWords[nextWord] {
+                        let combined = digitVal + ordVal2
+                        if combined >= 1, combined <= 31 {
+                            dayValue = combined
+                            dayEndIndex = i + 2
+                        }
+                    }
+                }
+                // Number-word cardinal day via parseNumberSpan (FIX 2)
+            } else if isNumberWord(dayToken) {
+                if let span = parseNumberSpan([], startAt: i + 1, in: slots) {
+                    // Reject if span includes scale words
+                    let hasScaleWord = (i + 1 ..< span.endIndex).contains { idx in
+                        let w = resolvedWord(slots[idx].text)
+                        return scales[w] != nil
+                    }
+                    if !hasScaleWord, span.value >= 1, span.value <= 31 {
+                        dayValue = span.value
+                        dayEndIndex = span.endIndex - 1
+                    }
+                }
+            }
+
+            guard let day = dayValue, day >= 1, day <= 31 else { i += 1; continue }
+
+            // Capitalize month
+            let monthName = capitalizeMonthName(slots[i].text)
+            slots[i].text = reattachPunctuation(monthName, from: slots[i].text)
+
+            // Replace first token of day span, consume the rest
+            slots[i + 1].text = reattachPunctuation("\(day)", from: slots[i + 1].text)
+            if dayEndIndex > i + 1 {
+                for j in (i + 2) ... dayEndIndex {
+                    slots[j].consumed = true
+                }
+            }
+
+            // Pattern 3: Optional year
+            let yearSearchStart = dayEndIndex + 1
+            if yearSearchStart < n, !slots[yearSearchStart].consumed {
+                let rawYearSearchToken = slots[yearSearchStart].text
+                let (yearSearchCore, yearSearchLeading, _) = stripPunctuation(rawYearSearchToken)
+                var commaConsumed = false
+                var yearTokenStart = yearSearchStart
+
+                // Detect comma separator in any of three forms (FIX 3):
+                // 1. Trailing comma on day token — handled below when formatting output
+                // 2. Leading comma on year token (e.g. ",2026")
+                // 3. Standalone comma token (e.g. ",")
+                if yearSearchCore.isEmpty {
+                    // Case 3: standalone punctuation token
+                    commaConsumed = true
+                    yearTokenStart = yearSearchStart + 1
+                } else if yearSearchLeading.contains(",") {
+                    // Case 2: leading comma on year token
+                    commaConsumed = true
+                } else if resolvedWord(rawYearSearchToken) == "," {
+                    commaConsumed = true
+                    yearTokenStart = yearSearchStart + 1
+                }
+
+                if yearTokenStart < n, !slots[yearTokenStart].consumed {
+                    let yearStr = slots[yearTokenStart].text
+                    let (yearCore, _, _) = stripPunctuation(yearStr)
+
+                    if let yearVal = Int(yearCore), yearVal >= 1000, yearVal <= 2999 {
+                        // Exclusion: not followed by currency/percent/time
+                        let afterIdx = yearTokenStart + 1
+                        var isExcluded = false
+                        if afterIdx < n {
+                            let afterWord = resolvedWord(slots[afterIdx].text)
+                            if currencyWords.contains(afterWord) || timeWords.contains(afterWord) {
+                                isExcluded = true
+                            }
+                        }
+
+                        if !isExcluded {
+                            if commaConsumed {
+                                slots[yearSearchStart].consumed = true
+                            }
+                            let (_, _, yearTrailing) = stripPunctuation(yearStr)
+
+                            // Formatting is deterministic: always "Month D, YYYY" when year present.
+                            // Input comma structure is intentionally ignored here.
+                            let (dayCore, dayLeading, dayTrailing) = stripPunctuation(slots[i + 1].text)
+                            let cleanedTrailing = dayTrailing.replacingOccurrences(of: ",", with: "")
+                            slots[i + 1].text = dayLeading + dayCore + "," + cleanedTrailing
+                            slots[yearTokenStart].text = yearCore + yearTrailing
+                            i = yearTokenStart
+                            continue
+                        }
+                    }
+                }
+            }
+
+            i = dayEndIndex
+            continue
+        }
+    }
+
+    // MARK: - Date Helpers
+
+    private func matchMonth(_ token: String) -> Int? {
+        let (core, _, _) = stripPunctuation(token)
+        return monthNames[core.lowercased()]
+    }
+
+    private func capitalizeMonthName(_ token: String) -> String {
+        let (core, leading, trailing) = stripPunctuation(token)
+        guard !core.isEmpty else { return token }
+        let capitalized = core.prefix(1).uppercased() + core.dropFirst()
+        return leading + capitalized + trailing
+    }
+
+    private func ordinalSuffix(for value: Int) -> String {
+        let mod100 = value % 100
+        let mod10 = value % 10
+        if mod100 >= 11, mod100 <= 13 { return "th" }
+        switch mod10 {
+        case 1: return "st"
+        case 2: return "nd"
+        case 3: return "rd"
+        default: return "th"
+        }
+    }
+
+    private func isCommaToken(_ word: String) -> Bool {
+        let (core, _, _) = stripPunctuation(word)
+        return core.isEmpty || core == ","
     }
 
     // MARK: - Pass 6: Final Cleanup (Fix 5 & 6)
@@ -1199,7 +1477,7 @@ final class NumberNormalizationService {
             let word = resolvedWord(slots[i].text)
 
             // --- Fix 6: minus/negative + <number> → -<number> ---
-            if (word == "minus" || word == "negative"), i + 1 < n, !slots[i + 1].consumed {
+            if word == "minus" || word == "negative", i + 1 < n, !slots[i + 1].consumed {
                 let nextText = slots[i + 1].text
                 let (nextCore, nextLeading, nextTrailing) = stripPunctuation(nextText)
 
@@ -1207,7 +1485,7 @@ final class NumberNormalizationService {
                 // Match optional leading minus, digits, optional decimal point + digits
                 let pattern = #"^-?\d+(?:,\d{1,2})*(?:\.\d+)?"#
                 if let match = nextCore.range(of: pattern, options: .regularExpression) {
-                    let numericPart = String(nextCore[match.lowerBound..<match.upperBound])
+                    let numericPart = String(nextCore[match.lowerBound ..< match.upperBound])
                     let suffix = String(nextCore[match.upperBound...])
 
                     // Prevent double-negative
