@@ -83,6 +83,9 @@ enum UserDefaultsKeys {
     // MARK: - Formatting
     static let appFormattingEnabled = "appFormattingEnabled"
 
+    // MARK: - Number Normalization (ITN)
+    static let itnEnabled = "itnEnabled"
+
     // MARK: - Accessibility
     static let spokenFeedbackEnabled = "spokenFeedbackEnabled"
     static let spokenFeedbackProviderId = "spokenFeedbackProviderId"

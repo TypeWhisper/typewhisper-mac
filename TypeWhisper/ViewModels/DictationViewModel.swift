@@ -125,6 +125,9 @@ final class DictationViewModel: ObservableObject {
     }
     @Published private(set) var lastTranscribedText: String?
     @Published private(set) var lastTranscriptionLanguage: String?
+    @Published var numberNormalizationEnabled: Bool {
+        didSet { numberNormalizationService.isEnabled = numberNormalizationEnabled }
+    }
     @Published var hotkeyLabelsVersion = 0
     var hybridHotkeyLabel: String { Self.loadHotkeyLabel(for: .hybrid) }
     var pttHotkeyLabel: String { Self.loadHotkeyLabel(for: .pushToTalk) }
@@ -189,6 +192,7 @@ final class DictationViewModel: ObservableObject {
     private let accessibilityAnnouncementService: AccessibilityAnnouncementService
     private let errorLogService: ErrorLogService
     private let mediaPlaybackService: MediaPlaybackService
+    private let numberNormalizationService: NumberNormalizationService
     private let postProcessingPipeline: PostProcessingPipeline
     private var matchedWorkflow: Workflow?
     private var activeWorkflowMatch: WorkflowMatchResult?
@@ -258,6 +262,7 @@ final class DictationViewModel: ObservableObject {
         promptProcessingService: PromptProcessingService,
         workflowTextProcessingService: WorkflowTextProcessingService? = nil,
         appFormatterService: AppFormatterService,
+        numberNormalizationService: NumberNormalizationService,
         speechFeedbackService: SpeechFeedbackService,
         accessibilityAnnouncementService: AccessibilityAnnouncementService,
         errorLogService: ErrorLogService,
@@ -290,7 +295,9 @@ final class DictationViewModel: ObservableObject {
         self.accessibilityAnnouncementService = accessibilityAnnouncementService
         self.errorLogService = errorLogService
         self.mediaPlaybackService = mediaPlaybackService
+        self.numberNormalizationService = numberNormalizationService
         self.postProcessingPipeline = PostProcessingPipeline(
+            numberNormalizationService: numberNormalizationService,
             snippetService: snippetService,
             dictionaryService: dictionaryService,
             appFormatterService: appFormatterService
@@ -339,6 +346,7 @@ final class DictationViewModel: ObservableObject {
         self.mediaPauseEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.mediaPauseEnabled)
         self.transcribeShortQuietClipsAggressively = Self.loadTranscribeShortQuietClipsAggressively()
         self.spokenFeedbackEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.spokenFeedbackEnabled)
+        self.numberNormalizationEnabled = numberNormalizationService.isEnabled
         self.indicatorStyle = Self.loadIndicatorStyle()
         self.notchIndicatorVisibility = UserDefaults.standard.string(forKey: UserDefaultsKeys.notchIndicatorVisibility)
             .flatMap { NotchIndicatorVisibility(rawValue: $0) } ?? .duringActivity

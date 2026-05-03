@@ -101,6 +101,7 @@ final class ServiceContainer: ObservableObject {
         widgetDataService = WidgetDataService(historyService: historyService)
         memoryService = MemoryService(promptProcessingService: promptProcessingService)
         appFormatterService = AppFormatterService()
+        let numberNormalizationService = NumberNormalizationService()
         audioRecorderService = AudioRecorderService()
         promptProcessingService.memoryService = memoryService
         promptProcessingService.modelManagerService = modelManagerService
@@ -136,6 +137,7 @@ final class ServiceContainer: ObservableObject {
             promptActionService: promptActionService,
             promptProcessingService: promptProcessingService,
             appFormatterService: appFormatterService,
+            numberNormalizationService: numberNormalizationService,
             speechFeedbackService: speechFeedbackService,
             accessibilityAnnouncementService: accessibilityAnnouncementService,
             errorLogService: errorLogService,

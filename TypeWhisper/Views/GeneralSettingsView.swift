@@ -227,6 +227,13 @@ struct GeneralSettingsView: View {
                 }
             }
 
+            Section(String(localized: "Formatting")) {
+                Toggle(String(localized: "Normalize numbers"), isOn: $dictation.numberNormalizationEnabled)
+                Text(String(localized: "Converts spoken numbers to digits (e.g. \"twenty three\" → \"23\")."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
         }
         .formStyle(.grouped)
         .padding()

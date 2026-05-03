@@ -11,11 +11,18 @@ struct PostProcessingResult {
 
 @MainActor
 final class PostProcessingPipeline {
+    private let numberNormalizationService: NumberNormalizationService
     private let snippetService: SnippetService
     private let dictionaryService: DictionaryService
     private let appFormatterService: AppFormatterService?
 
-    init(snippetService: SnippetService, dictionaryService: DictionaryService, appFormatterService: AppFormatterService? = nil) {
+    init(
+        numberNormalizationService: NumberNormalizationService,
+        snippetService: SnippetService,
+        dictionaryService: DictionaryService,
+        appFormatterService: AppFormatterService? = nil
+    ) {
+        self.numberNormalizationService = numberNormalizationService
         self.snippetService = snippetService
         self.dictionaryService = dictionaryService
         self.appFormatterService = appFormatterService
@@ -51,7 +58,8 @@ final class PostProcessingPipeline {
         steps.append((600, -3))
         steps.sort { $0.priority < $1.priority }
 
-        var result = text
+        // ITN — run on raw STT output before any other transformation
+        var result = numberNormalizationService.normalize(text)
         var appliedSteps: [String] = []
 
         func stepName(for id: Int) -> String {

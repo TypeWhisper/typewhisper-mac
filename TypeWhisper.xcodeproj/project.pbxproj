@@ -78,6 +78,8 @@
 		86F4253D3CDE30E859D0F219 /* ProfileServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F41BD305007A3A158038C75C /* ProfileServiceTests.swift */; };
 		928A1F1B7A0D4C62A2B90761 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000034 /* TypeWhisperPluginSDK */; };
 		A47BC06842DCB0BB47A2D938 /* SnippetServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE6B6611B899F649B097A726 /* SnippetServiceTests.swift */; };
+		AA00000000000000000400 /* NumberNormalizationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000400 /* NumberNormalizationService.swift */; };
+		AA00000000000000000401 /* NumberNormalizationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000401 /* NumberNormalizationServiceTests.swift */; };
 		F18A00000000000000000001 /* FillerWordsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18A00000000000000000010 /* FillerWordsPlugin.swift */; };
 		F18A00000000000000000002 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = F18A00000000000000000011 /* manifest.json */; };
 		F18A00000000000000000003 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = F18A00000000000000000037 /* TypeWhisperPluginSDK */; };
@@ -661,6 +663,8 @@
 		BE6B6611B899F649B097A726 /* SnippetServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SnippetServiceTests.swift; sourceTree = "<group>"; };
 		B2D4F6A8C0E2143F9B7D5C1A /* PromptActionTemperaturePersistenceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptActionTemperaturePersistenceTests.swift; sourceTree = "<group>"; };
 		CE5852D6767C5FA955B84C52 /* AppFormatterServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppFormatterServiceTests.swift; sourceTree = "<group>"; };
+		BB00000000000000000400 /* NumberNormalizationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NumberNormalizationService.swift; sourceTree = "<group>"; };
+		BB00000000000000000401 /* NumberNormalizationServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NumberNormalizationServiceTests.swift; sourceTree = "<group>"; };
 		4D980A5CFE1A4217A10C2102 /* WhisperKitPluginLifecycleTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WhisperKitPluginLifecycleTests.swift; sourceTree = "<group>"; };
 		C42900000000000000000002 /* LiveTranscriptPluginBehaviorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveTranscriptPluginBehaviorTests.swift; sourceTree = "<group>"; };
 		D63A42880A0BA4C84F36E873 /* DictionaryServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictionaryServiceTests.swift; sourceTree = "<group>"; };
@@ -1223,6 +1227,7 @@
 				BB00000000000000000244 /* ErrorLogService.swift */,
 				BB00000000000000000246 /* AccessibilityAnnouncementService.swift */,
 				BB00000000000000000247 /* SpeechFeedbackService.swift */,
+				BB00000000000000000400 /* NumberNormalizationService.swift */,
 				BB00000000000000000272 /* TermPackRegistryService.swift */,
 				BB00000000000000000286 /* LicenseService.swift */,
 				D4A100000000000000000002 /* RecorderTranscriptionBuffer.swift */,
@@ -1822,6 +1827,7 @@
 				7D2E4F50617283946C1F7A8B /* SoundServiceTests.swift */,
 				BE6B6611B899F649B097A726 /* SnippetServiceTests.swift */,
 				D4A100000000000000000004 /* RecorderTranscriptionBufferTests.swift */,
+				BB00000000000000000401 /* NumberNormalizationServiceTests.swift */,
 				C42900000000000000000002 /* LiveTranscriptPluginBehaviorTests.swift */,
 				91B4D7E2C5A809F1632E4B7F /* StreamingHandlerTests.swift */,
 				4D980A5CFE1A4217A10C2102 /* WhisperKitPluginLifecycleTests.swift */,
@@ -3059,6 +3065,7 @@
 				204C804898EAE1127B62EC98 /* TestSupport.swift in Sources */,
 				76858B5B28A121356A5D9599 /* TextDiffServiceTests.swift in Sources */,
 				4D980A5CFE1A4217A10C2101 /* WhisperKitPluginLifecycleTests.swift in Sources */,
+				AA00000000000000000401 /* NumberNormalizationServiceTests.swift in Sources */,
 				E2DA879FDEFA04FBD013E837 /* OutputFormatter.swift in Sources */,
 				BA68B1E282D5D714132FEA24 /* PortDiscovery.swift in Sources */,
 			);
@@ -3176,6 +3183,7 @@
 					AA00000000000000000321 /* MinimalIndicatorView.swift in Sources */,
 					AA00000000000000000208 /* SharedIndicatorComponents.swift in Sources */,
 					AA00000000000000000126 /* PostProcessingPipeline.swift in Sources */,
+					AA00000000000000000400 /* NumberNormalizationService.swift in Sources */,
 				AA00000000000000000127 /* PluginSettingsView.swift in Sources */,
 				AA00000000000000000152 /* AppConstants.swift in Sources */,
 				AA00000000000000000189 /* WidgetData.swift in Sources */,
