@@ -6,7 +6,7 @@
 
 Speech-to-text and AI text processing for macOS. Transcribe audio using on-device AI models or cloud APIs (Groq, OpenAI), then transform the result with reusable workflows. Your voice data stays on your Mac with local models - or use cloud APIs for faster processing.
 
-TypeWhisper `1.3` is the current stable direct-download release for macOS. It includes system-wide dictation, file transcription, unified workflows, history, dictionary, snippets, legacy migration tools, and bundled integrations. Advanced surfaces like the HTTP API, CLI, widgets, watch folders, and the plugin SDK remain supported for power users and automation.
+TypeWhisper `1.4` is the current release-candidate line for macOS. It includes system-wide dictation, file transcription, unified workflows, history, dictionary, snippets, and bundled integrations. Advanced surfaces like the HTTP API, CLI, widgets, watch folders, and the plugin SDK remain supported for power users and automation.
 
 See the [release readiness guide](docs/release-readiness.md), [support matrix](docs/support-matrix.md), and [release checklist](docs/release-checklist.md) for the current release definition and ship gates.
 
@@ -25,7 +25,6 @@ See the [release readiness guide](docs/release-readiness.md), [support matrix](d
 <p align="center">
   <a href=".github/screenshots/history.png"><img src=".github/screenshots/history.png" width="270" alt="Transcription History"></a>
   <a href=".github/screenshots/dictionary.png"><img src=".github/screenshots/dictionary.png" width="270" alt="Dictionary"></a>
-  <a href=".github/screenshots/legacy.png"><img src=".github/screenshots/legacy.png" width="270" alt="Legacy Rules and Prompts"></a>
 </p>
 
 <p align="center">
@@ -48,7 +47,6 @@ See the [release readiness guide](docs/release-readiness.md), [support matrix](d
 - **Focus-safe local processing** - On-device workflows keep focus in the original target app instead of foregrounding TypeWhisper unexpectedly
 - **Snippets and dictionary polish** - Snippets are first-class settings, dictionary term packs are easier to review, and corrections stay engine-aware
 - **Integration refresh** - Bundled transcription, LLM, and action plugins are easier to inspect and activate
-- **Legacy cleanup** - Existing rules and prompts remain available in a dedicated Legacy area while the workflow migration is underway
 
 ## Features
 
@@ -113,7 +111,7 @@ brew install --cask typewhisper/tap/typewhisper
 
 Download the latest DMG from [GitHub Releases](https://github.com/TypeWhisper/typewhisper-mac/releases/latest).
 
-Stable direct-download releases use the default Sparkle channel. Release candidates such as `1.3.0-rc*` and daily builds are published as GitHub prereleases, update the shared Sparkle appcast on their own channels, and are excluded from Homebrew.
+Stable direct-download releases use the default Sparkle channel. Release candidates such as `1.4.0-rc*` and daily builds are published as GitHub prereleases, update the shared Sparkle appcast on their own channels, and are excluded from Homebrew.
 Installed builds can switch channels in `Settings -> About` via the `Update Channel` picker.
 
 ## Quick Start
@@ -389,7 +387,7 @@ Manual workflows are excluded from automatic dictation matching. They appear onl
 
 The active workflow name is shown as a badge in the indicator, together with a short explanation of why it matched.
 
-Existing rules and prompts remain visible in Settings > Legacy so they can be reviewed and cleaned up during the migration. Multiple engines can be loaded simultaneously for instant switching between workflows. Note that loading multiple local models increases memory usage. Cloud engines (Groq, OpenAI) have negligible memory overhead.
+Multiple engines can be loaded simultaneously for instant switching between workflows. Note that loading multiple local models increases memory usage. Cloud engines (Groq, OpenAI) have negligible memory overhead.
 
 ## Plugins
 
@@ -421,11 +419,10 @@ TypeWhisper/
 │   ├── HotkeyService
 │   ├── TextInsertionService
 │   ├── WorkflowService     # Workflow matching and persistence
-│   ├── LegacyWorkflowService # Read-only access to old rules and prompts
 │   ├── HistoryService      # Transcription history persistence (SwiftData)
 │   ├── DictionaryService   # Custom term corrections
 │   ├── SnippetService      # Text snippets with placeholders
-│   ├── PromptActionService # Legacy prompt management (SwiftData)
+│   ├── PromptActionService # Prompt action persistence (SwiftData)
 │   ├── PromptProcessingService # LLM orchestration for prompt execution
 │   ├── PluginManager       # Plugin discovery, loading, and lifecycle
 │   ├── PluginRegistryService # Plugin marketplace (download, install, update)

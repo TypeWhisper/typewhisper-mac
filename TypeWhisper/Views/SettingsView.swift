@@ -3,7 +3,7 @@ import AppKit
 
 enum SettingsTab: Hashable {
     case home, general, recording, hotkeys, recorder
-    case fileTranscription, history, dictionary, snippets, workflows, legacyWorkflows, profiles, prompts, integrations, advanced, license, about
+    case fileTranscription, history, dictionary, snippets, workflows, profiles, prompts, integrations, advanced, license, about
 }
 
 private struct SettingsDestination: Identifiable, Hashable {
@@ -27,10 +27,9 @@ struct SettingsView: View {
     @ObservedObject private var homeViewModel = HomeViewModel.shared
     @ObservedObject private var promptActionsViewModel = PromptActionsViewModel.shared
     @ObservedObject private var settingsNavigation = SettingsNavigationCoordinator.shared
-    @ObservedObject private var legacyWorkflowService = ServiceContainer.shared.legacyWorkflowService
 
     private var destinations: [SettingsDestination] {
-        var items = [
+        [
             SettingsDestination(tab: .home, title: String(localized: "Home"), systemImage: "house", badge: nil),
             SettingsDestination(tab: .general, title: String(localized: "General"), systemImage: "gear", badge: nil),
             SettingsDestination(tab: .recording, title: String(localized: "Recording"), systemImage: "mic.fill", badge: nil),
@@ -50,35 +49,17 @@ struct SettingsView: View {
                 title: localizedAppText("Workflows", de: "Workflows"),
                 systemImage: "point.3.connected.trianglepath.dotted",
                 badge: nil
-            )
+            ),
+            SettingsDestination(
+                tab: .integrations,
+                title: String(localized: "Integrations"),
+                systemImage: "puzzlepiece.extension",
+                badge: registryService.availableUpdatesCount > 0 ? registryService.availableUpdatesCount : nil
+            ),
+            SettingsDestination(tab: .advanced, title: String(localized: "Advanced"), systemImage: "gearshape.2", badge: nil),
+            SettingsDestination(tab: .license, title: String(localized: "License"), systemImage: "key", badge: nil),
+            SettingsDestination(tab: .about, title: String(localized: "About"), systemImage: "info.circle", badge: nil)
         ]
-
-        if !legacyWorkflowService.items.isEmpty {
-            items.append(
-                SettingsDestination(
-                    tab: .legacyWorkflows,
-                    title: localizedAppText("Legacy", de: "Legacy"),
-                    systemImage: "archivebox",
-                    badge: legacyWorkflowService.items.count
-                )
-            )
-        }
-
-        items.append(
-            contentsOf: [
-                SettingsDestination(
-                    tab: .integrations,
-                    title: String(localized: "Integrations"),
-                    systemImage: "puzzlepiece.extension",
-                    badge: registryService.availableUpdatesCount > 0 ? registryService.availableUpdatesCount : nil
-                ),
-                SettingsDestination(tab: .advanced, title: String(localized: "Advanced"), systemImage: "gearshape.2", badge: nil),
-                SettingsDestination(tab: .license, title: String(localized: "License"), systemImage: "key", badge: nil),
-                SettingsDestination(tab: .about, title: String(localized: "About"), systemImage: "info.circle", badge: nil)
-            ]
-        )
-
-        return items
     }
 
     private var destinationSections: [SettingsDestinationSection] {
@@ -120,33 +101,11 @@ struct SettingsView: View {
         }
         .onReceive(settingsNavigation.$request.compactMap { $0 }) { request in
             switch request.tab {
-            case .profiles:
-                if legacyWorkflowService.items.isEmpty {
-                    selectedTab = .workflows
-                    WorkflowsNavigationCoordinator.shared.showMine()
-                } else {
-                    selectedTab = .legacyWorkflows
-                    WorkflowsNavigationCoordinator.shared.showLegacy(focus: .rule)
-                }
-            case .prompts:
-                if legacyWorkflowService.items.isEmpty {
-                    selectedTab = .workflows
-                    WorkflowsNavigationCoordinator.shared.showMine()
-                } else {
-                    selectedTab = .legacyWorkflows
-                    WorkflowsNavigationCoordinator.shared.showLegacy(focus: .prompt)
-                }
-            case .workflows:
+            case .profiles, .prompts, .workflows:
                 selectedTab = .workflows
                 WorkflowsNavigationCoordinator.shared.showMine()
             default:
                 selectedTab = request.tab
-            }
-        }
-        .onChange(of: legacyWorkflowService.items.count) { _, count in
-            if count == 0 && selectedTab == .legacyWorkflows {
-                selectedTab = .workflows
-                WorkflowsNavigationCoordinator.shared.showMine()
             }
         }
     }
@@ -180,12 +139,10 @@ struct SettingsView: View {
             SnippetsSettingsView()
         case .workflows:
             WorkflowsSettingsView()
-        case .legacyWorkflows:
-            LegacyWorkflowsSettingsView()
         case .profiles:
             WorkflowsSettingsView()
         case .prompts:
-            LegacyWorkflowsSettingsView()
+            WorkflowsSettingsView()
         case .integrations:
             PluginSettingsView()
         case .advanced:
@@ -271,10 +228,6 @@ private func settingsDestinationSections(_ destinations: [SettingsDestination]) 
         settingsDestination(destinations, .snippets),
         settingsDestination(destinations, .workflows)
     ]
-
-    if let legacyDestination = destinations.first(where: { $0.tab == .legacyWorkflows }) {
-        workspaceDestinations.append(legacyDestination)
-    }
 
     workspaceDestinations.append(settingsDestination(destinations, .integrations))
 

@@ -11,6 +11,7 @@
         "de": "Cloud-Transkription und LLM ueber die Groq-API. Schnelle Inferenz, erfordert API-Key."
     },
     "category": "transcription",
+    "categories": ["transcription", "llm"],
     "iconSystemName": "bolt.fill",
     "principalClass": "GroqPlugin",
     "requiresAPIKey": true

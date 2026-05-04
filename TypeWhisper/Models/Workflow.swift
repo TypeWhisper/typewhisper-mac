@@ -491,6 +491,21 @@ extension WorkflowTriggerKind {
 }
 
 extension Workflow {
+    var pluginWorkflowInfo: PluginWorkflowInfo {
+        PluginWorkflowInfo(
+            id: id,
+            name: name,
+            isEnabled: isEnabled,
+            sortOrder: sortOrder,
+            template: PluginWorkflowTemplate(rawValue: template.rawValue) ?? .custom,
+            trigger: trigger?.pluginWorkflowTrigger ?? PluginWorkflowTrigger(kind: .manual),
+            behavior: behavior.pluginWorkflowBehavior,
+            output: output.pluginWorkflowOutput,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
+    }
+
     var definition: WorkflowTemplateDefinition {
         template.definition
     }
@@ -662,5 +677,53 @@ extension Workflow {
             return "\nConfigured source language: \(configuredLanguage)."
         }
         return ""
+    }
+}
+
+private extension WorkflowTrigger {
+    var pluginWorkflowTrigger: PluginWorkflowTrigger {
+        PluginWorkflowTrigger(
+            kind: PluginWorkflowTriggerKind(rawValue: kind.rawValue) ?? .manual,
+            appBundleIdentifiers: appBundleIdentifiers,
+            websitePatterns: websitePatterns,
+            hotkeys: hotkeys.map(\.pluginWorkflowHotkey),
+            hotkeyBehavior: PluginWorkflowHotkeyBehavior(rawValue: hotkeyBehavior.rawValue) ?? .startDictation
+        )
+    }
+}
+
+private extension UnifiedHotkey {
+    var pluginWorkflowHotkey: PluginWorkflowHotkey {
+        PluginWorkflowHotkey(
+            keyCode: keyCode,
+            modifierFlags: modifierFlags,
+            isFn: isFn,
+            isDoubleTap: isDoubleTap,
+            modifierKeyCodes: modifierKeyCodes.sorted(),
+            mouseButton: mouseButton
+        )
+    }
+}
+
+private extension WorkflowBehavior {
+    var pluginWorkflowBehavior: PluginWorkflowBehavior {
+        PluginWorkflowBehavior(
+            settings: settings,
+            fineTuning: fineTuning,
+            providerId: providerId,
+            cloudModel: cloudModel,
+            temperatureMode: temperatureMode,
+            temperatureValue: temperatureValue
+        )
+    }
+}
+
+private extension WorkflowOutput {
+    var pluginWorkflowOutput: PluginWorkflowOutput {
+        PluginWorkflowOutput(
+            format: format,
+            autoEnter: autoEnter,
+            targetActionPluginId: targetActionPluginId
+        )
     }
 }

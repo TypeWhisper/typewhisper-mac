@@ -963,6 +963,7 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
             loadedPlugin: nil,
             registryPlugin: RegistryPlugin(
                 id: "com.typewhisper.mock.sdk-missing",
+                source: .official,
                 name: "Marketplace Replacement",
                 version: "1.3.1",
                 minHostVersion: "1.3.0",
@@ -972,6 +973,7 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
                 author: "TypeWhisper",
                 description: "Replacement",
                 category: "utility",
+                categories: ["utility"],
                 size: 1,
                 downloadURL: "https://example.com/replacement.zip",
                 iconSystemName: nil,
@@ -1001,6 +1003,7 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
     func testRegistryPluginRejectsArm64OnlyEntryOnIntel() {
         let plugin = RegistryPlugin(
             id: "com.typewhisper.mock.arm64-only",
+            source: .official,
             name: "ARM64 Only",
             version: "1.0.0",
             minHostVersion: "1.0.0",
@@ -1010,6 +1013,7 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
             author: "TypeWhisper",
             description: "Test plugin",
             category: "transcription",
+            categories: ["transcription"],
             size: 1,
             downloadURL: "https://example.com/plugin.zip",
             iconSystemName: nil,

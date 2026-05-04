@@ -16,7 +16,6 @@ final class ServiceContainer: ObservableObject {
     let textDiffService: TextDiffService
     let profileService: ProfileService
     let workflowService: WorkflowService
-    let legacyWorkflowService: LegacyWorkflowService
     let translationService: AnyObject? // TranslationService (macOS 15+)
     let audioDuckingService: AudioDuckingService
     let mediaPlaybackService: MediaPlaybackService
@@ -73,10 +72,6 @@ final class ServiceContainer: ObservableObject {
         profileService = ProfileService()
         workflowService = WorkflowService()
         promptActionService = PromptActionService()
-        legacyWorkflowService = LegacyWorkflowService(
-            profileService: profileService,
-            promptActionService: promptActionService
-        )
         #if canImport(Translation)
         if #available(macOS 15, *) {
             translationService = TranslationService()
@@ -237,6 +232,9 @@ final class ServiceContainer: ObservableObject {
                 }
             }
             return names
+        }
+        pluginManager.setWorkflowProvider { [weak self] in
+            self?.workflowService.workflows.map(\.pluginWorkflowInfo) ?? []
         }
         pluginManager.scanAndLoadPlugins()
 

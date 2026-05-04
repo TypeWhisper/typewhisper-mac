@@ -8,14 +8,28 @@
 - `bash scripts/check_first_party_warnings.sh build.log`
 - Review `README.md`, `SECURITY.md`, `docs/support-matrix.md`, `docs/release-readiness.md`, `Plugins/README.md`, and `TypeWhisperPluginSDK/README.md`
 - Confirm marketplace plugin manifests and registry releases carry the current `sdkCompatibilityVersion`
-- Confirm `MARKETING_VERSION = 1.3.0` across the app, CLI, and widgets
-- Prepare or refresh `docs/release-notes/1.3.0.md`
-- If you want to edit the notes directly on GitHub, create or update the draft release for `v1.3.0` before pushing the tag
-- Otherwise the release workflow will publish `docs/release-notes/1.3.0.md` automatically when no release already exists
+- Confirm `MARKETING_VERSION = 1.4.0` across the app, CLI, and widgets
+- Prepare or refresh `docs/release-notes/1.4.0.md`
+- If you want to edit the notes directly on GitHub, create or update the draft release for `v1.4.0` before pushing the tag
+- Otherwise the release workflow will publish `docs/release-notes/1.4.0.md` automatically when no release already exists
+
+## Before `1.4.0-rc1`
+
+- Confirm `1.3.x` builds continue to use `plugins-v1.json`
+- Confirm `1.4.0-rc*`, `1.4.0` daily, and `1.4.0` stable builds use `plugins-community-v1.json`
+- Confirm community registry entries set `source` to `community`; omitted `source` values must remain official marketplace entries
+- Keep community plugin submissions out of the `1.3` release scope unless they are already bundled or first-party
+- Smoke-test the Integrations hub grouped lists for Built-in, Marketplace, Community, and Manual plugin paths
+- Smoke-test the Installed, Discover, and Manual tabs at desktop and compact window sizes
+- Verify Discover search, the Community include/exclude checkbox, and the capability filter menu
+- Verify source, hosting, and multi-capability badges and filters for Local, Cloud, Transcription, LLM, Action, Memory, and combined-capability plugins
+- Verify manual `.bundle` installation, external bundle enable/disable, and incompatible bundle notices
+- Verify plugin update discovery still works for official and community registry entries
+- Verify Plugin SDK workflow snapshots expose names, triggers, behavior settings, output routing, and Local/Cloud-safe metadata without exposing SwiftData objects
 
 ## RC Smoke Checks
 
-- Publish `1.3.0-rc*` on the `release-candidate` channel and daily builds on the `daily` channel
+- Publish `1.4.0-rc*` on the `release-candidate` channel and daily builds on the `daily` channel
 - Stable builds must use only the default channel
 - Fresh install
 - Permission recovery
@@ -23,7 +37,6 @@
 - File transcription
 - Workflow prompt action
 - Workflow setup step (cross-tab navigation)
-- Legacy prompt drag-and-drop reordering
 - History edit/export
 - Post-processing transparency in history and indicators
 - Workflow matching for app, URL, hotkey, and fallback triggers
@@ -50,7 +63,7 @@
 - Fn hotkey in both press-and-release and press-and-hold strategies
 - Audio preview and recording after input-device changes, especially AirPods and Bluetooth profile switches
 - Audio recovery after Bluetooth route changes (verify no crash)
-- Auto-submit workflow behavior and legacy Auto Enter profile compatibility
+- Auto-submit workflow behavior
 - Disable history saving (toggle off, dictate, verify no entry created)
 - STT and AI-processed text both shown in the history entry
 - Spoken feedback (TTS)
@@ -64,13 +77,13 @@
   - Open the language picker, search, select multiple languages, verify the selected count
   - Run a dictation and confirm the hints reach the engine
 - Verify CLI and HTTP API locally
-- Upgrade from `1.2.2` with legacy prompts/profiles preserved and 1.3 Workflows available
+- Upgrade from `1.2.2` with 1.4 Workflows available and no Legacy settings page
 
-## Before `1.3.0`
+## Before `1.4.0`
 
-- Observe the latest `1.3.0-rc*` build on real machines for multiple days
+- Observe the latest `1.4.0-rc*` build on real machines for multiple days
 - No open P0/P1 bugs in the core workflow
 - Finalize release notes
 - RC and daily tags must not update Homebrew or trigger stable website messaging
 - Verify DMG, ZIP, and the `release-candidate` appcast entry with `minimumSystemVersion` set to `14.0`
-- Verify Homebrew and the stable appcast update only at the final `1.3.0`
+- Verify Homebrew and the stable appcast update only at the final `1.4.0`

@@ -11,6 +11,7 @@
         "de": "Cloud-Transkription und LLM ueber Fireworks AI. Streaming-Transkription, schnelle Inferenz, erfordert API-Key."
     },
     "category": "transcription",
+    "categories": ["transcription", "llm"],
     "iconSystemName": "flame.fill",
     "principalClass": "FireworksPlugin",
     "requiresAPIKey": true

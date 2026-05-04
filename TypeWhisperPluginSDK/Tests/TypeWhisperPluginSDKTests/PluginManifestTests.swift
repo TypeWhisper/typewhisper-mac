@@ -92,6 +92,27 @@ final class PluginManifestTests: XCTestCase {
         XCTAssertEqual(manifest.resolvedHosting, .cloud)
     }
 
+    func testPluginManifestDecodesMultipleCategoryIdentifiers() throws {
+        let data = Data(
+            """
+            {
+              "id": "com.typewhisper.multi",
+              "name": "Multi Plugin",
+              "version": "1.2.3",
+              "principalClass": "MultiPlugin",
+              "category": "transcription",
+              "categories": ["transcription", "llm", "memory"]
+            }
+            """.utf8
+        )
+
+        let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
+
+        XCTAssertEqual(manifest.category, "transcription")
+        XCTAssertEqual(manifest.categories, ["transcription", "llm", "memory"])
+        XCTAssertEqual(manifest.resolvedCategoryIdentifiers, ["transcription", "llm", "memory"])
+    }
+
     func testPluginManifestResolvedHostingFallsBackToAPIKeyRequirement() {
         let cloudManifest = PluginManifest(
             id: "com.typewhisper.remote",

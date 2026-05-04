@@ -341,11 +341,19 @@ func activate(host: HostServices) {
     // Rule names
     let rules = host.availableRuleNames
 
+    // User workflows as read-only SDK snapshots
+    let workflows = host.availableWorkflows
+    let workflowTriggerWords = workflows.compactMap { workflow in
+        workflow.behavior.settings["triggerWord"]
+    }
+
     // Host UI coordination
     host.notifyCapabilitiesChanged()
     host.setStreamingDisplayActive(true)
 }
 ```
+
+`availableWorkflows` exposes read-only `PluginWorkflowInfo` snapshots. Plugins can inspect workflow names, templates, enabled state, trigger metadata, behavior settings, LLM provider/model choices, temperature directives, and output routing without depending on TypeWhisper's internal SwiftData models.
 
 ---
 
@@ -485,7 +493,8 @@ let wavData = PluginWavEncoder.encode(samples, sampleRate: 16000)
 | `minOSVersion` | No | Minimum macOS version (e.g. `14.0`, `26.0`). Plugin is skipped on older systems. |
 | `author` | No | Author name |
 | `principalClass` | Yes | Objective-C class name, must match `@objc(Name)` |
-| `category` | No | Marketplace category: `transcription`, `tts`, `llm`, `post-processor`, `action`, `memory`, or `utility`. |
+| `category` | No | Primary/legacy marketplace category: `transcription`, `tts`, `llm`, `post-processor`, `action`, `memory`, or `utility`. |
+| `categories` | No | Optional list of all plugin capabilities. Use this for plugins that cover multiple surfaces, for example `["transcription", "llm"]`. |
 | `hosting` | No | Marketplace hosting classification: `local` or `cloud`. If omitted, TypeWhisper falls back to `requiresAPIKey == true` as cloud and otherwise local. |
 | `requiresAPIKey` | No | Whether the plugin specifically needs an API key credential. This is not the Local/Cloud category; use `hosting` for that. |
 | `iconSystemName` | No | SF Symbol name for marketplace and settings UI. |
@@ -499,7 +508,13 @@ To distribute via the TypeWhisper plugin marketplace:
 1. Build your plugin in Release configuration
 2. ZIP the `.bundle`: `ditto -ck --sequesterRsrc MyPlugin.bundle MyPlugin.zip`
 3. Host the ZIP (GitHub Releases, your own server, etc.)
-4. Submit a PR to add your plugin to the appropriate gh-pages registry feed (`plugins.json` for legacy plugins without `sdkCompatibilityVersion`, `plugins-v1.json` for the current `v1` SDK line)
+4. Submit a PR to add your plugin to the appropriate gh-pages registry feed
+
+Registry feeds:
+
+- `plugins.json` - legacy plugins without `sdkCompatibilityVersion`
+- `plugins-v1.json` - current official `v1` SDK marketplace feed used by `1.3.x`
+- `plugins-community-v1.json` - `1.4+` community-capable `v1` SDK feed
 
 Registry entry format:
 
@@ -513,7 +528,9 @@ Registry entry format:
   "minOSVersion": "14.0",
   "author": "Your Name",
   "description": "What your plugin does.",
+  "source": "community",
   "category": "transcription|tts|llm|post-processor|action|memory|utility",
+  "categories": ["transcription", "llm"],
   "hosting": "local|cloud",
   "requiresAPIKey": false,
   "size": 12345678,
@@ -521,6 +538,8 @@ Registry entry format:
   "iconSystemName": "star.fill"
 }
 ```
+
+`source` is registry metadata for the TypeWhisper Integrations UI. Omit it for official marketplace entries; TypeWhisper treats missing values as `official`. Use `"source": "community"` for community-maintained plugins submitted to the `1.4+` community feed. This field is not required in the plugin bundle manifest.
 
 ---
 

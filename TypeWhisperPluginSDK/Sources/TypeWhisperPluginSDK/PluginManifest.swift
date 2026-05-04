@@ -23,6 +23,7 @@ public struct PluginManifest: Codable, Equatable, Sendable {
     public let hosting: PluginHosting?
     public let iconSystemName: String?
     public let category: String?
+    public let categories: [String]?
 
     public init(
         id: String,
@@ -37,7 +38,8 @@ public struct PluginManifest: Codable, Equatable, Sendable {
         requiresAPIKey: Bool? = nil,
         hosting: PluginHosting? = nil,
         iconSystemName: String? = nil,
-        category: String? = nil
+        category: String? = nil,
+        categories: [String]? = nil
     ) {
         self.id = id
         self.name = name
@@ -52,11 +54,30 @@ public struct PluginManifest: Codable, Equatable, Sendable {
         self.hosting = hosting
         self.iconSystemName = iconSystemName
         self.category = category
+        self.categories = categories
     }
 }
 
 public extension PluginManifest {
     var resolvedHosting: PluginHosting {
         hosting ?? PluginHosting.fallback(requiresAPIKey: requiresAPIKey)
+    }
+
+    var resolvedCategoryIdentifiers: [String] {
+        Self.normalizedCategoryIdentifiers(primary: category, categories: categories)
+    }
+
+    static func normalizedCategoryIdentifiers(primary: String?, categories: [String]?) -> [String] {
+        var seen: Set<String> = []
+        var result: [String] = []
+
+        for value in [primary].compactMap({ $0 }) + (categories ?? []) {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            guard seen.insert(trimmed).inserted else { continue }
+            result.append(trimmed)
+        }
+
+        return result
     }
 }

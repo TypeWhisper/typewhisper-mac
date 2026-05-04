@@ -25,6 +25,9 @@ public protocol HostServices: Sendable {
     // Available rule names
     var availableRuleNames: [String] { get }
 
+    // Available user workflows
+    var availableWorkflows: [PluginWorkflowInfo] { get }
+
     // Notify host that plugin capabilities changed (e.g. model loaded/unloaded)
     func notifyCapabilitiesChanged()
 
@@ -34,6 +37,8 @@ public protocol HostServices: Sendable {
 }
 
 public extension HostServices {
+    var availableWorkflows: [PluginWorkflowInfo] { [] }
+
     @available(*, deprecated, renamed: "availableRuleNames")
     var availableProfileNames: [String] { availableRuleNames }
 }

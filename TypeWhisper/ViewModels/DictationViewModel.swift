@@ -917,11 +917,11 @@ final class DictationViewModel: ObservableObject {
                 return
             }
             guard let refinedRule = profileService.matchRule(bundleIdentifier: bundleId, url: resolvedURL) else {
-                logger.info("URL resolution: no legacy rule matched for URL \(resolvedURL)")
+                logger.info("URL resolution: no profile rule matched for URL \(resolvedURL)")
                 return
             }
 
-            logger.info("URL resolution: matched legacy rule '\(refinedRule.profile.name)'")
+            logger.info("URL resolution: matched profile rule '\(refinedRule.profile.name)'")
             applyRuleMatch(refinedRule, activeApp: capturedActiveApp)
             refreshLiveStreamingIfParamsChanged()
         }
@@ -1540,7 +1540,7 @@ final class DictationViewModel: ObservableObject {
     // MARK: - Shared Helpers
 
     /// Builds an LLM handler for the post-processing pipeline.
-    /// Priority: workflow > legacy inline/prompt action > translation > nil.
+    /// Priority: workflow > profile inline/prompt action > translation > nil.
     private func buildLLMHandler(
         translationTarget: String?,
         detectedLanguage: String?,

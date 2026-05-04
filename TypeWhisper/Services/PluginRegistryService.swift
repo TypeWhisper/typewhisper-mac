@@ -71,8 +71,14 @@ enum PluginCategory: String, CaseIterable {
 
 // MARK: - Registry Models
 
+enum PluginDistributionSource: String, Codable, Equatable {
+    case official
+    case community
+}
+
 struct RegistryPlugin: Codable, Identifiable {
     let id: String
+    let source: PluginDistributionSource
     let name: String
     let version: String
     let minHostVersion: String
@@ -82,6 +88,7 @@ struct RegistryPlugin: Codable, Identifiable {
     let author: String
     let description: String
     let category: String
+    let categories: [String]
     let size: Int64
     let downloadURL: String
     let iconSystemName: String?
@@ -152,10 +159,12 @@ private struct LegacyRegistryRelease: Decodable {
 
 struct RegistryPluginEntry: Decodable {
     let id: String
+    let source: PluginDistributionSource
     let name: String
     let author: String
     let description: String
     let category: String
+    let categories: [String]
     let iconSystemName: String?
     let requiresAPIKey: Bool?
     let hosting: PluginHosting?
@@ -165,10 +174,12 @@ struct RegistryPluginEntry: Decodable {
 
     private enum CodingKeys: String, CodingKey {
         case id
+        case source
         case name
         case author
         case description
         case category
+        case categories
         case iconSystemName
         case requiresAPIKey
         case hosting
@@ -188,10 +199,16 @@ struct RegistryPluginEntry: Decodable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
         id = try container.decode(String.self, forKey: .id)
+        source = try container.decodeIfPresent(PluginDistributionSource.self, forKey: .source) ?? .official
         name = try container.decode(String.self, forKey: .name)
         author = try container.decode(String.self, forKey: .author)
         description = try container.decode(String.self, forKey: .description)
-        category = try container.decode(String.self, forKey: .category)
+        let primaryCategory = try container.decodeIfPresent(String.self, forKey: .category)
+        categories = PluginManifest.normalizedCategoryIdentifiers(
+            primary: primaryCategory,
+            categories: try container.decodeIfPresent([String].self, forKey: .categories)
+        )
+        category = categories.first ?? PluginCategory.utility.rawValue
         iconSystemName = try container.decodeIfPresent(String.self, forKey: .iconSystemName)
         requiresAPIKey = try container.decodeIfPresent(Bool.self, forKey: .requiresAPIKey)
         hosting = try container.decodeIfPresent(PluginHosting.self, forKey: .hosting)
@@ -253,6 +270,7 @@ struct RegistryPluginEntry: Decodable {
 
         return RegistryPlugin(
             id: id,
+            source: source,
             name: name,
             version: compatibleRelease.version,
             minHostVersion: compatibleRelease.minHostVersion,
@@ -262,6 +280,7 @@ struct RegistryPluginEntry: Decodable {
             author: author,
             description: description,
             category: category,
+            categories: categories,
             size: compatibleRelease.size,
             downloadURL: compatibleRelease.downloadURL,
             iconSystemName: iconSystemName,
@@ -359,6 +378,7 @@ final class PluginRegistryService: ObservableObject {
     enum RegistryFeed: String, Equatable {
         case legacy = "plugins.json"
         case v1 = "plugins-v1.json"
+        case communityV1 = "plugins-community-v1.json"
 
         var pathComponent: String { rawValue }
     }
@@ -411,7 +431,13 @@ final class PluginRegistryService: ObservableObject {
         releaseChannel: AppConstants.ReleaseChannel
     ) -> RegistryFeed {
         _ = releaseChannel
-        return compareVersions(appVersion, "1.3.0") == .orderedAscending ? .legacy : .v1
+        if compareVersions(appVersion, "1.3.0") == .orderedAscending {
+            return .legacy
+        }
+        if compareVersions(appVersion, "1.4.0") != .orderedAscending {
+            return .communityV1
+        }
+        return .v1
     }
 
     init(

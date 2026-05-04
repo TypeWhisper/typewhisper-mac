@@ -11,6 +11,7 @@
         "de": "Verbindung zu jedem OpenAI-kompatiblen API-Server fuer Transkription und LLM. Funktioniert mit Ollama, LM Studio, vLLM und mehr."
     },
     "category": "transcription",
+    "categories": ["transcription", "llm"],
     "iconSystemName": "server.rack",
     "principalClass": "OpenAICompatiblePlugin"
 }

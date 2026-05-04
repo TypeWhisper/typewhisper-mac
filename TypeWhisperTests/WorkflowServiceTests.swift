@@ -4,6 +4,57 @@ import XCTest
 
 @MainActor
 final class WorkflowServiceTests: XCTestCase {
+    func testWorkflowExposesPluginSDKSnapshot() throws {
+        let workflowId = try XCTUnwrap(UUID(uuidString: "5696C819-F96E-419B-9224-14FF94C65AA8"))
+        let createdAt = Date(timeIntervalSince1970: 100)
+        let updatedAt = Date(timeIntervalSince1970: 200)
+        let hotkey = UnifiedHotkey(
+            keyCode: 15,
+            modifierFlags: NSEvent.ModifierFlags.command.rawValue,
+            isFn: false,
+            isDoubleTap: true,
+            modifierKeyCodes: [55]
+        )
+        let workflow = Workflow(
+            id: workflowId,
+            name: "Dynamic Cleanup",
+            isEnabled: true,
+            sortOrder: 3,
+            template: .custom,
+            trigger: .hotkeys([hotkey], behavior: .processSelectedText),
+            behavior: WorkflowBehavior(
+                settings: ["triggerWord": "cleanup"],
+                fineTuning: "Keep speaker intent.",
+                providerId: "openai",
+                cloudModel: "gpt-5.4",
+                temperatureModeRaw: "custom",
+                temperatureValue: 0.2
+            ),
+            output: WorkflowOutput(
+                format: "markdown",
+                autoEnter: true,
+                targetActionPluginId: "com.example.action"
+            ),
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
+
+        let snapshot = workflow.pluginWorkflowInfo
+
+        XCTAssertEqual(snapshot.id, workflowId)
+        XCTAssertEqual(snapshot.name, "Dynamic Cleanup")
+        XCTAssertEqual(snapshot.template, .custom)
+        XCTAssertEqual(snapshot.trigger.kind, .hotkey)
+        XCTAssertEqual(snapshot.trigger.hotkeyBehavior, .processSelectedText)
+        XCTAssertEqual(snapshot.trigger.hotkeys.first?.keyCode, 15)
+        XCTAssertEqual(snapshot.trigger.hotkeys.first?.modifierKeyCodes, [55])
+        XCTAssertEqual(snapshot.behavior.settings["triggerWord"], "cleanup")
+        XCTAssertEqual(snapshot.behavior.temperatureMode, .custom)
+        XCTAssertEqual(snapshot.output.targetActionPluginId, "com.example.action")
+        XCTAssertEqual(snapshot.createdAt, createdAt)
+        XCTAssertEqual(snapshot.updatedAt, updatedAt)
+    }
+
     func testWorkflowServicePersistsEncodedTriggerBehaviorAndOutput() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
         defer { TestSupport.remove(appSupportDirectory) }
@@ -58,7 +109,7 @@ final class WorkflowServiceTests: XCTestCase {
         )
     }
 
-    func testLegacyWorkflowTriggerWithoutHotkeyBehaviorDefaultsToStartDictation() throws {
+    func testStoredWorkflowTriggerWithoutHotkeyBehaviorDefaultsToStartDictation() throws {
         let payload: [String: Any] = [
             "kind": "hotkey",
             "appBundleIdentifiers": [],
@@ -289,9 +340,9 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertFalse(prompt.contains("unless the instruction explicitly says otherwise"))
     }
 
-    func testLegacyTranslationWorkflowWithoutProcessorKeepsLLMPrompt() throws {
+    func testStoredTranslationWorkflowWithoutProcessorKeepsLLMPrompt() throws {
         let workflow = Workflow(
-            name: "Legacy Translate",
+            name: "Stored Translate",
             template: .translation,
             trigger: .manual(),
             behavior: WorkflowBehavior(settings: ["targetLanguage": "German"])
@@ -436,7 +487,7 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(capturedSourceLanguage, "en")
     }
 
-    func testWorkflowTextProcessingServiceUsesLLMPromptPathForLegacyTranslationWorkflows() async throws {
+    func testWorkflowTextProcessingServiceUsesLLMPromptPathForStoredTranslationWorkflows() async throws {
         let workflow = Workflow(
             name: "LLM Translate",
             template: .translation,
@@ -465,7 +516,7 @@ final class WorkflowServiceTests: XCTestCase {
                 return "Verarbeiteter Text"
             },
             appleTranslator: { _, _, _ in
-                XCTFail("Legacy translation workflows must use the LLM prompt processor")
+                XCTFail("Stored translation workflows must use the LLM prompt processor")
                 return ""
             }
         )

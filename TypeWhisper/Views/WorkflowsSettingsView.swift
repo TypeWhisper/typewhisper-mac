@@ -11,30 +11,17 @@ final class WorkflowsNavigationCoordinator: ObservableObject {
     nonisolated(unsafe) static var shared: WorkflowsNavigationCoordinator!
 
     @Published private(set) var route: WorkflowRoute?
-    @Published private(set) var legacyFocus: LegacyWorkflowSourceKind?
 
     func showMine() {
         route = nil
-        legacyFocus = nil
-    }
-
-    func showLegacy(focus: LegacyWorkflowSourceKind? = nil) {
-        route = nil
-        legacyFocus = focus
-    }
-
-    func setLegacyFocus(_ focus: LegacyWorkflowSourceKind?) {
-        legacyFocus = focus
     }
 
     func createWorkflow() {
         route = .create
-        legacyFocus = nil
     }
 
     func editWorkflow(id: UUID) {
         route = .edit(id)
-        legacyFocus = nil
     }
 
     func goBackToList() {
@@ -66,14 +53,6 @@ struct WorkflowsSettingsView: View {
                 MissingWorkflowPage()
             }
         }
-    }
-}
-
-struct LegacyWorkflowsSettingsView: View {
-    var body: some View {
-        LegacyWorkflowsPage()
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .frame(minWidth: 760, minHeight: 480)
     }
 }
 
@@ -543,226 +522,11 @@ private struct WorkflowRow: View {
     }
 }
 
-private struct LegacyWorkflowsPage: View {
-    @ObservedObject private var legacyWorkflowService = ServiceContainer.shared.legacyWorkflowService
-    @ObservedObject private var navigation = WorkflowsNavigationCoordinator.shared
-
-    @State private var searchText = ""
-    @State private var pendingDeleteItem: LegacyWorkflowItem?
-
-    private var filteredItems: [LegacyWorkflowItem] {
-        let trimmedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let scoped = legacyWorkflowService.items.filter { item in
-            guard let focus = navigation.legacyFocus else { return true }
-            return item.sourceKind == focus
-        }
-
-        guard !trimmedQuery.isEmpty else { return scoped }
-
-        return scoped.filter { item in
-            item.name.localizedCaseInsensitiveContains(trimmedQuery)
-                || item.summary.localizedCaseInsensitiveContains(trimmedQuery)
-                || item.detail.localizedCaseInsensitiveContains(trimmedQuery)
-        }
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            header
-
-            Divider()
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    filterBar
-
-                    if filteredItems.isEmpty {
-                        ContentUnavailableView {
-                            Label(localizedAppText("No Legacy Entries", de: "Keine Legacy-Einträge"), systemImage: "archivebox")
-                        } description: {
-                            Text(localizedAppText("There are currently no rules or prompts in the old system.", de: "Aktuell gibt es keine Regeln oder Prompts im alten System."))
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 220)
-                        .background {
-                            workflowsGroupedSurface(cornerRadius: 16)
-                        }
-                    } else {
-                        LazyVStack(spacing: 0) {
-                            ForEach(Array(filteredItems.enumerated()), id: \.element.id) { index, item in
-                                LegacyWorkflowRow(item: item) {
-                                    pendingDeleteItem = item
-                                }
-
-                                if index < filteredItems.count - 1 {
-                                    Divider()
-                                        .padding(.leading, 62)
-                                }
-                            }
-                        }
-                        .background {
-                            workflowsGroupedSurface(cornerRadius: 16)
-                        }
-                    }
-                }
-                .padding(16)
-            }
-        }
-        .confirmationDialog(
-            localizedAppText("Delete legacy entry?", de: "Legacy-Eintrag löschen?"),
-            isPresented: Binding(
-                get: { pendingDeleteItem != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        pendingDeleteItem = nil
-                    }
-                }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button(localizedAppText("Delete", de: "Löschen"), role: .destructive) {
-                guard let pendingDeleteItem else { return }
-                legacyWorkflowService.deleteItem(pendingDeleteItem)
-                self.pendingDeleteItem = nil
-            }
-
-            Button(localizedAppText("Cancel", de: "Abbrechen"), role: .cancel) {
-                pendingDeleteItem = nil
-            }
-        } message: {
-            if let pendingDeleteItem {
-                Text(deleteMessage(for: pendingDeleteItem))
-            }
-        }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(localizedAppText("Legacy", de: "Legacy"))
-                .font(.headline)
-            Text(
-                localizedAppText(
-                    "View and clean up the old rules and prompts while the workflow migration is underway.",
-                    de: "Sichte und bereinige die alten Regeln und Prompts, während die Workflow-Migration läuft."
-                )
-            )
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(.bar)
-    }
-
-    private var filterBar: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Picker(
-                localizedAppText("Legacy Filter", de: "Legacy-Filter"),
-                selection: Binding(
-                    get: { navigation.legacyFocus },
-                    set: { navigation.setLegacyFocus($0) }
-                )
-            ) {
-                Text(localizedAppText("All", de: "Alle")).tag(nil as LegacyWorkflowSourceKind?)
-                Text(localizedAppText("Rules", de: "Regeln")).tag(LegacyWorkflowSourceKind.rule as LegacyWorkflowSourceKind?)
-                Text(localizedAppText("Prompts", de: "Prompts")).tag(LegacyWorkflowSourceKind.prompt as LegacyWorkflowSourceKind?)
-            }
-            .pickerStyle(.segmented)
-
-            HStack(spacing: 10) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                TextField(localizedAppText("Search legacy entries", de: "Legacy-Einträge durchsuchen"), text: $searchText)
-                    .textFieldStyle(.plain)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(nsColor: .controlBackgroundColor))
-            }
-        }
-    }
-
-    private func deleteMessage(for item: LegacyWorkflowItem) -> String {
-        switch item.sourceKind {
-        case .rule:
-            return localizedAppText(
-                "This removes the legacy rule “\(item.name)” from the old store.",
-                de: "Dadurch wird die Legacy-Regel „\(item.name)“ aus dem alten Store entfernt."
-            )
-        case .prompt:
-            return localizedAppText(
-                "This removes the legacy prompt “\(item.name)” and clears its links from old rules.",
-                de: "Dadurch wird der Legacy-Prompt „\(item.name)“ entfernt und aus alten Regeln ausgetragen."
-            )
-        }
-    }
-}
-
-private struct LegacyWorkflowRow: View {
-    let item: LegacyWorkflowItem
-    let onDelete: () -> Void
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: item.sourceKind == .rule ? "archivebox" : "sparkles.rectangle.stack")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 30, height: 30)
-                .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Text(item.name)
-                        .font(.headline)
-
-                    WorkflowBadge(title: item.sourceKind.title, tint: .secondary.opacity(0.14), foreground: .secondary)
-
-                    if item.isImported {
-                        WorkflowBadge(title: localizedAppText("Imported", de: "Importiert"), tint: .green.opacity(0.14), foreground: .green)
-                    }
-                }
-
-                Text(item.summary)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-
-                Text(item.detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                WorkflowBadge(
-                    title: item.isEnabled
-                        ? localizedAppText("Enabled in legacy store", de: "Im Legacy-Store aktiv")
-                        : localizedAppText("Disabled in legacy store", de: "Im Legacy-Store deaktiviert"),
-                    tint: item.isEnabled ? .orange.opacity(0.14) : .secondary.opacity(0.14),
-                    foreground: item.isEnabled ? .orange : .secondary
-                )
-            }
-
-            Spacer(minLength: 12)
-
-            Button(role: .destructive, action: onDelete) {
-                Image(systemName: "trash")
-                    .font(.system(size: 13, weight: .semibold))
-                    .frame(width: 28, height: 28)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .help(localizedAppText("Delete legacy entry", de: "Legacy-Eintrag löschen"))
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-    }
-}
-
 private struct WorkflowEditorPage: View {
     let workflow: Workflow?
 
     @ObservedObject private var workflowService = ServiceContainer.shared.workflowService
     @ObservedObject private var hotkeyService = ServiceContainer.shared.hotkeyService
-    @ObservedObject private var profileService = ServiceContainer.shared.profileService
     @ObservedObject private var profilesViewModel = ServiceContainer.shared.profilesViewModel
     @ObservedObject private var historyService = ServiceContainer.shared.historyService
     @ObservedObject private var promptProcessingService = ServiceContainer.shared.promptProcessingService
@@ -1400,7 +1164,6 @@ private struct WorkflowEditorPage: View {
         if let validationError = draft.validationError(
             hotkeyService: hotkeyService,
             workflowService: workflowService,
-            profileService: profileService,
             existingWorkflowId: workflow?.id
         ) {
             validationMessage = validationError
@@ -1472,15 +1235,6 @@ private struct WorkflowEditorPage: View {
             validationMessage = localizedAppText(
                 "This hotkey is already used by workflow “\(conflictWorkflow.name)”.",
                 de: "Dieser Hotkey wird bereits vom Workflow „\(conflictWorkflow.name)“ verwendet."
-            )
-            return
-        }
-
-        if let profileId = hotkeyService.isHotkeyAssignedToProfile(hotkey, excludingProfileId: nil),
-           let conflictProfile = profileService.profiles.first(where: { $0.id == profileId }) {
-            validationMessage = localizedAppText(
-                "This hotkey is already used by legacy rule “\(conflictProfile.name)”.",
-                de: "Dieser Hotkey wird bereits von der Legacy-Regel „\(conflictProfile.name)“ verwendet."
             )
             return
         }
@@ -2065,7 +1819,6 @@ private struct WorkflowDraft {
     func validationError(
         hotkeyService: HotkeyService,
         workflowService: WorkflowService,
-        profileService: ProfileService,
         existingWorkflowId: UUID?
     ) -> String? {
         if template == .dictation && triggerKind == .manual {
@@ -2113,14 +1866,6 @@ private struct WorkflowDraft {
                     return localizedAppText(
                         "This hotkey is already used by workflow “\(conflictWorkflow.name)”.",
                         de: "Dieser Hotkey wird bereits vom Workflow „\(conflictWorkflow.name)“ verwendet."
-                    )
-                }
-
-                if let conflictProfileId = hotkeyService.isHotkeyAssignedToProfile(hotkey, excludingProfileId: nil),
-                   let conflictProfile = profileService.profiles.first(where: { $0.id == conflictProfileId }) {
-                    return localizedAppText(
-                        "This hotkey is already used by legacy rule “\(conflictProfile.name)”.",
-                        de: "Dieser Hotkey wird bereits von der Legacy-Regel „\(conflictProfile.name)“ verwendet."
                     )
                 }
 
