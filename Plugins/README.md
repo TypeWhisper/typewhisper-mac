@@ -1,6 +1,13 @@
 # TypeWhisper Plugins
 
-Die First-Party-Pluginquellen wurden nach `TypeWhisperPluginSDK/Plugins/` verschoben.
+Kompilierte externe Plugins gehoeren weiterhin nach:
 
-Die vollständige Plugin-Dokumentation liegt jetzt in
+```
+~/Library/Application Support/TypeWhisper/Plugins/
+```
+
+Die First-Party-Pluginquellen in diesem Repository wurden nach
+`TypeWhisperPluginSDK/Plugins/` verschoben.
+
+Die vollstaendige Plugin-Dokumentation liegt jetzt in
 `TypeWhisperPluginSDK/Plugins/README.md`.

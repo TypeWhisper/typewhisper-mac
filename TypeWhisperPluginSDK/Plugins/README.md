@@ -79,6 +79,8 @@ Each plugin receives a `HostServices` object providing:
 
 Bundled MLX plugins such as Qwen3, Granite, and Voxtral store their optional HuggingFace token via the same plugin-scoped keychain helpers.
 
+Bundled cloud plugins include Groq, OpenAI, OpenAI Compatible, and xAI/Grok. The xAI/Grok bundle is a combined `LLMProviderPlugin`, `TranscriptionEnginePlugin`, `LiveTranscriptionCapablePlugin`, and `TTSProviderPlugin` implementation for Grok text generation, STT, and TTS.
+
 ## Example
 
 See `WebhookPlugin/` in `TypeWhisperPluginSDK/Plugins/` for a complete example that sends HTTP webhooks on each transcription.

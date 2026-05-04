@@ -510,7 +510,7 @@ struct RecordingSettingsView: View {
                     set: { UserDefaults.standard.set($0, forKey: UserDefaultsKeys.appFormattingEnabled) }
                 ))
 
-                Text(String(localized: "Automatically format transcribed text based on the target app. Configure the output format per profile."))
+                Text(String(localized: "Automatically format transcribed text based on the target app. Configure the output format per workflow."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

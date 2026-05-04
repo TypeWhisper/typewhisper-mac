@@ -5,6 +5,20 @@ import XCTest
 import TypeWhisperPluginSDK
 @testable import TypeWhisper
 
+private func rtfAttributedStringContainsFontTrait(
+    _ trait: NSFontTraitMask,
+    in attributed: NSAttributedString,
+    matching text: String
+) -> Bool {
+    let range = (attributed.string as NSString).range(of: text)
+    guard range.location != NSNotFound else { return false }
+
+    var effectiveRange = NSRange(location: 0, length: 0)
+    let font = attributed.attribute(.font, at: range.location, effectiveRange: &effectiveRange) as? NSFont
+    guard let font else { return false }
+    return NSFontManager.shared.traits(of: font).contains(trait)
+}
+
 final class APIRouterAndHandlersTests: XCTestCase {
     @objc(APIRouterMockLLMProviderPlugin)
     private final class MockLLMProviderPlugin: NSObject, LLMProviderPlugin, LLMProviderSetupStatusProviding, LLMTemperatureControllableProvider, PluginSettingsActivityReporting, @unchecked Sendable {
@@ -1380,6 +1394,128 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         _ = try await service.insertText("Hello", preserveClipboard: true)
 
+        XCTAssertTrue(didSimulatePaste)
+        XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
+    func testRTFOutputWritesPlainTextFallbackAndRichTextData() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.pasteSimulatorOverride = {}
+
+        _ = try await service.insertText(
+            "Meeting\n- **Launch** plan\n- _Budget_ review",
+            outputFormat: "rtf"
+        )
+
+        XCTAssertEqual(pasteboard.string(forType: .string), "Meeting\n- Launch plan\n- Budget review")
+
+        let rtfData = try XCTUnwrap(pasteboard.data(forType: .rtf))
+        let attributed = try NSAttributedString(
+            data: rtfData,
+            options: [.documentType: NSAttributedString.DocumentType.rtf],
+            documentAttributes: nil
+        )
+
+        XCTAssertEqual(attributed.string, "Meeting\n\u{2022} Launch plan\n\u{2022} Budget review")
+        XCTAssertTrue(rtfAttributedStringContainsFontTrait(NSFontTraitMask.boldFontMask, in: attributed, matching: "Launch"))
+        XCTAssertTrue(rtfAttributedStringContainsFontTrait(NSFontTraitMask.italicFontMask, in: attributed, matching: "Budget"))
+    }
+
+    @MainActor
+    func testRTFOutputStripsLLMMarkdownFenceAndInputBoundaryMarkers() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.pasteSimulatorOverride = {}
+
+        let llmResponse = """
+        Here is the Markdown-compatible text for rich-text conversion:
+
+        ```markdown
+        BEGIN TYPEWHISPER DICTATED TEXT
+        - **Launch** plan
+        - _Budget_ review
+        END TYPEWHISPER DICTATED TEXT
+        ```
+        """
+
+        _ = try await service.insertText(llmResponse, outputFormat: "rtf")
+
+        XCTAssertEqual(pasteboard.string(forType: .string), "- Launch plan\n- Budget review")
+
+        let rtfData = try XCTUnwrap(pasteboard.data(forType: .rtf))
+        let attributed = try NSAttributedString(
+            data: rtfData,
+            options: [.documentType: NSAttributedString.DocumentType.rtf],
+            documentAttributes: nil
+        )
+
+        XCTAssertEqual(attributed.string, "\u{2022} Launch plan\n\u{2022} Budget review")
+        XCTAssertFalse(attributed.string.contains("TYPEWHISPER"))
+        XCTAssertFalse(attributed.string.contains("```"))
+        XCTAssertTrue(rtfAttributedStringContainsFontTrait(NSFontTraitMask.boldFontMask, in: attributed, matching: "Launch"))
+        XCTAssertTrue(rtfAttributedStringContainsFontTrait(NSFontTraitMask.italicFontMask, in: attributed, matching: "Budget"))
+    }
+
+    @MainActor
+    func testRTFOutputUsesMarkdownParserForInlineSyntax() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.pasteSimulatorOverride = {}
+
+        _ = try await service.insertText(
+            "See [release notes](https://typewhisper.app) and `build 1.4`.",
+            outputFormat: "rtf"
+        )
+
+        XCTAssertEqual(pasteboard.string(forType: .string), "See release notes and build 1.4.")
+
+        let rtfData = try XCTUnwrap(pasteboard.data(forType: .rtf))
+        let attributed = try NSAttributedString(
+            data: rtfData,
+            options: [.documentType: NSAttributedString.DocumentType.rtf],
+            documentAttributes: nil
+        )
+
+        XCTAssertEqual(attributed.string, "See release notes and build 1.4.")
+    }
+
+    @MainActor
+    func testRTFPreserveClipboardUsesPasteboardInsteadOfPlainAccessibilityInsertion() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { element }
+        service.focusedTextStateOverride = { _ in
+            (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+        }
+
+        var insertedText: String?
+        service.insertTextAtOverride = { _, text in
+            insertedText = text
+            return true
+        }
+
+        var didSimulatePaste = false
+        service.pasteSimulatorOverride = {
+            didSimulatePaste = true
+        }
+
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+
+        _ = try await service.insertText("**Hello**", preserveClipboard: true, outputFormat: "rtf")
+
+        XCTAssertNil(insertedText)
         XCTAssertTrue(didSimulatePaste)
         XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
     }

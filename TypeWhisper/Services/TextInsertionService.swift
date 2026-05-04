@@ -25,7 +25,7 @@ final class TextInsertionService {
     var selectedTextOverride: (() -> String?)?
     var textSelectionViaCopyOverride: (() -> String?)?
 
-enum InsertionResult {
+    enum InsertionResult {
         case pasted
     }
 
@@ -392,15 +392,20 @@ enum InsertionResult {
     func insertText(
         _ text: String,
         preserveClipboard: Bool = false,
-        autoEnter: Bool = false
+        autoEnter: Bool = false,
+        outputFormat: String? = nil
     ) async throws -> InsertionResult {
         guard isAccessibilityGranted else {
             throw TextInsertionError.accessibilityNotGranted
         }
 
         let hadFocusedTextField = autoEnter && hasFocusedTextField()
+        let formattedClipboardPayload = ClipboardContentFormatter.payload(for: text, outputFormat: outputFormat)
+        let requiresPasteboardInsertion = ClipboardContentFormatter.requiresPasteboardInsertion(
+            outputFormat: outputFormat
+        )
 
-        if preserveClipboard,
+        if preserveClipboard, !requiresPasteboardInsertion,
            let focusedElement = getFocusedTextElement(),
            insertTextAtAndVerifyChange(element: focusedElement, text: text) {
             if hadFocusedTextField {
@@ -416,7 +421,11 @@ enum InsertionResult {
         // Set transcribed text on clipboard and simulate Cmd+V.
         // Text stays on clipboard as fallback if no text field is focused.
         pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        if let formattedClipboardPayload {
+            formattedClipboardPayload.write(to: pasteboard)
+        } else {
+            pasteboard.setString(text, forType: .string)
+        }
         simulatePaste()
 
         if preserveClipboard {

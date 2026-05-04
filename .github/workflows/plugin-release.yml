@@ -79,6 +79,7 @@ jobs:
             speechmatics) TARGET="SpeechmaticsPlugin" ;;
             system-tts) TARGET="SystemTTSPlugin" ;;
             filler-words) TARGET="FillerWordsPlugin" ;;
+            xai) TARGET="XAIPlugin" ;;
             *) echo "Unknown plugin: $PLUGIN_NAME" && exit 1 ;;
           esac
           # Set deployment target and Swift embedding per plugin
@@ -248,7 +249,12 @@ jobs:
           fi
 
           export TARGET_REGISTRY
-          echo "Updating registry file: $TARGET_REGISTRY"
+          TARGET_REGISTRIES="$TARGET_REGISTRY"
+          if [ "$TARGET_REGISTRY" = "plugins-v1.json" ]; then
+            TARGET_REGISTRIES="$TARGET_REGISTRIES plugins-community-v1.json"
+          fi
+          export TARGET_REGISTRIES
+          echo "Updating registry file(s): $TARGET_REGISTRIES"
 
           git fetch origin gh-pages
           git worktree add -B gh-pages /tmp/gh-pages origin/gh-pages
@@ -261,16 +267,7 @@ jobs:
             python3 << PYEOF
           import json, os, re, sys, tempfile
 
-          target_registry = os.environ["TARGET_REGISTRY"]
-          target_path = os.path.join("/tmp/gh-pages", target_registry)
-          if os.path.exists(target_path):
-              with open(target_path, "r") as f:
-                  registry = json.load(f)
-          else:
-              registry = {
-                  "schemaVersion": 1,
-                  "plugins": []
-              }
+          target_registries = os.environ["TARGET_REGISTRIES"].split()
 
           version = "$PLUGIN_VERSION"
           size = int("$ZIP_SIZE")
@@ -284,8 +281,6 @@ jobs:
 
           with open(src_manifest) as mf:
               manifest = json.load(mf)
-
-          registry.setdefault("schemaVersion", 1)
 
           # Semver-tolerant version sort key. Accepts "1.2.3", "1.2.3-beta.4",
           # "1.2.3+build.5" etc. Pre-release tags sort before matching release
@@ -375,59 +370,78 @@ jobs:
                   else:
                       plugin.pop(field, None)
 
-          updated = False
-          for plugin in registry["plugins"]:
-              if plugin["id"] == manifest["id"]:
-                  releases = migrate_legacy_release(plugin)
-                  sync_plugin_metadata(plugin)
-                  releases = [release for release in releases if release.get("version") != version]
-                  releases.append(build_release())
-                  plugin["releases"] = sorted(releases, key=lambda release: version_key(release["version"]), reverse=True)
-                  sync_legacy_fields(plugin, plugin["releases"][0])
-                  updated = True
-                  print(f"Updated {plugin['id']} release set with v{version}")
-                  break
+          def update_registry_file(target_registry):
+              target_path = os.path.join("/tmp/gh-pages", target_registry)
+              if os.path.exists(target_path):
+                  with open(target_path, "r") as f:
+                      registry = json.load(f)
+              else:
+                  registry = {
+                      "schemaVersion": 1,
+                      "plugins": []
+                  }
 
-          if not updated:
-              new_entry = {}
-              sync_plugin_metadata(new_entry)
-              new_entry["releases"] = [build_release()]
-              sync_legacy_fields(new_entry, new_entry["releases"][0])
-              registry["plugins"].append(new_entry)
-              print(f"Added new plugin {manifest['id']} v{version}")
+              registry.setdefault("schemaVersion", 1)
+              registry.setdefault("plugins", [])
 
-          # Atomic write: write to a temp file in the same directory, fsync,
-          # then rename into place. Prevents a half-written registry file from
-          # ending up on gh-pages if the job is killed mid-write and keeps
-          # concurrent readers consistent.
-          target_dir = os.path.dirname(target_path)
-          fd, tmp_path = tempfile.mkstemp(prefix=f"{target_registry}.", dir=target_dir)
-          try:
-              with os.fdopen(fd, "w") as f:
-                  json.dump(registry, f, indent=2)
-                  f.write("\n")
-                  f.flush()
-                  os.fsync(f.fileno())
-              os.replace(tmp_path, target_path)
-          except Exception:
+              updated = False
+              for plugin in registry["plugins"]:
+                  if plugin["id"] == manifest["id"]:
+                      releases = migrate_legacy_release(plugin)
+                      sync_plugin_metadata(plugin)
+                      releases = [release for release in releases if release.get("version") != version]
+                      releases.append(build_release())
+                      plugin["releases"] = sorted(releases, key=lambda release: version_key(release["version"]), reverse=True)
+                      sync_legacy_fields(plugin, plugin["releases"][0])
+                      updated = True
+                      print(f"{target_registry}: updated {plugin['id']} release set with v{version}")
+                      break
+
+              if not updated:
+                  new_entry = {}
+                  sync_plugin_metadata(new_entry)
+                  new_entry["releases"] = [build_release()]
+                  sync_legacy_fields(new_entry, new_entry["releases"][0])
+                  registry["plugins"].append(new_entry)
+                  print(f"{target_registry}: added new plugin {manifest['id']} v{version}")
+
+              # Atomic write: write to a temp file in the same directory, fsync,
+              # then rename into place. Prevents a half-written registry file from
+              # ending up on gh-pages if the job is killed mid-write and keeps
+              # concurrent readers consistent.
+              target_dir = os.path.dirname(target_path)
+              fd, tmp_path = tempfile.mkstemp(prefix=f"{target_registry}.", dir=target_dir)
               try:
-                  os.unlink(tmp_path)
-              except OSError:
-                  pass
-              raise
+                  with os.fdopen(fd, "w") as f:
+                      json.dump(registry, f, indent=2)
+                      f.write("\n")
+                      f.flush()
+                      os.fsync(f.fileno())
+                  os.replace(tmp_path, target_path)
+              except Exception:
+                  try:
+                      os.unlink(tmp_path)
+                  except OSError:
+                      pass
+                  raise
+
+          for target_registry in target_registries:
+              update_registry_file(target_registry)
           PYEOF
 
-            git add "$TARGET_REGISTRY"
+            for registry_file in $TARGET_REGISTRIES; do
+              git add "$registry_file"
+            done
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git diff --cached --quiet || git commit -m "Update ${TARGET} to v${PLUGIN_VERSION} in ${TARGET_REGISTRY}"
+            git diff --cached --quiet || git commit -m "Update ${TARGET} to v${PLUGIN_VERSION} in plugin registries"
             git push origin gh-pages
           }
 
           # Retry up to 5 times to handle concurrent pushes
           for i in 1 2 3 4 5; do
             if update_registry; then
-              echo "Successfully updated ${TARGET_REGISTRY} (attempt $i)"
+              echo "Successfully updated ${TARGET_REGISTRIES} (attempt $i)"
               break
             fi
             echo "Push failed (attempt $i), retrying in ${i}s..."
