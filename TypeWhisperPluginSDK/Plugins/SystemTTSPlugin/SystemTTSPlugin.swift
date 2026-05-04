@@ -203,7 +203,7 @@ private struct SystemTTSSettingsView: View {
     @State private var selectedVoiceId: String?
     @State private var rateWPM: Double
 
-    init(plugin: SystemTTSPlugin) {
+    nonisolated init(plugin: SystemTTSPlugin) {
         self.plugin = plugin
         _selectedVoiceId = State(initialValue: plugin.selectedVoiceId)
         _rateWPM = State(initialValue: Double(plugin.selectedRateWPM ?? 175))
