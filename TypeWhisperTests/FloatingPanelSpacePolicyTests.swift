@@ -3,8 +3,8 @@ import XCTest
 @testable import TypeWhisper
 
 final class FloatingPanelSpacePolicyTests: XCTestCase {
-    func testIndicatorPolicyTargetsOnlyTheActiveNormalSpace() {
-        let behavior = FloatingPanelSpacePolicy.indicatorCollectionBehavior
+    func testActiveScreenIndicatorPolicyTargetsOnlyTheActiveNormalSpace() {
+        let behavior = FloatingPanelSpacePolicy.indicatorCollectionBehavior(for: .activeScreen)
 
         XCTAssertTrue(behavior.contains(.moveToActiveSpace))
         XCTAssertTrue(behavior.contains(.stationary))
@@ -12,12 +12,23 @@ final class FloatingPanelSpacePolicyTests: XCTestCase {
         XCTAssertFalse(behavior.contains(.canJoinAllSpaces))
     }
 
-    func testIndicatorPolicyDoesNotJoinForeignFullscreenSpaces() {
+    func testFixedDisplayIndicatorPolicyStaysOnConfiguredDisplayAcrossSpaces() {
+        let primaryBehavior = FloatingPanelSpacePolicy.indicatorCollectionBehavior(for: .primaryScreen)
+        let builtInBehavior = FloatingPanelSpacePolicy.indicatorCollectionBehavior(for: .builtInScreen)
+
+        XCTAssertTrue(primaryBehavior.contains(.canJoinAllSpaces))
+        XCTAssertFalse(primaryBehavior.contains(.moveToActiveSpace))
+        XCTAssertTrue(primaryBehavior.contains(.fullScreenAuxiliary))
+        XCTAssertFalse(primaryBehavior.contains(.fullScreenNone))
+        XCTAssertEqual(primaryBehavior, builtInBehavior)
+    }
+
+    func testActiveScreenIndicatorPolicyDoesNotJoinForeignFullscreenSpaces() {
         XCTAssertFalse(
-            FloatingPanelSpacePolicy.indicatorCollectionBehavior.contains(.fullScreenAuxiliary)
+            FloatingPanelSpacePolicy.indicatorCollectionBehavior(for: .activeScreen).contains(.fullScreenAuxiliary)
         )
         XCTAssertTrue(
-            FloatingPanelSpacePolicy.indicatorCollectionBehavior.contains(.fullScreenNone)
+            FloatingPanelSpacePolicy.indicatorCollectionBehavior(for: .activeScreen).contains(.fullScreenNone)
         )
     }
 

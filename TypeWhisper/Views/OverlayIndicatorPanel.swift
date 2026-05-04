@@ -28,7 +28,10 @@ class OverlayIndicatorPanel: NSPanel {
         appearance = NSAppearance(named: .darkAqua)
         hidesOnDeactivate = false
         ignoresMouseEvents = true
-        FloatingPanelSpacePolicy.applyIndicatorPolicy(to: self)
+        FloatingPanelSpacePolicy.applyIndicatorPolicy(
+            to: self,
+            displayMode: DictationViewModel.shared.notchIndicatorDisplay
+        )
 
         let hostingView = NSHostingView(rootView: OverlayIndicatorView())
         hostingView.sizingOptions = []
@@ -115,7 +118,10 @@ class OverlayIndicatorPanel: NSPanel {
         }
 
         setFrame(NSRect(x: x, y: y, width: Self.panelWidth, height: Self.panelHeight), display: true)
-        FloatingPanelSpacePolicy.orderIndicatorFront(self)
+        FloatingPanelSpacePolicy.orderIndicatorFront(
+            self,
+            displayMode: DictationViewModel.shared.notchIndicatorDisplay
+        )
     }
 
     private func resolveScreen() -> NSScreen {

@@ -28,7 +28,10 @@ class MinimalIndicatorPanel: NSPanel {
         appearance = NSAppearance(named: .darkAqua)
         hidesOnDeactivate = false
         ignoresMouseEvents = true
-        FloatingPanelSpacePolicy.applyIndicatorPolicy(to: self)
+        FloatingPanelSpacePolicy.applyIndicatorPolicy(
+            to: self,
+            displayMode: DictationViewModel.shared.notchIndicatorDisplay
+        )
 
         let hostingView = NSHostingView(rootView: MinimalIndicatorView())
         hostingView.sizingOptions = []
@@ -114,7 +117,10 @@ class MinimalIndicatorPanel: NSPanel {
         }
 
         setFrame(NSRect(x: x, y: y, width: Self.panelWidth, height: Self.panelHeight), display: true)
-        FloatingPanelSpacePolicy.orderIndicatorFront(self)
+        FloatingPanelSpacePolicy.orderIndicatorFront(
+            self,
+            displayMode: DictationViewModel.shared.notchIndicatorDisplay
+        )
     }
 
     private func resolveScreen() -> NSScreen {
