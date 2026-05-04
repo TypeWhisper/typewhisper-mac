@@ -5,7 +5,7 @@ import TypeWhisperPluginSDK
 final class PluginRegistryServiceTests: XCTestCase {
     private let sdkCompatibilityVersion = "v1"
 
-    func testLegacyRegistryEntryDoesNotResolveWithoutSDKCompatibilityVersion() throws {
+    func testFlatRegistryEntryWithoutReleasesDoesNotResolve() throws {
         let data = Data(
             """
             {
@@ -17,7 +17,7 @@ final class PluginRegistryServiceTests: XCTestCase {
                   "version": "1.0.5",
                   "minHostVersion": "1.2.0",
                   "author": "TypeWhisper",
-                  "description": "Legacy entry",
+                  "description": "Legacy flat entry",
                   "category": "utility",
                   "size": 42,
                   "downloadURL": "https://example.com/legacy.zip"
@@ -336,13 +336,10 @@ final class PluginRegistryServiceTests: XCTestCase {
                 {
                   "id": "com.typewhisper.ok",
                   "name": "Good Plugin",
-                  "version": "1.0.0",
-                  "minHostVersion": "1.0.0",
                   "author": "TypeWhisper",
-                  "description": "Legacy good entry",
+                  "description": "Entry without releases",
                   "category": "utility",
-                  "size": 10,
-                  "downloadURL": "https://example.com/ok.zip"
+                  "size": 10
                 }
               ]
             }
@@ -359,34 +356,28 @@ final class PluginRegistryServiceTests: XCTestCase {
         XCTAssertTrue(plugins.isEmpty)
     }
 
-    func testRegistryFeedUsesLegacyForStableBuildBefore130() {
+    func testRegistryFeedUsesV1ForPre14Builds() {
         XCTAssertEqual(
             PluginRegistryService.registryFeed(
                 appVersion: "1.2.2",
                 releaseChannel: .stable
             ),
-            .legacy
+            .v1
         )
-    }
-
-    func testRegistryFeedKeepsLegacyForPre130PreviewBuilds() {
         XCTAssertEqual(
             PluginRegistryService.registryFeed(
                 appVersion: "1.2.2",
                 releaseChannel: .releaseCandidate
             ),
-            .legacy
+            .v1
         )
         XCTAssertEqual(
             PluginRegistryService.registryFeed(
                 appVersion: "1.2.2",
                 releaseChannel: .daily
             ),
-            .legacy
+            .v1
         )
-    }
-
-    func testRegistryFeedUsesV1ForReleaseCandidateBuild() {
         XCTAssertEqual(
             PluginRegistryService.registryFeed(
                 appVersion: "1.3.0",
@@ -394,9 +385,6 @@ final class PluginRegistryServiceTests: XCTestCase {
             ),
             .v1
         )
-    }
-
-    func testRegistryFeedUsesV1ForDailyBuild() {
         XCTAssertEqual(
             PluginRegistryService.registryFeed(
                 appVersion: "1.3.0",
@@ -404,9 +392,6 @@ final class PluginRegistryServiceTests: XCTestCase {
             ),
             .v1
         )
-    }
-
-    func testRegistryFeedUsesV1ForStable13xBuilds() {
         XCTAssertEqual(
             PluginRegistryService.registryFeed(
                 appVersion: "1.3.0",

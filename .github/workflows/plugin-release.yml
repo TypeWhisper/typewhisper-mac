@@ -120,14 +120,12 @@ jobs:
 
       - name: Patch manifest version
         run: |
-          # Find the manifest.json for this plugin target
-          MANIFEST=$(find TypeWhisperPluginSDK/Plugins -name manifest.json -path "*${TARGET}*" 2>/dev/null | head -1)
-          if [ -z "$MANIFEST" ]; then
-            # Fallback: search by plugin name
-            MANIFEST=$(find TypeWhisperPluginSDK/Plugins -name manifest.json | head -1)
+          MANIFEST="TypeWhisperPluginSDK/Plugins/${TARGET}/manifest.json"
+          if [ ! -f "$MANIFEST" ]; then
+            echo "Missing manifest for ${TARGET}: $MANIFEST"
+            exit 1
           fi
-          if [ -n "$MANIFEST" ]; then
-            python3 -c "
+          python3 -c "
           import json
           with open('$MANIFEST', 'r') as f:
               m = json.load(f)
@@ -136,11 +134,8 @@ jobs:
               json.dump(m, f, indent=4)
               f.write('\n')
           "
-            echo "Patched $MANIFEST to version $PLUGIN_VERSION"
-            cat "$MANIFEST"
-          else
-            echo "Warning: No manifest.json found"
-          fi
+          echo "Patched $MANIFEST to version $PLUGIN_VERSION"
+          cat "$MANIFEST"
 
       - name: Build Plugin
         run: |
@@ -227,31 +222,29 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           DOWNLOAD_URL="https://github.com/TypeWhisper/typewhisper-mac/releases/download/${TAG}/${TARGET}.zip"
-          MANIFEST_PATH=$(find TypeWhisperPluginSDK/Plugins -name manifest.json -path "*${TARGET}*" 2>/dev/null | head -1)
+          MANIFEST_PATH="TypeWhisperPluginSDK/Plugins/${TARGET}/manifest.json"
+          if [ ! -f "$MANIFEST_PATH" ]; then
+            echo "Missing manifest for ${TARGET}: $MANIFEST_PATH"
+            exit 1
+          fi
           TARGET_REGISTRY=$(python3 << PYEOF
           import json, os
 
           manifest_path = "$MANIFEST_PATH"
           src_manifest = os.path.join("$GITHUB_WORKSPACE", manifest_path) if manifest_path else ""
-          if not src_manifest or not os.path.exists(src_manifest):
-              print("")
-          else:
-              with open(src_manifest) as mf:
-                  manifest = json.load(mf)
-              sdk_compat = manifest.get("sdkCompatibilityVersion")
-              print(f"plugins-{sdk_compat}.json" if sdk_compat else "plugins.json")
+          with open(src_manifest) as mf:
+              manifest = json.load(mf)
+          sdk_compat = manifest.get("sdkCompatibilityVersion")
+          if not sdk_compat:
+              raise SystemExit("manifest.json is missing sdkCompatibilityVersion")
+          print(f"plugins-{sdk_compat}.json")
           PYEOF
           )
 
-          if [ -z "$TARGET_REGISTRY" ]; then
-            echo "Warning: No manifest found for ${TARGET}; skipping registry update"
-            exit 0
-          fi
-
           export TARGET_REGISTRY
           TARGET_REGISTRIES="$TARGET_REGISTRY"
-          if [ "$TARGET_REGISTRY" = "plugins-v1.json" ]; then
-            TARGET_REGISTRIES="$TARGET_REGISTRIES plugins-community-v1.json"
+          if [[ "$TARGET_REGISTRY" =~ ^plugins-(v[0-9]+)\.json$ ]]; then
+            TARGET_REGISTRIES="$TARGET_REGISTRIES plugins-community-${BASH_REMATCH[1]}.json"
           fi
           export TARGET_REGISTRIES
           echo "Updating registry file(s): $TARGET_REGISTRIES"
@@ -276,8 +269,7 @@ jobs:
           src_manifest = os.path.join("$GITHUB_WORKSPACE", manifest_path) if manifest_path else ""
 
           if not src_manifest or not os.path.exists(src_manifest):
-              print(f"Warning: No manifest found at {src_manifest}")
-              sys.exit(0)
+              raise SystemExit(f"Missing manifest at {src_manifest}")
 
           with open(src_manifest) as mf:
               manifest = json.load(mf)
@@ -330,46 +322,6 @@ jobs:
                       release[field] = manifest[field]
               return release
 
-          def migrate_legacy_release(plugin):
-              if plugin.get("releases"):
-                  return plugin["releases"]
-
-              version_value = plugin.get("version")
-              min_host = plugin.get("minHostVersion")
-              sdk_compat = plugin.get("sdkCompatibilityVersion")
-              size_value = plugin.get("size")
-              download_value = plugin.get("downloadURL")
-              if not all([version_value, min_host, size_value, download_value]):
-                  return []
-
-              legacy = {
-                  "version": version_value,
-                  "minHostVersion": min_host,
-                  "sdkCompatibilityVersion": sdk_compat,
-                  "size": size_value,
-                  "downloadURL": download_value,
-              }
-              for field in ["minOSVersion", "supportedArchitectures"]:
-                  if field in plugin and plugin[field] is not None:
-                      legacy[field] = plugin[field]
-              return [legacy]
-
-          def sync_legacy_fields(plugin, release):
-              plugin["version"] = release["version"]
-              plugin["minHostVersion"] = release["minHostVersion"]
-              if release.get("sdkCompatibilityVersion") is not None:
-                  plugin["sdkCompatibilityVersion"] = release["sdkCompatibilityVersion"]
-              else:
-                  plugin.pop("sdkCompatibilityVersion", None)
-              plugin["size"] = release["size"]
-              plugin["downloadURL"] = release["downloadURL"]
-
-              for field in ["minOSVersion", "supportedArchitectures"]:
-                  if field in release and release[field] is not None:
-                      plugin[field] = release[field]
-                  else:
-                      plugin.pop(field, None)
-
           def update_registry_file(target_registry):
               target_path = os.path.join("/tmp/gh-pages", target_registry)
               if os.path.exists(target_path):
@@ -387,12 +339,11 @@ jobs:
               updated = False
               for plugin in registry["plugins"]:
                   if plugin["id"] == manifest["id"]:
-                      releases = migrate_legacy_release(plugin)
                       sync_plugin_metadata(plugin)
+                      releases = plugin.get("releases", [])
                       releases = [release for release in releases if release.get("version") != version]
                       releases.append(build_release())
                       plugin["releases"] = sorted(releases, key=lambda release: version_key(release["version"]), reverse=True)
-                      sync_legacy_fields(plugin, plugin["releases"][0])
                       updated = True
                       print(f"{target_registry}: updated {plugin['id']} release set with v{version}")
                       break
@@ -401,7 +352,6 @@ jobs:
                   new_entry = {}
                   sync_plugin_metadata(new_entry)
                   new_entry["releases"] = [build_release()]
-                  sync_legacy_fields(new_entry, new_entry["releases"][0])
                   registry["plugins"].append(new_entry)
                   print(f"{target_registry}: added new plugin {manifest['id']} v{version}")
 
