@@ -29,6 +29,22 @@ final class WorkflowsNavigationCoordinator: ObservableObject {
     }
 }
 
+struct WorkflowOutputFormatPreset: Identifiable, Equatable {
+    let title: String
+    let value: String
+
+    var id: String { value }
+
+    static let all: [WorkflowOutputFormatPreset] = [
+        WorkflowOutputFormatPreset(title: "Markdown", value: "markdown"),
+        WorkflowOutputFormatPreset(title: "HTML", value: "html"),
+        WorkflowOutputFormatPreset(title: "RTF", value: "rtf"),
+        WorkflowOutputFormatPreset(title: "Plain Text", value: "plaintext"),
+        WorkflowOutputFormatPreset(title: "Code", value: "code"),
+        WorkflowOutputFormatPreset(title: "JSON", value: "json")
+    ]
+}
+
 struct WorkflowsSettingsView: View {
     @ObservedObject private var workflowService = ServiceContainer.shared.workflowService
     @ObservedObject private var navigation = WorkflowsNavigationCoordinator.shared
@@ -718,8 +734,22 @@ private struct WorkflowEditorPage: View {
                                 VStack(alignment: .leading, spacing: 6) {
                                     Text(localizedAppText("Output Format", de: "Ausgabeformat"))
                                         .font(.subheadline.weight(.semibold))
-                                    TextField(localizedAppText("e.g. Markdown, JSON, plain text", de: "z. B. Markdown, JSON, Plain Text"), text: $draft.outputFormat)
-                                        .textFieldStyle(.roundedBorder)
+                                    HStack(spacing: 8) {
+                                        TextField(localizedAppText("e.g. Markdown, RTF, JSON, plain text", de: "z. B. Markdown, RTF, JSON, Plain Text"), text: $draft.outputFormat)
+                                            .textFieldStyle(.roundedBorder)
+
+                                        Menu {
+                                            ForEach(WorkflowOutputFormatPreset.all) { preset in
+                                                Button(preset.title) {
+                                                    draft.outputFormat = preset.value
+                                                }
+                                            }
+                                        } label: {
+                                            Label(localizedAppText("Presets", de: "Presets"), systemImage: "list.bullet.rectangle")
+                                        }
+                                        .menuStyle(.borderlessButton)
+                                        .help(localizedAppText("Choose an output format preset", de: "Ausgabeformat-Preset wählen"))
+                                    }
                                 }
 
                                 Divider()

@@ -99,6 +99,7 @@
 		AA00000000000000000017 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000017 /* SettingsView.swift */; };
 		AA00000000000000000030 /* AudioRecordingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000030 /* AudioRecordingService.swift */; };
 		AA00000000000000000031 /* HotkeyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000031 /* HotkeyService.swift */; };
+		AA00000000000000000361 /* ClipboardContentFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000361 /* ClipboardContentFormatter.swift */; };
 		AA00000000000000000032 /* TextInsertionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000032 /* TextInsertionService.swift */; };
 		AA00000000000000000033 /* DictationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000033 /* DictationViewModel.swift */; };
 		AA00000000000000000040 /* HTTPResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000040 /* HTTPResponse.swift */; };
@@ -452,6 +453,7 @@
 		BB00000000000000000019 /* TypeWhisper.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TypeWhisper.entitlements; sourceTree = "<group>"; };
 		BB00000000000000000030 /* AudioRecordingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecordingService.swift; sourceTree = "<group>"; };
 		BB00000000000000000031 /* HotkeyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyService.swift; sourceTree = "<group>"; };
+		BB00000000000000000361 /* ClipboardContentFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardContentFormatter.swift; sourceTree = "<group>"; };
 		BB00000000000000000032 /* TextInsertionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInsertionService.swift; sourceTree = "<group>"; };
 		BB00000000000000000033 /* DictationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000350 /* ObjCExceptionCatcher.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ObjCExceptionCatcher.h; sourceTree = "<group>"; };
@@ -1205,6 +1207,7 @@
 				BB00000000000000000220 /* AudioPlaybackService.swift */,
 				BB00000000000000000031 /* HotkeyService.swift */,
 				BB00000000000000000196 /* IndicatorCoordinator.swift */,
+				BB00000000000000000361 /* ClipboardContentFormatter.swift */,
 				BB00000000000000000032 /* TextInsertionService.swift */,
 				BB00000000000000000050 /* SubtitleExporter.swift */,
 				BB00000000000000000148 /* HistoryExporter.swift */,
@@ -3151,6 +3154,7 @@
 				AA00000000000000000350 /* ObjCExceptionCatcher.m in Sources */,
 				AA00000000000000000230 /* AudioPlaybackService.swift in Sources */,
 				AA00000000000000000031 /* HotkeyService.swift in Sources */,
+				AA00000000000000000361 /* ClipboardContentFormatter.swift in Sources */,
 				AA00000000000000000032 /* TextInsertionService.swift in Sources */,
 				AA00000000000000000033 /* DictationViewModel.swift in Sources */,
 				AA00000000000000000181 /* DictationEnums.swift in Sources */,

@@ -1206,7 +1206,8 @@ final class DictationViewModel: ObservableObject {
                     _ = try await textInsertionService.insertText(
                         text,
                         preserveClipboard: preserveClipboard,
-                        autoEnter: self.effectiveAutoEnterEnabled
+                        autoEnter: self.effectiveAutoEnterEnabled,
+                        outputFormat: self.effectiveOutputFormat
                     )
                     EventBus.shared.emit(.textInserted(TextInsertedPayload(
                         text: text,

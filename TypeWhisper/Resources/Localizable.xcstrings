@@ -1228,12 +1228,12 @@
         }
       }
     },
-    "Automatically format transcribed text based on the target app. Configure the output format per profile." : {
+    "Automatically format transcribed text based on the target app. Configure the output format per workflow." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Transkribierten Text automatisch basierend auf der Ziel-App formatieren. Das Ausgabeformat kann pro Profil konfiguriert werden."
+            "value" : "Transkribierten Text automatisch basierend auf der Ziel-App formatieren. Das Ausgabeformat kann pro Workflow konfiguriert werden."
           }
         }
       }

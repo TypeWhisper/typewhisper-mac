@@ -660,7 +660,16 @@ extension Workflow {
     private func workflowOutputInstruction(for output: WorkflowOutput) -> String {
         var lines: [String] = []
         if let format = output.format?.trimmingCharacters(in: .whitespacesAndNewlines), !format.isEmpty {
-            lines.append("Return the result as \(format).")
+            let normalizedFormat = format.lowercased()
+            if normalizedFormat == "rtf" || normalizedFormat == "richtext" || normalizedFormat == "rich text" {
+                lines.append("Return Markdown-compatible text for rich-text conversion.")
+                lines.append("Use Markdown syntax for bold, italic, and lists where needed.")
+                lines.append("Return only the final transformed content without explanations or code fences.")
+                lines.append("Never include TYPEWHISPER input boundary markers in the result.")
+                lines.append("Do not output raw RTF control words.")
+            } else {
+                lines.append("Return the result as \(format).")
+            }
         }
         if output.targetActionPluginId != nil {
             lines.append("Return only the transformed text result without commentary.")
