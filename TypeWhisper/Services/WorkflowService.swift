@@ -9,6 +9,7 @@ private let workflowLogger = Logger(
 )
 
 enum WorkflowMatchKind: String, Sendable {
+    case appAndWebsite
     case website
     case app
     case globalFallback
@@ -16,6 +17,8 @@ enum WorkflowMatchKind: String, Sendable {
 
     var label: String {
         switch self {
+        case .appAndWebsite:
+            localizedAppText("App + Website", de: "App + Website")
         case .website:
             localizedAppText("Website", de: "Website")
         case .app:
@@ -193,9 +196,30 @@ final class WorkflowService: ObservableObject {
         let domain = extractDomain(from: url)
         let enabled = workflows.filter(\.isEnabled)
 
+        if !bundleId.isEmpty, let domain {
+            let matches = enabled.filter { workflow in
+                guard let trigger = workflow.trigger,
+                      !trigger.appBundleIdentifiers.isEmpty,
+                      !trigger.websitePatterns.isEmpty,
+                      trigger.appBundleIdentifiers.contains(bundleId) else {
+                    return false
+                }
+                return trigger.websitePatterns.contains { pattern in
+                    !pattern.isEmpty && domainMatches(domain, pattern: pattern)
+                }
+            }
+            if let result = bestMatch(from: matches, kind: .appAndWebsite, matchedDomain: domain) {
+                return result
+            }
+        }
+
         if let domain {
             let matches = enabled.filter { workflow in
-                guard let trigger = workflow.trigger, trigger.kind == .website else { return false }
+                guard let trigger = workflow.trigger,
+                      trigger.appBundleIdentifiers.isEmpty,
+                      !trigger.websitePatterns.isEmpty else {
+                    return false
+                }
                 return trigger.websitePatterns.contains { pattern in
                     !pattern.isEmpty && domainMatches(domain, pattern: pattern)
                 }
@@ -207,7 +231,10 @@ final class WorkflowService: ObservableObject {
 
         if !bundleId.isEmpty {
             let matches = enabled.filter { workflow in
-                guard let trigger = workflow.trigger, trigger.kind == .app else { return false }
+                guard let trigger = workflow.trigger,
+                      trigger.websitePatterns.isEmpty else {
+                    return false
+                }
                 return trigger.appBundleIdentifiers.contains(bundleId)
             }
             if let result = bestMatch(from: matches, kind: .app, matchedDomain: nil) {

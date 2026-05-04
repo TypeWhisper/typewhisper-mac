@@ -272,12 +272,8 @@ struct WorkflowTrigger: Codable, Equatable, Sendable {
 
     var hasValues: Bool {
         switch kind {
-        case .app:
-            !appBundleIdentifiers.isEmpty
-        case .website:
-            !websitePatterns.isEmpty
-        case .hotkey:
-            !hotkeys.isEmpty
+        case .app, .website, .hotkey:
+            !appBundleIdentifiers.isEmpty || !websitePatterns.isEmpty || !hotkeys.isEmpty
         case .global, .manual:
             true
         }

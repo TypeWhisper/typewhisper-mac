@@ -575,8 +575,8 @@ private struct WorkflowEditorPage: View {
                     }
 
                     templateSection
-                    behaviorSection
                     triggerSection
+                    behaviorSection
                     reviewSection
                 }
                 .padding(16)
@@ -619,7 +619,7 @@ private struct WorkflowEditorPage: View {
                 Text(
                     isEditing
                         ? localizedAppText("Adjust the current workflow without changing its template.", de: "Passe den aktuellen Workflow an, ohne seine Vorlage zu ändern.")
-                        : localizedAppText("Pick a concrete outcome first, then add behavior and one trigger category.", de: "Wähle zuerst ein konkretes Ergebnis und ergänze dann Verhalten und eine Trigger-Kategorie.")
+                        : localizedAppText("Pick a concrete outcome first, then add behavior and one or more triggers.", de: "Wähle zuerst ein konkretes Ergebnis und ergänze dann Verhalten und einen oder mehrere Trigger.")
                 )
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -933,31 +933,25 @@ private struct WorkflowEditorPage: View {
         WorkflowSectionCard(
             title: localizedAppText("Trigger", de: "Trigger"),
             description: localizedAppText(
-                "Choose how this workflow starts. Manual workflows are available from the Workflow Palette only.",
-                de: "Wähle, wie dieser Workflow startet. Manuelle Workflows sind nur über die Workflow-Palette verfügbar."
+                "Choose how this workflow starts. Automatic can use app, website, hotkey, or combinations.",
+                de: "Wähle, wie dieser Workflow startet. Automatisch kann App, Website, Hotkey oder Kombinationen nutzen."
             )
         ) {
             VStack(alignment: .leading, spacing: 14) {
-                Picker(localizedAppText("Trigger", de: "Trigger"), selection: $draft.triggerKind) {
+                Picker(localizedAppText("Trigger", de: "Trigger"), selection: $draft.triggerMode) {
+                    Text(localizedAppText("Automatic", de: "Automatisch")).tag(WorkflowTriggerMode.automatic)
                     if draft.template != .dictation {
-                        Text(localizedAppText("Manual", de: "Manuell")).tag(WorkflowTriggerKind.manual)
+                        Text(localizedAppText("Manual", de: "Manuell")).tag(WorkflowTriggerMode.manual)
                     }
-                    Text(localizedAppText("App", de: "App")).tag(WorkflowTriggerKind.app)
-                    Text(localizedAppText("Website", de: "Website")).tag(WorkflowTriggerKind.website)
-                    Text(localizedAppText("Hotkey", de: "Hotkey")).tag(WorkflowTriggerKind.hotkey)
-                    Text(localizedAppText("Always", de: "Immer")).tag(WorkflowTriggerKind.global)
+                    Text(localizedAppText("Always", de: "Immer")).tag(WorkflowTriggerMode.global)
                 }
                 .pickerStyle(.segmented)
 
-                switch draft.triggerKind {
+                switch draft.triggerMode {
                 case .manual:
                     manualTriggerEditor
-                case .app:
-                    appTriggerEditor
-                case .website:
-                    websiteTriggerEditor
-                case .hotkey:
-                    hotkeyTriggerEditor
+                case .automatic:
+                    automaticTriggerEditor
                 case .global:
                     alwaysTriggerEditor
                 }
@@ -1008,6 +1002,57 @@ private struct WorkflowEditorPage: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(workflowsGroupedSurface(cornerRadius: 12))
+    }
+
+    private var automaticTriggerEditor: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            triggerComponentEditor(
+                title: localizedAppText("App", de: "App"),
+                isOn: $draft.isAppTriggerEnabled
+            ) {
+                appTriggerEditor
+            }
+
+            Divider()
+
+            triggerComponentEditor(
+                title: localizedAppText("Website", de: "Website"),
+                isOn: $draft.isWebsiteTriggerEnabled
+            ) {
+                websiteTriggerEditor
+            }
+
+            Divider()
+
+            triggerComponentEditor(
+                title: localizedAppText("Hotkey", de: "Hotkey"),
+                isOn: $draft.isHotkeyTriggerEnabled
+            ) {
+                hotkeyTriggerEditor
+            }
+        }
+        .background(workflowsGroupedSurface(cornerRadius: 12))
+    }
+
+    private func triggerComponentEditor<Content: View>(
+        title: String,
+        isOn: Binding<Bool>,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Toggle(isOn: isOn) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+            }
+            .toggleStyle(.checkbox)
+
+            if isOn.wrappedValue {
+                content()
+                    .padding(.leading, 28)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
     }
 
     private var appTriggerEditor: some View {
@@ -1078,14 +1123,22 @@ private struct WorkflowEditorPage: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
 
-                    ForEach(websiteSuggestions, id: \.self) { domain in
-                        Button(domain) {
-                            draft.addWebsitePattern(domain)
-                            websiteInput = ""
-                            validationMessage = nil
+                    FlowLayout(spacing: 6) {
+                        ForEach(websiteSuggestions, id: \.self) { domain in
+                            Button(domain) {
+                                draft.addWebsitePattern(domain)
+                                websiteInput = ""
+                                validationMessage = nil
+                            }
+                            .buttonStyle(.plain)
+                            .font(.caption)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background {
+                                Capsule(style: .continuous)
+                                    .fill(Color.secondary.opacity(0.12))
+                            }
                         }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.primary)
                     }
                 }
             }
@@ -1112,6 +1165,7 @@ private struct WorkflowEditorPage: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                .labelsHidden()
 
                 Text(draft.hotkeyBehavior.editorDescription)
                     .font(.caption)
@@ -1140,7 +1194,7 @@ private struct WorkflowEditorPage: View {
             HotkeyRecorderView(
                 label: "",
                 title: localizedAppText("Add Shortcut", de: "Shortcut hinzufügen"),
-                subtitle: localizedAppText("You can attach more than one shortcut to the same workflow.", de: "Du kannst mehrere Shortcuts mit demselben Workflow verbinden."),
+                subtitle: nil,
                 onRecord: { hotkey in
                     addRecordedHotkey(hotkey)
                 },
@@ -1161,8 +1215,8 @@ private struct WorkflowEditorPage: View {
 
                 Text(
                     localizedAppText(
-                        "Runs when no app, website, or hotkey workflow matches.",
-                        de: "Läuft, wenn kein App-, Website- oder Hotkey-Workflow passt."
+                        "Runs when no app or website workflow matches. Hotkeys stay direct triggers.",
+                        de: "Läuft, wenn kein App- oder Website-Workflow passt. Hotkeys bleiben direkte Trigger."
                     )
                 )
                 .font(.caption)
@@ -1652,11 +1706,20 @@ private struct MissingWorkflowPage: View {
     }
 }
 
-private struct WorkflowDraft {
+enum WorkflowTriggerMode: String, CaseIterable, Hashable {
+    case manual
+    case automatic
+    case global
+}
+
+struct WorkflowDraft {
     var name: String
     var isEnabled: Bool
     var template: WorkflowTemplate
-    var triggerKind: WorkflowTriggerKind
+    var triggerMode: WorkflowTriggerMode
+    var isAppTriggerEnabled: Bool
+    var isWebsiteTriggerEnabled: Bool
+    var isHotkeyTriggerEnabled: Bool
     var appBundleIdentifiers: [String]
     var websitePatterns: [String]
     var hotkeys: [UnifiedHotkey]
@@ -1680,7 +1743,10 @@ private struct WorkflowDraft {
         self.name = template.definition.name
         self.isEnabled = true
         self.template = template
-        self.triggerKind = template == .dictation ? .hotkey : .manual
+        self.triggerMode = template == .dictation ? .automatic : .manual
+        self.isAppTriggerEnabled = false
+        self.isWebsiteTriggerEnabled = false
+        self.isHotkeyTriggerEnabled = template == .dictation
         self.appBundleIdentifiers = []
         self.websitePatterns = []
         self.hotkeys = []
@@ -1731,43 +1797,43 @@ private struct WorkflowDraft {
         self.targetActionPluginId = output.targetActionPluginId
 
         if let trigger = workflow.trigger {
+            self.appBundleIdentifiers = trigger.appBundleIdentifiers
+            self.websitePatterns = trigger.websitePatterns
+            self.hotkeys = trigger.hotkeys
+            self.hotkeyBehavior = trigger.hotkeyBehavior
+
             switch trigger.kind {
-            case .app:
-                self.triggerKind = .app
-                self.appBundleIdentifiers = trigger.appBundleIdentifiers
-                self.websitePatterns = []
-                self.hotkeys = []
-            case .website:
-                self.triggerKind = .website
-                self.appBundleIdentifiers = []
-                self.websitePatterns = trigger.websitePatterns
-                self.hotkeys = []
-            case .hotkey:
-                self.triggerKind = .hotkey
-                self.appBundleIdentifiers = []
-                self.websitePatterns = []
-                self.hotkeys = trigger.hotkeys
-                self.hotkeyBehavior = trigger.hotkeyBehavior
             case .global:
-                self.triggerKind = .global
-                self.appBundleIdentifiers = []
-                self.websitePatterns = []
-                self.hotkeys = []
+                self.triggerMode = .global
+                self.isAppTriggerEnabled = false
+                self.isWebsiteTriggerEnabled = false
+                self.isHotkeyTriggerEnabled = false
             case .manual:
-                self.triggerKind = .manual
-                self.appBundleIdentifiers = []
-                self.websitePatterns = []
-                self.hotkeys = []
+                self.triggerMode = .manual
+                self.isAppTriggerEnabled = false
+                self.isWebsiteTriggerEnabled = false
+                self.isHotkeyTriggerEnabled = false
+            case .app, .website, .hotkey:
+                self.triggerMode = .automatic
+                self.isAppTriggerEnabled = !trigger.appBundleIdentifiers.isEmpty
+                self.isWebsiteTriggerEnabled = !trigger.websitePatterns.isEmpty
+                self.isHotkeyTriggerEnabled = !trigger.hotkeys.isEmpty
             }
         } else {
-            self.triggerKind = .manual
+            self.triggerMode = .manual
+            self.isAppTriggerEnabled = false
+            self.isWebsiteTriggerEnabled = false
+            self.isHotkeyTriggerEnabled = false
             self.appBundleIdentifiers = []
             self.websitePatterns = []
             self.hotkeys = []
         }
 
-        if self.template == .dictation && self.triggerKind == .manual {
-            self.triggerKind = .hotkey
+        if self.template == .dictation && self.triggerMode == .manual {
+            self.triggerMode = .automatic
+            if !hasEnabledAutomaticTriggerComponent {
+                self.isHotkeyTriggerEnabled = true
+            }
         }
     }
 
@@ -1790,14 +1856,14 @@ private struct WorkflowDraft {
             de: " Gesprochene Sprache: \(workflowInputLanguageSummary(for: inputLanguageSelection))."
         )
 
-        if triggerKind == .manual {
+        if triggerMode == .manual {
             return localizedAppText(
                 "\(resolvedName) is available as \(template.definition.name) from the Workflow Palette.\(languageSentence)",
                 de: "\(resolvedName) ist als \(template.definition.name) über die Workflow-Palette verfügbar.\(languageSentence)"
             )
         }
 
-        if triggerKind == .global {
+        if triggerMode == .global {
             return localizedAppText(
                 "\(resolvedName) runs always as \(template.definition.name).\(languageSentence)",
                 de: "\(resolvedName) läuft immer als \(template.definition.name).\(languageSentence)"
@@ -1839,8 +1905,11 @@ private struct WorkflowDraft {
             outputFormat = ""
             providerId = nil
             cloudModel = nil
-            if triggerKind == .manual {
-                triggerKind = .hotkey
+            if triggerMode == .manual {
+                triggerMode = .automatic
+            }
+            if !hasEnabledAutomaticTriggerComponent {
+                isHotkeyTriggerEnabled = true
             }
         }
     }
@@ -1851,59 +1920,68 @@ private struct WorkflowDraft {
         workflowService: WorkflowService,
         existingWorkflowId: UUID?
     ) -> String? {
-        if template == .dictation && triggerKind == .manual {
+        if template == .dictation && triggerMode == .manual {
             return localizedAppText(
                 "Dictation Only workflows need a recording trigger.",
                 de: "Nur-Diktat-Workflows brauchen einen Aufnahme-Trigger."
             )
         }
 
-        switch triggerKind {
-        case .app:
-            if appBundleIdentifiers.isEmpty {
+        switch triggerMode {
+        case .automatic:
+            if !hasEnabledAutomaticTriggerComponent {
+                return localizedAppText(
+                    "Please enable at least one automatic trigger.",
+                    de: "Bitte aktiviere mindestens einen automatischen Trigger."
+                )
+            }
+
+            if isAppTriggerEnabled && appBundleIdentifiers.isEmpty {
                 return localizedAppText(
                     "Please select at least one app.",
                     de: "Bitte wähle mindestens eine App aus."
                 )
             }
-        case .website:
-            if websitePatterns.isEmpty {
+
+            if isWebsiteTriggerEnabled && websitePatterns.isEmpty {
                 return localizedAppText(
                     "Please add at least one website or domain.",
                     de: "Bitte füge mindestens eine Website oder Domain hinzu."
                 )
             }
-        case .hotkey:
-            guard !hotkeys.isEmpty else {
-                return localizedAppText(
-                    "Please record at least one workflow shortcut.",
-                    de: "Bitte nimm mindestens einen Workflow-Shortcut auf."
-                )
-            }
 
-            for hotkey in hotkeys {
-                if hotkeys.contains(where: { candidate in
-                    candidate != hotkey && workflowHotkeysConflict(candidate, hotkey)
-                }) {
+            if isHotkeyTriggerEnabled {
+                guard !hotkeys.isEmpty else {
                     return localizedAppText(
-                        "The workflow contains duplicate shortcuts.",
-                        de: "Der Workflow enthält doppelte Shortcuts."
+                        "Please record at least one workflow shortcut.",
+                        de: "Bitte nimm mindestens einen Workflow-Shortcut auf."
                     )
                 }
 
-                if let conflictWorkflowId = hotkeyService.isHotkeyAssignedToWorkflow(hotkey, excludingWorkflowId: existingWorkflowId),
-                   let conflictWorkflow = workflowService.workflow(id: conflictWorkflowId) {
-                    return localizedAppText(
-                        "This hotkey is already used by workflow “\(conflictWorkflow.name)”.",
-                        de: "Dieser Hotkey wird bereits vom Workflow „\(conflictWorkflow.name)“ verwendet."
-                    )
-                }
+                for hotkey in hotkeys {
+                    if hotkeys.contains(where: { candidate in
+                        candidate != hotkey && workflowHotkeysConflict(candidate, hotkey)
+                    }) {
+                        return localizedAppText(
+                            "The workflow contains duplicate shortcuts.",
+                            de: "Der Workflow enthält doppelte Shortcuts."
+                        )
+                    }
 
-                if let conflictSlot = hotkeyService.isHotkeyAssignedToGlobalSlot(hotkey) {
-                    return localizedAppText(
-                        "This hotkey is already used by the global slot “\(conflictSlot.rawValue)”.",
-                        de: "Dieser Hotkey wird bereits vom globalen Slot „\(conflictSlot.rawValue)“ verwendet."
-                    )
+                    if let conflictWorkflowId = hotkeyService.isHotkeyAssignedToWorkflow(hotkey, excludingWorkflowId: existingWorkflowId),
+                       let conflictWorkflow = workflowService.workflow(id: conflictWorkflowId) {
+                        return localizedAppText(
+                            "This hotkey is already used by workflow “\(conflictWorkflow.name)”.",
+                            de: "Dieser Hotkey wird bereits vom Workflow „\(conflictWorkflow.name)“ verwendet."
+                        )
+                    }
+
+                    if let conflictSlot = hotkeyService.isHotkeyAssignedToGlobalSlot(hotkey) {
+                        return localizedAppText(
+                            "This hotkey is already used by the global slot “\(conflictSlot.rawValue)”.",
+                            de: "Dieser Hotkey wird bereits vom globalen Slot „\(conflictSlot.rawValue)“ verwendet."
+                        )
+                    }
                 }
             }
         case .global, .manual:
@@ -1949,16 +2027,31 @@ private struct WorkflowDraft {
     }
 
     func resolvedTrigger() -> WorkflowTrigger? {
-        switch triggerKind {
-        case .app:
-            guard !appBundleIdentifiers.isEmpty else { return nil }
-            return .apps(appBundleIdentifiers)
-        case .website:
-            guard !websitePatterns.isEmpty else { return nil }
-            return .websites(websitePatterns)
-        case .hotkey:
-            guard !hotkeys.isEmpty else { return nil }
-            return .hotkeys(hotkeys, behavior: hotkeyBehavior)
+        switch triggerMode {
+        case .automatic:
+            let resolvedApps = isAppTriggerEnabled ? appBundleIdentifiers : []
+            let resolvedWebsites = isWebsiteTriggerEnabled ? websitePatterns : []
+            let resolvedHotkeys = isHotkeyTriggerEnabled ? hotkeys : []
+            guard !resolvedApps.isEmpty || !resolvedWebsites.isEmpty || !resolvedHotkeys.isEmpty else {
+                return nil
+            }
+
+            let kind: WorkflowTriggerKind
+            if !resolvedApps.isEmpty {
+                kind = .app
+            } else if !resolvedWebsites.isEmpty {
+                kind = .website
+            } else {
+                kind = .hotkey
+            }
+
+            return WorkflowTrigger(
+                kind: kind,
+                appBundleIdentifiers: resolvedApps,
+                websitePatterns: resolvedWebsites,
+                hotkeys: resolvedHotkeys,
+                hotkeyBehavior: hotkeyBehavior
+            )
         case .global:
             return .global()
         case .manual:
@@ -2014,48 +2107,69 @@ private struct WorkflowDraft {
     }
 
     private var triggerReviewText: String {
-        switch triggerKind {
-        case .app:
-            if appBundleIdentifiers.isEmpty {
-                return localizedAppText("an app trigger", de: "einen App-Trigger")
+        switch triggerMode {
+        case .automatic:
+            var parts: [String] = []
+
+            if isAppTriggerEnabled {
+                if appBundleIdentifiers.isEmpty {
+                    parts.append(localizedAppText("an app trigger", de: "einen App-Trigger"))
+                } else {
+                    parts.append(localizedAppText(
+                        "the apps \(workflowCompactList(appBundleIdentifiers.map(workflowAppDisplayName(for:)), conjunction: localizedAppText("and", de: "und")))",
+                        de: "die Apps \(workflowCompactList(appBundleIdentifiers.map(workflowAppDisplayName(for:)), conjunction: "und"))"
+                    ))
+                }
             }
-            return localizedAppText(
-                "the apps \(workflowCompactList(appBundleIdentifiers.map(workflowAppDisplayName(for:)), conjunction: localizedAppText("and", de: "und")))",
-                de: "die Apps \(workflowCompactList(appBundleIdentifiers.map(workflowAppDisplayName(for:)), conjunction: "und"))"
-            )
-        case .website:
-            if websitePatterns.isEmpty {
-                return localizedAppText("a website trigger", de: "einen Website-Trigger")
+
+            if isWebsiteTriggerEnabled {
+                if websitePatterns.isEmpty {
+                    parts.append(localizedAppText("a website trigger", de: "einen Website-Trigger"))
+                } else {
+                    parts.append(localizedAppText(
+                        "the websites \(workflowCompactList(websitePatterns, conjunction: localizedAppText("and", de: "und")))",
+                        de: "die Websites \(workflowCompactList(websitePatterns, conjunction: "und"))"
+                    ))
+                }
             }
-            return localizedAppText(
-                "the websites \(workflowCompactList(websitePatterns, conjunction: localizedAppText("and", de: "und")))",
-                de: "die Websites \(workflowCompactList(websitePatterns, conjunction: "und"))"
-            )
-        case .hotkey:
-            if !hotkeys.isEmpty {
+
+            if isHotkeyTriggerEnabled {
                 let shortcuts = workflowCompactList(
                     hotkeys.map(HotkeyService.displayName(for:)),
                     conjunction: localizedAppText("and", de: "und")
                 )
-                switch hotkeyBehavior {
-                case .startDictation:
-                    return localizedAppText(
-                        "the shortcuts \(shortcuts) to start dictation",
-                        de: "die Shortcuts \(shortcuts) zum Starten des Diktats"
-                    )
-                case .processSelectedText:
-                    return localizedAppText(
-                        "the shortcuts \(shortcuts) to process selected text",
-                        de: "die Shortcuts \(shortcuts) zum Verarbeiten markierten Texts"
-                    )
+                if shortcuts.isEmpty {
+                    parts.append(localizedAppText("a hotkey", de: "einen Hotkey"))
+                } else {
+                    switch hotkeyBehavior {
+                    case .startDictation:
+                        parts.append(localizedAppText(
+                            "the shortcuts \(shortcuts) to start dictation",
+                            de: "die Shortcuts \(shortcuts) zum Starten des Diktats"
+                        ))
+                    case .processSelectedText:
+                        parts.append(localizedAppText(
+                            "the shortcuts \(shortcuts) to process selected text",
+                            de: "die Shortcuts \(shortcuts) zum Verarbeiten markierten Texts"
+                        ))
+                    }
                 }
             }
-            return localizedAppText("a hotkey", de: "einen Hotkey")
+
+            if parts.isEmpty {
+                return localizedAppText("an automatic trigger", de: "einen automatischen Trigger")
+            }
+
+            return workflowCompactList(parts, conjunction: localizedAppText("and", de: "und"))
         case .global:
             return localizedAppText("always", de: "immer")
         case .manual:
             return localizedAppText("the Workflow Palette", de: "die Workflow-Palette")
         }
+    }
+
+    private var hasEnabledAutomaticTriggerComponent: Bool {
+        isAppTriggerEnabled || isWebsiteTriggerEnabled || isHotkeyTriggerEnabled
     }
 
     mutating func addWebsitePattern(_ value: String) {
@@ -2187,20 +2301,11 @@ private func workflowTriggerSummary(for workflow: Workflow) -> String {
     switch trigger.kind {
     case .manual:
         return localizedAppText("Manual", de: "Manuell")
-    case .app:
-        return trigger.appBundleIdentifiers.count == 1
-            ? localizedAppText("App", de: "App")
-            : localizedAppText("Apps", de: "Apps")
-    case .website:
-        return trigger.websitePatterns.count == 1
-            ? localizedAppText("Website", de: "Website")
-            : localizedAppText("Websites", de: "Websites")
-    case .hotkey:
-        return trigger.hotkeys.count == 1
-            ? localizedAppText("Hotkey", de: "Hotkey")
-            : localizedAppText("Hotkeys", de: "Hotkeys")
     case .global:
         return localizedAppText("Always", de: "Immer")
+    case .app, .website, .hotkey:
+        let parts = workflowTriggerSummaryParts(for: trigger)
+        return parts.isEmpty ? trigger.kind.paletteLabel : parts.joined(separator: " + ")
     }
 }
 
@@ -2210,17 +2315,46 @@ private func workflowTriggerDetail(for workflow: Workflow) -> String {
     switch trigger.kind {
     case .manual:
         return localizedAppText("Workflow Palette", de: "Workflow-Palette")
-    case .app:
-        return workflowCompactList(trigger.appBundleIdentifiers.map(workflowAppDisplayName(for:)))
-    case .website:
-        return workflowCompactList(trigger.websitePatterns)
-    case .hotkey:
-        let shortcuts = workflowCompactList(trigger.hotkeys.map(HotkeyService.displayName(for:)))
-        guard !shortcuts.isEmpty else { return trigger.hotkeyBehavior.shortcutSubtitle }
-        return "\(shortcuts) · \(trigger.hotkeyBehavior.shortcutSubtitle)"
     case .global:
         return ""
+    case .app, .website, .hotkey:
+        return workflowTriggerDetailParts(for: trigger).joined(separator: " · ")
     }
+}
+
+private func workflowTriggerSummaryParts(for trigger: WorkflowTrigger) -> [String] {
+    var parts: [String] = []
+    if !trigger.appBundleIdentifiers.isEmpty {
+        parts.append(trigger.appBundleIdentifiers.count == 1
+            ? localizedAppText("App", de: "App")
+            : localizedAppText("Apps", de: "Apps"))
+    }
+    if !trigger.websitePatterns.isEmpty {
+        parts.append(trigger.websitePatterns.count == 1
+            ? localizedAppText("Website", de: "Website")
+            : localizedAppText("Websites", de: "Websites"))
+    }
+    if !trigger.hotkeys.isEmpty {
+        parts.append(trigger.hotkeys.count == 1
+            ? localizedAppText("Hotkey", de: "Hotkey")
+            : localizedAppText("Hotkeys", de: "Hotkeys"))
+    }
+    return parts
+}
+
+private func workflowTriggerDetailParts(for trigger: WorkflowTrigger) -> [String] {
+    var parts: [String] = []
+    if !trigger.appBundleIdentifiers.isEmpty {
+        parts.append(workflowCompactList(trigger.appBundleIdentifiers.map(workflowAppDisplayName(for:))))
+    }
+    if !trigger.websitePatterns.isEmpty {
+        parts.append(workflowCompactList(trigger.websitePatterns))
+    }
+    if !trigger.hotkeys.isEmpty {
+        let shortcuts = workflowCompactList(trigger.hotkeys.map(HotkeyService.displayName(for:)))
+        parts.append(shortcuts.isEmpty ? trigger.hotkeyBehavior.shortcutSubtitle : "\(shortcuts) · \(trigger.hotkeyBehavior.shortcutSubtitle)")
+    }
+    return parts
 }
 
 private func workflowReviewText(for workflow: Workflow) -> String {

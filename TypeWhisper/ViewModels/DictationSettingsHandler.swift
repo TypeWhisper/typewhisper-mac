@@ -96,7 +96,7 @@ final class DictationSettingsHandler {
         let entries = workflows
             .filter(\.isEnabled)
             .flatMap { workflow -> [(id: UUID, hotkey: UnifiedHotkey, behavior: WorkflowHotkeyBehavior)] in
-                guard let trigger = workflow.trigger, trigger.kind == .hotkey else {
+                guard let trigger = workflow.trigger, !trigger.hotkeys.isEmpty else {
                     return []
                 }
                 return trigger.hotkeys.map { hotkey in

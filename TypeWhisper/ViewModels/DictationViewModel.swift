@@ -1446,6 +1446,18 @@ final class DictationViewModel: ObservableObject {
 
         let base: String
         switch match.kind {
+        case .appAndWebsite:
+            if let domain = match.matchedDomain {
+                base = localizedAppText(
+                    "This workflow applies because \(appDescriptor) was detected together with \(domain).",
+                    de: "Dieser Workflow greift, weil \(appDescriptor) zusammen mit \(domain) erkannt wurde."
+                )
+            } else {
+                base = localizedAppText(
+                    "This workflow applies because the app and website were detected together.",
+                    de: "Dieser Workflow greift, weil App und Website zusammen erkannt wurden."
+                )
+            }
         case .website:
             if let domain = match.matchedDomain {
                 base = localizedAppText(

@@ -149,6 +149,58 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(workflow.trigger?.hotkeyBehavior, .processSelectedText)
     }
 
+    func testWorkflowServicePersistsCombinedTriggerArrays() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory)
+        let hotkey = UnifiedHotkey(keyCode: 15, modifierFlags: NSEvent.ModifierFlags.command.rawValue, isFn: false)
+
+        service.addWorkflow(
+            name: "Claude Cleanup",
+            template: .summary,
+            trigger: WorkflowTrigger(
+                kind: .app,
+                appBundleIdentifiers: ["ai.anthropic.Claude"],
+                websitePatterns: ["claude.ai"],
+                hotkeys: [hotkey],
+                hotkeyBehavior: .processSelectedText
+            )
+        )
+
+        let reloaded = WorkflowService(appSupportDirectory: appSupportDirectory)
+        let trigger = try XCTUnwrap(reloaded.workflows.first?.trigger)
+
+        XCTAssertEqual(trigger.kind, .app)
+        XCTAssertEqual(trigger.appBundleIdentifiers, ["ai.anthropic.Claude"])
+        XCTAssertEqual(trigger.websitePatterns, ["claude.ai"])
+        XCTAssertEqual(trigger.hotkeys, [hotkey])
+        XCTAssertEqual(trigger.hotkeyBehavior, .processSelectedText)
+    }
+
+    func testWorkflowDraftPreservesCombinedTriggerArraysWhenSaving() throws {
+        let hotkey = UnifiedHotkey(keyCode: 15, modifierFlags: NSEvent.ModifierFlags.command.rawValue, isFn: false)
+        let workflow = Workflow(
+            name: "Claude Cleanup",
+            template: .summary,
+            trigger: WorkflowTrigger(
+                kind: .app,
+                appBundleIdentifiers: ["ai.anthropic.Claude"],
+                websitePatterns: ["claude.ai"],
+                hotkeys: [hotkey],
+                hotkeyBehavior: .processSelectedText
+            )
+        )
+
+        let trigger = try XCTUnwrap(WorkflowDraft(workflow).resolvedTrigger())
+
+        XCTAssertEqual(trigger.kind, .app)
+        XCTAssertEqual(trigger.appBundleIdentifiers, ["ai.anthropic.Claude"])
+        XCTAssertEqual(trigger.websitePatterns, ["claude.ai"])
+        XCTAssertEqual(trigger.hotkeys, [hotkey])
+        XCTAssertEqual(trigger.hotkeyBehavior, .processSelectedText)
+    }
+
     func testWorkflowServicePersistsDefaultLLMProviderAndModel() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
         defer { TestSupport.remove(appSupportDirectory) }
@@ -713,6 +765,71 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertTrue(match.wonBySortOrder)
     }
 
+    func testMatchWorkflowPrefersAppAndWebsiteBeforeWebsiteAndAppOnly() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory)
+        _ = service.addWorkflow(
+            name: "Claude Website Cleanup",
+            template: .summary,
+            trigger: .website("claude.ai"),
+            sortOrder: 0
+        )
+        _ = service.addWorkflow(
+            name: "Claude App Cleanup",
+            template: .cleanedText,
+            trigger: .app("ai.anthropic.Claude"),
+            sortOrder: 1
+        )
+        _ = service.addWorkflow(
+            name: "Claude App Website Cleanup",
+            template: .checklist,
+            trigger: WorkflowTrigger(
+                kind: .app,
+                appBundleIdentifiers: ["ai.anthropic.Claude"],
+                websitePatterns: ["claude.ai"]
+            ),
+            sortOrder: 2
+        )
+
+        let match = try XCTUnwrap(service.matchWorkflow(
+            bundleIdentifier: "ai.anthropic.Claude",
+            url: "https://claude.ai/chat"
+        ))
+
+        XCTAssertEqual(match.workflow.name, "Claude App Website Cleanup")
+        XCTAssertEqual(match.kind, .appAndWebsite)
+        XCTAssertEqual(match.matchedDomain, "claude.ai")
+        XCTAssertEqual(match.competingWorkflowCount, 0)
+        XCTAssertFalse(match.wonBySortOrder)
+    }
+
+    func testCombinedWorkflowRequiresBothAppAndWebsiteForAutomaticMatch() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory)
+        _ = service.addWorkflow(
+            name: "Claude App Website Cleanup",
+            template: .checklist,
+            trigger: WorkflowTrigger(
+                kind: .app,
+                appBundleIdentifiers: ["ai.anthropic.Claude"],
+                websitePatterns: ["claude.ai"]
+            )
+        )
+
+        XCTAssertNil(service.matchWorkflow(
+            bundleIdentifier: "com.apple.Safari",
+            url: "https://claude.ai/chat"
+        ))
+        XCTAssertNil(service.matchWorkflow(
+            bundleIdentifier: "ai.anthropic.Claude",
+            url: "https://example.com"
+        ))
+    }
+
     func testMatchWorkflowIgnoresDisabledAndHotkeyOnlyEntries() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
         defer { TestSupport.remove(appSupportDirectory) }
@@ -731,6 +848,45 @@ final class WorkflowServiceTests: XCTestCase {
         )
 
         XCTAssertNil(service.matchWorkflow(bundleIdentifier: "com.apple.mail", url: "https://mail.google.com"))
+    }
+
+    func testSyncWorkflowHotkeysRegistersCombinedTriggerHotkeys() throws {
+        let profileDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowProfileTests")
+        let workflowDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer {
+            TestSupport.remove(profileDirectory)
+            TestSupport.remove(workflowDirectory)
+        }
+
+        let hotkeyService = HotkeyService()
+        let workflowService = WorkflowService(appSupportDirectory: workflowDirectory)
+        let profileService = ProfileService(appSupportDirectory: profileDirectory)
+        let handler = DictationSettingsHandler(
+            hotkeyService: hotkeyService,
+            audioRecordingService: AudioRecordingService(),
+            textInsertionService: TextInsertionService(),
+            profileService: profileService,
+            workflowService: workflowService
+        )
+        let hotkey = UnifiedHotkey(keyCode: 15, modifierFlags: NSEvent.ModifierFlags.command.rawValue, isFn: false)
+        let workflow = try XCTUnwrap(workflowService.addWorkflow(
+            name: "Claude Cleanup",
+            template: .summary,
+            trigger: WorkflowTrigger(
+                kind: .app,
+                appBundleIdentifiers: ["ai.anthropic.Claude"],
+                websitePatterns: ["claude.ai"],
+                hotkeys: [hotkey],
+                hotkeyBehavior: .processSelectedText
+            )
+        ))
+
+        handler.syncWorkflowHotkeys(workflowService.workflows)
+
+        XCTAssertEqual(
+            hotkeyService.isHotkeyAssignedToWorkflow(hotkey, excludingWorkflowId: nil),
+            workflow.id
+        )
     }
 
     func testForcedWorkflowMatchUsesManualOverrideKind() throws {
