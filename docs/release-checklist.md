@@ -39,8 +39,8 @@
 - Workflow setup step (cross-tab navigation)
 - History edit/export
 - Post-processing transparency in history and indicators
-- Workflow matching for app, URL, hotkey, and fallback triggers
-- Global fallback workflow when no app-, URL-, or hotkey-specific workflow matches
+- Workflow matching for app + URL, URL-only, app-only, direct hotkey, and fallback triggers
+- Global fallback workflow when no app- or URL-specific workflow matches
 - Notch, Overlay, and Minimal indicator styles
 - Transcript preview toggle for Notch and Overlay
 - Plugin enable/disable

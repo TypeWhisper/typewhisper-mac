@@ -41,7 +41,7 @@ See the [release readiness guide](docs/release-readiness.md), [support matrix](d
 ## What's New in 1.3
 
 - **Unified Workflows** - Prompt actions and matching rules now live in one dedicated workflow surface with a native editor and guided creation flow
-- **Always fallback trigger** - Create a global workflow that runs when no more specific app, website, or hotkey workflow matches
+- **Always fallback trigger** - Create a global workflow that runs when no more specific app or website workflow matches
 - **Manual workflow palette** - Keep workflows out of automatic dictation matching and run them from one global Workflow Palette shortcut
 - **Safer prompt boundaries** - Workflow prompts treat dictated text as source content to transform, not instructions to execute
 - **Focus-safe local processing** - On-device workflows keep focus in the original target app instead of foregrounding TypeWhisper unexpectedly
@@ -69,7 +69,7 @@ See the [release readiness guide](docs/release-readiness.md), [support matrix](d
 
 ### AI Processing
 
-- **Workflows** - Build reusable transformations for translation, rewriting, extraction, formatting, and app-specific automation. Workflows can run automatically by app or website, from a dedicated hotkey, as a global fallback, or manually from the Workflow Palette. Hotkey workflows can either start dictation or process the current selection/clipboard directly.
+- **Workflows** - Build reusable transformations for translation, rewriting, extraction, formatting, and app-specific automation. Workflows can run automatically by app, website, or app + website combinations, from a dedicated hotkey, as a global fallback, or manually from the Workflow Palette. Hotkey workflows can either start dictation or process the current selection/clipboard directly.
 - **LLM providers** - Apple Intelligence (macOS 26+), Groq, OpenAI / ChatGPT, xAI/Grok, Gemini, and OpenAI Compatible with per-prompt provider and model override
 - **Speech providers** - System voices and xAI/Grok TTS can provide spoken feedback and readback
 - **Local prompt processing** - Gemma 4 via MLX runs on-device on Apple Silicon, with the current verified release path limited to the E2B/E4B 4-bit models
@@ -77,7 +77,7 @@ See the [release readiness guide](docs/release-readiness.md), [support matrix](d
 
 ### Personalization
 
-- **Workflow triggers** - Per-app, per-website, hotkey, global fallback, and manual palette-only triggers for language, task, engine, prompt, and auto-submit behavior. Website matching supports subdomains
+- **Workflow triggers** - Per-app, per-website, combined app + website, hotkey, global fallback, and manual palette-only triggers for language, task, engine, prompt, and auto-submit behavior. Website matching supports subdomains
 - **Dictionary** - Terms improve cloud recognition accuracy. Corrections fix common transcription mistakes automatically. Auto-learns from manual corrections. Includes importable term packs
 - **Localized term packs** - Built-in term pack names and descriptions are localized in English and German
 - **Snippets** - Text shortcuts with trigger/replacement. Supports placeholders like `{{DATE}}`, `{{TIME}}`, and `{{CLIPBOARD}}`
@@ -368,7 +368,7 @@ Local file paths are handed to the running TypeWhisper app directly, so large fi
 
 ## Workflows
 
-Workflows let you configure transcription, transformation, and automation behavior per application, website, hotkey, global fallback, or manual palette-only workflow. For example:
+Workflows let you configure transcription, transformation, and automation behavior per application, website, combined app + website context, hotkey, global fallback, or manual palette-only workflow. For example:
 
 - **Mail** - German language, Whisper Large v3
 - **Slack** - English language, Parakeet TDT v3
@@ -376,7 +376,7 @@ Workflows let you configure transcription, transformation, and automation behavi
 - **github.com** - English cleanup workflow that matches in any browser
 - **docs.google.com** - German dictation workflow that translates to English
 
-Create workflows in Settings > Workflows. Choose a template, assign an app, website, hotkey, Always, or Manual trigger, then configure language/task/engine overrides, prompt processing, auto-submit behavior, and priority. Hotkey workflows choose whether the shortcut starts dictation or processes the current selection/clipboard through the same insertion path as the Workflow Palette. Spoken language can be left on full auto-detect, fixed to one exact language, or restricted to a shortlist of likely languages for better detection accuracy. Website patterns support subdomain matching - e.g. `google.com` also matches `docs.google.com`.
+Create workflows in Settings > Workflows. Choose a template, then use Automatic to enable app, website, hotkey, or any combination of those trigger components. Always stays the global fallback, and Manual keeps the workflow palette-only. Hotkey workflows choose whether the shortcut starts dictation or processes the current selection/clipboard through the same insertion path as the Workflow Palette. Spoken language can be left on full auto-detect, fixed to one exact language, or restricted to a shortlist of likely languages for better detection accuracy. Website patterns support subdomain matching - e.g. `google.com` also matches `docs.google.com`.
 
 When you start dictating, TypeWhisper matches the active app and browser URL against enabled workflows with the following priority:
 1. **App + URL match** - highest specificity (e.g. Chrome + github.com)
@@ -384,7 +384,7 @@ When you start dictating, TypeWhisper matches the active app and browser URL aga
 3. **App-only match** - generic app workflows (e.g. all of Chrome)
 4. **Always fallback** - global workflow when no more specific workflow matches
 
-Manual workflows are excluded from automatic dictation matching. They appear only in the Workflow Palette and use the existing Workflow Palette hotkey.
+Hotkeys are direct workflow shortcuts, not context conditions in the app/URL matching order. Manual workflows are excluded from automatic dictation matching. They appear only in the Workflow Palette and use the existing Workflow Palette hotkey.
 
 The active workflow name is shown as a badge in the indicator, together with a short explanation of why it matched.
 
