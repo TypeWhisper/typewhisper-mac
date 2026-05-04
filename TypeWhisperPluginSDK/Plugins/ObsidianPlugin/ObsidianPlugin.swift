@@ -321,7 +321,7 @@ private struct ObsidianSettingsView: View {
     @State private var frontmatterEnabled: Bool = true
     @State private var tagsInput: String = "typewhisper"
     @State private var autoExportEnabled: Bool = false
-    private let bundle = Bundle(for: ObsidianPlugin.self)
+    private let bundle = pluginModuleBundle
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -565,3 +565,11 @@ private struct ObsidianSettingsView: View {
         }
     }
 }
+
+private let pluginModuleBundle: Bundle = {
+#if SWIFT_PACKAGE
+    Bundle.module
+#else
+    Bundle(for: ObsidianPlugin.self)
+#endif
+}()

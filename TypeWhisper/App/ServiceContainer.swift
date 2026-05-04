@@ -160,7 +160,8 @@ final class ServiceContainer: ObservableObject {
         profilesViewModel = ProfilesViewModel(
             profileService: profileService,
             historyService: historyService,
-            settingsViewModel: settingsViewModel
+            settingsViewModel: settingsViewModel,
+            textInsertionService: textInsertionService
         )
         dictionaryViewModel = DictionaryViewModel(dictionaryService: dictionaryService)
         snippetsViewModel = SnippetsViewModel(snippetService: snippetService)

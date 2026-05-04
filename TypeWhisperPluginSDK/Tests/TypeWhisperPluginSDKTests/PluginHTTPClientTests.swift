@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import TypeWhisperPluginSDK
+@_spi(Testing) @testable import TypeWhisperPluginSDK
 
 final class PluginHTTPClientTests: XCTestCase {
     override func tearDown() {
@@ -84,7 +84,7 @@ private final class MockHTTPSessionStore: @unchecked Sendable {
     }
 }
 
-private final class MockHTTPSession: PluginHTTPSession, @unchecked Sendable {
+private final class MockHTTPSession: PluginHTTPClientSession, @unchecked Sendable {
     private let lock = NSLock()
     private var outcomes: [Result<(Data, URLResponse), Error>]
     private(set) var requestedPaths: [String] = []

@@ -453,7 +453,7 @@ final class LiveTranscriptPanel: NSPanel {
 struct LiveTranscriptView: View {
     @ObservedObject var viewModel: LiveTranscriptViewModel
     let fontSize: Double
-    private let bundle = Bundle(for: LiveTranscriptPlugin.self)
+    private let bundle = pluginModuleBundle
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -524,6 +524,14 @@ struct LiveTranscriptView: View {
         )
     }
 }
+
+private let pluginModuleBundle: Bundle = {
+#if SWIFT_PACKAGE
+    Bundle.module
+#else
+    Bundle(for: LiveTranscriptPlugin.self)
+#endif
+}()
 
 // MARK: - Scroll Wheel Detector
 

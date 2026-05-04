@@ -5,7 +5,7 @@ import TypeWhisperPluginSDK
 final class PluginManifestValidationTests: XCTestCase {
     func testAllPluginManifestsDecodeAndDeclareCompatibility() throws {
         let manifestURLs = try FileManager.default.contentsOfDirectory(
-            at: TestSupport.repoRoot.appendingPathComponent("Plugins"),
+            at: TestSupport.repoRoot.appendingPathComponent("TypeWhisperPluginSDK/Plugins"),
             includingPropertiesForKeys: nil,
             options: [.skipsHiddenFiles, .skipsPackageDescendants]
         )
@@ -37,12 +37,12 @@ final class PluginManifestValidationTests: XCTestCase {
 
     func testAppleSiliconOnlyPluginsDeclareArm64Compatibility() throws {
         let manifestPaths = [
-            "Plugins/WhisperKitPlugin/manifest.json",
-            "Plugins/ParakeetPlugin/manifest.json",
-            "Plugins/GranitePlugin/manifest.json",
-            "Plugins/Gemma4Plugin/manifest.json",
-            "Plugins/Qwen3Plugin/manifest.json",
-            "Plugins/VoxtralPlugin/manifest.json",
+            "TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/manifest.json",
+            "TypeWhisperPluginSDK/Plugins/ParakeetPlugin/manifest.json",
+            "TypeWhisperPluginSDK/Plugins/GranitePlugin/manifest.json",
+            "TypeWhisperPluginSDK/Plugins/Gemma4Plugin/manifest.json",
+            "TypeWhisperPluginSDK/Plugins/Qwen3Plugin/manifest.json",
+            "TypeWhisperPluginSDK/Plugins/VoxtralPlugin/manifest.json",
         ]
 
         for relativePath in manifestPaths {
@@ -54,7 +54,7 @@ final class PluginManifestValidationTests: XCTestCase {
     }
 
     func testOpenAIPluginManifestDeclaresCloudHostingWithoutAPIKeyRequirement() throws {
-        let manifestURL = TestSupport.repoRoot.appendingPathComponent("Plugins/OpenAIPlugin/manifest.json")
+        let manifestURL = TestSupport.repoRoot.appendingPathComponent("TypeWhisperPluginSDK/Plugins/OpenAIPlugin/manifest.json")
         let data = try Data(contentsOf: manifestURL)
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
 

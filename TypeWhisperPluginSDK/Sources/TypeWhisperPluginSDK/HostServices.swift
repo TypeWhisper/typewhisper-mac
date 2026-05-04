@@ -45,20 +45,20 @@ public extension HostServices {
 
 // MARK: - HTTP Client (Reusable Ephemeral Session)
 
-internal protocol PluginHTTPSession: AnyObject {
+@_spi(Testing) public protocol PluginHTTPClientSession: AnyObject {
     func data(for request: URLRequest) async throws -> (Data, URLResponse)
     func finishTasksAndInvalidate()
 }
 
-extension URLSession: PluginHTTPSession {}
+@_spi(Testing) extension URLSession: PluginHTTPClientSession {}
 
 /// Drop-in replacement for `URLSession.shared.data(for:)` that reuses one ephemeral
 /// session so fast plugin requests can keep DNS/TLS/HTTP connections warm.
 public enum PluginHTTPClient {
     private static let logger = Logger(subsystem: "com.typewhisper.sdk", category: "HTTP")
     private static let lock = NSLock()
-    nonisolated(unsafe) private static var sharedSession: (any PluginHTTPSession)?
-    nonisolated(unsafe) private static var sessionFactory: (URLSessionConfiguration) -> any PluginHTTPSession = {
+    nonisolated(unsafe) private static var sharedSession: (any PluginHTTPClientSession)?
+    nonisolated(unsafe) private static var sessionFactory: (URLSessionConfiguration) -> any PluginHTTPClientSession = {
         URLSession(configuration: $0)
     }
 
@@ -81,14 +81,16 @@ public enum PluginHTTPClient {
         }
     }
 
-    internal static func configureForTesting(_ factory: @escaping (URLSessionConfiguration) -> any PluginHTTPSession) {
+    @_spi(Testing) public static func configureForTesting(
+        _ factory: @escaping (URLSessionConfiguration) -> any PluginHTTPClientSession
+    ) {
         resetSharedSession(reason: "test reconfiguration")
         lock.withLock {
             sessionFactory = factory
         }
     }
 
-    internal static func resetTestingHooks() {
+    @_spi(Testing) public static func resetTestingHooks() {
         resetSharedSession(reason: "test cleanup")
         lock.withLock {
             sessionFactory = { URLSession(configuration: $0) }
@@ -124,7 +126,7 @@ public enum PluginHTTPClient {
         }
     }
 
-    private static func sharedOrCreateSession() -> any PluginHTTPSession {
+    private static func sharedOrCreateSession() -> any PluginHTTPClientSession {
         lock.withLock {
             if let sharedSession {
                 return sharedSession
@@ -143,7 +145,7 @@ public enum PluginHTTPClient {
         return config
     }
 
-    private static func resetSharedSession(matching session: any PluginHTTPSession, reason: String) {
+    private static func resetSharedSession(matching session: any PluginHTTPClientSession, reason: String) {
         let didRemoveSharedSession = lock.withLock {
             guard let current = sharedSession, current === session else {
                 return false

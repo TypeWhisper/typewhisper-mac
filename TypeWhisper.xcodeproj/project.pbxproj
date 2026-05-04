@@ -13,7 +13,6 @@
 		1F7A2C3D4E5B60718293A4C6 /* PromptWizardInferenceServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A7B3C4D5E6F708192A3B4C6 /* PromptWizardInferenceServiceTests.swift */; };
 		1F7A2C3D4E5B60718293A4C7 /* PromptActionsViewModelWizardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A7B3C4D5E6F708192A3B4C7 /* PromptActionsViewModelWizardTests.swift */; };
 		4D980A5CFE1A4217A10C2101 /* WhisperKitPluginLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D980A5CFE1A4217A10C2102 /* WhisperKitPluginLifecycleTests.swift */; };
-		C42900000000000000000001 /* LiveTranscriptPluginBehaviorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C42900000000000000000002 /* LiveTranscriptPluginBehaviorTests.swift */; };
 		C42900000000000000000003 /* LiveTranscriptPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000216 /* LiveTranscriptPlugin.swift */; };
 		204C804898EAE1127B62EC98 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E808D246301E36546EEB811F /* TestSupport.swift */; };
 		A1F000000000000000000102 /* PostUpdatePromptCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */; };
@@ -79,7 +78,6 @@
 		F18A00000000000000000001 /* FillerWordsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18A00000000000000000010 /* FillerWordsPlugin.swift */; };
 		F18A00000000000000000002 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = F18A00000000000000000011 /* manifest.json */; };
 		F18A00000000000000000003 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = F18A00000000000000000037 /* TypeWhisperPluginSDK */; };
-		F18A00000000000000000005 /* FillerWordsPluginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18A00000000000000000013 /* FillerWordsPluginTests.swift */; };
 		F18A00000000000000000006 /* FillerWordsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18A00000000000000000010 /* FillerWordsPlugin.swift */; };
 		AA00000000000000000001 /* TypeWhisperApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000001 /* TypeWhisperApp.swift */; };
 		AA00000000000000000002 /* ServiceContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000002 /* ServiceContainer.swift */; };
@@ -658,7 +656,6 @@
 		B2D4F6A8C0E2143F9B7D5C1A /* PromptActionTemperaturePersistenceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptActionTemperaturePersistenceTests.swift; sourceTree = "<group>"; };
 		CE5852D6767C5FA955B84C52 /* AppFormatterServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppFormatterServiceTests.swift; sourceTree = "<group>"; };
 		4D980A5CFE1A4217A10C2102 /* WhisperKitPluginLifecycleTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WhisperKitPluginLifecycleTests.swift; sourceTree = "<group>"; };
-		C42900000000000000000002 /* LiveTranscriptPluginBehaviorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveTranscriptPluginBehaviorTests.swift; sourceTree = "<group>"; };
 		D63A42880A0BA4C84F36E873 /* DictionaryServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictionaryServiceTests.swift; sourceTree = "<group>"; };
 		D8AA5F3DBFD9010D09311C40 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
 		DD00000000000000000098 /* typewhisper-cli */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "typewhisper-cli"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -679,7 +676,6 @@
 		F18A00000000000000000010 /* FillerWordsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FillerWordsPlugin.swift; sourceTree = "<group>"; };
 		F18A00000000000000000011 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		F18A00000000000000000012 /* FillerWordsPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FillerWordsPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
-		F18A00000000000000000013 /* FillerWordsPluginTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FillerWordsPluginTests.swift; sourceTree = "<group>"; };
 		F41BD305007A3A158038C75C /* ProfileServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProfileServiceTests.swift; sourceTree = "<group>"; };
 		FD34FDF9D999D85DA1C35375 /* CLISupportTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CLISupportTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000248 /* HotkeyRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyRecorderView.swift; sourceTree = "<group>"; };
@@ -1367,7 +1363,7 @@
 				BB00000000000000000162 /* Localizable.xcstrings */,
 			);
 			name = WebhookPlugin;
-			path = Plugins/WebhookPlugin;
+			path = TypeWhisperPluginSDK/Plugins/WebhookPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000016 /* GroqPlugin */ = {
@@ -1378,7 +1374,7 @@
 				BB00000000000000000163 /* Localizable.xcstrings */,
 			);
 			name = GroqPlugin;
-			path = Plugins/GroqPlugin;
+			path = TypeWhisperPluginSDK/Plugins/GroqPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000017 /* OpenAIPlugin */ = {
@@ -1389,7 +1385,7 @@
 				BB00000000000000000164 /* Localizable.xcstrings */,
 			);
 			name = OpenAIPlugin;
-			path = Plugins/OpenAIPlugin;
+			path = TypeWhisperPluginSDK/Plugins/OpenAIPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000018 /* GeminiPlugin */ = {
@@ -1400,7 +1396,7 @@
 				BB00000000000000000165 /* Localizable.xcstrings */,
 			);
 			name = GeminiPlugin;
-			path = Plugins/GeminiPlugin;
+			path = TypeWhisperPluginSDK/Plugins/GeminiPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000019 /* LinearPlugin */ = {
@@ -1411,7 +1407,7 @@
 				BB00000000000000000166 /* Localizable.xcstrings */,
 			);
 			name = LinearPlugin;
-			path = Plugins/LinearPlugin;
+			path = TypeWhisperPluginSDK/Plugins/LinearPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000020 /* Qwen3Plugin */ = {
@@ -1423,7 +1419,7 @@
 				BB00000000000000000167 /* Localizable.xcstrings */,
 			);
 			name = Qwen3Plugin;
-			path = Plugins/Qwen3Plugin;
+			path = TypeWhisperPluginSDK/Plugins/Qwen3Plugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000021 /* WhisperKitPlugin */ = {
@@ -1434,7 +1430,7 @@
 				BB00000000000000000168 /* Localizable.xcstrings */,
 			);
 			name = WhisperKitPlugin;
-			path = Plugins/WhisperKitPlugin;
+			path = TypeWhisperPluginSDK/Plugins/WhisperKitPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000022 /* ParakeetPlugin */ = {
@@ -1445,7 +1441,7 @@
 				BB00000000000000000169 /* Localizable.xcstrings */,
 			);
 			name = ParakeetPlugin;
-			path = Plugins/ParakeetPlugin;
+			path = TypeWhisperPluginSDK/Plugins/ParakeetPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000023 /* SpeechAnalyzerPlugin */ = {
@@ -1456,7 +1452,7 @@
 				BB00000000000000000170 /* Localizable.xcstrings */,
 			);
 			name = SpeechAnalyzerPlugin;
-			path = Plugins/SpeechAnalyzerPlugin;
+			path = TypeWhisperPluginSDK/Plugins/SpeechAnalyzerPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000024 /* OpenAICompatiblePlugin */ = {
@@ -1467,7 +1463,7 @@
 				BB00000000000000000178 /* Localizable.xcstrings */,
 			);
 			name = OpenAICompatiblePlugin;
-			path = Plugins/OpenAICompatiblePlugin;
+			path = TypeWhisperPluginSDK/Plugins/OpenAICompatiblePlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000025 /* TypeWhisperWidgetExtension */ = {
@@ -1501,7 +1497,7 @@
 				BB00000000000000000193 /* Localizable.xcstrings */,
 			);
 			name = VoxtralPlugin;
-			path = Plugins/VoxtralPlugin;
+			path = TypeWhisperPluginSDK/Plugins/VoxtralPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000028 /* DeepgramPlugin */ = {
@@ -1512,7 +1508,7 @@
 				BB00000000000000000202 /* Localizable.xcstrings */,
 			);
 			name = DeepgramPlugin;
-			path = Plugins/DeepgramPlugin;
+			path = TypeWhisperPluginSDK/Plugins/DeepgramPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000029 /* AssemblyAIPlugin */ = {
@@ -1523,7 +1519,7 @@
 				BB00000000000000000206 /* Localizable.xcstrings */,
 			);
 			name = AssemblyAIPlugin;
-			path = Plugins/AssemblyAIPlugin;
+			path = TypeWhisperPluginSDK/Plugins/AssemblyAIPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000030 /* ObsidianPlugin */ = {
@@ -1534,7 +1530,7 @@
 				BB00000000000000000210 /* Localizable.xcstrings */,
 			);
 			name = ObsidianPlugin;
-			path = Plugins/ObsidianPlugin;
+			path = TypeWhisperPluginSDK/Plugins/ObsidianPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000031 /* ScriptPlugin */ = {
@@ -1545,7 +1541,7 @@
 				BB00000000000000000214 /* Localizable.xcstrings */,
 			);
 			name = ScriptPlugin;
-			path = Plugins/ScriptPlugin;
+			path = TypeWhisperPluginSDK/Plugins/ScriptPlugin;
 			sourceTree = "<group>";
 		};
 		F18A00000000000000000020 /* FillerWordsPlugin */ = {
@@ -1555,7 +1551,7 @@
 				F18A00000000000000000011 /* manifest.json */,
 			);
 			name = FillerWordsPlugin;
-			path = Plugins/FillerWordsPlugin;
+			path = TypeWhisperPluginSDK/Plugins/FillerWordsPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000032 /* LiveTranscriptPlugin */ = {
@@ -1566,7 +1562,7 @@
 				BB00000000000000000218 /* Localizable.xcstrings */,
 			);
 			name = LiveTranscriptPlugin;
-			path = Plugins/LiveTranscriptPlugin;
+			path = TypeWhisperPluginSDK/Plugins/LiveTranscriptPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000033 /* GranitePlugin */ = {
@@ -1577,7 +1573,7 @@
 				BB00000000000000000223 /* Localizable.xcstrings */,
 			);
 			name = GranitePlugin;
-			path = Plugins/GranitePlugin;
+			path = TypeWhisperPluginSDK/Plugins/GranitePlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000034 /* CloudflareASRPlugin */ = {
@@ -1587,7 +1583,7 @@
 				BB00000000000000000226 /* manifest.json */,
 			);
 			name = CloudflareASRPlugin;
-			path = Plugins/CloudflareASRPlugin;
+			path = TypeWhisperPluginSDK/Plugins/CloudflareASRPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000035 /* FileMemoryPlugin */ = {
@@ -1597,7 +1593,7 @@
 				BB00000000000000000230 /* manifest.json */,
 			);
 			name = FileMemoryPlugin;
-			path = Plugins/FileMemoryPlugin;
+			path = TypeWhisperPluginSDK/Plugins/FileMemoryPlugin;
 			sourceTree = "<group>";
 		};
 		C10000000000000000000001 /* SystemTTSPlugin */ = {
@@ -1607,7 +1603,7 @@
 				B10000000000000000000002 /* manifest.json */,
 			);
 			name = SystemTTSPlugin;
-			path = Plugins/SystemTTSPlugin;
+			path = TypeWhisperPluginSDK/Plugins/SystemTTSPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000036 /* OpenAIVectorMemoryPlugin */ = {
@@ -1617,7 +1613,7 @@
 				BB00000000000000000233 /* manifest.json */,
 			);
 			name = OpenAIVectorMemoryPlugin;
-			path = Plugins/OpenAIVectorMemoryPlugin;
+			path = TypeWhisperPluginSDK/Plugins/OpenAIVectorMemoryPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000037 /* FireworksPlugin */ = {
@@ -1628,7 +1624,7 @@
 				BB00000000000000000253 /* Localizable.xcstrings */,
 			);
 			name = FireworksPlugin;
-			path = Plugins/FireworksPlugin;
+			path = TypeWhisperPluginSDK/Plugins/FireworksPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000038 /* CerebrasPlugin */ = {
@@ -1639,7 +1635,7 @@
 				BB00000000000000000258 /* Localizable.xcstrings */,
 			);
 			name = CerebrasPlugin;
-			path = Plugins/CerebrasPlugin;
+			path = TypeWhisperPluginSDK/Plugins/CerebrasPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000039 /* ClaudePlugin */ = {
@@ -1650,7 +1646,7 @@
 				BB00000000000000000261 /* Localizable.xcstrings */,
 			);
 			name = ClaudePlugin;
-			path = Plugins/ClaudePlugin;
+			path = TypeWhisperPluginSDK/Plugins/ClaudePlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000041 /* GladiaPlugin */ = {
@@ -1661,7 +1657,7 @@
 				BB00000000000000000269 /* Localizable.xcstrings */,
 			);
 			name = GladiaPlugin;
-			path = Plugins/GladiaPlugin;
+			path = TypeWhisperPluginSDK/Plugins/GladiaPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000091 /* OpenRouterPlugin */ = {
@@ -1672,7 +1668,7 @@
 				BB00000000000000000276 /* Localizable.xcstrings */,
 			);
 			name = OpenRouterPlugin;
-			path = Plugins/OpenRouterPlugin;
+			path = TypeWhisperPluginSDK/Plugins/OpenRouterPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000040 /* ElevenLabsPlugin */ = {
@@ -1683,7 +1679,7 @@
 				BB00000000000000000265 /* Localizable.xcstrings */,
 			);
 			name = ElevenLabsPlugin;
-			path = Plugins/ElevenLabsPlugin;
+			path = TypeWhisperPluginSDK/Plugins/ElevenLabsPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000042 /* SonioxPlugin */ = {
@@ -1694,7 +1690,7 @@
 				BB00000000000000000280 /* Localizable.xcstrings */,
 			);
 			name = SonioxPlugin;
-			path = Plugins/SonioxPlugin;
+			path = TypeWhisperPluginSDK/Plugins/SonioxPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000043 /* CoherePlugin */ = {
@@ -1705,7 +1701,7 @@
 				BB00000000000000000284 /* Localizable.xcstrings */,
 			);
 			name = CoherePlugin;
-			path = Plugins/CoherePlugin;
+			path = TypeWhisperPluginSDK/Plugins/CoherePlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000044 /* Gemma4Plugin */ = {
@@ -1717,7 +1713,7 @@
 				BB00000000000000000298 /* Localizable.xcstrings */,
 			);
 			name = Gemma4Plugin;
-			path = Plugins/Gemma4Plugin;
+			path = TypeWhisperPluginSDK/Plugins/Gemma4Plugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000045 /* SpeechmaticsPlugin */ = {
@@ -1728,7 +1724,7 @@
 				BB00000000000000000293 /* Localizable.xcstrings */,
 			);
 			name = SpeechmaticsPlugin;
-			path = Plugins/SpeechmaticsPlugin;
+			path = TypeWhisperPluginSDK/Plugins/SpeechmaticsPlugin;
 			sourceTree = "<group>";
 		};
 		0C3F892FBBE11FA7B5924B24 /* GoogleCloudSTTPlugin */ = {
@@ -1738,7 +1734,7 @@
 				1D584661B6B55F6329CB5FC4 /* manifest.json */,
 			);
 			name = GoogleCloudSTTPlugin;
-			path = Plugins/GoogleCloudSTTPlugin;
+			path = TypeWhisperPluginSDK/Plugins/GoogleCloudSTTPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000090 /* Products */ = {
@@ -1793,7 +1789,6 @@
 				CE5852D6767C5FA955B84C52 /* AppFormatterServiceTests.swift */,
 				FD34FDF9D999D85DA1C35375 /* CLISupportTests.swift */,
 				2F4D6A8B0C1E3F5A7B9D2C4F /* DictationViewModelIndicatorSettingsTests.swift */,
-				F18A00000000000000000013 /* FillerWordsPluginTests.swift */,
 				6A7B8C9D0E1F223344556679 /* FloatingPanelSpacePolicyTests.swift */,
 				E5A1B2C3D4F5061728394A5E /* NotchIndicatorLayoutTests.swift */,
 				AA8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift */,
@@ -1816,7 +1811,6 @@
 				7D2E4F50617283946C1F7A8B /* SoundServiceTests.swift */,
 				BE6B6611B899F649B097A726 /* SnippetServiceTests.swift */,
 				D4A100000000000000000004 /* RecorderTranscriptionBufferTests.swift */,
-				C42900000000000000000002 /* LiveTranscriptPluginBehaviorTests.swift */,
 				91B4D7E2C5A809F1632E4B7F /* StreamingHandlerTests.swift */,
 				4D980A5CFE1A4217A10C2102 /* WhisperKitPluginLifecycleTests.swift */,
 				B26D2C342D877030A62CE027 /* Support */,
@@ -3033,10 +3027,8 @@
 				C23000000000000000000003 /* Gemma4Plugin.swift in Sources */,
 				C23000000000000000000004 /* Gemma4SettingsView.swift in Sources */,
 				C42900000000000000000003 /* LiveTranscriptPlugin.swift in Sources */,
-				C42900000000000000000001 /* LiveTranscriptPluginBehaviorTests.swift in Sources */,
 				1E6EDB8B0D1573A05A610078 /* PluginManifestValidationTests.swift in Sources */,
 				F18A00000000000000000006 /* FillerWordsPlugin.swift in Sources */,
-				F18A00000000000000000005 /* FillerWordsPluginTests.swift in Sources */,
 				91B4D7E2C5A809F1632E4B7C /* PluginRegistryServiceTests.swift in Sources */,
 				A1C3E59B7D1042F9A8C6E2B1 /* PromptActionTemperaturePersistenceTests.swift in Sources */,
 				1F7A2C3D4E5B60718293A4C7 /* PromptActionsViewModelWizardTests.swift in Sources */,

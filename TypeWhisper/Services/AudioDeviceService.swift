@@ -637,6 +637,11 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     }
 
     private func teardownPreviewEngine(_ engine: AVAudioEngine) {
+        guard engine.isRunning else {
+            engine.stop()
+            return
+        }
+
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
     }

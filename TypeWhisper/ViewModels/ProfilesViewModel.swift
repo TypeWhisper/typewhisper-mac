@@ -310,14 +310,21 @@ final class ProfilesViewModel: ObservableObject {
 
     private let profileService: ProfileService
     private let historyService: HistoryService
+    private let textInsertionService: TextInsertionService
     let settingsViewModel: SettingsViewModel
     private var cancellables = Set<AnyCancellable>()
     private var editorNameManuallyEdited = false
 
-    init(profileService: ProfileService, historyService: HistoryService, settingsViewModel: SettingsViewModel) {
+    init(
+        profileService: ProfileService,
+        historyService: HistoryService,
+        settingsViewModel: SettingsViewModel,
+        textInsertionService: TextInsertionService
+    ) {
         self.profileService = profileService
         self.historyService = historyService
         self.settingsViewModel = settingsViewModel
+        self.textInsertionService = textInsertionService
         self.profiles = profileService.profiles
         setupBindings()
         scanInstalledApps()
@@ -932,7 +939,10 @@ final class ProfilesViewModel: ObservableObject {
     }
 
     private func refreshEditorContext() {
-        let activeApp = ServiceContainer.shared.textInsertionService.captureActiveApp()
+        let textInsertionService = self.textInsertionService
+        let activeApp = MainActor.assumeIsolated {
+            textInsertionService.captureActiveApp()
+        }
         editorDetectedAppName = activeApp.name
         editorDetectedBundleIdentifier = activeApp.bundleId
         editorDetectedURL = nil
@@ -945,7 +955,7 @@ final class ProfilesViewModel: ObservableObject {
         guard let bundleId = bundleIdSnapshot else { return }
 
         Task { [weak self] in
-            let resolvedURL = await ServiceContainer.shared.textInsertionService.resolveBrowserURL(bundleId: bundleId)
+            let resolvedURL = await textInsertionService.resolveBrowserURL(bundleId: bundleId)
 
             await MainActor.run {
                 guard let self else { return }

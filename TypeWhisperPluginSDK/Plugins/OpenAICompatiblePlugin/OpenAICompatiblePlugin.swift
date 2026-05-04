@@ -194,7 +194,7 @@ final class OpenAICompatiblePlugin: NSObject, TranscriptionEnginePlugin, Diction
 
     // MARK: - Internal Methods
 
-    fileprivate func setBaseURL(_ url: String) {
+    func setBaseURL(_ url: String) {
         var normalized = url.trimmingCharacters(in: .whitespacesAndNewlines)
         while normalized.hasSuffix("/") {
             normalized = String(normalized.dropLast())
@@ -239,7 +239,7 @@ final class OpenAICompatiblePlugin: NSObject, TranscriptionEnginePlugin, Diction
         host?.notifyCapabilitiesChanged()
     }
 
-    fileprivate func fetchModels() async -> [FetchedModel] {
+    func fetchModels() async -> [FetchedModel] {
         guard let baseURL = _baseURL, !baseURL.isEmpty,
               let url = URL(string: "\(baseURL)/v1/models") else { return [] }
 
@@ -265,7 +265,7 @@ final class OpenAICompatiblePlugin: NSObject, TranscriptionEnginePlugin, Diction
         }
     }
 
-    fileprivate func validateConnection() async -> Bool {
+    func validateConnection() async -> Bool {
         guard let baseURL = _baseURL, !baseURL.isEmpty,
               let url = URL(string: "\(baseURL)/v1/models") else { return false }
 
@@ -319,7 +319,7 @@ private struct OpenAICompatibleSettingsView: View {
     @State private var llmTemperatureMode: PluginLLMTemperatureMode = .providerDefault
     @State private var llmTemperatureValue: Double = 0.3
     @State private var fetchedModels: [FetchedModel] = []
-    private let bundle = Bundle(for: OpenAICompatiblePlugin.self)
+    private let bundle = pluginModuleBundle
 
     private var hasModels: Bool { !fetchedModels.isEmpty }
 
@@ -622,3 +622,11 @@ private struct OpenAICompatibleSettingsView: View {
         }
     }
 }
+
+private let pluginModuleBundle: Bundle = {
+#if SWIFT_PACKAGE
+    Bundle.module
+#else
+    Bundle(for: OpenAICompatiblePlugin.self)
+#endif
+}()

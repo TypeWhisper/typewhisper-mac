@@ -120,10 +120,10 @@ jobs:
       - name: Patch manifest version
         run: |
           # Find the manifest.json for this plugin target
-          MANIFEST=$(find Plugins -name manifest.json -path "*${TARGET}*" 2>/dev/null | head -1)
+          MANIFEST=$(find TypeWhisperPluginSDK/Plugins -name manifest.json -path "*${TARGET}*" 2>/dev/null | head -1)
           if [ -z "$MANIFEST" ]; then
             # Fallback: search by plugin name
-            MANIFEST=$(find Plugins -name manifest.json | head -1)
+            MANIFEST=$(find TypeWhisperPluginSDK/Plugins -name manifest.json | head -1)
           fi
           if [ -n "$MANIFEST" ]; then
             python3 -c "
@@ -226,7 +226,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           DOWNLOAD_URL="https://github.com/TypeWhisper/typewhisper-mac/releases/download/${TAG}/${TARGET}.zip"
-          MANIFEST_PATH=$(find Plugins -name manifest.json -path "*${TARGET}*" 2>/dev/null | head -1)
+          MANIFEST_PATH=$(find TypeWhisperPluginSDK/Plugins -name manifest.json -path "*${TARGET}*" 2>/dev/null | head -1)
           TARGET_REGISTRY=$(python3 << PYEOF
           import json, os
 
