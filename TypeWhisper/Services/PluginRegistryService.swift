@@ -146,17 +146,6 @@ struct RegistryPluginRelease: Decodable, Equatable {
     }
 }
 
-private struct LegacyRegistryRelease: Decodable {
-    let version: String?
-    let minHostVersion: String?
-    let sdkCompatibilityVersion: String?
-    let minOSVersion: String?
-    let supportedArchitectures: [String]?
-    let size: Int64?
-    let downloadURL: String?
-    let downloadCount: Int?
-}
-
 struct RegistryPluginEntry: Decodable {
     let id: String
     let source: PluginDistributionSource
@@ -216,35 +205,7 @@ struct RegistryPluginEntry: Decodable {
         downloadCount = try container.decodeIfPresent(Int.self, forKey: .downloadCount)
 
         let decodedReleases = try container.decodeIfPresent([RegistryPluginRelease].self, forKey: .releases) ?? []
-        if !decodedReleases.isEmpty {
-            releases = decodedReleases
-            return
-        }
-
-        let legacy = try LegacyRegistryRelease(from: decoder)
-        guard
-            let version = legacy.version,
-            let minHostVersion = legacy.minHostVersion,
-            let size = legacy.size,
-            let downloadURL = legacy.downloadURL
-        else {
-            releases = []
-            return
-        }
-
-            releases = [
-            RegistryPluginRelease(
-                version: version,
-                minHostVersion: minHostVersion,
-                sdkCompatibilityVersion: legacy.sdkCompatibilityVersion,
-                minOSVersion: legacy.minOSVersion,
-                supportedArchitectures: legacy.supportedArchitectures,
-                size: size,
-                downloadURL: downloadURL,
-                publishedAt: nil,
-                downloadCount: legacy.downloadCount
-            )
-        ]
+        releases = decodedReleases
     }
 
     func resolvedPlugin(
@@ -308,7 +269,7 @@ struct PluginRegistryResponse: Decodable {
 
     /// Decodes the registry tolerantly: a single malformed plugin entry is
     /// logged and skipped instead of aborting the entire fetch. Without this,
-    /// one bad entry on the gh-pages `plugins.json` would empty the marketplace
+    /// one bad entry in a published registry feed would empty the marketplace
     /// for every installed app until a fix is deployed (release review K4).
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -376,7 +337,6 @@ final class PluginRegistryService: ObservableObject {
     nonisolated(unsafe) static var shared: PluginRegistryService!
 
     enum RegistryFeed: String, Equatable {
-        case legacy = "plugins.json"
         case v1 = "plugins-v1.json"
         case communityV1 = "plugins-community-v1.json"
 
@@ -431,9 +391,6 @@ final class PluginRegistryService: ObservableObject {
         releaseChannel: AppConstants.ReleaseChannel
     ) -> RegistryFeed {
         _ = releaseChannel
-        if compareVersions(appVersion, "1.3.0") == .orderedAscending {
-            return .legacy
-        }
         if compareVersions(appVersion, "1.4.0") != .orderedAscending {
             return .communityV1
         }
