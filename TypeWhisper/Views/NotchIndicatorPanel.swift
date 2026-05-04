@@ -60,11 +60,10 @@ class NotchIndicatorPanel: NSPanel {
         backgroundColor = .clear
         hasShadow = false
         isMovable = false
-        level = FloatingPanelSpacePolicy.indicatorWindowLevel
         appearance = NSAppearance(named: .darkAqua)
-        collectionBehavior = FloatingPanelSpacePolicy.indicatorCollectionBehavior
         hidesOnDeactivate = false
         ignoresMouseEvents = true
+        FloatingPanelSpacePolicy.applyIndicatorPolicy(to: self)
 
         let hostingView = FirstMouseHostingView(rootView: NotchIndicatorView(geometry: notchGeometry))
         hostingView.sizingOptions = []
@@ -96,15 +95,6 @@ class NotchIndicatorPanel: NSPanel {
             .sink { [weak self] _ in
                 self?.cachedScreen = nil
                 self?.updateVisibility(state: vm.state, vm: vm)
-            }
-            .store(in: &cancellables)
-
-        NSWorkspace.shared.notificationCenter
-            .publisher(for: NSWorkspace.activeSpaceDidChangeNotification)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                guard let self, self.isVisible else { return }
-                self.orderFrontRegardless()
             }
             .store(in: &cancellables)
     }
@@ -151,7 +141,7 @@ class NotchIndicatorPanel: NSPanel {
 
         let wasVisible = isVisible
         setFrame(NSRect(x: x, y: y, width: Self.panelWidth, height: Self.panelHeight), display: true)
-        orderFrontRegardless()
+        FloatingPanelSpacePolicy.orderIndicatorFront(self)
 
         guard !wasVisible else {
             if !notchGeometry.isPresented {
@@ -178,9 +168,10 @@ class NotchIndicatorPanel: NSPanel {
     }
 
     func refreshPlacementForActiveContextChange() {
-        guard DictationViewModel.shared.notchIndicatorDisplay == .activeScreen else { return }
-        cachedScreen = nil
         guard isVisible else { return }
+        if DictationViewModel.shared.notchIndicatorDisplay == .activeScreen {
+            cachedScreen = nil
+        }
         show()
     }
 

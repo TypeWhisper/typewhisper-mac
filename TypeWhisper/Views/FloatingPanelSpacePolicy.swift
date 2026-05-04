@@ -2,12 +2,12 @@ import AppKit
 import CoreGraphics
 
 enum FloatingPanelSpacePolicy {
-    // Passive indicator panels should stay above normal desktop spaces,
-    // but they must not bleed into another app's fullscreen space.
-    static let indicatorWindowLevel = NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()))
+    // Passive indicator panels should stay above the menu bar on normal spaces
+    // without remaining at the shielding level used by system lock overlays.
+    static let indicatorWindowLevel = NSWindow.Level.screenSaver
 
     static let indicatorCollectionBehavior: NSWindow.CollectionBehavior = [
-        .canJoinAllSpaces,
+        .moveToActiveSpace,
         .fullScreenNone,
         .stationary,
         .ignoresCycle
@@ -17,4 +17,16 @@ enum FloatingPanelSpacePolicy {
         .canJoinAllSpaces,
         .fullScreenAuxiliary
     ]
+
+    @MainActor
+    static func applyIndicatorPolicy(to panel: NSPanel) {
+        panel.level = indicatorWindowLevel
+        panel.collectionBehavior = indicatorCollectionBehavior
+    }
+
+    @MainActor
+    static func orderIndicatorFront(_ panel: NSPanel) {
+        applyIndicatorPolicy(to: panel)
+        panel.orderFrontRegardless()
+    }
 }
