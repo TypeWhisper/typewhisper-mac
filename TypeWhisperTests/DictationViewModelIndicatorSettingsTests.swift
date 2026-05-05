@@ -86,8 +86,8 @@ final class DictationViewModelIndicatorSettingsTests: XCTestCase {
         XCTAssertEqual(DictationViewModel.loadIndicatorStyle(defaults: defaults), .notch)
     }
 
-    func testAggressiveShortSpeechTranscriptionDefaultsToDisabled() {
-        XCTAssertFalse(DictationViewModel.loadTranscribeShortQuietClipsAggressively(defaults: defaults))
+    func testAggressiveShortSpeechTranscriptionDefaultsToEnabled() {
+        XCTAssertTrue(DictationViewModel.loadTranscribeShortQuietClipsAggressively(defaults: defaults))
     }
 
     func testAggressiveShortSpeechTranscriptionPersistsWhenEnabled() {
@@ -378,6 +378,24 @@ final class LanguageLocalizationTests: XCTestCase {
 
         XCTAssertTrue(searchTerms.contains(where: { $0.localizedCaseInsensitiveContains("english") }))
         XCTAssertTrue(searchTerms.contains(where: { $0.localizedCaseInsensitiveContains("englisch") }))
+    }
+
+    func testLocalizedAppLanguageNameDisplaysDeepgramMultilingualCode() {
+        UserDefaults.standard.set("en", forKey: UserDefaultsKeys.preferredAppLanguage)
+        XCTAssertEqual(localizedAppLanguageName(for: "multi"), "Multilingual")
+
+        UserDefaults.standard.set("de", forKey: UserDefaultsKeys.preferredAppLanguage)
+        XCTAssertEqual(localizedAppLanguageName(for: "multi"), "Mehrsprachig")
+    }
+
+    func testLanguageSearchTermsIncludeDeepgramMultilingualAliases() {
+        UserDefaults.standard.set("de", forKey: UserDefaultsKeys.preferredAppLanguage)
+
+        let searchTerms = localizedAppLanguageSearchTerms(for: "multi")
+
+        XCTAssertTrue(searchTerms.contains(where: { $0.caseInsensitiveCompare("multi") == .orderedSame }))
+        XCTAssertTrue(searchTerms.contains(where: { $0.caseInsensitiveCompare("Multilingual") == .orderedSame }))
+        XCTAssertTrue(searchTerms.contains(where: { $0.caseInsensitiveCompare("Mehrsprachig") == .orderedSame }))
     }
 
     @MainActor

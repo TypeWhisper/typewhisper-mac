@@ -13,6 +13,7 @@
 		1F7A2C3D4E5B60718293A4C6 /* PromptWizardInferenceServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A7B3C4D5E6F708192A3B4C6 /* PromptWizardInferenceServiceTests.swift */; };
 		1F7A2C3D4E5B60718293A4C7 /* PromptActionsViewModelWizardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A7B3C4D5E6F708192A3B4C7 /* PromptActionsViewModelWizardTests.swift */; };
 		4D980A5CFE1A4217A10C2101 /* WhisperKitPluginLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D980A5CFE1A4217A10C2102 /* WhisperKitPluginLifecycleTests.swift */; };
+		C42900000000000000000003 /* LiveTranscriptPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000216 /* LiveTranscriptPlugin.swift */; };
 		204C804898EAE1127B62EC98 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E808D246301E36546EEB811F /* TestSupport.swift */; };
 		A1F000000000000000000102 /* PostUpdatePromptCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */; };
 		A1C3E59B7D1042F9A8C6E2B1 /* PromptActionTemperaturePersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D4F6A8C0E2143F9B7D5C1A /* PromptActionTemperaturePersistenceTests.swift */; };
@@ -25,7 +26,6 @@
 		A10000000000000000000003 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000044 /* TypeWhisperPluginSDK */; };
 		A10000000000000000000005 /* SpeechFeedbackServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* SpeechFeedbackServiceTests.swift */; };
 		A10000000000000000000006 /* WorkflowServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000005 /* WorkflowServiceTests.swift */; };
-		A10000000000000000000007 /* LegacyWorkflowServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000006 /* LegacyWorkflowServiceTests.swift */; };
 		AA00000000000000000350 /* ObjCExceptionCatcher.m in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000351 /* ObjCExceptionCatcher.m */; };
 		AA00000000000000000353 /* PostUpdatePromptCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000353 /* PostUpdatePromptCoordinator.swift */; };
 		AA00000000000000000354 /* SettingsNavigationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000354 /* SettingsNavigationCoordinator.swift */; };
@@ -33,8 +33,8 @@
 		6C7D8E9F0A1B2C3D4E5F6072 /* FloatingPanelSpacePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C7D8E9F0A1B2C3D4E5F6071 /* FloatingPanelSpacePolicy.swift */; };
 		AA00000000000000000356 /* Workflow.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000356 /* Workflow.swift */; };
 		AA00000000000000000357 /* WorkflowService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000357 /* WorkflowService.swift */; };
-		AA00000000000000000358 /* LegacyWorkflowService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000358 /* LegacyWorkflowService.swift */; };
 		AA00000000000000000359 /* WorkflowsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000359 /* WorkflowsSettingsView.swift */; };
+		AA00000000000000000360 /* WorkflowTextProcessingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000360 /* WorkflowTextProcessingService.swift */; };
 		C23000000000000000000001 /* OpenAIPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000139 /* OpenAIPlugin.swift */; };
 		C23000000000000000000002 /* Qwen3ContextBiasFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000321 /* Qwen3ContextBiasFormatter.swift */; };
 		C23000000000000000000003 /* Gemma4Plugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000295 /* Gemma4Plugin.swift */; };
@@ -56,6 +56,12 @@
 		2F4D6A8B0C1E3F5A7B9D2C4E /* DictationViewModelIndicatorSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F4D6A8B0C1E3F5A7B9D2C4F /* DictationViewModelIndicatorSettingsTests.swift */; };
 		91B4D7E2C5A809F1632E4B7C /* PluginRegistryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B4D7E2C5A809F1632E4B7D /* PluginRegistryServiceTests.swift */; };
 		91B4D7E2C5A809F1632E4B7E /* StreamingHandlerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B4D7E2C5A809F1632E4B7F /* StreamingHandlerTests.swift */; };
+		9A584149706C7567496E0100 /* XAIPluginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A584149706C7567496E0101 /* XAIPluginTests.swift */; };
+		9A584149706C7567496E0200 /* XAIPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A584149706C7567496E0210 /* XAIPlugin.swift */; };
+		9A584149706C7567496E0201 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 9A584149706C7567496E0211 /* manifest.json */; };
+		9A584149706C7567496E0202 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 9A584149706C7567496E0212 /* Localizable.xcstrings */; };
+		9A584149706C7567496E0203 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 9A584149706C7567496E0260 /* TypeWhisperPluginSDK */; };
+		9A584149706C7567496E0204 /* XAIPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A584149706C7567496E0210 /* XAIPlugin.swift */; };
 		E5A1B2C3D4F5061728394A5B /* NotchIndicatorLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5A1B2C3D4F5061728394A5C /* NotchIndicatorLayout.swift */; };
 		E5A1B2C3D4F5061728394A5D /* NotchIndicatorLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5A1B2C3D4F5061728394A5E /* NotchIndicatorLayoutTests.swift */; };
 		3A4B5C6D7E8F901234567890 /* AudioEngineRecoverySupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A4B5C6D7E8F901234567891 /* AudioEngineRecoverySupportTests.swift */; };
@@ -75,6 +81,10 @@
 		86F4253D3CDE30E859D0F219 /* ProfileServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F41BD305007A3A158038C75C /* ProfileServiceTests.swift */; };
 		928A1F1B7A0D4C62A2B90761 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000034 /* TypeWhisperPluginSDK */; };
 		A47BC06842DCB0BB47A2D938 /* SnippetServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE6B6611B899F649B097A726 /* SnippetServiceTests.swift */; };
+		F18A00000000000000000001 /* FillerWordsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18A00000000000000000010 /* FillerWordsPlugin.swift */; };
+		F18A00000000000000000002 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = F18A00000000000000000011 /* manifest.json */; };
+		F18A00000000000000000003 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = F18A00000000000000000037 /* TypeWhisperPluginSDK */; };
+		F18A00000000000000000006 /* FillerWordsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18A00000000000000000010 /* FillerWordsPlugin.swift */; };
 		AA00000000000000000001 /* TypeWhisperApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000001 /* TypeWhisperApp.swift */; };
 		AA00000000000000000002 /* ServiceContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000002 /* ServiceContainer.swift */; };
 		AA00000000000000000005 /* TranscriptionResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000005 /* TranscriptionResult.swift */; };
@@ -87,6 +97,7 @@
 		AA00000000000000000017 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000017 /* SettingsView.swift */; };
 		AA00000000000000000030 /* AudioRecordingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000030 /* AudioRecordingService.swift */; };
 		AA00000000000000000031 /* HotkeyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000031 /* HotkeyService.swift */; };
+		AA00000000000000000361 /* ClipboardContentFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000361 /* ClipboardContentFormatter.swift */; };
 		AA00000000000000000032 /* TextInsertionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000032 /* TextInsertionService.swift */; };
 		AA00000000000000000033 /* DictationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000033 /* DictationViewModel.swift */; };
 		AA00000000000000000040 /* HTTPResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000040 /* HTTPResponse.swift */; };
@@ -426,7 +437,6 @@
 		A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PostUpdatePromptCoordinatorTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000004 /* SpeechFeedbackServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeechFeedbackServiceTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000005 /* WorkflowServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkflowServiceTests.swift; sourceTree = "<group>"; };
-		B10000000000000000000006 /* LegacyWorkflowServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LegacyWorkflowServiceTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000001 /* TypeWhisperApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypeWhisperApp.swift; sourceTree = "<group>"; };
 		BB00000000000000000002 /* ServiceContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceContainer.swift; sourceTree = "<group>"; };
 		BB00000000000000000005 /* TranscriptionResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionResult.swift; sourceTree = "<group>"; };
@@ -441,6 +451,7 @@
 		BB00000000000000000019 /* TypeWhisper.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TypeWhisper.entitlements; sourceTree = "<group>"; };
 		BB00000000000000000030 /* AudioRecordingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecordingService.swift; sourceTree = "<group>"; };
 		BB00000000000000000031 /* HotkeyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyService.swift; sourceTree = "<group>"; };
+		BB00000000000000000361 /* ClipboardContentFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardContentFormatter.swift; sourceTree = "<group>"; };
 		BB00000000000000000032 /* TextInsertionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInsertionService.swift; sourceTree = "<group>"; };
 		BB00000000000000000033 /* DictationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000350 /* ObjCExceptionCatcher.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ObjCExceptionCatcher.h; sourceTree = "<group>"; };
@@ -451,8 +462,8 @@
 		BB00000000000000000355 /* PostUpdateLicensePromptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostUpdateLicensePromptView.swift; sourceTree = "<group>"; };
 		BB00000000000000000356 /* Workflow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Workflow.swift; sourceTree = "<group>"; };
 		BB00000000000000000357 /* WorkflowService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowService.swift; sourceTree = "<group>"; };
-		BB00000000000000000358 /* LegacyWorkflowService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyWorkflowService.swift; sourceTree = "<group>"; };
 		BB00000000000000000359 /* WorkflowsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowsSettingsView.swift; sourceTree = "<group>"; };
+		BB00000000000000000360 /* WorkflowTextProcessingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowTextProcessingService.swift; sourceTree = "<group>"; };
 		BB00000000000000000040 /* HTTPResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPResponse.swift; sourceTree = "<group>"; };
 		BB00000000000000000041 /* HTTPRequestParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPRequestParser.swift; sourceTree = "<group>"; };
 		BB00000000000000000042 /* APIRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIRouter.swift; sourceTree = "<group>"; };
@@ -667,9 +678,17 @@
 		91B4D7E2C5A809F1632E4B7D /* PluginRegistryServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PluginRegistryServiceTests.swift; sourceTree = "<group>"; };
 		D4A100000000000000000004 /* RecorderTranscriptionBufferTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecorderTranscriptionBufferTests.swift; sourceTree = "<group>"; };
 		91B4D7E2C5A809F1632E4B7F /* StreamingHandlerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StreamingHandlerTests.swift; sourceTree = "<group>"; };
+		9A584149706C7567496E0101 /* XAIPluginTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = XAIPluginTests.swift; sourceTree = "<group>"; };
+		9A584149706C7567496E0210 /* XAIPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XAIPlugin.swift; sourceTree = "<group>"; };
+		9A584149706C7567496E0211 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		9A584149706C7567496E0212 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		9A584149706C7567496E0213 /* XAIPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = XAIPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		E5A1B2C3D4F5061728394A5C /* NotchIndicatorLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchIndicatorLayout.swift; sourceTree = "<group>"; };
 		E5A1B2C3D4F5061728394A5E /* NotchIndicatorLayoutTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotchIndicatorLayoutTests.swift; sourceTree = "<group>"; };
 		E808D246301E36546EEB811F /* TestSupport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
+		F18A00000000000000000010 /* FillerWordsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FillerWordsPlugin.swift; sourceTree = "<group>"; };
+		F18A00000000000000000011 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		F18A00000000000000000012 /* FillerWordsPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FillerWordsPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		F41BD305007A3A158038C75C /* ProfileServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProfileServiceTests.swift; sourceTree = "<group>"; };
 		FD34FDF9D999D85DA1C35375 /* CLISupportTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CLISupportTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000248 /* HotkeyRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyRecorderView.swift; sourceTree = "<group>"; };
@@ -772,6 +791,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000137 /* TypeWhisperPluginSDK in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9A584149706C7567496E0242 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9A584149706C7567496E0203 /* TypeWhisperPluginSDK in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -889,6 +916,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000225 /* TypeWhisperPluginSDK in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F18A00000000000000000032 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F18A00000000000000000003 /* TypeWhisperPluginSDK in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1082,6 +1117,7 @@
 				CC00000000000000000029 /* AssemblyAIPlugin */,
 				CC00000000000000000030 /* ObsidianPlugin */,
 				CC00000000000000000031 /* ScriptPlugin */,
+				F18A00000000000000000020 /* FillerWordsPlugin */,
 				CC00000000000000000032 /* LiveTranscriptPlugin */,
 				CC00000000000000000033 /* GranitePlugin */,
 				CC00000000000000000034 /* CloudflareASRPlugin */,
@@ -1095,6 +1131,7 @@
 				CC00000000000000000040 /* ElevenLabsPlugin */,
 				CC00000000000000000091 /* OpenRouterPlugin */,
 				CC00000000000000000042 /* SonioxPlugin */,
+				9A584149706C7567496E0220 /* XAIPlugin */,
 				CC00000000000000000043 /* CoherePlugin */,
 				CC00000000000000000044 /* Gemma4Plugin */,
 				CC00000000000000000045 /* SpeechmaticsPlugin */,
@@ -1166,6 +1203,7 @@
 				BB00000000000000000220 /* AudioPlaybackService.swift */,
 				BB00000000000000000031 /* HotkeyService.swift */,
 				BB00000000000000000196 /* IndicatorCoordinator.swift */,
+				BB00000000000000000361 /* ClipboardContentFormatter.swift */,
 				BB00000000000000000032 /* TextInsertionService.swift */,
 				BB00000000000000000050 /* SubtitleExporter.swift */,
 				BB00000000000000000148 /* HistoryExporter.swift */,
@@ -1174,7 +1212,7 @@
 				BB00000000000000000062 /* TextDiffService.swift */,
 				BB00000000000000000066 /* ProfileService.swift */,
 				BB00000000000000000357 /* WorkflowService.swift */,
-				BB00000000000000000358 /* LegacyWorkflowService.swift */,
+				BB00000000000000000360 /* WorkflowTextProcessingService.swift */,
 				BB00000000000000000073 /* TranslationService.swift */,
 				BB00000000000000000074 /* AudioDuckingService.swift */,
 				BB00000000000000000273 /* MediaPlaybackService.swift */,
@@ -1348,7 +1386,7 @@
 				BB00000000000000000162 /* Localizable.xcstrings */,
 			);
 			name = WebhookPlugin;
-			path = Plugins/WebhookPlugin;
+			path = TypeWhisperPluginSDK/Plugins/WebhookPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000016 /* GroqPlugin */ = {
@@ -1359,7 +1397,7 @@
 				BB00000000000000000163 /* Localizable.xcstrings */,
 			);
 			name = GroqPlugin;
-			path = Plugins/GroqPlugin;
+			path = TypeWhisperPluginSDK/Plugins/GroqPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000017 /* OpenAIPlugin */ = {
@@ -1370,7 +1408,7 @@
 				BB00000000000000000164 /* Localizable.xcstrings */,
 			);
 			name = OpenAIPlugin;
-			path = Plugins/OpenAIPlugin;
+			path = TypeWhisperPluginSDK/Plugins/OpenAIPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000018 /* GeminiPlugin */ = {
@@ -1381,7 +1419,7 @@
 				BB00000000000000000165 /* Localizable.xcstrings */,
 			);
 			name = GeminiPlugin;
-			path = Plugins/GeminiPlugin;
+			path = TypeWhisperPluginSDK/Plugins/GeminiPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000019 /* LinearPlugin */ = {
@@ -1392,7 +1430,7 @@
 				BB00000000000000000166 /* Localizable.xcstrings */,
 			);
 			name = LinearPlugin;
-			path = Plugins/LinearPlugin;
+			path = TypeWhisperPluginSDK/Plugins/LinearPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000020 /* Qwen3Plugin */ = {
@@ -1404,7 +1442,7 @@
 				BB00000000000000000167 /* Localizable.xcstrings */,
 			);
 			name = Qwen3Plugin;
-			path = Plugins/Qwen3Plugin;
+			path = TypeWhisperPluginSDK/Plugins/Qwen3Plugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000021 /* WhisperKitPlugin */ = {
@@ -1415,7 +1453,7 @@
 				BB00000000000000000168 /* Localizable.xcstrings */,
 			);
 			name = WhisperKitPlugin;
-			path = Plugins/WhisperKitPlugin;
+			path = TypeWhisperPluginSDK/Plugins/WhisperKitPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000022 /* ParakeetPlugin */ = {
@@ -1426,7 +1464,7 @@
 				BB00000000000000000169 /* Localizable.xcstrings */,
 			);
 			name = ParakeetPlugin;
-			path = Plugins/ParakeetPlugin;
+			path = TypeWhisperPluginSDK/Plugins/ParakeetPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000023 /* SpeechAnalyzerPlugin */ = {
@@ -1437,7 +1475,7 @@
 				BB00000000000000000170 /* Localizable.xcstrings */,
 			);
 			name = SpeechAnalyzerPlugin;
-			path = Plugins/SpeechAnalyzerPlugin;
+			path = TypeWhisperPluginSDK/Plugins/SpeechAnalyzerPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000024 /* OpenAICompatiblePlugin */ = {
@@ -1448,7 +1486,7 @@
 				BB00000000000000000178 /* Localizable.xcstrings */,
 			);
 			name = OpenAICompatiblePlugin;
-			path = Plugins/OpenAICompatiblePlugin;
+			path = TypeWhisperPluginSDK/Plugins/OpenAICompatiblePlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000025 /* TypeWhisperWidgetExtension */ = {
@@ -1482,7 +1520,7 @@
 				BB00000000000000000193 /* Localizable.xcstrings */,
 			);
 			name = VoxtralPlugin;
-			path = Plugins/VoxtralPlugin;
+			path = TypeWhisperPluginSDK/Plugins/VoxtralPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000028 /* DeepgramPlugin */ = {
@@ -1493,7 +1531,7 @@
 				BB00000000000000000202 /* Localizable.xcstrings */,
 			);
 			name = DeepgramPlugin;
-			path = Plugins/DeepgramPlugin;
+			path = TypeWhisperPluginSDK/Plugins/DeepgramPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000029 /* AssemblyAIPlugin */ = {
@@ -1504,7 +1542,7 @@
 				BB00000000000000000206 /* Localizable.xcstrings */,
 			);
 			name = AssemblyAIPlugin;
-			path = Plugins/AssemblyAIPlugin;
+			path = TypeWhisperPluginSDK/Plugins/AssemblyAIPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000030 /* ObsidianPlugin */ = {
@@ -1515,7 +1553,7 @@
 				BB00000000000000000210 /* Localizable.xcstrings */,
 			);
 			name = ObsidianPlugin;
-			path = Plugins/ObsidianPlugin;
+			path = TypeWhisperPluginSDK/Plugins/ObsidianPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000031 /* ScriptPlugin */ = {
@@ -1526,7 +1564,17 @@
 				BB00000000000000000214 /* Localizable.xcstrings */,
 			);
 			name = ScriptPlugin;
-			path = Plugins/ScriptPlugin;
+			path = TypeWhisperPluginSDK/Plugins/ScriptPlugin;
+			sourceTree = "<group>";
+		};
+		F18A00000000000000000020 /* FillerWordsPlugin */ = {
+			isa = PBXGroup;
+			children = (
+				F18A00000000000000000010 /* FillerWordsPlugin.swift */,
+				F18A00000000000000000011 /* manifest.json */,
+			);
+			name = FillerWordsPlugin;
+			path = TypeWhisperPluginSDK/Plugins/FillerWordsPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000032 /* LiveTranscriptPlugin */ = {
@@ -1537,7 +1585,7 @@
 				BB00000000000000000218 /* Localizable.xcstrings */,
 			);
 			name = LiveTranscriptPlugin;
-			path = Plugins/LiveTranscriptPlugin;
+			path = TypeWhisperPluginSDK/Plugins/LiveTranscriptPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000033 /* GranitePlugin */ = {
@@ -1548,7 +1596,7 @@
 				BB00000000000000000223 /* Localizable.xcstrings */,
 			);
 			name = GranitePlugin;
-			path = Plugins/GranitePlugin;
+			path = TypeWhisperPluginSDK/Plugins/GranitePlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000034 /* CloudflareASRPlugin */ = {
@@ -1558,7 +1606,7 @@
 				BB00000000000000000226 /* manifest.json */,
 			);
 			name = CloudflareASRPlugin;
-			path = Plugins/CloudflareASRPlugin;
+			path = TypeWhisperPluginSDK/Plugins/CloudflareASRPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000035 /* FileMemoryPlugin */ = {
@@ -1568,7 +1616,7 @@
 				BB00000000000000000230 /* manifest.json */,
 			);
 			name = FileMemoryPlugin;
-			path = Plugins/FileMemoryPlugin;
+			path = TypeWhisperPluginSDK/Plugins/FileMemoryPlugin;
 			sourceTree = "<group>";
 		};
 		C10000000000000000000001 /* SystemTTSPlugin */ = {
@@ -1578,7 +1626,7 @@
 				B10000000000000000000002 /* manifest.json */,
 			);
 			name = SystemTTSPlugin;
-			path = Plugins/SystemTTSPlugin;
+			path = TypeWhisperPluginSDK/Plugins/SystemTTSPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000036 /* OpenAIVectorMemoryPlugin */ = {
@@ -1588,7 +1636,7 @@
 				BB00000000000000000233 /* manifest.json */,
 			);
 			name = OpenAIVectorMemoryPlugin;
-			path = Plugins/OpenAIVectorMemoryPlugin;
+			path = TypeWhisperPluginSDK/Plugins/OpenAIVectorMemoryPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000037 /* FireworksPlugin */ = {
@@ -1599,7 +1647,7 @@
 				BB00000000000000000253 /* Localizable.xcstrings */,
 			);
 			name = FireworksPlugin;
-			path = Plugins/FireworksPlugin;
+			path = TypeWhisperPluginSDK/Plugins/FireworksPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000038 /* CerebrasPlugin */ = {
@@ -1610,7 +1658,7 @@
 				BB00000000000000000258 /* Localizable.xcstrings */,
 			);
 			name = CerebrasPlugin;
-			path = Plugins/CerebrasPlugin;
+			path = TypeWhisperPluginSDK/Plugins/CerebrasPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000039 /* ClaudePlugin */ = {
@@ -1621,7 +1669,7 @@
 				BB00000000000000000261 /* Localizable.xcstrings */,
 			);
 			name = ClaudePlugin;
-			path = Plugins/ClaudePlugin;
+			path = TypeWhisperPluginSDK/Plugins/ClaudePlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000041 /* GladiaPlugin */ = {
@@ -1632,7 +1680,7 @@
 				BB00000000000000000269 /* Localizable.xcstrings */,
 			);
 			name = GladiaPlugin;
-			path = Plugins/GladiaPlugin;
+			path = TypeWhisperPluginSDK/Plugins/GladiaPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000091 /* OpenRouterPlugin */ = {
@@ -1643,7 +1691,7 @@
 				BB00000000000000000276 /* Localizable.xcstrings */,
 			);
 			name = OpenRouterPlugin;
-			path = Plugins/OpenRouterPlugin;
+			path = TypeWhisperPluginSDK/Plugins/OpenRouterPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000040 /* ElevenLabsPlugin */ = {
@@ -1654,7 +1702,7 @@
 				BB00000000000000000265 /* Localizable.xcstrings */,
 			);
 			name = ElevenLabsPlugin;
-			path = Plugins/ElevenLabsPlugin;
+			path = TypeWhisperPluginSDK/Plugins/ElevenLabsPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000042 /* SonioxPlugin */ = {
@@ -1665,7 +1713,18 @@
 				BB00000000000000000280 /* Localizable.xcstrings */,
 			);
 			name = SonioxPlugin;
-			path = Plugins/SonioxPlugin;
+			path = TypeWhisperPluginSDK/Plugins/SonioxPlugin;
+			sourceTree = "<group>";
+		};
+		9A584149706C7567496E0220 /* XAIPlugin */ = {
+			isa = PBXGroup;
+			children = (
+				9A584149706C7567496E0210 /* XAIPlugin.swift */,
+				9A584149706C7567496E0211 /* manifest.json */,
+				9A584149706C7567496E0212 /* Localizable.xcstrings */,
+			);
+			name = XAIPlugin;
+			path = TypeWhisperPluginSDK/Plugins/XAIPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000043 /* CoherePlugin */ = {
@@ -1676,7 +1735,7 @@
 				BB00000000000000000284 /* Localizable.xcstrings */,
 			);
 			name = CoherePlugin;
-			path = Plugins/CoherePlugin;
+			path = TypeWhisperPluginSDK/Plugins/CoherePlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000044 /* Gemma4Plugin */ = {
@@ -1688,7 +1747,7 @@
 				BB00000000000000000298 /* Localizable.xcstrings */,
 			);
 			name = Gemma4Plugin;
-			path = Plugins/Gemma4Plugin;
+			path = TypeWhisperPluginSDK/Plugins/Gemma4Plugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000045 /* SpeechmaticsPlugin */ = {
@@ -1699,7 +1758,7 @@
 				BB00000000000000000293 /* Localizable.xcstrings */,
 			);
 			name = SpeechmaticsPlugin;
-			path = Plugins/SpeechmaticsPlugin;
+			path = TypeWhisperPluginSDK/Plugins/SpeechmaticsPlugin;
 			sourceTree = "<group>";
 		};
 		0C3F892FBBE11FA7B5924B24 /* GoogleCloudSTTPlugin */ = {
@@ -1709,7 +1768,7 @@
 				1D584661B6B55F6329CB5FC4 /* manifest.json */,
 			);
 			name = GoogleCloudSTTPlugin;
-			path = Plugins/GoogleCloudSTTPlugin;
+			path = TypeWhisperPluginSDK/Plugins/GoogleCloudSTTPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000090 /* Products */ = {
@@ -1732,6 +1791,7 @@
 				BB00000000000000000203 /* AssemblyAIPlugin.bundle */,
 				BB00000000000000000211 /* ObsidianPlugin.bundle */,
 				BB00000000000000000215 /* ScriptPlugin.bundle */,
+				F18A00000000000000000012 /* FillerWordsPlugin.bundle */,
 				BB00000000000000000219 /* LiveTranscriptPlugin.bundle */,
 				BB00000000000000000224 /* GranitePlugin.bundle */,
 				BB00000000000000000227 /* CloudflareASRPlugin.bundle */,
@@ -1745,6 +1805,7 @@
 				BB00000000000000000266 /* ElevenLabsPlugin.bundle */,
 				BB00000000000000000277 /* OpenRouterPlugin.bundle */,
 				BB00000000000000000281 /* SonioxPlugin.bundle */,
+				9A584149706C7567496E0213 /* XAIPlugin.bundle */,
 				BB00000000000000000285 /* CoherePlugin.bundle */,
 				BB00000000000000000290 /* Gemma4Plugin.bundle */,
 				BB00000000000000000294 /* SpeechmaticsPlugin.bundle */,
@@ -1781,12 +1842,12 @@
 				2A7B3C4D5E6F708192A3B4C6 /* PromptWizardInferenceServiceTests.swift */,
 				F41BD305007A3A158038C75C /* ProfileServiceTests.swift */,
 				B10000000000000000000005 /* WorkflowServiceTests.swift */,
-				B10000000000000000000006 /* LegacyWorkflowServiceTests.swift */,
 				B10000000000000000000004 /* SpeechFeedbackServiceTests.swift */,
 				7D2E4F50617283946C1F7A8B /* SoundServiceTests.swift */,
 				BE6B6611B899F649B097A726 /* SnippetServiceTests.swift */,
 				D4A100000000000000000004 /* RecorderTranscriptionBufferTests.swift */,
 				91B4D7E2C5A809F1632E4B7F /* StreamingHandlerTests.swift */,
+				9A584149706C7567496E0101 /* XAIPluginTests.swift */,
 				4D980A5CFE1A4217A10C2102 /* WhisperKitPluginLifecycleTests.swift */,
 				B26D2C342D877030A62CE027 /* Support */,
 				05313C25F9E79BCFC02899F2 /* TextDiffServiceTests.swift */,
@@ -2192,6 +2253,26 @@
 			productReference = BB00000000000000000215 /* ScriptPlugin.bundle */;
 			productType = "com.apple.product-type.bundle";
 		};
+		F18A00000000000000000030 /* FillerWordsPlugin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F18A00000000000000000036 /* Build configuration list for PBXNativeTarget "FillerWordsPlugin" */;
+			buildPhases = (
+				F18A00000000000000000031 /* Sources */,
+				F18A00000000000000000032 /* Frameworks */,
+				F18A00000000000000000033 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = FillerWordsPlugin;
+			packageProductDependencies = (
+				F18A00000000000000000037 /* TypeWhisperPluginSDK */,
+			);
+			productName = FillerWordsPlugin;
+			productReference = F18A00000000000000000012 /* FillerWordsPlugin.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
 		DD00000000000000000020 /* LiveTranscriptPlugin */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = FF00000000000000000106 /* Build configuration list for PBXNativeTarget "LiveTranscriptPlugin" */;
@@ -2454,6 +2535,26 @@
 			productReference = BB00000000000000000281 /* SonioxPlugin.bundle */;
 			productType = "com.apple.product-type.bundle";
 		};
+		9A584149706C7567496E0230 /* XAIPlugin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9A584149706C7567496E0252 /* Build configuration list for PBXNativeTarget "XAIPlugin" */;
+			buildPhases = (
+				9A584149706C7567496E0240 /* Sources */,
+				9A584149706C7567496E0242 /* Frameworks */,
+				9A584149706C7567496E0241 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = XAIPlugin;
+			packageProductDependencies = (
+				9A584149706C7567496E0260 /* TypeWhisperPluginSDK */,
+			);
+			productName = XAIPlugin;
+			productReference = 9A584149706C7567496E0213 /* XAIPlugin.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
 		DD00000000000000000032 /* CoherePlugin */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = FF00000000000000000154 /* Build configuration list for PBXNativeTarget "CoherePlugin" */;
@@ -2556,6 +2657,9 @@
 					D10000000000000000000001 = {
 						CreatedOnToolsVersion = 16.0;
 					};
+					9A584149706C7567496E0230 = {
+						CreatedOnToolsVersion = 26.2;
+					};
 				};
 			};
 			buildConfigurationList = FF00000000000000000020 /* Build configuration list for PBXProject "TypeWhisper" */;
@@ -2599,6 +2703,7 @@
 				DD00000000000000000017 /* AssemblyAIPlugin */,
 				DD00000000000000000018 /* ObsidianPlugin */,
 				DD00000000000000000019 /* ScriptPlugin */,
+				F18A00000000000000000030 /* FillerWordsPlugin */,
 				DD00000000000000000020 /* LiveTranscriptPlugin */,
 				DD00000000000000000021 /* GranitePlugin */,
 				DD00000000000000000022 /* CloudflareASRPlugin */,
@@ -2612,6 +2717,7 @@
 				DD00000000000000000028 /* ElevenLabsPlugin */,
 				DD00000000000000000030 /* OpenRouterPlugin */,
 				DD00000000000000000031 /* SonioxPlugin */,
+				9A584149706C7567496E0230 /* XAIPlugin */,
 				DD00000000000000000032 /* CoherePlugin */,
 				DD00000000000000000033 /* Gemma4Plugin */,
 				DD00000000000000000034 /* SpeechmaticsPlugin */,
@@ -2786,6 +2892,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F18A00000000000000000033 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F18A00000000000000000002 /* manifest.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FF00000000000000000105 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -2907,6 +3021,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		9A584149706C7567496E0241 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9A584149706C7567496E0201 /* manifest.json in Resources */,
+				9A584149706C7567496E0202 /* Localizable.xcstrings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FF00000000000000000153 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -2972,7 +3095,9 @@
 				C23000000000000000000010 /* DeepgramPlugin.swift in Sources */,
 				C23000000000000000000003 /* Gemma4Plugin.swift in Sources */,
 				C23000000000000000000004 /* Gemma4SettingsView.swift in Sources */,
+				C42900000000000000000003 /* LiveTranscriptPlugin.swift in Sources */,
 				1E6EDB8B0D1573A05A610078 /* PluginManifestValidationTests.swift in Sources */,
+				F18A00000000000000000006 /* FillerWordsPlugin.swift in Sources */,
 				91B4D7E2C5A809F1632E4B7C /* PluginRegistryServiceTests.swift in Sources */,
 				A1C3E59B7D1042F9A8C6E2B1 /* PromptActionTemperaturePersistenceTests.swift in Sources */,
 				1F7A2C3D4E5B60718293A4C7 /* PromptActionsViewModelWizardTests.swift in Sources */,
@@ -2980,12 +3105,13 @@
 				1F7A2C3D4E5B60718293A4C6 /* PromptWizardInferenceServiceTests.swift in Sources */,
 				86F4253D3CDE30E859D0F219 /* ProfileServiceTests.swift in Sources */,
 				A10000000000000000000006 /* WorkflowServiceTests.swift in Sources */,
-				A10000000000000000000007 /* LegacyWorkflowServiceTests.swift in Sources */,
 				A10000000000000000000005 /* SpeechFeedbackServiceTests.swift in Sources */,
 				6C1F7A8B9D2E4F5061728394 /* SoundServiceTests.swift in Sources */,
 				A47BC06842DCB0BB47A2D938 /* SnippetServiceTests.swift in Sources */,
 				D4A100000000000000000003 /* RecorderTranscriptionBufferTests.swift in Sources */,
 				91B4D7E2C5A809F1632E4B7E /* StreamingHandlerTests.swift in Sources */,
+				9A584149706C7567496E0100 /* XAIPluginTests.swift in Sources */,
+				9A584149706C7567496E0204 /* XAIPlugin.swift in Sources */,
 				204C804898EAE1127B62EC98 /* TestSupport.swift in Sources */,
 				76858B5B28A121356A5D9599 /* TextDiffServiceTests.swift in Sources */,
 				4D980A5CFE1A4217A10C2101 /* WhisperKitPluginLifecycleTests.swift in Sources */,
@@ -3020,6 +3146,7 @@
 				AA00000000000000000350 /* ObjCExceptionCatcher.m in Sources */,
 				AA00000000000000000230 /* AudioPlaybackService.swift in Sources */,
 				AA00000000000000000031 /* HotkeyService.swift in Sources */,
+				AA00000000000000000361 /* ClipboardContentFormatter.swift in Sources */,
 				AA00000000000000000032 /* TextInsertionService.swift in Sources */,
 				AA00000000000000000033 /* DictationViewModel.swift in Sources */,
 				AA00000000000000000181 /* DictationEnums.swift in Sources */,
@@ -3051,7 +3178,7 @@
 				AA00000000000000000356 /* Workflow.swift in Sources */,
 				AA00000000000000000066 /* ProfileService.swift in Sources */,
 				AA00000000000000000357 /* WorkflowService.swift in Sources */,
-				AA00000000000000000358 /* LegacyWorkflowService.swift in Sources */,
+				AA00000000000000000360 /* WorkflowTextProcessingService.swift in Sources */,
 				AA00000000000000000067 /* ProfilesViewModel.swift in Sources */,
 				AA00000000000000000068 /* ProfilesSettingsView.swift in Sources */,
 				AA00000000000000000070 /* UpdateChecker.swift in Sources */,
@@ -3280,6 +3407,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F18A00000000000000000031 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F18A00000000000000000001 /* FillerWordsPlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FF00000000000000000103 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -3365,6 +3500,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000292 /* SonioxPlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9A584149706C7567496E0240 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9A584149706C7567496E0200 /* XAIPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -3623,7 +3766,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.3.0;
+				MARKETING_VERSION = 1.4.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.dev;
 				PRODUCT_NAME = TypeWhisper;
 				SWIFT_OBJC_BRIDGING_HEADER = TypeWhisper/TypeWhisper-Bridging-Header.h;
@@ -3652,7 +3795,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.3.0;
+				MARKETING_VERSION = 1.4.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac;
 				PRODUCT_NAME = TypeWhisper;
 				SWIFT_OBJC_BRIDGING_HEADER = TypeWhisper/TypeWhisper-Bridging-Header.h;
@@ -3668,7 +3811,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
-				MARKETING_VERSION = 1.3.0;
+				MARKETING_VERSION = 1.4.0;
 				PRODUCT_NAME = "typewhisper-cli";
 				SWIFT_VERSION = 6.0;
 			};
@@ -3680,7 +3823,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
-				MARKETING_VERSION = 1.3.0;
+				MARKETING_VERSION = 1.4.0;
 				PRODUCT_NAME = "typewhisper-cli";
 				SWIFT_VERSION = 6.0;
 			};
@@ -3773,6 +3916,52 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.groq;
 				PRODUCT_NAME = GroqPlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
+		9A584149706C7567496E0250 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "xAI / Grok";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = XAIPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.xai;
+				PRODUCT_NAME = XAIPlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
+		9A584149706C7567496E0251 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "xAI / Grok";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = XAIPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.xai;
+				PRODUCT_NAME = XAIPlugin;
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
@@ -4166,7 +4355,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 1.3.0;
+				MARKETING_VERSION = 1.4.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.dev.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -4193,7 +4382,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 1.3.0;
+				MARKETING_VERSION = 1.4.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -4425,6 +4614,52 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.script;
 				PRODUCT_NAME = ScriptPlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
+		F18A00000000000000000034 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Filler Words";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = FillerWordsPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.filler-words";
+				PRODUCT_NAME = FillerWordsPlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
+		F18A00000000000000000035 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Filler Words";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = FillerWordsPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.filler-words";
+				PRODUCT_NAME = FillerWordsPlugin;
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
@@ -5301,6 +5536,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		9A584149706C7567496E0252 /* Build configuration list for PBXNativeTarget "XAIPlugin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9A584149706C7567496E0250 /* Debug */,
+				9A584149706C7567496E0251 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		FF00000000000000000044 /* Build configuration list for PBXNativeTarget "OpenAIPlugin" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -5423,6 +5667,15 @@
 			buildConfigurations = (
 				XX00000000000000000077 /* Debug */,
 				XX00000000000000000078 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F18A00000000000000000036 /* Build configuration list for PBXNativeTarget "FillerWordsPlugin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F18A00000000000000000034 /* Debug */,
+				F18A00000000000000000035 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -5671,6 +5924,11 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = TypeWhisperPluginSDK;
 		};
+		9A584149706C7567496E0260 /* TypeWhisperPluginSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = RR00000000000000000005 /* XCLocalSwiftPackageReference "TypeWhisperPluginSDK" */;
+			productName = TypeWhisperPluginSDK;
+		};
 		PP00000000000000000008 /* TypeWhisperPluginSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TypeWhisperPluginSDK;
@@ -5748,6 +6006,10 @@
 			productName = TypeWhisperPluginSDK;
 		};
 		PP00000000000000000026 /* TypeWhisperPluginSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TypeWhisperPluginSDK;
+		};
+		F18A00000000000000000037 /* TypeWhisperPluginSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TypeWhisperPluginSDK;
 		};

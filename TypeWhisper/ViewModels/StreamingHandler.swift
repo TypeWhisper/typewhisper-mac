@@ -54,11 +54,17 @@ final class StreamingHandler: @unchecked Sendable {
     ) {
         stop()
 
-        guard allowLiveTranscription else { return }
+        guard allowLiveTranscription else {
+            logger.info("Live transcript preview skipped: disabled")
+            return
+        }
 
         let providerId = engineOverrideId ?? selectedProviderId
         guard let providerId,
-              PluginManager.shared.transcriptionEngine(for: providerId) != nil else { return }
+              PluginManager.shared.transcriptionEngine(for: providerId) != nil else {
+            logger.info("Live transcript preview skipped: provider unavailable")
+            return
+        }
 
         resetStreamingState()
         onStreamingStateChange?(true)
@@ -84,11 +90,24 @@ final class StreamingHandler: @unchecked Sendable {
                     return true
                 }
             ) {
+                logger.info("Live transcript preview using live session providerId=\(handle.providerId, privacy: .public)")
                 self.sharedState.withLock { $0.liveSessionHandle = handle }
                 await self.runLiveSessionLoop(stateCheck: stateCheck)
                 return
             }
 
+            guard self.modelManager.allowsTranscriptPreviewFallback(
+                engineOverrideId: engineOverrideId,
+                selectedProviderId: selectedProviderId
+            ) else {
+                logger.info("Live transcript preview fallback skipped providerId=\(providerId, privacy: .public) reason=policy-opt-out")
+                await MainActor.run { [weak self] in
+                    self?.clearStreamingState(notifyStreamingStopped: true)
+                }
+                return
+            }
+
+            logger.info("Live transcript preview using fallback batch providerId=\(providerId, privacy: .public)")
             await self.runFallbackLoop(
                 streamPrompt: streamPrompt,
                 engineOverrideId: engineOverrideId,

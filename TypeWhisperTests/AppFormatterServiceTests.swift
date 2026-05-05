@@ -69,6 +69,19 @@ final class AppFormatterServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testRTFFormattingLeavesMarkdownTextForClipboardConversion() {
+        let service = AppFormatterService()
+
+        let output = service.format(
+            text: "**Launch**\n- Budget",
+            bundleId: "com.apple.mail",
+            outputFormat: "rtf"
+        )
+
+        XCTAssertEqual(output, "**Launch**\n- Budget")
+    }
+
+    @MainActor
     func testRegisterDefaultUserDefaultsIncludesAppFormattingFlag() {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)

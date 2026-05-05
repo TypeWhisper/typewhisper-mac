@@ -162,18 +162,23 @@ final class CoreAudioOutputVolumeController: AudioOutputVolumeControlling {
 final class AudioOutputVolumeGuard: @unchecked Sendable {
     private let volumeController: AudioOutputVolumeControlling
     private let tolerance: Float
+    private let allowsVolumeRestoration: Bool
     private let lock = NSLock()
     private var baseline: AudioOutputVolumeSnapshot?
 
     init(
         volumeController: AudioOutputVolumeControlling = CoreAudioOutputVolumeController(),
-        tolerance: Float = 0.02
+        tolerance: Float = 0.02,
+        allowsVolumeRestoration: Bool = false
     ) {
         self.volumeController = volumeController
         self.tolerance = tolerance
+        self.allowsVolumeRestoration = allowsVolumeRestoration
     }
 
     func captureBaseline() {
+        guard allowsVolumeRestoration else { return }
+
         let snapshot = volumeController.defaultOutputSnapshot()
         lock.withLock {
             baseline = snapshot
@@ -188,12 +193,16 @@ final class AudioOutputVolumeGuard: @unchecked Sendable {
     }
 
     func captureBaselineIfNeeded() {
+        guard allowsVolumeRestoration else { return }
+
         let alreadyCaptured = lock.withLock { baseline != nil }
         guard !alreadyCaptured else { return }
         captureBaseline()
     }
 
     func restoreIfRaised(reason: String) {
+        guard allowsVolumeRestoration else { return }
+
         let capturedBaseline = lock.withLock { baseline }
         guard let capturedBaseline else { return }
 

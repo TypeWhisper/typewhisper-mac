@@ -95,12 +95,12 @@ final class DictationSettingsHandler {
     func syncWorkflowHotkeys(_ workflows: [Workflow]) {
         let entries = workflows
             .filter(\.isEnabled)
-            .flatMap { workflow -> [(id: UUID, hotkey: UnifiedHotkey)] in
-                guard let trigger = workflow.trigger, trigger.kind == .hotkey else {
+            .flatMap { workflow -> [(id: UUID, hotkey: UnifiedHotkey, behavior: WorkflowHotkeyBehavior)] in
+                guard let trigger = workflow.trigger, !trigger.hotkeys.isEmpty else {
                     return []
                 }
                 return trigger.hotkeys.map { hotkey in
-                    (id: workflow.id, hotkey: hotkey)
+                    (id: workflow.id, hotkey: hotkey, behavior: trigger.hotkeyBehavior)
                 }
             }
         hotkeyService.registerWorkflowHotkeys(entries)

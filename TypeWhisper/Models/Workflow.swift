@@ -10,6 +10,7 @@ enum WorkflowTemplate: String, CaseIterable, Codable, Sendable {
     case checklist
     case json
     case summary
+    case dictation
     case custom
 
     static var catalog: [WorkflowTemplateDefinition] {
@@ -18,6 +19,16 @@ enum WorkflowTemplate: String, CaseIterable, Codable, Sendable {
 
     var definition: WorkflowTemplateDefinition {
         switch self {
+        case .dictation:
+            WorkflowTemplateDefinition(
+                template: self,
+                name: localizedAppText("Dictation Only", de: "Nur Diktat"),
+                description: localizedAppText(
+                    "Transcribe and insert without LLM processing.",
+                    de: "Transkribiert und fuegt ohne LLM-Verarbeitung ein."
+                ),
+                systemImage: "mic"
+            )
         case .cleanedText:
             WorkflowTemplateDefinition(
                 template: self,
@@ -111,6 +122,20 @@ struct WorkflowTemplateDefinition: Identifiable, Equatable, Sendable {
     var id: WorkflowTemplate { template }
 }
 
+enum WorkflowTranslationProcessor: String, CaseIterable, Codable, Sendable {
+    case appleTranslate
+    case llmPrompt
+
+    var label: String {
+        switch self {
+        case .appleTranslate:
+            localizedAppText("Apple Translate (On-Device)", de: "Apple Translate (On-Device)")
+        case .llmPrompt:
+            localizedAppText("LLM Prompt", de: "LLM-Prompt")
+        }
+    }
+}
+
 enum WorkflowTriggerKind: String, CaseIterable, Codable, Sendable {
     case app
     case website
@@ -119,22 +144,80 @@ enum WorkflowTriggerKind: String, CaseIterable, Codable, Sendable {
     case manual
 }
 
+enum WorkflowHotkeyBehavior: String, CaseIterable, Codable, Hashable, Sendable {
+    case startDictation
+    case processSelectedText
+
+    var editorLabel: String {
+        switch self {
+        case .startDictation:
+            localizedAppText("Start Dictation", de: "Diktat starten")
+        case .processSelectedText:
+            localizedAppText("Process Selected Text", de: "Markierten Text verarbeiten")
+        }
+    }
+
+    var editorDescription: String {
+        switch self {
+        case .startDictation:
+            localizedAppText(
+                "Pressing the shortcut starts recording and applies this workflow to the dictation.",
+                de: "Der Shortcut startet eine Aufnahme und wendet diesen Workflow auf das Diktat an."
+            )
+        case .processSelectedText:
+            localizedAppText(
+                "Pressing the shortcut transforms the current selection or clipboard without recording.",
+                de: "Der Shortcut verarbeitet die aktuelle Auswahl oder Zwischenablage ohne Aufnahme."
+            )
+        }
+    }
+
+    var shortcutSubtitle: String {
+        switch self {
+        case .startDictation:
+            localizedAppText("Starts dictation", de: "Startet Diktat")
+        case .processSelectedText:
+            localizedAppText("Processes selected text", de: "Verarbeitet markierten Text")
+        }
+    }
+}
+
 struct WorkflowTrigger: Codable, Equatable, Sendable {
     let kind: WorkflowTriggerKind
     var appBundleIdentifiers: [String]
     var websitePatterns: [String]
     var hotkeys: [UnifiedHotkey]
+    var hotkeyBehavior: WorkflowHotkeyBehavior
 
     init(
         kind: WorkflowTriggerKind,
         appBundleIdentifiers: [String] = [],
         websitePatterns: [String] = [],
-        hotkeys: [UnifiedHotkey] = []
+        hotkeys: [UnifiedHotkey] = [],
+        hotkeyBehavior: WorkflowHotkeyBehavior = .startDictation
     ) {
         self.kind = kind
         self.appBundleIdentifiers = appBundleIdentifiers
         self.websitePatterns = websitePatterns
         self.hotkeys = hotkeys
+        self.hotkeyBehavior = hotkeyBehavior
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case kind
+        case appBundleIdentifiers
+        case websitePatterns
+        case hotkeys
+        case hotkeyBehavior
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.kind = try container.decode(WorkflowTriggerKind.self, forKey: .kind)
+        self.appBundleIdentifiers = try container.decodeIfPresent([String].self, forKey: .appBundleIdentifiers) ?? []
+        self.websitePatterns = try container.decodeIfPresent([String].self, forKey: .websitePatterns) ?? []
+        self.hotkeys = try container.decodeIfPresent([UnifiedHotkey].self, forKey: .hotkeys) ?? []
+        self.hotkeyBehavior = try container.decodeIfPresent(WorkflowHotkeyBehavior.self, forKey: .hotkeyBehavior) ?? .startDictation
     }
 
     static func app(_ bundleIdentifier: String) -> WorkflowTrigger {
@@ -153,12 +236,18 @@ struct WorkflowTrigger: Codable, Equatable, Sendable {
         WorkflowTrigger(kind: .website, websitePatterns: patterns)
     }
 
-    static func hotkey(_ hotkey: UnifiedHotkey) -> WorkflowTrigger {
-        hotkeys([hotkey])
+    static func hotkey(
+        _ hotkey: UnifiedHotkey,
+        behavior: WorkflowHotkeyBehavior = .startDictation
+    ) -> WorkflowTrigger {
+        hotkeys([hotkey], behavior: behavior)
     }
 
-    static func hotkeys(_ hotkeys: [UnifiedHotkey]) -> WorkflowTrigger {
-        WorkflowTrigger(kind: .hotkey, hotkeys: hotkeys)
+    static func hotkeys(
+        _ hotkeys: [UnifiedHotkey],
+        behavior: WorkflowHotkeyBehavior = .startDictation
+    ) -> WorkflowTrigger {
+        WorkflowTrigger(kind: .hotkey, hotkeys: hotkeys, hotkeyBehavior: behavior)
     }
 
     static func global() -> WorkflowTrigger {
@@ -183,12 +272,8 @@ struct WorkflowTrigger: Codable, Equatable, Sendable {
 
     var hasValues: Bool {
         switch kind {
-        case .app:
-            !appBundleIdentifiers.isEmpty
-        case .website:
-            !websitePatterns.isEmpty
-        case .hotkey:
-            !hotkeys.isEmpty
+        case .app, .website, .hotkey:
+            !appBundleIdentifiers.isEmpty || !websitePatterns.isEmpty || !hotkeys.isEmpty
         case .global, .manual:
             true
         }
@@ -196,6 +281,10 @@ struct WorkflowTrigger: Codable, Equatable, Sendable {
 }
 
 struct WorkflowBehavior: Codable, Equatable, Sendable {
+    static let translationProcessorSettingKey = "translationProcessor"
+    static let targetLanguageSettingKey = "targetLanguage"
+    static let inputLanguageSettingKey = "inputLanguage"
+
     var settings: [String: String]
     var fineTuning: String
     var providerId: String?
@@ -398,12 +487,62 @@ extension WorkflowTriggerKind {
 }
 
 extension Workflow {
+    var pluginWorkflowInfo: PluginWorkflowInfo {
+        PluginWorkflowInfo(
+            id: id,
+            name: name,
+            isEnabled: isEnabled,
+            sortOrder: sortOrder,
+            template: PluginWorkflowTemplate(rawValue: template.rawValue) ?? .custom,
+            trigger: trigger?.pluginWorkflowTrigger ?? PluginWorkflowTrigger(kind: .manual),
+            behavior: behavior.pluginWorkflowBehavior,
+            output: output.pluginWorkflowOutput,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
+    }
+
     var definition: WorkflowTemplateDefinition {
         template.definition
     }
 
+    var translationProcessor: WorkflowTranslationProcessor {
+        guard template == .translation else { return .llmPrompt }
+        let rawValue = behavior.settings[WorkflowBehavior.translationProcessorSettingKey]
+        return rawValue.flatMap(WorkflowTranslationProcessor.init(rawValue:)) ?? .llmPrompt
+    }
+
+    var translationTargetLanguage: String? {
+        let rawValue = behavior.settings[WorkflowBehavior.targetLanguageSettingKey]
+            ?? behavior.settings["target"]
+        let trimmed = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
+    }
+
+    var usesAppleTranslate: Bool {
+        template == .translation && translationProcessor == .appleTranslate
+    }
+
+    var inputLanguageSelection: LanguageSelection {
+        get {
+            LanguageSelection(
+                storedValue: behavior.settings[WorkflowBehavior.inputLanguageSettingKey],
+                nilBehavior: .inheritGlobal
+            )
+        }
+        set {
+            var updatedBehavior = behavior
+            if let storedValue = newValue.storedValue(nilBehavior: .inheritGlobal) {
+                updatedBehavior.settings[WorkflowBehavior.inputLanguageSettingKey] = storedValue
+            } else {
+                updatedBehavior.settings.removeValue(forKey: WorkflowBehavior.inputLanguageSettingKey)
+            }
+            behavior = updatedBehavior
+        }
+    }
+
     var isManuallyRunnable: Bool {
-        systemPrompt() != nil || output.targetActionPluginId != nil
+        usesAppleTranslate || systemPrompt() != nil || output.targetActionPluginId != nil
     }
 
     func systemPrompt(
@@ -421,14 +560,18 @@ extension Workflow {
         )
 
         switch template {
+        case .dictation:
+            return nil
         case .cleanedText:
             return """
             Clean up the dictated text for readability. Fix punctuation, grammar, and formatting while preserving the original meaning and language. Return only the cleaned text.
             \(inputBoundaryInstruction)\(languageHint)\(settingsInstruction)\(fineTuningInstruction)\(outputInstruction)
             """
         case .translation:
-            let targetLanguage = behavior.settings["targetLanguage"]
-                ?? behavior.settings["target"]
+            if usesAppleTranslate {
+                return nil
+            }
+            let targetLanguage = translationTargetLanguage
                 ?? fallbackTranslationTarget
                 ?? "English"
             return """
@@ -494,7 +637,7 @@ extension Workflow {
     private func workflowSettingsInstruction(for settings: [String: String]) -> String {
         let relevantSettings = settings
             .filter { key, value in
-                !["instruction", "goal", "prompt", "targetLanguage", "target"].contains(key)
+                !["instruction", "goal", "prompt", "targetLanguage", "target", WorkflowBehavior.inputLanguageSettingKey].contains(key)
                 && !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             }
             .sorted { $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending }
@@ -513,7 +656,16 @@ extension Workflow {
     private func workflowOutputInstruction(for output: WorkflowOutput) -> String {
         var lines: [String] = []
         if let format = output.format?.trimmingCharacters(in: .whitespacesAndNewlines), !format.isEmpty {
-            lines.append("Return the result as \(format).")
+            let normalizedFormat = format.lowercased()
+            if normalizedFormat == "rtf" || normalizedFormat == "richtext" || normalizedFormat == "rich text" {
+                lines.append("Return Markdown-compatible text for rich-text conversion.")
+                lines.append("Use Markdown syntax for bold, italic, and lists where needed.")
+                lines.append("Return only the final transformed content without explanations or code fences.")
+                lines.append("Never include TYPEWHISPER input boundary markers in the result.")
+                lines.append("Do not output raw RTF control words.")
+            } else {
+                lines.append("Return the result as \(format).")
+            }
         }
         if output.targetActionPluginId != nil {
             lines.append("Return only the transformed text result without commentary.")
@@ -530,5 +682,53 @@ extension Workflow {
             return "\nConfigured source language: \(configuredLanguage)."
         }
         return ""
+    }
+}
+
+private extension WorkflowTrigger {
+    var pluginWorkflowTrigger: PluginWorkflowTrigger {
+        PluginWorkflowTrigger(
+            kind: PluginWorkflowTriggerKind(rawValue: kind.rawValue) ?? .manual,
+            appBundleIdentifiers: appBundleIdentifiers,
+            websitePatterns: websitePatterns,
+            hotkeys: hotkeys.map(\.pluginWorkflowHotkey),
+            hotkeyBehavior: PluginWorkflowHotkeyBehavior(rawValue: hotkeyBehavior.rawValue) ?? .startDictation
+        )
+    }
+}
+
+private extension UnifiedHotkey {
+    var pluginWorkflowHotkey: PluginWorkflowHotkey {
+        PluginWorkflowHotkey(
+            keyCode: keyCode,
+            modifierFlags: modifierFlags,
+            isFn: isFn,
+            isDoubleTap: isDoubleTap,
+            modifierKeyCodes: modifierKeyCodes.sorted(),
+            mouseButton: mouseButton
+        )
+    }
+}
+
+private extension WorkflowBehavior {
+    var pluginWorkflowBehavior: PluginWorkflowBehavior {
+        PluginWorkflowBehavior(
+            settings: settings,
+            fineTuning: fineTuning,
+            providerId: providerId,
+            cloudModel: cloudModel,
+            temperatureMode: temperatureMode,
+            temperatureValue: temperatureValue
+        )
+    }
+}
+
+private extension WorkflowOutput {
+    var pluginWorkflowOutput: PluginWorkflowOutput {
+        PluginWorkflowOutput(
+            format: format,
+            autoEnter: autoEnter,
+            targetActionPluginId: targetActionPluginId
+        )
     }
 }

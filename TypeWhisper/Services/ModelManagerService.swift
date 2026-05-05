@@ -32,16 +32,26 @@ final class ModelManagerService: ObservableObject {
         let session: any LiveTranscriptionSession
     }
 
+    private final class AutoUnloadTarget {
+        weak var plugin: NSObject?
+
+        init(plugin: NSObject) {
+            self.plugin = plugin
+        }
+    }
+
     @Published private(set) var selectedProviderId: String?
 
     @Published var autoUnloadSeconds: Int {
         didSet {
             UserDefaults.standard.set(autoUnloadSeconds, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            cancelAutoUnloadTimer()
             scheduleAutoUnloadIfNeeded()
         }
     }
 
-    private var autoUnloadTask: Task<Void, Never>?
+    private var autoUnloadTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
+    private var autoUnloadTargets: [ObjectIdentifier: AutoUnloadTarget] = [:]
     private var cancellables = Set<AnyCancellable>()
 
     private let providerKey = UserDefaultsKeys.selectedEngine
@@ -132,6 +142,14 @@ final class ModelManagerService: ObservableObject {
             return false
         }
         return loadedPlugin.manifest.requiresAPIKey == true
+    }
+
+    func allowsTranscriptPreviewFallback(engineOverrideId: String? = nil, selectedProviderId: String? = nil) -> Bool {
+        guard let providerId = engineOverrideId ?? selectedProviderId ?? self.selectedProviderId,
+              let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
+            return false
+        }
+        return (plugin as? any TranscriptPreviewFallbackPolicyProviding)?.allowsTranscriptPreviewFallback ?? true
     }
 
     /// Resolve display name for a given engine/model override combination
@@ -443,13 +461,26 @@ final class ModelManagerService: ObservableObject {
     // MARK: - Auto-Unload
 
     func scheduleAutoUnloadIfNeeded() {
-        autoUnloadTask?.cancel()
-        autoUnloadTask = nil
+        guard let providerId = selectedProviderId,
+              let plugin = PluginManager.shared.transcriptionEngine(for: providerId),
+              plugin.isConfigured else { return }
+
+        scheduleAutoUnloadIfNeeded(for: plugin)
+    }
+
+    func scheduleAutoUnloadIfNeeded(for plugin: any TypeWhisperPlugin) {
+        guard let nsPlugin = plugin as? NSObject else { return }
+        let key = ObjectIdentifier(nsPlugin)
+
+        autoUnloadTasks[key]?.cancel()
+        autoUnloadTasks[key] = nil
+        autoUnloadTargets[key] = nil
 
         let seconds = autoUnloadSeconds
         guard seconds != 0 else { return }
 
-        autoUnloadTask = Task { [weak self] in
+        autoUnloadTargets[key] = AutoUnloadTarget(plugin: nsPlugin)
+        autoUnloadTasks[key] = Task { [weak self] in
             if seconds == -1 {
                 // Small delay to let transcription call stack fully unwind
                 // before releasing the model (avoids EXC_BAD_ACCESS from MLX cleanup)
@@ -458,20 +489,25 @@ final class ModelManagerService: ObservableObject {
                 try? await Task.sleep(for: .seconds(seconds))
             }
             guard !Task.isCancelled else { return }
-            self?.performAutoUnload()
+            self?.performAutoUnload(for: key)
         }
     }
 
     func cancelAutoUnloadTimer() {
-        autoUnloadTask?.cancel()
-        autoUnloadTask = nil
+        for task in autoUnloadTasks.values {
+            task.cancel()
+        }
+        autoUnloadTasks.removeAll()
+        autoUnloadTargets.removeAll()
     }
 
-    private func performAutoUnload() {
-        guard let providerId = selectedProviderId,
-              let plugin = PluginManager.shared.transcriptionEngine(for: providerId),
-              plugin.isConfigured else { return }
-        guard let nsPlugin = plugin as? NSObject else { return }
+    private func performAutoUnload(for key: ObjectIdentifier) {
+        defer {
+            autoUnloadTasks[key] = nil
+            autoUnloadTargets[key] = nil
+        }
+
+        guard let nsPlugin = autoUnloadTargets[key]?.plugin else { return }
         let sel = NSSelectorFromString("triggerAutoUnload")
         guard nsPlugin.responds(to: sel) else { return }
         nsPlugin.perform(sel)

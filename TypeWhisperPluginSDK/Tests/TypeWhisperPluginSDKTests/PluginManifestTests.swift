@@ -70,4 +70,65 @@ final class PluginManifestTests: XCTestCase {
 
         XCTAssertEqual(manifest.sdkCompatibilityVersion, "v1")
     }
+
+    func testPluginManifestDecodesHostingWhenPresent() throws {
+        let data = Data(
+            """
+            {
+              "id": "com.typewhisper.cloud",
+              "name": "Cloud Plugin",
+              "version": "1.2.3",
+              "principalClass": "CloudPlugin",
+              "hosting": "cloud",
+              "requiresAPIKey": false
+            }
+            """.utf8
+        )
+
+        let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
+
+        XCTAssertEqual(manifest.hosting, .cloud)
+        XCTAssertEqual(manifest.requiresAPIKey, false)
+        XCTAssertEqual(manifest.resolvedHosting, .cloud)
+    }
+
+    func testPluginManifestDecodesMultipleCategoryIdentifiers() throws {
+        let data = Data(
+            """
+            {
+              "id": "com.typewhisper.multi",
+              "name": "Multi Plugin",
+              "version": "1.2.3",
+              "principalClass": "MultiPlugin",
+              "category": "transcription",
+              "categories": ["transcription", "llm", "memory"]
+            }
+            """.utf8
+        )
+
+        let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
+
+        XCTAssertEqual(manifest.category, "transcription")
+        XCTAssertEqual(manifest.categories, ["transcription", "llm", "memory"])
+        XCTAssertEqual(manifest.resolvedCategoryIdentifiers, ["transcription", "llm", "memory"])
+    }
+
+    func testPluginManifestResolvedHostingFallsBackToAPIKeyRequirement() {
+        let cloudManifest = PluginManifest(
+            id: "com.typewhisper.remote",
+            name: "Remote Plugin",
+            version: "1.0.0",
+            principalClass: "RemotePlugin",
+            requiresAPIKey: true
+        )
+        let localManifest = PluginManifest(
+            id: "com.typewhisper.local",
+            name: "Local Plugin",
+            version: "1.0.0",
+            principalClass: "LocalPlugin"
+        )
+
+        XCTAssertEqual(cloudManifest.resolvedHosting, .cloud)
+        XCTAssertEqual(localManifest.resolvedHosting, .local)
+    }
 }

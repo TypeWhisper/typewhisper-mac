@@ -36,11 +36,12 @@ final class AppFormatterService {
             return text
         }
 
+        let normalizedOutputFormat = outputFormat.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let resolvedFormat: String
-        if outputFormat == "auto" {
+        if normalizedOutputFormat == "auto" {
             resolvedFormat = Self.resolveAutoFormat(bundleId: bundleId)
         } else {
-            resolvedFormat = outputFormat
+            resolvedFormat = normalizedOutputFormat
         }
 
         logger.debug("Formatting text as '\(resolvedFormat)' for bundleId=\(bundleId ?? "nil")")
@@ -50,7 +51,7 @@ final class AppFormatterService {
             return formatAsMarkdown(text)
         case "html":
             return formatAsHTML(text)
-        case "code", "plaintext":
+        case "code", "plaintext", "rtf", "richtext", "rich text":
             return text
         default:
             return text

@@ -162,6 +162,7 @@ final class HotkeyService: ObservableObject {
     var onRecorderToggle: (() -> Void)?
     var onProfileDictationStart: ((UUID) -> Void)?
     var onWorkflowDictationStart: ((UUID) -> Void)?
+    var onWorkflowTextProcessing: ((UUID) -> Void)?
     var onCancelPressed: (() -> Void)?
     var onPushToTalkInterruption: (() -> Void)?
     var discardPushToTalkRecordingOnExtraKeyPress = false
@@ -243,6 +244,7 @@ final class HotkeyService: ObservableObject {
     private struct WorkflowHotkeyState {
         let workflowId: UUID
         var hotkey: UnifiedHotkey
+        var behavior: WorkflowHotkeyBehavior
         var fnWasDown = false
         var fnComboKeyPressed = false
         var modifierWasDown = false
@@ -343,11 +345,11 @@ final class HotkeyService: ObservableObject {
         setupMonitor()
     }
 
-    func registerWorkflowHotkeys(_ entries: [(id: UUID, hotkey: UnifiedHotkey)]) {
+    func registerWorkflowHotkeys(_ entries: [(id: UUID, hotkey: UnifiedHotkey, behavior: WorkflowHotkeyBehavior)]) {
         workflowSlots.removeAll()
         for entry in entries {
             workflowSlots[entry.id, default: []].append(
-                WorkflowHotkeyState(workflowId: entry.id, hotkey: entry.hotkey)
+                WorkflowHotkeyState(workflowId: entry.id, hotkey: entry.hotkey, behavior: entry.behavior)
             )
         }
         tearDownMonitor()
@@ -643,6 +645,7 @@ final class HotkeyService: ObservableObject {
                 dispatchWorkflowMatch(
                     workflowId: workflowId,
                     hotkey: wState.hotkey,
+                    behavior: wState.behavior,
                     keyDown: keyDown,
                     keyUp: keyUp,
                     source: source
@@ -747,6 +750,7 @@ final class HotkeyService: ObservableObject {
     private func dispatchWorkflowMatch(
         workflowId: UUID,
         hotkey: UnifiedHotkey,
+        behavior: WorkflowHotkeyBehavior,
         keyDown: Bool,
         keyUp: Bool,
         source: HotkeyEventSource
@@ -760,14 +764,14 @@ final class HotkeyService: ObservableObject {
             if source != .eventTap {
                 logFallbackMatchIfNeeded(hotkey: hotkey, source: source)
             }
-            handleWorkflowKeyDown(workflowId: workflowId)
+            handleWorkflowKeyDown(workflowId: workflowId, behavior: behavior)
         } else if keyUp, shouldDispatch(
             target: .workflow(workflowId),
             phase: .up,
             hotkey: hotkey,
             source: source
         ) {
-            handleWorkflowKeyUp(workflowId: workflowId)
+            handleWorkflowKeyUp(workflowId: workflowId, behavior: behavior)
         }
     }
 
@@ -1228,7 +1232,12 @@ final class HotkeyService: ObservableObject {
 
     // MARK: - Key Down / Up (Workflow Slots)
 
-    private func handleWorkflowKeyDown(workflowId: UUID) {
+    private func handleWorkflowKeyDown(workflowId: UUID, behavior: WorkflowHotkeyBehavior) {
+        guard behavior == .startDictation else {
+            onWorkflowTextProcessing?(workflowId)
+            return
+        }
+
         if isActive {
             isActive = false
             activeSlotType = nil
@@ -1250,7 +1259,8 @@ final class HotkeyService: ObservableObject {
         }
     }
 
-    private func handleWorkflowKeyUp(workflowId: UUID) {
+    private func handleWorkflowKeyUp(workflowId: UUID, behavior: WorkflowHotkeyBehavior) {
+        guard behavior == .startDictation else { return }
         guard isActive, activeWorkflowId == workflowId else { return }
 
         guard let downTime = keyDownTime else { return }

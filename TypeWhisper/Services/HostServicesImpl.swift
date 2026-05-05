@@ -6,12 +6,19 @@ final class HostServicesImpl: HostServices, @unchecked Sendable {
     let pluginId: String
     let pluginDataDirectory: URL
     let eventBus: EventBusProtocol
-    private let ruleNamesProvider: () -> [String]
+    private let ruleNamesProvider: @MainActor () -> [String]
+    private let workflowProvider: @MainActor () -> [PluginWorkflowInfo]
 
-    init(pluginId: String, eventBus: EventBusProtocol, ruleNamesProvider: @escaping () -> [String]) {
+    init(
+        pluginId: String,
+        eventBus: EventBusProtocol,
+        ruleNamesProvider: @escaping @MainActor () -> [String],
+        workflowProvider: @escaping @MainActor () -> [PluginWorkflowInfo] = { [] }
+    ) {
         self.pluginId = pluginId
         self.eventBus = eventBus
         self.ruleNamesProvider = ruleNamesProvider
+        self.workflowProvider = workflowProvider
 
         self.pluginDataDirectory = AppConstants.appSupportDirectory
             .appendingPathComponent("PluginData", isDirectory: true)
@@ -60,7 +67,11 @@ final class HostServicesImpl: HostServices, @unchecked Sendable {
     // MARK: - Rules
 
     var availableRuleNames: [String] {
-        ruleNamesProvider()
+        readMainActor(ruleNamesProvider)
+    }
+
+    var availableWorkflows: [PluginWorkflowInfo] {
+        readMainActor(workflowProvider)
     }
 
     // MARK: - Capabilities
@@ -76,6 +87,20 @@ final class HostServicesImpl: HostServices, @unchecked Sendable {
     func setStreamingDisplayActive(_ active: Bool) {
         DispatchQueue.main.async {
             DictationViewModel._shared?.updateExternalStreamingDisplay(active: active)
+        }
+    }
+
+    private func readMainActor<Value: Sendable>(_ body: @escaping @MainActor () -> Value) -> Value {
+        if Thread.isMainThread {
+            return MainActor.assumeIsolated {
+                body()
+            }
+        }
+
+        return DispatchQueue.main.sync {
+            MainActor.assumeIsolated {
+                body()
+            }
         }
     }
 }

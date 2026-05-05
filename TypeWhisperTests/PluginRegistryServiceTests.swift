@@ -5,7 +5,7 @@ import TypeWhisperPluginSDK
 final class PluginRegistryServiceTests: XCTestCase {
     private let sdkCompatibilityVersion = "v1"
 
-    func testLegacyRegistryEntryDoesNotResolveWithoutSDKCompatibilityVersion() throws {
+    func testFlatRegistryEntryWithoutReleasesDoesNotResolve() throws {
         let data = Data(
             """
             {
@@ -17,7 +17,7 @@ final class PluginRegistryServiceTests: XCTestCase {
                   "version": "1.0.5",
                   "minHostVersion": "1.2.0",
                   "author": "TypeWhisper",
-                  "description": "Legacy entry",
+                  "description": "Legacy flat entry",
                   "category": "utility",
                   "size": 42,
                   "downloadURL": "https://example.com/legacy.zip"
@@ -81,6 +81,45 @@ final class PluginRegistryServiceTests: XCTestCase {
         XCTAssertEqual(plugins.first?.version, "1.0.5")
         XCTAssertEqual(plugins.first?.downloadURL, "https://example.com/compatible.zip")
         XCTAssertEqual(plugins.first?.downloadCount, 100)
+    }
+
+    func testRegistryEntryDecodesMultipleCategoryIdentifiers() throws {
+        let data = Data(
+            """
+            {
+              "schemaVersion": 2,
+              "plugins": [
+                {
+                  "id": "com.typewhisper.multi-capability",
+                  "name": "Multi Capability Plugin",
+                  "author": "TypeWhisper",
+                  "description": "Transcribes and provides LLM processing.",
+                  "category": "transcription",
+                  "categories": ["transcription", "llm", "memory"],
+                  "releases": [
+                    {
+                      "version": "1.0.0",
+                      "minHostVersion": "1.4.0",
+                      "sdkCompatibilityVersion": "v1",
+                      "size": 10,
+                      "downloadURL": "https://example.com/plugin.zip"
+                    }
+                  ]
+                }
+              ]
+            }
+            """.utf8
+        )
+
+        let response = try JSONDecoder().decode(PluginRegistryResponse.self, from: data)
+        let plugins = response.resolvedPlugins(
+            appVersion: "1.4.0",
+            sdkCompatibilityVersion: sdkCompatibilityVersion
+        )
+
+        XCTAssertEqual(plugins.count, 1)
+        XCTAssertEqual(plugins.first?.category, "transcription")
+        XCTAssertEqual(plugins.first?.categories, ["transcription", "llm", "memory"])
     }
 
     func testMultiReleaseRegistryRejectsReleaseWithMismatchedSDKCompatibilityVersionAtSameHostVersion() throws {
@@ -180,6 +219,104 @@ final class PluginRegistryServiceTests: XCTestCase {
         XCTAssertEqual(plugins.first?.downloadURL, "https://example.com/intel-compatible.zip")
     }
 
+    func testRegistryEntryWithCloudHostingOverridesAPIKeyRequirementForClassification() throws {
+        let data = Data(
+            """
+            {
+              "schemaVersion": 2,
+              "plugins": [
+                {
+                  "id": "com.typewhisper.openai",
+                  "name": "OpenAI / ChatGPT",
+                  "author": "TypeWhisper",
+                  "description": "Cloud transcription plus OpenAI/ChatGPT prompts.",
+                  "category": "transcription",
+                  "hosting": "cloud",
+                  "requiresAPIKey": false,
+                  "releases": [
+                    {
+                      "version": "1.1.5",
+                      "minHostVersion": "1.2.2",
+                      "sdkCompatibilityVersion": "v1",
+                      "size": 20,
+                      "downloadURL": "https://example.com/openai.zip"
+                    }
+                  ]
+                }
+              ]
+            }
+            """.utf8
+        )
+
+        let response = try JSONDecoder().decode(PluginRegistryResponse.self, from: data)
+        let plugin = try XCTUnwrap(response.resolvedPlugins(
+            appVersion: "1.3.0",
+            sdkCompatibilityVersion: sdkCompatibilityVersion
+        ).first)
+
+        XCTAssertEqual(plugin.hosting, .cloud)
+        XCTAssertEqual(plugin.requiresAPIKey, false)
+        XCTAssertEqual(plugin.resolvedHosting, .cloud)
+    }
+
+    func testRegistryEntryWithoutHostingFallsBackToAPIKeyRequirementForClassification() throws {
+        let data = Data(
+            """
+            {
+              "schemaVersion": 2,
+              "plugins": [
+                {
+                  "id": "com.typewhisper.remote",
+                  "name": "Remote Plugin",
+                  "author": "TypeWhisper",
+                  "description": "Remote entry",
+                  "category": "transcription",
+                  "requiresAPIKey": true,
+                  "releases": [
+                    {
+                      "version": "1.0.0",
+                      "minHostVersion": "1.0.0",
+                      "sdkCompatibilityVersion": "v1",
+                      "size": 10,
+                      "downloadURL": "https://example.com/remote.zip"
+                    }
+                  ]
+                },
+                {
+                  "id": "com.typewhisper.local",
+                  "name": "Local Plugin",
+                  "author": "TypeWhisper",
+                  "description": "Local entry",
+                  "category": "transcription",
+                  "releases": [
+                    {
+                      "version": "1.0.0",
+                      "minHostVersion": "1.0.0",
+                      "sdkCompatibilityVersion": "v1",
+                      "size": 10,
+                      "downloadURL": "https://example.com/local.zip"
+                    }
+                  ]
+                }
+              ]
+            }
+            """.utf8
+        )
+
+        let response = try JSONDecoder().decode(PluginRegistryResponse.self, from: data)
+        let plugins = response.resolvedPlugins(
+            appVersion: "1.3.0",
+            sdkCompatibilityVersion: sdkCompatibilityVersion
+        )
+
+        let remote = try XCTUnwrap(plugins.first { $0.id == "com.typewhisper.remote" })
+        let local = try XCTUnwrap(plugins.first { $0.id == "com.typewhisper.local" })
+        XCTAssertNil(remote.hosting)
+        XCTAssertEqual(remote.resolvedHosting, .cloud)
+        XCTAssertNil(local.hosting)
+        XCTAssertEqual(local.resolvedHosting, .local)
+    }
+
     func testMalformedPluginEntryIsSkippedInsteadOfFailingEntireRegistry() throws {
         // A single bad entry (wrong type on a required field) must not empty
         // the marketplace: the decoder reports the error and keeps the rest.
@@ -199,13 +336,10 @@ final class PluginRegistryServiceTests: XCTestCase {
                 {
                   "id": "com.typewhisper.ok",
                   "name": "Good Plugin",
-                  "version": "1.0.0",
-                  "minHostVersion": "1.0.0",
                   "author": "TypeWhisper",
-                  "description": "Legacy good entry",
+                  "description": "Entry without releases",
                   "category": "utility",
-                  "size": 10,
-                  "downloadURL": "https://example.com/ok.zip"
+                  "size": 10
                 }
               ]
             }
@@ -222,34 +356,28 @@ final class PluginRegistryServiceTests: XCTestCase {
         XCTAssertTrue(plugins.isEmpty)
     }
 
-    func testRegistryFeedUsesLegacyForStableBuildBefore130() {
+    func testRegistryFeedUsesV1ForPre14Builds() {
         XCTAssertEqual(
             PluginRegistryService.registryFeed(
                 appVersion: "1.2.2",
                 releaseChannel: .stable
             ),
-            .legacy
+            .v1
         )
-    }
-
-    func testRegistryFeedKeepsLegacyForPre130PreviewBuilds() {
         XCTAssertEqual(
             PluginRegistryService.registryFeed(
                 appVersion: "1.2.2",
                 releaseChannel: .releaseCandidate
             ),
-            .legacy
+            .v1
         )
         XCTAssertEqual(
             PluginRegistryService.registryFeed(
                 appVersion: "1.2.2",
                 releaseChannel: .daily
             ),
-            .legacy
+            .v1
         )
-    }
-
-    func testRegistryFeedUsesV1ForReleaseCandidateBuild() {
         XCTAssertEqual(
             PluginRegistryService.registryFeed(
                 appVersion: "1.3.0",
@@ -257,9 +385,6 @@ final class PluginRegistryServiceTests: XCTestCase {
             ),
             .v1
         )
-    }
-
-    func testRegistryFeedUsesV1ForDailyBuild() {
         XCTAssertEqual(
             PluginRegistryService.registryFeed(
                 appVersion: "1.3.0",
@@ -267,23 +392,97 @@ final class PluginRegistryServiceTests: XCTestCase {
             ),
             .v1
         )
-    }
-
-    func testRegistryFeedUsesV1ForStable130AndNewer() {
         XCTAssertEqual(
             PluginRegistryService.registryFeed(
                 appVersion: "1.3.0",
                 releaseChannel: .stable
             ),
             .v1
+        )
+        XCTAssertEqual(
+            PluginRegistryService.registryFeed(
+                appVersion: "1.3.1",
+                releaseChannel: .stable
+            ),
+            .v1
+        )
+    }
+
+    func testRegistryFeedUsesCommunityFeedFor14PreviewAndStableBuilds() {
+        XCTAssertEqual(
+            PluginRegistryService.registryFeed(
+                appVersion: "1.4.0-rc1",
+                releaseChannel: .releaseCandidate
+            ),
+            .communityV1
+        )
+        XCTAssertEqual(
+            PluginRegistryService.registryFeed(
+                appVersion: "1.4.0",
+                releaseChannel: .daily
+            ),
+            .communityV1
         )
         XCTAssertEqual(
             PluginRegistryService.registryFeed(
                 appVersion: "1.4.0",
                 releaseChannel: .stable
             ),
-            .v1
+            .communityV1
         )
+    }
+
+    func testRegistryPluginSourceDefaultsToOfficialAndDecodesCommunity() throws {
+        let data = Data(
+            """
+            {
+              "schemaVersion": 1,
+              "plugins": [
+                {
+                  "id": "com.typewhisper.official",
+                  "name": "Official Plugin",
+                  "author": "TypeWhisper",
+                  "description": "Official entry",
+                  "category": "utility",
+                  "releases": [
+                    {
+                      "version": "1.0.0",
+                      "minHostVersion": "1.4.0",
+                      "sdkCompatibilityVersion": "v1",
+                      "size": 10,
+                      "downloadURL": "https://example.com/official.zip"
+                    }
+                  ]
+                },
+                {
+                  "id": "com.community.volcengine",
+                  "source": "community",
+                  "name": "Community Plugin",
+                  "author": "Community Author",
+                  "description": "Community entry",
+                  "category": "llm",
+                  "releases": [
+                    {
+                      "version": "1.0.0",
+                      "minHostVersion": "1.4.0",
+                      "sdkCompatibilityVersion": "v1",
+                      "size": 12,
+                      "downloadURL": "https://example.com/community.zip"
+                    }
+                  ]
+                }
+              ]
+            }
+            """.utf8
+        )
+
+        let response = try JSONDecoder().decode(PluginRegistryResponse.self, from: data)
+        let plugins = response.resolvedPlugins(
+            appVersion: "1.4.0",
+            sdkCompatibilityVersion: sdkCompatibilityVersion
+        )
+
+        XCTAssertEqual(plugins.map(\.source), [.official, .community])
     }
 
     @MainActor

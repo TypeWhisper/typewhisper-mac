@@ -60,15 +60,10 @@ final class PromptPaletteController: PromptPaletteControlling {
 
         let triggerSummary: String
         switch trigger.kind {
-        case .app:
-            let appNames = trigger.appBundleIdentifiers.map(resolveAppDisplayName(for:))
-            triggerSummary = "\(trigger.kind.paletteLabel): \(appNames.joined(separator: ", "))"
-        case .website:
-            triggerSummary = "\(trigger.kind.paletteLabel): \(trigger.websitePatterns.joined(separator: ", "))"
-        case .hotkey:
-            triggerSummary = "\(trigger.kind.paletteLabel): \(trigger.hotkeys.map(HotkeyService.displayName(for:)).joined(separator: ", "))"
         case .global, .manual:
             triggerSummary = trigger.kind.paletteLabel
+        case .app, .website, .hotkey:
+            triggerSummary = workflowPaletteTriggerComponents(for: trigger).joined(separator: " + ")
         }
 
         if workflow.name.localizedCaseInsensitiveCompare(workflow.definition.name) == .orderedSame {
@@ -81,12 +76,43 @@ final class PromptPaletteController: PromptPaletteControlling {
         var tokens = [workflow.name, workflow.definition.name]
         if let trigger = workflow.trigger {
             tokens.append(trigger.kind.paletteLabel)
+            tokens.append(contentsOf: workflowPaletteTriggerLabels(for: trigger))
             tokens.append(contentsOf: trigger.appBundleIdentifiers.map(resolveAppDisplayName(for:)))
             tokens.append(contentsOf: trigger.appBundleIdentifiers)
             tokens.append(contentsOf: trigger.websitePatterns)
             tokens.append(contentsOf: trigger.hotkeys.map(HotkeyService.displayName(for:)))
+            tokens.append(trigger.hotkeyBehavior.shortcutSubtitle)
         }
         return tokens
+    }
+
+    private func workflowPaletteTriggerComponents(for trigger: WorkflowTrigger) -> [String] {
+        var components: [String] = []
+        if !trigger.appBundleIdentifiers.isEmpty {
+            let appNames = trigger.appBundleIdentifiers.map(resolveAppDisplayName(for:))
+            components.append("\(WorkflowTriggerKind.app.paletteLabel): \(appNames.joined(separator: ", "))")
+        }
+        if !trigger.websitePatterns.isEmpty {
+            components.append("\(WorkflowTriggerKind.website.paletteLabel): \(trigger.websitePatterns.joined(separator: ", "))")
+        }
+        if !trigger.hotkeys.isEmpty {
+            components.append("\(WorkflowTriggerKind.hotkey.paletteLabel): \(trigger.hotkeys.map(HotkeyService.displayName(for:)).joined(separator: ", ")) · \(trigger.hotkeyBehavior.shortcutSubtitle)")
+        }
+        return components.isEmpty ? [trigger.kind.paletteLabel] : components
+    }
+
+    private func workflowPaletteTriggerLabels(for trigger: WorkflowTrigger) -> [String] {
+        var labels: [String] = []
+        if !trigger.appBundleIdentifiers.isEmpty {
+            labels.append(WorkflowTriggerKind.app.paletteLabel)
+        }
+        if !trigger.websitePatterns.isEmpty {
+            labels.append(WorkflowTriggerKind.website.paletteLabel)
+        }
+        if !trigger.hotkeys.isEmpty {
+            labels.append(WorkflowTriggerKind.hotkey.paletteLabel)
+        }
+        return labels
     }
 
     private func resolveAppDisplayName(for bundleIdentifier: String) -> String {

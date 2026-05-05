@@ -35,6 +35,31 @@ struct DictationSessionSnapshot: Sendable, Equatable {
     let error: String?
 }
 
+@MainActor
+enum DictationLanguageResolver {
+    static func resolve(
+        workflow: Workflow?,
+        profile: Profile?,
+        globalLanguageSelection: LanguageSelection
+    ) -> LanguageSelection {
+        if let workflow {
+            let workflowSelection = workflow.inputLanguageSelection
+            if workflowSelection != .inheritGlobal {
+                return workflowSelection
+            }
+        }
+
+        if let profile {
+            let profileSelection = profile.inputLanguageSelection
+            if profileSelection != .inheritGlobal {
+                return profileSelection
+            }
+        }
+
+        return globalLanguageSelection
+    }
+}
+
 /// Orchestrates the dictation flow: recording → transcription → text insertion.
 @MainActor
 final class DictationViewModel: ObservableObject {
@@ -159,6 +184,7 @@ final class DictationViewModel: ObservableObject {
     private let audioDeviceService: AudioDeviceService
     private let promptActionService: PromptActionService
     private let promptProcessingService: PromptProcessingService
+    private let workflowTextProcessingService: WorkflowTextProcessingService
     private let speechFeedbackService: SpeechFeedbackService
     private let accessibilityAnnouncementService: AccessibilityAnnouncementService
     private let errorLogService: ErrorLogService
@@ -230,6 +256,7 @@ final class DictationViewModel: ObservableObject {
         audioDeviceService: AudioDeviceService,
         promptActionService: PromptActionService,
         promptProcessingService: PromptProcessingService,
+        workflowTextProcessingService: WorkflowTextProcessingService? = nil,
         appFormatterService: AppFormatterService,
         speechFeedbackService: SpeechFeedbackService,
         accessibilityAnnouncementService: AccessibilityAnnouncementService,
@@ -253,6 +280,12 @@ final class DictationViewModel: ObservableObject {
         self.audioDeviceService = audioDeviceService
         self.promptActionService = promptActionService
         self.promptProcessingService = promptProcessingService
+        self.workflowTextProcessingService = workflowTextProcessingService
+            ?? WorkflowTextProcessingService(
+                promptProcessingService: promptProcessingService,
+                translationService: translationService,
+                workflowService: workflowService
+            )
         self.speechFeedbackService = speechFeedbackService
         self.accessibilityAnnouncementService = accessibilityAnnouncementService
         self.errorLogService = errorLogService
@@ -281,6 +314,7 @@ final class DictationViewModel: ObservableObject {
             textInsertionService: textInsertionService,
             workflowService: workflowService,
             promptProcessingService: promptProcessingService,
+            workflowTextProcessingService: self.workflowTextProcessingService,
             soundService: soundService,
             accessibilityAnnouncementService: accessibilityAnnouncementService
         )
@@ -406,7 +440,7 @@ final class DictationViewModel: ObservableObject {
     }
 
     nonisolated static func loadTranscribeShortQuietClipsAggressively(defaults: UserDefaults = .standard) -> Bool {
-        defaults.object(forKey: UserDefaultsKeys.transcribeShortQuietClipsAggressively) as? Bool ?? false
+        defaults.object(forKey: UserDefaultsKeys.transcribeShortQuietClipsAggressively) as? Bool ?? true
     }
 
     nonisolated static func persistTranscribeShortQuietClipsAggressively(_ enabled: Bool, defaults: UserDefaults = .standard) {
@@ -567,6 +601,10 @@ final class DictationViewModel: ObservableObject {
 
         hotkeyService.onWorkflowDictationStart = { [weak self] workflowId in
             self?.startRecording(forcedWorkflowId: workflowId)
+        }
+
+        hotkeyService.onWorkflowTextProcessing = { [weak self] workflowId in
+            self?.processWorkflowHotkeyText(workflowId: workflowId)
         }
 
         hotkeyService.onCancelPressed = { [weak self] in
@@ -754,12 +792,16 @@ final class DictationViewModel: ObservableObject {
         let immediateContextMs = (CFAbsoluteTimeGetCurrent() - startTimestamp) * 1000
 
         do {
-            // Play start sound BEFORE engine setup - AVAudioEngine reconfigures
-            // audio hardware (aggregate device) which disrupts NSSound playback.
-            soundService.play(.recordingStarted, enabled: soundFeedbackEnabled)
             audioRecordingService.selectedDeviceID = audioDeviceService.selectedDeviceID
             audioRecordingService.hasExplicitDeviceSelection = audioDeviceService.selectedDeviceUID != nil
+            let selectedInputUsesBluetooth = audioDeviceService.selectedDeviceUsesBluetoothTransport
+            audioRecordingService.selectedInputDeviceUsesBluetoothTransport = selectedInputUsesBluetooth
             try audioRecordingService.startRecording()
+            if selectedInputUsesBluetooth {
+                logger.info("Skipping recording start sound for Bluetooth input device")
+            } else {
+                soundService.play(.recordingStarted, enabled: soundFeedbackEnabled)
+            }
             if mediaPauseEnabled { mediaPlaybackService.pauseIfPlaying() }
             if audioDuckingEnabled {
                 audioDuckingService.duckAudio(to: Float(audioDuckingLevel))
@@ -875,27 +917,22 @@ final class DictationViewModel: ObservableObject {
                 return
             }
             guard let refinedRule = profileService.matchRule(bundleIdentifier: bundleId, url: resolvedURL) else {
-                logger.info("URL resolution: no legacy rule matched for URL \(resolvedURL)")
+                logger.info("URL resolution: no profile rule matched for URL \(resolvedURL)")
                 return
             }
 
-            logger.info("URL resolution: matched legacy rule '\(refinedRule.profile.name)'")
+            logger.info("URL resolution: matched profile rule '\(refinedRule.profile.name)'")
             applyRuleMatch(refinedRule, activeApp: capturedActiveApp)
             refreshLiveStreamingIfParamsChanged()
         }
     }
 
     private var effectiveLanguageSelection: LanguageSelection {
-        if let profileLang = matchedProfile?.inputLanguage {
-            let profileSelection = LanguageSelection(
-                storedValue: profileLang,
-                nilBehavior: .inheritGlobal
-            )
-            if profileSelection != .inheritGlobal {
-                return profileSelection
-            }
-        }
-        return settingsViewModel.languageSelection
+        DictationLanguageResolver.resolve(
+            workflow: matchedWorkflow,
+            profile: matchedProfile,
+            globalLanguageSelection: settingsViewModel.languageSelection
+        )
     }
 
     private var effectiveLanguage: String? {
@@ -1169,7 +1206,8 @@ final class DictationViewModel: ObservableObject {
                     _ = try await textInsertionService.insertText(
                         text,
                         preserveClipboard: preserveClipboard,
-                        autoEnter: self.effectiveAutoEnterEnabled
+                        autoEnter: self.effectiveAutoEnterEnabled,
+                        outputFormat: self.effectiveOutputFormat
                     )
                     EventBus.shared.emit(.textInserted(TextInsertedPayload(
                         text: text,
@@ -1408,6 +1446,18 @@ final class DictationViewModel: ObservableObject {
 
         let base: String
         switch match.kind {
+        case .appAndWebsite:
+            if let domain = match.matchedDomain {
+                base = localizedAppText(
+                    "This workflow applies because \(appDescriptor) was detected together with \(domain).",
+                    de: "Dieser Workflow greift, weil \(appDescriptor) zusammen mit \(domain) erkannt wurde."
+                )
+            } else {
+                base = localizedAppText(
+                    "This workflow applies because the app and website were detected together.",
+                    de: "Dieser Workflow greift, weil App und Website zusammen erkannt wurden."
+                )
+            }
         case .website:
             if let domain = match.matchedDomain {
                 base = localizedAppText(
@@ -1503,29 +1553,18 @@ final class DictationViewModel: ObservableObject {
     // MARK: - Shared Helpers
 
     /// Builds an LLM handler for the post-processing pipeline.
-    /// Priority: workflow > legacy inline/prompt action > translation > nil.
+    /// Priority: workflow > profile inline/prompt action > translation > nil.
     private func buildLLMHandler(
         translationTarget: String?,
         detectedLanguage: String?,
         configuredLanguage: String?
     ) -> ((String) async throws -> String)? {
-        if let matchedWorkflow,
-           let systemPrompt = matchedWorkflow.systemPrompt(
-                fallbackTranslationTarget: translationTarget,
-                detectedLanguage: detectedLanguage,
-                configuredLanguage: configuredLanguage
-           ) {
-            let pps = promptProcessingService
-            let behavior = matchedWorkflow.behavior
-            return { text in
-                try await pps.process(
-                    prompt: systemPrompt,
-                    text: text,
-                    providerOverride: behavior.providerId,
-                    cloudModelOverride: behavior.cloudModel,
-                    temperatureDirective: behavior.temperatureDirective
-                )
-            }
+        if let workflowHandler = buildWorkflowTextProcessingHandler(
+            translationTarget: translationTarget,
+            detectedLanguage: detectedLanguage,
+            configuredLanguage: configuredLanguage
+        ) {
+            return workflowHandler
         }
 
         // Inline commands compose with profile prompt; otherwise use prompt action directly
@@ -1579,6 +1618,34 @@ final class DictationViewModel: ObservableObject {
         #endif
 
         return nil
+    }
+
+    private func buildWorkflowTextProcessingHandler(
+        translationTarget: String?,
+        detectedLanguage: String?,
+        configuredLanguage: String?
+    ) -> ((String) async throws -> String)? {
+        guard let workflow = matchedWorkflow else { return nil }
+
+        let workflowProcessor = workflowTextProcessingService
+        guard workflowProcessor.canProcess(
+            workflow: workflow,
+            fallbackTranslationTarget: translationTarget,
+            detectedLanguage: detectedLanguage,
+            configuredLanguage: configuredLanguage
+        ) else {
+            return nil
+        }
+
+        return { text in
+            try await workflowProcessor.process(
+                workflow: workflow,
+                text: text,
+                fallbackTranslationTarget: translationTarget,
+                detectedLanguage: detectedLanguage,
+                configuredLanguage: configuredLanguage
+            )
+        }
     }
 
     /// Builds the system prompt for inline command detection.
@@ -1654,6 +1721,17 @@ final class DictationViewModel: ObservableObject {
     func triggerWorkflowPalette() {
         recentTranscriptionPaletteHandler.hide()
         promptPaletteHandler.triggerSelection(currentState: state, soundFeedbackEnabled: soundFeedbackEnabled)
+    }
+
+    func processWorkflowHotkeyText(workflowId: UUID) {
+        recentTranscriptionPaletteHandler.hide()
+        promptPaletteHandler.hide()
+        guard let workflow = workflowService.workflow(id: workflowId) else { return }
+        promptPaletteHandler.processWorkflowDirectly(
+            workflow: workflow,
+            currentState: state,
+            soundFeedbackEnabled: soundFeedbackEnabled
+        )
     }
 
     func triggerRecentTranscriptionsPalette() {
@@ -1732,7 +1810,7 @@ func classifyShortSpeech(
     rawDuration: TimeInterval,
     peakLevel: Float,
     hasConfirmedText: Bool,
-    transcribeShortQuietClipsAggressively: Bool = false
+    transcribeShortQuietClipsAggressively: Bool = true
 ) -> ShortSpeechDecision {
     guard rawDuration >= 0.04 else { return .discardTooShort }
     if hasConfirmedText { return .transcribe }
@@ -1746,9 +1824,7 @@ func classifyShortSpeech(
         return .transcribe
     }
 
-    if peakLevel < 0.006 {
-        return transcribeShortQuietClipsAggressively ? .transcribe : .discardNoSpeech
-    }
+    if peakLevel < 0.006 { return .discardNoSpeech }
     return .transcribe
 }
 

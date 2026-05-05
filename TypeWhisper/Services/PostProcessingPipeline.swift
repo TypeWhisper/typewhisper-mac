@@ -53,8 +53,21 @@ final class PostProcessingPipeline {
 
         var result = text
         var appliedSteps: [String] = []
+
+        func stepName(for id: Int) -> String {
+            switch id {
+            case -4: return "Formatting"
+            case -1: return llmStepName ?? "Prompt"
+            case -2: return "Snippets"
+            case -3: return "Corrections"
+            default: return plugins[id].processorName
+            }
+        }
+
         for step in steps {
             let before = result
+            let name = stepName(for: step.id)
+            let stepStart = ContinuousClock.now
             do {
                 switch step.id {
                 case -4:
@@ -72,27 +85,13 @@ final class PostProcessingPipeline {
                 default:
                     result = try await plugins[step.id].process(text: result, context: context)
                 }
-                if result != before {
-                    let name: String
-                    switch step.id {
-                    case -4: name = "Formatting"
-                    case -1: name = llmStepName ?? "Prompt"
-                    case -2: name = "Snippets"
-                    case -3: name = "Corrections"
-                    default: name = plugins[step.id].processorName
-                    }
+                let changed = result != before
+                logger.info("Post-processing step '\(name)' finished in \(ContinuousClock.now - stepStart), changed: \(changed)")
+                if changed {
                     appliedSteps.append(name)
                 }
             } catch {
-                let name: String
-                switch step.id {
-                case -4: name = "AppFormatter"
-                case -1: name = "LLM/Translation"
-                case -2: name = "Snippets"
-                case -3: name = "Dictionary"
-                default: name = plugins[step.id].processorName
-                }
-                logger.error("Post-processor '\(name)' failed: \(error.localizedDescription)")
+                logger.error("Post-processing step '\(name)' failed after \(ContinuousClock.now - stepStart): \(error.localizedDescription)")
                 // Only re-throw for LLM step
                 if step.id == -1 {
                     throw error

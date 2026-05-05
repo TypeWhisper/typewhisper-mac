@@ -27,7 +27,7 @@ final class PromptPaletteHandler {
     private let promptPaletteController: any PromptPaletteControlling
     private let textInsertionService: TextInsertionService
     private let workflowService: WorkflowService
-    private let promptProcessingService: PromptProcessingService
+    private let workflowTextProcessingService: WorkflowTextProcessingService
     private let soundService: SoundService
     private let accessibilityAnnouncementService: AccessibilityAnnouncementService
 
@@ -44,6 +44,7 @@ final class PromptPaletteHandler {
         textInsertionService: TextInsertionService,
         workflowService: WorkflowService,
         promptProcessingService: PromptProcessingService,
+        workflowTextProcessingService: WorkflowTextProcessingService? = nil,
         soundService: SoundService,
         accessibilityAnnouncementService: AccessibilityAnnouncementService,
         promptPaletteController: any PromptPaletteControlling = PromptPaletteController()
@@ -51,7 +52,12 @@ final class PromptPaletteHandler {
         self.promptPaletteController = promptPaletteController
         self.textInsertionService = textInsertionService
         self.workflowService = workflowService
-        self.promptProcessingService = promptProcessingService
+        self.workflowTextProcessingService = workflowTextProcessingService
+            ?? WorkflowTextProcessingService(
+                promptProcessingService: promptProcessingService,
+                translationService: nil,
+                workflowService: workflowService
+            )
         self.soundService = soundService
         self.accessibilityAnnouncementService = accessibilityAnnouncementService
     }
@@ -71,48 +77,99 @@ final class PromptPaletteHandler {
         let workflows = workflowService.workflows.filter { $0.isEnabled && $0.isManuallyRunnable }
         guard !workflows.isEmpty else { return }
 
-        // Capture active app BEFORE the palette steals focus
         let activeApp = textInsertionService.captureActiveApp()
+        let browserInfoTask = makeBrowserInfoTask(activeApp: activeApp)
 
-        // Start resolving browser URL + title asynchronously
-        var browserInfoTask: Task<(url: String?, title: String?), Never>?
-        if let bundleId = activeApp.bundleId {
-            let tis = textInsertionService
-            browserInfoTask = Task {
-                await tis.resolveBrowserInfo(bundleId: bundleId)
-            }
-        }
-
-        // 3-tier fallback: AX selection -> Cmd+C simulation -> clipboard
-        if let sel = textInsertionService.getTextSelection() {
-            logger.info("[PromptPalette] Got selected text via AX: \(sel.text.prefix(80))")
-            showPalette(
-                text: sel.text, selection: sel, focusedElement: nil,
-                selectionViaCopy: false, activeApp: activeApp,
-                browserInfoTask: browserInfoTask, workflows: workflows,
+        resolveTextContext(
+            activeApp: activeApp,
+            browserInfoTask: browserInfoTask,
+            soundFeedbackEnabled: soundFeedbackEnabled
+        ) { [weak self] context in
+            self?.showPalette(
+                context: context,
+                workflows: workflows,
                 soundFeedbackEnabled: soundFeedbackEnabled
             )
+        }
+    }
+
+    func processWorkflowDirectly(
+        workflow: Workflow,
+        currentState: DictationViewModel.State,
+        soundFeedbackEnabled: Bool
+    ) {
+        guard currentState == .idle,
+              workflow.isEnabled,
+              workflow.isManuallyRunnable else {
+            return
+        }
+
+        let activeApp = textInsertionService.captureActiveApp()
+        let browserInfoTask = makeBrowserInfoTask(activeApp: activeApp)
+
+        resolveTextContext(
+            activeApp: activeApp,
+            browserInfoTask: browserInfoTask,
+            soundFeedbackEnabled: soundFeedbackEnabled
+        ) { [weak self] context in
+            self?.processStandaloneWorkflow(
+                workflow: workflow,
+                context: context,
+                soundFeedbackEnabled: soundFeedbackEnabled
+            )
+        }
+    }
+
+    private func makeBrowserInfoTask(
+        activeApp: (name: String?, bundleId: String?, url: String?)
+    ) -> Task<(url: String?, title: String?), Never>? {
+        guard let bundleId = activeApp.bundleId else { return nil }
+        let tis = textInsertionService
+        return Task {
+            await tis.resolveBrowserInfo(bundleId: bundleId)
+        }
+    }
+
+    private func resolveTextContext(
+        activeApp: (name: String?, bundleId: String?, url: String?),
+        browserInfoTask: Task<(url: String?, title: String?), Never>?,
+        soundFeedbackEnabled: Bool,
+        completion: @escaping (PaletteContext) -> Void
+    ) {
+        if let sel = textInsertionService.getTextSelection() {
+            logger.info("[PromptPalette] Got selected text via AX: \(sel.text.prefix(80))")
+            completion(PaletteContext(
+                text: sel.text,
+                selection: sel,
+                focusedElement: nil,
+                activeApp: activeApp,
+                browserInfoTask: browserInfoTask,
+                selectionViaCopy: false
+            ))
         } else {
-            // AX failed - try Cmd+C simulation (async) before falling back to clipboard
             let tis = textInsertionService
             Task {
                 if let copied = await tis.getTextSelectionViaCopy() {
                     logger.info("[PromptPalette] Got selected text via Cmd+C: \(copied.prefix(80))")
-                    showPalette(
-                        text: copied, selection: nil, focusedElement: nil,
-                        selectionViaCopy: true, activeApp: activeApp,
-                        browserInfoTask: browserInfoTask, workflows: workflows,
-                        soundFeedbackEnabled: soundFeedbackEnabled
-                    )
+                    completion(PaletteContext(
+                        text: copied,
+                        selection: nil,
+                        focusedElement: nil,
+                        activeApp: activeApp,
+                        browserInfoTask: browserInfoTask,
+                        selectionViaCopy: true
+                    ))
                 } else if let clipboard = NSPasteboard.general.string(forType: .string), !clipboard.isEmpty {
                     let focusedElement = tis.getFocusedTextElement()
                     logger.info("[PromptPalette] No selection, using clipboard: \(clipboard.prefix(80))")
-                    showPalette(
-                        text: clipboard, selection: nil, focusedElement: focusedElement,
-                        selectionViaCopy: false, activeApp: activeApp,
-                        browserInfoTask: browserInfoTask, workflows: workflows,
-                        soundFeedbackEnabled: soundFeedbackEnabled
-                    )
+                    completion(PaletteContext(
+                        text: clipboard,
+                        selection: nil,
+                        focusedElement: focusedElement,
+                        activeApp: activeApp,
+                        browserInfoTask: browserInfoTask,
+                        selectionViaCopy: false
+                    ))
                 } else {
                     logger.info("[PromptPalette] No text available, aborting")
                     let message = "Please select or copy some text first."
@@ -126,25 +183,13 @@ final class PromptPaletteHandler {
     }
 
     private func showPalette(
-        text: String,
-        selection: TextInsertionService.TextSelection?,
-        focusedElement: AXUIElement?,
-        selectionViaCopy: Bool,
-        activeApp: (name: String?, bundleId: String?, url: String?),
-        browserInfoTask: Task<(url: String?, title: String?), Never>?,
+        context: PaletteContext,
         workflows: [Workflow],
         soundFeedbackEnabled: Bool
     ) {
-        paletteContext = PaletteContext(
-            text: text,
-            selection: selection,
-            focusedElement: focusedElement,
-            activeApp: activeApp,
-            browserInfoTask: browserInfoTask,
-            selectionViaCopy: selectionViaCopy
-        )
+        paletteContext = context
 
-        promptPaletteController.show(workflows: workflows, sourceText: text) { [weak self] workflow in
+        promptPaletteController.show(workflows: workflows, sourceText: context.text) { [weak self] workflow in
             self?.processStandaloneWorkflow(workflow: workflow, soundFeedbackEnabled: soundFeedbackEnabled)
         }
     }
@@ -153,24 +198,28 @@ final class PromptPaletteHandler {
         guard let ctx = paletteContext else { return }
         paletteContext = nil
 
+        processStandaloneWorkflow(
+            workflow: workflow,
+            context: ctx,
+            soundFeedbackEnabled: soundFeedbackEnabled
+        )
+    }
+
+    private func processStandaloneWorkflow(
+        workflow: Workflow,
+        context ctx: PaletteContext,
+        soundFeedbackEnabled: Bool
+    ) {
         onShowNotchFeedback?(workflow.name + "...", "ellipsis.circle", 30, false, nil)
         accessibilityAnnouncementService.announcePromptProcessing(workflow.name)
 
         Task { [weak self] in
             guard let self else { return }
             do {
-                let result: String
-                if let systemPrompt = workflow.systemPrompt() {
-                    result = try await promptProcessingService.process(
-                        prompt: systemPrompt,
-                        text: ctx.text,
-                        providerOverride: workflow.behavior.providerId,
-                        cloudModelOverride: workflow.behavior.cloudModel,
-                        temperatureDirective: workflow.behavior.temperatureDirective
-                    )
-                } else {
-                    result = ctx.text
-                }
+                let result = try await workflowTextProcessingService.process(
+                    workflow: workflow,
+                    text: ctx.text
+                )
                 guard !Task.isCancelled else { return }
 
                 // Route to action plugin if configured

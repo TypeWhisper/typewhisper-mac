@@ -108,6 +108,10 @@ enum UserDefaultsKeys {
     static let watchFolderEngine = "watchFolderEngine"
     static let watchFolderModel = "watchFolderModel"
 
+    // MARK: - Workflows
+    static let workflowDefaultLLMProviderId = "workflowDefaultLLMProviderId"
+    static let workflowDefaultLLMCloudModel = "workflowDefaultLLMCloudModel"
+
     // MARK: - Licensing
     static let usageIntent = "usageIntent"
     static let userType = "userType"

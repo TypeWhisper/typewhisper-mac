@@ -97,13 +97,25 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     var audioDeviceIDResolverOverride: ((String) -> AudioDeviceID?)?
     var selectionValidationOverride: ((AudioDeviceID?) throws -> Void)?
     var startPreviewOverride: ((AudioDeviceID?) throws -> Void)?
+    private let inputActivationGuard: AudioInputDeviceActivating
+    private let transportResolver: AudioDeviceTransportResolving
+    private let bluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing
+    private let selectionEngineValidator: AudioInputSelectionEngineValidating
 
     var selectedDeviceID: AudioDeviceID? {
         guard let uid = selectedDeviceUID else { return nil }
         if let audioDeviceIDResolverOverride {
             return audioDeviceIDResolverOverride(uid)
         }
-        return audioDeviceID(fromUID: uid)
+        return Self.audioDeviceID(fromUID: uid)
+    }
+
+    var selectedDeviceUsesBluetoothTransport: Bool {
+        guard let selectedDeviceID,
+              let transportType = transportType(for: selectedDeviceID) else {
+            return false
+        }
+        return Self.isBluetoothTransportType(transportType)
     }
 
     private var listenerBlock: AudioObjectPropertyListenerBlock?
@@ -123,9 +135,12 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     private static let previewEngineTeardownRetentionInterval: TimeInterval = 0.3
     private let outputVolumeGuard: AudioOutputVolumeGuard
     private var activePreviewDeviceID: AudioDeviceID?
+    private var activePreviewUsesBluetoothTransport = false
+    private var bluetoothPreviewConfigurationChangeIgnoreUntil: TimeInterval?
     private var compatibilityCache: [String: AudioInputDeviceCompatibility] = [:]
     private var isApplyingValidatedSelection = false
     private var isInitializingSelection = false
+    private static let bluetoothPreviewConfigurationChangeIgnoreWindow: TimeInterval = 3.0
 
     private var hasMicrophonePermission: Bool {
         if let hasMicrophonePermissionOverride {
@@ -157,9 +172,17 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         initialInputDevices: [AudioInputDevice]? = nil,
         monitorDeviceChanges: Bool = true,
         probeCompatibilities: Bool = false,
-        outputVolumeGuard: AudioOutputVolumeGuard = AudioOutputVolumeGuard()
+        outputVolumeGuard: AudioOutputVolumeGuard = AudioOutputVolumeGuard(),
+        transportResolver: AudioDeviceTransportResolving = CoreAudioDeviceTransportResolver(),
+        bluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing = CoreAudioBluetoothInputRouteStabilizer(),
+        selectionEngineValidator: AudioInputSelectionEngineValidating = AVAudioInputSelectionEngineValidator(),
+        inputActivationGuard: AudioInputDeviceActivating = AudioInputDeviceActivationGuard()
     ) {
         self.outputVolumeGuard = outputVolumeGuard
+        self.transportResolver = transportResolver
+        self.bluetoothInputRouteStabilizer = bluetoothInputRouteStabilizer
+        self.selectionEngineValidator = selectionEngineValidator
+        self.inputActivationGuard = inputActivationGuard
         previewNotificationQueue.underlyingQueue = previewRecoveryQueue
         isInitializingSelection = true
         selectedDeviceUID = UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedInputDeviceUID)
@@ -204,20 +227,57 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             return
         }
 
+        let usesBluetoothPreviewInput = previewInputUsesBluetoothTransport(preferredDeviceID)
+        let enginePreferredDeviceID = AudioEngineInputRoute.preferredDeviceIDForEngine(
+            selectedDeviceID: preferredDeviceID,
+            usesBluetoothTransport: usesBluetoothPreviewInput
+        )
+
         outputVolumeGuard.captureBaseline()
+
+        guard inputActivationGuard.activateIfNeeded(
+            deviceID: preferredDeviceID,
+            usesBluetoothTransport: usesBluetoothPreviewInput,
+            reason: "preview-start"
+        ) else {
+            outputVolumeGuard.restoreIfRaised(reason: "preview-start-input-activation-failed")
+            outputVolumeGuard.clear()
+            previewError = .routingConflict
+            return
+        }
+
+        do {
+            try waitForBluetoothRouteStabilizationIfNeeded(
+                inputDeviceID: preferredDeviceID,
+                usesBluetoothTransport: usesBluetoothPreviewInput,
+                reason: "preview-start"
+            )
+        } catch {
+            outputVolumeGuard.restoreIfRaised(reason: "preview-start-route-stabilization-failed")
+            outputVolumeGuard.clear()
+            inputActivationGuard.restore(reason: "preview-start-route-stabilization-failed")
+            previewError = .routingConflict
+            return
+        }
 
         if let startPreviewOverride {
             do {
-                try startPreviewOverride(preferredDeviceID)
+                try startPreviewOverride(enginePreferredDeviceID)
                 outputVolumeGuard.restoreIfRaised(reason: "preview-start-override")
                 outputVolumeGuard.clear()
                 isPreviewActive = true
             } catch let error as SelectedInputDeviceError {
+                if usesBluetoothPreviewInput {
+                    inputActivationGuard.restore(reason: "preview-start-override-failed")
+                }
                 outputVolumeGuard.restoreIfRaised(reason: "preview-start-override-failed")
                 outputVolumeGuard.clear()
                 previewError = error
                 isPreviewActive = false
             } catch {
+                if usesBluetoothPreviewInput {
+                    inputActivationGuard.restore(reason: "preview-start-override-failed")
+                }
                 outputVolumeGuard.restoreIfRaised(reason: "preview-start-override-failed")
                 outputVolumeGuard.clear()
                 previewError = selectedDeviceUID == nil ? nil : .incompatible(.engineStartFailed)
@@ -229,20 +289,28 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         let engine = AVAudioEngine()
         previewLock.withLock {
             previewEngine = engine
-            activePreviewDeviceID = preferredDeviceID
+            activePreviewDeviceID = enginePreferredDeviceID
+            activePreviewUsesBluetoothTransport = usesBluetoothPreviewInput
+            bluetoothPreviewConfigurationChangeIgnoreUntil = nil
         }
         previewRecoveryCoordinator.beginStarting()
-        installPreviewConfigurationObserver(for: engine)
+        if !usesBluetoothPreviewInput {
+            installPreviewConfigurationObserver(for: engine)
+        }
 
         do {
-            try startPreviewEngineWithRecovery(engine, preferredDeviceID: preferredDeviceID, label: "preview")
+            try startPreviewEngineWithRecovery(engine, preferredDeviceID: enginePreferredDeviceID, label: "preview")
             if selectedDeviceUID != nil {
                 markSelectedDeviceCompatibility(.compatible)
             }
 
-            if previewRecoveryCoordinator.finishStartingSuccessfully() == .performImmediateRecovery {
+            let startupRecoveryAction = previewRecoveryCoordinator.finishStartingSuccessfully()
+            if usesBluetoothPreviewInput {
+                beginBluetoothPreviewConfigurationChangeIgnoreWindow()
+                installPreviewConfigurationObserver(for: engine)
+            } else if startupRecoveryAction == .performImmediateRecovery {
                 logger.warning("Preview engine configuration changed while starting, restarting with fresh input format")
-                try restartPreviewEngineWithRecovery(engine, preferredDeviceID: preferredDeviceID, label: "preview-startup")
+                try restartPreviewEngineWithRecovery(engine, preferredDeviceID: enginePreferredDeviceID, label: "preview-startup")
                 schedulePreviewRecoveryIfNeeded(previewRecoveryCoordinator.finishRecovery())
             }
 
@@ -272,6 +340,8 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             let engine = previewEngine
             previewEngine = nil
             activePreviewDeviceID = nil
+            activePreviewUsesBluetoothTransport = false
+            bluetoothPreviewConfigurationChangeIgnoreUntil = nil
             return engine
         }
         if let engine {
@@ -281,6 +351,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             outputVolumeGuard.restoreIfRaised(reason: "preview-stop")
         }
         outputVolumeGuard.clear()
+        inputActivationGuard.restore(reason: "preview-stop")
         isPreviewActive = false
         previewAudioLevel = 0
         previewRawLevel = 0
@@ -304,7 +375,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             sum += sample * sample
         }
         let rms = sqrt(sum / Float(max(frames, 1)))
-        let level = min(1.0, rms * 5)
+        let level = AudioLevelMeter.normalizedLevel(rms: rms)
         DispatchQueue.main.async { [weak self] in
             guard let self, self.isPreviewActive else { return }
             self.previewAudioLevel = level
@@ -313,6 +384,10 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     }
 
     private func handlePreviewConfigurationChangeNotification() {
+        if shouldSuppressBluetoothPreviewConfigurationChange() {
+            logger.info("Ignoring Bluetooth preview configuration change during route settle window")
+            return
+        }
         schedulePreviewRecoveryIfNeeded(previewRecoveryCoordinator.noteConfigurationChange())
     }
 
@@ -368,6 +443,8 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             let engine = previewEngine
             previewEngine = nil
             activePreviewDeviceID = nil
+            activePreviewUsesBluetoothTransport = false
+            bluetoothPreviewConfigurationChangeIgnoreUntil = nil
             return engine
         }
         if let engine {
@@ -376,6 +453,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         }
         outputVolumeGuard.restoreIfRaised(reason: "preview-recovery-failure")
         outputVolumeGuard.clear()
+        inputActivationGuard.restore(reason: "preview-recovery-failure")
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.isPreviewActive = false
@@ -456,12 +534,19 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             outputVolumeGuard.clear()
         }
 
-        installPreviewConfigurationObserver(for: replacementEngine)
+        let usesBluetoothPreviewInput = previewLock.withLock { activePreviewUsesBluetoothTransport }
+        if !usesBluetoothPreviewInput {
+            installPreviewConfigurationObserver(for: replacementEngine)
+        }
         teardownPreviewEngine(engine)
         previewEngineTeardownRetainer.retain(engine, for: Self.previewEngineTeardownRetentionInterval)
 
         do {
             try startPreviewEngineWithRecovery(replacementEngine, preferredDeviceID: preferredDeviceID, label: label)
+            if usesBluetoothPreviewInput {
+                beginBluetoothPreviewConfigurationChangeIgnoreWindow()
+                installPreviewConfigurationObserver(for: replacementEngine)
+            }
         } catch {
             cleanupAfterFailedPreviewStart(replacementEngine)
             throw error
@@ -478,7 +563,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         }
 
         let inputNode = engine.inputNode
-        let format = inputNode.outputFormat(forBus: 0)
+        let format = try settledInputFormat(for: inputNode, preferredDeviceID: preferredDeviceID, label: label)
         logger.info("\(label, privacy: .public) input format: sampleRate=\(format.sampleRate), channels=\(format.channelCount)")
         try validateInputFormat(format, for: preferredDeviceID)
 
@@ -487,7 +572,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         // between `configureExplicitInputDevice` and here). Mirrors
         // `AudioRecordingService.validateTapInstallationPreconditions`.
         // See issue #332.
-        let currentFormat = inputNode.outputFormat(forBus: 0)
+        let currentFormat = try settledInputFormat(for: inputNode, preferredDeviceID: preferredDeviceID, label: "\(label)-tap")
         try validatePreviewTapInstallationPreconditions(expected: format, current: currentFormat)
 
         // Wrap installTap so NSException (e.g. AVAudioSession incompatible format)
@@ -552,6 +637,11 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     }
 
     private func teardownPreviewEngine(_ engine: AVAudioEngine) {
+        guard engine.isRunning else {
+            engine.stop()
+            return
+        }
+
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
     }
@@ -563,15 +653,47 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             if previewEngine === engine {
                 previewEngine = nil
                 activePreviewDeviceID = nil
+                activePreviewUsesBluetoothTransport = false
+                bluetoothPreviewConfigurationChangeIgnoreUntil = nil
             }
         }
         teardownPreviewEngine(engine)
         previewEngineTeardownRetainer.retain(engine, for: Self.previewEngineTeardownRetentionInterval)
         outputVolumeGuard.restoreIfRaised(reason: "preview-start-failed")
         outputVolumeGuard.clear()
+        inputActivationGuard.restore(reason: "preview-start-failed")
         isPreviewActive = false
         previewAudioLevel = 0
         previewRawLevel = 0
+    }
+
+    private func previewInputUsesBluetoothTransport(_ preferredDeviceID: AudioDeviceID?) -> Bool {
+        guard let preferredDeviceID,
+              let transportType = transportType(for: preferredDeviceID) else {
+            return false
+        }
+        return Self.isBluetoothTransportType(transportType)
+    }
+
+    private func beginBluetoothPreviewConfigurationChangeIgnoreWindow(now: TimeInterval = CFAbsoluteTimeGetCurrent()) {
+        previewLock.withLock {
+            guard activePreviewUsesBluetoothTransport else { return }
+            bluetoothPreviewConfigurationChangeIgnoreUntil = now + Self.bluetoothPreviewConfigurationChangeIgnoreWindow
+        }
+    }
+
+    private func shouldSuppressBluetoothPreviewConfigurationChange(now: TimeInterval = CFAbsoluteTimeGetCurrent()) -> Bool {
+        previewLock.withLock {
+            guard activePreviewUsesBluetoothTransport,
+                  let ignoreUntil = bluetoothPreviewConfigurationChangeIgnoreUntil else {
+                return false
+            }
+            guard now < ignoreUntil else {
+                bluetoothPreviewConfigurationChangeIgnoreUntil = nil
+                return false
+            }
+            return true
+        }
     }
 
     // MARK: - CoreAudio Device Enumeration
@@ -634,7 +756,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         return getCFStringProperty(deviceID: deviceID, address: &address)
     }
 
-    private static func deviceUID(for deviceID: AudioDeviceID) -> String? {
+    fileprivate static func deviceUID(for deviceID: AudioDeviceID) -> String? {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyDeviceUID,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -651,11 +773,15 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         return cf.takeUnretainedValue() as String
     }
 
-    private static func inputChannelCount(for deviceID: AudioDeviceID) -> Int {
+    static func inputChannelCount(for deviceID: AudioDeviceID) -> Int {
+        channelCount(for: deviceID, scope: kAudioDevicePropertyScopeInput)
+    }
+
+    private static func channelCount(for deviceID: AudioDeviceID, scope: AudioObjectPropertyScope) -> Int {
         var size: UInt32 = 0
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyStreamConfiguration,
-            mScope: kAudioDevicePropertyScopeInput,
+            mScope: scope,
             mElement: kAudioObjectPropertyElementMain
         )
         let status = AudioObjectGetPropertyDataSize(deviceID, &address, 0, nil, &size)
@@ -679,7 +805,16 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         return channels
     }
 
-    private static func isAggregateDevice(_ deviceID: AudioDeviceID) -> Bool {
+    func transportType(for deviceID: AudioDeviceID) -> UInt32? {
+        transportResolver.transportType(for: deviceID)
+    }
+
+    static func isBluetoothTransportType(_ transportType: UInt32) -> Bool {
+        transportType == kAudioDeviceTransportTypeBluetooth
+            || transportType == kAudioDeviceTransportTypeBluetoothLE
+    }
+
+    fileprivate static func transportType(for deviceID: AudioDeviceID) -> UInt32? {
         var transportType: UInt32 = 0
         var size = UInt32(MemoryLayout<UInt32>.size)
         var address = AudioObjectPropertyAddress(
@@ -688,12 +823,17 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             mElement: kAudioObjectPropertyElementMain
         )
         let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &transportType)
-        guard status == noErr else { return false }
+        guard status == noErr else { return nil }
+        return transportType
+    }
+
+    private static func isAggregateDevice(_ deviceID: AudioDeviceID) -> Bool {
+        guard let transportType = transportType(for: deviceID) else { return false }
         return transportType == kAudioDeviceTransportTypeAggregate
             || transportType == kAudioDeviceTransportTypeVirtual
     }
 
-    private func audioDeviceID(fromUID uid: String) -> AudioDeviceID? {
+    fileprivate static func audioDeviceID(fromUID uid: String) -> AudioDeviceID? {
         var deviceID = AudioDeviceID(0)
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
         var address = AudioObjectPropertyAddress(
@@ -854,7 +994,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     }
 
     private func validateDeviceSelection(uid: String) throws {
-        guard let deviceID = audioDeviceIDResolverOverride?(uid) ?? audioDeviceID(fromUID: uid) else {
+        guard let deviceID = audioDeviceIDResolverOverride?(uid) ?? Self.audioDeviceID(fromUID: uid) else {
             throw SelectedInputDeviceError.unavailable
         }
 
@@ -863,6 +1003,59 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             return
         }
 
+        let usesBluetoothInput = previewInputUsesBluetoothTransport(deviceID)
+        let engineDeviceID = AudioEngineInputRoute.preferredDeviceIDForEngine(
+            selectedDeviceID: deviceID,
+            usesBluetoothTransport: usesBluetoothInput
+        )
+        guard inputActivationGuard.activateIfNeeded(
+            deviceID: deviceID,
+            usesBluetoothTransport: usesBluetoothInput,
+            reason: "selection-validation"
+        ) else {
+            throw SelectedInputDeviceError.routingConflict
+        }
+        defer {
+            if usesBluetoothInput {
+                inputActivationGuard.restore(reason: "selection-validation")
+            }
+        }
+
+        try waitForBluetoothRouteStabilizationIfNeeded(
+            inputDeviceID: deviceID,
+            usesBluetoothTransport: usesBluetoothInput,
+            reason: "selection-validation"
+        )
+
+        try validateSelectionEngineRoute(preferredDeviceID: engineDeviceID)
+    }
+
+    private func waitForBluetoothRouteStabilizationIfNeeded(
+        inputDeviceID: AudioDeviceID?,
+        usesBluetoothTransport: Bool,
+        reason: String
+    ) throws {
+        guard usesBluetoothTransport else { return }
+
+        guard bluetoothInputRouteStabilizer.waitForActivatedDefaultInput(
+            deviceID: inputDeviceID,
+            reason: reason
+        ) else {
+            throw SelectedInputDeviceError.routingConflict
+        }
+    }
+
+    private func validateSelectionEngineRoute(preferredDeviceID: AudioDeviceID?) throws {
+        try selectionEngineValidator.validate(preferredDeviceID: preferredDeviceID)
+    }
+}
+
+protocol AudioInputSelectionEngineValidating: AnyObject {
+    func validate(preferredDeviceID: AudioDeviceID?) throws
+}
+
+final class AVAudioInputSelectionEngineValidator: AudioInputSelectionEngineValidating {
+    func validate(preferredDeviceID: AudioDeviceID?) throws {
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
 
@@ -880,9 +1073,11 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         }
 
         do {
-            try configureExplicitInputDevice(deviceID, on: engine, label: "selection")
-            let format = inputNode.outputFormat(forBus: 0)
-            try validateInputFormat(format, for: deviceID)
+            if let preferredDeviceID {
+                try configureExplicitInputDevice(preferredDeviceID, on: engine, label: "selection")
+            }
+            let format = try settledInputFormat(for: inputNode, preferredDeviceID: preferredDeviceID, label: "selection")
+            try validateInputFormat(format, for: preferredDeviceID)
             do {
                 _ = try ObjCExceptionCatcher.catching {
                     inputNode.installTap(onBus: 0, bufferSize: 256, format: format) { _, _ in }
@@ -905,7 +1100,9 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             throw SelectedInputDeviceError.incompatible(.engineStartFailed)
         }
     }
+}
 
+extension AudioDeviceService {
     private func revertSelectedDeviceUID(to value: String?) {
         isApplyingValidatedSelection = true
         selectedDeviceUID = value
@@ -932,6 +1129,378 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
 // MARK: - Audio Device Helper
 
 private let deviceHelperLogger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhisper-mac", category: "AudioDeviceHelper")
+
+protocol AudioDeviceTransportResolving: AnyObject {
+    func transportType(for deviceID: AudioDeviceID) -> UInt32?
+}
+
+final class CoreAudioDeviceTransportResolver: AudioDeviceTransportResolving {
+    func transportType(for deviceID: AudioDeviceID) -> UInt32? {
+        AudioDeviceService.transportType(for: deviceID)
+    }
+}
+
+enum AudioLevelMeter {
+    private static let minimumDecibels: Float = -55
+    private static let maximumDecibels: Float = -18
+
+    static func normalizedLevel(rms: Float) -> Float {
+        guard rms > 0 else { return 0 }
+
+        let decibels = 20 * log10(rms)
+        guard decibels > minimumDecibels else { return 0 }
+
+        let normalized = (decibels - minimumDecibels) / (maximumDecibels - minimumDecibels)
+        return min(1, max(0, normalized))
+    }
+}
+
+enum AudioInputSignal {
+    private static let signalPeakThreshold: Float = 0.000_01
+
+    static func containsSignal(_ buffer: AVAudioPCMBuffer, peakThreshold: Float = signalPeakThreshold) -> Bool {
+        guard buffer.frameLength > 0,
+              let channels = buffer.floatChannelData else {
+            return false
+        }
+
+        let frameCount = Int(buffer.frameLength)
+        let channelCount = Int(buffer.format.channelCount)
+        for channelIndex in 0..<channelCount {
+            let channel = channels[channelIndex]
+            for frameIndex in 0..<frameCount where abs(channel[frameIndex]) > peakThreshold {
+                return true
+            }
+        }
+        return false
+    }
+}
+
+enum AudioEngineInputRoute {
+    static func preferredDeviceIDForEngine(
+        selectedDeviceID: AudioDeviceID?,
+        usesBluetoothTransport: Bool
+    ) -> AudioDeviceID? {
+        guard let selectedDeviceID else { return nil }
+        return usesBluetoothTransport ? nil : selectedDeviceID
+    }
+}
+
+enum BluetoothAudioRouteStabilizer {
+    static let defaultTimeout: TimeInterval = 1.5
+    static let defaultStableDuration: TimeInterval = 0.25
+    static let defaultPollInterval: TimeInterval = 0.02
+
+    static func waitForActivatedDefaultRoute(
+        inputDeviceID: AudioDeviceID?,
+        reason: String,
+        timeout: TimeInterval = defaultTimeout,
+        stableDuration: TimeInterval = defaultStableDuration,
+        pollInterval: TimeInterval = defaultPollInterval,
+        now: () -> TimeInterval = { CFAbsoluteTimeGetCurrent() },
+        sleep: (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) },
+        readDefaultInput: () -> AudioDeviceID? = { CoreAudioInputDeviceDefaultController().defaultInputDeviceID() }
+    ) -> Bool {
+        let deadline = now() + timeout
+        var stableSince: TimeInterval?
+
+        while true {
+            let currentTime = now()
+            let inputMatches = inputDeviceID.map { readDefaultInput() == $0 } ?? true
+
+            if inputMatches {
+                if stableSince == nil {
+                    stableSince = currentTime
+                }
+                if let stableSince, currentTime - stableSince >= stableDuration {
+                    deviceHelperLogger.info("Bluetooth default route stabilized for \(reason, privacy: .public)")
+                    return true
+                }
+            } else {
+                stableSince = nil
+            }
+
+            guard currentTime < deadline else {
+                deviceHelperLogger.warning("Bluetooth default route did not stabilize for \(reason, privacy: .public)")
+                return false
+            }
+
+            sleep(min(pollInterval, max(0, deadline - currentTime)))
+        }
+    }
+}
+
+struct AudioInputHardwareFormat: Equatable, Sendable {
+    let sampleRate: Double
+    let channelCount: AVAudioChannelCount
+}
+
+enum AudioInputFormatStabilizer {
+    static let defaultTimeout: TimeInterval = 1.0
+    static let defaultPollInterval: TimeInterval = 0.02
+
+    static func expectedHardwareFormat(for deviceID: AudioDeviceID?) -> AudioInputHardwareFormat? {
+        guard let deviceID,
+              let sampleRate = nominalSampleRate(for: deviceID),
+              sampleRate > 0 else {
+            return nil
+        }
+
+        let channelCount = AVAudioChannelCount(AudioDeviceService.inputChannelCount(for: deviceID))
+        guard channelCount > 0 else { return nil }
+        return AudioInputHardwareFormat(sampleRate: sampleRate, channelCount: channelCount)
+    }
+
+    static func isSettled(
+        _ format: AVAudioFormat,
+        expectedHardwareFormat: AudioInputHardwareFormat?
+    ) -> Bool {
+        guard format.sampleRate > 0, format.channelCount > 0 else { return false }
+        guard let expectedHardwareFormat else { return true }
+
+        let sampleRateMatches = abs(format.sampleRate - expectedHardwareFormat.sampleRate) < 1.0
+        let channelCountMatches = format.channelCount == expectedHardwareFormat.channelCount
+        return sampleRateMatches && channelCountMatches
+    }
+
+    static func waitForSettledFormat(
+        label: String,
+        expectedHardwareFormat: AudioInputHardwareFormat?,
+        timeout: TimeInterval = defaultTimeout,
+        pollInterval: TimeInterval = defaultPollInterval,
+        now: () -> TimeInterval = { CFAbsoluteTimeGetCurrent() },
+        readFormat: () -> AVAudioFormat,
+        sleep: (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) }
+    ) throws -> AVAudioFormat {
+        let deadline = now() + timeout
+        var lastFormat = readFormat()
+
+        while true {
+            if isSettled(lastFormat, expectedHardwareFormat: expectedHardwareFormat) {
+                return lastFormat
+            }
+
+            let currentTime = now()
+            guard currentTime < deadline else { break }
+            sleep(min(pollInterval, max(0, deadline - currentTime)))
+            lastFormat = readFormat()
+        }
+
+        throw makeFormatMismatchError(
+            label: label,
+            expectedHardwareFormat: expectedHardwareFormat,
+            actualFormat: lastFormat
+        )
+    }
+
+    private static func nominalSampleRate(for deviceID: AudioDeviceID) -> Double? {
+        var sampleRate = Float64(0)
+        var size = UInt32(MemoryLayout<Float64>.size)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyNominalSampleRate,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &sampleRate)
+        guard status == noErr else { return nil }
+        return sampleRate
+    }
+
+    private static func makeFormatMismatchError(
+        label: String,
+        expectedHardwareFormat: AudioInputHardwareFormat?,
+        actualFormat: AVAudioFormat
+    ) -> NSError {
+        let expectedDescription: String
+        if let expectedHardwareFormat {
+            expectedDescription = "\(expectedHardwareFormat.sampleRate) Hz/\(expectedHardwareFormat.channelCount) ch"
+        } else {
+            expectedDescription = "valid non-zero input format"
+        }
+
+        return NSError(
+            domain: AudioEngineRecoveryErrorDomains.transientFormatMismatch,
+            code: 0,
+            userInfo: [
+                NSLocalizedDescriptionKey: "\(label) input format did not settle: expected \(expectedDescription), got \(actualFormat.sampleRate) Hz/\(actualFormat.channelCount) ch"
+            ]
+        )
+    }
+}
+
+protocol BluetoothInputRouteStabilizing: AnyObject {
+    func waitForActivatedDefaultInput(deviceID: AudioDeviceID?, reason: String) -> Bool
+}
+
+final class CoreAudioBluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing {
+    func waitForActivatedDefaultInput(deviceID: AudioDeviceID?, reason: String) -> Bool {
+        BluetoothAudioRouteStabilizer.waitForActivatedDefaultRoute(
+            inputDeviceID: deviceID,
+            reason: reason
+        )
+    }
+}
+
+func settledInputFormat(
+    for inputNode: AVAudioInputNode,
+    preferredDeviceID: AudioDeviceID?,
+    label: String
+) throws -> AVAudioFormat {
+    let expectedHardwareFormat = AudioInputFormatStabilizer.expectedHardwareFormat(for: preferredDeviceID)
+    return try AudioInputFormatStabilizer.waitForSettledFormat(
+        label: label,
+        expectedHardwareFormat: expectedHardwareFormat,
+        readFormat: { inputNode.outputFormat(forBus: 0) }
+    )
+}
+
+protocol AudioInputDeviceDefaultControlling: AnyObject {
+    func defaultInputDeviceID() -> AudioDeviceID?
+    func setDefaultInputDeviceID(_ deviceID: AudioDeviceID) -> Bool
+}
+
+final class CoreAudioInputDeviceDefaultController: AudioInputDeviceDefaultControlling {
+    func defaultInputDeviceID() -> AudioDeviceID? {
+        var deviceID = AudioDeviceID(0)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        let status = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            0, nil,
+            &size,
+            &deviceID
+        )
+        guard status == noErr, deviceID != 0 else {
+            deviceHelperLogger.warning("Could not read default input device: status=\(status)")
+            return nil
+        }
+        return deviceID
+    }
+
+    func setDefaultInputDeviceID(_ deviceID: AudioDeviceID) -> Bool {
+        var deviceID = deviceID
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        let status = AudioObjectSetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            0, nil,
+            UInt32(MemoryLayout<AudioDeviceID>.size),
+            &deviceID
+        )
+        if status != noErr {
+            deviceHelperLogger.error("Could not set default input device \(deviceID): status=\(status)")
+        }
+        return status == noErr
+    }
+}
+
+protocol AudioInputDeviceActivating: AnyObject {
+    @discardableResult
+    func activate(deviceID: AudioDeviceID, reason: String) -> Bool
+    func restore(reason: String)
+}
+
+extension AudioInputDeviceActivating {
+    @discardableResult
+    func activateIfNeeded(
+        deviceID: AudioDeviceID?,
+        usesBluetoothTransport: Bool,
+        reason: String
+    ) -> Bool {
+        guard usesBluetoothTransport else { return true }
+        guard let deviceID else { return false }
+        return activate(deviceID: deviceID, reason: reason)
+    }
+}
+
+final class AudioInputDeviceActivationGuard: AudioInputDeviceActivating, @unchecked Sendable {
+    private struct Activation {
+        let deviceID: AudioDeviceID
+        let previousDeviceID: AudioDeviceID?
+        var retainCount: Int
+    }
+
+    private let controller: AudioInputDeviceDefaultControlling
+    private let lock = NSLock()
+    private var activation: Activation?
+
+    init(controller: AudioInputDeviceDefaultControlling = CoreAudioInputDeviceDefaultController()) {
+        self.controller = controller
+    }
+
+    @discardableResult
+    func activate(deviceID: AudioDeviceID, reason: String) -> Bool {
+        lock.lock()
+        if var currentActivation = activation {
+            guard currentActivation.deviceID == deviceID else {
+                lock.unlock()
+                deviceHelperLogger.warning("Cannot activate input device \(deviceID) for \(reason, privacy: .public); \(currentActivation.deviceID) is already active")
+                return false
+            }
+            currentActivation.retainCount += 1
+            activation = currentActivation
+            lock.unlock()
+            return true
+        }
+        lock.unlock()
+
+        let previousDeviceID = controller.defaultInputDeviceID()
+        guard previousDeviceID != deviceID else {
+            lock.withLock {
+                activation = Activation(deviceID: deviceID, previousDeviceID: nil, retainCount: 1)
+            }
+            deviceHelperLogger.info("Default input already matches Bluetooth input \(deviceID) for \(reason, privacy: .public)")
+            return true
+        }
+
+        guard controller.setDefaultInputDeviceID(deviceID) else {
+            return false
+        }
+
+        lock.withLock {
+            activation = Activation(deviceID: deviceID, previousDeviceID: previousDeviceID, retainCount: 1)
+        }
+        deviceHelperLogger.info("Temporarily activated input device \(deviceID) for \(reason, privacy: .public)")
+        return true
+    }
+
+    func restore(reason: String) {
+        lock.lock()
+        guard var currentActivation = activation else {
+            lock.unlock()
+            return
+        }
+
+        if currentActivation.retainCount > 1 {
+            currentActivation.retainCount -= 1
+            activation = currentActivation
+            lock.unlock()
+            return
+        }
+
+        activation = nil
+        lock.unlock()
+
+        guard let previousDeviceID = currentActivation.previousDeviceID else { return }
+        guard controller.defaultInputDeviceID() == currentActivation.deviceID else {
+            deviceHelperLogger.info("Leaving default input unchanged after \(reason, privacy: .public) because it no longer matches \(currentActivation.deviceID)")
+            return
+        }
+
+        if controller.setDefaultInputDeviceID(previousDeviceID) {
+            deviceHelperLogger.info("Restored default input device after \(reason, privacy: .public)")
+        }
+    }
+}
 
 /// Sets the CoreAudio input device on an AVAudioEngine's input node AUHAL.
 /// Checks the return status and verifies the device was actually set.
@@ -1021,10 +1590,15 @@ extension AudioDeviceService {
         replacePreviewAudioEngineForRecoveryIfNeeded(engine)
     }
 
-    func testingSetPreviewEngine(_ engine: AVAudioEngine?, activeDeviceID: AudioDeviceID? = nil) {
+    func testingSetPreviewEngine(
+        _ engine: AVAudioEngine?,
+        activeDeviceID: AudioDeviceID? = nil,
+        usesBluetoothTransport: Bool = false
+    ) {
         previewLock.withLock {
             previewEngine = engine
             activePreviewDeviceID = activeDeviceID
+            activePreviewUsesBluetoothTransport = usesBluetoothTransport
         }
     }
 
@@ -1038,6 +1612,14 @@ extension AudioDeviceService {
 
     func testingValidatePreviewTapInstallationPreconditions(expected: AVAudioFormat, current: AVAudioFormat) throws {
         try validatePreviewTapInstallationPreconditions(expected: expected, current: current)
+    }
+
+    func testingBeginBluetoothPreviewConfigurationChangeIgnoreWindow(now: TimeInterval) {
+        beginBluetoothPreviewConfigurationChangeIgnoreWindow(now: now)
+    }
+
+    func testingShouldSuppressBluetoothPreviewConfigurationChange(now: TimeInterval) -> Bool {
+        shouldSuppressBluetoothPreviewConfigurationChange(now: now)
     }
 }
 #endif

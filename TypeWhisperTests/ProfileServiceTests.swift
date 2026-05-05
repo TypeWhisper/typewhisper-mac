@@ -122,10 +122,12 @@ final class ProfileServiceTests: XCTestCase {
         let profileService = ProfileService(appSupportDirectory: appSupportDirectory)
         let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
         let settingsViewModel = SettingsViewModel(modelManager: ModelManagerService())
+        let textInsertionService = TextInsertionService()
         let viewModel = ProfilesViewModel(
             profileService: profileService,
             historyService: historyService,
-            settingsViewModel: settingsViewModel
+            settingsViewModel: settingsViewModel,
+            textInsertionService: textInsertionService
         )
 
         viewModel.prepareNewProfile(prefilledPromptActionId: "prompt-123")
@@ -150,10 +152,12 @@ final class ProfileServiceTests: XCTestCase {
         let profileService = ProfileService(appSupportDirectory: appSupportDirectory)
         let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
         let settingsViewModel = SettingsViewModel(modelManager: ModelManagerService())
+        let textInsertionService = TextInsertionService()
         let viewModel = ProfilesViewModel(
             profileService: profileService,
             historyService: historyService,
-            settingsViewModel: settingsViewModel
+            settingsViewModel: settingsViewModel,
+            textInsertionService: textInsertionService
         )
 
         viewModel.prepareNewProfile()
@@ -174,10 +178,12 @@ final class ProfileServiceTests: XCTestCase {
         let profileService = ProfileService(appSupportDirectory: appSupportDirectory)
         let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
         let settingsViewModel = SettingsViewModel(modelManager: ModelManagerService())
+        let textInsertionService = TextInsertionService()
         let viewModel = ProfilesViewModel(
             profileService: profileService,
             historyService: historyService,
-            settingsViewModel: settingsViewModel
+            settingsViewModel: settingsViewModel,
+            textInsertionService: textInsertionService
         )
 
         profileService.addProfile(name: "Prompt A 1", promptActionId: "prompt-a")

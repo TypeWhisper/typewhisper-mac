@@ -5,7 +5,7 @@ import TypeWhisperPluginSDK
 final class PluginManifestValidationTests: XCTestCase {
     func testAllPluginManifestsDecodeAndDeclareCompatibility() throws {
         let manifestURLs = try FileManager.default.contentsOfDirectory(
-            at: TestSupport.repoRoot.appendingPathComponent("Plugins"),
+            at: TestSupport.repoRoot.appendingPathComponent("TypeWhisperPluginSDK/Plugins"),
             includingPropertiesForKeys: nil,
             options: [.skipsHiddenFiles, .skipsPackageDescendants]
         )
@@ -37,12 +37,12 @@ final class PluginManifestValidationTests: XCTestCase {
 
     func testAppleSiliconOnlyPluginsDeclareArm64Compatibility() throws {
         let manifestPaths = [
-            "Plugins/WhisperKitPlugin/manifest.json",
-            "Plugins/ParakeetPlugin/manifest.json",
-            "Plugins/GranitePlugin/manifest.json",
-            "Plugins/Gemma4Plugin/manifest.json",
-            "Plugins/Qwen3Plugin/manifest.json",
-            "Plugins/VoxtralPlugin/manifest.json",
+            "TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/manifest.json",
+            "TypeWhisperPluginSDK/Plugins/ParakeetPlugin/manifest.json",
+            "TypeWhisperPluginSDK/Plugins/GranitePlugin/manifest.json",
+            "TypeWhisperPluginSDK/Plugins/Gemma4Plugin/manifest.json",
+            "TypeWhisperPluginSDK/Plugins/Qwen3Plugin/manifest.json",
+            "TypeWhisperPluginSDK/Plugins/VoxtralPlugin/manifest.json",
         ]
 
         for relativePath in manifestPaths {
@@ -51,6 +51,16 @@ final class PluginManifestValidationTests: XCTestCase {
             let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
             XCTAssertEqual(manifest.supportedArchitectures, ["arm64"], relativePath)
         }
+    }
+
+    func testOpenAIPluginManifestDeclaresCloudHostingWithoutAPIKeyRequirement() throws {
+        let manifestURL = TestSupport.repoRoot.appendingPathComponent("TypeWhisperPluginSDK/Plugins/OpenAIPlugin/manifest.json")
+        let data = try Data(contentsOf: manifestURL)
+        let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
+
+        XCTAssertEqual(manifest.hosting, .cloud)
+        XCTAssertEqual(manifest.requiresAPIKey, false)
+        XCTAssertEqual(manifest.resolvedHosting, .cloud)
     }
 }
 
@@ -381,6 +391,80 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         XCTAssertEqual(plugin.huggingFaceToken, "hf_parakeet_saved")
     }
 
+    func testParakeetDisablesTranscriptPreviewFallback() throws {
+        let fallbackPolicy: any TranscriptPreviewFallbackPolicyProviding = ParakeetPlugin()
+
+        XCTAssertFalse(fallbackPolicy.allowsTranscriptPreviewFallback)
+    }
+
+    func testParakeetDictionaryTermsSupportReflectsStoredBoostingPreference() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let defaultHost = MockHostServices(pluginDataDirectory: appSupportDirectory)
+        let defaultPlugin = ParakeetPlugin()
+        defaultPlugin.activate(host: defaultHost)
+        XCTAssertEqual(defaultPlugin.dictionaryTermsSupport, .requiresPluginSetting)
+
+        let enabledHost = MockHostServices(
+            pluginDataDirectory: appSupportDirectory,
+            defaults: ["vocabularyBoostingEnabled": true]
+        )
+        let enabledPlugin = ParakeetPlugin()
+        enabledPlugin.activate(host: enabledHost)
+        XCTAssertEqual(enabledPlugin.dictionaryTermsSupport, .supported)
+    }
+
+    func testParakeetEnablingVocabularyBoostingPersistsAndNotifiesCapabilityChange() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let host = MockHostServices(pluginDataDirectory: appSupportDirectory)
+        let plugin = ParakeetPlugin()
+        plugin.activate(host: host)
+
+        plugin.setBoostingEnabled(true)
+
+        XCTAssertEqual(host.userDefault(forKey: "vocabularyBoostingEnabled") as? Bool, true)
+        XCTAssertEqual(plugin.dictionaryTermsSupport, .supported)
+        XCTAssertEqual(host.capabilitiesChangedCount, 1)
+
+        plugin.setBoostingEnabled(true)
+
+        XCTAssertEqual(host.capabilitiesChangedCount, 1)
+    }
+
+    func testParakeetDisablingVocabularyBoostingPersistsClearsVocabularyAndHidesCtcActivity() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let host = MockHostServices(
+            pluginDataDirectory: appSupportDirectory,
+            defaults: ["vocabularyBoostingEnabled": true]
+        )
+        let plugin = ParakeetPlugin()
+        plugin.activate(host: host)
+        plugin.lastConfiguredPrompt = "TypeWhisper Madison"
+        plugin.lastBoostingTermCount = 2
+        plugin.ctcModelState = .downloading
+        XCTAssertEqual(plugin.currentSettingsActivity?.message, "Downloading vocabulary model")
+
+        plugin.setBoostingEnabled(false)
+
+        XCTAssertEqual(host.userDefault(forKey: "vocabularyBoostingEnabled") as? Bool, false)
+        XCTAssertEqual(plugin.dictionaryTermsSupport, .requiresPluginSetting)
+        XCTAssertNil(plugin.lastConfiguredPrompt)
+        XCTAssertEqual(plugin.lastBoostingTermCount, 0)
+        XCTAssertNil(plugin.currentSettingsActivity)
+        plugin.ctcModelState = .error("Vocabulary model failed")
+        XCTAssertNil(plugin.currentSettingsActivity)
+        XCTAssertEqual(host.capabilitiesChangedCount, 1)
+
+        plugin.setBoostingEnabled(false)
+
+        XCTAssertEqual(host.capabilitiesChangedCount, 1)
+    }
+
     func testParakeetStoresAndClearsHuggingFaceTokenSecret() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -541,6 +625,10 @@ final class PluginDictionaryGuardTests: XCTestCase {
             ),
             "hello world"
         )
+    }
+
+    func testDeepgramSupportedLanguagesIncludeMultilingualCodeSwitchingMode() {
+        XCTAssertTrue(DeepgramPlugin().supportedLanguages.contains("multi"))
     }
 
     func testDeepgramDictionaryQueryItemsLimitDictionaryTermsTo100AndPreserveOrder() {
@@ -875,6 +963,7 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
             loadedPlugin: nil,
             registryPlugin: RegistryPlugin(
                 id: "com.typewhisper.mock.sdk-missing",
+                source: .official,
                 name: "Marketplace Replacement",
                 version: "1.3.1",
                 minHostVersion: "1.3.0",
@@ -884,10 +973,12 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
                 author: "TypeWhisper",
                 description: "Replacement",
                 category: "utility",
+                categories: ["utility"],
                 size: 1,
                 downloadURL: "https://example.com/replacement.zip",
                 iconSystemName: nil,
                 requiresAPIKey: nil,
+                hosting: nil,
                 descriptions: nil,
                 downloadCount: nil
             ),
@@ -912,6 +1003,7 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
     func testRegistryPluginRejectsArm64OnlyEntryOnIntel() {
         let plugin = RegistryPlugin(
             id: "com.typewhisper.mock.arm64-only",
+            source: .official,
             name: "ARM64 Only",
             version: "1.0.0",
             minHostVersion: "1.0.0",
@@ -921,10 +1013,12 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
             author: "TypeWhisper",
             description: "Test plugin",
             category: "transcription",
+            categories: ["transcription"],
             size: 1,
             downloadURL: "https://example.com/plugin.zip",
             iconSystemName: nil,
             requiresAPIKey: nil,
+            hosting: nil,
             descriptions: nil,
             downloadCount: nil
         )

@@ -9,6 +9,7 @@ private let workflowLogger = Logger(
 )
 
 enum WorkflowMatchKind: String, Sendable {
+    case appAndWebsite
     case website
     case app
     case globalFallback
@@ -16,6 +17,8 @@ enum WorkflowMatchKind: String, Sendable {
 
     var label: String {
         switch self {
+        case .appAndWebsite:
+            localizedAppText("App + Website", de: "App + Website")
         case .website:
             localizedAppText("Website", de: "Website")
         case .app:
@@ -39,11 +42,36 @@ struct WorkflowMatchResult {
 @MainActor
 final class WorkflowService: ObservableObject {
     @Published private(set) var workflows: [Workflow] = []
+    @Published var defaultProviderId: String {
+        didSet {
+            userDefaults.set(defaultProviderId, forKey: UserDefaultsKeys.workflowDefaultLLMProviderId)
+            if oldValue != defaultProviderId {
+                defaultCloudModel = ""
+            }
+        }
+    }
+    @Published var defaultCloudModel: String {
+        didSet {
+            userDefaults.set(defaultCloudModel, forKey: UserDefaultsKeys.workflowDefaultLLMCloudModel)
+        }
+    }
 
     private let modelContainer: ModelContainer
     private let modelContext: ModelContext
+    private let userDefaults: UserDefaults
 
-    init(appSupportDirectory: URL = AppConstants.appSupportDirectory) {
+    init(
+        appSupportDirectory: URL = AppConstants.appSupportDirectory,
+        userDefaults: UserDefaults = .standard
+    ) {
+        self.userDefaults = userDefaults
+        self.defaultProviderId = userDefaults.string(forKey: UserDefaultsKeys.workflowDefaultLLMProviderId)
+            ?? userDefaults.string(forKey: "llmProviderType")
+            ?? PromptProcessingService.appleIntelligenceId
+        self.defaultCloudModel = userDefaults.string(forKey: UserDefaultsKeys.workflowDefaultLLMCloudModel)
+            ?? userDefaults.string(forKey: "llmCloudModel")
+            ?? ""
+
         let schema = Schema([Workflow.self])
         let storeDir = appSupportDirectory
         try? FileManager.default.createDirectory(at: storeDir, withIntermediateDirectories: true)
@@ -145,14 +173,53 @@ final class WorkflowService: ObservableObject {
         )
     }
 
+    func llmProviderId(for workflow: Workflow) -> String? {
+        let providerId = workflow.behavior.providerId ?? defaultProviderId
+        let trimmed = providerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    func llmCloudModel(for workflow: Workflow) -> String? {
+        let modelId: String?
+        if workflow.behavior.providerId == nil {
+            modelId = defaultCloudModel
+        } else {
+            modelId = workflow.behavior.cloudModel
+        }
+
+        let trimmed = modelId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
+    }
+
     func matchWorkflow(bundleIdentifier: String?, url: String? = nil) -> WorkflowMatchResult? {
         let bundleId = bundleIdentifier ?? ""
         let domain = extractDomain(from: url)
         let enabled = workflows.filter(\.isEnabled)
 
+        if !bundleId.isEmpty, let domain {
+            let matches = enabled.filter { workflow in
+                guard let trigger = workflow.trigger,
+                      !trigger.appBundleIdentifiers.isEmpty,
+                      !trigger.websitePatterns.isEmpty,
+                      trigger.appBundleIdentifiers.contains(bundleId) else {
+                    return false
+                }
+                return trigger.websitePatterns.contains { pattern in
+                    !pattern.isEmpty && domainMatches(domain, pattern: pattern)
+                }
+            }
+            if let result = bestMatch(from: matches, kind: .appAndWebsite, matchedDomain: domain) {
+                return result
+            }
+        }
+
         if let domain {
             let matches = enabled.filter { workflow in
-                guard let trigger = workflow.trigger, trigger.kind == .website else { return false }
+                guard let trigger = workflow.trigger,
+                      trigger.appBundleIdentifiers.isEmpty,
+                      !trigger.websitePatterns.isEmpty else {
+                    return false
+                }
                 return trigger.websitePatterns.contains { pattern in
                     !pattern.isEmpty && domainMatches(domain, pattern: pattern)
                 }
@@ -164,7 +231,10 @@ final class WorkflowService: ObservableObject {
 
         if !bundleId.isEmpty {
             let matches = enabled.filter { workflow in
-                guard let trigger = workflow.trigger, trigger.kind == .app else { return false }
+                guard let trigger = workflow.trigger,
+                      trigger.websitePatterns.isEmpty else {
+                    return false
+                }
                 return trigger.appBundleIdentifiers.contains(bundleId)
             }
             if let result = bestMatch(from: matches, kind: .app, matchedDomain: nil) {
