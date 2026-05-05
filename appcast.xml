@@ -5,6 +5,15 @@
     <language>en</language>
     <description>Stable, release candidate, and daily updates for TypeWhisper.</description>
     <item>
+      <title>Version 1.4.0-daily.20260505</title>
+      <pubDate>Tue, 05 May 2026 06:30:50 +0000</pubDate>
+      <sparkle:version>704</sparkle:version>
+      <sparkle:shortVersionString>1.4.0-daily.20260505</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:channel>daily</sparkle:channel>
+      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.4.0-daily.20260505/TypeWhisper-v1.4.0-daily.20260505.zip" sparkle:edSignature="WmJbHL+foNzpHD4TzaQG/s+ELn2h3lQqbTVm6hAbZQ/uBzgAA1EWXwzqidYecZD56JoHzvMFOvlgXWsNXxUpBg==" length="11933076" type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.4.0-rc1</title>
       <pubDate>Mon, 04 May 2026 17:37:25 +0000</pubDate>
       <sparkle:version>700</sparkle:version>
@@ -20,15 +29,6 @@
       <sparkle:shortVersionString>1.3.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.3.1/TypeWhisper-v1.3.1.zip" sparkle:edSignature="AhuABm0j77QzZwBiqvJ+TRdm67u0jLfKTT/RSx1OiLqF2qAova0xGPJOfi/TG72OYB6zKGjTG0nBiWg3aKOZCQ==" length="11785671" type="application/octet-stream" />
-    </item>
-    <item>
-      <title>Version 1.3.1-daily.20260503</title>
-      <pubDate>Sun, 03 May 2026 06:51:09 +0000</pubDate>
-      <sparkle:version>696</sparkle:version>
-      <sparkle:shortVersionString>1.3.1-daily.20260503</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:channel>daily</sparkle:channel>
-      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.3.1-daily.20260503/TypeWhisper-v1.3.1-daily.20260503.zip" sparkle:edSignature="EWCaF6h60OHrYXUt4F/SuZ9kLc5pI8eFC7kIGi1GLPP6kSug6e/W0FMYziKWyprn6eBlekdQZuhrxSU+aAXRCA==" length="11779126" type="application/octet-stream" />
     </item>
   </channel>
 </rss>
