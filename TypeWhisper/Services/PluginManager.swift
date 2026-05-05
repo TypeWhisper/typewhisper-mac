@@ -191,7 +191,8 @@ final class PluginManager: ObservableObject {
     @Published private(set) var incompatibleExternalBundles: [String: IncompatibleExternalBundle] = [:]
 
     let pluginsDirectory: URL
-    private var ruleNamesProvider: () -> [String] = { [] }
+    private var ruleNamesProvider: @MainActor () -> [String] = { [] }
+    private var workflowProvider: @MainActor () -> [PluginWorkflowInfo] = { [] }
 
     var postProcessors: [PostProcessorPlugin] {
         loadedPlugins
@@ -552,18 +553,27 @@ final class PluginManager: ObservableObject {
         )
     }
 
-    func setRuleNamesProvider(_ provider: @escaping () -> [String]) {
+    func setRuleNamesProvider(_ provider: @escaping @MainActor () -> [String]) {
         self.ruleNamesProvider = provider
     }
 
+    func setWorkflowProvider(_ provider: @escaping @MainActor () -> [PluginWorkflowInfo]) {
+        self.workflowProvider = provider
+    }
+
     private func activatePlugin(_ plugin: LoadedPlugin) {
-        let host = HostServicesImpl(pluginId: plugin.manifest.id, eventBus: EventBus.shared, ruleNamesProvider: ruleNamesProvider)
+        let host = HostServicesImpl(
+            pluginId: plugin.manifest.id,
+            eventBus: EventBus.shared,
+            ruleNamesProvider: ruleNamesProvider,
+            workflowProvider: workflowProvider
+        )
         plugin.instance.activate(host: host)
         logger.info("Activated plugin: \(plugin.manifest.id)")
     }
 
     @available(*, deprecated, renamed: "setRuleNamesProvider")
-    func setProfileNamesProvider(_ provider: @escaping () -> [String]) {
+    func setProfileNamesProvider(_ provider: @escaping @MainActor () -> [String]) {
         setRuleNamesProvider(provider)
     }
 

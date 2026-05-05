@@ -1,0 +1,13 @@
+{
+  "id": "com.typewhisper.filler-words",
+  "name": "Filler Words",
+  "version": "1.0.0",
+  "minHostVersion": "1.0.0",
+  "sdkCompatibilityVersion": "v1",
+  "minOSVersion": "14.0",
+  "author": "TypeWhisper",
+  "principalClass": "FillerWordsPlugin",
+  "requiresAPIKey": false,
+  "iconSystemName": "text.badge.minus",
+  "category": "post-processor"
+}

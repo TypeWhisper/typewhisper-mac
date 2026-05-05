@@ -94,24 +94,24 @@ final class IndicatorCoordinator {
         }
     }
 
-    private func refreshActiveScreenPanels() {
+    private func refreshVisibleIndicatorPanels() {
         notchPanel.refreshPlacementForActiveContextChange()
         overlayPanel.refreshPlacementForActiveContextChange()
         minimalPanel.refreshPlacementForActiveContextChange()
     }
 
     private func scheduleActiveScreenRefreshes() {
-        refreshActiveScreenPanels()
+        refreshVisibleIndicatorPanels()
 
         deferredRefreshTask?.cancel()
         deferredRefreshTask = Task { @MainActor [weak self] in
             await Task.yield()
             guard !Task.isCancelled else { return }
-            self?.refreshActiveScreenPanels()
+            self?.refreshVisibleIndicatorPanels()
 
             try? await Task.sleep(for: .milliseconds(120))
             guard !Task.isCancelled else { return }
-            self?.refreshActiveScreenPanels()
+            self?.refreshVisibleIndicatorPanels()
         }
     }
 }

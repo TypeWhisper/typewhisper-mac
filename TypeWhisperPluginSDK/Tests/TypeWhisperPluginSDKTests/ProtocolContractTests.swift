@@ -33,10 +33,16 @@ private struct MockHostServices: HostServices {
     let activeAppName: String? = "Notes"
     let eventBus: EventBusProtocol
     let availableRuleNames: [String]
+    let availableWorkflows: [PluginWorkflowInfo]
 
-    init(eventBus: EventBusProtocol, availableRuleNames: [String]) {
+    init(
+        eventBus: EventBusProtocol,
+        availableRuleNames: [String],
+        availableWorkflows: [PluginWorkflowInfo] = []
+    ) {
         self.eventBus = eventBus
         self.availableRuleNames = availableRuleNames
+        self.availableWorkflows = availableWorkflows
         self.pluginDataDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     }
 
@@ -226,6 +232,58 @@ final class ProtocolContractTests: XCTestCase {
         XCTAssertEqual(host.availableRuleNames, ["Work", "Docs"])
         XCTAssertEqual(host.availableProfileNames, ["Work", "Docs"])
         XCTAssertEqual(host.activeAppName, "Notes")
+    }
+
+    func testHostServicesExposeWorkflowSnapshots() throws {
+        let workflowId = try XCTUnwrap(UUID(uuidString: "4C35C70D-4AD2-48C7-9D05-6A1C5A4A6D2C"))
+        let workflow = PluginWorkflowInfo(
+            id: workflowId,
+            name: "Dynamic Cleanup",
+            isEnabled: true,
+            sortOrder: 2,
+            template: .custom,
+            trigger: PluginWorkflowTrigger(
+                kind: .website,
+                appBundleIdentifiers: [],
+                websitePatterns: ["example.com"],
+                hotkeys: [
+                    PluginWorkflowHotkey(
+                        keyCode: 15,
+                        modifierFlags: 1_048_576,
+                        isFn: false,
+                        isDoubleTap: true,
+                        modifierKeyCodes: [55],
+                        mouseButton: nil
+                    )
+                ],
+                hotkeyBehavior: .processSelectedText
+            ),
+            behavior: PluginWorkflowBehavior(
+                settings: ["triggerWord": "cleanup"],
+                fineTuning: "Keep speaker intent.",
+                providerId: "openai",
+                cloudModel: "gpt-5.4",
+                temperatureMode: .custom,
+                temperatureValue: 0.2
+            ),
+            output: PluginWorkflowOutput(
+                format: "markdown",
+                autoEnter: true,
+                targetActionPluginId: "com.example.action"
+            ),
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 200)
+        )
+        let host = MockHostServices(
+            eventBus: MockEventBus(),
+            availableRuleNames: ["Dynamic Cleanup"],
+            availableWorkflows: [workflow]
+        )
+
+        XCTAssertEqual(host.availableWorkflows, [workflow])
+        XCTAssertEqual(host.availableWorkflows.first?.trigger.websitePatterns, ["example.com"])
+        XCTAssertEqual(host.availableWorkflows.first?.behavior.settings["triggerWord"], "cleanup")
+        XCTAssertEqual(host.availableWorkflows.first?.output.targetActionPluginId, "com.example.action")
     }
 
     func testTranscriptionPluginUsesDefaultStreamingFallback() async throws {

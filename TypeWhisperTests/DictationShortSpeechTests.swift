@@ -37,8 +37,20 @@ final class DictationShortSpeechTests: XCTestCase {
         XCTAssertEqual(Double(paddedSamples.count) / AudioRecordingService.targetSampleRate, 0.75, accuracy: 0.0001)
     }
 
-    func testOneHundredTwentyMsVeryQuietClip_isNoSpeech() {
-        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.12, peakLevel: 0.0029, hasConfirmedText: false), .discardNoSpeech)
+    func testOneHundredTwentyMsVeryQuietClip_transcribesByDefault() {
+        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.12, peakLevel: 0.0029, hasConfirmedText: false), .transcribe)
+    }
+
+    func testOneHundredTwentyMsVeryQuietClip_discardsWhenAggressivePolicyDisabled() {
+        XCTAssertEqual(
+            classifyShortSpeech(
+                rawDuration: 0.12,
+                peakLevel: 0.0029,
+                hasConfirmedText: false,
+                transcribeShortQuietClipsAggressively: false
+            ),
+            .discardNoSpeech
+        )
     }
 
     func testOneHundredTwentyMsBorderlineQuietClip_nowTranscribes() {
@@ -61,8 +73,8 @@ final class DictationShortSpeechTests: XCTestCase {
         XCTAssertEqual(classifyShortSpeech(rawDuration: 0.12, peakLevel: 0.0029, hasConfirmedText: true), .transcribe)
     }
 
-    func testFourHundredMsSpeech_usesLoweredShortClipThresholdAndNoMinimumPad() {
-        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.4, peakLevel: 0.0029, hasConfirmedText: false), .discardNoSpeech)
+    func testFourHundredMsVeryQuietClip_transcribesByDefaultAndPads() {
+        XCTAssertEqual(classifyShortSpeech(rawDuration: 0.4, peakLevel: 0.0029, hasConfirmedText: false), .transcribe)
         XCTAssertEqual(classifyShortSpeech(rawDuration: 0.4, peakLevel: 0.0034, hasConfirmedText: false), .transcribe)
 
         let paddedSamples = paddedSamplesForFinalTranscription(makeSamples(duration: 0.4), rawDuration: 0.4)

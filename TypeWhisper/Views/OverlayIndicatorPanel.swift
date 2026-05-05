@@ -25,11 +25,13 @@ class OverlayIndicatorPanel: NSPanel {
         backgroundColor = .clear
         hasShadow = false
         isMovable = false
-        level = FloatingPanelSpacePolicy.indicatorWindowLevel
         appearance = NSAppearance(named: .darkAqua)
-        collectionBehavior = FloatingPanelSpacePolicy.indicatorCollectionBehavior
         hidesOnDeactivate = false
         ignoresMouseEvents = true
+        FloatingPanelSpacePolicy.applyIndicatorPolicy(
+            to: self,
+            displayMode: DictationViewModel.shared.notchIndicatorDisplay
+        )
 
         let hostingView = NSHostingView(rootView: OverlayIndicatorView())
         hostingView.sizingOptions = []
@@ -116,7 +118,10 @@ class OverlayIndicatorPanel: NSPanel {
         }
 
         setFrame(NSRect(x: x, y: y, width: Self.panelWidth, height: Self.panelHeight), display: true)
-        orderFrontRegardless()
+        FloatingPanelSpacePolicy.orderIndicatorFront(
+            self,
+            displayMode: DictationViewModel.shared.notchIndicatorDisplay
+        )
     }
 
     private func resolveScreen() -> NSScreen {
@@ -124,9 +129,10 @@ class OverlayIndicatorPanel: NSPanel {
     }
 
     func refreshPlacementForActiveContextChange() {
-        guard DictationViewModel.shared.notchIndicatorDisplay == .activeScreen else { return }
-        cachedScreen = nil
         guard isVisible else { return }
+        if DictationViewModel.shared.notchIndicatorDisplay == .activeScreen {
+            cachedScreen = nil
+        }
         show()
     }
 

@@ -536,6 +536,7 @@ jobs:
           git push origin gh-pages
 
   trigger-website:
+    if: "!contains(needs.prepare.outputs.tag, '-')"
     needs: [prepare, build]
     runs-on: ubuntu-latest
     steps:

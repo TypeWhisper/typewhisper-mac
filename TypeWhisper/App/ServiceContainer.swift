@@ -16,7 +16,6 @@ final class ServiceContainer: ObservableObject {
     let textDiffService: TextDiffService
     let profileService: ProfileService
     let workflowService: WorkflowService
-    let legacyWorkflowService: LegacyWorkflowService
     let translationService: AnyObject? // TranslationService (macOS 15+)
     let audioDuckingService: AudioDuckingService
     let mediaPlaybackService: MediaPlaybackService
@@ -59,9 +58,12 @@ final class ServiceContainer: ObservableObject {
 
     private init() {
         // Services
+        let inputActivationGuard = AudioInputDeviceActivationGuard()
         modelManagerService = ModelManagerService()
         audioFileService = AudioFileService()
-        audioRecordingService = AudioRecordingService()
+        audioRecordingService = AudioRecordingService(
+            inputActivationGuard: inputActivationGuard
+        )
         hotkeyService = HotkeyService()
         textInsertionService = TextInsertionService()
         historyService = HistoryService()
@@ -70,10 +72,6 @@ final class ServiceContainer: ObservableObject {
         profileService = ProfileService()
         workflowService = WorkflowService()
         promptActionService = PromptActionService()
-        legacyWorkflowService = LegacyWorkflowService(
-            profileService: profileService,
-            promptActionService: promptActionService
-        )
         #if canImport(Translation)
         if #available(macOS 15, *) {
             translationService = TranslationService()
@@ -88,7 +86,9 @@ final class ServiceContainer: ObservableObject {
         dictionaryService = DictionaryService()
         snippetService = SnippetService()
         soundService = SoundService()
-        audioDeviceService = AudioDeviceService()
+        audioDeviceService = AudioDeviceService(
+            inputActivationGuard: inputActivationGuard
+        )
         promptProcessingService = PromptProcessingService()
         pluginManager = PluginManager()
         pluginRegistryService = PluginRegistryService()
@@ -98,6 +98,7 @@ final class ServiceContainer: ObservableObject {
         appFormatterService = AppFormatterService()
         audioRecorderService = AudioRecorderService()
         promptProcessingService.memoryService = memoryService
+        promptProcessingService.modelManagerService = modelManagerService
         watchFolderService = WatchFolderService(audioFileService: audioFileService, modelManagerService: modelManagerService)
         accessibilityAnnouncementService = AccessibilityAnnouncementService()
         speechFeedbackService = SpeechFeedbackService()
@@ -159,7 +160,8 @@ final class ServiceContainer: ObservableObject {
         profilesViewModel = ProfilesViewModel(
             profileService: profileService,
             historyService: historyService,
-            settingsViewModel: settingsViewModel
+            settingsViewModel: settingsViewModel,
+            textInsertionService: textInsertionService
         )
         dictionaryViewModel = DictionaryViewModel(dictionaryService: dictionaryService)
         snippetsViewModel = SnippetsViewModel(snippetService: snippetService)
@@ -231,6 +233,9 @@ final class ServiceContainer: ObservableObject {
                 }
             }
             return names
+        }
+        pluginManager.setWorkflowProvider { [weak self] in
+            self?.workflowService.workflows.map(\.pluginWorkflowInfo) ?? []
         }
         pluginManager.scanAndLoadPlugins()
 

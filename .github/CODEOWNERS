@@ -10,4 +10,6 @@
 /TypeWhisper/ViewModels/ @SeoFood
 /TypeWhisperTests/ @SeoFood
 /TypeWhisperPluginSDK/ @SeoFood
-/Plugins/ @SeoFood
+/PluginRegistry/ @SeoFood
+/Plugins/README.md @SeoFood
+/TypeWhisperPluginSDK/Plugins/ @SeoFood

@@ -16,7 +16,7 @@ TypeWhisper `1.x` is a stable direct-download release line for macOS. The Mac Ap
 - System-wide dictation with a global hotkey and text insertion
 - File transcription, including batch processing and export
 - Workflow processing with bundled prompt presets and custom actions
-- Workflows for app-, URL-, hotkey-, and global fallback control, with legacy prompt/profile compatibility
+- Workflows for app, URL, combined app + URL, direct hotkey, and global fallback control, with legacy prompt/profile compatibility
 - History, Dictionary, and Snippets
 - Bundled default integrations and bundled plugins
 
@@ -95,7 +95,7 @@ These surfaces remain part of `1.x`, but they are positioned as advanced or auto
 - Workflow setup flow across tabs
 - History edit/export
 - History entry shows both STT and AI-processed text where applicable
-- Workflow matching for app, URL, hotkey, and global fallback triggers
+- Workflow matching for app + URL, URL-only, app-only, direct hotkey, and global fallback triggers
 - Auto-submit workflow behavior and legacy Auto Enter profile compatibility
 - Plugin enable/disable
 - Community term pack download and apply

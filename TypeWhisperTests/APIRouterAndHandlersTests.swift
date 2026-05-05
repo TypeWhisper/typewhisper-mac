@@ -5,9 +5,23 @@ import XCTest
 import TypeWhisperPluginSDK
 @testable import TypeWhisper
 
+private func rtfAttributedStringContainsFontTrait(
+    _ trait: NSFontTraitMask,
+    in attributed: NSAttributedString,
+    matching text: String
+) -> Bool {
+    let range = (attributed.string as NSString).range(of: text)
+    guard range.location != NSNotFound else { return false }
+
+    var effectiveRange = NSRange(location: 0, length: 0)
+    let font = attributed.attribute(.font, at: range.location, effectiveRange: &effectiveRange) as? NSFont
+    guard let font else { return false }
+    return NSFontManager.shared.traits(of: font).contains(trait)
+}
+
 final class APIRouterAndHandlersTests: XCTestCase {
     @objc(APIRouterMockLLMProviderPlugin)
-    private final class MockLLMProviderPlugin: NSObject, LLMProviderPlugin, LLMProviderSetupStatusProviding, LLMTemperatureControllableProvider, @unchecked Sendable {
+    private final class MockLLMProviderPlugin: NSObject, LLMProviderPlugin, LLMProviderSetupStatusProviding, LLMTemperatureControllableProvider, PluginSettingsActivityReporting, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.llm" }
         static var pluginName: String { "Mock LLM" }
 
@@ -18,8 +32,21 @@ final class APIRouterAndHandlersTests: XCTestCase {
         var configuredProviderName = "Gemini"
         var requiresExternalCredentials = true
         var unavailableReason: String?
+        var restoreMakesAvailable = false
+        nonisolated(unsafe) private var _lastSystemPrompt: String?
+        nonisolated(unsafe) private var _lastUserText: String?
         nonisolated(unsafe) private var _lastRequestedModel: String?
         nonisolated(unsafe) private var _lastTemperatureDirective: PluginLLMTemperatureDirective?
+        nonisolated(unsafe) private var _autoUnloadCount = 0
+        nonisolated(unsafe) private var _restoreCount = 0
+
+        var lastSystemPrompt: String? {
+            requestLock.withLock { _lastSystemPrompt }
+        }
+
+        var lastUserText: String? {
+            requestLock.withLock { _lastUserText }
+        }
 
         var lastRequestedModel: String? {
             requestLock.withLock { _lastRequestedModel }
@@ -27,6 +54,14 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         var lastTemperatureDirective: PluginLLMTemperatureDirective? {
             requestLock.withLock { _lastTemperatureDirective }
+        }
+
+        var autoUnloadCount: Int {
+            requestLock.withLock { _autoUnloadCount }
+        }
+
+        var restoreCount: Int {
+            requestLock.withLock { _restoreCount }
         }
 
         required override init() {}
@@ -37,9 +72,12 @@ final class APIRouterAndHandlersTests: XCTestCase {
         var providerName: String { configuredProviderName }
         var isAvailable: Bool { available }
         var supportedModels: [PluginModelInfo] { models }
+        var currentSettingsActivity: PluginSettingsActivity? { nil }
 
         func process(systemPrompt: String, userText: String, model: String?) async throws -> String {
             requestLock.withLock {
+                _lastSystemPrompt = systemPrompt
+                _lastUserText = userText
                 _lastRequestedModel = model
             }
             return responseText
@@ -52,10 +90,42 @@ final class APIRouterAndHandlersTests: XCTestCase {
             temperatureDirective: PluginLLMTemperatureDirective
         ) async throws -> String {
             requestLock.withLock {
+                _lastSystemPrompt = systemPrompt
+                _lastUserText = userText
                 _lastRequestedModel = model
                 _lastTemperatureDirective = temperatureDirective
             }
             return responseText
+        }
+
+        @objc func triggerAutoUnload() {
+            requestLock.withLock {
+                _autoUnloadCount += 1
+            }
+        }
+
+        @objc func triggerRestoreModel() {
+            requestLock.withLock {
+                _restoreCount += 1
+            }
+            if restoreMakesAvailable {
+                available = true
+            }
+        }
+    }
+
+    @MainActor
+    private final class MemoryRetrieverSpy: MemoryRetrieving {
+        private(set) var requestedTexts: [String] = []
+        var context = """
+        <memory_context>
+        The user prefers concise wording.
+        </memory_context>
+        """
+
+        func retrieveRelevantMemories(for text: String) async -> String {
+            requestedTexts.append(text)
+            return context
         }
     }
 
@@ -429,6 +499,62 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         override func restoreAudio() {
             onRestore()
+        }
+    }
+
+    @MainActor
+    private final class MockSoundService: SoundService {
+        let onPlay: (SoundEvent, Bool) -> Void
+
+        init(onPlay: @escaping (SoundEvent, Bool) -> Void = { _, _ in }) {
+            self.onPlay = onPlay
+            super.init()
+        }
+
+        override func play(_ event: SoundEvent, enabled: Bool) {
+            onPlay(event, enabled)
+        }
+    }
+
+    private final class FakeAudioDeviceTransportResolver: AudioDeviceTransportResolving {
+        private let transports: [AudioDeviceID: UInt32]
+        private let onResolve: ((AudioDeviceID) -> Void)?
+
+        init(
+            transports: [AudioDeviceID: UInt32],
+            onResolve: ((AudioDeviceID) -> Void)? = nil
+        ) {
+            self.transports = transports
+            self.onResolve = onResolve
+        }
+
+        func transportType(for deviceID: AudioDeviceID) -> UInt32? {
+            onResolve?(deviceID)
+            return transports[deviceID]
+        }
+    }
+
+    private final class FakeBluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing {
+        private let handler: (AudioDeviceID?, String) -> Bool
+
+        init(handler: @escaping (AudioDeviceID?, String) -> Bool) {
+            self.handler = handler
+        }
+
+        func waitForActivatedDefaultInput(deviceID: AudioDeviceID?, reason: String) -> Bool {
+            handler(deviceID, reason)
+        }
+    }
+
+    private final class FakeAudioInputSelectionEngineValidator: AudioInputSelectionEngineValidating {
+        private let handler: (AudioDeviceID?) throws -> Void
+
+        init(handler: @escaping (AudioDeviceID?) throws -> Void) {
+            self.handler = handler
+        }
+
+        func validate(preferredDeviceID: AudioDeviceID?) throws {
+            try handler(preferredDeviceID)
         }
     }
 
@@ -1273,6 +1399,128 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    func testRTFOutputWritesPlainTextFallbackAndRichTextData() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.pasteSimulatorOverride = {}
+
+        _ = try await service.insertText(
+            "Meeting\n- **Launch** plan\n- _Budget_ review",
+            outputFormat: "rtf"
+        )
+
+        XCTAssertEqual(pasteboard.string(forType: .string), "Meeting\n- Launch plan\n- Budget review")
+
+        let rtfData = try XCTUnwrap(pasteboard.data(forType: .rtf))
+        let attributed = try NSAttributedString(
+            data: rtfData,
+            options: [.documentType: NSAttributedString.DocumentType.rtf],
+            documentAttributes: nil
+        )
+
+        XCTAssertEqual(attributed.string, "Meeting\n\u{2022} Launch plan\n\u{2022} Budget review")
+        XCTAssertTrue(rtfAttributedStringContainsFontTrait(NSFontTraitMask.boldFontMask, in: attributed, matching: "Launch"))
+        XCTAssertTrue(rtfAttributedStringContainsFontTrait(NSFontTraitMask.italicFontMask, in: attributed, matching: "Budget"))
+    }
+
+    @MainActor
+    func testRTFOutputStripsLLMMarkdownFenceAndInputBoundaryMarkers() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.pasteSimulatorOverride = {}
+
+        let llmResponse = """
+        Here is the Markdown-compatible text for rich-text conversion:
+
+        ```markdown
+        BEGIN TYPEWHISPER DICTATED TEXT
+        - **Launch** plan
+        - _Budget_ review
+        END TYPEWHISPER DICTATED TEXT
+        ```
+        """
+
+        _ = try await service.insertText(llmResponse, outputFormat: "rtf")
+
+        XCTAssertEqual(pasteboard.string(forType: .string), "- Launch plan\n- Budget review")
+
+        let rtfData = try XCTUnwrap(pasteboard.data(forType: .rtf))
+        let attributed = try NSAttributedString(
+            data: rtfData,
+            options: [.documentType: NSAttributedString.DocumentType.rtf],
+            documentAttributes: nil
+        )
+
+        XCTAssertEqual(attributed.string, "\u{2022} Launch plan\n\u{2022} Budget review")
+        XCTAssertFalse(attributed.string.contains("TYPEWHISPER"))
+        XCTAssertFalse(attributed.string.contains("```"))
+        XCTAssertTrue(rtfAttributedStringContainsFontTrait(NSFontTraitMask.boldFontMask, in: attributed, matching: "Launch"))
+        XCTAssertTrue(rtfAttributedStringContainsFontTrait(NSFontTraitMask.italicFontMask, in: attributed, matching: "Budget"))
+    }
+
+    @MainActor
+    func testRTFOutputUsesMarkdownParserForInlineSyntax() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.pasteSimulatorOverride = {}
+
+        _ = try await service.insertText(
+            "See [release notes](https://typewhisper.app) and `build 1.4`.",
+            outputFormat: "rtf"
+        )
+
+        XCTAssertEqual(pasteboard.string(forType: .string), "See release notes and build 1.4.")
+
+        let rtfData = try XCTUnwrap(pasteboard.data(forType: .rtf))
+        let attributed = try NSAttributedString(
+            data: rtfData,
+            options: [.documentType: NSAttributedString.DocumentType.rtf],
+            documentAttributes: nil
+        )
+
+        XCTAssertEqual(attributed.string, "See release notes and build 1.4.")
+    }
+
+    @MainActor
+    func testRTFPreserveClipboardUsesPasteboardInsteadOfPlainAccessibilityInsertion() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { element }
+        service.focusedTextStateOverride = { _ in
+            (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+        }
+
+        var insertedText: String?
+        service.insertTextAtOverride = { _, text in
+            insertedText = text
+            return true
+        }
+
+        var didSimulatePaste = false
+        service.pasteSimulatorOverride = {
+            didSimulatePaste = true
+        }
+
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+
+        _ = try await service.insertText("**Hello**", preserveClipboard: true, outputFormat: "rtf")
+
+        XCTAssertNil(insertedText)
+        XCTAssertTrue(didSimulatePaste)
+        XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
     func testApiStartRecording_startsAudioBeforeDeferredSelectedTextCapture() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?
@@ -1426,6 +1674,163 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual(Array(events.prefix(3)), ["capture_app", "start_audio", "pause_media"])
     }
 
+    @MainActor
+    func testApiStartRecording_playsStartSoundAfterAudioStart() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        var events: [String] = []
+        let soundService = MockSoundService { event, enabled in
+            guard event == .recordingStarted, enabled else { return }
+            events.append("start_sound")
+        }
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+            Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
+        }
+
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            soundService: soundService
+        )
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.soundFeedbackEnabled = true
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {
+            events.append("start_audio")
+        }
+
+        _ = context.dictationViewModel.apiStartRecording()
+
+        XCTAssertEqual(events, ["start_audio", "start_sound"])
+    }
+
+    @MainActor
+    func testApiStartRecording_skipsStartSoundForBluetoothInput() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        var events: [String] = []
+        let bluetoothDeviceID = AudioDeviceID(409)
+        let soundService = MockSoundService { event, enabled in
+            guard event == .recordingStarted, enabled else { return }
+            events.append("start_sound")
+        }
+        let transportResolver = FakeAudioDeviceTransportResolver(
+            transports: [bluetoothDeviceID: kAudioDeviceTransportTypeBluetooth]
+        ) { deviceID in
+            XCTAssertEqual(deviceID, bluetoothDeviceID)
+        }
+        let deviceRouteStabilizer = FakeBluetoothInputRouteStabilizer { inputDeviceID, reason in
+            XCTAssertEqual(inputDeviceID, bluetoothDeviceID)
+            XCTAssertEqual(reason, "selection-validation")
+            return true
+        }
+        let selectionEngineValidator = FakeAudioInputSelectionEngineValidator { preferredDeviceID in
+            XCTAssertNil(preferredDeviceID)
+        }
+        let recordingRouteStabilizer = FakeBluetoothInputRouteStabilizer { inputDeviceID, reason in
+            XCTAssertEqual(inputDeviceID, bluetoothDeviceID)
+            XCTAssertEqual(reason, "recording-start")
+            return true
+        }
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+            Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
+        }
+
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            soundService: soundService,
+            audioDeviceTransportResolver: transportResolver,
+            audioDeviceBluetoothInputRouteStabilizer: deviceRouteStabilizer,
+            audioDeviceSelectionEngineValidator: selectionEngineValidator,
+            audioRecordingBluetoothInputRouteStabilizer: recordingRouteStabilizer
+        )
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.soundFeedbackEnabled = true
+        context.audioDeviceService.inputDevices = [
+            AudioInputDevice(deviceID: bluetoothDeviceID, name: "AirPods Max", uid: "bt-input")
+        ]
+        context.audioDeviceService.audioDeviceIDResolverOverride = { uid in
+            uid == "bt-input" ? bluetoothDeviceID : nil
+        }
+        context.audioDeviceService.selectedDeviceUID = "bt-input"
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { selectedDeviceID in
+            XCTAssertEqual(selectedDeviceID, bluetoothDeviceID)
+            return true
+        }
+        context.audioRecordingService.startRecordingOverride = {
+            XCTAssertTrue(context.audioRecordingService.selectedInputDeviceUsesBluetoothTransport)
+            events.append("start_audio")
+        }
+
+        _ = context.dictationViewModel.apiStartRecording()
+
+        XCTAssertEqual(events, ["start_audio"])
+        XCTAssertTrue(context.audioRecordingService.hasExplicitDeviceSelection)
+    }
+
+    @MainActor
+    func testApiStartRecording_keepsStartSoundForUSBInputAfterAudioStart() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        var events: [String] = []
+        let usbDeviceID = AudioDeviceID(410)
+        let soundService = MockSoundService { event, enabled in
+            guard event == .recordingStarted, enabled else { return }
+            events.append("start_sound")
+        }
+        let transportResolver = FakeAudioDeviceTransportResolver(
+            transports: [usbDeviceID: kAudioDeviceTransportTypeUSB]
+        ) { deviceID in
+            XCTAssertEqual(deviceID, usbDeviceID)
+        }
+        let selectionEngineValidator = FakeAudioInputSelectionEngineValidator { preferredDeviceID in
+            XCTAssertEqual(preferredDeviceID, usbDeviceID)
+        }
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+            Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
+        }
+
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            soundService: soundService,
+            audioDeviceTransportResolver: transportResolver,
+            audioDeviceSelectionEngineValidator: selectionEngineValidator
+        )
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.soundFeedbackEnabled = true
+        context.audioDeviceService.inputDevices = [
+            AudioInputDevice(deviceID: usbDeviceID, name: "USB Mic", uid: "usb-input")
+        ]
+        context.audioDeviceService.audioDeviceIDResolverOverride = { uid in
+            uid == "usb-input" ? usbDeviceID : nil
+        }
+        context.audioDeviceService.selectedDeviceUID = "usb-input"
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { selectedDeviceID in
+            XCTAssertEqual(selectedDeviceID, usbDeviceID)
+            return true
+        }
+        context.audioRecordingService.startRecordingOverride = {
+            XCTAssertFalse(context.audioRecordingService.selectedInputDeviceUsesBluetoothTransport)
+            events.append("start_audio")
+        }
+
+        _ = context.dictationViewModel.apiStartRecording()
+
+        XCTAssertEqual(events, ["start_audio", "start_sound"])
+    }
+
     #if !APPSTORE
     @MainActor
     func testMediaPlaybackServicePausesAndResumesFromOneShotTrackInfo() {
@@ -1569,7 +1974,10 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
         let snippetService = SnippetService(appSupportDirectory: appSupportDirectory)
         let soundService = SoundService()
+        let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
         let audioDeviceService = AudioDeviceService()
+        Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
         let promptActionService = PromptActionService(appSupportDirectory: appSupportDirectory)
         let promptProcessingService = PromptProcessingService()
         let appFormatterService = AppFormatterService()
@@ -2125,7 +2533,12 @@ final class APIRouterAndHandlersTests: XCTestCase {
     private static func makeDictationContext(
         appSupportDirectory: URL,
         audioDuckingService: AudioDuckingService? = nil,
-        mediaPlaybackService: MediaPlaybackService? = nil
+        mediaPlaybackService: MediaPlaybackService? = nil,
+        soundService: SoundService? = nil,
+        audioDeviceTransportResolver: AudioDeviceTransportResolving = CoreAudioDeviceTransportResolver(),
+        audioDeviceBluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing = CoreAudioBluetoothInputRouteStabilizer(),
+        audioDeviceSelectionEngineValidator: AudioInputSelectionEngineValidating = AVAudioInputSelectionEngineValidator(),
+        audioRecordingBluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing = CoreAudioBluetoothInputRouteStabilizer()
     ) -> DictationContext {
         EventBus.shared = EventBus()
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
@@ -2165,7 +2578,9 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let modelManager = ModelManagerService()
         modelManager.selectProvider(mockPlugin.providerId)
 
-        let audioRecordingService = AudioRecordingService()
+        let audioRecordingService = AudioRecordingService(
+            bluetoothInputRouteStabilizer: audioRecordingBluetoothInputRouteStabilizer
+        )
         let hotkeyService = HotkeyService()
         let textInsertionService = TextInsertionService()
         let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
@@ -2175,8 +2590,12 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let audioDuckingService = audioDuckingService ?? AudioDuckingService()
         let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
         let snippetService = SnippetService(appSupportDirectory: appSupportDirectory)
-        let soundService = SoundService()
-        let audioDeviceService = AudioDeviceService()
+        let soundService = soundService ?? SoundService()
+        let audioDeviceService = AudioDeviceService(
+            transportResolver: audioDeviceTransportResolver,
+            bluetoothInputRouteStabilizer: audioDeviceBluetoothInputRouteStabilizer,
+            selectionEngineValidator: audioDeviceSelectionEngineValidator
+        )
         let promptActionService = PromptActionService(appSupportDirectory: appSupportDirectory)
         let promptProcessingService = PromptProcessingService()
         let appFormatterService = AppFormatterService()
@@ -2255,9 +2674,149 @@ final class APIRouterAndHandlersTests: XCTestCase {
         )
     }
 
+    private static func restoreSelectedInputDeviceUID(_ value: Any?) {
+        if let value {
+            UserDefaults.standard.set(value, forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        } else {
+            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        }
+    }
+
     private static func jsonObject(_ response: HTTPResponse) throws -> [String: Any] {
         let object = try JSONSerialization.jsonObject(with: response.body)
         return try XCTUnwrap(object as? [String: Any])
+    }
+
+    @MainActor
+    func testPromptProcessingInjectsMemoryByDefault() async throws {
+        let providerKey = "llmProviderType"
+        let modelKey = "llmCloudModel"
+        let originalProvider = UserDefaults.standard.object(forKey: providerKey)
+        let originalModel = UserDefaults.standard.object(forKey: modelKey)
+        defer {
+            if let originalProvider {
+                UserDefaults.standard.set(originalProvider, forKey: providerKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: providerKey)
+            }
+            if let originalModel {
+                UserDefaults.standard.set(originalModel, forKey: modelKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: modelKey)
+            }
+        }
+
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockLLMProviderPlugin()
+        plugin.models = [PluginModelInfo(id: "gemini-2.5-flash", displayName: "Gemini 2.5 Flash")]
+
+        let manifest = PluginManifest(
+            id: "com.typewhisper.mock.llm",
+            name: "Mock LLM",
+            version: "1.0.0",
+            principalClass: "APIRouterMockLLMProviderPlugin"
+        )
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: manifest,
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let memoryRetriever = MemoryRetrieverSpy()
+        let service = PromptProcessingService()
+        service.memoryService = memoryRetriever
+
+        _ = try await service.process(
+            prompt: "Fix grammar.",
+            text: "hello world",
+            providerOverride: "Gemini"
+        )
+
+        XCTAssertEqual(memoryRetriever.requestedTexts, ["hello world"])
+        XCTAssertTrue(plugin.lastSystemPrompt?.contains("<memory_context>") == true)
+        XCTAssertTrue(plugin.lastSystemPrompt?.contains("The user prefers concise wording.") == true)
+        XCTAssertTrue(plugin.lastSystemPrompt?.contains("Fix grammar.") == true)
+        XCTAssertEqual(plugin.lastUserText, "hello world")
+    }
+
+    @MainActor
+    func testWorkflowPromptProcessingSkipsMemoryAndUsesWorkflowBehavior() async throws {
+        let providerKey = "llmProviderType"
+        let modelKey = "llmCloudModel"
+        let originalProvider = UserDefaults.standard.object(forKey: providerKey)
+        let originalModel = UserDefaults.standard.object(forKey: modelKey)
+        defer {
+            if let originalProvider {
+                UserDefaults.standard.set(originalProvider, forKey: providerKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: providerKey)
+            }
+            if let originalModel {
+                UserDefaults.standard.set(originalModel, forKey: modelKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: modelKey)
+            }
+        }
+
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockLLMProviderPlugin()
+        plugin.models = [
+            PluginModelInfo(id: "gemini-2.5-flash", displayName: "Gemini 2.5 Flash"),
+            PluginModelInfo(id: "gemini-2.5-pro", displayName: "Gemini 2.5 Pro")
+        ]
+
+        let manifest = PluginManifest(
+            id: "com.typewhisper.mock.llm",
+            name: "Mock LLM",
+            version: "1.0.0",
+            principalClass: "APIRouterMockLLMProviderPlugin"
+        )
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: manifest,
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let memoryRetriever = MemoryRetrieverSpy()
+        let service = PromptProcessingService()
+        service.memoryService = memoryRetriever
+
+        let behavior = WorkflowBehavior(
+            providerId: "Gemini",
+            cloudModel: "gemini-2.5-pro",
+            temperatureModeRaw: PluginLLMTemperatureMode.custom.rawValue,
+            temperatureValue: 0.8
+        )
+
+        _ = try await service.processWorkflow(
+            prompt: "Clean up the dictated text.",
+            text: "hello world",
+            behavior: behavior
+        )
+
+        XCTAssertTrue(memoryRetriever.requestedTexts.isEmpty)
+        XCTAssertEqual(plugin.lastSystemPrompt, "Clean up the dictated text.")
+        XCTAssertEqual(plugin.lastUserText, "hello world")
+        XCTAssertEqual(plugin.lastRequestedModel, "gemini-2.5-pro")
+        XCTAssertEqual(plugin.lastTemperatureDirective, .custom(0.8))
     }
 
     @MainActor
@@ -2504,6 +3063,47 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    func testPromptProcessingRestoresLocalProviderBeforeProcessingWhenModelWasAutoUnloaded() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockLLMProviderPlugin()
+        plugin.available = false
+        plugin.configuredProviderName = "Gemma 4 (MLX)"
+        plugin.requiresExternalCredentials = false
+        plugin.restoreMakesAvailable = true
+        plugin.unavailableReason = "Load a Gemma 4 model in Integrations before using it for prompts."
+
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.local-llm",
+                    name: "Mock Local LLM",
+                    version: "1.0.0",
+                    principalClass: "APIRouterMockLLMProviderPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let service = PromptProcessingService()
+        let result = try await service.process(
+            prompt: "Fix grammar",
+            text: "hello world",
+            providerOverride: "Gemma 4 (MLX)"
+        )
+
+        XCTAssertEqual(result, "processed")
+        XCTAssertEqual(plugin.restoreCount, 1)
+    }
+
+    @MainActor
     func testPromptProcessingUsesHighPriorityActivityForLocalProviders() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -2543,6 +3143,162 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         XCTAssertEqual(result, "processed")
         XCTAssertEqual(activityManager.reasons, ["Local prompt processing with Gemma 4 (MLX)"])
+    }
+
+    @MainActor
+    func testPromptProcessingSchedulesImmediateAutoUnloadForLocalProvider() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        defer {
+            if let originalAutoUnload {
+                UserDefaults.standard.set(originalAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            }
+        }
+        UserDefaults.standard.set(-1, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockLLMProviderPlugin()
+        plugin.configuredProviderName = "Gemma 4 (MLX)"
+        plugin.requiresExternalCredentials = false
+
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.local-llm",
+                    name: "Mock Local LLM",
+                    version: "1.0.0",
+                    principalClass: "APIRouterMockLLMProviderPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        let service = PromptProcessingService()
+        service.modelManagerService = modelManager
+
+        let result = try await service.process(
+            prompt: "Fix grammar",
+            text: "hello world",
+            providerOverride: "Gemma 4 (MLX)"
+        )
+
+        XCTAssertEqual(result, "processed")
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(plugin.autoUnloadCount, 1)
+    }
+
+    @MainActor
+    func testPromptProcessingDoesNotAutoUnloadRemoteProvider() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        defer {
+            if let originalAutoUnload {
+                UserDefaults.standard.set(originalAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            }
+        }
+        UserDefaults.standard.set(-1, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockLLMProviderPlugin()
+        plugin.configuredProviderName = "Gemini"
+        plugin.requiresExternalCredentials = true
+
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.llm",
+                    name: "Mock LLM",
+                    version: "1.0.0",
+                    principalClass: "APIRouterMockLLMProviderPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        let service = PromptProcessingService()
+        service.modelManagerService = modelManager
+
+        let result = try await service.process(
+            prompt: "Fix grammar",
+            text: "hello world",
+            providerOverride: "Gemini"
+        )
+
+        XCTAssertEqual(result, "processed")
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(plugin.autoUnloadCount, 0)
+    }
+
+    @MainActor
+    func testPromptProcessingDoesNotAutoUnloadLocalProviderWhenDisabled() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        defer {
+            if let originalAutoUnload {
+                UserDefaults.standard.set(originalAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            }
+        }
+        UserDefaults.standard.set(0, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockLLMProviderPlugin()
+        plugin.configuredProviderName = "Gemma 4 (MLX)"
+        plugin.requiresExternalCredentials = false
+
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.local-llm",
+                    name: "Mock Local LLM",
+                    version: "1.0.0",
+                    principalClass: "APIRouterMockLLMProviderPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        let service = PromptProcessingService()
+        service.modelManagerService = modelManager
+
+        let result = try await service.process(
+            prompt: "Fix grammar",
+            text: "hello world",
+            providerOverride: "Gemma 4 (MLX)"
+        )
+
+        XCTAssertEqual(result, "processed")
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(plugin.autoUnloadCount, 0)
     }
 
     @MainActor
@@ -4011,7 +4767,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         service.suspendMonitoring()
 
         let workflowId = UUID()
-        service.registerWorkflowHotkeys([(id: workflowId, hotkey: spaceHotkey())])
+        service.registerWorkflowHotkeys([(id: workflowId, hotkey: spaceHotkey(), behavior: .startDictation)])
 
         var startedWorkflowId: UUID?
         service.onWorkflowDictationStart = { startedWorkflowId = $0 }
@@ -4030,14 +4786,41 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testWorkflowHotkeyTextProcessingCallbackDoesNotStartDictation() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        let workflowId = UUID()
+        service.registerWorkflowHotkeys([(id: workflowId, hotkey: spaceHotkey(), behavior: .processSelectedText)])
+
+        var textWorkflowId: UUID?
+        var startedWorkflowId: UUID?
+        service.onWorkflowTextProcessing = { textWorkflowId = $0 }
+        service.onWorkflowDictationStart = { startedWorkflowId = $0 }
+
+        let keyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
+        let keyUp = try makeKeyboardEvent(keyCode: 0x31, keyDown: false)
+
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertEqual(textWorkflowId, workflowId)
+        XCTAssertNil(startedWorkflowId)
+        XCTAssertNil(service.currentMode)
+        XCTAssertNil(service.activeWorkflowId)
+
+        XCTAssertTrue(service.processEventForTesting(keyUp, source: .monitor))
+        XCTAssertNil(service.currentMode)
+        XCTAssertNil(service.activeWorkflowId)
+    }
+
+    @MainActor
     func testWorkflowCanRegisterMultipleHotkeysForSameWorkflow() throws {
         let service = HotkeyService()
         service.suspendMonitoring()
 
         let workflowId = UUID()
         service.registerWorkflowHotkeys([
-            (id: workflowId, hotkey: spaceHotkey()),
-            (id: workflowId, hotkey: alternateSpaceHotkey())
+            (id: workflowId, hotkey: spaceHotkey(), behavior: .startDictation),
+            (id: workflowId, hotkey: alternateSpaceHotkey(), behavior: .startDictation)
         ])
 
         var startedWorkflowIds: [UUID] = []

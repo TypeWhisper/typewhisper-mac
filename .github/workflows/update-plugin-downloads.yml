@@ -51,7 +51,10 @@ jobs:
                   counts[plugin_name] = counts.get(plugin_name, 0) + asset.get("download_count", 0)
 
           changed = False
-          registry_paths = sorted(glob.glob("/tmp/gh-pages/plugins*.json"))
+          registry_paths = sorted(set(
+              glob.glob("/tmp/gh-pages/plugins-v*.json")
+              + glob.glob("/tmp/gh-pages/plugins-community-v*.json")
+          ))
 
           for target_path in registry_paths:
               with open(target_path) as f:
@@ -105,7 +108,7 @@ jobs:
               print("No changes needed")
           PYEOF
 
-            for registry_file in plugins*.json; do
+            for registry_file in plugins-v*.json plugins-community-v*.json; do
               if [ -f "$registry_file" ]; then
                 git add "$registry_file"
               fi

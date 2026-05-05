@@ -11,35 +11,38 @@ final class WorkflowsNavigationCoordinator: ObservableObject {
     nonisolated(unsafe) static var shared: WorkflowsNavigationCoordinator!
 
     @Published private(set) var route: WorkflowRoute?
-    @Published private(set) var legacyFocus: LegacyWorkflowSourceKind?
 
     func showMine() {
         route = nil
-        legacyFocus = nil
-    }
-
-    func showLegacy(focus: LegacyWorkflowSourceKind? = nil) {
-        route = nil
-        legacyFocus = focus
-    }
-
-    func setLegacyFocus(_ focus: LegacyWorkflowSourceKind?) {
-        legacyFocus = focus
     }
 
     func createWorkflow() {
         route = .create
-        legacyFocus = nil
     }
 
     func editWorkflow(id: UUID) {
         route = .edit(id)
-        legacyFocus = nil
     }
 
     func goBackToList() {
         route = nil
     }
+}
+
+struct WorkflowOutputFormatPreset: Identifiable, Equatable {
+    let title: String
+    let value: String
+
+    var id: String { value }
+
+    static let all: [WorkflowOutputFormatPreset] = [
+        WorkflowOutputFormatPreset(title: "Markdown", value: "markdown"),
+        WorkflowOutputFormatPreset(title: "HTML", value: "html"),
+        WorkflowOutputFormatPreset(title: "RTF", value: "rtf"),
+        WorkflowOutputFormatPreset(title: "Plain Text", value: "plaintext"),
+        WorkflowOutputFormatPreset(title: "Code", value: "code"),
+        WorkflowOutputFormatPreset(title: "JSON", value: "json")
+    ]
 }
 
 struct WorkflowsSettingsView: View {
@@ -69,14 +72,6 @@ struct WorkflowsSettingsView: View {
     }
 }
 
-struct LegacyWorkflowsSettingsView: View {
-    var body: some View {
-        LegacyWorkflowsPage()
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .frame(minWidth: 760, minHeight: 480)
-    }
-}
-
 private struct MyWorkflowsPage: View {
     @ObservedObject private var workflowService = ServiceContainer.shared.workflowService
     @ObservedObject private var promptProcessingService = ServiceContainer.shared.promptProcessingService
@@ -94,6 +89,7 @@ private struct MyWorkflowsPage: View {
                 || workflow.template.definition.name.localizedCaseInsensitiveContains(trimmedQuery)
                 || workflowTriggerSummary(for: workflow).localizedCaseInsensitiveContains(trimmedQuery)
                 || workflowTriggerDetail(for: workflow).localizedCaseInsensitiveContains(trimmedQuery)
+                || workflowInputLanguageSummary(for: workflow.inputLanguageSelection).localizedCaseInsensitiveContains(trimmedQuery)
         }
     }
 
@@ -217,14 +213,14 @@ private struct MyWorkflowsPage: View {
                         .controlSize(.small)
                     }
                 } else {
-                    let models = promptProcessingService.modelsForProvider(promptProcessingService.selectedProviderId)
+                    let models = promptProcessingService.modelsForProvider(workflowService.defaultProviderId)
 
                     ViewThatFits(in: .horizontal) {
                         HStack(alignment: .top, spacing: 12) {
                             compactDefaultLLMField(title: localizedAppText("Provider", de: "Provider")) {
                                 Picker(
                                     localizedAppText("Provider", de: "Provider"),
-                                    selection: $promptProcessingService.selectedProviderId
+                                    selection: workflowDefaultProviderBinding
                                 ) {
                                     ForEach(providers, id: \.id) { provider in
                                         Text(provider.displayName).tag(provider.id)
@@ -236,8 +232,10 @@ private struct MyWorkflowsPage: View {
                                 compactDefaultLLMField(title: localizedAppText("Model", de: "Modell")) {
                                     Picker(
                                         localizedAppText("Model", de: "Modell"),
-                                        selection: $promptProcessingService.selectedCloudModel
+                                        selection: $workflowService.defaultCloudModel
                                     ) {
+                                        Text(localizedAppText("Provider Default", de: "Provider-Standard"))
+                                            .tag("")
                                         ForEach(models, id: \.id) { model in
                                             Text(model.displayName).tag(model.id)
                                         }
@@ -250,7 +248,7 @@ private struct MyWorkflowsPage: View {
                             compactDefaultLLMField(title: localizedAppText("Provider", de: "Provider")) {
                                 Picker(
                                     localizedAppText("Provider", de: "Provider"),
-                                    selection: $promptProcessingService.selectedProviderId
+                                    selection: workflowDefaultProviderBinding
                                 ) {
                                     ForEach(providers, id: \.id) { provider in
                                         Text(provider.displayName).tag(provider.id)
@@ -262,8 +260,10 @@ private struct MyWorkflowsPage: View {
                                 compactDefaultLLMField(title: localizedAppText("Model", de: "Modell")) {
                                     Picker(
                                         localizedAppText("Model", de: "Modell"),
-                                        selection: $promptProcessingService.selectedCloudModel
+                                        selection: $workflowService.defaultCloudModel
                                     ) {
+                                        Text(localizedAppText("Provider Default", de: "Provider-Standard"))
+                                            .tag("")
                                         ForEach(models, id: \.id) { model in
                                             Text(model.displayName).tag(model.id)
                                         }
@@ -275,7 +275,7 @@ private struct MyWorkflowsPage: View {
 
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
                         Text(
-                            promptProcessingService.isProviderReady(promptProcessingService.selectedProviderId)
+                            promptProcessingService.isProviderReady(workflowService.defaultProviderId)
                                 ? localizedAppText(
                                     "Ready for new workflows.",
                                     de: "Bereit für neue Workflows."
@@ -299,6 +299,20 @@ private struct MyWorkflowsPage: View {
                 }
             }
         }
+    }
+
+    private var workflowDefaultProviderBinding: Binding<String> {
+        Binding(
+            get: { workflowService.defaultProviderId },
+            set: { providerId in
+                workflowService.defaultProviderId = providerId
+                let models = promptProcessingService.modelsForProvider(providerId)
+                if !workflowService.defaultCloudModel.isEmpty,
+                   !models.contains(where: { $0.id == workflowService.defaultCloudModel }) {
+                    workflowService.defaultCloudModel = ""
+                }
+            }
+        )
     }
 
     @ViewBuilder
@@ -470,6 +484,12 @@ private struct WorkflowRow: View {
                             foreground: .secondary
                         )
                     }
+                    WorkflowBadge(
+                        title: workflowInputLanguageSummary(for: workflow.inputLanguageSelection),
+                        compact: true,
+                        tint: .secondary.opacity(0.12),
+                        foreground: .secondary
+                    )
                     Spacer(minLength: 0)
                 }
             }
@@ -518,229 +538,15 @@ private struct WorkflowRow: View {
     }
 }
 
-private struct LegacyWorkflowsPage: View {
-    @ObservedObject private var legacyWorkflowService = ServiceContainer.shared.legacyWorkflowService
-    @ObservedObject private var navigation = WorkflowsNavigationCoordinator.shared
-
-    @State private var searchText = ""
-    @State private var pendingDeleteItem: LegacyWorkflowItem?
-
-    private var filteredItems: [LegacyWorkflowItem] {
-        let trimmedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let scoped = legacyWorkflowService.items.filter { item in
-            guard let focus = navigation.legacyFocus else { return true }
-            return item.sourceKind == focus
-        }
-
-        guard !trimmedQuery.isEmpty else { return scoped }
-
-        return scoped.filter { item in
-            item.name.localizedCaseInsensitiveContains(trimmedQuery)
-                || item.summary.localizedCaseInsensitiveContains(trimmedQuery)
-                || item.detail.localizedCaseInsensitiveContains(trimmedQuery)
-        }
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            header
-
-            Divider()
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    filterBar
-
-                    if filteredItems.isEmpty {
-                        ContentUnavailableView {
-                            Label(localizedAppText("No Legacy Entries", de: "Keine Legacy-Einträge"), systemImage: "archivebox")
-                        } description: {
-                            Text(localizedAppText("There are currently no rules or prompts in the old system.", de: "Aktuell gibt es keine Regeln oder Prompts im alten System."))
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 220)
-                        .background {
-                            workflowsGroupedSurface(cornerRadius: 16)
-                        }
-                    } else {
-                        LazyVStack(spacing: 0) {
-                            ForEach(Array(filteredItems.enumerated()), id: \.element.id) { index, item in
-                                LegacyWorkflowRow(item: item) {
-                                    pendingDeleteItem = item
-                                }
-
-                                if index < filteredItems.count - 1 {
-                                    Divider()
-                                        .padding(.leading, 62)
-                                }
-                            }
-                        }
-                        .background {
-                            workflowsGroupedSurface(cornerRadius: 16)
-                        }
-                    }
-                }
-                .padding(16)
-            }
-        }
-        .confirmationDialog(
-            localizedAppText("Delete legacy entry?", de: "Legacy-Eintrag löschen?"),
-            isPresented: Binding(
-                get: { pendingDeleteItem != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        pendingDeleteItem = nil
-                    }
-                }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button(localizedAppText("Delete", de: "Löschen"), role: .destructive) {
-                guard let pendingDeleteItem else { return }
-                legacyWorkflowService.deleteItem(pendingDeleteItem)
-                self.pendingDeleteItem = nil
-            }
-
-            Button(localizedAppText("Cancel", de: "Abbrechen"), role: .cancel) {
-                pendingDeleteItem = nil
-            }
-        } message: {
-            if let pendingDeleteItem {
-                Text(deleteMessage(for: pendingDeleteItem))
-            }
-        }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(localizedAppText("Legacy", de: "Legacy"))
-                .font(.headline)
-            Text(
-                localizedAppText(
-                    "View and clean up the old rules and prompts while the workflow migration is underway.",
-                    de: "Sichte und bereinige die alten Regeln und Prompts, während die Workflow-Migration läuft."
-                )
-            )
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(.bar)
-    }
-
-    private var filterBar: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Picker(
-                localizedAppText("Legacy Filter", de: "Legacy-Filter"),
-                selection: Binding(
-                    get: { navigation.legacyFocus },
-                    set: { navigation.setLegacyFocus($0) }
-                )
-            ) {
-                Text(localizedAppText("All", de: "Alle")).tag(nil as LegacyWorkflowSourceKind?)
-                Text(localizedAppText("Rules", de: "Regeln")).tag(LegacyWorkflowSourceKind.rule as LegacyWorkflowSourceKind?)
-                Text(localizedAppText("Prompts", de: "Prompts")).tag(LegacyWorkflowSourceKind.prompt as LegacyWorkflowSourceKind?)
-            }
-            .pickerStyle(.segmented)
-
-            HStack(spacing: 10) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                TextField(localizedAppText("Search legacy entries", de: "Legacy-Einträge durchsuchen"), text: $searchText)
-                    .textFieldStyle(.plain)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(nsColor: .controlBackgroundColor))
-            }
-        }
-    }
-
-    private func deleteMessage(for item: LegacyWorkflowItem) -> String {
-        switch item.sourceKind {
-        case .rule:
-            return localizedAppText(
-                "This removes the legacy rule “\(item.name)” from the old store.",
-                de: "Dadurch wird die Legacy-Regel „\(item.name)“ aus dem alten Store entfernt."
-            )
-        case .prompt:
-            return localizedAppText(
-                "This removes the legacy prompt “\(item.name)” and clears its links from old rules.",
-                de: "Dadurch wird der Legacy-Prompt „\(item.name)“ entfernt und aus alten Regeln ausgetragen."
-            )
-        }
-    }
-}
-
-private struct LegacyWorkflowRow: View {
-    let item: LegacyWorkflowItem
-    let onDelete: () -> Void
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: item.sourceKind == .rule ? "archivebox" : "sparkles.rectangle.stack")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 30, height: 30)
-                .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Text(item.name)
-                        .font(.headline)
-
-                    WorkflowBadge(title: item.sourceKind.title, tint: .secondary.opacity(0.14), foreground: .secondary)
-
-                    if item.isImported {
-                        WorkflowBadge(title: localizedAppText("Imported", de: "Importiert"), tint: .green.opacity(0.14), foreground: .green)
-                    }
-                }
-
-                Text(item.summary)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-
-                Text(item.detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                WorkflowBadge(
-                    title: item.isEnabled
-                        ? localizedAppText("Enabled in legacy store", de: "Im Legacy-Store aktiv")
-                        : localizedAppText("Disabled in legacy store", de: "Im Legacy-Store deaktiviert"),
-                    tint: item.isEnabled ? .orange.opacity(0.14) : .secondary.opacity(0.14),
-                    foreground: item.isEnabled ? .orange : .secondary
-                )
-            }
-
-            Spacer(minLength: 12)
-
-            Button(role: .destructive, action: onDelete) {
-                Image(systemName: "trash")
-                    .font(.system(size: 13, weight: .semibold))
-                    .frame(width: 28, height: 28)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .help(localizedAppText("Delete legacy entry", de: "Legacy-Eintrag löschen"))
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-    }
-}
-
 private struct WorkflowEditorPage: View {
     let workflow: Workflow?
 
     @ObservedObject private var workflowService = ServiceContainer.shared.workflowService
     @ObservedObject private var hotkeyService = ServiceContainer.shared.hotkeyService
-    @ObservedObject private var profileService = ServiceContainer.shared.profileService
     @ObservedObject private var profilesViewModel = ServiceContainer.shared.profilesViewModel
     @ObservedObject private var historyService = ServiceContainer.shared.historyService
     @ObservedObject private var promptProcessingService = ServiceContainer.shared.promptProcessingService
+    @ObservedObject private var settingsViewModel = SettingsViewModel.shared
     @ObservedObject private var navigation = WorkflowsNavigationCoordinator.shared
 
     @State private var draft: WorkflowDraft
@@ -769,8 +575,8 @@ private struct WorkflowEditorPage: View {
                     }
 
                     templateSection
-                    behaviorSection
                     triggerSection
+                    behaviorSection
                     reviewSection
                 }
                 .padding(16)
@@ -813,7 +619,7 @@ private struct WorkflowEditorPage: View {
                 Text(
                     isEditing
                         ? localizedAppText("Adjust the current workflow without changing its template.", de: "Passe den aktuellen Workflow an, ohne seine Vorlage zu ändern.")
-                        : localizedAppText("Pick a concrete outcome first, then add behavior and one trigger category.", de: "Wähle zuerst ein konkretes Ergebnis und ergänze dann Verhalten und eine Trigger-Kategorie.")
+                        : localizedAppText("Pick a concrete outcome first, then add behavior and one or more triggers.", de: "Wähle zuerst ein konkretes Ergebnis und ergänze dann Verhalten und einen oder mehrere Trigger.")
                 )
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -860,13 +666,12 @@ private struct WorkflowEditorPage: View {
                         .textFieldStyle(.roundedBorder)
                 }
 
+                if draft.template == .dictation {
+                    workflowInputLanguageEditor
+                }
+
                 if draft.template == .translation {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(localizedAppText("Target Language", de: "Zielsprache"))
-                            .font(.subheadline.weight(.semibold))
-                        TextField(localizedAppText("e.g. English", de: "z. B. Englisch"), text: $draft.translationTargetLanguage)
-                            .textFieldStyle(.roundedBorder)
-                    }
+                    translationProcessorSection
                 }
 
                 if draft.template == .custom {
@@ -880,14 +685,16 @@ private struct WorkflowEditorPage: View {
                     )
                 }
 
-                WorkflowTextEditorField(
-                    title: localizedAppText("Fine-Tuning", de: "Feinabstimmung"),
-                    placeholder: localizedAppText(
-                        "Optional: add tone, length, or wording hints.",
-                        de: "Optional: ergänze Hinweise zu Ton, Länge oder Formulierung."
-                    ),
-                    text: $draft.fineTuning
-                )
+                if draft.usesLLMProcessing {
+                    WorkflowTextEditorField(
+                        title: localizedAppText("Fine-Tuning", de: "Feinabstimmung"),
+                        placeholder: localizedAppText(
+                            "Optional: add tone, length, or wording hints.",
+                            de: "Optional: ergänze Hinweise zu Ton, Länge oder Formulierung."
+                        ),
+                        text: $draft.fineTuning
+                    )
+                }
 
                 VStack(alignment: .leading, spacing: 0) {
                     Button {
@@ -913,21 +720,115 @@ private struct WorkflowEditorPage: View {
 
                     if isAdvancedExpanded {
                         VStack(alignment: .leading, spacing: 14) {
-                            workflowProviderOverrideSection
+                            if draft.template != .dictation {
+                                workflowInputLanguageEditor
 
-                            Divider()
+                                Divider()
+                            }
 
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(localizedAppText("Output Format", de: "Ausgabeformat"))
-                                    .font(.subheadline.weight(.semibold))
-                                TextField(localizedAppText("e.g. Markdown, JSON, plain text", de: "z. B. Markdown, JSON, Plain Text"), text: $draft.outputFormat)
-                                    .textFieldStyle(.roundedBorder)
+                            if draft.usesLLMProcessing {
+                                workflowProviderOverrideSection
+
+                                Divider()
+
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(localizedAppText("Output Format", de: "Ausgabeformat"))
+                                        .font(.subheadline.weight(.semibold))
+                                    HStack(spacing: 8) {
+                                        TextField(localizedAppText("e.g. Markdown, RTF, JSON, plain text", de: "z. B. Markdown, RTF, JSON, Plain Text"), text: $draft.outputFormat)
+                                            .textFieldStyle(.roundedBorder)
+
+                                        Menu {
+                                            ForEach(WorkflowOutputFormatPreset.all) { preset in
+                                                Button(preset.title) {
+                                                    draft.outputFormat = preset.value
+                                                }
+                                            }
+                                        } label: {
+                                            Label(localizedAppText("Presets", de: "Presets"), systemImage: "list.bullet.rectangle")
+                                        }
+                                        .menuStyle(.borderlessButton)
+                                        .help(localizedAppText("Choose an output format preset", de: "Ausgabeformat-Preset wählen"))
+                                    }
+                                }
+
+                                Divider()
                             }
 
                             Toggle(localizedAppText("Press Enter after inserting", de: "Nach dem Einfügen Enter drücken"), isOn: $draft.autoEnter)
                         }
                         .padding(.top, 4)
                     }
+                }
+            }
+        }
+    }
+
+    private var workflowInputLanguageEditor: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(localizedAppText("Spoken Language", de: "Gesprochene Sprache"))
+                .font(.subheadline.weight(.semibold))
+            LanguageSelectionEditor(
+                selection: $draft.inputLanguageSelection,
+                availableLanguages: settingsViewModel.availableLanguages,
+                nilBehavior: .inheritGlobal,
+                inheritTitle: localizedAppText("Global Setting", de: "Globale Einstellung")
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var translationProcessorSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(localizedAppText("Translation Mode", de: "Übersetzungsmodus"))
+                    .font(.subheadline.weight(.semibold))
+                Picker(localizedAppText("Translation Mode", de: "Übersetzungsmodus"), selection: $draft.translationProcessor) {
+                    ForEach(WorkflowTranslationProcessor.allCases, id: \.self) { processor in
+                        Text(processor.label).tag(processor)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: draft.translationProcessor) { _, newValue in
+                    draft.normalizeTranslationTarget(for: newValue)
+                }
+            }
+
+            if draft.usesAppleTranslate {
+                #if canImport(Translation)
+                if #available(macOS 15, *) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(localizedAppText("Target Language", de: "Zielsprache"))
+                            .font(.subheadline.weight(.semibold))
+                        Picker(localizedAppText("Target Language", de: "Zielsprache"), selection: $draft.translationTargetLanguage) {
+                            ForEach(TranslationService.availableTargetLanguages, id: \.code) { language in
+                                Text(language.name).tag(language.code)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                    }
+                } else {
+                    Text(localizedAppText(
+                        "Apple Translate requires macOS 15 or later. Choose LLM Prompt on this Mac.",
+                        de: "Apple Translate benötigt macOS 15 oder neuer. Wähle auf diesem Mac LLM-Prompt."
+                    ))
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                }
+                #else
+                Text(localizedAppText(
+                    "Apple Translate is not available in this build. Choose LLM Prompt instead.",
+                    de: "Apple Translate ist in diesem Build nicht verfügbar. Wähle stattdessen LLM-Prompt."
+                ))
+                .font(.caption)
+                .foregroundStyle(.orange)
+                #endif
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(localizedAppText("Target Language", de: "Zielsprache"))
+                        .font(.subheadline.weight(.semibold))
+                    TextField(localizedAppText("e.g. English", de: "z. B. Englisch"), text: $draft.translationTargetLanguage)
+                        .textFieldStyle(.roundedBorder)
                 }
             }
         }
@@ -964,8 +865,8 @@ private struct WorkflowEditorPage: View {
                 ) {
                     Text(
                         localizedAppText(
-                            "Use Workflow Default (\(promptProcessingService.displayName(for: promptProcessingService.selectedProviderId)))",
-                            de: "Workflow-Standard verwenden (\(promptProcessingService.displayName(for: promptProcessingService.selectedProviderId)))"
+                            "Use Workflow Default (\(promptProcessingService.displayName(for: workflowService.defaultProviderId)))",
+                            de: "Workflow-Standard verwenden (\(promptProcessingService.displayName(for: workflowService.defaultProviderId)))"
                         )
                     )
                     .tag(nil as String?)
@@ -1032,29 +933,25 @@ private struct WorkflowEditorPage: View {
         WorkflowSectionCard(
             title: localizedAppText("Trigger", de: "Trigger"),
             description: localizedAppText(
-                "Choose how this workflow starts. Manual workflows are available from the Workflow Palette only.",
-                de: "Wähle, wie dieser Workflow startet. Manuelle Workflows sind nur über die Workflow-Palette verfügbar."
+                "Choose how this workflow starts. Automatic can use app, website, hotkey, or combinations.",
+                de: "Wähle, wie dieser Workflow startet. Automatisch kann App, Website, Hotkey oder Kombinationen nutzen."
             )
         ) {
             VStack(alignment: .leading, spacing: 14) {
-                Picker(localizedAppText("Trigger", de: "Trigger"), selection: $draft.triggerKind) {
-                    Text(localizedAppText("Manual", de: "Manuell")).tag(WorkflowTriggerKind.manual)
-                    Text(localizedAppText("App", de: "App")).tag(WorkflowTriggerKind.app)
-                    Text(localizedAppText("Website", de: "Website")).tag(WorkflowTriggerKind.website)
-                    Text(localizedAppText("Hotkey", de: "Hotkey")).tag(WorkflowTriggerKind.hotkey)
-                    Text(localizedAppText("Always", de: "Immer")).tag(WorkflowTriggerKind.global)
+                Picker(localizedAppText("Trigger", de: "Trigger"), selection: $draft.triggerMode) {
+                    Text(localizedAppText("Automatic", de: "Automatisch")).tag(WorkflowTriggerMode.automatic)
+                    if draft.template != .dictation {
+                        Text(localizedAppText("Manual", de: "Manuell")).tag(WorkflowTriggerMode.manual)
+                    }
+                    Text(localizedAppText("Always", de: "Immer")).tag(WorkflowTriggerMode.global)
                 }
                 .pickerStyle(.segmented)
 
-                switch draft.triggerKind {
+                switch draft.triggerMode {
                 case .manual:
                     manualTriggerEditor
-                case .app:
-                    appTriggerEditor
-                case .website:
-                    websiteTriggerEditor
-                case .hotkey:
-                    hotkeyTriggerEditor
+                case .automatic:
+                    automaticTriggerEditor
                 case .global:
                     alwaysTriggerEditor
                 }
@@ -1105,6 +1002,57 @@ private struct WorkflowEditorPage: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(workflowsGroupedSurface(cornerRadius: 12))
+    }
+
+    private var automaticTriggerEditor: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            triggerComponentEditor(
+                title: localizedAppText("App", de: "App"),
+                isOn: $draft.isAppTriggerEnabled
+            ) {
+                appTriggerEditor
+            }
+
+            Divider()
+
+            triggerComponentEditor(
+                title: localizedAppText("Website", de: "Website"),
+                isOn: $draft.isWebsiteTriggerEnabled
+            ) {
+                websiteTriggerEditor
+            }
+
+            Divider()
+
+            triggerComponentEditor(
+                title: localizedAppText("Hotkey", de: "Hotkey"),
+                isOn: $draft.isHotkeyTriggerEnabled
+            ) {
+                hotkeyTriggerEditor
+            }
+        }
+        .background(workflowsGroupedSurface(cornerRadius: 12))
+    }
+
+    private func triggerComponentEditor<Content: View>(
+        title: String,
+        isOn: Binding<Bool>,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Toggle(isOn: isOn) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+            }
+            .toggleStyle(.checkbox)
+
+            if isOn.wrappedValue {
+                content()
+                    .padding(.leading, 28)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
     }
 
     private var appTriggerEditor: some View {
@@ -1175,14 +1123,22 @@ private struct WorkflowEditorPage: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
 
-                    ForEach(websiteSuggestions, id: \.self) { domain in
-                        Button(domain) {
-                            draft.addWebsitePattern(domain)
-                            websiteInput = ""
-                            validationMessage = nil
+                    FlowLayout(spacing: 6) {
+                        ForEach(websiteSuggestions, id: \.self) { domain in
+                            Button(domain) {
+                                draft.addWebsitePattern(domain)
+                                websiteInput = ""
+                                validationMessage = nil
+                            }
+                            .buttonStyle(.plain)
+                            .font(.caption)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background {
+                                Capsule(style: .continuous)
+                                    .fill(Color.secondary.opacity(0.12))
+                            }
                         }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.primary)
                     }
                 }
             }
@@ -1195,6 +1151,28 @@ private struct WorkflowEditorPage: View {
 
     private var hotkeyTriggerEditor: some View {
         VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(localizedAppText("Shortcut Behavior", de: "Shortcut-Verhalten"))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+
+                Picker(
+                    localizedAppText("Shortcut Behavior", de: "Shortcut-Verhalten"),
+                    selection: $draft.hotkeyBehavior
+                ) {
+                    ForEach(WorkflowHotkeyBehavior.allCases, id: \.self) { behavior in
+                        Text(behavior.editorLabel).tag(behavior)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+
+                Text(draft.hotkeyBehavior.editorDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             if draft.hotkeys.isEmpty {
                 Text(localizedAppText("No shortcuts recorded yet.", de: "Noch keine Shortcuts aufgenommen."))
                     .font(.subheadline)
@@ -1204,7 +1182,7 @@ private struct WorkflowEditorPage: View {
                     ForEach(draft.hotkeys, id: \.self) { hotkey in
                         WorkflowSelectionRow(
                             title: HotkeyService.displayName(for: hotkey),
-                            subtitle: localizedAppText("Workflow shortcut", de: "Workflow-Shortcut"),
+                            subtitle: draft.hotkeyBehavior.shortcutSubtitle,
                             iconSystemName: "keyboard"
                         ) {
                             draft.hotkeys.removeAll { $0 == hotkey }
@@ -1216,7 +1194,7 @@ private struct WorkflowEditorPage: View {
             HotkeyRecorderView(
                 label: "",
                 title: localizedAppText("Add Shortcut", de: "Shortcut hinzufügen"),
-                subtitle: localizedAppText("You can attach more than one shortcut to the same workflow.", de: "Du kannst mehrere Shortcuts mit demselben Workflow verbinden."),
+                subtitle: nil,
                 onRecord: { hotkey in
                     addRecordedHotkey(hotkey)
                 },
@@ -1237,8 +1215,8 @@ private struct WorkflowEditorPage: View {
 
                 Text(
                     localizedAppText(
-                        "Runs when no app, website, or hotkey workflow matches.",
-                        de: "Läuft, wenn kein App-, Website- oder Hotkey-Workflow passt."
+                        "Runs when no app or website workflow matches. Hotkeys stay direct triggers.",
+                        de: "Läuft, wenn kein App- oder Website-Workflow passt. Hotkeys bleiben direkte Trigger."
                     )
                 )
                 .font(.caption)
@@ -1270,7 +1248,6 @@ private struct WorkflowEditorPage: View {
         if let validationError = draft.validationError(
             hotkeyService: hotkeyService,
             workflowService: workflowService,
-            profileService: profileService,
             existingWorkflowId: workflow?.id
         ) {
             validationMessage = validationError
@@ -1342,15 +1319,6 @@ private struct WorkflowEditorPage: View {
             validationMessage = localizedAppText(
                 "This hotkey is already used by workflow “\(conflictWorkflow.name)”.",
                 de: "Dieser Hotkey wird bereits vom Workflow „\(conflictWorkflow.name)“ verwendet."
-            )
-            return
-        }
-
-        if let profileId = hotkeyService.isHotkeyAssignedToProfile(hotkey, excludingProfileId: nil),
-           let conflictProfile = profileService.profiles.first(where: { $0.id == profileId }) {
-            validationMessage = localizedAppText(
-                "This hotkey is already used by legacy rule “\(conflictProfile.name)”.",
-                de: "Dieser Hotkey wird bereits von der Legacy-Regel „\(conflictProfile.name)“ verwendet."
             )
             return
         }
@@ -1738,16 +1706,28 @@ private struct MissingWorkflowPage: View {
     }
 }
 
-private struct WorkflowDraft {
+enum WorkflowTriggerMode: String, CaseIterable, Hashable {
+    case manual
+    case automatic
+    case global
+}
+
+struct WorkflowDraft {
     var name: String
     var isEnabled: Bool
     var template: WorkflowTemplate
-    var triggerKind: WorkflowTriggerKind
+    var triggerMode: WorkflowTriggerMode
+    var isAppTriggerEnabled: Bool
+    var isWebsiteTriggerEnabled: Bool
+    var isHotkeyTriggerEnabled: Bool
     var appBundleIdentifiers: [String]
     var websitePatterns: [String]
     var hotkeys: [UnifiedHotkey]
+    var hotkeyBehavior: WorkflowHotkeyBehavior
     var fineTuning: String
+    var inputLanguageSelection: LanguageSelection
     var translationTargetLanguage: String
+    var translationProcessor: WorkflowTranslationProcessor
     var customInstruction: String
     var outputFormat: String
     var autoEnter: Bool
@@ -1763,12 +1743,20 @@ private struct WorkflowDraft {
         self.name = template.definition.name
         self.isEnabled = true
         self.template = template
-        self.triggerKind = .manual
+        self.triggerMode = template == .dictation ? .automatic : .manual
+        self.isAppTriggerEnabled = false
+        self.isWebsiteTriggerEnabled = false
+        self.isHotkeyTriggerEnabled = template == .dictation
         self.appBundleIdentifiers = []
         self.websitePatterns = []
         self.hotkeys = []
+        self.hotkeyBehavior = .startDictation
         self.fineTuning = ""
-        self.translationTargetLanguage = template == .translation ? "English" : ""
+        self.inputLanguageSelection = .inheritGlobal
+        self.translationProcessor = template == .translation ? Self.defaultTranslationProcessor : .llmPrompt
+        self.translationTargetLanguage = template == .translation
+            ? Self.defaultTranslationTargetLanguage(for: translationProcessor)
+            : ""
         self.customInstruction = ""
         self.outputFormat = ""
         self.autoEnter = false
@@ -1788,10 +1776,19 @@ private struct WorkflowDraft {
         self.isEnabled = workflow.isEnabled
         self.template = workflow.template
         self.fineTuning = behavior.fineTuning
-        self.translationTargetLanguage = behavior.settings["targetLanguage"] ?? behavior.settings["target"] ?? ""
+        self.inputLanguageSelection = workflow.inputLanguageSelection
+        self.translationProcessor = workflow.translationProcessor
+        let rawTranslationTargetLanguage = workflow.translationTargetLanguage ?? ""
+        if workflow.usesAppleTranslate,
+           let normalized = WorkflowTranslationLanguageNormalizer.normalizedLanguageIdentifier(from: rawTranslationTargetLanguage) {
+            self.translationTargetLanguage = normalized
+        } else {
+            self.translationTargetLanguage = rawTranslationTargetLanguage
+        }
         self.customInstruction = behavior.settings["instruction"] ?? behavior.settings["goal"] ?? behavior.settings["prompt"] ?? ""
         self.outputFormat = output.format ?? ""
         self.autoEnter = output.autoEnter
+        self.hotkeyBehavior = .startDictation
         self.preservedBehaviorSettings = behavior.settings
         self.providerId = behavior.providerId
         self.cloudModel = behavior.cloudModel
@@ -1800,38 +1797,43 @@ private struct WorkflowDraft {
         self.targetActionPluginId = output.targetActionPluginId
 
         if let trigger = workflow.trigger {
+            self.appBundleIdentifiers = trigger.appBundleIdentifiers
+            self.websitePatterns = trigger.websitePatterns
+            self.hotkeys = trigger.hotkeys
+            self.hotkeyBehavior = trigger.hotkeyBehavior
+
             switch trigger.kind {
-            case .app:
-                self.triggerKind = .app
-                self.appBundleIdentifiers = trigger.appBundleIdentifiers
-                self.websitePatterns = []
-                self.hotkeys = []
-            case .website:
-                self.triggerKind = .website
-                self.appBundleIdentifiers = []
-                self.websitePatterns = trigger.websitePatterns
-                self.hotkeys = []
-            case .hotkey:
-                self.triggerKind = .hotkey
-                self.appBundleIdentifiers = []
-                self.websitePatterns = []
-                self.hotkeys = trigger.hotkeys
             case .global:
-                self.triggerKind = .global
-                self.appBundleIdentifiers = []
-                self.websitePatterns = []
-                self.hotkeys = []
+                self.triggerMode = .global
+                self.isAppTriggerEnabled = false
+                self.isWebsiteTriggerEnabled = false
+                self.isHotkeyTriggerEnabled = false
             case .manual:
-                self.triggerKind = .manual
-                self.appBundleIdentifiers = []
-                self.websitePatterns = []
-                self.hotkeys = []
+                self.triggerMode = .manual
+                self.isAppTriggerEnabled = false
+                self.isWebsiteTriggerEnabled = false
+                self.isHotkeyTriggerEnabled = false
+            case .app, .website, .hotkey:
+                self.triggerMode = .automatic
+                self.isAppTriggerEnabled = !trigger.appBundleIdentifiers.isEmpty
+                self.isWebsiteTriggerEnabled = !trigger.websitePatterns.isEmpty
+                self.isHotkeyTriggerEnabled = !trigger.hotkeys.isEmpty
             }
         } else {
-            self.triggerKind = .manual
+            self.triggerMode = .manual
+            self.isAppTriggerEnabled = false
+            self.isWebsiteTriggerEnabled = false
+            self.isHotkeyTriggerEnabled = false
             self.appBundleIdentifiers = []
             self.websitePatterns = []
             self.hotkeys = []
+        }
+
+        if self.template == .dictation && self.triggerMode == .manual {
+            self.triggerMode = .automatic
+            if !hasEnabledAutomaticTriggerComponent {
+                self.isHotkeyTriggerEnabled = true
+            }
         }
     }
 
@@ -1840,24 +1842,37 @@ private struct WorkflowDraft {
         return trimmed.isEmpty ? template.definition.name : trimmed
     }
 
+    var usesAppleTranslate: Bool {
+        template == .translation && translationProcessor == .appleTranslate
+    }
+
+    var usesLLMProcessing: Bool {
+        !usesAppleTranslate && template != .dictation
+    }
+
     var reviewText: String {
-        if triggerKind == .manual {
+        let languageSentence = localizedAppText(
+            " Spoken language: \(workflowInputLanguageSummary(for: inputLanguageSelection)).",
+            de: " Gesprochene Sprache: \(workflowInputLanguageSummary(for: inputLanguageSelection))."
+        )
+
+        if triggerMode == .manual {
             return localizedAppText(
-                "\(resolvedName) is available as \(template.definition.name) from the Workflow Palette.",
-                de: "\(resolvedName) ist als \(template.definition.name) über die Workflow-Palette verfügbar."
+                "\(resolvedName) is available as \(template.definition.name) from the Workflow Palette.\(languageSentence)",
+                de: "\(resolvedName) ist als \(template.definition.name) über die Workflow-Palette verfügbar.\(languageSentence)"
             )
         }
 
-        if triggerKind == .global {
+        if triggerMode == .global {
             return localizedAppText(
-                "\(resolvedName) runs always as \(template.definition.name).",
-                de: "\(resolvedName) läuft immer als \(template.definition.name)."
+                "\(resolvedName) runs always as \(template.definition.name).\(languageSentence)",
+                de: "\(resolvedName) läuft immer als \(template.definition.name).\(languageSentence)"
             )
         }
 
         return localizedAppText(
-            "\(resolvedName) runs as \(template.definition.name) via \(triggerReviewText).",
-            de: "\(resolvedName) läuft als \(template.definition.name) über \(triggerReviewText)."
+            "\(resolvedName) runs as \(template.definition.name) via \(triggerReviewText).\(languageSentence)",
+            de: "\(resolvedName) läuft als \(template.definition.name) über \(triggerReviewText).\(languageSentence)"
         )
     }
 
@@ -1872,13 +1887,30 @@ private struct WorkflowDraft {
         }
 
         if newTemplate != .translation {
+            translationProcessor = .llmPrompt
             translationTargetLanguage = ""
-        } else if translationTargetLanguage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            translationTargetLanguage = "English"
+        } else {
+            translationProcessor = Self.defaultTranslationProcessor
+            if translationTargetLanguage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                translationTargetLanguage = Self.defaultTranslationTargetLanguage(for: translationProcessor)
+            }
         }
 
         if newTemplate != .custom {
             customInstruction = ""
+        }
+
+        if newTemplate == .dictation {
+            fineTuning = ""
+            outputFormat = ""
+            providerId = nil
+            cloudModel = nil
+            if triggerMode == .manual {
+                triggerMode = .automatic
+            }
+            if !hasEnabledAutomaticTriggerComponent {
+                isHotkeyTriggerEnabled = true
+            }
         }
     }
 
@@ -1886,63 +1918,70 @@ private struct WorkflowDraft {
     func validationError(
         hotkeyService: HotkeyService,
         workflowService: WorkflowService,
-        profileService: ProfileService,
         existingWorkflowId: UUID?
     ) -> String? {
-        switch triggerKind {
-        case .app:
-            if appBundleIdentifiers.isEmpty {
+        if template == .dictation && triggerMode == .manual {
+            return localizedAppText(
+                "Dictation Only workflows need a recording trigger.",
+                de: "Nur-Diktat-Workflows brauchen einen Aufnahme-Trigger."
+            )
+        }
+
+        switch triggerMode {
+        case .automatic:
+            if !hasEnabledAutomaticTriggerComponent {
+                return localizedAppText(
+                    "Please enable at least one automatic trigger.",
+                    de: "Bitte aktiviere mindestens einen automatischen Trigger."
+                )
+            }
+
+            if isAppTriggerEnabled && appBundleIdentifiers.isEmpty {
                 return localizedAppText(
                     "Please select at least one app.",
                     de: "Bitte wähle mindestens eine App aus."
                 )
             }
-        case .website:
-            if websitePatterns.isEmpty {
+
+            if isWebsiteTriggerEnabled && websitePatterns.isEmpty {
                 return localizedAppText(
                     "Please add at least one website or domain.",
                     de: "Bitte füge mindestens eine Website oder Domain hinzu."
                 )
             }
-        case .hotkey:
-            guard !hotkeys.isEmpty else {
-                return localizedAppText(
-                    "Please record at least one workflow shortcut.",
-                    de: "Bitte nimm mindestens einen Workflow-Shortcut auf."
-                )
-            }
 
-            for hotkey in hotkeys {
-                if hotkeys.contains(where: { candidate in
-                    candidate != hotkey && workflowHotkeysConflict(candidate, hotkey)
-                }) {
+            if isHotkeyTriggerEnabled {
+                guard !hotkeys.isEmpty else {
                     return localizedAppText(
-                        "The workflow contains duplicate shortcuts.",
-                        de: "Der Workflow enthält doppelte Shortcuts."
+                        "Please record at least one workflow shortcut.",
+                        de: "Bitte nimm mindestens einen Workflow-Shortcut auf."
                     )
                 }
 
-                if let conflictWorkflowId = hotkeyService.isHotkeyAssignedToWorkflow(hotkey, excludingWorkflowId: existingWorkflowId),
-                   let conflictWorkflow = workflowService.workflow(id: conflictWorkflowId) {
-                    return localizedAppText(
-                        "This hotkey is already used by workflow “\(conflictWorkflow.name)”.",
-                        de: "Dieser Hotkey wird bereits vom Workflow „\(conflictWorkflow.name)“ verwendet."
-                    )
-                }
+                for hotkey in hotkeys {
+                    if hotkeys.contains(where: { candidate in
+                        candidate != hotkey && workflowHotkeysConflict(candidate, hotkey)
+                    }) {
+                        return localizedAppText(
+                            "The workflow contains duplicate shortcuts.",
+                            de: "Der Workflow enthält doppelte Shortcuts."
+                        )
+                    }
 
-                if let conflictProfileId = hotkeyService.isHotkeyAssignedToProfile(hotkey, excludingProfileId: nil),
-                   let conflictProfile = profileService.profiles.first(where: { $0.id == conflictProfileId }) {
-                    return localizedAppText(
-                        "This hotkey is already used by legacy rule “\(conflictProfile.name)”.",
-                        de: "Dieser Hotkey wird bereits von der Legacy-Regel „\(conflictProfile.name)“ verwendet."
-                    )
-                }
+                    if let conflictWorkflowId = hotkeyService.isHotkeyAssignedToWorkflow(hotkey, excludingWorkflowId: existingWorkflowId),
+                       let conflictWorkflow = workflowService.workflow(id: conflictWorkflowId) {
+                        return localizedAppText(
+                            "This hotkey is already used by workflow “\(conflictWorkflow.name)”.",
+                            de: "Dieser Hotkey wird bereits vom Workflow „\(conflictWorkflow.name)“ verwendet."
+                        )
+                    }
 
-                if let conflictSlot = hotkeyService.isHotkeyAssignedToGlobalSlot(hotkey) {
-                    return localizedAppText(
-                        "This hotkey is already used by the global slot “\(conflictSlot.rawValue)”.",
-                        de: "Dieser Hotkey wird bereits vom globalen Slot „\(conflictSlot.rawValue)“ verwendet."
-                    )
+                    if let conflictSlot = hotkeyService.isHotkeyAssignedToGlobalSlot(hotkey) {
+                        return localizedAppText(
+                            "This hotkey is already used by the global slot “\(conflictSlot.rawValue)”.",
+                            de: "Dieser Hotkey wird bereits vom globalen Slot „\(conflictSlot.rawValue)“ verwendet."
+                        )
+                    }
                 }
             }
         case .global, .manual:
@@ -1954,6 +1993,23 @@ private struct WorkflowDraft {
                 "Translation workflows need a target language.",
                 de: "Übersetzungs-Workflows brauchen eine Zielsprache."
             )
+        }
+
+        if usesAppleTranslate {
+            #if canImport(Translation)
+            if #available(macOS 15, *) {
+            } else {
+                return localizedAppText(
+                    "Apple Translate workflows require macOS 15 or later.",
+                    de: "Apple-Translate-Workflows benötigen macOS 15 oder neuer."
+                )
+            }
+            #else
+            return localizedAppText(
+                "Apple Translate is not available in this build.",
+                de: "Apple Translate ist in diesem Build nicht verfügbar."
+            )
+            #endif
         }
 
         if template == .custom {
@@ -1971,16 +2027,31 @@ private struct WorkflowDraft {
     }
 
     func resolvedTrigger() -> WorkflowTrigger? {
-        switch triggerKind {
-        case .app:
-            guard !appBundleIdentifiers.isEmpty else { return nil }
-            return .apps(appBundleIdentifiers)
-        case .website:
-            guard !websitePatterns.isEmpty else { return nil }
-            return .websites(websitePatterns)
-        case .hotkey:
-            guard !hotkeys.isEmpty else { return nil }
-            return .hotkeys(hotkeys)
+        switch triggerMode {
+        case .automatic:
+            let resolvedApps = isAppTriggerEnabled ? appBundleIdentifiers : []
+            let resolvedWebsites = isWebsiteTriggerEnabled ? websitePatterns : []
+            let resolvedHotkeys = isHotkeyTriggerEnabled ? hotkeys : []
+            guard !resolvedApps.isEmpty || !resolvedWebsites.isEmpty || !resolvedHotkeys.isEmpty else {
+                return nil
+            }
+
+            let kind: WorkflowTriggerKind
+            if !resolvedApps.isEmpty {
+                kind = .app
+            } else if !resolvedWebsites.isEmpty {
+                kind = .website
+            } else {
+                kind = .hotkey
+            }
+
+            return WorkflowTrigger(
+                kind: kind,
+                appBundleIdentifiers: resolvedApps,
+                websitePatterns: resolvedWebsites,
+                hotkeys: resolvedHotkeys,
+                hotkeyBehavior: hotkeyBehavior
+            )
         case .global:
             return .global()
         case .manual:
@@ -1992,13 +2063,20 @@ private struct WorkflowDraft {
         var settings = preservedBehaviorSettings
         settings.removeValue(forKey: "targetLanguage")
         settings.removeValue(forKey: "target")
+        settings.removeValue(forKey: WorkflowBehavior.translationProcessorSettingKey)
+        settings.removeValue(forKey: WorkflowBehavior.inputLanguageSettingKey)
         settings.removeValue(forKey: "instruction")
         settings.removeValue(forKey: "goal")
         settings.removeValue(forKey: "prompt")
 
+        if let storedInputLanguage = inputLanguageSelection.storedValue(nilBehavior: .inheritGlobal) {
+            settings[WorkflowBehavior.inputLanguageSettingKey] = storedInputLanguage
+        }
+
         let trimmedTargetLanguage = translationTargetLanguage.trimmingCharacters(in: .whitespacesAndNewlines)
         if template == .translation && !trimmedTargetLanguage.isEmpty {
-            settings["targetLanguage"] = trimmedTargetLanguage
+            settings[WorkflowBehavior.targetLanguageSettingKey] = trimmedTargetLanguage
+            settings[WorkflowBehavior.translationProcessorSettingKey] = translationProcessor.rawValue
         }
 
         let trimmedInstruction = customInstruction.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2011,9 +2089,9 @@ private struct WorkflowDraft {
 
         return WorkflowBehavior(
             settings: settings,
-            fineTuning: fineTuning.trimmingCharacters(in: .whitespacesAndNewlines),
-            providerId: trimmedProviderId?.isEmpty == false ? trimmedProviderId : nil,
-            cloudModel: trimmedCloudModel?.isEmpty == false ? trimmedCloudModel : nil,
+            fineTuning: usesLLMProcessing ? fineTuning.trimmingCharacters(in: .whitespacesAndNewlines) : "",
+            providerId: usesLLMProcessing && trimmedProviderId?.isEmpty == false ? trimmedProviderId : nil,
+            cloudModel: usesLLMProcessing && trimmedCloudModel?.isEmpty == false ? trimmedCloudModel : nil,
             temperatureModeRaw: temperatureModeRaw,
             temperatureValue: temperatureValue
         )
@@ -2022,43 +2100,76 @@ private struct WorkflowDraft {
     func resolvedOutput() -> WorkflowOutput {
         let trimmedFormat = outputFormat.trimmingCharacters(in: .whitespacesAndNewlines)
         return WorkflowOutput(
-            format: trimmedFormat.isEmpty ? nil : trimmedFormat,
+            format: usesLLMProcessing && !trimmedFormat.isEmpty ? trimmedFormat : nil,
             autoEnter: autoEnter,
-            targetActionPluginId: targetActionPluginId
+            targetActionPluginId: template == .dictation ? nil : targetActionPluginId
         )
     }
 
     private var triggerReviewText: String {
-        switch triggerKind {
-        case .app:
-            if appBundleIdentifiers.isEmpty {
-                return localizedAppText("an app trigger", de: "einen App-Trigger")
+        switch triggerMode {
+        case .automatic:
+            var parts: [String] = []
+
+            if isAppTriggerEnabled {
+                if appBundleIdentifiers.isEmpty {
+                    parts.append(localizedAppText("an app trigger", de: "einen App-Trigger"))
+                } else {
+                    parts.append(localizedAppText(
+                        "the apps \(workflowCompactList(appBundleIdentifiers.map(workflowAppDisplayName(for:)), conjunction: localizedAppText("and", de: "und")))",
+                        de: "die Apps \(workflowCompactList(appBundleIdentifiers.map(workflowAppDisplayName(for:)), conjunction: "und"))"
+                    ))
+                }
             }
-            return localizedAppText(
-                "the apps \(workflowCompactList(appBundleIdentifiers.map(workflowAppDisplayName(for:)), conjunction: localizedAppText("and", de: "und")))",
-                de: "die Apps \(workflowCompactList(appBundleIdentifiers.map(workflowAppDisplayName(for:)), conjunction: "und"))"
-            )
-        case .website:
-            if websitePatterns.isEmpty {
-                return localizedAppText("a website trigger", de: "einen Website-Trigger")
+
+            if isWebsiteTriggerEnabled {
+                if websitePatterns.isEmpty {
+                    parts.append(localizedAppText("a website trigger", de: "einen Website-Trigger"))
+                } else {
+                    parts.append(localizedAppText(
+                        "the websites \(workflowCompactList(websitePatterns, conjunction: localizedAppText("and", de: "und")))",
+                        de: "die Websites \(workflowCompactList(websitePatterns, conjunction: "und"))"
+                    ))
+                }
             }
-            return localizedAppText(
-                "the websites \(workflowCompactList(websitePatterns, conjunction: localizedAppText("and", de: "und")))",
-                de: "die Websites \(workflowCompactList(websitePatterns, conjunction: "und"))"
-            )
-        case .hotkey:
-            if !hotkeys.isEmpty {
-                return localizedAppText(
-                    "the shortcuts \(workflowCompactList(hotkeys.map(HotkeyService.displayName(for:)), conjunction: localizedAppText("and", de: "und")))",
-                    de: "die Shortcuts \(workflowCompactList(hotkeys.map(HotkeyService.displayName(for:)), conjunction: "und"))"
+
+            if isHotkeyTriggerEnabled {
+                let shortcuts = workflowCompactList(
+                    hotkeys.map(HotkeyService.displayName(for:)),
+                    conjunction: localizedAppText("and", de: "und")
                 )
+                if shortcuts.isEmpty {
+                    parts.append(localizedAppText("a hotkey", de: "einen Hotkey"))
+                } else {
+                    switch hotkeyBehavior {
+                    case .startDictation:
+                        parts.append(localizedAppText(
+                            "the shortcuts \(shortcuts) to start dictation",
+                            de: "die Shortcuts \(shortcuts) zum Starten des Diktats"
+                        ))
+                    case .processSelectedText:
+                        parts.append(localizedAppText(
+                            "the shortcuts \(shortcuts) to process selected text",
+                            de: "die Shortcuts \(shortcuts) zum Verarbeiten markierten Texts"
+                        ))
+                    }
+                }
             }
-            return localizedAppText("a hotkey", de: "einen Hotkey")
+
+            if parts.isEmpty {
+                return localizedAppText("an automatic trigger", de: "einen automatischen Trigger")
+            }
+
+            return workflowCompactList(parts, conjunction: localizedAppText("and", de: "und"))
         case .global:
             return localizedAppText("always", de: "immer")
         case .manual:
             return localizedAppText("the Workflow Palette", de: "die Workflow-Palette")
         }
+    }
+
+    private var hasEnabledAutomaticTriggerComponent: Bool {
+        isAppTriggerEnabled || isWebsiteTriggerEnabled || isHotkeyTriggerEnabled
     }
 
     mutating func addWebsitePattern(_ value: String) {
@@ -2072,15 +2183,56 @@ private struct WorkflowDraft {
             workflowHotkeysConflict(candidate, hotkey)
         }
     }
+
+    mutating func normalizeTranslationTarget(for processor: WorkflowTranslationProcessor) {
+        guard template == .translation else { return }
+        let current = translationTargetLanguage.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        switch processor {
+        case .appleTranslate:
+            if let normalized = WorkflowTranslationLanguageNormalizer.normalizedLanguageIdentifier(from: current) {
+                translationTargetLanguage = normalized
+            } else {
+                translationTargetLanguage = Self.defaultTranslationTargetLanguage(for: processor)
+            }
+        case .llmPrompt:
+            if current.isEmpty || current == "en" {
+                translationTargetLanguage = Self.defaultTranslationTargetLanguage(for: processor)
+            }
+        }
+    }
+
+    private static var defaultTranslationProcessor: WorkflowTranslationProcessor {
+        #if canImport(Translation)
+        if #available(macOS 15, *) {
+            return .appleTranslate
+        }
+        #endif
+        return .llmPrompt
+    }
+
+    private static func defaultTranslationTargetLanguage(for processor: WorkflowTranslationProcessor) -> String {
+        switch processor {
+        case .appleTranslate:
+            "en"
+        case .llmPrompt:
+            "English"
+        }
+    }
 }
 
 private func workflowSummaryText(for workflow: Workflow) -> String {
     let templateName = workflow.template.definition.name
     switch workflow.template {
     case .translation:
-        let targetLanguage = workflow.behavior.settings["targetLanguage"]
-            ?? workflow.behavior.settings["target"]
+        let targetLanguage = workflow.translationTargetLanguage
         if let targetLanguage, !targetLanguage.isEmpty {
+            if workflow.usesAppleTranslate {
+                return localizedAppText(
+                    "Apple Translate to \(localizedAppLanguageName(for: targetLanguage))",
+                    de: "Apple Translate nach \(localizedAppLanguageName(for: targetLanguage))"
+                )
+            }
             return localizedAppText(
                 "\(templateName) to \(targetLanguage)",
                 de: "\(templateName) nach \(targetLanguage)"
@@ -2100,6 +2252,47 @@ private func workflowSummaryText(for workflow: Workflow) -> String {
     }
 }
 
+private func workflowInputLanguageSummary(for selection: LanguageSelection) -> String {
+    switch selection {
+    case .inheritGlobal:
+        return localizedAppText("Global Setting", de: "Globale Einstellung")
+    case .auto:
+        return localizedAppText("Auto-detect", de: "Automatische Erkennung")
+    case .exact(let code):
+        return localizedAppLanguageName(for: code)
+    case .hints(let codes):
+        let normalizedCodes = LanguageSelection.hints(codes).selectedCodes
+        guard !normalizedCodes.isEmpty else {
+            return localizedAppText("Auto-detect", de: "Automatische Erkennung")
+        }
+        return localizedAppText(
+            "Auto-detect between \(workflowLanguageNameList(normalizedCodes))",
+            de: "Automatische Erkennung zwischen \(workflowLanguageNameList(normalizedCodes))"
+        )
+    }
+}
+
+private func workflowLanguageNameList(_ codes: [String]) -> String {
+    let names = localizedAppLanguageNames(for: codes)
+    switch names.count {
+    case 0:
+        return ""
+    case 1:
+        return names[0]
+    case 2:
+        return localizedAppText(
+            "\(names[0]) and \(names[1])",
+            de: "\(names[0]) und \(names[1])"
+        )
+    default:
+        let allButLast = names.dropLast().joined(separator: ", ")
+        return localizedAppText(
+            "\(allButLast), and \(names[names.count - 1])",
+            de: "\(allButLast) und \(names[names.count - 1])"
+        )
+    }
+}
+
 private func workflowTriggerSummary(for workflow: Workflow) -> String {
     guard let trigger = workflow.trigger else {
         return localizedAppText("No Trigger", de: "Kein Trigger")
@@ -2108,20 +2301,11 @@ private func workflowTriggerSummary(for workflow: Workflow) -> String {
     switch trigger.kind {
     case .manual:
         return localizedAppText("Manual", de: "Manuell")
-    case .app:
-        return trigger.appBundleIdentifiers.count == 1
-            ? localizedAppText("App", de: "App")
-            : localizedAppText("Apps", de: "Apps")
-    case .website:
-        return trigger.websitePatterns.count == 1
-            ? localizedAppText("Website", de: "Website")
-            : localizedAppText("Websites", de: "Websites")
-    case .hotkey:
-        return trigger.hotkeys.count == 1
-            ? localizedAppText("Hotkey", de: "Hotkey")
-            : localizedAppText("Hotkeys", de: "Hotkeys")
     case .global:
         return localizedAppText("Always", de: "Immer")
+    case .app, .website, .hotkey:
+        let parts = workflowTriggerSummaryParts(for: trigger)
+        return parts.isEmpty ? trigger.kind.paletteLabel : parts.joined(separator: " + ")
     }
 }
 
@@ -2131,46 +2315,81 @@ private func workflowTriggerDetail(for workflow: Workflow) -> String {
     switch trigger.kind {
     case .manual:
         return localizedAppText("Workflow Palette", de: "Workflow-Palette")
-    case .app:
-        return workflowCompactList(trigger.appBundleIdentifiers.map(workflowAppDisplayName(for:)))
-    case .website:
-        return workflowCompactList(trigger.websitePatterns)
-    case .hotkey:
-        return workflowCompactList(trigger.hotkeys.map(HotkeyService.displayName(for:)))
     case .global:
         return ""
+    case .app, .website, .hotkey:
+        return workflowTriggerDetailParts(for: trigger).joined(separator: " · ")
     }
+}
+
+private func workflowTriggerSummaryParts(for trigger: WorkflowTrigger) -> [String] {
+    var parts: [String] = []
+    if !trigger.appBundleIdentifiers.isEmpty {
+        parts.append(trigger.appBundleIdentifiers.count == 1
+            ? localizedAppText("App", de: "App")
+            : localizedAppText("Apps", de: "Apps"))
+    }
+    if !trigger.websitePatterns.isEmpty {
+        parts.append(trigger.websitePatterns.count == 1
+            ? localizedAppText("Website", de: "Website")
+            : localizedAppText("Websites", de: "Websites"))
+    }
+    if !trigger.hotkeys.isEmpty {
+        parts.append(trigger.hotkeys.count == 1
+            ? localizedAppText("Hotkey", de: "Hotkey")
+            : localizedAppText("Hotkeys", de: "Hotkeys"))
+    }
+    return parts
+}
+
+private func workflowTriggerDetailParts(for trigger: WorkflowTrigger) -> [String] {
+    var parts: [String] = []
+    if !trigger.appBundleIdentifiers.isEmpty {
+        parts.append(workflowCompactList(trigger.appBundleIdentifiers.map(workflowAppDisplayName(for:))))
+    }
+    if !trigger.websitePatterns.isEmpty {
+        parts.append(workflowCompactList(trigger.websitePatterns))
+    }
+    if !trigger.hotkeys.isEmpty {
+        let shortcuts = workflowCompactList(trigger.hotkeys.map(HotkeyService.displayName(for:)))
+        parts.append(shortcuts.isEmpty ? trigger.hotkeyBehavior.shortcutSubtitle : "\(shortcuts) · \(trigger.hotkeyBehavior.shortcutSubtitle)")
+    }
+    return parts
 }
 
 private func workflowReviewText(for workflow: Workflow) -> String {
     let summary = workflowSummaryText(for: workflow)
     let triggerSummary = workflowTriggerSummary(for: workflow)
     let triggerDetail = workflowTriggerDetail(for: workflow)
+    let languageSentence = localizedAppText(
+        ". Spoken language: \(workflowInputLanguageSummary(for: workflow.inputLanguageSelection))",
+        de: ". Gesprochene Sprache: \(workflowInputLanguageSummary(for: workflow.inputLanguageSelection))"
+    )
 
     if workflow.trigger?.kind == .global {
         return localizedAppText(
-            "\(summary) runs always",
-            de: "\(summary) läuft immer"
+            "\(summary) runs always\(languageSentence)",
+            de: "\(summary) läuft immer\(languageSentence)"
         )
     }
 
     if workflow.trigger?.kind == .manual {
         return localizedAppText(
-            "\(summary) is available from the Workflow Palette",
-            de: "\(summary) ist über die Workflow-Palette verfügbar"
+            "\(summary) is available from the Workflow Palette\(languageSentence)",
+            de: "\(summary) ist über die Workflow-Palette verfügbar\(languageSentence)"
         )
     }
 
     if triggerDetail.isEmpty {
         return localizedAppText(
-            "\(summary) via \(triggerSummary)",
-            de: "\(summary) über \(triggerSummary)"
+            "\(summary) via \(triggerSummary)\(languageSentence)",
+            de: "\(summary) über \(triggerSummary)\(languageSentence)"
         )
     }
 
     return localizedAppText(
-        "\(summary) via \(triggerSummary): \(triggerDetail)",
-        de: "\(summary) über \(triggerSummary): \(triggerDetail)"
+        "\(summary) via \(triggerSummary): \(triggerDetail)\(languageSentence)",
+        de: "\(summary) über \(triggerSummary): \(triggerDetail)\(languageSentence)"
     )
 }
 

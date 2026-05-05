@@ -1,0 +1,85 @@
+name: Community Plugin Registry
+
+on:
+  pull_request:
+    paths:
+      - 'PluginRegistry/community-v1/**'
+      - 'scripts/assemble_community_plugin_registry.py'
+      - '.github/workflows/community-plugin-registry.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'PluginRegistry/community-v1/**'
+      - 'scripts/assemble_community_plugin_registry.py'
+      - '.github/workflows/community-plugin-registry.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate community plugin registry entries
+        run: python3 scripts/assemble_community_plugin_registry.py
+
+  publish:
+    if: github.event_name == 'push'
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Publish community plugin registry
+        run: |
+          git fetch origin gh-pages || {
+            echo "gh-pages branch does not exist, bootstrapping..."
+            git checkout --orphan gh-pages
+            git rm -rf .
+            echo '{"schemaVersion":1,"plugins":[]}' > plugins-community-v1.json
+            git add plugins-community-v1.json
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git commit -m "Bootstrap gh-pages with empty community plugin registry"
+            git push origin gh-pages
+            git checkout -
+            git fetch origin gh-pages
+          }
+
+          git worktree add -B gh-pages /tmp/gh-pages origin/gh-pages
+
+          update_registry() {
+            cd /tmp/gh-pages
+            git fetch origin gh-pages
+            git reset --hard origin/gh-pages
+
+            python3 "$GITHUB_WORKSPACE/scripts/assemble_community_plugin_registry.py" \
+              --community-dir "$GITHUB_WORKSPACE/PluginRegistry/community-v1" \
+              --base /tmp/gh-pages/plugins-community-v1.json \
+              --output /tmp/plugins-community-v1.json
+
+            cp /tmp/plugins-community-v1.json /tmp/gh-pages/plugins-community-v1.json
+
+            git add plugins-community-v1.json
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git diff --cached --quiet || git commit -m "Update community plugin registry"
+            git push origin gh-pages
+          }
+
+          for i in 1 2 3 4 5; do
+            if update_registry; then
+              echo "Successfully updated community plugin registry (attempt $i)"
+              break
+            fi
+            if [ "$i" -eq 5 ]; then
+              echo "Failed to update community plugin registry after 5 attempts"
+              exit 1
+            fi
+            echo "Attempt $i failed, retrying..."
+            sleep 2
+          done

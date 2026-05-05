@@ -184,6 +184,176 @@ final class RecentTranscriptionPaletteHandlerTests: XCTestCase {
 
 @MainActor
 final class PromptPaletteHandlerTests: XCTestCase {
+    func testDirectWorkflowHotkeyProcessesAccessibilitySelectionWithoutShowingPalette() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let textInsertionService = TextInsertionService()
+        textInsertionService.accessibilityGrantedOverride = true
+        textInsertionService.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        let selectedElement = AXUIElementCreateSystemWide()
+        textInsertionService.textSelectionOverride = {
+            TextInsertionService.TextSelection(text: "Selected source", element: selectedElement)
+        }
+
+        var insertedText: String?
+        textInsertionService.insertTextAtOverride = { _, text in
+            insertedText = text
+            return true
+        }
+
+        let workflowService = WorkflowService(appSupportDirectory: appSupportDirectory)
+        let workflow = Workflow(
+            name: "Direct Summary",
+            template: .summary,
+            trigger: .hotkeys([
+                UnifiedHotkey(keyCode: 17, modifierFlags: 0, isFn: false)
+            ], behavior: .processSelectedText)
+        )
+        let controller = PromptPaletteControllerSpy()
+        let handler = PromptPaletteHandler(
+            textInsertionService: textInsertionService,
+            workflowService: workflowService,
+            promptProcessingService: PromptProcessingService(),
+            workflowTextProcessingService: WorkflowTextProcessingService(
+                promptProcessor: { _, text, _, _, _ in "Processed: \(text)" },
+                appleTranslator: nil
+            ),
+            soundService: SoundService(),
+            accessibilityAnnouncementService: AccessibilityAnnouncementService(),
+            promptPaletteController: controller
+        )
+
+        handler.processWorkflowDirectly(
+            workflow: workflow,
+            currentState: .idle,
+            soundFeedbackEnabled: false
+        )
+
+        try await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertFalse(controller.isVisible)
+        XCTAssertEqual(insertedText, "Processed: Selected source")
+    }
+
+    func testDirectWorkflowHotkeyUsesClipboardFallbackWhenSelectionIsUnavailable() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let textInsertionService = TextInsertionService()
+        textInsertionService.accessibilityGrantedOverride = true
+        textInsertionService.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        textInsertionService.textSelectionOverride = { nil }
+        textInsertionService.textSelectionViaCopyOverride = { nil }
+        textInsertionService.focusedTextElementOverride = { AXUIElementCreateSystemWide() }
+
+        var insertedText: String?
+        textInsertionService.insertTextAtOverride = { _, text in
+            insertedText = text
+            return true
+        }
+
+        let pasteboard = NSPasteboard.general
+        let savedClipboard = textInsertionService.saveClipboard(from: pasteboard)
+        defer { textInsertionService.restoreClipboard(savedClipboard, to: pasteboard) }
+        pasteboard.clearContents()
+        pasteboard.setString("Clipboard source", forType: .string)
+
+        let workflowService = WorkflowService(appSupportDirectory: appSupportDirectory)
+        let workflow = Workflow(
+            name: "Direct Cleanup",
+            template: .cleanedText,
+            trigger: .hotkeys([
+                UnifiedHotkey(keyCode: 17, modifierFlags: 0, isFn: false)
+            ], behavior: .processSelectedText)
+        )
+        let handler = PromptPaletteHandler(
+            textInsertionService: textInsertionService,
+            workflowService: workflowService,
+            promptProcessingService: PromptProcessingService(),
+            workflowTextProcessingService: WorkflowTextProcessingService(
+                promptProcessor: { _, text, _, _, _ in "Processed: \(text)" },
+                appleTranslator: nil
+            ),
+            soundService: SoundService(),
+            accessibilityAnnouncementService: AccessibilityAnnouncementService(),
+            promptPaletteController: PromptPaletteControllerSpy()
+        )
+
+        handler.processWorkflowDirectly(
+            workflow: workflow,
+            currentState: .idle,
+            soundFeedbackEnabled: false
+        )
+
+        try await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertEqual(insertedText, "Processed: Clipboard source")
+    }
+
+    func testDirectWorkflowHotkeyShowsErrorWhenNoSelectionOrClipboardIsAvailable() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let textInsertionService = TextInsertionService()
+        textInsertionService.accessibilityGrantedOverride = true
+        textInsertionService.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        textInsertionService.textSelectionOverride = { nil }
+        textInsertionService.textSelectionViaCopyOverride = { nil }
+
+        let pasteboard = NSPasteboard.general
+        let savedClipboard = textInsertionService.saveClipboard(from: pasteboard)
+        defer { textInsertionService.restoreClipboard(savedClipboard, to: pasteboard) }
+        pasteboard.clearContents()
+
+        let workflowService = WorkflowService(appSupportDirectory: appSupportDirectory)
+        let workflow = Workflow(
+            name: "Direct Empty",
+            template: .cleanedText,
+            trigger: .hotkeys([
+                UnifiedHotkey(keyCode: 17, modifierFlags: 0, isFn: false)
+            ], behavior: .processSelectedText)
+        )
+
+        var processedText: String?
+        let handler = PromptPaletteHandler(
+            textInsertionService: textInsertionService,
+            workflowService: workflowService,
+            promptProcessingService: PromptProcessingService(),
+            workflowTextProcessingService: WorkflowTextProcessingService(
+                promptProcessor: { _, text, _, _, _ in
+                    processedText = text
+                    return "Processed: \(text)"
+                },
+                appleTranslator: nil
+            ),
+            soundService: SoundService(),
+            accessibilityAnnouncementService: AccessibilityAnnouncementService(),
+            promptPaletteController: PromptPaletteControllerSpy()
+        )
+
+        var feedbackMessage: String?
+        var errorMessage: String?
+        handler.onShowNotchFeedback = { message, _, _, _, _ in
+            feedbackMessage = message
+        }
+        handler.onShowError = { message in
+            errorMessage = message
+        }
+
+        handler.processWorkflowDirectly(
+            workflow: workflow,
+            currentState: .idle,
+            soundFeedbackEnabled: false
+        )
+
+        try await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertNil(processedText)
+        XCTAssertEqual(feedbackMessage, "Please select or copy some text first.")
+        XCTAssertEqual(errorMessage, "Please select or copy some text first.")
+    }
+
     func testTriggerSelectionStillOpensPaletteWhenCurrentProviderIsNotReady() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
