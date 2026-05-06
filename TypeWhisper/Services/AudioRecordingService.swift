@@ -127,6 +127,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private var audioEngine: AVAudioEngine?
+    private var inputCaptureSession: AudioInputCaptureSession?
     private var startupConfigurationChangeGuard: StartupConfigurationChangeGuard?
     private var configChangeObserver: NSObjectProtocol?
     private var sampleBuffer: [Float] = []
@@ -143,6 +144,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private let inputActivationGuard: AudioInputDeviceActivating
     private let bluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing
     private let inputReadinessChecker: AudioInputReadinessChecking
+    private let inputCaptureFactory: AudioInputCaptureFactory
     private let initialInputTapSeenLock = OSAllocatedUnfairLock(initialState: false)
     private var _lastStopGraceCaptureApplied = false
 
@@ -154,12 +156,14 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         outputVolumeGuard: AudioOutputVolumeGuard = AudioOutputVolumeGuard(),
         inputActivationGuard: AudioInputDeviceActivating = AudioInputDeviceActivationGuard(),
         bluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing = CoreAudioBluetoothInputRouteStabilizer(),
-        inputReadinessChecker: AudioInputReadinessChecking = BluetoothInputReadinessChecker()
+        inputReadinessChecker: AudioInputReadinessChecking = BluetoothInputReadinessChecker(),
+        inputCaptureFactory: AudioInputCaptureFactory = CoreAudioHALInputCaptureFactory()
     ) {
         self.outputVolumeGuard = outputVolumeGuard
         self.inputActivationGuard = inputActivationGuard
         self.bluetoothInputRouteStabilizer = bluetoothInputRouteStabilizer
         self.inputReadinessChecker = inputReadinessChecker
+        self.inputCaptureFactory = inputCaptureFactory
         recoveryNotificationQueue.underlyingQueue = recoveryQueue
     }
 
@@ -309,9 +313,23 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             return
         }
 
+        if case .inputOnlyDevice(let inputOnlyDeviceID) = selectedCaptureRoute {
+            do {
+                try startInputOnlyRecording(deviceID: inputOnlyDeviceID, label: "recording")
+                outputVolumeGuard.restoreIfRaised(reason: "recording-start")
+                outputVolumeGuard.clear()
+                isRecording = true
+            } catch {
+                cleanupAfterFailedInputOnlyStart()
+                throw error
+            }
+            return
+        }
+
         let engine = AVAudioEngine()
         engineLock.withLock {
             audioEngine = engine
+            inputCaptureSession = nil
             startupConfigurationChangeGuard = nil
         }
         recoveryCoordinator.beginStarting()
@@ -372,13 +390,48 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
 
         // Atomically claim the engine - only the first concurrent caller proceeds
-        let engine: AVAudioEngine? = engineLock.withLock {
-            let e = audioEngine
+        let capture: (engine: AVAudioEngine?, inputCaptureSession: AudioInputCaptureSession?) = engineLock.withLock {
+            let capture = (engine: audioEngine, inputCaptureSession: inputCaptureSession)
             audioEngine = nil
+            inputCaptureSession = nil
             startupConfigurationChangeGuard = nil
-            return e
+            return capture
         }
-        guard let engine else {
+        if let inputCaptureSession = capture.inputCaptureSession {
+            let bufferedDuration = totalBufferDuration
+            var graceApplied = false
+
+            if policy.shouldApplyGracePeriod(bufferedDuration: bufferedDuration),
+               case .finalizeShortSpeech(_, let maxExtraCapture, let pollInterval) = policy {
+                let deadline = Date().addingTimeInterval(maxExtraCapture)
+                graceApplied = true
+
+                while Date() < deadline, policy.shouldApplyGracePeriod(bufferedDuration: totalBufferDuration) {
+                    try? await Task.sleep(for: .seconds(pollInterval))
+                }
+            }
+
+            setLastStopGraceCaptureApplied(graceApplied)
+            recoveryCoordinator.transitionToIdle()
+            removeConfigurationObserver()
+            outputVolumeGuard.captureBaseline()
+            inputCaptureSession.stop()
+            outputVolumeGuard.restoreIfRaised(reason: "recording-stop")
+            outputVolumeGuard.clear()
+            inputActivationGuard.restore(reason: "recording-stop")
+            processingQueue.sync { }
+
+            let samples = drainSampleBuffer()
+
+            DispatchQueue.main.async { [weak self] in
+                self?.isRecording = false
+                self?.audioLevel = 0
+            }
+
+            return samples
+        }
+
+        guard let engine = capture.engine else {
             outputVolumeGuard.clear()
             return []
         }
@@ -699,6 +752,15 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
     }
 
+    private var selectedCaptureRoute: AudioInputCaptureRoute {
+        configLock.withLock {
+            AudioInputCaptureRoute.selectedRoute(
+                selectedDeviceID: _hasExplicitDeviceSelection ? _selectedDeviceID : nil,
+                usesBluetoothTransport: _hasExplicitDeviceSelection && _selectedInputDeviceUsesBluetoothTransport
+            )
+        }
+    }
+
     private var hasCapturedInitialInput: Bool {
         initialInputTapSeenLock.withLock { $0 }
     }
@@ -744,6 +806,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let didReplace = engineLock.withLock { () -> Bool in
             guard audioEngine === engine else { return false }
             audioEngine = replacementEngine
+            inputCaptureSession = nil
             startupConfigurationChangeGuard = nil
             return true
         }
@@ -757,6 +820,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             if audioEngine === engine {
                 audioEngine = nil
             }
+            inputCaptureSession = nil
             if startupConfigurationChangeGuard?.engineID == ObjectIdentifier(engine) {
                 startupConfigurationChangeGuard = nil
             }
@@ -850,6 +914,70 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
         processingQueue.async { [weak self] in
             self?.processConvertedSamples(samples)
+        }
+    }
+
+    private func startInputOnlyRecording(deviceID: AudioDeviceID, label: String) throws {
+        do {
+            let inputFormat = try inputCaptureFactory.inputOnlyCaptureFormat(deviceID: deviceID)
+            guard let monoFormat = AudioInputBufferNormalizer.monoFloatFormat(for: inputFormat),
+                  let targetFormat = AVAudioFormat(
+                      commonFormat: .pcmFormatFloat32,
+                      sampleRate: Self.targetSampleRate,
+                      channels: 1,
+                      interleaved: false
+                  ),
+                  let converter = AVAudioConverter(from: monoFormat, to: targetFormat) else {
+                throw AudioRecordingError.engineStartFailed("Cannot create input-only audio converter")
+            }
+
+            let session = try inputCaptureFactory.startInputOnlyCapture(
+                deviceID: deviceID,
+                label: label,
+                bufferSize: Self.captureTapFrames
+            ) { [weak self] buffer in
+                guard let self,
+                      let monoBuffer = AudioInputBufferNormalizer.monoFloatBuffer(from: buffer) else {
+                    return
+                }
+                self.markInitialInputTapSeenIfNeeded(monoBuffer)
+                self.processAudioBuffer(monoBuffer, converter: converter, targetFormat: targetFormat)
+            }
+
+            recoveryCoordinator.transitionToIdle()
+            removeConfigurationObserver()
+            engineLock.withLock {
+                audioEngine = nil
+                inputCaptureSession = session
+                startupConfigurationChangeGuard = nil
+            }
+        } catch let error as SelectedInputDeviceError {
+            throw mapSelectedInputDeviceError(error)
+        } catch let error as AudioRecordingError {
+            throw error
+        } catch {
+            throw AudioRecordingError.engineStartFailed(error.localizedDescription)
+        }
+    }
+
+    private func cleanupAfterFailedInputOnlyStart() {
+        recoveryCoordinator.transitionToIdle()
+        removeConfigurationObserver()
+        let session: AudioInputCaptureSession? = engineLock.withLock {
+            let session = inputCaptureSession
+            inputCaptureSession = nil
+            audioEngine = nil
+            startupConfigurationChangeGuard = nil
+            return session
+        }
+        session?.stop()
+        outputVolumeGuard.restoreIfRaised(reason: "recording-start-failed")
+        outputVolumeGuard.clear()
+        inputActivationGuard.restore(reason: "recording-start-failed")
+        DispatchQueue.main.async { [weak self] in
+            self?.isRecording = false
+            self?.audioLevel = 0
+            self?.rawAudioLevel = 0
         }
     }
 
@@ -1032,6 +1160,7 @@ extension AudioRecordingService {
     func testingSetAudioEngine(_ engine: AVAudioEngine?) {
         engineLock.withLock {
             audioEngine = engine
+            inputCaptureSession = nil
         }
     }
 
