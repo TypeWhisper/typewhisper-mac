@@ -1440,12 +1440,11 @@ final class CoreAudioHALInputOperations: CoreAudioHALInputOperating {
         label: String
     ) throws {
         var enabled = enabled
-        try setProperty(
+        try setUInt32Property(
             kAudioOutputUnitProperty_EnableIO,
             scope: scope,
             element: element,
             audioUnit: audioUnit,
-            valueSize: UInt32(MemoryLayout<UInt32>.size),
             value: &enabled,
             operation: "\(label) set EnableIO scope=\(scope) element=\(element)"
         )
@@ -1454,12 +1453,11 @@ final class CoreAudioHALInputOperations: CoreAudioHALInputOperating {
     func setCurrentDevice(_ deviceID: AudioDeviceID, audioUnit: AudioUnit, label: String) throws {
         var deviceID = deviceID
         do {
-            try setProperty(
+            try setUInt32Property(
                 kAudioOutputUnitProperty_CurrentDevice,
                 scope: kAudioUnitScope_Global,
                 element: 0,
                 audioUnit: audioUnit,
-                valueSize: UInt32(MemoryLayout<AudioDeviceID>.size),
                 value: &deviceID,
                 operation: "\(label) set current input device"
             )
@@ -1470,24 +1468,22 @@ final class CoreAudioHALInputOperations: CoreAudioHALInputOperating {
     }
 
     func setStreamFormat(_ streamDescription: inout AudioStreamBasicDescription, audioUnit: AudioUnit, label: String) throws {
-        try setProperty(
+        try setStreamDescriptionProperty(
             kAudioUnitProperty_StreamFormat,
             scope: kAudioUnitScope_Output,
             element: 1,
             audioUnit: audioUnit,
-            valueSize: UInt32(MemoryLayout<AudioStreamBasicDescription>.size),
             value: &streamDescription,
             operation: "\(label) set HAL input stream format"
         )
     }
 
     func setInputCallback(_ callback: inout AURenderCallbackStruct, audioUnit: AudioUnit, label: String) throws {
-        try setProperty(
+        try setInputCallbackProperty(
             kAudioOutputUnitProperty_SetInputCallback,
             scope: kAudioUnitScope_Global,
             element: 0,
             audioUnit: audioUnit,
-            valueSize: UInt32(MemoryLayout<AURenderCallbackStruct>.size),
             value: &callback,
             operation: "\(label) set HAL input callback"
         )
@@ -1530,23 +1526,70 @@ final class CoreAudioHALInputOperations: CoreAudioHALInputOperating {
         AudioUnitRender(audioUnit, actionFlags, timestamp, busNumber, frameCount, data)
     }
 
-    private func setProperty<T>(
+    private func setUInt32Property(
         _ propertyID: AudioUnitPropertyID,
         scope: AudioUnitScope,
         element: AudioUnitElement,
         audioUnit: AudioUnit,
-        valueSize: UInt32,
-        value: inout T,
+        value: inout UInt32,
         operation: String
     ) throws {
-        let status = AudioUnitSetProperty(
-            audioUnit,
-            propertyID,
-            scope,
-            element,
-            &value,
-            valueSize
-        )
+        let status = withUnsafePointer(to: &value) { pointer in
+            AudioUnitSetProperty(
+                audioUnit,
+                propertyID,
+                scope,
+                element,
+                pointer,
+                UInt32(MemoryLayout<UInt32>.size)
+            )
+        }
+        try checkPropertyStatus(status, operation: operation)
+    }
+
+    private func setStreamDescriptionProperty(
+        _ propertyID: AudioUnitPropertyID,
+        scope: AudioUnitScope,
+        element: AudioUnitElement,
+        audioUnit: AudioUnit,
+        value: inout AudioStreamBasicDescription,
+        operation: String
+    ) throws {
+        let status = withUnsafePointer(to: &value) { pointer in
+            AudioUnitSetProperty(
+                audioUnit,
+                propertyID,
+                scope,
+                element,
+                pointer,
+                UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+            )
+        }
+        try checkPropertyStatus(status, operation: operation)
+    }
+
+    private func setInputCallbackProperty(
+        _ propertyID: AudioUnitPropertyID,
+        scope: AudioUnitScope,
+        element: AudioUnitElement,
+        audioUnit: AudioUnit,
+        value: inout AURenderCallbackStruct,
+        operation: String
+    ) throws {
+        let status = withUnsafePointer(to: &value) { pointer in
+            AudioUnitSetProperty(
+                audioUnit,
+                propertyID,
+                scope,
+                element,
+                pointer,
+                UInt32(MemoryLayout<AURenderCallbackStruct>.size)
+            )
+        }
+        try checkPropertyStatus(status, operation: operation)
+    }
+
+    private func checkPropertyStatus(_ status: OSStatus, operation: String) throws {
         guard status == noErr else {
             throw CoreAudioHALInputOperationError(operation: operation, status: status)
         }
@@ -1593,8 +1636,8 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
         self.audioUnit = audioUnit
 
         do {
-            var disabled: UInt32 = 0
-            var enabled: UInt32 = 1
+            let disabled: UInt32 = 0
+            let enabled: UInt32 = 1
             try operations.setEnableIO(disabled, scope: kAudioUnitScope_Output, element: 0, audioUnit: audioUnit, label: label)
             try operations.setEnableIO(enabled, scope: kAudioUnitScope_Input, element: 1, audioUnit: audioUnit, label: label)
             try operations.setCurrentDevice(deviceID, audioUnit: audioUnit, label: label)
