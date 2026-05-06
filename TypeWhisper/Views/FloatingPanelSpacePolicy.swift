@@ -15,7 +15,7 @@ enum FloatingPanelSpacePolicy {
 
     private static let fixedDisplayIndicatorCollectionBehavior: NSWindow.CollectionBehavior = [
         .canJoinAllSpaces,
-        .fullScreenAuxiliary,
+        .fullScreenNone,
         .stationary,
         .ignoresCycle
     ]
