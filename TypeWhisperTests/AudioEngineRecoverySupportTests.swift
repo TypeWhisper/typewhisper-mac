@@ -1,4 +1,5 @@
 import AudioToolbox
+import AudioUnit
 import AVFoundation
 import XCTest
 @testable import TypeWhisper
@@ -100,6 +101,62 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
             ),
             AudioDeviceID(410)
         )
+    }
+
+    func testCaptureRouteUsesInputOnlyHALForExplicitNonBluetoothSelection() {
+        XCTAssertEqual(
+            AudioInputCaptureRoute.selectedRoute(
+                selectedDeviceID: AudioDeviceID(410),
+                usesBluetoothTransport: false
+            ),
+            .inputOnlyDevice(AudioDeviceID(410))
+        )
+    }
+
+    func testCaptureRouteKeepsAVAudioEngineForDefaultAndBluetoothSelection() {
+        XCTAssertEqual(
+            AudioInputCaptureRoute.selectedRoute(
+                selectedDeviceID: nil,
+                usesBluetoothTransport: false
+            ),
+            .avAudioEngine(preferredDeviceID: nil)
+        )
+        XCTAssertEqual(
+            AudioInputCaptureRoute.selectedRoute(
+                selectedDeviceID: AudioDeviceID(112),
+                usesBluetoothTransport: true
+            ),
+            .avAudioEngine(preferredDeviceID: nil)
+        )
+    }
+
+    func testAudioInputBufferNormalizerDownmixesMultiChannelFloatBuffers() throws {
+        let stereoFormat = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 96_000,
+            channels: 2,
+            interleaved: false
+        ))
+        let stereoBuffer = try XCTUnwrap(AVAudioPCMBuffer(
+            pcmFormat: stereoFormat,
+            frameCapacity: 3
+        ))
+        stereoBuffer.frameLength = 3
+        stereoBuffer.floatChannelData?[0][0] = 1
+        stereoBuffer.floatChannelData?[0][1] = 0.5
+        stereoBuffer.floatChannelData?[0][2] = -1
+        stereoBuffer.floatChannelData?[1][0] = -1
+        stereoBuffer.floatChannelData?[1][1] = 0.5
+        stereoBuffer.floatChannelData?[1][2] = 1
+
+        let monoBuffer = try XCTUnwrap(AudioInputBufferNormalizer.monoFloatBuffer(from: stereoBuffer))
+
+        XCTAssertEqual(monoBuffer.format.sampleRate, 96_000)
+        XCTAssertEqual(monoBuffer.format.channelCount, 1)
+        let monoChannel = try XCTUnwrap(monoBuffer.floatChannelData?[0])
+        XCTAssertEqual(monoChannel[0], 0, accuracy: Float(0.0001))
+        XCTAssertEqual(monoChannel[1], 0.5, accuracy: Float(0.0001))
+        XCTAssertEqual(monoChannel[2], 0, accuracy: Float(0.0001))
     }
 
     func testInputFormatStabilizerRejectsStaleDefaultFormatAfterBluetoothDeviceSwitch() {
@@ -447,6 +504,38 @@ final class AudioDeviceServiceCompatibilityTests: XCTestCase {
         XCTAssertEqual(service.selectedDeviceCompatibility, .compatible)
     }
 
+    func testSelectingUSBDeviceValidatesWithInputOnlyCaptureInsteadOfAVAudioEngineProbe() {
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let usbDeviceID = AudioDeviceID(712)
+        let inputCaptureFactory = FakeAudioInputCaptureFactory()
+        let transportResolver = FakeAudioDeviceTransportResolver(
+            transports: [usbDeviceID: kAudioDeviceTransportTypeUSB]
+        )
+        let service = AudioDeviceService(
+            initialInputDevices: [
+                AudioInputDevice(deviceID: usbDeviceID, name: "Elgato Wave XLR", uid: "wave-xlr")
+            ],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false,
+            transportResolver: transportResolver,
+            selectionEngineValidator: AVAudioInputSelectionEngineValidator(inputCaptureFactory: inputCaptureFactory),
+            inputCaptureFactory: inputCaptureFactory
+        )
+
+        service.audioDeviceIDResolverOverride = { uid in
+            uid == "wave-xlr" ? usbDeviceID : nil
+        }
+
+        service.selectedDeviceUID = "wave-xlr"
+
+        XCTAssertEqual(service.selectedDeviceUID, "wave-xlr")
+        XCTAssertNil(service.previewError)
+        XCTAssertEqual(inputCaptureFactory.validateCalls, [
+            .init(deviceID: usbDeviceID, label: "selection")
+        ])
+        XCTAssertEqual(service.selectedDeviceCompatibility, .compatible)
+    }
+
     func testDisplayName_marksIncompatibleDevicesWithoutRemovingThem() {
         let device = AudioInputDevice(
             deviceID: AudioDeviceID(42),
@@ -603,9 +692,10 @@ final class AudioDeviceServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
-    func testStartPreviewKeepsExplicitEngineRouteForUSBInput() {
+    func testStartPreviewUsesInputOnlyCaptureForUSBInput() {
         let usbDeviceID = AudioDeviceID(711)
         let inputActivationGuard = FakeAudioInputDeviceActivator()
+        let inputCaptureFactory = FakeAudioInputCaptureFactory()
         let transportResolver = FakeAudioDeviceTransportResolver(
             transports: [usbDeviceID: kAudioDeviceTransportTypeUSB]
         ) { deviceID in
@@ -618,6 +708,7 @@ final class AudioDeviceServiceCompatibilityTests: XCTestCase {
             monitorDeviceChanges: false,
             probeCompatibilities: false,
             transportResolver: transportResolver,
+            inputCaptureFactory: inputCaptureFactory,
             inputActivationGuard: inputActivationGuard
         )
 
@@ -627,16 +718,18 @@ final class AudioDeviceServiceCompatibilityTests: XCTestCase {
             uid == "usb-input" ? usbDeviceID : nil
         }
         service.selectedDeviceUID = "usb-input"
-        service.startPreviewOverride = { preferredDeviceID in
-            XCTAssertEqual(preferredDeviceID, usbDeviceID)
-        }
 
         service.startPreview()
 
         XCTAssertTrue(inputActivationGuard.activateCalls.isEmpty)
+        XCTAssertEqual(inputCaptureFactory.startCalls, [
+            .init(deviceID: usbDeviceID, label: "preview", bufferSize: 1024)
+        ])
         XCTAssertTrue(service.isPreviewActive)
 
         service.stopPreview()
+
+        XCTAssertEqual(inputCaptureFactory.createdSessions.first?.stopCalls, 1)
     }
 }
 
@@ -962,6 +1055,32 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         XCTAssertTrue(inputActivationGuard.activateCalls.isEmpty)
     }
 
+    func testStartRecordingUsesInputOnlyCaptureForExplicitUSBInput() async throws {
+        let usbDeviceID = AudioDeviceID(730)
+        let inputCaptureFactory = FakeAudioInputCaptureFactory()
+        let service = AudioRecordingService(inputCaptureFactory: inputCaptureFactory)
+        service.hasMicrophonePermissionOverride = true
+        service.hasExplicitDeviceSelection = true
+        service.selectedDeviceID = usbDeviceID
+        service.selectedInputDeviceUsesBluetoothTransport = false
+        service.inputAvailabilityOverride = { selectedDeviceID in
+            XCTAssertEqual(selectedDeviceID, usbDeviceID)
+            return true
+        }
+
+        try service.startRecording()
+
+        XCTAssertTrue(service.isRecording)
+        XCTAssertEqual(inputCaptureFactory.startCalls, [
+            .init(deviceID: usbDeviceID, label: "recording", bufferSize: 1024)
+        ])
+
+        let samples = await service.stopRecording(policy: .immediate)
+
+        XCTAssertTrue(samples.isEmpty)
+        XCTAssertEqual(inputCaptureFactory.createdSessions.first?.stopCalls, 1)
+    }
+
     func testRecoveryEngineSwap_replacesStoredEngineInstance() {
         let service = AudioRecordingService()
         let originalEngine = AVAudioEngine()
@@ -1027,6 +1146,89 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
 
         XCTAssertFalse(service.testingConsumeStartupConfigurationChangeGuardIfMatching(for: engine, liveFormat: mismatchedFormat))
         XCTAssertFalse(service.testingConsumeStartupConfigurationChangeGuardIfMatching(for: engine, liveFormat: expectedFormat))
+    }
+}
+
+final class CoreAudioHALInputCaptureSessionTests: XCTestCase {
+    func testSessionConfiguresInputOnlyHALUnitAndPullsInputFromRenderCallback() throws {
+        let operations = FakeCoreAudioHALInputOperations()
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 96_000,
+            channels: 2,
+            interleaved: false
+        ))
+        var receivedBuffers: [AVAudioPCMBuffer] = []
+
+        let session = try CoreAudioHALInputCaptureSession(
+            deviceID: AudioDeviceID(900),
+            format: format,
+            bufferSize: 256,
+            label: "test-hal",
+            operations: operations
+        ) { buffer in
+            receivedBuffers.append(buffer)
+        }
+
+        XCTAssertEqual(operations.enableIOCalls, [
+            .init(enabled: 0, scope: kAudioUnitScope_Output, element: 0),
+            .init(enabled: 1, scope: kAudioUnitScope_Input, element: 1)
+        ])
+        XCTAssertEqual(operations.currentDeviceCalls, [AudioDeviceID(900)])
+        XCTAssertEqual(operations.streamFormatCalls.first?.mSampleRate, 96_000)
+        XCTAssertEqual(operations.streamFormatCalls.first?.mChannelsPerFrame, 2)
+        XCTAssertEqual(operations.initializeCalls, 1)
+        XCTAssertEqual(operations.startCalls, 1)
+        XCTAssertNotNil(operations.inputCallback)
+
+        var flags = AudioUnitRenderActionFlags()
+        var timestamp = AudioTimeStamp()
+        let callback = try XCTUnwrap(operations.inputCallback)
+        let callbackStatus = try XCTUnwrap(callback.inputProc)(
+            try XCTUnwrap(callback.inputProcRefCon),
+            &flags,
+            &timestamp,
+            1,
+            64,
+            nil
+        )
+
+        XCTAssertEqual(callbackStatus, noErr)
+        XCTAssertEqual(operations.renderCalls, [
+            .init(busNumber: 1, frameCount: 64)
+        ])
+        XCTAssertEqual(receivedBuffers.count, 1)
+        XCTAssertEqual(receivedBuffers.first?.format.sampleRate, 96_000)
+        XCTAssertEqual(receivedBuffers.first?.format.channelCount, 2)
+
+        session.stop()
+
+        XCTAssertEqual(operations.stopCalls, 1)
+        XCTAssertEqual(operations.uninitializeCalls, 1)
+        XCTAssertEqual(operations.disposeCalls, 1)
+    }
+
+    func testSessionMapsCurrentDeviceFailureToSelectedInputCompatibilityError() throws {
+        let operations = FakeCoreAudioHALInputOperations()
+        operations.currentDeviceError = SelectedInputDeviceError.incompatible(.cannotSetDevice)
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 1,
+            interleaved: false
+        ))
+
+        XCTAssertThrowsError(try CoreAudioHALInputCaptureSession(
+            deviceID: AudioDeviceID(901),
+            format: format,
+            bufferSize: 128,
+            label: "test-hal",
+            operations: operations,
+            onBuffer: { _ in }
+        )) { error in
+            XCTAssertEqual(error as? SelectedInputDeviceError, .incompatible(.cannotSetDevice))
+        }
+        XCTAssertEqual(operations.disposeCalls, 1)
     }
 }
 
@@ -1287,6 +1489,155 @@ private final class FakeAudioInputSelectionEngineValidator: AudioInputSelectionE
 
     func validate(preferredDeviceID: AudioDeviceID?) throws {
         try handler(preferredDeviceID)
+    }
+}
+
+private final class FakeAudioInputCaptureSession: AudioInputCaptureSession {
+    private(set) var stopCalls = 0
+
+    func stop() {
+        stopCalls += 1
+    }
+}
+
+private final class FakeAudioInputCaptureFactory: AudioInputCaptureFactory {
+    struct ValidateCall: Equatable {
+        let deviceID: AudioDeviceID
+        let label: String
+    }
+
+    struct StartCall: Equatable {
+        let deviceID: AudioDeviceID
+        let label: String
+        let bufferSize: AVAudioFrameCount
+    }
+
+    private let format: AVAudioFormat
+    var inputFormatError: Error?
+    var validateError: Error?
+    var startError: Error?
+    private(set) var inputFormatCalls: [AudioDeviceID] = []
+    private(set) var validateCalls: [ValidateCall] = []
+    private(set) var startCalls: [StartCall] = []
+    private(set) var createdSessions: [FakeAudioInputCaptureSession] = []
+
+    init(format: AVAudioFormat? = nil) {
+        self.format = format ?? AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 96_000,
+            channels: 2,
+            interleaved: false
+        )!
+    }
+
+    func inputOnlyCaptureFormat(deviceID: AudioDeviceID) throws -> AVAudioFormat {
+        inputFormatCalls.append(deviceID)
+        if let inputFormatError { throw inputFormatError }
+        return format
+    }
+
+    func validateInputOnlyDevice(deviceID: AudioDeviceID, label: String) throws {
+        validateCalls.append(.init(deviceID: deviceID, label: label))
+        if let validateError { throw validateError }
+    }
+
+    func startInputOnlyCapture(
+        deviceID: AudioDeviceID,
+        label: String,
+        bufferSize: AVAudioFrameCount,
+        onBuffer: @escaping (AVAudioPCMBuffer) -> Void
+    ) throws -> AudioInputCaptureSession {
+        startCalls.append(.init(deviceID: deviceID, label: label, bufferSize: bufferSize))
+        if let startError { throw startError }
+        let session = FakeAudioInputCaptureSession()
+        createdSessions.append(session)
+        return session
+    }
+}
+
+private final class FakeCoreAudioHALInputOperations: CoreAudioHALInputOperating {
+    struct EnableIOCall: Equatable {
+        let enabled: UInt32
+        let scope: AudioUnitScope
+        let element: AudioUnitElement
+    }
+
+    struct RenderCall: Equatable {
+        let busNumber: UInt32
+        let frameCount: UInt32
+    }
+
+    let audioUnit: AudioUnit = AudioUnit(bitPattern: 0x1)!
+    var currentDeviceError: Error?
+    var renderStatus: OSStatus = noErr
+    private(set) var enableIOCalls: [EnableIOCall] = []
+    private(set) var currentDeviceCalls: [AudioDeviceID] = []
+    private(set) var streamFormatCalls: [AudioStreamBasicDescription] = []
+    private(set) var inputCallback: AURenderCallbackStruct?
+    private(set) var initializeCalls = 0
+    private(set) var startCalls = 0
+    private(set) var stopCalls = 0
+    private(set) var uninitializeCalls = 0
+    private(set) var disposeCalls = 0
+    private(set) var renderCalls: [RenderCall] = []
+
+    func makeInputUnit() throws -> AudioUnit {
+        audioUnit
+    }
+
+    func setEnableIO(
+        _ enabled: UInt32,
+        scope: AudioUnitScope,
+        element: AudioUnitElement,
+        audioUnit: AudioUnit,
+        label: String
+    ) throws {
+        enableIOCalls.append(.init(enabled: enabled, scope: scope, element: element))
+    }
+
+    func setCurrentDevice(_ deviceID: AudioDeviceID, audioUnit: AudioUnit, label: String) throws {
+        if let currentDeviceError { throw currentDeviceError }
+        currentDeviceCalls.append(deviceID)
+    }
+
+    func setStreamFormat(_ streamDescription: inout AudioStreamBasicDescription, audioUnit: AudioUnit, label: String) throws {
+        streamFormatCalls.append(streamDescription)
+    }
+
+    func setInputCallback(_ callback: inout AURenderCallbackStruct, audioUnit: AudioUnit, label: String) throws {
+        inputCallback = callback
+    }
+
+    func initialize(_ audioUnit: AudioUnit, label: String) throws {
+        initializeCalls += 1
+    }
+
+    func start(_ audioUnit: AudioUnit, label: String) throws {
+        startCalls += 1
+    }
+
+    func stop(_ audioUnit: AudioUnit) {
+        stopCalls += 1
+    }
+
+    func uninitialize(_ audioUnit: AudioUnit) {
+        uninitializeCalls += 1
+    }
+
+    func dispose(_ audioUnit: AudioUnit) {
+        disposeCalls += 1
+    }
+
+    func render(
+        audioUnit: AudioUnit,
+        actionFlags: UnsafeMutablePointer<AudioUnitRenderActionFlags>,
+        timestamp: UnsafePointer<AudioTimeStamp>,
+        busNumber: UInt32,
+        frameCount: UInt32,
+        data: UnsafeMutablePointer<AudioBufferList>
+    ) -> OSStatus {
+        renderCalls.append(.init(busNumber: busNumber, frameCount: frameCount))
+        return renderStatus
     }
 }
 

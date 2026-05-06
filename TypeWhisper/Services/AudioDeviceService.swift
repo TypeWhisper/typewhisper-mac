@@ -1,6 +1,7 @@
 import Foundation
 import CoreAudio
 import AudioToolbox
+import AudioUnit
 @preconcurrency import AVFoundation
 import Combine
 import os
@@ -101,6 +102,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     private let transportResolver: AudioDeviceTransportResolving
     private let bluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing
     private let selectionEngineValidator: AudioInputSelectionEngineValidating
+    private let inputCaptureFactory: AudioInputCaptureFactory
 
     var selectedDeviceID: AudioDeviceID? {
         guard let uid = selectedDeviceUID else { return nil }
@@ -120,6 +122,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
 
     private var listenerBlock: AudioObjectPropertyListenerBlock?
     private var previewEngine: AVAudioEngine?
+    private var previewInputCaptureSession: AudioInputCaptureSession?
     private var previewConfigChangeObserver: NSObjectProtocol?
     private let deviceChangeSubject = PassthroughSubject<Void, Never>()
     private var cancellables = Set<AnyCancellable>()
@@ -176,12 +179,14 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         transportResolver: AudioDeviceTransportResolving = CoreAudioDeviceTransportResolver(),
         bluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing = CoreAudioBluetoothInputRouteStabilizer(),
         selectionEngineValidator: AudioInputSelectionEngineValidating = AVAudioInputSelectionEngineValidator(),
+        inputCaptureFactory: AudioInputCaptureFactory = CoreAudioHALInputCaptureFactory(),
         inputActivationGuard: AudioInputDeviceActivating = AudioInputDeviceActivationGuard()
     ) {
         self.outputVolumeGuard = outputVolumeGuard
         self.transportResolver = transportResolver
         self.bluetoothInputRouteStabilizer = bluetoothInputRouteStabilizer
         self.selectionEngineValidator = selectionEngineValidator
+        self.inputCaptureFactory = inputCaptureFactory
         self.inputActivationGuard = inputActivationGuard
         previewNotificationQueue.underlyingQueue = previewRecoveryQueue
         isInitializingSelection = true
@@ -228,7 +233,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         }
 
         let usesBluetoothPreviewInput = previewInputUsesBluetoothTransport(preferredDeviceID)
-        let enginePreferredDeviceID = AudioEngineInputRoute.preferredDeviceIDForEngine(
+        let captureRoute = AudioInputCaptureRoute.selectedRoute(
             selectedDeviceID: preferredDeviceID,
             usesBluetoothTransport: usesBluetoothPreviewInput
         )
@@ -262,7 +267,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
 
         if let startPreviewOverride {
             do {
-                try startPreviewOverride(enginePreferredDeviceID)
+                try startPreviewOverride(captureRoute.avAudioEnginePreferredDeviceID)
                 outputVolumeGuard.restoreIfRaised(reason: "preview-start-override")
                 outputVolumeGuard.clear()
                 isPreviewActive = true
@@ -286,9 +291,38 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             return
         }
 
+        if case .inputOnlyDevice(let inputOnlyDeviceID) = captureRoute {
+            do {
+                try startInputOnlyPreviewCapture(deviceID: inputOnlyDeviceID, label: "preview")
+                if selectedDeviceUID != nil {
+                    markSelectedDeviceCompatibility(.compatible)
+                }
+                outputVolumeGuard.restoreIfRaised(reason: "preview-start")
+                outputVolumeGuard.clear()
+                isPreviewActive = true
+            } catch let error as SelectedInputDeviceError {
+                if case .incompatible(let issue) = error {
+                    markSelectedDeviceCompatibility(.incompatible(issue))
+                }
+                previewError = error
+                cleanupAfterFailedInputOnlyPreviewStart()
+            } catch {
+                logger.error("Failed to start input-only preview capture: \(error.localizedDescription)")
+                if selectedDeviceUID != nil {
+                    markSelectedDeviceCompatibility(.incompatible(.engineStartFailed))
+                    previewError = .incompatible(.engineStartFailed)
+                }
+                cleanupAfterFailedInputOnlyPreviewStart()
+            }
+            return
+        }
+
+        let enginePreferredDeviceID = captureRoute.avAudioEnginePreferredDeviceID
+
         let engine = AVAudioEngine()
         previewLock.withLock {
             previewEngine = engine
+            previewInputCaptureSession = nil
             activePreviewDeviceID = enginePreferredDeviceID
             activePreviewUsesBluetoothTransport = usesBluetoothPreviewInput
             bluetoothPreviewConfigurationChangeIgnoreUntil = nil
@@ -344,10 +378,20 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             bluetoothPreviewConfigurationChangeIgnoreUntil = nil
             return engine
         }
+        let inputCaptureSession: AudioInputCaptureSession? = previewLock.withLock {
+            let session = previewInputCaptureSession
+            previewInputCaptureSession = nil
+            return session
+        }
         if let engine {
             outputVolumeGuard.captureBaseline()
             teardownPreviewEngine(engine)
             previewEngineTeardownRetainer.retain(engine, for: Self.previewEngineTeardownRetentionInterval)
+            outputVolumeGuard.restoreIfRaised(reason: "preview-stop")
+        }
+        if let inputCaptureSession {
+            outputVolumeGuard.captureBaseline()
+            inputCaptureSession.stop()
             outputVolumeGuard.restoreIfRaised(reason: "preview-stop")
         }
         outputVolumeGuard.clear()
@@ -367,8 +411,9 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     }
 
     private func processPreviewBuffer(_ buffer: AVAudioPCMBuffer) {
-        guard let channelData = buffer.floatChannelData?[0] else { return }
-        let frames = Int(buffer.frameLength)
+        guard let monoBuffer = AudioInputBufferNormalizer.monoFloatBuffer(from: buffer),
+              let channelData = monoBuffer.floatChannelData?[0] else { return }
+        let frames = Int(monoBuffer.frameLength)
         var sum: Float = 0
         for i in 0..<frames {
             let sample = channelData[i]
@@ -380,6 +425,26 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             guard let self, self.isPreviewActive else { return }
             self.previewAudioLevel = level
             self.previewRawLevel = rms
+        }
+    }
+
+    private func startInputOnlyPreviewCapture(deviceID: AudioDeviceID, label: String) throws {
+        let session = try inputCaptureFactory.startInputOnlyCapture(
+            deviceID: deviceID,
+            label: label,
+            bufferSize: 1024
+        ) { [weak self] buffer in
+            self?.processPreviewBuffer(buffer)
+        }
+
+        previewRecoveryCoordinator.transitionToIdle()
+        removePreviewConfigurationObserver()
+        previewLock.withLock {
+            previewEngine = nil
+            previewInputCaptureSession = session
+            activePreviewDeviceID = deviceID
+            activePreviewUsesBluetoothTransport = false
+            bluetoothPreviewConfigurationChangeIgnoreUntil = nil
         }
     }
 
@@ -413,7 +478,8 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         let (engine, preferredDeviceID): (AVAudioEngine?, AudioDeviceID?) = previewLock.withLock {
             (previewEngine, activePreviewDeviceID)
         }
-        guard isPreviewActive, let engine else { return }
+        let hasInputOnlyCapture = previewLock.withLock { previewInputCaptureSession != nil }
+        guard isPreviewActive, !hasInputOnlyCapture, let engine else { return }
 
         logger.warning("Preview audio engine configuration changed, restarting engine")
 
@@ -447,10 +513,16 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             bluetoothPreviewConfigurationChangeIgnoreUntil = nil
             return engine
         }
+        let inputCaptureSession: AudioInputCaptureSession? = previewLock.withLock {
+            let session = previewInputCaptureSession
+            previewInputCaptureSession = nil
+            return session
+        }
         if let engine {
             teardownPreviewEngine(engine)
             previewEngineTeardownRetainer.retain(engine, for: Self.previewEngineTeardownRetentionInterval)
         }
+        inputCaptureSession?.stop()
         outputVolumeGuard.restoreIfRaised(reason: "preview-recovery-failure")
         outputVolumeGuard.clear()
         inputActivationGuard.restore(reason: "preview-recovery-failure")
@@ -652,6 +724,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         previewLock.withLock {
             if previewEngine === engine {
                 previewEngine = nil
+                previewInputCaptureSession = nil
                 activePreviewDeviceID = nil
                 activePreviewUsesBluetoothTransport = false
                 bluetoothPreviewConfigurationChangeIgnoreUntil = nil
@@ -659,6 +732,27 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         }
         teardownPreviewEngine(engine)
         previewEngineTeardownRetainer.retain(engine, for: Self.previewEngineTeardownRetentionInterval)
+        outputVolumeGuard.restoreIfRaised(reason: "preview-start-failed")
+        outputVolumeGuard.clear()
+        inputActivationGuard.restore(reason: "preview-start-failed")
+        isPreviewActive = false
+        previewAudioLevel = 0
+        previewRawLevel = 0
+    }
+
+    private func cleanupAfterFailedInputOnlyPreviewStart() {
+        previewRecoveryCoordinator.transitionToIdle()
+        removePreviewConfigurationObserver()
+        let session: AudioInputCaptureSession? = previewLock.withLock {
+            let session = previewInputCaptureSession
+            previewInputCaptureSession = nil
+            previewEngine = nil
+            activePreviewDeviceID = nil
+            activePreviewUsesBluetoothTransport = false
+            bluetoothPreviewConfigurationChangeIgnoreUntil = nil
+            return session
+        }
+        session?.stop()
         outputVolumeGuard.restoreIfRaised(reason: "preview-start-failed")
         outputVolumeGuard.clear()
         inputActivationGuard.restore(reason: "preview-start-failed")
@@ -1055,7 +1149,18 @@ protocol AudioInputSelectionEngineValidating: AnyObject {
 }
 
 final class AVAudioInputSelectionEngineValidator: AudioInputSelectionEngineValidating {
+    private let inputCaptureFactory: AudioInputCaptureFactory
+
+    init(inputCaptureFactory: AudioInputCaptureFactory = CoreAudioHALInputCaptureFactory()) {
+        self.inputCaptureFactory = inputCaptureFactory
+    }
+
     func validate(preferredDeviceID: AudioDeviceID?) throws {
+        if let preferredDeviceID {
+            try inputCaptureFactory.validateInputOnlyDevice(deviceID: preferredDeviceID, label: "selection")
+            return
+        }
+
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
 
@@ -1183,6 +1288,502 @@ enum AudioEngineInputRoute {
     ) -> AudioDeviceID? {
         guard let selectedDeviceID else { return nil }
         return usesBluetoothTransport ? nil : selectedDeviceID
+    }
+}
+
+enum AudioInputCaptureRoute: Equatable {
+    case avAudioEngine(preferredDeviceID: AudioDeviceID?)
+    case inputOnlyDevice(AudioDeviceID)
+
+    var avAudioEnginePreferredDeviceID: AudioDeviceID? {
+        switch self {
+        case .avAudioEngine(let preferredDeviceID):
+            return preferredDeviceID
+        case .inputOnlyDevice:
+            return nil
+        }
+    }
+
+    static func selectedRoute(
+        selectedDeviceID: AudioDeviceID?,
+        usesBluetoothTransport: Bool
+    ) -> AudioInputCaptureRoute {
+        guard let selectedDeviceID else {
+            return .avAudioEngine(preferredDeviceID: nil)
+        }
+        guard !usesBluetoothTransport else {
+            return .avAudioEngine(preferredDeviceID: nil)
+        }
+        return .inputOnlyDevice(selectedDeviceID)
+    }
+}
+
+protocol AudioInputCaptureSession: AnyObject {
+    func stop()
+}
+
+protocol AudioInputCaptureFactory: AnyObject {
+    func inputOnlyCaptureFormat(deviceID: AudioDeviceID) throws -> AVAudioFormat
+    func validateInputOnlyDevice(deviceID: AudioDeviceID, label: String) throws
+    func startInputOnlyCapture(
+        deviceID: AudioDeviceID,
+        label: String,
+        bufferSize: AVAudioFrameCount,
+        onBuffer: @escaping (AVAudioPCMBuffer) -> Void
+    ) throws -> AudioInputCaptureSession
+}
+
+final class CoreAudioHALInputCaptureFactory: AudioInputCaptureFactory {
+    private let operations: CoreAudioHALInputOperating
+
+    init(operations: CoreAudioHALInputOperating = CoreAudioHALInputOperations()) {
+        self.operations = operations
+    }
+
+    func inputOnlyCaptureFormat(deviceID: AudioDeviceID) throws -> AVAudioFormat {
+        try CoreAudioHALInputCaptureSession.captureFormat(for: deviceID)
+    }
+
+    func validateInputOnlyDevice(deviceID: AudioDeviceID, label: String) throws {
+        let session = try startInputOnlyCapture(
+            deviceID: deviceID,
+            label: label,
+            bufferSize: 128,
+            onBuffer: { _ in }
+        )
+        session.stop()
+    }
+
+    func startInputOnlyCapture(
+        deviceID: AudioDeviceID,
+        label: String,
+        bufferSize: AVAudioFrameCount,
+        onBuffer: @escaping (AVAudioPCMBuffer) -> Void
+    ) throws -> AudioInputCaptureSession {
+        let format = try inputOnlyCaptureFormat(deviceID: deviceID)
+        do {
+            return try CoreAudioHALInputCaptureSession(
+                deviceID: deviceID,
+                format: format,
+                bufferSize: bufferSize,
+                label: label,
+                operations: operations,
+                onBuffer: onBuffer
+            )
+        } catch let error as SelectedInputDeviceError {
+            throw error
+        } catch {
+            throw SelectedInputDeviceError.incompatible(.engineStartFailed)
+        }
+    }
+}
+
+protocol CoreAudioHALInputOperating: AnyObject {
+    func makeInputUnit() throws -> AudioUnit
+    func setEnableIO(
+        _ enabled: UInt32,
+        scope: AudioUnitScope,
+        element: AudioUnitElement,
+        audioUnit: AudioUnit,
+        label: String
+    ) throws
+    func setCurrentDevice(_ deviceID: AudioDeviceID, audioUnit: AudioUnit, label: String) throws
+    func setStreamFormat(_ streamDescription: inout AudioStreamBasicDescription, audioUnit: AudioUnit, label: String) throws
+    func setInputCallback(_ callback: inout AURenderCallbackStruct, audioUnit: AudioUnit, label: String) throws
+    func initialize(_ audioUnit: AudioUnit, label: String) throws
+    func start(_ audioUnit: AudioUnit, label: String) throws
+    func stop(_ audioUnit: AudioUnit)
+    func uninitialize(_ audioUnit: AudioUnit)
+    func dispose(_ audioUnit: AudioUnit)
+    func render(
+        audioUnit: AudioUnit,
+        actionFlags: UnsafeMutablePointer<AudioUnitRenderActionFlags>,
+        timestamp: UnsafePointer<AudioTimeStamp>,
+        busNumber: UInt32,
+        frameCount: UInt32,
+        data: UnsafeMutablePointer<AudioBufferList>
+    ) -> OSStatus
+}
+
+private struct CoreAudioHALInputOperationError: Error {
+    let operation: String
+    let status: OSStatus
+}
+
+final class CoreAudioHALInputOperations: CoreAudioHALInputOperating {
+    func makeInputUnit() throws -> AudioUnit {
+        var description = AudioComponentDescription(
+            componentType: kAudioUnitType_Output,
+            componentSubType: kAudioUnitSubType_HALOutput,
+            componentManufacturer: kAudioUnitManufacturer_Apple,
+            componentFlags: 0,
+            componentFlagsMask: 0
+        )
+
+        guard let component = AudioComponentFindNext(nil, &description) else {
+            throw CoreAudioHALInputOperationError(operation: "find HAL output component", status: -1)
+        }
+
+        var audioUnit: AudioUnit?
+        let status = AudioComponentInstanceNew(component, &audioUnit)
+        guard status == noErr, let audioUnit else {
+            throw CoreAudioHALInputOperationError(operation: "create HAL input unit", status: status)
+        }
+        return audioUnit
+    }
+
+    func setEnableIO(
+        _ enabled: UInt32,
+        scope: AudioUnitScope,
+        element: AudioUnitElement,
+        audioUnit: AudioUnit,
+        label: String
+    ) throws {
+        var enabled = enabled
+        try setUInt32Property(
+            kAudioOutputUnitProperty_EnableIO,
+            scope: scope,
+            element: element,
+            audioUnit: audioUnit,
+            value: &enabled,
+            operation: "\(label) set EnableIO scope=\(scope) element=\(element)"
+        )
+    }
+
+    func setCurrentDevice(_ deviceID: AudioDeviceID, audioUnit: AudioUnit, label: String) throws {
+        var deviceID = deviceID
+        do {
+            try setUInt32Property(
+                kAudioOutputUnitProperty_CurrentDevice,
+                scope: kAudioUnitScope_Global,
+                element: 0,
+                audioUnit: audioUnit,
+                value: &deviceID,
+                operation: "\(label) set current input device"
+            )
+        } catch let error as CoreAudioHALInputOperationError {
+            deviceHelperLogger.error("[\(label)] Could not set HAL input device \(deviceID): status=\(error.status)")
+            throw SelectedInputDeviceError.incompatible(.cannotSetDevice)
+        }
+    }
+
+    func setStreamFormat(_ streamDescription: inout AudioStreamBasicDescription, audioUnit: AudioUnit, label: String) throws {
+        try setStreamDescriptionProperty(
+            kAudioUnitProperty_StreamFormat,
+            scope: kAudioUnitScope_Output,
+            element: 1,
+            audioUnit: audioUnit,
+            value: &streamDescription,
+            operation: "\(label) set HAL input stream format"
+        )
+    }
+
+    func setInputCallback(_ callback: inout AURenderCallbackStruct, audioUnit: AudioUnit, label: String) throws {
+        try setInputCallbackProperty(
+            kAudioOutputUnitProperty_SetInputCallback,
+            scope: kAudioUnitScope_Global,
+            element: 0,
+            audioUnit: audioUnit,
+            value: &callback,
+            operation: "\(label) set HAL input callback"
+        )
+    }
+
+    func initialize(_ audioUnit: AudioUnit, label: String) throws {
+        let status = AudioUnitInitialize(audioUnit)
+        guard status == noErr else {
+            throw CoreAudioHALInputOperationError(operation: "\(label) initialize HAL input unit", status: status)
+        }
+    }
+
+    func start(_ audioUnit: AudioUnit, label: String) throws {
+        let status = AudioOutputUnitStart(audioUnit)
+        guard status == noErr else {
+            throw CoreAudioHALInputOperationError(operation: "\(label) start HAL input unit", status: status)
+        }
+    }
+
+    func stop(_ audioUnit: AudioUnit) {
+        AudioOutputUnitStop(audioUnit)
+    }
+
+    func uninitialize(_ audioUnit: AudioUnit) {
+        AudioUnitUninitialize(audioUnit)
+    }
+
+    func dispose(_ audioUnit: AudioUnit) {
+        AudioComponentInstanceDispose(audioUnit)
+    }
+
+    func render(
+        audioUnit: AudioUnit,
+        actionFlags: UnsafeMutablePointer<AudioUnitRenderActionFlags>,
+        timestamp: UnsafePointer<AudioTimeStamp>,
+        busNumber: UInt32,
+        frameCount: UInt32,
+        data: UnsafeMutablePointer<AudioBufferList>
+    ) -> OSStatus {
+        AudioUnitRender(audioUnit, actionFlags, timestamp, busNumber, frameCount, data)
+    }
+
+    private func setUInt32Property(
+        _ propertyID: AudioUnitPropertyID,
+        scope: AudioUnitScope,
+        element: AudioUnitElement,
+        audioUnit: AudioUnit,
+        value: inout UInt32,
+        operation: String
+    ) throws {
+        let status = withUnsafePointer(to: &value) { pointer in
+            AudioUnitSetProperty(
+                audioUnit,
+                propertyID,
+                scope,
+                element,
+                pointer,
+                UInt32(MemoryLayout<UInt32>.size)
+            )
+        }
+        try checkPropertyStatus(status, operation: operation)
+    }
+
+    private func setStreamDescriptionProperty(
+        _ propertyID: AudioUnitPropertyID,
+        scope: AudioUnitScope,
+        element: AudioUnitElement,
+        audioUnit: AudioUnit,
+        value: inout AudioStreamBasicDescription,
+        operation: String
+    ) throws {
+        let status = withUnsafePointer(to: &value) { pointer in
+            AudioUnitSetProperty(
+                audioUnit,
+                propertyID,
+                scope,
+                element,
+                pointer,
+                UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+            )
+        }
+        try checkPropertyStatus(status, operation: operation)
+    }
+
+    private func setInputCallbackProperty(
+        _ propertyID: AudioUnitPropertyID,
+        scope: AudioUnitScope,
+        element: AudioUnitElement,
+        audioUnit: AudioUnit,
+        value: inout AURenderCallbackStruct,
+        operation: String
+    ) throws {
+        let status = withUnsafePointer(to: &value) { pointer in
+            AudioUnitSetProperty(
+                audioUnit,
+                propertyID,
+                scope,
+                element,
+                pointer,
+                UInt32(MemoryLayout<AURenderCallbackStruct>.size)
+            )
+        }
+        try checkPropertyStatus(status, operation: operation)
+    }
+
+    private func checkPropertyStatus(_ status: OSStatus, operation: String) throws {
+        guard status == noErr else {
+            throw CoreAudioHALInputOperationError(operation: operation, status: status)
+        }
+    }
+}
+
+final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecked Sendable {
+    final class RenderState: @unchecked Sendable {
+        let audioUnit: AudioUnit
+        let operations: CoreAudioHALInputOperating
+        let format: AVAudioFormat
+        let onBuffer: (AVAudioPCMBuffer) -> Void
+
+        init(
+            audioUnit: AudioUnit,
+            operations: CoreAudioHALInputOperating,
+            format: AVAudioFormat,
+            onBuffer: @escaping (AVAudioPCMBuffer) -> Void
+        ) {
+            self.audioUnit = audioUnit
+            self.operations = operations
+            self.format = format
+            self.onBuffer = onBuffer
+        }
+    }
+
+    private let audioUnit: AudioUnit
+    private let operations: CoreAudioHALInputOperating
+    private let renderState: RenderState
+    private let lock = NSLock()
+    private var isStopped = false
+
+    init(
+        deviceID: AudioDeviceID,
+        format: AVAudioFormat,
+        bufferSize: AVAudioFrameCount,
+        label: String,
+        operations: CoreAudioHALInputOperating,
+        onBuffer: @escaping (AVAudioPCMBuffer) -> Void
+    ) throws {
+        self.operations = operations
+
+        let audioUnit = try operations.makeInputUnit()
+        self.audioUnit = audioUnit
+
+        do {
+            let disabled: UInt32 = 0
+            let enabled: UInt32 = 1
+            try operations.setEnableIO(disabled, scope: kAudioUnitScope_Output, element: 0, audioUnit: audioUnit, label: label)
+            try operations.setEnableIO(enabled, scope: kAudioUnitScope_Input, element: 1, audioUnit: audioUnit, label: label)
+            try operations.setCurrentDevice(deviceID, audioUnit: audioUnit, label: label)
+
+            var streamDescription = try Self.streamDescription(for: format)
+            try operations.setStreamFormat(&streamDescription, audioUnit: audioUnit, label: label)
+
+            let renderState = RenderState(
+                audioUnit: audioUnit,
+                operations: operations,
+                format: format,
+                onBuffer: onBuffer
+            )
+            self.renderState = renderState
+            var callback = AURenderCallbackStruct(
+                inputProc: coreAudioHALInputRenderCallback,
+                inputProcRefCon: Unmanaged.passUnretained(renderState).toOpaque()
+            )
+            try operations.setInputCallback(&callback, audioUnit: audioUnit, label: label)
+            try operations.initialize(audioUnit, label: label)
+            try operations.start(audioUnit, label: label)
+
+            deviceHelperLogger.info("[\(label)] Started input-only HAL capture for device \(deviceID), sampleRate=\(format.sampleRate), channels=\(format.channelCount), bufferSize=\(bufferSize)")
+        } catch {
+            operations.stop(audioUnit)
+            operations.uninitialize(audioUnit)
+            operations.dispose(audioUnit)
+            throw error
+        }
+    }
+
+    static func captureFormat(for deviceID: AudioDeviceID) throws -> AVAudioFormat {
+        guard let hardwareFormat = AudioInputFormatStabilizer.expectedHardwareFormat(for: deviceID),
+              let format = AVAudioFormat(
+                  commonFormat: .pcmFormatFloat32,
+                  sampleRate: hardwareFormat.sampleRate,
+                  channels: hardwareFormat.channelCount,
+                  interleaved: false
+              ) else {
+            throw SelectedInputDeviceError.incompatible(.invalidInputFormat)
+        }
+        return format
+    }
+
+    func stop() {
+        let shouldStop = lock.withLock { () -> Bool in
+            guard !isStopped else { return false }
+            isStopped = true
+            return true
+        }
+        guard shouldStop else { return }
+        operations.stop(audioUnit)
+        operations.uninitialize(audioUnit)
+        operations.dispose(audioUnit)
+    }
+
+    private static func streamDescription(for format: AVAudioFormat) throws -> AudioStreamBasicDescription {
+        let streamDescription = format.streamDescription.pointee
+        guard streamDescription.mFormatID == kAudioFormatLinearPCM,
+              streamDescription.mChannelsPerFrame > 0,
+              streamDescription.mSampleRate > 0 else {
+            throw SelectedInputDeviceError.incompatible(.invalidInputFormat)
+        }
+        return streamDescription
+    }
+}
+
+private func coreAudioHALInputRenderCallback(
+    inRefCon: UnsafeMutableRawPointer,
+    ioActionFlags: UnsafeMutablePointer<AudioUnitRenderActionFlags>,
+    inTimeStamp: UnsafePointer<AudioTimeStamp>,
+    inBusNumber: UInt32,
+    inNumberFrames: UInt32,
+    ioData: UnsafeMutablePointer<AudioBufferList>?
+) -> OSStatus {
+    let renderState = Unmanaged<CoreAudioHALInputCaptureSession.RenderState>
+        .fromOpaque(inRefCon)
+        .takeUnretainedValue()
+
+    guard let buffer = AVAudioPCMBuffer(
+        pcmFormat: renderState.format,
+        frameCapacity: AVAudioFrameCount(inNumberFrames)
+    ) else {
+        return kAudioUnitErr_InvalidPropertyValue
+    }
+    buffer.frameLength = AVAudioFrameCount(inNumberFrames)
+
+    let status = renderState.operations.render(
+        audioUnit: renderState.audioUnit,
+        actionFlags: ioActionFlags,
+        timestamp: inTimeStamp,
+        busNumber: 1,
+        frameCount: inNumberFrames,
+        data: buffer.mutableAudioBufferList
+    )
+    guard status == noErr else { return status }
+
+    renderState.onBuffer(buffer)
+    return noErr
+}
+
+enum AudioInputBufferNormalizer {
+    static func monoFloatFormat(for format: AVAudioFormat) -> AVAudioFormat? {
+        AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: format.sampleRate,
+            channels: 1,
+            interleaved: false
+        )
+    }
+
+    static func monoFloatBuffer(from buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+        guard buffer.frameLength > 0,
+              buffer.format.sampleRate > 0,
+              let sourceChannels = buffer.floatChannelData else {
+            return nil
+        }
+
+        let frameCount = Int(buffer.frameLength)
+        let channelCount = Int(buffer.format.channelCount)
+        guard channelCount > 0 else { return nil }
+
+        if channelCount == 1,
+           buffer.format.commonFormat == .pcmFormatFloat32,
+           !buffer.format.isInterleaved {
+            return buffer
+        }
+
+        guard let monoFormat = monoFloatFormat(for: buffer.format),
+              let monoBuffer = AVAudioPCMBuffer(
+                  pcmFormat: monoFormat,
+                  frameCapacity: buffer.frameLength
+              ),
+              let monoChannel = monoBuffer.floatChannelData?[0] else {
+            return nil
+        }
+
+        monoBuffer.frameLength = buffer.frameLength
+        for frameIndex in 0..<frameCount {
+            var sum: Float = 0
+            for channelIndex in 0..<channelCount {
+                sum += sourceChannels[channelIndex][frameIndex]
+            }
+            monoChannel[frameIndex] = sum / Float(channelCount)
+        }
+        return monoBuffer
     }
 }
 
