@@ -159,6 +159,28 @@ final class WorkflowService: ObservableObject {
         fetchWorkflows()
     }
 
+    @discardableResult
+    func moveWorkflow(draggedWorkflowId: UUID, droppedOn targetWorkflowId: UUID) -> Bool {
+        guard draggedWorkflowId != targetWorkflowId,
+              let fromIndex = workflows.firstIndex(where: { $0.id == draggedWorkflowId }),
+              let toIndex = workflows.firstIndex(where: { $0.id == targetWorkflowId }) else {
+            return false
+        }
+
+        var reordered = workflows
+        let movedWorkflow = reordered.remove(at: fromIndex)
+        // The original target index inserts before the target when moving up and
+        // after the shifted target when moving down.
+        let insertionIndex = toIndex
+        guard insertionIndex >= reordered.startIndex, insertionIndex <= reordered.endIndex else {
+            return false
+        }
+
+        reordered.insert(movedWorkflow, at: insertionIndex)
+        reorderWorkflows(reordered)
+        return true
+    }
+
     func workflow(id: UUID) -> Workflow? {
         workflows.first(where: { $0.id == id })
     }

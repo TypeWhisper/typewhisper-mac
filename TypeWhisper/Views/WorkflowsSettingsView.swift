@@ -80,8 +80,16 @@ private struct MyWorkflowsPage: View {
     @State private var searchText = ""
     @State private var pendingDeleteWorkflowId: UUID?
 
+    private var trimmedSearchText: String {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var isFilteringWorkflows: Bool {
+        !trimmedSearchText.isEmpty
+    }
+
     private var filteredWorkflows: [Workflow] {
-        let trimmedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedQuery = trimmedSearchText
         guard !trimmedQuery.isEmpty else { return workflowService.workflows }
 
         return workflowService.workflows.filter { workflow in
@@ -107,6 +115,10 @@ private struct MyWorkflowsPage: View {
                         emptyState
                     } else {
                         searchField
+
+                        if isFilteringWorkflows {
+                            reorderDisabledNotice
+                        }
 
                         if filteredWorkflows.isEmpty {
                             filteredEmptyState
@@ -386,20 +398,62 @@ private struct MyWorkflowsPage: View {
         }
     }
 
+    private var reorderDisabledNotice: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: "line.3.horizontal.decrease.circle")
+                .font(.body)
+                .foregroundStyle(.secondary)
+
+            Text(
+                localizedAppText(
+                    "Reordering is disabled while search is active to keep the global workflow order deterministic.",
+                    de: "Die Sortierung ist während der Suche deaktiviert, damit die globale Workflow-Reihenfolge eindeutig bleibt."
+                )
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            Spacer(minLength: 0)
+
+            Button(localizedAppText("Clear Search", de: "Suche löschen")) {
+                searchText = ""
+            }
+            .buttonStyle(.link)
+            .font(.caption)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        }
+    }
+
     private var workflowsList: some View {
         let orderedIds = workflowService.workflows.map(\.id)
+        let canReorder = !isFilteringWorkflows
 
         return LazyVStack(spacing: 0) {
             ForEach(Array(filteredWorkflows.enumerated()), id: \.element.id) { index, workflow in
                 WorkflowRow(
                     workflow: workflow,
-                    canMoveUp: orderedIds.firstIndex(of: workflow.id).map { $0 > 0 } ?? false,
-                    canMoveDown: orderedIds.firstIndex(of: workflow.id).map { $0 < orderedIds.count - 1 } ?? false,
+                    canMoveUp: canReorder && (orderedIds.firstIndex(of: workflow.id).map { $0 > 0 } ?? false),
+                    canMoveDown: canReorder && (orderedIds.firstIndex(of: workflow.id).map { $0 < orderedIds.count - 1 } ?? false),
+                    isReorderingEnabled: canReorder,
                     onToggle: { workflowService.toggleWorkflow(workflow) },
                     onEdit: { navigation.editWorkflow(id: workflow.id) },
                     onDelete: { pendingDeleteWorkflowId = workflow.id },
                     onMoveUp: { move(workflow: workflow, by: -1) },
-                    onMoveDown: { move(workflow: workflow, by: 1) }
+                    onMoveDown: { move(workflow: workflow, by: 1) },
+                    onDropWorkflow: { droppedId in
+                        guard let draggedWorkflowId = UUID(uuidString: droppedId) else {
+                            return false
+                        }
+                        return workflowService.moveWorkflow(
+                            draggedWorkflowId: draggedWorkflowId,
+                            droppedOn: workflow.id
+                        )
+                    }
                 )
 
                 if index < filteredWorkflows.count - 1 {
@@ -431,11 +485,16 @@ private struct WorkflowRow: View {
     let workflow: Workflow
     let canMoveUp: Bool
     let canMoveDown: Bool
+    let isReorderingEnabled: Bool
     let onToggle: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
     let onMoveUp: () -> Void
     let onMoveDown: () -> Void
+    let onDropWorkflow: (String) -> Bool
+
+    @State private var isDropTargeted = false
+    @State private var isHovered = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -531,9 +590,89 @@ private struct WorkflowRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+        .background(rowBackgroundColor)
         .contentShape(Rectangle())
+        .onHover { hovering in
+            isHovered = hovering
+        }
         .onTapGesture {
             onEdit()
+        }
+        .workflowReordering(
+            isEnabled: isReorderingEnabled,
+            workflowId: workflow.id.uuidString,
+            isTargeted: $isDropTargeted
+        ) { droppedItems in
+            guard let droppedId = droppedItems.first else {
+                return false
+            }
+            return onDropWorkflow(droppedId)
+        }
+        .help(
+            isReorderingEnabled
+                ? localizedAppText("Drag to reorder workflow", de: "Workflow ziehen, um die Reihenfolge zu ändern")
+                : localizedAppText("Clear search to reorder workflows", de: "Suche löschen, um Workflows zu sortieren")
+        )
+        .accessibilityHint(
+            isReorderingEnabled
+                ? localizedAppText("Drag this row to reorder workflows.", de: "Ziehe diese Zeile, um Workflows zu sortieren.")
+                : localizedAppText("Reordering is disabled while search is active.", de: "Die Sortierung ist während aktiver Suche deaktiviert.")
+        )
+    }
+
+    private var rowBackgroundColor: Color {
+        if isDropTargeted {
+            return Color.accentColor.opacity(0.08)
+        }
+
+        if isHovered, isReorderingEnabled {
+            return Color.primary.opacity(0.035)
+        }
+
+        return Color.clear
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func workflowReordering(
+        isEnabled: Bool,
+        workflowId: String,
+        isTargeted: Binding<Bool>,
+        onDrop: @escaping ([String]) -> Bool
+    ) -> some View {
+        if isEnabled {
+            self
+                .draggable(workflowId)
+                .dropDestination(for: String.self) { droppedItems, _ in
+                    onDrop(droppedItems)
+                } isTargeted: { targeted in
+                    isTargeted.wrappedValue = targeted
+                }
+                .overlay {
+                    OpenHandCursorView()
+                        .allowsHitTesting(false)
+                }
+        } else {
+            self
+        }
+    }
+}
+
+private struct OpenHandCursorView: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        CursorView()
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    private final class CursorView: NSView {
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            nil
+        }
+
+        override func resetCursorRects() {
+            addCursorRect(bounds, cursor: .openHand)
         }
     }
 }

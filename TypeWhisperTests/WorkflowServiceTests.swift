@@ -274,6 +274,127 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(service.nextSortOrder(), 3)
     }
 
+    func testMoveWorkflowDownDropsAfterTargetAndRenumbersFullOrder() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory)
+        let first = try XCTUnwrap(service.addWorkflow(
+            name: "First",
+            template: .cleanedText,
+            trigger: .app("com.apple.mail")
+        ))
+        _ = service.addWorkflow(
+            name: "Second",
+            template: .translation,
+            trigger: .website("docs.github.com")
+        )
+        let third = try XCTUnwrap(service.addWorkflow(
+            name: "Third",
+            template: .summary,
+            trigger: .hotkey(UnifiedHotkey(keyCode: 3, modifierFlags: 0, isFn: false))
+        ))
+        _ = service.addWorkflow(
+            name: "Fourth",
+            template: .checklist,
+            trigger: .manual()
+        )
+
+        let moved = service.moveWorkflow(draggedWorkflowId: first.id, droppedOn: third.id)
+
+        XCTAssertTrue(moved)
+        XCTAssertEqual(service.workflows.map(\.name), ["Second", "Third", "First", "Fourth"])
+        XCTAssertEqual(service.workflows.map(\.sortOrder), [0, 1, 2, 3])
+
+        let reloaded = WorkflowService(appSupportDirectory: appSupportDirectory)
+        XCTAssertEqual(reloaded.workflows.map(\.name), ["Second", "Third", "First", "Fourth"])
+        XCTAssertEqual(reloaded.workflows.map(\.sortOrder), [0, 1, 2, 3])
+    }
+
+    func testMoveWorkflowUpDropsBeforeTargetAndRenumbersFullOrder() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory)
+        _ = service.addWorkflow(
+            name: "First",
+            template: .cleanedText,
+            trigger: .app("com.apple.mail")
+        )
+        let second = try XCTUnwrap(service.addWorkflow(
+            name: "Second",
+            template: .translation,
+            trigger: .website("docs.github.com")
+        ))
+        let third = try XCTUnwrap(service.addWorkflow(
+            name: "Third",
+            template: .summary,
+            trigger: .hotkey(UnifiedHotkey(keyCode: 3, modifierFlags: 0, isFn: false))
+        ))
+        _ = service.addWorkflow(
+            name: "Fourth",
+            template: .checklist,
+            trigger: .manual()
+        )
+
+        let moved = service.moveWorkflow(draggedWorkflowId: third.id, droppedOn: second.id)
+
+        XCTAssertTrue(moved)
+        XCTAssertEqual(service.workflows.map(\.name), ["First", "Third", "Second", "Fourth"])
+        XCTAssertEqual(service.workflows.map(\.sortOrder), [0, 1, 2, 3])
+    }
+
+    func testMoveWorkflowRejectsSelfAndUnknownDropsWithoutChangingOrder() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory)
+        let first = try XCTUnwrap(service.addWorkflow(
+            name: "First",
+            template: .cleanedText,
+            trigger: .app("com.apple.mail")
+        ))
+        let second = try XCTUnwrap(service.addWorkflow(
+            name: "Second",
+            template: .translation,
+            trigger: .website("docs.github.com")
+        ))
+        let originalNames = service.workflows.map(\.name)
+        let originalSortOrders = service.workflows.map(\.sortOrder)
+
+        XCTAssertFalse(service.moveWorkflow(draggedWorkflowId: first.id, droppedOn: first.id))
+        XCTAssertFalse(service.moveWorkflow(draggedWorkflowId: UUID(), droppedOn: second.id))
+        XCTAssertFalse(service.moveWorkflow(draggedWorkflowId: first.id, droppedOn: UUID()))
+        XCTAssertEqual(service.workflows.map(\.name), originalNames)
+        XCTAssertEqual(service.workflows.map(\.sortOrder), originalSortOrders)
+    }
+
+    func testMovedWorkflowSortOrderControlsMatchingPriority() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory)
+        let summary = try XCTUnwrap(service.addWorkflow(
+            name: "Docs Summary",
+            template: .summary,
+            trigger: .website("docs.github.com")
+        ))
+        let cleanup = try XCTUnwrap(service.addWorkflow(
+            name: "Docs Cleanup",
+            template: .cleanedText,
+            trigger: .website("docs.github.com")
+        ))
+
+        XCTAssertTrue(service.moveWorkflow(draggedWorkflowId: cleanup.id, droppedOn: summary.id))
+
+        let match = try XCTUnwrap(service.matchWorkflow(
+            bundleIdentifier: "com.apple.Safari",
+            url: "https://docs.github.com/en/actions"
+        ))
+        XCTAssertEqual(match.workflow.name, "Docs Cleanup")
+        XCTAssertTrue(match.wonBySortOrder)
+    }
+
     func testToggleAndDeleteWorkflowUpdatePublishedState() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
         defer { TestSupport.remove(appSupportDirectory) }
