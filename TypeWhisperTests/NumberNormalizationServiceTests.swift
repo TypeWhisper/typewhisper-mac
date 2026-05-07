@@ -4,17 +4,20 @@ import XCTest
 @MainActor
 final class NumberNormalizationServiceTests: XCTestCase {
     private var service: NumberNormalizationService!
+    private var defaultsSuite: UserDefaults!
 
     override func setUp() {
         super.setUp()
-        // Reset UserDefaults key so prior test runs do not leak isEnabled=false
-        UserDefaults.standard.removeObject(forKey: "itnEnabled")
-        service = NumberNormalizationService()
+        // Isolated suite so tests cannot leak state or reset developer app preferences
+        defaultsSuite = UserDefaults(suiteName: "com.typewhisper.itn.tests")
+        defaultsSuite.removePersistentDomain(forName: "com.typewhisper.itn.tests")
+        service = NumberNormalizationService(defaults: defaultsSuite)
         service.isEnabled = true
     }
 
     override func tearDown() {
-        UserDefaults.standard.removeObject(forKey: "itnEnabled")
+        defaultsSuite.removePersistentDomain(forName: "com.typewhisper.itn.tests")
+        defaultsSuite = nil
         service = nil
         super.tearDown()
     }
@@ -361,6 +364,16 @@ final class NumberNormalizationServiceTests: XCTestCase {
     func testFiveOhFive() {
         let result = service.normalize("Five oh five.")
         XCTAssertEqual(result, "505.")
+    }
+
+    func testPlainDigitSequenceOneTwoThree() {
+        let result = service.normalize("one two three")
+        XCTAssertEqual(result, "123")
+    }
+
+    func testPlainDigitSequenceTwoDigit() {
+        let result = service.normalize("five two")
+        XCTAssertEqual(result, "52")
     }
 
     // MARK: - Bug Fix 8: Prevent Number Merge Across Punctuation

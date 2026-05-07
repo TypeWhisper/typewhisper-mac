@@ -361,6 +361,7 @@ final class NumberNormalizationService {
     /// Parses a contiguous span of number words and numeric tokens into an integer value.
     /// Enforces punctuation boundaries: stops if a token has trailing punctuation.
     /// Handles "o"/"oh" as zero within digit sequences (e.g. "five o five" → 505).
+    /// Detects pure sequences of unit words as digit sequences (e.g. "one two three" → 123).
     private func parseNumberSpan(_: [String], startAt index: Int, in slots: [ITNSlot]) -> (value: Int, endIndex: Int, consumedCount: Int)? {
         var i = index
         let n = slots.count
@@ -371,6 +372,11 @@ final class NumberNormalizationService {
         // When non-nil, we are in "digit sequence" mode (triggered by "o"/"oh").
         // Each subsequent unit/teen word is treated as a single digit appended to this string.
         var digitSequence: String? = nil
+
+        // Track unit digits for plain digit-sequence detection.
+        // When non-nil, all word values seen so far are single-digit units (< 10).
+        // Set to nil when a value >= 10 (teen, tens, scale) or a numeric token is encountered.
+        var unitDigits: [Int]? = []
 
         while i < n {
             guard !slots[i].consumed else { break }
@@ -412,7 +418,8 @@ final class NumberNormalizationService {
 
             // --- Check for numeric (digit) tokens (Fix 2) ---
             if let digitVal = parseNumericToken(word) {
-                // Numeric digit token — part of the span
+                // Numeric digit token — part of the span, but not a word unit
+                unitDigits = nil
                 if digitSequence != nil {
                     // In digit sequence mode: append each digit
                     let digitStr = String(digitVal)
@@ -444,6 +451,13 @@ final class NumberNormalizationService {
             // --- Word-based number parsing ---
             guard isNumberWord(word) else { break }
             guard let val = wordToValue(word) else { break }
+
+            // Track unit digits for plain digit-sequence detection
+            if unitDigits != nil, val < 10, scales[word] == nil {
+                unitDigits!.append(val)
+            } else {
+                unitDigits = nil
+            }
 
             // If in digit sequence mode, only accept single-digit values
             if digitSequence != nil {
@@ -487,6 +501,14 @@ final class NumberNormalizationService {
         // If we were in digit sequence mode, use that value
         if let ds = digitSequence, let sequenceVal = Int(ds) {
             total = sequenceVal
+        } else if let digits = unitDigits, digits.count >= 2 {
+            // Pure sequence of unit words (no teens/tens/scales) → treat as digit sequence
+            let digitStr = digits.map(String.init).joined()
+            if let sequenceVal = Int(digitStr) {
+                total = sequenceVal
+            } else {
+                total += current
+            }
         } else {
             total += current
         }
@@ -1163,7 +1185,7 @@ final class NumberNormalizationService {
                 }
 
             } else if word == "am" || word == "pm" {
-                let suffix = word.uppercased()
+                let suffix = word.lowercased()
 
                 // Scan backward past consumed slots — earlier passes (cardinal, year detection)
                 // may have consumed tokens between the hour and am/pm.
@@ -1200,7 +1222,7 @@ final class NumberNormalizationService {
                         else if let v = units[minWord] { minVal = v }
 
                         if let h = hourVal, let m = minVal, h > 0, h <= 12, m >= 0, m <= 9 {
-                            slots[hourIdx].text = reattachPunctuation("\(h):0\(m) \(suffix)", from: slots[hourIdx].text)
+                            slots[hourIdx].text = reattachPunctuation("\(h):0\(m)\(suffix)", from: slots[hourIdx].text)
                             slots[ohIdx].consumed = true
                             slots[minIdx].consumed = true
                             slots[i].consumed = true
@@ -1233,7 +1255,7 @@ final class NumberNormalizationService {
                             span.value > 0, span.value < 60 { minVal = span.value }
 
                     if let h = hourVal, let m = minVal, h > 0, h <= 12, m >= 0, m < 60 {
-                        slots[hourIdx].text = reattachPunctuation("\(h):\(String(format: "%02d", m)) \(suffix)", from: slots[hourIdx].text)
+                        slots[hourIdx].text = reattachPunctuation("\(h):\(String(format: "%02d", m))\(suffix)", from: slots[hourIdx].text)
                         slots[minIdx].consumed = true
                         slots[i].consumed = true
                         i += 1
@@ -1249,7 +1271,7 @@ final class NumberNormalizationService {
                     else if let v = wordToValue(hourWord), v < 100 { hourVal = v }
 
                     if let h = hourVal, h > 0, h <= 12 {
-                        slots[hourIdx].text = reattachPunctuation("\(h) \(suffix)", from: slots[hourIdx].text)
+                        slots[hourIdx].text = reattachPunctuation("\(h)\(suffix)", from: slots[hourIdx].text)
                         slots[i].consumed = true
                         i += 1
                         continue
