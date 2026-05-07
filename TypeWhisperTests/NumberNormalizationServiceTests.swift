@@ -3,16 +3,18 @@ import XCTest
 
 @MainActor
 final class NumberNormalizationServiceTests: XCTestCase {
-    private var service: NumberNormalizationService!
-    private var defaultsSuite: UserDefaults!
+    nonisolated(unsafe) private var service: NumberNormalizationService!
+    nonisolated(unsafe) private var defaultsSuite: UserDefaults!
 
     override func setUp() {
         super.setUp()
         // Isolated suite so tests cannot leak state or reset developer app preferences
         defaultsSuite = UserDefaults(suiteName: "com.typewhisper.itn.tests")
         defaultsSuite.removePersistentDomain(forName: "com.typewhisper.itn.tests")
-        service = NumberNormalizationService(defaults: defaultsSuite)
-        service.isEnabled = true
+        MainActor.assumeIsolated {
+            service = NumberNormalizationService(defaults: defaultsSuite)
+            service.isEnabled = true
+        }
     }
 
     override func tearDown() {
