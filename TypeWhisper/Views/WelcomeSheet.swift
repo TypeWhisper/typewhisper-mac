@@ -23,20 +23,20 @@ struct WelcomeSheet: View {
             VStack(spacing: 12) {
                 welcomeChoiceButton(
                     intent: .personalOSS,
-                    title: localizedAppText("Private & OSS", de: "Privat & OSS"),
+                    title: localizedAppText("GPLv3 / OSS", de: "GPLv3 / OSS"),
                     description: localizedAppText(
-                        "Personal use and GPL-compatible open-source work stay free.",
-                        de: "Private Nutzung und GPL-kompatible Open-Source-Arbeit bleiben kostenlos."
+                        "Install and run the GPL version as-is, including personal or internal use.",
+                        de: "Installiere und nutze die GPL-Version unverändert, auch privat oder intern."
                     ),
                     systemImage: "person"
                 )
 
                 welcomeChoiceButton(
                     intent: .workSolo,
-                    title: localizedAppText("At work, solo", de: "Beruflich allein"),
+                    title: localizedAppText("Commercial license", de: "Kommerzielle Lizenz"),
                     description: localizedAppText(
-                        "Freelance work, day job usage, or closed-source projects for one person.",
-                        de: "Freelance-Arbeit, Nutzung im Job oder Closed-Source-Projekte für eine Person."
+                        "Non-GPL terms, procurement, support, or proprietary distribution for one person.",
+                        de: "Nicht-GPL-Bedingungen, Beschaffung, Support oder proprietäre Weiterverteilung für eine Person."
                     ),
                     systemImage: "briefcase"
                 )
@@ -45,8 +45,8 @@ struct WelcomeSheet: View {
                     intent: .team,
                     title: localizedAppText("With a team", de: "Mit Team"),
                     description: localizedAppText(
-                        "Shared rollout, multiple devices, and team-wide usage.",
-                        de: "Gemeinsamer Rollout, mehrere Geräte und Team-Nutzung."
+                        "Procurement, support, managed seats, and multi-device rollout.",
+                        de: "Beschaffung, Support, verwaltete Plätze und Rollout auf mehreren Geräten."
                     ),
                     systemImage: "person.3"
                 )

@@ -28,12 +28,12 @@ struct PostUpdateLicensePromptView: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text(localizedAppText("Using TypeWhisper professionally?", de: "Nutzt du TypeWhisper beruflich?"))
+                Text(localizedAppText("Need commercial license terms?", de: "Brauchst du kommerzielle Lizenzbedingungen?"))
                     .font(.title2.weight(.semibold))
 
                 Text(localizedAppText(
-                    "Private and GPL-compatible open-source use stays free. If you use TypeWhisper for work, please get a license.",
-                    de: "Private Nutzung und GPL-kompatible Open-Source-Arbeit bleiben kostenlos. Wenn du TypeWhisper beruflich nutzt, hole dir bitte eine Lizenz."
+                    "You can keep using the GPL version as-is. Choose a commercial license if you need non-GPL terms, procurement, support, or proprietary redistribution.",
+                    de: "Du kannst die GPL-Version unverändert weiter nutzen. Wähle eine kommerzielle Lizenz, wenn du Nicht-GPL-Bedingungen, Beschaffung, Support oder proprietäre Weiterverteilung brauchst."
                 ))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -41,10 +41,10 @@ struct PostUpdateLicensePromptView: View {
 
             VStack(spacing: 12) {
                 actionCard(
-                    title: localizedAppText("Private / OSS", de: "Privat / OSS"),
+                    title: localizedAppText("GPLv3 / OSS", de: "GPLv3 / OSS"),
                     description: localizedAppText(
-                        "Keep using it for personal work and compliant open source.",
-                        de: "Nutze es weiter privat oder für kompatible Open-Source-Arbeit."
+                        "Keep using the GPL version as-is.",
+                        de: "Nutze die GPL-Version unverändert weiter."
                     ),
                     systemImage: "person",
                     emphasized: false,
@@ -52,10 +52,10 @@ struct PostUpdateLicensePromptView: View {
                 )
 
                 actionCard(
-                    title: localizedAppText("I use it for work", de: "Ich nutze es beruflich"),
+                    title: localizedAppText("Show commercial options", de: "Kommerzielle Optionen anzeigen"),
                     description: localizedAppText(
-                        "Open the licensing options and keep this reminder active until a license is in place.",
-                        de: "Öffne die Lizenzoptionen und behalte diese Erinnerung aktiv, bis eine Lizenz hinterlegt ist."
+                        "Open licensing for non-GPL terms, procurement, support, or proprietary redistribution.",
+                        de: "Öffne Lizenzen für Nicht-GPL-Bedingungen, Beschaffung, Support oder proprietäre Weiterverteilung."
                     ),
                     systemImage: "briefcase.fill",
                     emphasized: true,
