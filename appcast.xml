@@ -5,6 +5,15 @@
     <language>en</language>
     <description>Stable, release candidate, and daily updates for TypeWhisper.</description>
     <item>
+      <title>Version 1.4.0-daily.20260508</title>
+      <pubDate>Fri, 08 May 2026 06:11:18 +0000</pubDate>
+      <sparkle:version>734</sparkle:version>
+      <sparkle:shortVersionString>1.4.0-daily.20260508</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:channel>daily</sparkle:channel>
+      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.4.0-daily.20260508/TypeWhisper-v1.4.0-daily.20260508.zip" sparkle:edSignature="iuzC4ROhmtgXQnfV4/wQQILb6yWeuNkdcASwACqr4hiyb0rmv42uX/2stPIf9OUIsNbx6Jg8W3K8lx+idp5gCQ==" length="12310108" type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.4.0-rc2</title>
       <pubDate>Thu, 07 May 2026 15:13:37 +0000</pubDate>
       <sparkle:version>732</sparkle:version>
@@ -12,15 +21,6 @@
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <sparkle:channel>release-candidate</sparkle:channel>
       <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.4.0-rc2/TypeWhisper-v1.4.0-rc2.zip" sparkle:edSignature="0RiYr+iyfEFlASx6LUWNOW798PbAR4VilQyEGndGvqOCQSi3H2ZebVBaiSSDbGb9Oa01Bxs2Fs0QRaDdiQmGBw==" length="12310200" type="application/octet-stream" />
-    </item>
-    <item>
-      <title>Version 1.4.0-daily.20260507</title>
-      <pubDate>Thu, 07 May 2026 06:53:10 +0000</pubDate>
-      <sparkle:version>722</sparkle:version>
-      <sparkle:shortVersionString>1.4.0-daily.20260507</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:channel>daily</sparkle:channel>
-      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.4.0-daily.20260507/TypeWhisper-v1.4.0-daily.20260507.zip" sparkle:edSignature="6wQyaDPth6H36Pw2HhC/czwG2A0Z4yO5y9HdJwf/lBBjjd8rOhdvKyaegpmT2Ra57qO1Ebv8/k71xJcdCZgFCw==" length="12084870" type="application/octet-stream" />
     </item>
     <item>
       <title>Version 1.3.1</title>
