@@ -269,70 +269,83 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
             displayName: "Qwen3 0.6B (4-bit)",
             repoId: "mlx-community/Qwen3-ASR-0.6B-4bit",
             sizeDescription: "~0.7 GB",
-            ramRequirement: "8 GB+"
+            ramRequirement: "8 GB+",
+            usageHint: "Smallest download; use when memory matters more than quality."
         ),
         Qwen3ModelDef(
             id: "qwen3-asr-0.6b-5bit",
             displayName: "Qwen3 0.6B (5-bit)",
             repoId: "mlx-community/Qwen3-ASR-0.6B-5bit",
             sizeDescription: "~0.8 GB",
-            ramRequirement: "8 GB+"
+            ramRequirement: "8 GB+",
+            usageHint: "Slightly more precision than 4-bit with a similar footprint."
         ),
         Qwen3ModelDef(
             id: "qwen3-asr-0.6b-6bit",
             displayName: "Qwen3 0.6B (6-bit)",
             repoId: "mlx-community/Qwen3-ASR-0.6B-6bit",
             sizeDescription: "~0.9 GB",
-            ramRequirement: "8 GB+"
+            ramRequirement: "8 GB+",
+            usageHint: "Fast pick for 8 GB Macs and casual dictation.",
+            recommendation: .lowMemory
         ),
         Qwen3ModelDef(
             id: "qwen3-asr-0.6b-8bit",
             displayName: "Qwen3 0.6B (8-bit)",
             repoId: "mlx-community/Qwen3-ASR-0.6B-8bit",
             sizeDescription: "~1.0 GB",
-            ramRequirement: "16 GB+"
+            ramRequirement: "16 GB+",
+            usageHint: "Higher-precision small model when 0.6B quality matters."
         ),
         Qwen3ModelDef(
             id: "qwen3-asr-0.6b-bf16",
             displayName: "Qwen3 0.6B (BF16)",
             repoId: "mlx-community/Qwen3-ASR-0.6B-bf16",
             sizeDescription: "~1.6 GB",
-            ramRequirement: "16 GB+"
+            ramRequirement: "16 GB+",
+            usageHint: "Unquantized small model; useful for comparison or validation."
         ),
         Qwen3ModelDef(
             id: "qwen3-asr-1.7b-4bit",
             displayName: "Qwen3 1.7B (4-bit)",
             repoId: "mlx-community/Qwen3-ASR-1.7B-4bit",
             sizeDescription: "~1.6 GB",
-            ramRequirement: "16 GB+"
+            ramRequirement: "16 GB+",
+            usageHint: "Smallest 1.7B option; use when 6-bit is too heavy."
         ),
         Qwen3ModelDef(
             id: "qwen3-asr-1.7b-5bit",
             displayName: "Qwen3 1.7B (5-bit)",
             repoId: "mlx-community/Qwen3-ASR-1.7B-5bit",
             sizeDescription: "~1.8 GB",
-            ramRequirement: "16 GB+"
+            ramRequirement: "16 GB+",
+            usageHint: "Middle ground if the default 6-bit model is tight on memory."
         ),
         Qwen3ModelDef(
             id: "qwen3-asr-1.7b-6bit",
             displayName: "Qwen3 1.7B (6-bit)",
             repoId: "mlx-community/Qwen3-ASR-1.7B-6bit",
             sizeDescription: "~2.0 GB",
-            ramRequirement: "16 GB+"
+            ramRequirement: "16 GB+",
+            usageHint: "Best default for most 16 GB+ Macs.",
+            recommendation: .balanced
         ),
         Qwen3ModelDef(
             id: "qwen3-asr-1.7b-8bit",
             displayName: "Qwen3 1.7B (8-bit)",
             repoId: "mlx-community/Qwen3-ASR-1.7B-8bit",
             sizeDescription: "~2.5 GB",
-            ramRequirement: "32 GB+"
+            ramRequirement: "32 GB+",
+            usageHint: "Higher-quality pick for 32 GB+ Macs.",
+            recommendation: .highQuality
         ),
         Qwen3ModelDef(
             id: "qwen3-asr-1.7b-bf16",
             displayName: "Qwen3 1.7B (BF16)",
             repoId: "mlx-community/Qwen3-ASR-1.7B-bf16",
             sizeDescription: "~4.1 GB",
-            ramRequirement: "32 GB+"
+            ramRequirement: "32 GB+",
+            usageHint: "Largest unquantized model; use for max-fidelity validation."
         ),
     ]
 
@@ -428,6 +441,32 @@ struct Qwen3ModelDef: Identifiable {
     let repoId: String
     let sizeDescription: String
     let ramRequirement: String
+    let usageHint: String
+    let recommendation: Qwen3ModelRecommendation?
+
+    init(
+        id: String,
+        displayName: String,
+        repoId: String,
+        sizeDescription: String,
+        ramRequirement: String,
+        usageHint: String,
+        recommendation: Qwen3ModelRecommendation? = nil
+    ) {
+        self.id = id
+        self.displayName = displayName
+        self.repoId = repoId
+        self.sizeDescription = sizeDescription
+        self.ramRequirement = ramRequirement
+        self.usageHint = usageHint
+        self.recommendation = recommendation
+    }
+}
+
+enum Qwen3ModelRecommendation: Equatable {
+    case lowMemory
+    case balanced
+    case highQuality
 }
 
 enum Qwen3ModelState: Equatable {
@@ -609,6 +648,10 @@ private struct Qwen3SettingsView: View {
         !storedHfToken.isEmpty
     }
 
+    private var quickPickModels: [Qwen3ModelDef] {
+        Qwen3Plugin.availableModels.filter { $0.recommendation != nil }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Qwen3 ASR (MLX)")
@@ -695,6 +738,8 @@ private struct Qwen3SettingsView: View {
                     .font(.subheadline)
                     .fontWeight(.medium)
 
+                quickPickGuide
+
                 ForEach(Qwen3Plugin.availableModels) { modelDef in
                     modelRow(modelDef)
                 }
@@ -745,12 +790,54 @@ private struct Qwen3SettingsView: View {
     }
 
     @ViewBuilder
+    private var quickPickGuide: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Quick picks", bundle: bundle)
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
+
+            ForEach(quickPickModels) { modelDef in
+                if let recommendation = modelDef.recommendation {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Image(systemName: recommendationSystemImage(for: recommendation))
+                            .font(.caption)
+                            .foregroundStyle(recommendationColor(for: recommendation))
+                            .frame(width: 14)
+
+                        Text(recommendationTitle(for: recommendation))
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundStyle(.primary)
+
+                        Text(modelDef.displayName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
     private func modelRow(_ modelDef: Qwen3ModelDef) -> some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(modelDef.displayName)
-                    .font(.body)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(modelDef.displayName)
+                        .font(.body)
+
+                    if let recommendation = modelDef.recommendation {
+                        recommendationBadge(recommendation)
+                    }
+                }
+
                 Text("\(modelDef.sizeDescription) - RAM: \(modelDef.ramRequirement)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Text(localizedUsageHint(for: modelDef))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -789,6 +876,92 @@ private struct Qwen3SettingsView: View {
             }
         }
         .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private func recommendationBadge(_ recommendation: Qwen3ModelRecommendation) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: recommendationSystemImage(for: recommendation))
+                .imageScale(.small)
+            Text(recommendationShortLabel(for: recommendation))
+        }
+        .font(.caption2)
+        .fontWeight(.semibold)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .foregroundStyle(recommendationColor(for: recommendation))
+        .background(recommendationColor(for: recommendation).opacity(0.12), in: Capsule())
+    }
+
+    private func recommendationSystemImage(for recommendation: Qwen3ModelRecommendation) -> String {
+        switch recommendation {
+        case .lowMemory:
+            "bolt.fill"
+        case .balanced:
+            "checkmark.seal.fill"
+        case .highQuality:
+            "star.fill"
+        }
+    }
+
+    private func recommendationColor(for recommendation: Qwen3ModelRecommendation) -> Color {
+        switch recommendation {
+        case .lowMemory:
+            .blue
+        case .balanced:
+            .green
+        case .highQuality:
+            .purple
+        }
+    }
+
+    private func recommendationShortLabel(for recommendation: Qwen3ModelRecommendation) -> String {
+        switch recommendation {
+        case .lowMemory:
+            String(localized: "8 GB pick", bundle: bundle)
+        case .balanced:
+            String(localized: "Recommended", bundle: bundle)
+        case .highQuality:
+            String(localized: "32 GB quality", bundle: bundle)
+        }
+    }
+
+    private func recommendationTitle(for recommendation: Qwen3ModelRecommendation) -> String {
+        switch recommendation {
+        case .lowMemory:
+            String(localized: "Fast / 8 GB", bundle: bundle)
+        case .balanced:
+            String(localized: "Best default", bundle: bundle)
+        case .highQuality:
+            String(localized: "Quality / 32 GB", bundle: bundle)
+        }
+    }
+
+    private func localizedUsageHint(for modelDef: Qwen3ModelDef) -> String {
+        switch modelDef.id {
+        case "qwen3-asr-0.6b-4bit":
+            String(localized: "Smallest download; use when memory matters more than quality.", bundle: bundle)
+        case "qwen3-asr-0.6b-5bit":
+            String(localized: "Slightly more precision than 4-bit with a similar footprint.", bundle: bundle)
+        case "qwen3-asr-0.6b-6bit":
+            String(localized: "Fast pick for 8 GB Macs and casual dictation.", bundle: bundle)
+        case "qwen3-asr-0.6b-8bit":
+            String(localized: "Higher-precision small model when 0.6B quality matters.", bundle: bundle)
+        case "qwen3-asr-0.6b-bf16":
+            String(localized: "Unquantized small model; useful for comparison or validation.", bundle: bundle)
+        case "qwen3-asr-1.7b-4bit":
+            String(localized: "Smallest 1.7B option; use when 6-bit is too heavy.", bundle: bundle)
+        case "qwen3-asr-1.7b-5bit":
+            String(localized: "Middle ground if the default 6-bit model is tight on memory.", bundle: bundle)
+        case "qwen3-asr-1.7b-6bit":
+            String(localized: "Best default for most 16 GB+ Macs.", bundle: bundle)
+        case "qwen3-asr-1.7b-8bit":
+            String(localized: "Higher-quality pick for 32 GB+ Macs.", bundle: bundle)
+        case "qwen3-asr-1.7b-bf16":
+            String(localized: "Largest unquantized model; use for max-fidelity validation.", bundle: bundle)
+        default:
+            modelDef.usageHint
+        }
     }
 
     private func validateAndSaveHuggingFaceToken() {

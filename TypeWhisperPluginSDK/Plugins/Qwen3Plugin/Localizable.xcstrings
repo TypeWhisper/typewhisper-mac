@@ -31,6 +31,176 @@
         }
       }
     },
+    "Quick picks" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schnellauswahl"
+          }
+        }
+      }
+    },
+    "8 GB pick" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "8-GB-Tipp"
+          }
+        }
+      }
+    },
+    "Recommended" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Empfohlen"
+          }
+        }
+      }
+    },
+    "32 GB quality" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "32-GB-Qualität"
+          }
+        }
+      }
+    },
+    "Fast / 8 GB" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schnell / 8 GB"
+          }
+        }
+      }
+    },
+    "Best default" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beste Vorgabe"
+          }
+        }
+      }
+    },
+    "Quality / 32 GB" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Qualität / 32 GB"
+          }
+        }
+      }
+    },
+    "Smallest download; use when memory matters more than quality." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kleinster Download; nutze es, wenn Speicher wichtiger als Qualität ist."
+          }
+        }
+      }
+    },
+    "Slightly more precision than 4-bit with a similar footprint." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Etwas mehr Präzision als 4-bit bei ähnlichem Speicherbedarf."
+          }
+        }
+      }
+    },
+    "Fast pick for 8 GB Macs and casual dictation." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schnelle Wahl für 8-GB-Macs und einfache Diktate."
+          }
+        }
+      }
+    },
+    "Higher-precision small model when 0.6B quality matters." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kleines Modell mit höherer Präzision, wenn 0.6B-Qualität wichtiger ist."
+          }
+        }
+      }
+    },
+    "Unquantized small model; useful for comparison or validation." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unquantisiertes kleines Modell; nützlich für Vergleich oder Validierung."
+          }
+        }
+      }
+    },
+    "Smallest 1.7B option; use when 6-bit is too heavy." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kleinste 1.7B-Option; nutze sie, wenn 6-bit zu schwer ist."
+          }
+        }
+      }
+    },
+    "Middle ground if the default 6-bit model is tight on memory." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mittelweg, wenn das 6-bit-Standardmodell knapp im Speicher wird."
+          }
+        }
+      }
+    },
+    "Best default for most 16 GB+ Macs." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beste Vorgabe für die meisten Macs mit 16 GB+."
+          }
+        }
+      }
+    },
+    "Higher-quality pick for 32 GB+ Macs." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Qualitätswahl für Macs mit 32 GB+."
+          }
+        }
+      }
+    },
+    "Largest unquantized model; use for max-fidelity validation." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Größtes unquantisiertes Modell; für Validierung mit maximaler Wiedergabetreue."
+          }
+        }
+      }
+    },
     "HuggingFace Token" : {
       "localizations" : {
         "de" : {

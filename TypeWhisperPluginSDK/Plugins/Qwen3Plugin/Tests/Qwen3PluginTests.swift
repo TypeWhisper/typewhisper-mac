@@ -96,4 +96,23 @@ final class Qwen3PluginTests: XCTestCase {
             ]
         )
     }
+
+    func testModelCatalogIncludesRecommendationGuidance() {
+        let modelsById = Dictionary(
+            uniqueKeysWithValues: Qwen3Plugin.availableModels.map { ($0.id, $0) }
+        )
+
+        XCTAssertEqual(modelsById["qwen3-asr-0.6b-6bit"]?.recommendation, .lowMemory)
+        XCTAssertEqual(modelsById["qwen3-asr-1.7b-6bit"]?.recommendation, .balanced)
+        XCTAssertEqual(modelsById["qwen3-asr-1.7b-8bit"]?.recommendation, .highQuality)
+        XCTAssertTrue(Qwen3Plugin.availableModels.allSatisfy { !$0.usageHint.isEmpty })
+        XCTAssertEqual(
+            Qwen3Plugin.availableModels.filter { $0.recommendation != nil }.map(\.id),
+            [
+                "qwen3-asr-0.6b-6bit",
+                "qwen3-asr-1.7b-6bit",
+                "qwen3-asr-1.7b-8bit",
+            ]
+        )
+    }
 }
