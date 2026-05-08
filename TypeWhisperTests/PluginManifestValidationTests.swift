@@ -64,6 +64,17 @@ final class PluginManifestValidationTests: XCTestCase {
         XCTAssertEqual(manifest.resolvedHosting, .cloud)
         XCTAssertEqual(manifest.resolvedCategoryIdentifiers, ["transcription", "llm", "tts"])
     }
+
+    func testQwen3UnsupportedLanguageSelectionFallsBackToAuto() {
+        XCTAssertEqual(
+            LanguageSelection.exact("uk").normalizedForSupportedLanguages(Qwen3Plugin.qwenSupportedLanguageCodes),
+            .auto
+        )
+        XCTAssertEqual(
+            LanguageSelection.hints(["fr", "uk"]).normalizedForSupportedLanguages(Qwen3Plugin.qwenSupportedLanguageCodes),
+            .exact("fr")
+        )
+    }
 }
 
 @MainActor

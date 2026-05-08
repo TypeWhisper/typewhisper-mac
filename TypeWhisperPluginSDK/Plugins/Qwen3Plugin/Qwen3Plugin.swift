@@ -24,7 +24,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     private static let primaryParams = STTGenerateParameters(
         maxTokens: 2048,
         temperature: 0.0,
-        language: "English",
+        language: nil,
         chunkDuration: 30.0,
         minChunkDuration: 1.0
     )
@@ -32,7 +32,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     private static let fallbackParams = STTGenerateParameters(
         maxTokens: 1536,
         temperature: 0.0,
-        language: "English",
+        language: nil,
         chunkDuration: 15.0,
         minChunkDuration: 1.0
     )
@@ -85,17 +85,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     }
 
     var supportedLanguages: [String] {
-        [
-            "af", "am", "ar", "az", "be", "bg", "bn", "bs", "ca", "cs",
-            "cy", "da", "de", "el", "en", "es", "et", "fa", "fi", "fr",
-            "gl", "gu", "ha", "he", "hi", "hr", "hu", "hy", "id", "is",
-            "it", "ja", "jw", "ka", "kk", "km", "kn", "ko", "lo", "lt",
-            "lv", "mk", "ml", "mn", "mr", "ms", "my", "ne", "nl", "no",
-            "pa", "pl", "ps", "pt", "ro", "ru", "sd", "si", "sk", "sl",
-            "sn", "so", "sq", "sr", "su", "sv", "sw", "ta", "te", "tg",
-            "th", "tk", "tl", "tr", "tt", "uk", "ur", "uz", "vi", "yo",
-            "yue", "zh",
-        ]
+        Self.qwenSupportedLanguageCodes
     }
 
     var selectedModelId: String? { _selectedModelId }
@@ -132,6 +122,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         )
         let primaryText = Self.normalizeTranscript(primaryOutput.text)
         let text: String
+        let outputLanguageName: String?
 
         if QwenTranscriptGuard.isLikelyLooped(primaryText) {
             let fallbackOutput = Self.generate(
@@ -145,16 +136,27 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
 
             if fallbackText.isEmpty {
                 text = primaryText
+                outputLanguageName = primaryOutput.language
             } else if QwenTranscriptGuard.isLikelyLooped(fallbackText) {
                 text = QwenTranscriptGuard.preferredTranscript(primary: primaryText, fallback: fallbackText)
+                outputLanguageName = primaryOutput.language ?? fallbackOutput.language
             } else {
                 text = fallbackText
+                outputLanguageName = fallbackOutput.language
             }
         } else {
             text = primaryText
+            outputLanguageName = primaryOutput.language
         }
 
-        return PluginTranscriptionResult(text: text, detectedLanguage: language)
+        let resultLanguageName = outputLanguageName ?? languageName
+        let cleanedText = QwenTranscriptGuard.removingLikelyTrailingArtifact(
+            from: text,
+            languageName: resultLanguageName
+        )
+        let detectedLanguage = Self.languageCode(forQwenLanguageName: resultLanguageName) ?? language
+
+        return PluginTranscriptionResult(text: cleanedText, detectedLanguage: detectedLanguage)
     }
 
     // MARK: - Model Management
@@ -266,36 +268,85 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
             id: "qwen3-asr-0.6b-4bit",
             displayName: "Qwen3 0.6B (4-bit)",
             repoId: "mlx-community/Qwen3-ASR-0.6B-4bit",
-            sizeDescription: "~400 MB",
+            sizeDescription: "~0.7 GB",
+            ramRequirement: "8 GB+"
+        ),
+        Qwen3ModelDef(
+            id: "qwen3-asr-0.6b-5bit",
+            displayName: "Qwen3 0.6B (5-bit)",
+            repoId: "mlx-community/Qwen3-ASR-0.6B-5bit",
+            sizeDescription: "~0.8 GB",
+            ramRequirement: "8 GB+"
+        ),
+        Qwen3ModelDef(
+            id: "qwen3-asr-0.6b-6bit",
+            displayName: "Qwen3 0.6B (6-bit)",
+            repoId: "mlx-community/Qwen3-ASR-0.6B-6bit",
+            sizeDescription: "~0.9 GB",
             ramRequirement: "8 GB+"
         ),
         Qwen3ModelDef(
             id: "qwen3-asr-0.6b-8bit",
             displayName: "Qwen3 0.6B (8-bit)",
             repoId: "mlx-community/Qwen3-ASR-0.6B-8bit",
-            sizeDescription: "~800 MB",
+            sizeDescription: "~1.0 GB",
+            ramRequirement: "16 GB+"
+        ),
+        Qwen3ModelDef(
+            id: "qwen3-asr-0.6b-bf16",
+            displayName: "Qwen3 0.6B (BF16)",
+            repoId: "mlx-community/Qwen3-ASR-0.6B-bf16",
+            sizeDescription: "~1.6 GB",
             ramRequirement: "16 GB+"
         ),
         Qwen3ModelDef(
             id: "qwen3-asr-1.7b-4bit",
             displayName: "Qwen3 1.7B (4-bit)",
             repoId: "mlx-community/Qwen3-ASR-1.7B-4bit",
-            sizeDescription: "~1 GB",
+            sizeDescription: "~1.6 GB",
+            ramRequirement: "16 GB+"
+        ),
+        Qwen3ModelDef(
+            id: "qwen3-asr-1.7b-5bit",
+            displayName: "Qwen3 1.7B (5-bit)",
+            repoId: "mlx-community/Qwen3-ASR-1.7B-5bit",
+            sizeDescription: "~1.8 GB",
+            ramRequirement: "16 GB+"
+        ),
+        Qwen3ModelDef(
+            id: "qwen3-asr-1.7b-6bit",
+            displayName: "Qwen3 1.7B (6-bit)",
+            repoId: "mlx-community/Qwen3-ASR-1.7B-6bit",
+            sizeDescription: "~2.0 GB",
             ramRequirement: "16 GB+"
         ),
         Qwen3ModelDef(
             id: "qwen3-asr-1.7b-8bit",
             displayName: "Qwen3 1.7B (8-bit)",
             repoId: "mlx-community/Qwen3-ASR-1.7B-8bit",
-            sizeDescription: "~2 GB",
+            sizeDescription: "~2.5 GB",
+            ramRequirement: "32 GB+"
+        ),
+        Qwen3ModelDef(
+            id: "qwen3-asr-1.7b-bf16",
+            displayName: "Qwen3 1.7B (BF16)",
+            repoId: "mlx-community/Qwen3-ASR-1.7B-bf16",
+            sizeDescription: "~4.1 GB",
             ramRequirement: "32 GB+"
         ),
     ]
 
     // MARK: - Helpers
 
-    // ISO 639-1 code to English language name (used by Qwen3 ASR API)
-    private static let languageNames: [String: String] = [
+    static let qwenSupportedLanguageCodes: [String] = [
+        "zh", "en", "yue", "ar", "de", "fr", "es", "pt", "id", "it",
+        "ko", "ru", "th", "vi", "ja", "tr", "hi", "ms", "nl", "sv",
+        "da", "fi", "pl", "cs", "fil", "tl", "fa", "el", "ro", "hu",
+        "mk",
+    ]
+
+    // Language code to English language name used by the Qwen3 ASR API.
+    private static let languageNamesByCode: [String: String] = [
         "zh": "Chinese", "en": "English", "yue": "Cantonese",
         "ar": "Arabic", "de": "German", "fr": "French",
         "es": "Spanish", "pt": "Portuguese", "id": "Indonesian",
@@ -304,16 +355,43 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         "tr": "Turkish", "hi": "Hindi", "ms": "Malay",
         "nl": "Dutch", "sv": "Swedish", "da": "Danish",
         "fi": "Finnish", "pl": "Polish", "cs": "Czech",
-        "fil": "Filipino", "fa": "Persian", "el": "Greek",
+        "fil": "Filipino", "tl": "Filipino", "fa": "Persian", "el": "Greek",
         "hu": "Hungarian", "mk": "Macedonian", "ro": "Romanian",
     ]
 
-    fileprivate static func resolveLanguageName(_ isoCode: String?) -> String {
-        guard let code = isoCode else { return "English" }
-        return languageNames[code] ?? "English"
+    private static let languageCodesByName: [String: String] = {
+        var result: [String: String] = [:]
+        for (code, name) in languageNamesByCode {
+            if result[name.lowercased()] == nil || code != "tl" {
+                result[name.lowercased()] = code
+            }
+        }
+        return result
+    }()
+
+    static func resolveLanguageName(_ isoCode: String?) -> String? {
+        guard let code = isoCode?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              !code.isEmpty else {
+            return nil
+        }
+        return languageNamesByCode[code]
     }
 
-    private static func contextBiasString(from prompt: String?) -> String {
+    static func languageCode(forQwenLanguageName languageName: String?) -> String? {
+        guard let languageName = languageName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !languageName.isEmpty else {
+            return nil
+        }
+
+        let names = languageName
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+        guard names.count == 1 else { return nil }
+        return languageCodesByName[names[0]]
+    }
+
+    static func contextBiasString(from prompt: String?) -> String {
         Qwen3ContextBiasFormatter.format(prompt: prompt)
     }
 
@@ -322,7 +400,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         audio: MLXArray,
         params: STTGenerateParameters,
         context: String,
-        language: String
+        language: String?
     ) -> STTOutput {
         model.generate(
             audio: audio,
@@ -372,6 +450,27 @@ enum Qwen3ModelState: Equatable {
 // MARK: - QwenTranscriptGuard (Loop Detection)
 
 enum QwenTranscriptGuard {
+    static func removingLikelyTrailingArtifact(from text: String, languageName: String?) -> String {
+        guard isFrench(languageName) else { return text }
+
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return text }
+
+        let artifactPattern = #"(?i)[.!?;:]\s+oui[.!?]*$"#
+        guard let artifactRange = trimmed.range(of: artifactPattern, options: .regularExpression) else {
+            return text
+        }
+
+        let artifact = String(trimmed[artifactRange])
+        guard let punctuation = artifact.first else { return text }
+
+        let prefix = trimmed[..<artifactRange.lowerBound]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prefix.isEmpty else { return text }
+
+        return "\(prefix)\(punctuation)"
+    }
+
     static func isLikelyLooped(_ text: String) -> Bool {
         let words = words(in: text)
         guard words.count >= 16 else { return false }
@@ -402,6 +501,18 @@ enum QwenTranscriptGuard {
             .lowercased()
             .split(whereSeparator: { !$0.isLetter && !$0.isNumber && $0 != "'" })
             .map(String.init)
+    }
+
+    private static func isFrench(_ languageName: String?) -> Bool {
+        guard let languageName = languageName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !languageName.isEmpty else {
+            return false
+        }
+
+        return languageName
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .contains("french")
     }
 
     private struct LoopMetrics {
@@ -482,6 +593,10 @@ private struct Qwen3SettingsView: View {
 
     private let pollTimer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
+    nonisolated init(plugin: Qwen3Plugin) {
+        self.plugin = plugin
+    }
+
     private var trimmedHfTokenInput: String {
         hfTokenInput.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -499,7 +614,7 @@ private struct Qwen3SettingsView: View {
             Text("Qwen3 ASR (MLX)")
                 .font(.headline)
 
-            Text("Local speech-to-text powered by MLX on Apple Silicon. 30 languages, no API key required.", bundle: bundle)
+            Text("Local Qwen3-ASR speech-to-text powered by MLX on Apple Silicon. 30 languages plus Chinese dialect coverage, no API key required.", bundle: bundle)
                 .font(.callout)
                 .foregroundStyle(.secondary)
 

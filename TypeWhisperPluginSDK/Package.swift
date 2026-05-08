@@ -9,6 +9,11 @@ let package = Package(
         .library(name: "TypeWhisperPluginSDK", type: .dynamic, targets: ["TypeWhisperPluginSDK"]),
         .library(name: "TypeWhisperPluginSDKTesting", targets: ["TypeWhisperPluginSDKTesting"]),
     ],
+    dependencies: [
+        .package(url: "https://github.com/Blaizzy/mlx-audio-swift.git", revision: "2685c640d4079641a01ef3489cacb684c34109fd"),
+        .package(url: "https://github.com/huggingface/swift-huggingface.git", exact: "0.9.0"),
+        .package(url: "https://github.com/ml-explore/mlx-swift.git", exact: "0.31.3"),
+    ],
     targets: [
         .target(name: "TypeWhisperPluginSDK"),
         .target(
@@ -29,6 +34,22 @@ let package = Package(
             name: "OpenAIPlugin",
             dependencies: ["TypeWhisperPluginSDK"],
             path: "Plugins/OpenAIPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
+            name: "Qwen3Plugin",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                .product(name: "HuggingFace", package: "swift-huggingface"),
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXAudioCore", package: "mlx-audio-swift"),
+                .product(name: "MLXAudioSTT", package: "mlx-audio-swift"),
+            ],
+            path: "Plugins/Qwen3Plugin",
             exclude: ["Tests"],
             resources: [
                 .process("Localizable.xcstrings"),
@@ -113,6 +134,15 @@ let package = Package(
                 "OpenAIPlugin",
             ],
             path: "Plugins/OpenAIPlugin/Tests"
+        ),
+        .testTarget(
+            name: "Qwen3PluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "Qwen3Plugin",
+            ],
+            path: "Plugins/Qwen3Plugin/Tests"
         ),
         .testTarget(
             name: "FillerWordsPluginTests",

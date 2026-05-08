@@ -1,0 +1,99 @@
+import XCTest
+import TypeWhisperPluginSDK
+@testable import Qwen3Plugin
+
+final class Qwen3PluginTests: XCTestCase {
+    func testAutoDetectDoesNotForceEnglish() {
+        XCTAssertNil(Qwen3Plugin.resolveLanguageName(nil))
+        XCTAssertNil(Qwen3Plugin.resolveLanguageName(""))
+        XCTAssertNil(Qwen3Plugin.resolveLanguageName("   "))
+    }
+
+    func testFrenchLanguageResolvesToQwenLanguageName() {
+        XCTAssertEqual(Qwen3Plugin.resolveLanguageName("fr"), "French")
+        XCTAssertEqual(Qwen3Plugin.languageCode(forQwenLanguageName: "French"), "fr")
+    }
+
+    func testUnsupportedLanguageDoesNotFallbackToEnglish() {
+        XCTAssertNil(Qwen3Plugin.resolveLanguageName("uk"))
+        XCTAssertNil(Qwen3Plugin.languageCode(forQwenLanguageName: "French,English"))
+    }
+
+    func testSupportedLanguagesMatchQwenASRLanguageSetWithTagalogAlias() {
+        XCTAssertEqual(
+            Qwen3Plugin.qwenSupportedLanguageCodes,
+            [
+                "zh", "en", "yue", "ar", "de", "fr", "es", "pt", "id", "it",
+                "ko", "ru", "th", "vi", "ja", "tr", "hi", "ms", "nl", "sv",
+                "da", "fi", "pl", "cs", "fil", "tl", "fa", "el", "ro", "hu",
+                "mk",
+            ]
+        )
+        XCTAssertEqual(Qwen3Plugin.resolveLanguageName("fil"), "Filipino")
+        XCTAssertEqual(Qwen3Plugin.resolveLanguageName("tl"), "Filipino")
+    }
+
+    func testContextFormatterAddsAntiHallucinationInstructionAndDictionaryTerms() {
+        let context = Qwen3Plugin.contextBiasString(from: " TypeWhisper, MLX, TypeWhisper ")
+
+        XCTAssertTrue(context.contains(Qwen3ContextBiasFormatter.baseInstruction))
+        XCTAssertTrue(context.contains("Technical terms: TypeWhisper, MLX."))
+    }
+
+    func testContextFormatterIncludesBaseInstructionWithoutDictionaryTerms() {
+        XCTAssertEqual(
+            Qwen3Plugin.contextBiasString(from: nil),
+            Qwen3ContextBiasFormatter.baseInstruction
+        )
+    }
+
+    func testFrenchTrailingOuiArtifactIsRemovedOnlyAfterSentencePunctuation() {
+        XCTAssertEqual(
+            QwenTranscriptGuard.removingLikelyTrailingArtifact(
+                from: "Je vais envoyer le fichier. oui",
+                languageName: "French"
+            ),
+            "Je vais envoyer le fichier."
+        )
+        XCTAssertEqual(
+            QwenTranscriptGuard.removingLikelyTrailingArtifact(
+                from: "Je vais envoyer le fichier. Oui.",
+                languageName: "French"
+            ),
+            "Je vais envoyer le fichier."
+        )
+    }
+
+    func testFrenchTrailingOuiGuardPreservesRealOuiUsages() {
+        XCTAssertEqual(
+            QwenTranscriptGuard.removingLikelyTrailingArtifact(from: "Oui.", languageName: "French"),
+            "Oui."
+        )
+        XCTAssertEqual(
+            QwenTranscriptGuard.removingLikelyTrailingArtifact(from: "Je pense que oui.", languageName: "French"),
+            "Je pense que oui."
+        )
+        XCTAssertEqual(
+            QwenTranscriptGuard.removingLikelyTrailingArtifact(from: "I will send it. oui", languageName: "English"),
+            "I will send it. oui"
+        )
+    }
+
+    func testModelCatalogIncludesRefreshedMLXVariants() {
+        XCTAssertEqual(
+            Qwen3Plugin.availableModels.map(\.id),
+            [
+                "qwen3-asr-0.6b-4bit",
+                "qwen3-asr-0.6b-5bit",
+                "qwen3-asr-0.6b-6bit",
+                "qwen3-asr-0.6b-8bit",
+                "qwen3-asr-0.6b-bf16",
+                "qwen3-asr-1.7b-4bit",
+                "qwen3-asr-1.7b-5bit",
+                "qwen3-asr-1.7b-6bit",
+                "qwen3-asr-1.7b-8bit",
+                "qwen3-asr-1.7b-bf16",
+            ]
+        )
+    }
+}
