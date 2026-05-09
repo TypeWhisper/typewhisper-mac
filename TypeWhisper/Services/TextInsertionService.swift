@@ -257,6 +257,12 @@ final class TextInsertionService {
         }
     }
 
+    private struct AutoEnterTarget {
+        let element: AXUIElement?
+        let bundleId: String?
+        let shouldPressReturn: Bool
+    }
+
     func getSelectedText() -> String? {
         if let selectedTextOverride {
             return selectedTextOverride()
@@ -393,13 +399,20 @@ final class TextInsertionService {
         _ text: String,
         preserveClipboard: Bool = false,
         autoEnter: Bool = false,
-        outputFormat: String? = nil
+        outputFormat: String? = nil,
+        autoEnterTargetElement: AXUIElement? = nil,
+        autoEnterTargetBundleId: String? = nil
     ) async throws -> InsertionResult {
         guard isAccessibilityGranted else {
             throw TextInsertionError.accessibilityNotGranted
         }
 
-        let hadFocusedTextField = autoEnter && hasFocusedTextField()
+        let currentFocusedElement = autoEnter ? getFocusedTextElement() : nil
+        let autoEnterTarget = autoEnter ? AutoEnterTarget(
+            element: autoEnterTargetElement ?? currentFocusedElement,
+            bundleId: autoEnterTargetBundleId ?? captureActiveApp().bundleId,
+            shouldPressReturn: autoEnterTargetElement != nil || currentFocusedElement != nil || hasFocusedTextField()
+        ) : nil
         let formattedClipboardPayload = ClipboardContentFormatter.payload(for: text, outputFormat: outputFormat)
         let requiresPasteboardInsertion = ClipboardContentFormatter.requiresPasteboardInsertion(
             outputFormat: outputFormat
@@ -408,9 +421,8 @@ final class TextInsertionService {
         if preserveClipboard, !requiresPasteboardInsertion,
            let focusedElement = getFocusedTextElement(),
            insertTextAtAndVerifyChange(element: focusedElement, text: text) {
-            if hadFocusedTextField {
-                try? await Task.sleep(for: .milliseconds(50))
-                simulateReturn()
+            if let autoEnterTarget, autoEnterTarget.shouldPressReturn {
+                await performAutoEnter(using: autoEnterTarget)
             }
             return .pasted
         }
@@ -433,9 +445,8 @@ final class TextInsertionService {
             restoreClipboard(savedItems, to: pasteboard)
         }
 
-        if hadFocusedTextField {
-            try? await Task.sleep(for: .milliseconds(50))
-            simulateReturn()
+        if let autoEnterTarget, autoEnterTarget.shouldPressReturn {
+            await performAutoEnter(using: autoEnterTarget)
         }
 
         return .pasted
@@ -512,19 +523,22 @@ final class TextInsertionService {
         return point
     }
 
-    func simulateReturn() {
+    func simulateReturn() async {
         if let returnSimulatorOverride {
             returnSimulatorOverride()
             return
         }
         let returnKeyCode: CGKeyCode = 0x24
-        let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: returnKeyCode, keyDown: true)
+        let source = CGEventSource(stateID: .hidSystemState)
+        let keyDown = CGEvent(keyboardEventSource: source, virtualKey: returnKeyCode, keyDown: true)
         keyDown?.flags = []
-        keyDown?.post(tap: .cgSessionEventTap)
+        keyDown?.post(tap: .cghidEventTap)
 
-        let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: returnKeyCode, keyDown: false)
+        try? await Task.sleep(for: .milliseconds(10))
+
+        let keyUp = CGEvent(keyboardEventSource: source, virtualKey: returnKeyCode, keyDown: false)
         keyUp?.flags = []
-        keyUp?.post(tap: .cgSessionEventTap)
+        keyUp?.post(tap: .cghidEventTap)
     }
 
     private func simulatePaste() {
@@ -541,6 +555,35 @@ final class TextInsertionService {
         let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: vKeyCode, keyDown: false)
         keyUp?.flags = .maskCommand
         keyUp?.post(tap: .cgSessionEventTap)
+    }
+
+    private func performAutoEnter(using target: AutoEnterTarget) async {
+        await restoreAutoEnterTarget(target)
+        try? await Task.sleep(for: .milliseconds(80))
+        await simulateReturn()
+    }
+
+    private func restoreAutoEnterTarget(_ target: AutoEnterTarget) async {
+        if let bundleId = target.bundleId,
+           NSWorkspace.shared.frontmostApplication?.bundleIdentifier != bundleId,
+           let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).first {
+            let activated = app.activate(from: NSRunningApplication.current)
+            logger.info("Auto Enter reactivated target app \(bundleId, privacy: .public): \(activated)")
+            try? await Task.sleep(for: .milliseconds(120))
+        }
+
+        if let element = target.element {
+            let result = AXUIElementSetAttributeValue(
+                element,
+                kAXFocusedAttribute as CFString,
+                kCFBooleanTrue
+            )
+            if result != .success {
+                logger.debug("Auto Enter could not refocus captured element: \(result.rawValue)")
+            } else {
+                try? await Task.sleep(for: .milliseconds(30))
+            }
+        }
     }
 
     private func simulateCopy() {

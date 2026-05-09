@@ -1463,6 +1463,33 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    func testAutoEnterTriggersReturnWithCapturedTargetElement() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let targetElement = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { nil }
+        service.focusedTextFieldOverride = { false }
+        service.captureActiveAppOverride = { (nil, nil, nil) }
+        service.pasteSimulatorOverride = {}
+
+        var didSimulateReturn = false
+        service.returnSimulatorOverride = {
+            didSimulateReturn = true
+        }
+
+        _ = try await service.insertText(
+            "Hello",
+            autoEnter: true,
+            autoEnterTargetElement: targetElement
+        )
+
+        XCTAssertTrue(didSimulateReturn)
+        XCTAssertEqual(pasteboard.string(forType: .string), "Hello")
+    }
+
+    @MainActor
     func testPreserveClipboardAvoidsPasteboardWhenVerifiedAccessibilityInsertionSucceeds() async throws {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard.withUniqueName()

@@ -197,6 +197,7 @@ final class DictationViewModel: ObservableObject {
     private var forcedProfileId: UUID?
     private var forcedWorkflowId: UUID?
     private var capturedActiveApp: (name: String?, bundleId: String?, url: String?)?
+    private var capturedFocusedTextElement: AXUIElement?
     private var capturedSelectedText: String?
 
     private var cancellables = Set<AnyCancellable>()
@@ -827,6 +828,7 @@ final class DictationViewModel: ObservableObject {
             // not delay capture of the user's first spoken words.
             let activeApp = textInsertionService.captureActiveApp()
             capturedActiveApp = activeApp
+            capturedFocusedTextElement = textInsertionService.getFocusedTextElement()
             capturedSelectedText = nil
             activeAppIcon = nil
 
@@ -1243,7 +1245,9 @@ final class DictationViewModel: ObservableObject {
                         text,
                         preserveClipboard: preserveClipboard,
                         autoEnter: self.effectiveAutoEnterEnabled,
-                        outputFormat: self.effectiveOutputFormat
+                        outputFormat: self.effectiveOutputFormat,
+                        autoEnterTargetElement: self.capturedFocusedTextElement,
+                        autoEnterTargetBundleId: activeApp.bundleId
                     )
                     EventBus.shared.emit(.textInserted(TextInsertedPayload(
                         text: text,
@@ -1374,6 +1378,7 @@ final class DictationViewModel: ObservableObject {
         recordingStartTime = nil
         clearActiveRuleState()
         capturedActiveApp = nil
+        capturedFocusedTextElement = nil
         capturedSelectedText = nil
         activeAppIcon = nil
         processingPhase = nil

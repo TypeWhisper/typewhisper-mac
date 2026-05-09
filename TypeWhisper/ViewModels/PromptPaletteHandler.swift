@@ -283,7 +283,7 @@ final class PromptPaletteHandler {
 
                 if workflow.output.autoEnter, insertionOutcome != .failed {
                     try? await Task.sleep(for: .milliseconds(50))
-                    textInsertionService.simulateReturn()
+                    await textInsertionService.simulateReturn()
                 }
 
                 soundService.play(.transcriptionSuccess, enabled: soundFeedbackEnabled)
