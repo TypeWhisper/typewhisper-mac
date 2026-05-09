@@ -2210,18 +2210,43 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
-    func testApiStartRecording_showsNoMicDetectedErrorWhenNoInputAvailable() async throws {
+    func testApiStartRecording_showsNoMicDetectedErrorWhenSelectedInputUnavailable() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let deviceID = AudioDeviceID(42)
+        let transportResolver = FakeAudioDeviceTransportResolver(
+            transports: [deviceID: kAudioDeviceTransportTypeUSB]
+        ) { requestedDeviceID in
+            XCTAssertEqual(requestedDeviceID, deviceID)
+        }
+        let selectionEngineValidator = FakeAudioInputSelectionEngineValidator { preferredDeviceID in
+            XCTAssertEqual(preferredDeviceID, deviceID)
+        }
         var dictationContext: DictationContext?
         defer {
             dictationContext = nil
             TestSupport.remove(appSupportDirectory)
+            Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
         }
 
-        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            audioDeviceTransportResolver: transportResolver,
+            audioDeviceSelectionEngineValidator: selectionEngineValidator
+        )
         let context = try XCTUnwrap(dictationContext)
+        context.audioDeviceService.inputDevices = [
+            AudioInputDevice(deviceID: deviceID, name: "USB Mic", uid: "usb-input")
+        ]
+        context.audioDeviceService.audioDeviceIDResolverOverride = { uid in
+            uid == "usb-input" ? deviceID : nil
+        }
+        context.audioDeviceService.selectedDeviceUID = "usb-input"
         context.audioRecordingService.hasMicrophonePermissionOverride = true
-        context.audioRecordingService.inputAvailabilityOverride = { _ in false }
+        context.audioRecordingService.inputAvailabilityOverride = { selectedDeviceID in
+            XCTAssertEqual(selectedDeviceID, deviceID)
+            return false
+        }
 
         _ = context.dictationViewModel.apiStartRecording()
 
@@ -4313,6 +4338,7 @@ final class AudioRecordingServiceInputAvailabilityTests: XCTestCase {
 
         service.hasMicrophonePermissionOverride = true
         service.selectedDeviceID = AudioDeviceID(42)
+        service.hasExplicitDeviceSelection = true
         service.inputAvailabilityOverride = { selectedDeviceID in
             XCTAssertEqual(selectedDeviceID, AudioDeviceID(42))
             return false
@@ -4355,7 +4381,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         service.setHotkeyForTesting(spaceHotkey(), for: .toggle)
 
         var startCount = 0
-        service.onDictationStart = {
+        service.onDictationStart = { _ in
             startCount += 1
         }
 
@@ -4372,7 +4398,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         service.setHotkeyForTesting(spaceHotkey(), for: .toggle)
 
         var startCount = 0
-        service.onDictationStart = {
+        service.onDictationStart = { _ in
             startCount += 1
         }
 
@@ -4386,6 +4412,28 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testPushToTalkStartCallbackIncludesRequestTimestamp() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(spaceHotkey(), for: .pushToTalk)
+
+        let before = DispatchTime.now().uptimeNanoseconds
+        var requestTimestamp: UInt64?
+        service.onDictationStart = { timestamp in
+            requestTimestamp = timestamp
+        }
+
+        let keyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
+
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+
+        let timestamp = try XCTUnwrap(requestTimestamp)
+        XCTAssertGreaterThanOrEqual(timestamp, before)
+        XCTAssertLessThanOrEqual(timestamp, DispatchTime.now().uptimeNanoseconds)
+    }
+
+    @MainActor
     func testMonitorFallbackStopsPushToTalkOnKeyUp() throws {
         let service = HotkeyService()
         service.suspendMonitoring()
@@ -4394,7 +4442,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
 
         var startCount = 0
         var stopCount = 0
-        service.onDictationStart = {
+        service.onDictationStart = { _ in
             startCount += 1
         }
         service.onDictationStop = {
@@ -4419,7 +4467,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
 
         var startCount = 0
         var stopCount = 0
-        service.onDictationStart = { startCount += 1 }
+        service.onDictationStart = { _ in startCount += 1 }
         service.onDictationStop = { stopCount += 1 }
 
         let comboDown = try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: [.command, .option])
@@ -4451,7 +4499,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
 
         var startCount = 0
         var stopCount = 0
-        service.onDictationStart = { startCount += 1 }
+        service.onDictationStart = { _ in startCount += 1 }
         service.onDictationStop = { stopCount += 1 }
 
         let rightCommandDown = try makeFlagsChangedEvent(keyCode: 0x36, modifierFlags: [.command])
@@ -4486,7 +4534,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         service.setHotkeyForTesting(try rightCommandRightOptionComboHotkey(), for: .pushToTalk)
 
         var startCount = 0
-        service.onDictationStart = { startCount += 1 }
+        service.onDictationStart = { _ in startCount += 1 }
 
         let leftCommandDown = try makeFlagsChangedEvent(
             keyCode: 0x37,
@@ -4511,7 +4559,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
 
         var startCount = 0
         var stopCount = 0
-        service.onDictationStart = { startCount += 1 }
+        service.onDictationStart = { _ in startCount += 1 }
         service.onDictationStop = { stopCount += 1 }
 
         let rightCommandDown = try makeFlagsChangedEvent(
@@ -4540,7 +4588,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         service.setHotkeyForTesting(try rightCommandRightOptionComboHotkey(), for: .pushToTalk)
 
         var startCount = 0
-        service.onDictationStart = { startCount += 1 }
+        service.onDictationStart = { _ in startCount += 1 }
 
         let rightCommandDown = try makeFlagsChangedEvent(
             keyCode: 0x36,
@@ -4564,7 +4612,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         service.setHotkeyForTesting(controlShiftComboHotkey(), for: .toggle)
 
         var startCount = 0
-        service.onDictationStart = { startCount += 1 }
+        service.onDictationStart = { _ in startCount += 1 }
 
         let comboDown = try makeFlagsChangedEvent(keyCode: 0x38, modifierFlags: [.control, .shift])
 
@@ -4580,7 +4628,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         service.setHotkeyForTesting(controlShiftComboHotkey(), for: .toggle)
 
         var startCount = 0
-        service.onDictationStart = { startCount += 1 }
+        service.onDictationStart = { _ in startCount += 1 }
 
         let commandControlShift = try makeFlagsChangedEvent(
             keyCode: 0x38,
@@ -4609,7 +4657,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         service.setHotkeyForTesting(try rightCommandRightOptionComboHotkey(), for: .toggle)
 
         var startCount = 0
-        service.onDictationStart = { startCount += 1 }
+        service.onDictationStart = { _ in startCount += 1 }
 
         let rightComboWithExtraLeftCommand = try makeFlagsChangedEvent(
             keyCode: 0x37,
@@ -4627,7 +4675,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         leftService.setHotkeyForTesting(try legacyCommandOptionComboHotkey(), for: .toggle)
 
         var leftStartCount = 0
-        leftService.onDictationStart = { leftStartCount += 1 }
+        leftService.onDictationStart = { _ in leftStartCount += 1 }
 
         let leftOptionDown = try makeFlagsChangedEvent(
             keyCode: 0x3A,
@@ -4641,7 +4689,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         rightService.setHotkeyForTesting(try legacyCommandOptionComboHotkey(), for: .toggle)
 
         var rightStartCount = 0
-        rightService.onDictationStart = { rightStartCount += 1 }
+        rightService.onDictationStart = { _ in rightStartCount += 1 }
 
         let rightOptionDown = try makeFlagsChangedEvent(
             keyCode: 0x3D,
@@ -4704,7 +4752,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         var startCount = 0
         var stopCount = 0
         var interruptionCount = 0
-        service.onDictationStart = { startCount += 1 }
+        service.onDictationStart = { _ in startCount += 1 }
         service.onDictationStop = { stopCount += 1 }
         service.onPushToTalkInterruption = { interruptionCount += 1 }
 
@@ -4756,7 +4804,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         service.setHotkeyForTesting(commandOptionComboHotkey(), for: .toggle)
 
         var startCount = 0
-        service.onDictationStart = {
+        service.onDictationStart = { _ in
             startCount += 1
         }
 
@@ -4776,7 +4824,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         service.setHotkeyForTesting(commandOptionAHotkey(), for: .toggle)
 
         var startCount = 0
-        service.onDictationStart = {
+        service.onDictationStart = { _ in
             startCount += 1
         }
 
@@ -4798,7 +4846,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         service.setHotkeyForTesting(commandOptionComboHotkey(), for: .toggle)
 
         var startCount = 0
-        service.onDictationStart = {
+        service.onDictationStart = { _ in
             startCount += 1
         }
 
@@ -4816,7 +4864,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         service.setHotkeyForTesting(commandOptionAHotkey(), for: .toggle)
 
         var startCount = 0
-        service.onDictationStart = {
+        service.onDictationStart = { _ in
             startCount += 1
         }
 
@@ -4834,7 +4882,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         service.setHotkeyForTesting(bareSpaceHotkey(), for: .toggle)
 
         var startCount = 0
-        service.onDictationStart = {
+        service.onDictationStart = { _ in
             startCount += 1
         }
 
@@ -4855,7 +4903,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
 
         var startCount = 0
         var stopCount = 0
-        service.onDictationStart = { startCount += 1 }
+        service.onDictationStart = { _ in startCount += 1 }
         service.onDictationStop = { stopCount += 1 }
 
         let keyDown = try makeFnEvent(isDown: true)
@@ -4879,7 +4927,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
 
         var startCount = 0
         var stopCount = 0
-        service.onDictationStart = { startCount += 1 }
+        service.onDictationStart = { _ in startCount += 1 }
         service.onDictationStop = { stopCount += 1 }
 
         let keyDown = try makeFnEvent(isDown: true)
@@ -4904,7 +4952,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
 
         var startCount = 0
         var stopCount = 0
-        service.onDictationStart = { startCount += 1 }
+        service.onDictationStart = { _ in startCount += 1 }
         service.onDictationStop = { stopCount += 1 }
 
         let keyDown = try makeFnEvent(isDown: true)
@@ -4929,7 +4977,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         service.setHotkeyForTesting(fnHotkey(), for: .toggle)
 
         var startCount = 0
-        service.onDictationStart = { startCount += 1 }
+        service.onDictationStart = { _ in startCount += 1 }
 
         let keyDown = try makeFnEvent(isDown: true)
         let keyUp = try makeFnEvent(isDown: false)
@@ -4951,7 +4999,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         var callbackCount = 0
         var startCount = 0
         service.onRecentTranscriptionsToggle = { callbackCount += 1 }
-        service.onDictationStart = { startCount += 1 }
+        service.onDictationStart = { _ in startCount += 1 }
 
         let keyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
 
@@ -4972,7 +5020,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         var startCount = 0
         var stopCount = 0
         var callbackCount = 0
-        service.onDictationStart = { startCount += 1 }
+        service.onDictationStart = { _ in startCount += 1 }
         service.onDictationStop = { stopCount += 1 }
         service.onRecentTranscriptionsToggle = { callbackCount += 1 }
 
@@ -4998,7 +5046,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         var callbackCount = 0
         var startCount = 0
         service.onCopyLastTranscription = { callbackCount += 1 }
-        service.onDictationStart = { startCount += 1 }
+        service.onDictationStart = { _ in startCount += 1 }
 
         let keyDown = try makeKeyboardEvent(keyCode: 0x08, keyDown: true, flags: [.maskCommand, .maskShift])
 
@@ -5019,7 +5067,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         var startCount = 0
         var stopCount = 0
         var callbackCount = 0
-        service.onDictationStart = { startCount += 1 }
+        service.onDictationStart = { _ in startCount += 1 }
         service.onDictationStop = { stopCount += 1 }
         service.onCopyLastTranscription = { callbackCount += 1 }
 
@@ -5045,7 +5093,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         var callbackCount = 0
         var startCount = 0
         service.onRecorderToggle = { callbackCount += 1 }
-        service.onDictationStart = { startCount += 1 }
+        service.onDictationStart = { _ in startCount += 1 }
 
         let keyDown = try makeKeyboardEvent(keyCode: 0x00, keyDown: true, flags: [.maskCommand, .maskAlternate])
 
@@ -5066,7 +5114,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         var startCount = 0
         var stopCount = 0
         var callbackCount = 0
-        service.onDictationStart = { startCount += 1 }
+        service.onDictationStart = { _ in startCount += 1 }
         service.onDictationStop = { stopCount += 1 }
         service.onRecorderToggle = { callbackCount += 1 }
 
@@ -5119,7 +5167,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         service.setHotkeyForTesting(commandOptionAHotkey(), for: .toggle)
 
         var startCount = 0
-        service.onDictationStart = { startCount += 1 }
+        service.onDictationStart = { _ in startCount += 1 }
 
         let keyDown = try makeKeyboardEvent(
             keyCode: 0x00,
@@ -5140,7 +5188,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         service.registerProfileHotkeys([(id: profileId, hotkey: controlShiftComboHotkey())])
 
         var startedProfileId: UUID?
-        service.onProfileDictationStart = { startedProfileId = $0 }
+        service.onProfileDictationStart = { profileId, _ in startedProfileId = profileId }
 
         let extraModifierDown = try makeFlagsChangedEvent(
             keyCode: 0x38,
@@ -5160,7 +5208,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         service.registerWorkflowHotkeys([(id: workflowId, hotkey: spaceHotkey(), behavior: .startDictation)])
 
         var startedWorkflowId: UUID?
-        service.onWorkflowDictationStart = { startedWorkflowId = $0 }
+        service.onWorkflowDictationStart = { workflowId, _ in startedWorkflowId = workflowId }
 
         let keyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
         let keyUp = try makeKeyboardEvent(keyCode: 0x31, keyDown: false)
@@ -5186,7 +5234,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         var textWorkflowId: UUID?
         var startedWorkflowId: UUID?
         service.onWorkflowTextProcessing = { textWorkflowId = $0 }
-        service.onWorkflowDictationStart = { startedWorkflowId = $0 }
+        service.onWorkflowDictationStart = { workflowId, _ in startedWorkflowId = workflowId }
 
         let keyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
         let keyUp = try makeKeyboardEvent(keyCode: 0x31, keyDown: false)
@@ -5214,7 +5262,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         ])
 
         var startedWorkflowIds: [UUID] = []
-        service.onWorkflowDictationStart = { startedWorkflowIds.append($0) }
+        service.onWorkflowDictationStart = { workflowId, _ in startedWorkflowIds.append(workflowId) }
 
         let firstDown = try makeKeyboardEvent(
             keyCode: 0x31,
@@ -5244,7 +5292,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         ])
 
         var startedWorkflowId: UUID?
-        service.onWorkflowDictationStart = { startedWorkflowId = $0 }
+        service.onWorkflowDictationStart = { workflowId, _ in startedWorkflowId = workflowId }
 
         let extraModifierDown = try makeFlagsChangedEvent(
             keyCode: 0x38,

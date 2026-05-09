@@ -1072,13 +1072,26 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
 
         XCTAssertTrue(service.isRecording)
         XCTAssertEqual(inputCaptureFactory.startCalls, [
-            .init(deviceID: usbDeviceID, label: "recording", bufferSize: 1024)
+            .init(deviceID: usbDeviceID, label: "recording", bufferSize: 256)
         ])
 
         let samples = await service.stopRecording(policy: .immediate)
 
         XCTAssertTrue(samples.isEmpty)
         XCTAssertEqual(inputCaptureFactory.createdSessions.first?.stopCalls, 1)
+    }
+
+    func testDefaultInputRecordingSkipsAvailabilityPreflightFastPath() throws {
+        let service = AudioRecordingService()
+        service.hasMicrophonePermissionOverride = true
+        service.hasExplicitDeviceSelection = false
+        service.inputAvailabilityOverride = { _ in
+            XCTFail("default-input fast path should rely on engine startup instead of input availability preflight")
+            return true
+        }
+        service.startRecordingOverride = {}
+
+        XCTAssertNoThrow(try service.startRecording())
     }
 
     func testRecoveryEngineSwap_replacesStoredEngineInstance() {

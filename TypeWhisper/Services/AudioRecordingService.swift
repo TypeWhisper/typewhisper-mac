@@ -147,9 +147,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private let inputCaptureFactory: AudioInputCaptureFactory
     private let initialInputTapSeenLock = OSAllocatedUnfairLock(initialState: false)
     private var _lastStopGraceCaptureApplied = false
+    private var recordingRequestUptimeNanoseconds: UInt64?
+    private var hasLoggedFirstConvertedSample = false
 
     static let targetSampleRate: Double = 16000
-    private static let captureTapFrames: AVAudioFrameCount = 1024
+    private static let captureTapFrames: AVAudioFrameCount = 256
     private static let engineTeardownRetentionInterval: TimeInterval = 0.3
 
     init(
@@ -256,7 +258,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         return inputFormat
     }
 
-    func startRecording() throws {
+    func startRecording(requestUptimeNanoseconds: UInt64 = DispatchTime.now().uptimeNanoseconds) throws {
         guard hasMicrophonePermission else {
             throw AudioRecordingError.microphonePermissionDenied
         }
@@ -266,7 +268,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         recoveryError = nil
 
         try validateRecordingInputAvailability()
-        clearRecordingBuffer()
+        clearRecordingBuffer(requestUptimeNanoseconds: requestUptimeNanoseconds)
 
         let routeActivationRequest = selectedRouteActivationRequest
         outputVolumeGuard.captureBaseline()
@@ -838,14 +840,13 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private func validateRecordingInputAvailability() throws {
-        if let inputAvailabilityOverride {
-            guard inputAvailabilityOverride(selectedDeviceID) else {
-                throw AudioRecordingError.noMicrophoneDetected
-            }
-            return
-        }
-
         if hasExplicitDeviceSelection {
+            if let inputAvailabilityOverride {
+                guard inputAvailabilityOverride(selectedDeviceID) else {
+                    throw AudioRecordingError.noMicrophoneDetected
+                }
+                return
+            }
             guard let selectedDeviceID else {
                 throw AudioRecordingError.selectedInputDeviceUnavailable
             }
@@ -854,16 +855,14 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             }
             return
         }
-
-        guard AudioDeviceService.hasAvailableInputDevice() else {
-            throw AudioRecordingError.noMicrophoneDetected
-        }
     }
 
-    private func clearRecordingBuffer() {
+    private func clearRecordingBuffer(requestUptimeNanoseconds: UInt64? = nil) {
         bufferLock.lock()
         sampleBuffer.removeAll()
         _peakRawAudioLevel = 0
+        recordingRequestUptimeNanoseconds = requestUptimeNanoseconds
+        hasLoggedFirstConvertedSample = false
         bufferLock.unlock()
         initialInputTapSeenLock.withLock { $0 = false }
     }
@@ -984,11 +983,25 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private func processConvertedSamples(_ samples: [Float]) {
         let rms = sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(samples.count))
         let normalizedLevel = AudioLevelMeter.normalizedLevel(rms: rms)
+        var requestToFirstBufferMs: Double?
 
         bufferLock.lock()
         sampleBuffer.append(contentsOf: samples)
         if rms > _peakRawAudioLevel { _peakRawAudioLevel = rms }
+        if !hasLoggedFirstConvertedSample {
+            hasLoggedFirstConvertedSample = true
+            requestToFirstBufferMs = Self.elapsedMilliseconds(
+                from: recordingRequestUptimeNanoseconds,
+                to: DispatchTime.now().uptimeNanoseconds
+            )
+        }
         bufferLock.unlock()
+
+        if let requestToFirstBufferMs {
+            logger.info(
+                "First recording audio buffer appended: requestToFirstBufferMs=\(Self.formatMilliseconds(requestToFirstBufferMs), privacy: .public), sampleCount=\(samples.count, privacy: .public)"
+            )
+        }
 
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
@@ -1009,6 +1022,16 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let samples = sampleBuffer
         sampleBuffer.removeAll()
         return samples
+    }
+
+    private static func elapsedMilliseconds(from start: UInt64?, to end: UInt64) -> Double? {
+        guard let start, end >= start else { return nil }
+        return Double(end - start) / 1_000_000
+    }
+
+    private static func formatMilliseconds(_ value: Double?) -> String {
+        guard let value else { return "n/a" }
+        return String(format: "%.1f", value)
     }
 
     private func validateRecordingInputFormat(_ format: AVAudioFormat, preferredDeviceID: AudioDeviceID?) throws {

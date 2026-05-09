@@ -472,6 +472,16 @@ final class DictationViewModel: ObservableObject {
         min(max(offset, 0), 8)
     }
 
+    nonisolated private static func elapsedMilliseconds(from start: UInt64, to end: UInt64) -> Double? {
+        guard end >= start else { return nil }
+        return Double(end - start) / 1_000_000
+    }
+
+    nonisolated private static func formatMilliseconds(_ value: Double?) -> String {
+        guard let value else { return "n/a" }
+        return String(format: "%.1f", value)
+    }
+
     var needsMicPermission: Bool {
         !audioRecordingService.hasMicrophonePermission
     }
@@ -488,7 +498,10 @@ final class DictationViewModel: ObservableObject {
 
     func apiStartRecording() -> UUID {
         let sessionID = UUID()
-        startRecording(sessionID: sessionID)
+        startRecording(
+            sessionID: sessionID,
+            requestUptimeNanoseconds: DispatchTime.now().uptimeNanoseconds
+        )
         return sessionID
     }
 
@@ -591,20 +604,20 @@ final class DictationViewModel: ObservableObject {
     }
 
     private func setupBindings() {
-        hotkeyService.onDictationStart = { [weak self] in
-            self?.startRecording()
+        hotkeyService.onDictationStart = { [weak self] requestTimestamp in
+            self?.startRecording(requestUptimeNanoseconds: requestTimestamp)
         }
 
         hotkeyService.onDictationStop = { [weak self] in
             self?.stopDictation()
         }
 
-        hotkeyService.onProfileDictationStart = { [weak self] profileId in
-            self?.startRecording(forcedProfileId: profileId)
+        hotkeyService.onProfileDictationStart = { [weak self] profileId, requestTimestamp in
+            self?.startRecording(forcedProfileId: profileId, requestUptimeNanoseconds: requestTimestamp)
         }
 
-        hotkeyService.onWorkflowDictationStart = { [weak self] workflowId in
-            self?.startRecording(forcedWorkflowId: workflowId)
+        hotkeyService.onWorkflowDictationStart = { [weak self] workflowId, requestTimestamp in
+            self?.startRecording(forcedWorkflowId: workflowId, requestUptimeNanoseconds: requestTimestamp)
         }
 
         hotkeyService.onWorkflowTextProcessing = { [weak self] workflowId in
@@ -732,16 +745,10 @@ final class DictationViewModel: ObservableObject {
     private func startRecording(
         forcedProfileId: UUID? = nil,
         forcedWorkflowId: UUID? = nil,
-        sessionID: UUID = UUID()
+        sessionID: UUID = UUID(),
+        requestUptimeNanoseconds: UInt64 = DispatchTime.now().uptimeNanoseconds
     ) {
         let startTimestamp = CFAbsoluteTimeGetCurrent()
-
-        // Dismiss prompt palette if active
-        promptPaletteHandler.hide()
-        recentTranscriptionPaletteHandler.hide()
-
-        // Cancel auto-unload timer to prevent unloading during recording
-        modelManager.cancelAutoUnloadTimer()
 
         // Cancel any pending transcription from a previous recording
         if transcriptionTask != nil {
@@ -781,9 +788,20 @@ final class DictationViewModel: ObservableObject {
             audioRecordingService.hasExplicitDeviceSelection = audioDeviceService.selectedDeviceUID != nil
             let selectedInputUsesBluetooth = audioDeviceService.selectedDeviceUsesBluetoothTransport
             audioRecordingService.selectedInputDeviceUsesBluetoothTransport = selectedInputUsesBluetooth
-            let audioStartTimestamp = CFAbsoluteTimeGetCurrent()
-            try audioRecordingService.startRecording()
-            let audioStartMs = (CFAbsoluteTimeGetCurrent() - audioStartTimestamp) * 1000
+            let audioStartTimestamp = DispatchTime.now().uptimeNanoseconds
+            try audioRecordingService.startRecording(requestUptimeNanoseconds: requestUptimeNanoseconds)
+            let audioStartCompletedTimestamp = DispatchTime.now().uptimeNanoseconds
+            let audioStartMs = Self.elapsedMilliseconds(
+                from: audioStartTimestamp,
+                to: audioStartCompletedTimestamp
+            )
+            let requestToAudioStartMs = Self.elapsedMilliseconds(
+                from: requestUptimeNanoseconds,
+                to: audioStartCompletedTimestamp
+            )
+            promptPaletteHandler.hide()
+            recentTranscriptionPaletteHandler.hide()
+            modelManager.cancelAutoUnloadTimer()
             if selectedInputUsesBluetooth {
                 logger.info("Skipping recording start sound for Bluetooth input device")
             } else {
@@ -838,7 +856,7 @@ final class DictationViewModel: ObservableObject {
 
             let totalStartMs = (CFAbsoluteTimeGetCurrent() - startTimestamp) * 1000
             logger.info(
-                "Recording started: audioStartMs=\(String(format: "%.1f", audioStartMs), privacy: .public), contextMs=\(String(format: "%.1f", contextMs), privacy: .public), totalStartMs=\(String(format: "%.1f", totalStartMs), privacy: .public)"
+                "Recording started: requestToAudioStartMs=\(Self.formatMilliseconds(requestToAudioStartMs), privacy: .public), audioStartMs=\(Self.formatMilliseconds(audioStartMs), privacy: .public), contextMs=\(String(format: "%.1f", contextMs), privacy: .public), totalStartMs=\(String(format: "%.1f", totalStartMs), privacy: .public)"
             )
         } catch {
             clearDeferredRecordingContext()

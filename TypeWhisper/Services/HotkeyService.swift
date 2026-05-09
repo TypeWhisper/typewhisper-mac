@@ -154,14 +154,14 @@ final class HotkeyService: ObservableObject {
 
     @Published private(set) var currentMode: HotkeyMode?
 
-    var onDictationStart: (() -> Void)?
+    var onDictationStart: ((UInt64) -> Void)?
     var onDictationStop: (() -> Void)?
     var onPromptPaletteToggle: (() -> Void)?
     var onRecentTranscriptionsToggle: (() -> Void)?
     var onCopyLastTranscription: (() -> Void)?
     var onRecorderToggle: (() -> Void)?
-    var onProfileDictationStart: ((UUID) -> Void)?
-    var onWorkflowDictationStart: ((UUID) -> Void)?
+    var onProfileDictationStart: ((UUID, UInt64) -> Void)?
+    var onWorkflowDictationStart: ((UUID, UInt64) -> Void)?
     var onWorkflowTextProcessing: ((UUID) -> Void)?
     var onCancelPressed: (() -> Void)?
     var onPushToTalkInterruption: (() -> Void)?
@@ -179,6 +179,10 @@ final class HotkeyService: ObservableObject {
     private static let monitorDedupWindow: TimeInterval = 0.12
     private static let capsLockKeyCode: UInt16 = 0x39
     private static let capsLockSuppressionWindow: TimeInterval = 0.25
+
+    nonisolated static func requestTimestamp() -> UInt64 {
+        DispatchTime.now().uptimeNanoseconds
+    }
 
     // MARK: - Per-Slot State
 
@@ -1139,6 +1143,7 @@ final class HotkeyService: ObservableObject {
             pushToTalkInterruptionSignaled = false
             onDictationStop?()
         } else {
+            let requestTimestamp = Self.requestTimestamp()
             activeSlotType = slotType
             activeProfileId = nil
             activeWorkflowId = nil
@@ -1146,7 +1151,7 @@ final class HotkeyService: ObservableObject {
             isActive = true
             pushToTalkInterruptionSignaled = false
             currentMode = slotType == .toggle ? .toggle : .pushToTalk
-            onDictationStart?()
+            onDictationStart?(requestTimestamp)
         }
     }
 
@@ -1200,6 +1205,7 @@ final class HotkeyService: ObservableObject {
             pushToTalkInterruptionSignaled = false
             onDictationStop?()
         } else {
+            let requestTimestamp = Self.requestTimestamp()
             activeProfileId = profileId
             activeWorkflowId = nil
             activeSlotType = nil
@@ -1207,7 +1213,7 @@ final class HotkeyService: ObservableObject {
             isActive = true
             pushToTalkInterruptionSignaled = false
             currentMode = .pushToTalk // hybrid behavior
-            onProfileDictationStart?(profileId)
+            onProfileDictationStart?(profileId, requestTimestamp)
         }
     }
 
@@ -1248,6 +1254,7 @@ final class HotkeyService: ObservableObject {
             pushToTalkInterruptionSignaled = false
             onDictationStop?()
         } else {
+            let requestTimestamp = Self.requestTimestamp()
             activeProfileId = nil
             activeWorkflowId = workflowId
             activeSlotType = nil
@@ -1255,7 +1262,7 @@ final class HotkeyService: ObservableObject {
             isActive = true
             pushToTalkInterruptionSignaled = false
             currentMode = .pushToTalk
-            onWorkflowDictationStart?(workflowId)
+            onWorkflowDictationStart?(workflowId, requestTimestamp)
         }
     }
 
