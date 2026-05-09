@@ -828,7 +828,7 @@ final class DictationViewModel: ObservableObject {
             // not delay capture of the user's first spoken words.
             let activeApp = textInsertionService.captureActiveApp()
             capturedActiveApp = activeApp
-            capturedFocusedTextElement = textInsertionService.getFocusedTextElement()
+            capturedFocusedTextElement = textInsertionService.getFocusedElement()
             capturedSelectedText = nil
             activeAppIcon = nil
 

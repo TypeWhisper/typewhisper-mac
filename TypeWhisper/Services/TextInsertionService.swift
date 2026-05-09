@@ -249,6 +249,10 @@ final class TextInsertionService {
         let selectedText: String?
         let selectedRange: NSRange?
 
+        var hasObservableTextState: Bool {
+            value != nil || selectedText != nil || selectedRange != nil
+        }
+
         static func == (lhs: FocusedTextState, rhs: FocusedTextState) -> Bool {
             lhs.element == rhs.element &&
             lhs.value == rhs.value &&
@@ -261,6 +265,12 @@ final class TextInsertionService {
         let element: AXUIElement?
         let bundleId: String?
         let shouldPressReturn: Bool
+    }
+
+    private enum PasteCompletion {
+        case verified
+        case unavailable
+        case timedOut
     }
 
     func getSelectedText() -> String? {
@@ -294,7 +304,7 @@ final class TextInsertionService {
     }
 
     /// Returns the focused text element (even without selection), for later insertion.
-    func getFocusedTextElement() -> AXUIElement? {
+    func getFocusedElement() -> AXUIElement? {
         if let focusedTextElementOverride {
             return focusedTextElementOverride()
         }
@@ -306,7 +316,16 @@ final class TextInsertionService {
             return nil
         }
 
-        let element = focusedElement as! AXUIElement
+        return (focusedElement as! AXUIElement)
+    }
+
+    /// Returns the focused text element (even without selection), for later insertion.
+    func getFocusedTextElement() -> AXUIElement? {
+        if let focusedTextElementOverride {
+            return focusedTextElementOverride()
+        }
+
+        guard let element = getFocusedElement() else { return nil }
         var roleValue: AnyObject?
         guard AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleValue) == .success,
               let role = roleValue as? String else { return nil }
@@ -376,6 +395,18 @@ final class TextInsertionService {
         PasteVerificationState(focusedTextState: captureFocusedTextState())
     }
 
+    private func capturePasteVerificationState(for preferredElement: AXUIElement?) -> PasteVerificationState? {
+        let focusedTextState: FocusedTextState?
+        if let preferredElement {
+            focusedTextState = captureFocusedTextState(for: preferredElement)
+        } else {
+            focusedTextState = captureFocusedTextState()
+        }
+
+        guard let focusedTextState, focusedTextState.hasObservableTextState else { return nil }
+        return PasteVerificationState(focusedTextState: focusedTextState)
+    }
+
     func canRestoreClipboard(afterPasteUsing state: PasteVerificationState) -> Bool {
         guard let initialState = state.focusedTextState,
               let currentState = captureFocusedTextState(for: initialState.element) else {
@@ -395,6 +426,35 @@ final class TextInsertionService {
         )
     }
 
+    private func waitForPasteCompletion(using state: PasteVerificationState?) async -> PasteCompletion {
+        guard let state, let initialState = state.focusedTextState else {
+            try? await Task.sleep(for: .milliseconds(120))
+            return .unavailable
+        }
+
+        let deadline = Date().addingTimeInterval(0.6)
+        repeat {
+            if let currentState = captureFocusedTextState(for: initialState.element),
+               Self.focusedTextDidChange(
+                   from: (
+                       value: initialState.value,
+                       selectedText: initialState.selectedText,
+                       selectedRange: initialState.selectedRange
+                   ),
+                   to: (
+                       value: currentState.value,
+                       selectedText: currentState.selectedText,
+                       selectedRange: currentState.selectedRange
+                   )
+               ) {
+                return .verified
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        } while Date() < deadline
+
+        return .timedOut
+    }
+
     func insertText(
         _ text: String,
         preserveClipboard: Bool = false,
@@ -407,11 +467,11 @@ final class TextInsertionService {
             throw TextInsertionError.accessibilityNotGranted
         }
 
-        let currentFocusedElement = autoEnter ? getFocusedTextElement() : nil
+        let currentFocusedElement = autoEnter ? getFocusedElement() : nil
         let autoEnterTarget = autoEnter ? AutoEnterTarget(
             element: autoEnterTargetElement ?? currentFocusedElement,
             bundleId: autoEnterTargetBundleId ?? captureActiveApp().bundleId,
-            shouldPressReturn: autoEnterTargetElement != nil || currentFocusedElement != nil || hasFocusedTextField()
+            shouldPressReturn: true
         ) : nil
         let formattedClipboardPayload = ClipboardContentFormatter.payload(for: text, outputFormat: outputFormat)
         let requiresPasteboardInsertion = ClipboardContentFormatter.requiresPasteboardInsertion(
@@ -429,6 +489,10 @@ final class TextInsertionService {
 
         let pasteboard = pasteboardProvider()
         let savedItems = preserveClipboard ? saveClipboard(from: pasteboard) : []
+        if let autoEnterTarget {
+            await restoreAutoEnterTarget(autoEnterTarget)
+        }
+        let pasteVerificationState = autoEnterTarget.flatMap { capturePasteVerificationState(for: $0.element) }
 
         // Set transcribed text on clipboard and simulate Cmd+V.
         // Text stays on clipboard as fallback if no text field is focused.
@@ -440,13 +504,19 @@ final class TextInsertionService {
         }
         simulatePaste()
 
+        let pasteCompletion = await waitForPasteCompletion(using: pasteVerificationState)
+
         if preserveClipboard {
-            try? await Task.sleep(for: .milliseconds(200))
             restoreClipboard(savedItems, to: pasteboard)
         }
 
         if let autoEnterTarget, autoEnterTarget.shouldPressReturn {
-            await performAutoEnter(using: autoEnterTarget)
+            switch pasteCompletion {
+            case .verified, .unavailable:
+                await performAutoEnter(using: autoEnterTarget)
+            case .timedOut:
+                logger.warning("Auto Enter skipped because paste completion could not be verified")
+            }
         }
 
         return .pasted
@@ -529,16 +599,15 @@ final class TextInsertionService {
             return
         }
         let returnKeyCode: CGKeyCode = 0x24
-        let source = CGEventSource(stateID: .hidSystemState)
-        let keyDown = CGEvent(keyboardEventSource: source, virtualKey: returnKeyCode, keyDown: true)
+        let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: returnKeyCode, keyDown: true)
         keyDown?.flags = []
-        keyDown?.post(tap: .cghidEventTap)
+        keyDown?.post(tap: .cgSessionEventTap)
 
-        try? await Task.sleep(for: .milliseconds(10))
+        try? await Task.sleep(for: .milliseconds(5))
 
-        let keyUp = CGEvent(keyboardEventSource: source, virtualKey: returnKeyCode, keyDown: false)
+        let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: returnKeyCode, keyDown: false)
         keyUp?.flags = []
-        keyUp?.post(tap: .cghidEventTap)
+        keyUp?.post(tap: .cgSessionEventTap)
     }
 
     private func simulatePaste() {
@@ -580,10 +649,53 @@ final class TextInsertionService {
             )
             if result != .success {
                 logger.debug("Auto Enter could not refocus captured element: \(result.rawValue)")
+                if let fallbackElement = focusedElementForApp(bundleId: target.bundleId) {
+                    let fallbackResult = AXUIElementSetAttributeValue(
+                        fallbackElement,
+                        kAXFocusedAttribute as CFString,
+                        kCFBooleanTrue
+                    )
+                    logger.debug("Auto Enter fallback focus result: \(fallbackResult.rawValue)")
+                    if fallbackResult == .success {
+                        try? await Task.sleep(for: .milliseconds(30))
+                    }
+                }
             } else {
                 try? await Task.sleep(for: .milliseconds(30))
             }
+        } else if let fallbackElement = focusedElementForApp(bundleId: target.bundleId) {
+            let fallbackResult = AXUIElementSetAttributeValue(
+                fallbackElement,
+                kAXFocusedAttribute as CFString,
+                kCFBooleanTrue
+            )
+            logger.debug("Auto Enter focused fallback app element: \(fallbackResult.rawValue)")
+            if fallbackResult == .success {
+                try? await Task.sleep(for: .milliseconds(30))
+            }
         }
+    }
+
+    private func focusedElementForApp(bundleId: String?) -> AXUIElement? {
+        guard let bundleId,
+              let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).first else {
+            return nil
+        }
+
+        let appElement = AXUIElementCreateApplication(app.processIdentifier)
+        var focusedElement: AnyObject?
+        if AXUIElementCopyAttributeValue(appElement, kAXFocusedUIElementAttribute as CFString, &focusedElement) == .success,
+           let focusedElement {
+            return (focusedElement as! AXUIElement)
+        }
+
+        var focusedWindow: AnyObject?
+        if AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, &focusedWindow) == .success,
+           let focusedWindow {
+            return (focusedWindow as! AXUIElement)
+        }
+
+        return nil
     }
 
     private func simulateCopy() {

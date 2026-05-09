@@ -1418,11 +1418,12 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
-    func testAutoEnterSkipsReturnWithoutFocusedTextField() async throws {
+    func testAutoEnterTriggersReturnWithoutFocusedTextFieldWhenRequested() async throws {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard.withUniqueName()
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { nil }
         service.focusedTextFieldOverride = { false }
 
         var didSimulatePaste = false
@@ -1438,8 +1439,44 @@ final class APIRouterAndHandlersTests: XCTestCase {
         _ = try await service.insertText("Hello", autoEnter: true)
 
         XCTAssertTrue(didSimulatePaste)
-        XCTAssertFalse(didSimulateReturn)
+        XCTAssertTrue(didSimulateReturn)
         XCTAssertEqual(pasteboard.string(forType: .string), "Hello")
+    }
+
+    @MainActor
+    func testAutoEnterWaitsForVerifiedPasteBeforeReturn() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let targetElement = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { targetElement }
+        service.focusedTextFieldOverride = { true }
+        service.captureActiveAppOverride = { (nil, nil, nil) }
+
+        var pasteHasCompleted = false
+        service.focusedTextStateOverride = { _ in
+            pasteHasCompleted
+                ? (value: "Hello", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
+                : (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+        }
+
+        var events: [String] = []
+        service.pasteSimulatorOverride = {
+            events.append("paste")
+            pasteHasCompleted = true
+        }
+        service.returnSimulatorOverride = {
+            events.append("return")
+        }
+
+        _ = try await service.insertText(
+            "Hello",
+            autoEnter: true,
+            autoEnterTargetElement: targetElement
+        )
+
+        XCTAssertEqual(events, ["paste", "return"])
     }
 
     @MainActor
