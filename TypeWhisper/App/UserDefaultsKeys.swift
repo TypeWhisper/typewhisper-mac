@@ -55,6 +55,7 @@ enum UserDefaultsKeys {
     static let activatedTermPacks = "activatedTermPacks" // Legacy - kept for migration cleanup
     static let activatedTermPackStates = "activatedTermPackStates"
     static let termPackRegistryLastUpdateCheck = "termPackRegistryLastUpdateCheck"
+    static let selectedIndustryPreset = "selectedIndustryPreset"
 
     // MARK: - History
     static let historyEnabled = "historyEnabled"

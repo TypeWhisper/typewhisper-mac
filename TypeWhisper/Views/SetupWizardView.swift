@@ -8,11 +8,13 @@ struct SetupWizardView: View {
     @ObservedObject private var audioDevice = ServiceContainer.shared.audioDeviceService
     @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
     @ObservedObject private var promptActionsViewModel = PromptActionsViewModel.shared
+    @ObservedObject private var dictionaryViewModel = DictionaryViewModel.shared
     @ObservedObject private var promptProcessingService: PromptProcessingService
 
     @State private var currentStep: Int
     @State private var selectedProvider: String?
     @State private var selectedHotkeyMode: HotkeySlotType
+    @State private var selectedIndustryPreset: IndustryPreset
     @State private var trialSuccess = false
     @State private var trialText = ""
     @FocusState private var isTrialFieldFocused: Bool
@@ -22,6 +24,7 @@ struct SetupWizardView: View {
     init() {
         let saved = UserDefaults.standard.integer(forKey: UserDefaultsKeys.setupWizardCurrentStep)
         _currentStep = State(initialValue: min(saved, 5))
+        _selectedIndustryPreset = State(initialValue: IndustryPreset.selected())
         _promptProcessingService = ObservedObject(wrappedValue: PromptActionsViewModel.shared.promptProcessingService)
 
         if UserDefaults.standard.data(forKey: UserDefaultsKeys.hybridHotkey) != nil {
@@ -144,10 +147,26 @@ struct SetupWizardView: View {
             }
             .frame(maxWidth: 380)
 
+            VStack(alignment: .leading, spacing: 10) {
+                Text(String(localized: "What kind of writing do you do most?"))
+                    .font(.headline)
+
+                ForEach(IndustryPreset.allCases) { preset in
+                    industryOption(preset)
+                }
+
+                Text(String(localized: "Industry term packs are prepared during setup and activated automatically when a commercial license is active."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: 420)
+
             Spacer()
 
             VStack(spacing: 12) {
                 Button(String(localized: "Get Started")) {
+                    applyIndustrySelection()
                     withAnimation { currentStep = 1 }
                 }
                 .buttonStyle(.borderedProminent)
@@ -163,6 +182,37 @@ struct SetupWizardView: View {
             .padding(.bottom, 24)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func industryOption(_ preset: IndustryPreset) -> some View {
+        let isSelected = selectedIndustryPreset == preset
+
+        return HStack(spacing: 12) {
+            Image(systemName: isSelected ? "largecircle.fill.circle" : preset.systemImage)
+                .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                .frame(width: 24)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(preset.displayName)
+                    .font(.body.weight(.medium))
+                Text(preset.description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 8).fill(isSelected ? Color.accentColor.opacity(0.08) : Color.secondary.opacity(0.08)))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(isSelected ? Color.accentColor.opacity(0.35) : Color.clear, lineWidth: 1))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            selectedIndustryPreset = preset
+        }
+    }
+
+    private func applyIndustrySelection() {
+        dictionaryViewModel.applyIndustryPreset(selectedIndustryPreset)
     }
 
     private func featureHighlight(icon: String, title: String, description: String) -> some View {

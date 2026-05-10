@@ -176,7 +176,7 @@ struct DictionarySettingsView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 10) {
                 // Built-in Packs
-                ForEach(TermPack.allPacks) { pack in
+                ForEach(viewModel.visibleBuiltInPacks) { pack in
                     TermPackCardView(pack: pack, viewModel: viewModel)
                 }
 
@@ -224,7 +224,7 @@ struct DictionarySettingsView: View {
                 .padding(.vertical, 12)
 
             case .loaded:
-                if termPackRegistryService.communityPacks.isEmpty {
+                if viewModel.visibleCommunityPacks.isEmpty {
                     HStack {
                         Spacer()
                         Text(String(localized: "No community packs available yet."))
@@ -234,7 +234,7 @@ struct DictionarySettingsView: View {
                     }
                     .padding(.vertical, 12)
                 } else {
-                    ForEach(termPackRegistryService.communityPacks) { pack in
+                    ForEach(viewModel.visibleCommunityPacks) { pack in
                         TermPackCardView(pack: pack, viewModel: viewModel)
                     }
                 }

@@ -173,7 +173,11 @@ final class ServiceContainer: ObservableObject {
             settingsViewModel: settingsViewModel,
             textInsertionService: textInsertionService
         )
-        dictionaryViewModel = DictionaryViewModel(dictionaryService: dictionaryService)
+        dictionaryViewModel = DictionaryViewModel(
+            dictionaryService: dictionaryService,
+            licenseService: licenseService,
+            termPackRegistryService: termPackRegistryService
+        )
         snippetsViewModel = SnippetsViewModel(snippetService: snippetService)
         homeViewModel = HomeViewModel(historyService: historyService)
         promptActionsViewModel = PromptActionsViewModel(
