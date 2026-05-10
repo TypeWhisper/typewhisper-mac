@@ -35,13 +35,9 @@ private final class MenuBarState: ObservableObject {
         self.recentTranscriptionsMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .recentTranscriptions)
         self.copyLastTranscriptionMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .copyLastTranscription)
         self.recorderToggleMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .recorderToggle)
-        if let name = modelManager.activeModelName, modelManager.isModelReady {
-            self.statusText = String(localized: "\(name) ready")
-            self.statusImage = "checkmark.circle.fill"
-        } else {
-            self.statusText = String(localized: "No model loaded")
-            self.statusImage = "exclamationmark.triangle.fill"
-        }
+        let modelStatus = Self.idleModelStatus(from: modelManager)
+        self.statusText = modelStatus.text
+        self.statusImage = modelStatus.image
 
         // React to dictation state changes (not audioLevel/duration/partialText)
         dictation.$state
@@ -113,15 +109,23 @@ private final class MenuBarState: ObservableObject {
             statusText = String(localized: "Transcribing...")
             statusImage = "arrow.triangle.2.circlepath"
         default:
-            if let name = modelManager.activeModelName, modelManager.isModelReady {
-                statusText = String(localized: "\(name) ready")
-                statusImage = "checkmark.circle.fill"
-            } else {
-                statusText = String(localized: "No model loaded")
-                statusImage = "exclamationmark.triangle.fill"
-            }
+            let modelStatus = Self.idleModelStatus(from: modelManager)
+            statusText = modelStatus.text
+            statusImage = modelStatus.image
         }
         isModelReady = modelManager.isModelReady
+    }
+
+    private static func idleModelStatus(from modelManager: ModelManagerService) -> (text: String, image: String) {
+        guard let name = modelManager.activeModelName else {
+            return (String(localized: "No model loaded"), "exclamationmark.triangle.fill")
+        }
+
+        if modelManager.isModelReady {
+            return (String(localized: "\(name) ready"), "checkmark.circle.fill")
+        }
+
+        return (String(localized: "\(name) selected"), "clock.fill")
     }
 
     private func refreshCopyAvailability() {

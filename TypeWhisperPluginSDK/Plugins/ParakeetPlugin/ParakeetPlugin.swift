@@ -17,10 +17,12 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
     fileprivate var host: HostServices?
     fileprivate var asrManager: AsrManager?
     fileprivate var loadedModelId: String?
+    fileprivate var _selectedModelId: String?
     fileprivate var modelState: ParakeetModelState = .notLoaded
     fileprivate var downloadProgress: Double = 0
     fileprivate var selectedVersion: ParakeetVersion = .v3
     fileprivate var _hfToken: String?
+    var restoresModelOnActivate = true
 
     // Vocabulary Boosting
     fileprivate var ctcModels: CtcModels?
@@ -40,19 +42,34 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
 
     func activate(host: HostServices) {
         self.host = host
+        _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
         _hfToken = PluginHuggingFaceTokenHelper.loadToken(from: host)
         vocabularyBoostingEnabled = host.userDefault(forKey: "vocabularyBoostingEnabled") as? Bool ?? false
         if let versionString = host.userDefault(forKey: "selectedVersion") as? String,
            let version = ParakeetVersion(rawValue: versionString) {
             selectedVersion = version
         }
-        Task { await restoreLoadedModel(allowDownloads: false) }
+        if let selectedModelId = _selectedModelId,
+           let version = ParakeetVersion.from(modelId: selectedModelId) {
+            selectedVersion = version
+        } else if let persistedLoadedModel = host.userDefault(forKey: "loadedModel") as? String,
+                  !persistedLoadedModel.isEmpty {
+            _selectedModelId = persistedLoadedModel
+            host.setUserDefault(persistedLoadedModel, forKey: "selectedModel")
+            if let version = ParakeetVersion.from(modelId: persistedLoadedModel) {
+                selectedVersion = version
+            }
+        }
+        if restoresModelOnActivate {
+            Task { await restoreLoadedModel(allowDownloads: false) }
+        }
     }
 
     func deactivate() {
         clearVocabularyBoostingState(resetModelState: true)
         asrManager = nil
         loadedModelId = nil
+        _selectedModelId = nil
         modelState = .notLoaded
         _hfToken = nil
         host = nil
@@ -79,15 +96,19 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
         }
     }
 
-    var selectedModelId: String? { loadedModelId }
+    var selectedModelId: String? { _selectedModelId }
     var allowsTranscriptPreviewFallback: Bool { false }
 
     func selectModel(_ modelId: String) {
         guard let version = ParakeetVersion.from(modelId: modelId) else { return }
+        _selectedModelId = modelId
+        host?.setUserDefault(modelId, forKey: "selectedModel")
         if version == selectedVersion && loadedModelId == modelId { return }
         Task {
             unloadModel(clearPersistence: false)
             selectedVersion = version
+            _selectedModelId = modelId
+            host?.setUserDefault(modelId, forKey: "selectedModel")
             host?.setUserDefault(version.rawValue, forKey: "selectedVersion")
             await loadModel()
         }
@@ -427,8 +448,10 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
 
             asrManager = manager
             loadedModelId = selectedVersion.modelDef.id
+            _selectedModelId = selectedVersion.modelDef.id
             modelState = .ready
 
+            host?.setUserDefault(selectedVersion.modelDef.id, forKey: "selectedModel")
             host?.setUserDefault(selectedVersion.modelDef.id, forKey: "loadedModel")
             host?.setUserDefault(selectedVersion.rawValue, forKey: "selectedVersion")
             host?.notifyCapabilitiesChanged()
@@ -463,6 +486,10 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
     func restoreLoadedModel(allowDownloads: Bool = true) async {
         guard let savedModelId = host?.userDefault(forKey: "loadedModel") as? String else {
             return
+        }
+        if _selectedModelId == nil {
+            _selectedModelId = savedModelId
+            host?.setUserDefault(savedModelId, forKey: "selectedModel")
         }
         // Infer version from persisted model ID for backwards compatibility
         if let version = ParakeetVersion.from(modelId: savedModelId) {

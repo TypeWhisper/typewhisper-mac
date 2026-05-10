@@ -10,6 +10,7 @@ let package = Package(
         .library(name: "TypeWhisperPluginSDKTesting", targets: ["TypeWhisperPluginSDKTesting"]),
     ],
     dependencies: [
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", branch: "main"),
         .package(url: "https://github.com/Blaizzy/mlx-audio-swift.git", revision: "2685c640d4079641a01ef3489cacb684c34109fd"),
         .package(url: "https://github.com/huggingface/swift-huggingface.git", exact: "0.9.0"),
         .package(url: "https://github.com/ml-explore/mlx-swift.git", exact: "0.31.3"),
@@ -50,6 +51,19 @@ let package = Package(
                 .product(name: "MLXAudioSTT", package: "mlx-audio-swift"),
             ],
             path: "Plugins/Qwen3Plugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
+            name: "ParakeetPlugin",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                .product(name: "FluidAudio", package: "FluidAudio"),
+            ],
+            path: "Plugins/ParakeetPlugin",
             exclude: ["Tests"],
             resources: [
                 .process("Localizable.xcstrings"),
@@ -143,6 +157,15 @@ let package = Package(
                 "Qwen3Plugin",
             ],
             path: "Plugins/Qwen3Plugin/Tests"
+        ),
+        .testTarget(
+            name: "ParakeetPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "ParakeetPlugin",
+            ],
+            path: "Plugins/ParakeetPlugin/Tests"
         ),
         .testTarget(
             name: "FillerWordsPluginTests",
