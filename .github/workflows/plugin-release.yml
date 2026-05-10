@@ -83,13 +83,13 @@ jobs:
             *) echo "Unknown plugin: $PLUGIN_NAME" && exit 1 ;;
           esac
           # Set deployment target and Swift embedding per plugin
-          # All plugins use Xcode 26.2 (mlx-audio-swift requires Swift 6.2 for package resolution,
-          # and workspace-state.json v7 from Xcode 26.2 is incompatible with Xcode 16.2)
+          # All plugins use Xcode 26.3 (mlx-audio-swift requires Swift 6.2+ for package resolution,
+          # and workspace-state.json v7 from Xcode 26.x is incompatible with Xcode 16.2)
           # - SpeechAnalyzer: macOS 26 deployment target
           # - Qwen3/Voxtral/Granite/Gemma4: macOS 14 + embed Swift compat libs (MLX uses Swift 6.2 features)
           # - All others: macOS 14, no compat libs needed (simple Foundation/SDK code)
           EMBED_SWIFT_LIBS="NO"
-          XCODE_VERSION="26.2"
+          XCODE_VERSION="26.3"
           if [ "$TARGET" = "SpeechAnalyzerPlugin" ]; then
             DEPLOY_TARGET="26.0"
           elif [ "$TARGET" = "Qwen3Plugin" ] || [ "$TARGET" = "VoxtralPlugin" ] || [ "$TARGET" = "GranitePlugin" ] || [ "$TARGET" = "Gemma4Plugin" ]; then

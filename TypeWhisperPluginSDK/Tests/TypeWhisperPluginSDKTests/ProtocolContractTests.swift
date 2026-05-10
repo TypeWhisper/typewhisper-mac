@@ -343,7 +343,8 @@ final class ProtocolContractTests: XCTestCase {
 
         XCTAssertEqual(result.text, "transcribed")
         XCTAssertEqual(plugin.host?.availableRuleNames, ["Work"])
-        XCTAssertNil(plugin.settingsView)
+        let hasSettingsView = await MainActor.run { plugin.settingsView != nil }
+        XCTAssertFalse(hasSettingsView)
 
         plugin.deactivate()
         XCTAssertNil(plugin.host)

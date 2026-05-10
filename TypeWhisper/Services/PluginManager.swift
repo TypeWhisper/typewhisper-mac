@@ -150,8 +150,10 @@ struct LoadedPlugin: Identifiable {
         !(instance is UnloadedPluginPlaceholder)
     }
 
+    @MainActor
     var supportsSettingsWindow: Bool {
-        isRuntimeLoaded && instance.settingsView != nil
+        guard isRuntimeLoaded else { return false }
+        return instance.settingsView != nil
     }
 }
 

@@ -10,10 +10,11 @@ public protocol TypeWhisperPlugin: AnyObject, Sendable {
     init()
     func activate(host: HostServices)
     func deactivate()
-    var settingsView: AnyView? { get }
+    @MainActor var settingsView: AnyView? { get }
 }
 
 public extension TypeWhisperPlugin {
+    @MainActor
     var settingsView: AnyView? { nil }
 }
 
