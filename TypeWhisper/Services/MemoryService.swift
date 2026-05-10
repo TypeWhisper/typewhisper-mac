@@ -83,10 +83,11 @@ Return ONLY the JSON array, nothing else.
     private func handleTranscription(_ payload: TranscriptionCompletedPayload) {
         guard isEnabled, payload.finalText.count >= minimumTextLength else { return }
 
-        // Per-rule gate
+        // Per-workflow gate. Legacy profiles may still exist on disk, but they
+        // are no longer a runtime source in 1.4.
         if let ruleName = payload.ruleName,
-           let profile = ServiceContainer.shared.profileService.profiles.first(where: { $0.name == ruleName }) {
-            guard profile.memoryEnabled else { return }
+           ServiceContainer.shared.workflowService.workflows.contains(where: { $0.name == ruleName }) {
+            // Continue only for known workflow-backed rule names.
         } else {
             return
         }

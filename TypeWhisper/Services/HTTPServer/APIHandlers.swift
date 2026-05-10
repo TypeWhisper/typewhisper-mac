@@ -8,7 +8,7 @@ final class APIHandlers: @unchecked Sendable {
     private let audioFileService: AudioFileService
     private let translationService: AnyObject? // TranslationService (macOS 15+)
     private let historyService: HistoryService
-    private let profileService: ProfileService
+    private let workflowService: WorkflowService
     private let dictionaryService: DictionaryService
     private let dictationViewModel: DictationViewModel
 
@@ -17,7 +17,7 @@ final class APIHandlers: @unchecked Sendable {
         audioFileService: AudioFileService,
         translationService: AnyObject?,
         historyService: HistoryService,
-        profileService: ProfileService,
+        workflowService: WorkflowService,
         dictionaryService: DictionaryService,
         dictationViewModel: DictationViewModel
     ) {
@@ -25,7 +25,7 @@ final class APIHandlers: @unchecked Sendable {
         self.audioFileService = audioFileService
         self.translationService = translationService
         self.historyService = historyService
-        self.profileService = profileService
+        self.workflowService = workflowService
         self.dictionaryService = dictionaryService
         self.dictationViewModel = dictationViewModel
     }
@@ -734,7 +734,7 @@ final class APIHandlers: @unchecked Sendable {
     // MARK: - GET /v1/rules
 
     private func handleGetRules(_ request: HTTPRequest) async -> HTTPResponse {
-        let profileService = self.profileService
+        let workflowService = self.workflowService
         return await MainActor.run {
             struct RuleEntry: Encodable {
                 let id: String
@@ -754,8 +754,8 @@ final class APIHandlers: @unchecked Sendable {
                 let profiles: [RuleEntry]
             }
 
-            let entries = profileService.profiles.map { profile in
-                let selection = profile.inputLanguageSelection
+            let entries = workflowService.workflows.map { workflow in
+                let selection = workflow.inputLanguageSelection
                 let legacyInputLanguage: String?
                 switch selection {
                 case .auto:
@@ -767,16 +767,16 @@ final class APIHandlers: @unchecked Sendable {
                 }
 
                 return RuleEntry(
-                    id: profile.id.uuidString,
-                    name: profile.name,
-                    is_enabled: profile.isEnabled,
-                    priority: profile.priority,
-                    bundle_identifiers: profile.bundleIdentifiers,
-                    url_patterns: profile.urlPatterns,
+                    id: workflow.id.uuidString,
+                    name: workflow.name,
+                    is_enabled: workflow.isEnabled,
+                    priority: workflow.sortOrder,
+                    bundle_identifiers: workflow.trigger?.appBundleIdentifiers ?? [],
+                    url_patterns: workflow.trigger?.websitePatterns ?? [],
                     input_language: legacyInputLanguage,
                     language_mode: selection.mode.rawValue,
                     language_hints: selection.selectedCodes,
-                    translation_target_language: profile.translationTargetLanguage
+                    translation_target_language: workflow.translationTargetLanguage
                 )
             }
 
@@ -792,13 +792,13 @@ final class APIHandlers: @unchecked Sendable {
             return .error(status: 400, message: "Missing or invalid 'id' query parameter")
         }
 
-        let profileService = self.profileService
+        let workflowService = self.workflowService
         return await MainActor.run {
-            guard let profile = profileService.profiles.first(where: { $0.id == uuid }) else {
+            guard let workflow = workflowService.workflows.first(where: { $0.id == uuid }) else {
                 return .error(status: 404, message: "Rule not found")
             }
 
-            profileService.toggleProfile(profile)
+            workflowService.toggleWorkflow(workflow)
 
             struct ToggleResponse: Encodable {
                 let id: String
@@ -809,11 +809,11 @@ final class APIHandlers: @unchecked Sendable {
             }
 
             return .json(ToggleResponse(
-                id: profile.id.uuidString,
-                name: profile.name,
-                rule_name: profile.name,
-                profile_name: profile.name,
-                is_enabled: profile.isEnabled
+                id: workflow.id.uuidString,
+                name: workflow.name,
+                rule_name: workflow.name,
+                profile_name: workflow.name,
+                is_enabled: workflow.isEnabled
             ))
         }
     }

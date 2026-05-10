@@ -515,6 +515,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let modelManager: ModelManagerService
         let historyService: HistoryService
         let profileService: ProfileService
+        let workflowService: WorkflowService
         let dictionaryService: DictionaryService
         let dictationViewModel: DictationViewModel
         let audioRecordingService: AudioRecordingService
@@ -527,6 +528,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             modelManager: ModelManagerService,
             historyService: HistoryService,
             profileService: ProfileService,
+            workflowService: WorkflowService,
             dictionaryService: DictionaryService,
             dictationViewModel: DictationViewModel,
             audioRecordingService: AudioRecordingService,
@@ -538,6 +540,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             self.modelManager = modelManager
             self.historyService = historyService
             self.profileService = profileService
+            self.workflowService = workflowService
             self.dictionaryService = dictionaryService
             self.dictationViewModel = dictationViewModel
             self.audioRecordingService = audioRecordingService
@@ -717,10 +720,19 @@ final class APIRouterAndHandlersTests: XCTestCase {
                 engineUsed: "parakeet"
             )
             context.profileService.addProfile(
-                name: "Docs",
+                name: "Legacy Docs",
                 urlPatterns: ["docs.github.com"],
                 inputLanguage: #"["de","en"]"#,
                 priority: 1
+            )
+            _ = context.workflowService.addWorkflow(
+                name: "Docs",
+                template: .summary,
+                trigger: .website("docs.github.com"),
+                behavior: WorkflowBehavior(settings: [
+                    WorkflowBehavior.inputLanguageSettingKey: #"["de","en"]"#
+                ]),
+                sortOrder: 0
             )
             return context
         }
@@ -747,6 +759,18 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual((rules["rules"] as? [[String: Any]])?.first?["language_hints"] as? [String], ["de", "en"])
         XCTAssertNil((rules["rules"] as? [[String: Any]])?.first?["input_language"] as? String)
         XCTAssertEqual((legacyProfiles["profiles"] as? [[String: Any]])?.first?["name"] as? String, "Docs")
+
+        let workflowId = try XCTUnwrap((rules["rules"] as? [[String: Any]])?.first?["id"] as? String)
+        let toggle = try Self.jsonObject(
+            await router.route(HTTPRequest(method: "PUT", path: "/v1/rules/toggle", queryParams: ["id": workflowId], headers: [:], body: Data()))
+        )
+        XCTAssertEqual(toggle["name"] as? String, "Docs")
+        XCTAssertEqual(toggle["is_enabled"] as? Bool, false)
+
+        let toggledRules = try Self.jsonObject(
+            await router.route(HTTPRequest(method: "GET", path: "/v1/rules", queryParams: [:], headers: [:], body: Data()))
+        )
+        XCTAssertEqual((toggledRules["rules"] as? [[String: Any]])?.first?["is_enabled"] as? Bool, false)
     }
 
     func testDictionaryTermsEndpointsReplaceNormalizeAndClearTerms() async throws {
@@ -1737,7 +1761,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
-    func testApiStartRecording_appliesBundleProfileBeforeDeferredMetadataCapture() async throws {
+    func testApiStartRecording_ignoresLegacyBundleProfileBeforeDeferredMetadataCapture() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?
         defer {
@@ -1764,9 +1788,121 @@ final class APIRouterAndHandlersTests: XCTestCase {
         _ = context.dictationViewModel.apiStartRecording()
 
         XCTAssertEqual(context.dictationViewModel.state, DictationViewModel.State.recording)
-        XCTAssertEqual(context.dictationViewModel.activeRuleName, "Docs")
+        XCTAssertNil(context.dictationViewModel.activeRuleName)
 
         await fulfillment(of: [selectedTextCaptured], timeout: 1.0)
+    }
+
+    @MainActor
+    func testDictationRuntimeIgnoresLegacyProfileLanguageSelection() async throws {
+        let selectedLanguageKey = UserDefaultsKeys.selectedLanguage
+        let originalSelectedLanguage = UserDefaults.standard.object(forKey: selectedLanguageKey)
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            if let originalSelectedLanguage {
+                UserDefaults.standard.set(originalSelectedLanguage, forKey: selectedLanguageKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: selectedLanguageKey)
+            }
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        UserDefaults.standard.set("de", forKey: selectedLanguageKey)
+        MockTranscriptionPlugin.reset()
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        context.profileService.addProfile(
+            name: "Legacy Notes",
+            bundleIdentifiers: ["com.apple.Notes"],
+            inputLanguage: "en",
+            translationTargetLanguage: "en"
+        )
+        context.textInsertionService.captureActiveAppOverride = {
+            ("Notes", "com.apple.Notes", nil)
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.pasteSimulatorOverride = {}
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+
+        XCTAssertEqual(context.dictationViewModel.state, .recording)
+        XCTAssertNil(context.dictationViewModel.activeRuleName)
+
+        _ = context.dictationViewModel.apiStopRecording()
+        for _ in 0..<40 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .completed {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .completed)
+        XCTAssertEqual(MockTranscriptionPlugin.lastLanguageSelection.requestedLanguage, "de")
+    }
+
+    @MainActor
+    func testDictationRuntimeUsesWorkflowInsteadOfCompetingLegacyProfile() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        context.profileService.addProfile(
+            name: "Legacy Notes",
+            bundleIdentifiers: ["com.apple.Notes"],
+            inputLanguage: "en",
+            translationTargetLanguage: "en"
+        )
+        _ = context.workflowService.addWorkflow(
+            name: "Workflow Notes",
+            template: .dictation,
+            trigger: .app("com.apple.Notes"),
+            behavior: WorkflowBehavior(settings: [
+                WorkflowBehavior.inputLanguageSettingKey: "de"
+            ])
+        )
+        context.textInsertionService.captureActiveAppOverride = {
+            ("Notes", "com.apple.Notes", nil)
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.pasteSimulatorOverride = {}
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+
+        XCTAssertEqual(context.dictationViewModel.state, .recording)
+        XCTAssertEqual(context.dictationViewModel.activeRuleName, "Workflow Notes")
+
+        _ = context.dictationViewModel.apiStopRecording()
+        for _ in 0..<40 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .completed {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .completed)
+        XCTAssertEqual(MockTranscriptionPlugin.lastLanguageSelection.requestedLanguage, "de")
     }
 
     @MainActor
@@ -2579,7 +2715,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             audioFileService: audioFileService,
             translationService: nil,
             historyService: historyService,
-            profileService: profileService,
+            workflowService: workflowService,
             dictionaryService: dictionaryService,
             dictationViewModel: dictationViewModel
         )
@@ -2590,6 +2726,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             modelManager: modelManager,
             historyService: historyService,
             profileService: profileService,
+            workflowService: workflowService,
             dictionaryService: dictionaryService,
             dictationViewModel: dictationViewModel,
             audioRecordingService: audioRecordingService,
@@ -2720,6 +2857,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let historyService: HistoryService
         let recentTranscriptionStore: RecentTranscriptionStore
         let profileService: ProfileService
+        let workflowService: WorkflowService
         let ttsProvider: MockTTSProviderPlugin
         private let retainedObjects: [AnyObject]
 
@@ -2733,6 +2871,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             historyService: HistoryService,
             recentTranscriptionStore: RecentTranscriptionStore,
             profileService: ProfileService,
+            workflowService: WorkflowService,
             ttsProvider: MockTTSProviderPlugin,
             retainedObjects: [AnyObject]
         ) {
@@ -2745,6 +2884,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             self.historyService = historyService
             self.recentTranscriptionStore = recentTranscriptionStore
             self.profileService = profileService
+            self.workflowService = workflowService
             self.ttsProvider = ttsProvider
             self.retainedObjects = retainedObjects
         }
@@ -2873,6 +3013,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             historyService: historyService,
             recentTranscriptionStore: recentTranscriptionStore,
             profileService: profileService,
+            workflowService: workflowService,
             ttsProvider: ttsProvider,
             retainedObjects: [
                 EventBus.shared,
@@ -5197,6 +5338,24 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
 
         XCTAssertFalse(service.processEventForTesting(extraModifierDown, source: .monitor))
         XCTAssertNil(startedProfileId)
+    }
+
+    @MainActor
+    func testProfileHotkeysAreIgnoredForLegacyRuntime() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        let profileId = UUID()
+        service.registerProfileHotkeys([(id: profileId, hotkey: spaceHotkey())])
+
+        var startedProfileId: UUID?
+        service.onProfileDictationStart = { profileId, _ in startedProfileId = profileId }
+
+        let keyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
+
+        XCTAssertFalse(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertNil(startedProfileId)
+        XCTAssertNil(service.currentMode)
     }
 
     @MainActor

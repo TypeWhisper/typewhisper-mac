@@ -73,7 +73,6 @@ final class DictationSettingsHandler {
     }
 
     func registerInitialTriggerHotkeys() {
-        syncProfileHotkeys(profileService.profiles)
         syncWorkflowHotkeys(workflowService.workflows)
     }
 
@@ -82,14 +81,8 @@ final class DictationSettingsHandler {
         registerInitialTriggerHotkeys()
     }
 
-    func syncProfileHotkeys(_ profiles: [Profile]) {
-        let entries = profiles
-            .filter { $0.isEnabled }
-            .compactMap { profile -> (id: UUID, hotkey: UnifiedHotkey)? in
-                guard let hotkey = profile.hotkey else { return nil }
-                return (id: profile.id, hotkey: hotkey)
-            }
-        hotkeyService.registerProfileHotkeys(entries)
+    func syncProfileHotkeys(_: [Profile]) {
+        hotkeyService.registerProfileHotkeys([])
     }
 
     func syncWorkflowHotkeys(_ workflows: [Workflow]) {

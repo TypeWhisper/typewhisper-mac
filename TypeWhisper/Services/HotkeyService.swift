@@ -340,11 +340,8 @@ final class HotkeyService: ObservableObject {
 
     // MARK: - Profile Hotkeys
 
-    func registerProfileHotkeys(_ entries: [(id: UUID, hotkey: UnifiedHotkey)]) {
+    func registerProfileHotkeys(_: [(id: UUID, hotkey: UnifiedHotkey)]) {
         profileSlots.removeAll()
-        for entry in entries {
-            profileSlots[entry.id] = ProfileHotkeyState(profileId: entry.id, hotkey: entry.hotkey)
-        }
         tearDownMonitor()
         setupMonitor()
     }
@@ -360,12 +357,7 @@ final class HotkeyService: ObservableObject {
         setupMonitor()
     }
 
-    func isHotkeyAssignedToProfile(_ hotkey: UnifiedHotkey, excludingProfileId: UUID?) -> UUID? {
-        for (id, state) in profileSlots where id != excludingProfileId {
-            if state.hotkey.conflicts(with: hotkey) {
-                return id
-            }
-        }
+    func isHotkeyAssignedToProfile(_: UnifiedHotkey, excludingProfileId _: UUID?) -> UUID? {
         return nil
     }
 

@@ -130,6 +130,14 @@ final class WorkflowService: ObservableObject {
         (workflows.map(\.sortOrder).max() ?? -1) + 1
     }
 
+    var availableRuleNames: [String] {
+        var names: [String] = []
+        for workflow in workflows where !names.contains(workflow.name) {
+            names.append(workflow.name)
+        }
+        return names
+    }
+
     func updateWorkflow(_ workflow: Workflow) {
         workflow.updatedAt = Date()
         save()

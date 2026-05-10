@@ -4,6 +4,27 @@ import XCTest
 
 @MainActor
 final class WorkflowServiceTests: XCTestCase {
+    func testAvailableRuleNamesExposeWorkflowsButNotLegacyProfiles() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let workflowService = WorkflowService(appSupportDirectory: appSupportDirectory)
+        let profileService = ProfileService(appSupportDirectory: appSupportDirectory)
+
+        profileService.addProfile(
+            name: "Legacy Notes",
+            bundleIdentifiers: ["com.apple.Notes"]
+        )
+        workflowService.addWorkflow(
+            name: "Notes Workflow",
+            template: .dictation,
+            trigger: .app("com.apple.Notes")
+        )
+
+        XCTAssertEqual(profileService.profiles.map(\.name), ["Legacy Notes"])
+        XCTAssertEqual(workflowService.availableRuleNames, ["Notes Workflow"])
+    }
+
     func testWorkflowExposesPluginSDKSnapshot() throws {
         let workflowId = try XCTUnwrap(UUID(uuidString: "5696C819-F96E-419B-9224-14FF94C65AA8"))
         let createdAt = Date(timeIntervalSince1970: 100)
@@ -1414,7 +1435,7 @@ final class WatchFolderExportTests: XCTestCase {
 
 @MainActor
 final class DictationLanguageResolverTests: XCTestCase {
-    func testWorkflowLanguageOverridesProfileAndGlobalLanguage() {
+    func testWorkflowLanguageOverridesGlobalLanguage() {
         let workflow = Workflow(
             name: "German Workflow",
             template: .dictation,
@@ -1423,52 +1444,46 @@ final class DictationLanguageResolverTests: XCTestCase {
                 WorkflowBehavior.inputLanguageSettingKey: "de",
             ])
         )
-        let profile = Profile(name: "English Rule", inputLanguage: "en")
 
         let resolved = DictationLanguageResolver.resolve(
             workflow: workflow,
-            profile: profile,
             globalLanguageSelection: .hints(["fr", "nl"])
         )
 
         XCTAssertEqual(resolved, .exact("de"))
     }
 
-    func testWorkflowInheritFallsBackToProfileBeforeGlobalLanguage() {
+    func testWorkflowInheritFallsBackToGlobalLanguage() {
         let workflow = Workflow(
             name: "Inherit Workflow",
             template: .dictation,
             trigger: .hotkey(UnifiedHotkey(keyCode: 6, modifierFlags: 0, isFn: false))
         )
-        let profile = Profile(name: "Hint Rule", inputLanguage: #"["de","en"]"#)
 
         let resolved = DictationLanguageResolver.resolve(
             workflow: workflow,
-            profile: profile,
-            globalLanguageSelection: .exact("fr")
+            globalLanguageSelection: .hints(["de", "en"])
         )
 
         XCTAssertEqual(resolved, .hints(["de", "en"]))
     }
 
-    func testWorkflowInheritFallsBackToGlobalWhenProfileAlsoInherits() {
+    func testWorkflowInheritFallsBackToGlobalExactLanguage() {
         let workflow = Workflow(
             name: "Inherit Workflow",
             template: .dictation,
             trigger: .hotkey(UnifiedHotkey(keyCode: 7, modifierFlags: 0, isFn: false))
         )
-        let profile = Profile(name: "Global Rule")
 
         let resolved = DictationLanguageResolver.resolve(
             workflow: workflow,
-            profile: profile,
             globalLanguageSelection: .exact("fr")
         )
 
         XCTAssertEqual(resolved, .exact("fr"))
     }
 
-    func testWorkflowAutoOverridesProfileAndGlobalLanguage() {
+    func testWorkflowAutoOverridesGlobalLanguage() {
         let workflow = Workflow(
             name: "Auto Workflow",
             template: .dictation,
@@ -1477,11 +1492,9 @@ final class DictationLanguageResolverTests: XCTestCase {
                 WorkflowBehavior.inputLanguageSettingKey: "auto",
             ])
         )
-        let profile = Profile(name: "German Rule", inputLanguage: "de")
 
         let resolved = DictationLanguageResolver.resolve(
             workflow: workflow,
-            profile: profile,
             globalLanguageSelection: .exact("fr")
         )
 
