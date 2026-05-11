@@ -28,6 +28,7 @@ enum PluginCategory: String, CaseIterable {
     case tts
     case llm
     case postProcessor = "post-processor"
+    case fileAutomation = "file-automation"
     case action
     case memory
     case utility
@@ -38,6 +39,7 @@ enum PluginCategory: String, CaseIterable {
         case .tts: String(localized: "Text-to-Speech")
         case .llm: String(localized: "LLM Providers")
         case .postProcessor: String(localized: "Post-Processors")
+        case .fileAutomation: String(localized: "File Automations")
         case .action: String(localized: "Actions")
         case .memory: String(localized: "Memory")
         case .utility: String(localized: "Utilities")
@@ -50,6 +52,7 @@ enum PluginCategory: String, CaseIterable {
         case .tts: "speaker.wave.2.fill"
         case .llm: "brain"
         case .postProcessor: "arrow.triangle.2.circlepath"
+        case .fileAutomation: "folder.badge.gearshape"
         case .action: "bolt.fill"
         case .memory: "brain.head.profile"
         case .utility: "wrench"
@@ -62,9 +65,10 @@ enum PluginCategory: String, CaseIterable {
         case .tts: 1
         case .llm: 2
         case .postProcessor: 3
-        case .action: 4
-        case .memory: 5
-        case .utility: 6
+        case .fileAutomation: 4
+        case .action: 5
+        case .memory: 6
+        case .utility: 7
         }
     }
 }

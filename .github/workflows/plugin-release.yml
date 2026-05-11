@@ -62,6 +62,7 @@ jobs:
             assemblyai) TARGET="AssemblyAIPlugin" ;;
             obsidian) TARGET="ObsidianPlugin" ;;
             script) TARGET="ScriptPlugin" ;;
+            file-job-script) TARGET="FileJobScriptPlugin" ;;
             livetranscript) TARGET="LiveTranscriptPlugin" ;;
             granite) TARGET="GranitePlugin" ;;
             cloudflare-asr) TARGET="CloudflareASRPlugin" ;;

@@ -483,6 +483,47 @@ final class ProtocolContractTests: XCTestCase {
         XCTAssertEqual(result.segments.first?.speakerConfidence, 0.91)
     }
 
+    func testFileJobAutomationContextCarriesWatchFolderExportMetadata() throws {
+        let segment = FileJobTranscriptSegment(
+            text: "Hello",
+            start: 0.25,
+            end: 1.5,
+            speakerLabel: "Speaker A",
+            speakerConfidence: 0.91
+        )
+        let context = FileJobContext(
+            jobKind: .watchFolder,
+            sourceFilePath: "/tmp/in/meeting.wav",
+            outputDirectoryPath: "/tmp/out",
+            outputFilePath: "/tmp/out/meeting.srt",
+            outputFormat: "srt",
+            engineId: "whisperkit",
+            engineName: "WhisperKit",
+            modelId: "large-v3",
+            transcriptText: "Speaker A: Hello",
+            detectedLanguage: "en",
+            segments: [segment]
+        )
+        let artifact = FileJobArtifact(fileExtension: "srt", content: "1\n00:00:00,250 --> 00:00:01,500\nHello")
+        let result = FileJobAutomationResult(
+            artifact: artifact,
+            appliedSteps: ["File Job Script"],
+            outputPathWasWritten: true
+        )
+
+        XCTAssertEqual(FileJobKind.watchFolder.rawValue, "watch-folder")
+        XCTAssertEqual(context.sourceFileName, "meeting.wav")
+        XCTAssertEqual(context.outputFormat, "srt")
+        XCTAssertEqual(context.segments, [segment])
+        XCTAssertEqual(result.artifact, artifact)
+        XCTAssertEqual(result.appliedSteps, ["File Job Script"])
+        XCTAssertTrue(result.outputPathWasWritten)
+
+        let encoded = try JSONEncoder().encode(context)
+        let decoded = try JSONDecoder().decode(FileJobContext.self, from: encoded)
+        XCTAssertEqual(decoded, context)
+    }
+
     func testTTSPluginCanPersistVoiceAndReceiveSpeakRequest() async throws {
         let plugin = MockTTSPlugin()
         let host = MockHostServices(eventBus: MockEventBus(), availableRuleNames: ["Work"])

@@ -1,4 +1,5 @@
 import AppKit
+import TypeWhisperPluginSDK
 import XCTest
 @testable import TypeWhisper
 
@@ -1500,6 +1501,82 @@ final class WatchFolderExportTests: XCTestCase {
                 TranscriptionSegment(text: "world", start: 1.5, end: 2.75)
             ]
         )
+    }
+}
+
+@MainActor
+final class FileJobAutomationPipelineTests: XCTestCase {
+    func testPipelineAppliesFileJobAutomationResult() async throws {
+        let plugin = MockFileJobAutomationPlugin(
+            artifact: FileJobArtifact(fileExtension: "txt", content: "custom export"),
+            appliedSteps: ["Mock File Job"],
+            outputPathWasWritten: true
+        )
+        let pipeline = FileJobAutomationPipeline(automationsProvider: { [plugin] })
+        let context = FileJobContext(
+            jobKind: .watchFolder,
+            sourceFilePath: "/tmp/in/meeting.wav",
+            outputDirectoryPath: "/tmp/out",
+            outputFilePath: "/tmp/out/meeting.txt",
+            outputFormat: "txt",
+            engineId: "whisperkit",
+            engineName: "WhisperKit",
+            modelId: "large-v3",
+            transcriptText: "raw transcript",
+            detectedLanguage: "en"
+        )
+
+        let result = await pipeline.process(
+            artifact: FileJobArtifact(fileExtension: "txt", content: "default export"),
+            context: context
+        )
+
+        XCTAssertEqual(plugin.receivedArtifact?.content, "default export")
+        XCTAssertEqual(plugin.receivedContext?.jobKind, .watchFolder)
+        XCTAssertEqual(result.artifact.content, "custom export")
+        XCTAssertEqual(result.appliedSteps, ["Mock File Job"])
+        XCTAssertTrue(result.outputPathWasWritten)
+    }
+
+    private final class MockFileJobAutomationPlugin: NSObject, FileJobAutomationPlugin, @unchecked Sendable {
+        static let pluginId = "com.typewhisper.test.file-job"
+        static let pluginName = "Mock File Job"
+
+        let automationName = "Mock File Job"
+        let priority = 10
+
+        private let artifact: FileJobArtifact
+        private let appliedSteps: [String]
+        private let outputPathWasWritten: Bool
+        private(set) var receivedArtifact: FileJobArtifact?
+        private(set) var receivedContext: FileJobContext?
+
+        required override init() {
+            self.artifact = FileJobArtifact(fileExtension: "txt", content: "")
+            self.appliedSteps = []
+            self.outputPathWasWritten = false
+            super.init()
+        }
+
+        init(artifact: FileJobArtifact, appliedSteps: [String], outputPathWasWritten: Bool) {
+            self.artifact = artifact
+            self.appliedSteps = appliedSteps
+            self.outputPathWasWritten = outputPathWasWritten
+            super.init()
+        }
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+
+        func process(artifact: FileJobArtifact, context: FileJobContext) async throws -> FileJobAutomationResult {
+            receivedArtifact = artifact
+            receivedContext = context
+            return FileJobAutomationResult(
+                artifact: self.artifact,
+                appliedSteps: appliedSteps,
+                outputPathWasWritten: outputPathWasWritten
+            )
+        }
     }
 }
 

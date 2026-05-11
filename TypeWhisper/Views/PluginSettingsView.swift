@@ -318,6 +318,7 @@ struct PluginSettingsView: View {
         if plugin.instance is any TTSProviderPlugin { categories.append(.tts) }
         if plugin.instance is any LLMProviderPlugin { categories.append(.llm) }
         if plugin.instance is any PostProcessorPlugin { categories.append(.postProcessor) }
+        if plugin.instance is any FileJobAutomationPlugin { categories.append(.fileAutomation) }
         if plugin.instance is any ActionPlugin { categories.append(.action) }
         if plugin.instance is any MemoryStoragePlugin { categories.append(.memory) }
         return categories
@@ -883,6 +884,7 @@ private extension PluginCategory {
         case .tts: String(localized: "TTS")
         case .llm: String(localized: "LLM")
         case .postProcessor: String(localized: "Post-processing")
+        case .fileAutomation: String(localized: "File automation")
         case .action: String(localized: "Actions")
         case .memory: String(localized: "Memory")
         case .utility: String(localized: "Utility")

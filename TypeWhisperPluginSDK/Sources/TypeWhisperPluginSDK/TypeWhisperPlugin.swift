@@ -210,6 +210,129 @@ public protocol PostProcessorPlugin: TypeWhisperPlugin {
     @MainActor func process(text: String, context: PostProcessingContext) async throws -> String
 }
 
+// MARK: - File Job Automation Plugin
+
+public enum FileJobKind: String, Codable, Sendable {
+    case watchFolder = "watch-folder"
+    case fileTranscription = "file-transcription"
+    case dictation
+}
+
+public struct FileJobTranscriptSegment: Codable, Equatable, Sendable {
+    public let text: String
+    public let start: TimeInterval
+    public let end: TimeInterval
+    public let speakerLabel: String?
+    public let speakerConfidence: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case text
+        case start
+        case end
+        case speakerLabel = "speaker"
+        case speakerConfidence = "speaker_confidence"
+    }
+
+    public init(
+        text: String,
+        start: TimeInterval,
+        end: TimeInterval,
+        speakerLabel: String? = nil,
+        speakerConfidence: Double? = nil
+    ) {
+        self.text = text
+        self.start = start
+        self.end = end
+        self.speakerLabel = speakerLabel
+        self.speakerConfidence = speakerConfidence
+    }
+}
+
+public struct FileJobContext: Codable, Equatable, Sendable {
+    public let jobKind: FileJobKind
+    public let sourceFilePath: String?
+    public let sourceFileName: String?
+    public let outputDirectoryPath: String?
+    public let outputFilePath: String?
+    public let outputFormat: String?
+    public let engineId: String?
+    public let engineName: String?
+    public let modelId: String?
+    public let transcriptText: String
+    public let detectedLanguage: String?
+    public let segments: [FileJobTranscriptSegment]
+
+    public init(
+        jobKind: FileJobKind,
+        sourceFilePath: String? = nil,
+        sourceFileName: String? = nil,
+        outputDirectoryPath: String? = nil,
+        outputFilePath: String? = nil,
+        outputFormat: String? = nil,
+        engineId: String? = nil,
+        engineName: String? = nil,
+        modelId: String? = nil,
+        transcriptText: String,
+        detectedLanguage: String? = nil,
+        segments: [FileJobTranscriptSegment] = []
+    ) {
+        self.jobKind = jobKind
+        self.sourceFilePath = sourceFilePath
+        if let sourceFileName {
+            self.sourceFileName = sourceFileName
+        } else if let sourceFilePath {
+            self.sourceFileName = URL(fileURLWithPath: sourceFilePath).lastPathComponent
+        } else {
+            self.sourceFileName = nil
+        }
+        self.outputDirectoryPath = outputDirectoryPath
+        self.outputFilePath = outputFilePath
+        self.outputFormat = outputFormat
+        self.engineId = engineId
+        self.engineName = engineName
+        self.modelId = modelId
+        self.transcriptText = transcriptText
+        self.detectedLanguage = detectedLanguage
+        self.segments = segments
+    }
+}
+
+public struct FileJobArtifact: Codable, Equatable, Sendable {
+    public let fileExtension: String
+    public let content: String
+
+    public init(fileExtension: String, content: String) {
+        self.fileExtension = fileExtension
+        self.content = content
+    }
+}
+
+public struct FileJobAutomationResult: Codable, Equatable, Sendable {
+    public let artifact: FileJobArtifact
+    public let appliedSteps: [String]
+    public let outputPathWasWritten: Bool
+
+    public init(
+        artifact: FileJobArtifact,
+        appliedSteps: [String] = [],
+        outputPathWasWritten: Bool = false
+    ) {
+        self.artifact = artifact
+        self.appliedSteps = appliedSteps
+        self.outputPathWasWritten = outputPathWasWritten
+    }
+}
+
+public protocol FileJobAutomationPlugin: TypeWhisperPlugin {
+    var automationName: String { get }
+    var priority: Int { get }
+    @MainActor func process(artifact: FileJobArtifact, context: FileJobContext) async throws -> FileJobAutomationResult
+}
+
+public extension FileJobAutomationPlugin {
+    var priority: Int { 400 }
+}
+
 // MARK: - Transcription Engine Plugin
 
 public struct AudioData: Sendable {
