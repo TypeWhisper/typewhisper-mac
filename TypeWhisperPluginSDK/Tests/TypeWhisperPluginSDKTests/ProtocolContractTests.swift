@@ -96,6 +96,27 @@ private final class MockTranscriptionPlugin: NSObject, TranscriptionEnginePlugin
     }
 }
 
+@objc(MockAuthRoleStatusPlugin)
+private final class MockAuthRoleStatusPlugin: NSObject, TypeWhisperPlugin, PluginAuthRoleStatusProviding, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.auth-roles"
+    static let pluginName = "Mock Auth Roles"
+
+    required override init() {}
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    func authStatus(for role: PluginAuthRole) -> PluginAuthRoleStatus {
+        role == .transcription
+            ? PluginAuthRoleStatus(
+                isAvailable: false,
+                unavailableReason: "Transcription needs a key.",
+                requiredCredentialLabel: "API key"
+            )
+            : .available
+    }
+}
+
 @objc(MockDictionaryTermsPlugin)
 private final class MockDictionaryTermsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.mock.dictionary-terms"
@@ -260,6 +281,34 @@ private final class MockTTSPlugin: NSObject, TTSProviderPlugin, @unchecked Senda
 }
 
 final class ProtocolContractTests: XCTestCase {
+    func testPluginAuthRolesExposeStableRawValues() {
+        XCTAssertEqual(PluginAuthRole.transcription.rawValue, "transcription")
+        XCTAssertEqual(PluginAuthRole.llm.rawValue, "llm")
+        XCTAssertEqual(PluginAuthRole.tts.rawValue, "tts")
+    }
+
+    func testPluginAuthRoleStatusResolverUsesProviderOverrideAndLegacyFallback() {
+        let roleAwarePlugin = MockAuthRoleStatusPlugin()
+        let roleStatus = PluginAuthRoleStatusResolver.status(
+            for: roleAwarePlugin,
+            role: .transcription,
+            legacyIsConfigured: true
+        )
+
+        XCTAssertFalse(roleStatus.isAvailable)
+        XCTAssertEqual(roleStatus.unavailableReason, "Transcription needs a key.")
+        XCTAssertEqual(roleStatus.requiredCredentialLabel, "API key")
+
+        let legacyPlugin = MockTranscriptionPlugin()
+        XCTAssertEqual(
+            PluginAuthRoleStatusResolver.status(for: legacyPlugin, role: .transcription, legacyIsConfigured: true),
+            .available
+        )
+        XCTAssertFalse(
+            PluginAuthRoleStatusResolver.status(for: legacyPlugin, role: .transcription, legacyIsConfigured: false).isAvailable
+        )
+    }
+
     func testHostServicesExposeRulesSecretsAndDefaults() throws {
         let host = MockHostServices(eventBus: MockEventBus(), availableRuleNames: ["Work", "Docs"])
 

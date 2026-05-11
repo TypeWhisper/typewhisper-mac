@@ -72,8 +72,9 @@ final class ModelManagerService: ObservableObject {
     /// True when the selected engine plugin exists. The actual model readiness check
     /// happens in transcribe() which handles restoration via triggerRestoreModel().
     var canTranscribe: Bool {
-        guard let providerId = selectedProviderId else { return false }
-        return PluginManager.shared.transcriptionEngine(for: providerId) != nil
+        guard let providerId = selectedProviderId,
+              let engine = PluginManager.shared.transcriptionEngine(for: providerId) else { return false }
+        return canUseForTranscription(engine)
     }
 
     var activeEngineName: String? {
@@ -112,6 +113,11 @@ final class ModelManagerService: ObservableObject {
     func selectProvider(_ providerId: String) {
         selectedProviderId = providerId
         UserDefaults.standard.set(providerId, forKey: providerKey)
+    }
+
+    func clearProviderSelection() {
+        selectedProviderId = nil
+        UserDefaults.standard.removeObject(forKey: providerKey)
     }
 
     func selectModel(_ providerId: String, modelId: String) {
@@ -166,6 +172,28 @@ final class ModelManagerService: ObservableObject {
         return (plugin as? any TranscriptPreviewFallbackPolicyProviding)?.allowsTranscriptPreviewFallback ?? true
     }
 
+    func transcriptionAuthStatus(for engine: TranscriptionEnginePlugin) -> PluginAuthRoleStatus {
+        // Legacy plugins may use isConfigured for loaded-model state, so absence of the
+        // optional auth-role protocol should not make auto-unloaded local engines unselectable.
+        PluginAuthRoleStatusResolver.status(
+            for: engine,
+            role: .transcription,
+            legacyIsConfigured: true
+        )
+    }
+
+    func transcriptionAuthStatus(for providerId: String?) -> PluginAuthRoleStatus? {
+        guard let providerId,
+              let engine = PluginManager.shared.transcriptionEngine(for: providerId) else {
+            return nil
+        }
+        return transcriptionAuthStatus(for: engine)
+    }
+
+    func canUseForTranscription(_ engine: TranscriptionEnginePlugin) -> Bool {
+        transcriptionAuthStatus(for: engine).isAvailable
+    }
+
     /// Resolve display name for a given engine/model override combination
     func resolvedModelDisplayName(engineOverrideId: String? = nil, cloudModelOverride: String? = nil) -> String? {
         let providerId = engineOverrideId ?? selectedProviderId
@@ -189,17 +217,17 @@ final class ModelManagerService: ObservableObject {
     /// If the selected plugin is missing, fall back to the first available engine.
     func restoreProviderSelection() {
         if let providerId = selectedProviderId,
-           PluginManager.shared.transcriptionEngine(for: providerId) != nil {
+           let engine = PluginManager.shared.transcriptionEngine(for: providerId),
+           canUseForTranscription(engine) {
             return
         }
         // Selected provider doesn't exist - find a fallback
-        if let fallback = PluginManager.shared.transcriptionEngines.first(where: { $0.isConfigured }) {
+        if let fallback = PluginManager.shared.transcriptionEngines.first(where: { $0.isConfigured && canUseForTranscription($0) }) {
             selectProvider(fallback.providerId)
-        } else if let anyEngine = PluginManager.shared.transcriptionEngines.first {
+        } else if let anyEngine = PluginManager.shared.transcriptionEngines.first(where: { canUseForTranscription($0) }) {
             selectProvider(anyEngine.providerId)
         } else {
-            selectedProviderId = nil
-            UserDefaults.standard.removeObject(forKey: providerKey)
+            clearProviderSelection()
         }
     }
 
@@ -277,6 +305,13 @@ final class ModelManagerService: ObservableObject {
         guard let providerId,
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
             throw TranscriptionEngineError.modelNotLoaded
+        }
+
+        let authStatus = transcriptionAuthStatus(for: plugin)
+        guard authStatus.isAvailable else {
+            throw TranscriptionEngineError.unsupportedTask(
+                authStatus.unavailableReason ?? "Transcription is not available for this engine."
+            )
         }
 
         if !plugin.isConfigured {
@@ -366,6 +401,13 @@ final class ModelManagerService: ObservableObject {
             throw TranscriptionEngineError.modelNotLoaded
         }
 
+        let authStatus = transcriptionAuthStatus(for: plugin)
+        guard authStatus.isAvailable else {
+            throw TranscriptionEngineError.unsupportedTask(
+                authStatus.unavailableReason ?? "Transcription is not available for this engine."
+            )
+        }
+
         if !plugin.isConfigured {
             await triggerRestoreModel(plugin)
         }
@@ -434,6 +476,13 @@ final class ModelManagerService: ObservableObject {
         guard let providerId,
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
             throw TranscriptionEngineError.modelNotLoaded
+        }
+
+        let authStatus = transcriptionAuthStatus(for: plugin)
+        guard authStatus.isAvailable else {
+            throw TranscriptionEngineError.unsupportedTask(
+                authStatus.unavailableReason ?? "Transcription is not available for this engine."
+            )
         }
 
         if !plugin.isConfigured {

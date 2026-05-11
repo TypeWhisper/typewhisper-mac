@@ -33,6 +33,49 @@ final class OpenAIPluginTests: XCTestCase {
         XCTAssertEqual(plugin.selectedLLMModelId, "gpt-5.5")
     }
 
+    func testOpenAIChatGPTLoginOnlyMakesLLMAuthRoleAvailable() throws {
+        let host = try PluginTestHostServices(
+            defaults: ["authMode": "chatgpt"],
+            secrets: ["oauth-refresh-token": "refresh-token"]
+        )
+        let plugin = OpenAIPlugin()
+        plugin.activate(host: host)
+
+        XCTAssertTrue(plugin.authStatus(for: .llm).isAvailable)
+
+        let transcriptionStatus = plugin.authStatus(for: .transcription)
+        XCTAssertFalse(transcriptionStatus.isAvailable)
+        XCTAssertEqual(transcriptionStatus.requiredCredentialLabel, "OpenAI API key")
+        XCTAssertEqual(
+            transcriptionStatus.unavailableReason,
+            "ChatGPT Login only enables prompt processing. OpenAI transcription requires an OpenAI API key."
+        )
+
+        let ttsStatus = plugin.authStatus(for: .tts)
+        XCTAssertFalse(ttsStatus.isAvailable)
+        XCTAssertEqual(ttsStatus.requiredCredentialLabel, "OpenAI API key")
+    }
+
+    func testOpenAIAPIKeyMakesLLMTranscriptionAndTTSAuthRolesAvailable() throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "sk-live"])
+        let plugin = OpenAIPlugin()
+        plugin.activate(host: host)
+
+        XCTAssertTrue(plugin.authStatus(for: .llm).isAvailable)
+        XCTAssertTrue(plugin.authStatus(for: .transcription).isAvailable)
+        XCTAssertTrue(plugin.authStatus(for: .tts).isAvailable)
+    }
+
+    func testOpenAIWithoutCredentialsMakesCloudAuthRolesUnavailable() throws {
+        let host = try PluginTestHostServices()
+        let plugin = OpenAIPlugin()
+        plugin.activate(host: host)
+
+        XCTAssertFalse(plugin.authStatus(for: .llm).isAvailable)
+        XCTAssertFalse(plugin.authStatus(for: .transcription).isAvailable)
+        XCTAssertFalse(plugin.authStatus(for: .tts).isAvailable)
+    }
+
     func testOpenAIUsesResponsesAPIForGPT5ModelsOnly() {
         XCTAssertTrue(OpenAIPlugin.usesResponsesAPI(for: "gpt-5.5"))
         XCTAssertTrue(OpenAIPlugin.usesResponsesAPI(for: "gpt-5.4-mini"))

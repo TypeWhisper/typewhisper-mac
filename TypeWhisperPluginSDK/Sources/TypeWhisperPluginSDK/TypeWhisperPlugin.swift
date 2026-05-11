@@ -40,6 +40,80 @@ public extension PluginSettingsActivityReporting {
     var currentSettingsActivity: PluginSettingsActivity? { nil }
 }
 
+// MARK: - Auth Role Status
+
+public enum PluginAuthRole: String, CaseIterable, Sendable {
+    case transcription
+    case llm
+    case tts
+}
+
+public struct PluginAuthRoleStatus: Sendable, Equatable {
+    public let isAvailable: Bool
+    public let unavailableReason: String?
+    public let requiredCredentialLabel: String?
+
+    public init(
+        isAvailable: Bool,
+        unavailableReason: String? = nil,
+        requiredCredentialLabel: String? = nil
+    ) {
+        self.isAvailable = isAvailable
+        self.unavailableReason = unavailableReason
+        self.requiredCredentialLabel = requiredCredentialLabel
+    }
+
+    public static let available = PluginAuthRoleStatus(isAvailable: true)
+
+    public static func unavailable(
+        reason: String,
+        requiredCredentialLabel: String? = nil
+    ) -> PluginAuthRoleStatus {
+        PluginAuthRoleStatus(
+            isAvailable: false,
+            unavailableReason: reason,
+            requiredCredentialLabel: requiredCredentialLabel
+        )
+    }
+
+    public static func legacyFallback(
+        isConfigured: Bool,
+        unavailableReason: String = "Plugin is not configured.",
+        requiredCredentialLabel: String? = nil
+    ) -> PluginAuthRoleStatus {
+        isConfigured
+            ? .available
+            : .unavailable(
+                reason: unavailableReason,
+                requiredCredentialLabel: requiredCredentialLabel
+            )
+    }
+}
+
+public protocol PluginAuthRoleStatusProviding: TypeWhisperPlugin {
+    func authStatus(for role: PluginAuthRole) -> PluginAuthRoleStatus
+}
+
+public enum PluginAuthRoleStatusResolver {
+    public static func status(
+        for plugin: any TypeWhisperPlugin,
+        role: PluginAuthRole,
+        legacyIsConfigured: Bool = true,
+        legacyUnavailableReason: String = "Plugin is not configured.",
+        legacyRequiredCredentialLabel: String? = nil
+    ) -> PluginAuthRoleStatus {
+        if let provider = plugin as? any PluginAuthRoleStatusProviding {
+            return provider.authStatus(for: role)
+        }
+
+        return .legacyFallback(
+            isConfigured: legacyIsConfigured,
+            unavailableReason: legacyUnavailableReason,
+            requiredCredentialLabel: legacyRequiredCredentialLabel
+        )
+    }
+}
+
 // MARK: - Settings Window Environment
 
 private struct PluginSettingsCloseActionKey: EnvironmentKey {

@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import TypeWhisperPluginSDK
 
 enum SettingsTab: Hashable {
     case home, general, recording, hotkeys, recorder
@@ -360,6 +361,28 @@ struct RecordingSettingsView: View {
         dictation.needsMicPermission || dictation.needsAccessibilityPermission
     }
 
+    private func transcriptionAuthNotice(for engines: [TranscriptionEnginePlugin]) -> String? {
+        engines
+            .map { modelManager.transcriptionAuthStatus(for: $0) }
+            .first { !$0.isAvailable }?
+            .unavailableReason
+    }
+
+    @ViewBuilder
+    private func enginePickerLabel(for engine: TranscriptionEnginePlugin) -> some View {
+        let authStatus = modelManager.transcriptionAuthStatus(for: engine)
+        HStack {
+            Text(engine.providerDisplayName)
+            if !authStatus.isAvailable {
+                Text("(\(String(localized: "unavailable")))")
+                    .foregroundStyle(.secondary)
+            } else if !engine.isConfigured {
+                Text("(\(String(localized: "not ready")))")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
     var body: some View {
         Form {
             if needsPermissions {
@@ -376,13 +399,9 @@ struct RecordingSettingsView: View {
                         Text(String(localized: "None")).tag(nil as String?)
                         Divider()
                         ForEach(engines, id: \.providerId) { engine in
-                            HStack {
-                                Text(engine.providerDisplayName)
-                                if !engine.isConfigured {
-                                    Text("(\(String(localized: "not ready")))")
-                                        .foregroundStyle(.secondary)
-                                }
-                            }.tag(engine.providerId as String?)
+                            enginePickerLabel(for: engine)
+                                .tag(engine.providerId as String?)
+                                .disabled(!modelManager.canUseForTranscription(engine))
                         }
                     }
                     .onChange(of: selectedProvider) { _, newValue in
@@ -391,8 +410,15 @@ struct RecordingSettingsView: View {
                         }
                     }
 
+                    if let notice = transcriptionAuthNotice(for: engines) {
+                        Label(notice, systemImage: "key")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
                     if let providerId = selectedProvider,
-                       let engine = pluginManager.transcriptionEngine(for: providerId) {
+                       let engine = pluginManager.transcriptionEngine(for: providerId),
+                       modelManager.canUseForTranscription(engine) {
                         let models = engine.transcriptionModels
                         if models.count > 1 {
                             Picker(String(localized: "Model"), selection: Binding(
@@ -585,6 +611,7 @@ struct RecordingSettingsView: View {
         .padding()
         .frame(minWidth: 500, minHeight: 300)
         .onAppear {
+            modelManager.restoreProviderSelection()
             selectedProvider = modelManager.selectedProviderId
             customSounds = SoundChoice.installedCustomSounds()
         }

@@ -780,6 +780,36 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
         }
     }
 
+    private final class MockRoleGatedTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, PluginAuthRoleStatusProviding, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.role-gated" }
+        static var pluginName: String { "Mock Role Gated" }
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+        var providerId: String { "mock-role-gated" }
+        var providerDisplayName: String { "Mock Role Gated" }
+        var isConfigured: Bool { true }
+        var supportsTranslation: Bool { false }
+        var supportedLanguages: [String] { ["en"] }
+        var transcriptionModels: [PluginModelInfo] { [] }
+        var selectedModelId: String? { nil }
+        func selectModel(_ modelId: String) {}
+
+        func authStatus(for role: PluginAuthRole) -> PluginAuthRoleStatus {
+            role == .transcription
+                ? PluginAuthRoleStatus(
+                    isAvailable: false,
+                    unavailableReason: "Transcription needs a separate credential.",
+                    requiredCredentialLabel: "API key"
+                )
+                : .available
+        }
+
+        func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+            PluginTranscriptionResult(text: "ok", detectedLanguage: language)
+        }
+    }
+
     override func tearDown() {
         RuntimeArchitecture.overrideCurrent = nil
         super.tearDown()
@@ -960,6 +990,55 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
 
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
         PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.compatible",
+                    name: "Mock Compatible",
+                    version: "1.0.0",
+                    principalClass: "MockTranscriptionPlugin"
+                ),
+                instance: MockTranscriptionPlugin(),
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(modelManager.selectedProviderId, "mock-compatible")
+    }
+
+    func testModelManagerFallsBackWhenStoredProviderCannotUseTranscriptionRole() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let selectedEngineKey = UserDefaultsKeys.selectedEngine
+        let originalSelection = UserDefaults.standard.object(forKey: selectedEngineKey)
+        UserDefaults.standard.set("mock-role-gated", forKey: selectedEngineKey)
+        defer {
+            if let originalSelection {
+                UserDefaults.standard.set(originalSelection, forKey: selectedEngineKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: selectedEngineKey)
+            }
+        }
+
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.role-gated",
+                    name: "Mock Role Gated",
+                    version: "1.0.0",
+                    principalClass: "MockRoleGatedTranscriptionPlugin"
+                ),
+                instance: MockRoleGatedTranscriptionPlugin(),
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            ),
             LoadedPlugin(
                 manifest: PluginManifest(
                     id: "com.typewhisper.mock.compatible",

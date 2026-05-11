@@ -1267,6 +1267,7 @@ final class OpenAIPlugin: NSObject,
     LiveTranscriptionCapablePlugin,
     LLMProviderPlugin,
     TTSProviderPlugin,
+    PluginAuthRoleStatusProviding,
     @unchecked Sendable
 {
     static let pluginId = "com.typewhisper.openai"
@@ -1296,6 +1297,13 @@ final class OpenAIPlugin: NSObject,
     )
 
     private let chatHelper = PluginOpenAIChatHelper(baseURL: "https://api.openai.com")
+
+    private static let openAIAPIKeyCredentialLabel = "OpenAI API key"
+    private static let chatGPTLoginCredentialLabel = "ChatGPT Login"
+    private static let apiKeyOrChatGPTCredentialLabel = "OpenAI API key or ChatGPT Login"
+    private static let transcriptionRequiresAPIKeyReason = "ChatGPT Login only enables prompt processing. OpenAI transcription requires an OpenAI API key."
+    private static let ttsRequiresAPIKeyReason = "ChatGPT Login only enables prompt processing. OpenAI text-to-speech requires an OpenAI API key."
+    private static let llmRequiresCredentialsReason = "OpenAI prompt processing requires an OpenAI API key or ChatGPT Login."
 
     private static let storageKeys = (
         apiKey: "api-key",
@@ -1385,6 +1393,47 @@ final class OpenAIPlugin: NSObject,
 
     func deactivate() {
         host = nil
+    }
+
+    // MARK: - PluginAuthRoleStatusProviding
+
+    func authStatus(for role: PluginAuthRole) -> PluginAuthRoleStatus {
+        switch role {
+        case .transcription:
+            guard normalizedAPIKey != nil else {
+                return .unavailable(
+                    reason: _authMode == .chatGPT
+                        ? Self.transcriptionRequiresAPIKeyReason
+                        : "OpenAI transcription requires an OpenAI API key.",
+                    requiredCredentialLabel: Self.openAIAPIKeyCredentialLabel
+                )
+            }
+            return .available
+
+        case .llm:
+            guard isAvailable else {
+                return .unavailable(
+                    reason: _authMode == .chatGPT
+                        ? "ChatGPT Login is not connected."
+                        : Self.llmRequiresCredentialsReason,
+                    requiredCredentialLabel: _authMode == .chatGPT
+                        ? Self.chatGPTLoginCredentialLabel
+                        : Self.apiKeyOrChatGPTCredentialLabel
+                )
+            }
+            return .available
+
+        case .tts:
+            guard normalizedAPIKey != nil else {
+                return .unavailable(
+                    reason: _authMode == .chatGPT
+                        ? Self.ttsRequiresAPIKeyReason
+                        : "OpenAI text-to-speech requires an OpenAI API key.",
+                    requiredCredentialLabel: Self.openAIAPIKeyCredentialLabel
+                )
+            }
+            return .available
+        }
     }
 
     // MARK: - TranscriptionEnginePlugin
