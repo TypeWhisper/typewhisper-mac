@@ -27,6 +27,15 @@ struct AdvancedSettingsView: View {
                     .foregroundStyle(.secondary)
 
                 if memoryService.isEnabled {
+                    Picker(String(localized: "Capture From"), selection: $memoryService.captureScope) {
+                        ForEach(MemoryCaptureScope.allCases) { scope in
+                            Text(scope.localizedTitle).tag(scope)
+                        }
+                    }
+                    Text(memoryService.captureScope.localizedDescription)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
                     Picker(String(localized: "Extraction Provider"), selection: $memoryService.extractionProviderId) {
                         Text(String(localized: "None")).tag("")
                         ForEach(promptProcessingService.availableProviders, id: \.id) { provider in

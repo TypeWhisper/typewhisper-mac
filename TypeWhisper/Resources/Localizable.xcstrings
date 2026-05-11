@@ -928,6 +928,16 @@
         }
       }
     },
+    "All dictations" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Diktate"
+          }
+        }
+      }
+    },
     "All imported" : {
       "localizations" : {
         "de" : {
@@ -1418,6 +1428,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Abgebrochen"
+          }
+        }
+      }
+    },
+    "Capture From" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erfassen aus"
           }
         }
       }
@@ -3917,6 +3937,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Memory"
+          }
+        }
+      }
+    },
+    "Memory extraction runs for every eligible transcription after the minimum text length and cooldown checks." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Memory-Extraktion läuft für jede geeignete Transkription nach Mindestlänge und Cooldown."
+          }
+        }
+      }
+    },
+    "Memory extraction runs only when the transcription was produced by a known workflow." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Memory-Extraktion läuft nur, wenn die Transkription von einem bekannten Workflow erzeugt wurde."
           }
         }
       }
@@ -8792,6 +8832,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Wörter"
+          }
+        }
+      }
+    },
+    "Workflow dictations only" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur Workflow-Diktate"
           }
         }
       }

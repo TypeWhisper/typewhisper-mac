@@ -80,6 +80,7 @@ enum UserDefaultsKeys {
     static let memoryExtractionModel = "memoryExtractionModel"
     static let memoryMinTextLength = "memoryMinTextLength"
     static let memoryExtractionPrompt = "memoryExtractionPrompt"
+    static let memoryCaptureScope = "memoryCaptureScope"
 
     // MARK: - Formatting
     static let appFormattingEnabled = "appFormattingEnabled"

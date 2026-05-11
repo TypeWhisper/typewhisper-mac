@@ -4,8 +4,45 @@ import os.log
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "MemoryService")
 
+enum MemoryCaptureScope: String, CaseIterable, Identifiable, Hashable {
+    case allDictations
+    case workflowDictationsOnly
+
+    static let defaultScope: MemoryCaptureScope = .allDictations
+
+    var id: String { rawValue }
+
+    var localizedTitle: String {
+        switch self {
+        case .allDictations:
+            return String(localized: "All dictations")
+        case .workflowDictationsOnly:
+            return String(localized: "Workflow dictations only")
+        }
+    }
+
+    var localizedDescription: String {
+        switch self {
+        case .allDictations:
+            return String(localized: "Memory extraction runs for every eligible transcription after the minimum text length and cooldown checks.")
+        case .workflowDictationsOnly:
+            return String(localized: "Memory extraction runs only when the transcription was produced by a known workflow.")
+        }
+    }
+
+    static func load(from defaults: UserDefaults = .standard) -> MemoryCaptureScope {
+        guard let rawValue = defaults.string(forKey: UserDefaultsKeys.memoryCaptureScope),
+              let scope = MemoryCaptureScope(rawValue: rawValue) else {
+            return defaultScope
+        }
+        return scope
+    }
+}
+
 @MainActor
 final class MemoryService: ObservableObject, MemoryRetrieving {
+    nonisolated static let rawMemoryTypeMetadataKey = "rawMemoryType"
+
     @Published var isEnabled: Bool {
         didSet { UserDefaults.standard.set(isEnabled, forKey: UserDefaultsKeys.memoryEnabled) }
     }
@@ -20,6 +57,9 @@ final class MemoryService: ObservableObject, MemoryRetrieving {
     }
     @Published var extractionPrompt: String {
         didSet { UserDefaults.standard.set(extractionPrompt, forKey: UserDefaultsKeys.memoryExtractionPrompt) }
+    }
+    @Published var captureScope: MemoryCaptureScope {
+        didSet { UserDefaults.standard.set(captureScope.rawValue, forKey: UserDefaultsKeys.memoryCaptureScope) }
     }
 
     static let defaultExtractionPrompt = """
@@ -45,18 +85,26 @@ Return ONLY the JSON array, nothing else.
 """
 
     private let promptProcessingService: PromptProcessingService
+    private let workflowNameProvider: @MainActor () -> [String]
     private var eventSubscriptionId: UUID?
     private var lastExtractionTime: Date = .distantPast
     private let extractionCooldown: TimeInterval = 30
 
-    init(promptProcessingService: PromptProcessingService) {
+    init(
+        promptProcessingService: PromptProcessingService,
+        workflowNameProvider: @escaping @MainActor () -> [String] = {
+            ServiceContainer.shared.workflowService.workflows.map(\.name)
+        }
+    ) {
         self.promptProcessingService = promptProcessingService
+        self.workflowNameProvider = workflowNameProvider
         self.isEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.memoryEnabled)
         self.extractionProviderId = UserDefaults.standard.string(forKey: UserDefaultsKeys.memoryExtractionProvider) ?? ""
         self.extractionModel = UserDefaults.standard.string(forKey: UserDefaultsKeys.memoryExtractionModel) ?? ""
         self.minimumTextLength = UserDefaults.standard.object(forKey: UserDefaultsKeys.memoryMinTextLength) as? Int ?? 50
         let saved = UserDefaults.standard.string(forKey: UserDefaultsKeys.memoryExtractionPrompt) ?? ""
         self.extractionPrompt = saved.isEmpty ? Self.defaultExtractionPrompt : saved
+        self.captureScope = MemoryCaptureScope.load()
     }
 
     // MARK: - Lifecycle
@@ -80,25 +128,41 @@ Return ONLY the JSON array, nothing else.
 
     // MARK: - Extraction
 
-    private func handleTranscription(_ payload: TranscriptionCompletedPayload) {
-        guard isEnabled, payload.finalText.count >= minimumTextLength else { return }
+    nonisolated static func shouldAttemptExtraction(
+        payload: TranscriptionCompletedPayload,
+        isEnabled: Bool,
+        minimumTextLength: Int,
+        captureScope: MemoryCaptureScope,
+        knownWorkflowNames: [String]
+    ) -> Bool {
+        guard isEnabled, payload.finalText.count >= minimumTextLength else { return false }
 
-        // Per-workflow gate. Legacy profiles may still exist on disk, but they
-        // are no longer a runtime source in 1.4.
-        if let ruleName = payload.ruleName,
-           ServiceContainer.shared.workflowService.workflows.contains(where: { $0.name == ruleName }) {
-            // Continue only for known workflow-backed rule names.
-        } else {
-            return
+        switch captureScope {
+        case .allDictations:
+            return true
+        case .workflowDictationsOnly:
+            guard let ruleName = payload.ruleName else { return false }
+            return knownWorkflowNames.contains(ruleName)
         }
+    }
+
+    private func handleTranscription(_ payload: TranscriptionCompletedPayload) {
+        let knownWorkflowNames = captureScope == .workflowDictationsOnly ? workflowNameProvider() : []
+        guard Self.shouldAttemptExtraction(
+            payload: payload,
+            isEnabled: isEnabled,
+            minimumTextLength: minimumTextLength,
+            captureScope: captureScope,
+            knownWorkflowNames: knownWorkflowNames
+        ) else { return }
+
+        let providerId = extractionProviderId
+        guard !providerId.isEmpty else { return }
 
         // Cooldown
         let now = Date()
         guard now.timeIntervalSince(lastExtractionTime) >= extractionCooldown else { return }
         lastExtractionTime = now
-
-        let providerId = extractionProviderId
-        guard !providerId.isEmpty else { return }
 
         // Capture all MainActor properties before detaching
         let prompt = extractionPrompt
@@ -129,18 +193,42 @@ Return ONLY the JSON array, nothing else.
             ruleName: payload.ruleName,
             timestamp: payload.timestamp
         ))
-        guard !entries.isEmpty else { return }
+        guard !entries.isEmpty else {
+            logger.info("Memory extraction produced no storable entries")
+            return
+        }
 
         let plugins = PluginManager.shared.memoryStoragePlugins
-        guard !plugins.isEmpty else { return }
+        guard !plugins.isEmpty else {
+            logger.warning("Memory extraction produced entries, but no memory storage plugins are loaded")
+            return
+        }
 
         let deduped = await deduplicate(entries: entries, using: plugins)
-        guard !deduped.isEmpty else { return }
-
-        for plugin in plugins where plugin.isReady {
-            try? await plugin.store(deduped)
-            logger.info("Stored \(deduped.count) memories in \(plugin.storageName)")
+        guard !deduped.isEmpty else {
+            logger.info("Memory extraction produced only duplicate entries")
+            return
         }
+
+        var storedInReadyPlugin = false
+        for plugin in plugins where plugin.isReady {
+            do {
+                try await plugin.store(deduped)
+                storedInReadyPlugin = true
+                logger.info("Stored \(deduped.count) memories in \(plugin.storageName)")
+            } catch {
+                logger.error("Failed to store memories in \(plugin.storageName): \(error.localizedDescription)")
+            }
+        }
+
+        if !storedInReadyPlugin {
+            logger.warning("Memory extraction produced entries, but no ready memory storage plugin accepted them")
+        }
+    }
+
+    nonisolated static func memoryType(for rawValue: String) -> MemoryType {
+        let normalized = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return MemoryType(rawValue: normalized) ?? .context
     }
 
     private func parseExtractedMemories(_ json: String, source: MemorySource) -> [MemoryEntry] {
@@ -156,13 +244,22 @@ Return ONLY the JSON array, nothing else.
         }
 
         guard let data = cleaned.data(using: .utf8),
-              let raw = try? JSONDecoder().decode([RawMemory].self, from: data) else { return [] }
+              let raw = try? JSONDecoder().decode([RawMemory].self, from: data) else {
+            logger.info("Memory extraction response was not a JSON array of memory entries")
+            return []
+        }
 
         return raw.compactMap { item in
-            guard let type = MemoryType(rawValue: item.type) else { return nil }
+            let type = Self.memoryType(for: item.type)
+            let normalizedType = item.type.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            var metadata: [String: String] = [:]
+            if MemoryType(rawValue: normalizedType) == nil {
+                logger.info("Memory extraction returned unknown type '\(item.type, privacy: .public)'; storing it as context")
+                metadata[Self.rawMemoryTypeMetadataKey] = normalizedType
+            }
             let conf = item.confidence ?? 0.8
             guard conf >= 0.8 else { return nil }
-            return MemoryEntry(content: item.content, type: type, source: source, confidence: conf)
+            return MemoryEntry(content: item.content, type: type, source: source, metadata: metadata, confidence: conf)
         }
     }
 
@@ -177,7 +274,11 @@ Return ONLY the JSON array, nothing else.
             for plugin in plugins where plugin.isReady {
                 if let results = try? await plugin.search(query),
                    let best = results.first,
-                   best.relevanceScore > 0.85 {
+                   Self.shouldTreatAsDuplicate(
+                       newEntry: entry,
+                       existingEntry: best.entry,
+                       relevanceScore: best.relevanceScore
+                   ) {
                     var updated = best.entry
                     updated.lastAccessedAt = Date()
                     updated.accessCount += 1
@@ -189,6 +290,22 @@ Return ONLY the JSON array, nothing else.
             if !isDuplicate { unique.append(entry) }
         }
         return unique
+    }
+
+    nonisolated static func shouldTreatAsDuplicate(
+        newEntry: MemoryEntry,
+        existingEntry: MemoryEntry,
+        relevanceScore: Double
+    ) -> Bool {
+        guard relevanceScore > 0.85 else { return false }
+
+        if newEntry.metadata[rawMemoryTypeMetadataKey] != nil || existingEntry.metadata[rawMemoryTypeMetadataKey] != nil {
+            let newContent = newEntry.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            let existingContent = existingEntry.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            return newContent.caseInsensitiveCompare(existingContent) == .orderedSame
+        }
+
+        return true
     }
 
     // MARK: - Retrieval

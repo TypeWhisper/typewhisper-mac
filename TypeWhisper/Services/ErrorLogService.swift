@@ -75,6 +75,7 @@ private struct DiagnosticsReport: Encodable {
         let historyRetentionDays: Int
         let saveAudioWithHistory: Bool
         let memoryEnabled: Bool
+        let memoryCaptureScope: String
         let appFormattingEnabled: Bool
         let soundFeedbackEnabled: Bool
         let spokenFeedbackEnabled: Bool
@@ -228,6 +229,7 @@ final class ErrorLogService: ObservableObject {
                 historyRetentionDays: defaults.integer(forKey: UserDefaultsKeys.historyRetentionDays),
                 saveAudioWithHistory: defaults.bool(forKey: UserDefaultsKeys.saveAudioWithHistory),
                 memoryEnabled: defaults.bool(forKey: UserDefaultsKeys.memoryEnabled),
+                memoryCaptureScope: MemoryCaptureScope.load(from: defaults).rawValue,
                 appFormattingEnabled: defaults.bool(forKey: UserDefaultsKeys.appFormattingEnabled),
                 soundFeedbackEnabled: defaults.object(forKey: UserDefaultsKeys.soundFeedbackEnabled) as? Bool ?? true,
                 spokenFeedbackEnabled: defaults.bool(forKey: UserDefaultsKeys.spokenFeedbackEnabled),
