@@ -504,7 +504,7 @@ final class AudioDeviceServiceCompatibilityTests: XCTestCase {
         XCTAssertEqual(service.selectedDeviceCompatibility, .compatible)
     }
 
-    func testSelectingUSBDeviceValidatesWithInputOnlyCaptureInsteadOfAVAudioEngineProbe() {
+    func testSelectingUSBDeviceSkipsInputOnlyProbeAndAllowsSelection() {
         UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
         let usbDeviceID = AudioDeviceID(712)
         let inputCaptureFactory = FakeAudioInputCaptureFactory()
@@ -530,9 +530,38 @@ final class AudioDeviceServiceCompatibilityTests: XCTestCase {
 
         XCTAssertEqual(service.selectedDeviceUID, "wave-xlr")
         XCTAssertNil(service.previewError)
-        XCTAssertEqual(inputCaptureFactory.validateCalls, [
-            .init(deviceID: usbDeviceID, label: "selection")
-        ])
+        XCTAssertTrue(inputCaptureFactory.validateCalls.isEmpty)
+        XCTAssertEqual(service.selectedDeviceCompatibility, .compatible)
+    }
+
+    func testSelectingUSBDeviceAllowsSelectionWhenInputOnlyValidationFails() {
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let usbDeviceID = AudioDeviceID(713)
+        let inputCaptureFactory = FakeAudioInputCaptureFactory()
+        inputCaptureFactory.validateError = SelectedInputDeviceError.incompatible(.engineStartFailed)
+        let transportResolver = FakeAudioDeviceTransportResolver(
+            transports: [usbDeviceID: kAudioDeviceTransportTypeUSB]
+        )
+        let service = AudioDeviceService(
+            initialInputDevices: [
+                AudioInputDevice(deviceID: usbDeviceID, name: "Babyface Pro", uid: "babyface-pro")
+            ],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false,
+            transportResolver: transportResolver,
+            selectionEngineValidator: AVAudioInputSelectionEngineValidator(inputCaptureFactory: inputCaptureFactory),
+            inputCaptureFactory: inputCaptureFactory
+        )
+
+        service.audioDeviceIDResolverOverride = { uid in
+            uid == "babyface-pro" ? usbDeviceID : nil
+        }
+
+        service.selectedDeviceUID = "babyface-pro"
+
+        XCTAssertEqual(service.selectedDeviceUID, "babyface-pro")
+        XCTAssertNil(service.previewError)
+        XCTAssertTrue(inputCaptureFactory.validateCalls.isEmpty)
         XCTAssertEqual(service.selectedDeviceCompatibility, .compatible)
     }
 

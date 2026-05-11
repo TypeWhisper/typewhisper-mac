@@ -1121,6 +1121,11 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             reason: "selection-validation"
         )
 
+        // Non-Bluetooth inputs use input-only HAL capture during preview and recording.
+        // Keep selection non-blocking so device-specific HAL start failures surface
+        // when the user actually tests or records with that input.
+        guard usesBluetoothInput else { return }
+
         try validateSelectionEngineRoute(preferredDeviceID: engineDeviceID)
     }
 
