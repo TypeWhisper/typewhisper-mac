@@ -48,6 +48,8 @@ final class WorkflowServiceTests: XCTestCase {
                 fineTuning: "Keep speaker intent.",
                 providerId: "openai",
                 cloudModel: "gpt-5.4",
+                transcriptionEngineId: "whisperkit",
+                transcriptionModelId: "large-v3",
                 temperatureModeRaw: "custom",
                 temperatureValue: 0.2
             ),
@@ -70,6 +72,8 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(snapshot.trigger.hotkeys.first?.keyCode, 15)
         XCTAssertEqual(snapshot.trigger.hotkeys.first?.modifierKeyCodes, [55])
         XCTAssertEqual(snapshot.behavior.settings["triggerWord"], "cleanup")
+        XCTAssertEqual(snapshot.behavior.transcriptionEngineId, "whisperkit")
+        XCTAssertEqual(snapshot.behavior.transcriptionModelId, "large-v3")
         XCTAssertEqual(snapshot.behavior.temperatureMode, .custom)
         XCTAssertEqual(snapshot.output.targetActionPluginId, "com.example.action")
         XCTAssertEqual(snapshot.createdAt, createdAt)
@@ -93,6 +97,8 @@ final class WorkflowServiceTests: XCTestCase {
                 fineTuning: "Keep it concise.",
                 providerId: "Groq",
                 cloudModel: "llama-3.3",
+                transcriptionEngineId: "whisperkit",
+                transcriptionModelId: "large-v3",
                 temperatureModeRaw: "custom",
                 temperatureValue: 0.2
             ),
@@ -116,6 +122,8 @@ final class WorkflowServiceTests: XCTestCase {
                 fineTuning: "Keep it concise.",
                 providerId: "Groq",
                 cloudModel: "llama-3.3",
+                transcriptionEngineId: "whisperkit",
+                transcriptionModelId: "large-v3",
                 temperatureModeRaw: "custom",
                 temperatureValue: 0.2
             )
@@ -170,6 +178,23 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(workflow.trigger?.hotkeyBehavior, .processSelectedText)
     }
 
+    func testStoredWorkflowBehaviorWithoutTranscriptionOverridesDefaultsToNil() throws {
+        let payload: [String: Any] = [
+            "settings": ["inputLanguage": "en"],
+            "fineTuning": "",
+            "providerId": "Groq",
+            "cloudModel": "llama-3.3"
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+
+        let behavior = try JSONDecoder().decode(WorkflowBehavior.self, from: data)
+
+        XCTAssertEqual(behavior.providerId, "Groq")
+        XCTAssertEqual(behavior.cloudModel, "llama-3.3")
+        XCTAssertNil(behavior.transcriptionEngineId)
+        XCTAssertNil(behavior.transcriptionModelId)
+    }
+
     func testWorkflowServicePersistsCombinedTriggerArrays() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
         defer { TestSupport.remove(appSupportDirectory) }
@@ -220,6 +245,51 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(trigger.websitePatterns, ["claude.ai"])
         XCTAssertEqual(trigger.hotkeys, [hotkey])
         XCTAssertEqual(trigger.hotkeyBehavior, .processSelectedText)
+    }
+
+    func testWorkflowDraftPreservesDictationTranscriptionOverridesWhenSaving() throws {
+        let hotkey = UnifiedHotkey(keyCode: 15, modifierFlags: NSEvent.ModifierFlags.command.rawValue, isFn: false)
+        let workflow = Workflow(
+            name: "Norwegian Whisper",
+            template: .dictation,
+            trigger: .hotkeys([hotkey]),
+            behavior: WorkflowBehavior(
+                settings: [WorkflowBehavior.inputLanguageSettingKey: "no"],
+                transcriptionEngineId: "local-whisper",
+                transcriptionModelId: "large-v3-turbo"
+            )
+        )
+
+        let draft = WorkflowDraft(workflow)
+        let behavior = draft.resolvedBehavior()
+
+        XCTAssertEqual(draft.transcriptionEngineId, "local-whisper")
+        XCTAssertEqual(draft.transcriptionModelId, "large-v3-turbo")
+        XCTAssertEqual(behavior.transcriptionEngineId, "local-whisper")
+        XCTAssertEqual(behavior.transcriptionModelId, "large-v3-turbo")
+    }
+
+    func testWorkflowDraftDropsTranscriptionOverridesForNonDictationTemplates() throws {
+        var draft = WorkflowDraft(template: .dictation)
+        draft.transcriptionEngineId = "whisperkit"
+        draft.transcriptionModelId = "large-v3"
+
+        draft.selectTemplate(.summary)
+
+        XCTAssertNil(draft.transcriptionEngineId)
+        XCTAssertNil(draft.transcriptionModelId)
+        XCTAssertNil(draft.resolvedBehavior().transcriptionEngineId)
+        XCTAssertNil(draft.resolvedBehavior().transcriptionModelId)
+    }
+
+    func testWorkflowDraftDropsTranscriptionModelWithoutEngineOverride() throws {
+        var draft = WorkflowDraft(template: .dictation)
+        draft.transcriptionModelId = "large-v3"
+
+        let behavior = draft.resolvedBehavior()
+
+        XCTAssertNil(behavior.transcriptionEngineId)
+        XCTAssertNil(behavior.transcriptionModelId)
     }
 
     func testWorkflowServicePersistsDefaultLLMProviderAndModel() throws {
@@ -1499,5 +1569,56 @@ final class DictationLanguageResolverTests: XCTestCase {
         )
 
         XCTAssertEqual(resolved, .auto)
+    }
+}
+
+@MainActor
+final class DictationTranscriptionOverrideResolverTests: XCTestCase {
+    func testDictationWorkflowResolvesEngineAndModelOverrides() {
+        let workflow = Workflow(
+            name: "Norwegian Whisper",
+            template: .dictation,
+            trigger: .hotkey(UnifiedHotkey(keyCode: 8, modifierFlags: 0, isFn: false)),
+            behavior: WorkflowBehavior(
+                transcriptionEngineId: "local-whisper",
+                transcriptionModelId: "large-v3-turbo"
+            )
+        )
+
+        XCTAssertEqual(
+            DictationTranscriptionOverrideResolver.engineId(for: workflow),
+            "local-whisper"
+        )
+        XCTAssertEqual(
+            DictationTranscriptionOverrideResolver.modelId(for: workflow),
+            "large-v3-turbo"
+        )
+    }
+
+    func testModelOverrideRequiresEngineOverride() {
+        let workflow = Workflow(
+            name: "Incomplete Override",
+            template: .dictation,
+            trigger: .hotkey(UnifiedHotkey(keyCode: 8, modifierFlags: 0, isFn: false)),
+            behavior: WorkflowBehavior(transcriptionModelId: "large-v3")
+        )
+
+        XCTAssertNil(DictationTranscriptionOverrideResolver.engineId(for: workflow))
+        XCTAssertNil(DictationTranscriptionOverrideResolver.modelId(for: workflow))
+    }
+
+    func testNonDictationWorkflowIgnoresTranscriptionOverrides() {
+        let workflow = Workflow(
+            name: "Prompt Cleanup",
+            template: .summary,
+            trigger: .hotkey(UnifiedHotkey(keyCode: 8, modifierFlags: 0, isFn: false)),
+            behavior: WorkflowBehavior(
+                transcriptionEngineId: "local-whisper",
+                transcriptionModelId: "large-v3"
+            )
+        )
+
+        XCTAssertNil(DictationTranscriptionOverrideResolver.engineId(for: workflow))
+        XCTAssertNil(DictationTranscriptionOverrideResolver.modelId(for: workflow))
     }
 }

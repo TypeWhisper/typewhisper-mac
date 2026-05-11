@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import TypeWhisperPluginSDK
 
 enum WorkflowRoute: Equatable {
     case create
@@ -686,6 +687,7 @@ private struct WorkflowEditorPage: View {
     @ObservedObject private var historyService = ServiceContainer.shared.historyService
     @ObservedObject private var promptProcessingService = ServiceContainer.shared.promptProcessingService
     @ObservedObject private var settingsViewModel = SettingsViewModel.shared
+    @ObservedObject private var pluginManager = PluginManager.shared
     @ObservedObject private var navigation = WorkflowsNavigationCoordinator.shared
 
     @State private var draft: WorkflowDraft
@@ -807,6 +809,7 @@ private struct WorkflowEditorPage: View {
 
                 if draft.template == .dictation {
                     workflowInputLanguageEditor
+                    workflowTranscriptionEngineSection
                 }
 
                 if draft.template == .translation {
@@ -897,6 +900,78 @@ private struct WorkflowEditorPage: View {
                             Toggle(localizedAppText("Press Enter after inserting", de: "Nach dem Einfügen Enter drücken"), isOn: $draft.autoEnter)
                         }
                         .padding(.top, 4)
+                    }
+                }
+            }
+        }
+    }
+
+    private var workflowTranscriptionEngineSection: some View {
+        let engines = pluginManager.transcriptionEngines.sorted {
+            $0.providerDisplayName.localizedCaseInsensitiveCompare($1.providerDisplayName) == .orderedAscending
+        }
+
+        return VStack(alignment: .leading, spacing: 10) {
+            Text(localizedAppText("Transcription Engine", de: "Transkriptions-Engine"))
+                .font(.subheadline.weight(.semibold))
+
+            if engines.isEmpty {
+                Text(
+                    localizedAppText(
+                        "Install a transcription engine in Integrations before using workflow engine overrides.",
+                        de: "Installiere zuerst eine Transkriptions-Engine in Integrationen, bevor du Workflow-Engine-Overrides nutzt."
+                    )
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            } else {
+                Picker(
+                    localizedAppText("Engine", de: "Engine"),
+                    selection: workflowTranscriptionEngineBinding
+                ) {
+                    Text(localizedAppText("Use Global Engine", de: "Globale Engine verwenden"))
+                        .tag(nil as String?)
+                    ForEach(engines, id: \.providerId) { engine in
+                        Text(engine.providerDisplayName).tag(engine.providerId as String?)
+                    }
+                }
+
+                Text(
+                    draft.transcriptionEngineId == nil
+                        ? localizedAppText(
+                            "This workflow follows the global transcription engine setting.",
+                            de: "Dieser Workflow folgt der globalen Transkriptions-Engine-Einstellung."
+                        )
+                        : localizedAppText(
+                            "This workflow starts dictation with its own transcription engine.",
+                            de: "Dieser Workflow startet das Diktat mit einer eigenen Transkriptions-Engine."
+                        )
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+                if let engineId = draft.transcriptionEngineId {
+                    let models = transcriptionModels(for: engineId)
+                    if !models.isEmpty {
+                        Picker(
+                            localizedAppText("Model", de: "Modell"),
+                            selection: workflowTranscriptionModelBinding
+                        ) {
+                            Text(localizedAppText("Engine Default", de: "Engine-Standard"))
+                                .tag(nil as String?)
+                            ForEach(models, id: \.id) { model in
+                                Text(model.displayName).tag(model.id as String?)
+                            }
+                        }
+
+                        Text(
+                            localizedAppText(
+                                "Leave the model on Engine Default to follow the engine's selected model.",
+                                de: "Lass das Modell auf Engine-Standard, um dem ausgewählten Modell der Engine zu folgen."
+                            )
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -1387,6 +1462,7 @@ private struct WorkflowEditorPage: View {
         if let validationError = draft.validationError(
             hotkeyService: hotkeyService,
             workflowService: workflowService,
+            pluginManager: pluginManager,
             existingWorkflowId: workflow?.id
         ) {
             validationMessage = validationError
@@ -1474,6 +1550,11 @@ private struct WorkflowEditorPage: View {
         validationMessage = nil
     }
 
+    private func transcriptionModels(for engineId: String) -> [PluginModelInfo] {
+        guard let engine = pluginManager.transcriptionEngine(for: engineId) else { return [] }
+        return engine.modelCatalog
+    }
+
     private func selectedTemplateCard(definition: WorkflowTemplateDefinition) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: definition.systemImage)
@@ -1524,6 +1605,34 @@ private struct WorkflowEditorPage: View {
             get: { draft.cloudModel },
             set: { modelId in
                 draft.cloudModel = modelId
+            }
+        )
+    }
+
+    private var workflowTranscriptionEngineBinding: Binding<String?> {
+        Binding(
+            get: { draft.transcriptionEngineId },
+            set: { engineId in
+                draft.transcriptionEngineId = engineId
+                if engineId == nil {
+                    draft.transcriptionModelId = nil
+                    return
+                }
+
+                if let transcriptionModelId = draft.transcriptionModelId,
+                   let engineId,
+                   !transcriptionModels(for: engineId).contains(where: { $0.id == transcriptionModelId }) {
+                    draft.transcriptionModelId = nil
+                }
+            }
+        )
+    }
+
+    private var workflowTranscriptionModelBinding: Binding<String?> {
+        Binding(
+            get: { draft.transcriptionModelId },
+            set: { modelId in
+                draft.transcriptionModelId = modelId
             }
         )
     }
@@ -1870,6 +1979,8 @@ struct WorkflowDraft {
     var customInstruction: String
     var outputFormat: String
     var autoEnter: Bool
+    var transcriptionEngineId: String?
+    var transcriptionModelId: String?
 
     private var preservedBehaviorSettings: [String: String]
     var providerId: String?
@@ -1899,6 +2010,8 @@ struct WorkflowDraft {
         self.customInstruction = ""
         self.outputFormat = ""
         self.autoEnter = false
+        self.transcriptionEngineId = nil
+        self.transcriptionModelId = nil
         self.preservedBehaviorSettings = [:]
         self.providerId = nil
         self.cloudModel = nil
@@ -1927,6 +2040,8 @@ struct WorkflowDraft {
         self.customInstruction = behavior.settings["instruction"] ?? behavior.settings["goal"] ?? behavior.settings["prompt"] ?? ""
         self.outputFormat = output.format ?? ""
         self.autoEnter = output.autoEnter
+        self.transcriptionEngineId = workflow.template == .dictation ? behavior.transcriptionEngineId : nil
+        self.transcriptionModelId = workflow.template == .dictation ? behavior.transcriptionModelId : nil
         self.hotkeyBehavior = .startDictation
         self.preservedBehaviorSettings = behavior.settings
         self.providerId = behavior.providerId
@@ -2050,6 +2165,9 @@ struct WorkflowDraft {
             if !hasEnabledAutomaticTriggerComponent {
                 isHotkeyTriggerEnabled = true
             }
+        } else {
+            transcriptionEngineId = nil
+            transcriptionModelId = nil
         }
     }
 
@@ -2057,6 +2175,7 @@ struct WorkflowDraft {
     func validationError(
         hotkeyService: HotkeyService,
         workflowService: WorkflowService,
+        pluginManager: PluginManager,
         existingWorkflowId: UUID?
     ) -> String? {
         if template == .dictation && triggerMode == .manual {
@@ -2064,6 +2183,26 @@ struct WorkflowDraft {
                 "Dictation Only workflows need a recording trigger.",
                 de: "Nur-Diktat-Workflows brauchen einen Aufnahme-Trigger."
             )
+        }
+
+        if template == .dictation,
+           let transcriptionEngineId,
+           !transcriptionEngineId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            guard let engine = pluginManager.transcriptionEngine(for: transcriptionEngineId) else {
+                return localizedAppText(
+                    "The selected transcription engine is not installed.",
+                    de: "Die ausgewählte Transkriptions-Engine ist nicht installiert."
+                )
+            }
+
+            if let transcriptionModelId,
+               !transcriptionModelId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               !engine.modelCatalog.contains(where: { $0.id == transcriptionModelId }) {
+                return localizedAppText(
+                    "The selected transcription model is not available for this engine.",
+                    de: "Das ausgewählte Transkriptionsmodell ist für diese Engine nicht verfügbar."
+                )
+            }
         }
 
         switch triggerMode {
@@ -2225,12 +2364,15 @@ struct WorkflowDraft {
 
         let trimmedProviderId = providerId?.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedCloudModel = cloudModel?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedTranscriptionEngineId = template == .dictation ? Self.trimmedOptional(transcriptionEngineId) : nil
 
         return WorkflowBehavior(
             settings: settings,
             fineTuning: usesLLMProcessing ? fineTuning.trimmingCharacters(in: .whitespacesAndNewlines) : "",
             providerId: usesLLMProcessing && trimmedProviderId?.isEmpty == false ? trimmedProviderId : nil,
             cloudModel: usesLLMProcessing && trimmedCloudModel?.isEmpty == false ? trimmedCloudModel : nil,
+            transcriptionEngineId: trimmedTranscriptionEngineId,
+            transcriptionModelId: trimmedTranscriptionEngineId != nil ? Self.trimmedOptional(transcriptionModelId) : nil,
             temperatureModeRaw: temperatureModeRaw,
             temperatureValue: temperatureValue
         )
@@ -2357,6 +2499,11 @@ struct WorkflowDraft {
         case .llmPrompt:
             "English"
         }
+    }
+
+    private static func trimmedOptional(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
     }
 }
 

@@ -302,6 +302,8 @@ final class ProtocolContractTests: XCTestCase {
                 fineTuning: "Keep speaker intent.",
                 providerId: "openai",
                 cloudModel: "gpt-5.4",
+                transcriptionEngineId: "whisperkit",
+                transcriptionModelId: "large-v3",
                 temperatureMode: .custom,
                 temperatureValue: 0.2
             ),
@@ -322,7 +324,28 @@ final class ProtocolContractTests: XCTestCase {
         XCTAssertEqual(host.availableWorkflows, [workflow])
         XCTAssertEqual(host.availableWorkflows.first?.trigger.websitePatterns, ["example.com"])
         XCTAssertEqual(host.availableWorkflows.first?.behavior.settings["triggerWord"], "cleanup")
+        XCTAssertEqual(host.availableWorkflows.first?.behavior.transcriptionEngineId, "whisperkit")
+        XCTAssertEqual(host.availableWorkflows.first?.behavior.transcriptionModelId, "large-v3")
         XCTAssertEqual(host.availableWorkflows.first?.output.targetActionPluginId, "com.example.action")
+    }
+
+    func testWorkflowBehaviorDecodesLegacyPayloadWithoutTranscriptionOverrides() throws {
+        let payload: [String: Any] = [
+            "settings": ["triggerWord": "cleanup"],
+            "fineTuning": "Keep speaker intent.",
+            "providerId": "openai",
+            "cloudModel": "gpt-5.4",
+            "temperatureMode": "custom",
+            "temperatureValue": 0.2
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+
+        let behavior = try JSONDecoder().decode(PluginWorkflowBehavior.self, from: data)
+
+        XCTAssertEqual(behavior.providerId, "openai")
+        XCTAssertEqual(behavior.cloudModel, "gpt-5.4")
+        XCTAssertNil(behavior.transcriptionEngineId)
+        XCTAssertNil(behavior.transcriptionModelId)
     }
 
     func testTranscriptionPluginUsesDefaultStreamingFallback() async throws {

@@ -289,6 +289,8 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
     var fineTuning: String
     var providerId: String?
     var cloudModel: String?
+    var transcriptionEngineId: String?
+    var transcriptionModelId: String?
     var temperatureModeRaw: String?
     var temperatureValue: Double?
 
@@ -297,6 +299,8 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
         fineTuning: String = "",
         providerId: String? = nil,
         cloudModel: String? = nil,
+        transcriptionEngineId: String? = nil,
+        transcriptionModelId: String? = nil,
         temperatureModeRaw: String? = nil,
         temperatureValue: Double? = nil
     ) {
@@ -304,6 +308,8 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
         self.fineTuning = fineTuning
         self.providerId = providerId
         self.cloudModel = cloudModel
+        self.transcriptionEngineId = transcriptionEngineId
+        self.transcriptionModelId = transcriptionModelId
         self.temperatureModeRaw = temperatureModeRaw
         self.temperatureValue = temperatureValue
     }
@@ -717,6 +723,8 @@ private extension WorkflowBehavior {
             fineTuning: fineTuning,
             providerId: providerId,
             cloudModel: cloudModel,
+            transcriptionEngineId: transcriptionEngineId,
+            transcriptionModelId: transcriptionModelId,
             temperatureMode: temperatureMode,
             temperatureValue: temperatureValue
         )

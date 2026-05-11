@@ -52,6 +52,24 @@ enum DictationLanguageResolver {
     }
 }
 
+@MainActor
+enum DictationTranscriptionOverrideResolver {
+    static func engineId(for workflow: Workflow?) -> String? {
+        guard workflow?.template == .dictation else { return nil }
+        return trimmed(workflow?.behavior.transcriptionEngineId)
+    }
+
+    static func modelId(for workflow: Workflow?) -> String? {
+        guard engineId(for: workflow) != nil else { return nil }
+        return trimmed(workflow?.behavior.transcriptionModelId)
+    }
+
+    private static func trimmed(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
+    }
+}
+
 /// Orchestrates the dictation flow: recording → transcription → text insertion.
 @MainActor
 final class DictationViewModel: ObservableObject {
@@ -934,11 +952,11 @@ final class DictationViewModel: ObservableObject {
     }
 
     private var effectiveEngineOverrideId: String? {
-        nil
+        DictationTranscriptionOverrideResolver.engineId(for: matchedWorkflow)
     }
 
     private var effectiveCloudModelOverride: String? {
-        nil
+        DictationTranscriptionOverrideResolver.modelId(for: matchedWorkflow)
     }
 
     private var effectiveRuleName: String? {
