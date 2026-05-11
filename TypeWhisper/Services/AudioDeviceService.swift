@@ -32,6 +32,30 @@ enum AudioInputDeviceCompatibility: Sendable, Equatable {
     case unknown
     case compatible
     case incompatible(AudioInputDeviceCompatibilityIssue)
+
+    var diagnosticsValue: String {
+        switch self {
+        case .unknown:
+            return "unknown"
+        case .compatible:
+            return "compatible"
+        case .incompatible(let issue):
+            return "incompatible:\(issue.diagnosticsValue)"
+        }
+    }
+}
+
+extension AudioInputDeviceCompatibilityIssue {
+    var diagnosticsValue: String {
+        switch self {
+        case .cannotSetDevice:
+            return "cannotSetDevice"
+        case .invalidInputFormat:
+            return "invalidInputFormat"
+        case .engineStartFailed:
+            return "engineStartFailed"
+        }
+    }
 }
 
 enum SelectedInputDeviceError: LocalizedError, Sendable, Equatable {
@@ -55,15 +79,132 @@ enum SelectedInputDeviceError: LocalizedError, Sendable, Equatable {
             )
         }
     }
+
+    var diagnosticsValue: String {
+        switch self {
+        case .unavailable:
+            return "unavailable"
+        case .incompatible(let issue):
+            return "incompatible:\(issue.diagnosticsValue)"
+        case .routingConflict:
+            return "routingConflict"
+        }
+    }
 }
 
-struct AudioInputDevice: Identifiable, Equatable {
+struct AudioInputDevice: Identifiable, Equatable, Sendable {
     let deviceID: AudioDeviceID
     let name: String
     let uid: String
     var compatibility: AudioInputDeviceCompatibility = .unknown
 
     var id: String { uid }
+}
+
+struct AudioInputDiagnosticsReport: Encodable, Equatable, Sendable {
+    struct Device: Encodable, Equatable, Sendable {
+        let deviceID: UInt32
+        let uid: String?
+        let name: String?
+        let inputChannels: Int
+        let outputChannels: Int
+        let nominalSampleRate: Double?
+        let transportType: UInt32?
+        let transportTypeName: String?
+        let transportTypeFourCC: String?
+        let isDefaultInput: Bool
+        let isSelected: Bool
+        let isAggregateOrVirtual: Bool
+        let listedByTypeWhisper: Bool
+        let compatibility: String
+        let inputOnlyCaptureFormat: String?
+        let inputOnlyCaptureFormatError: String?
+    }
+
+    let selectedInputDeviceUID: String?
+    let selectedInputDeviceID: UInt32?
+    let selectedInputDeviceName: String?
+    let selectedInputUsesBluetoothTransport: Bool
+    let previewActive: Bool
+    let previewAudioLevel: Float
+    let previewRawLevel: Float
+    let previewError: String?
+    let defaultInputDeviceID: UInt32?
+    let lastInputOnlyCaptureFailure: AudioInputCaptureFailureDiagnostics?
+    let devices: [Device]
+}
+
+struct AudioInputCaptureFailureDiagnostics: Encodable, Equatable, Sendable {
+    let timestamp: Date
+    let label: String
+    let deviceID: UInt32
+    let operation: String
+    let status: Int32?
+    let statusString: String?
+    let errorDescription: String
+    let formatSampleRate: Double
+    let formatChannelCount: UInt32
+}
+
+enum AudioInputCaptureDiagnosticsStore {
+    private struct State: Sendable {
+        var lastInputOnlyCaptureFailure: AudioInputCaptureFailureDiagnostics?
+    }
+
+    private static let state = OSAllocatedUnfairLock(initialState: State())
+
+    static func recordFailure(
+        label: String,
+        deviceID: AudioDeviceID,
+        format: AVAudioFormat,
+        error: Error
+    ) {
+        let operationError = error as? CoreAudioHALInputOperationError
+        let status = operationError?.status
+        let statusString: String?
+        if let status {
+            statusString = audioStatusString(status)
+        } else {
+            statusString = nil
+        }
+        let failure = AudioInputCaptureFailureDiagnostics(
+            timestamp: Date(),
+            label: label,
+            deviceID: UInt32(deviceID),
+            operation: operationError?.operation ?? "\(label) input-only capture",
+            status: status,
+            statusString: statusString,
+            errorDescription: diagnosticsErrorDescription(error),
+            formatSampleRate: format.sampleRate,
+            formatChannelCount: format.channelCount
+        )
+        state.withLock { state in
+            state.lastInputOnlyCaptureFailure = failure
+        }
+    }
+
+    static func lastFailure() -> AudioInputCaptureFailureDiagnostics? {
+        state.withLock { state in
+            state.lastInputOnlyCaptureFailure
+        }
+    }
+
+    static func clear() {
+        state.withLock { state in
+            state.lastInputOnlyCaptureFailure = nil
+        }
+    }
+
+    private static func diagnosticsErrorDescription(_ error: Error) -> String {
+        if let selectedInputError = error as? SelectedInputDeviceError {
+            return selectedInputError.diagnosticsValue
+        }
+        if let localizedError = error as? LocalizedError,
+           let description = localizedError.errorDescription {
+            return description
+        }
+        return (error as NSError).localizedDescription
+    }
 }
 
 final class AudioDeviceService: ObservableObject, @unchecked Sendable {
@@ -169,6 +310,54 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         case .unknown, .compatible:
             return nil
         }
+    }
+
+    func diagnosticsReport() -> AudioInputDiagnosticsReport {
+        let defaultInputDeviceID = CoreAudioInputDeviceDefaultController().defaultInputDeviceID()
+        var listedDevicesByID: [AudioDeviceID: AudioInputDevice] = [:]
+        var listedDevicesByUID: [String: AudioInputDevice] = [:]
+        for device in inputDevices {
+            listedDevicesByID[device.deviceID] = device
+            listedDevicesByUID[device.uid] = device
+        }
+        let selectedDeviceID = selectedDeviceID
+
+        let devices = Self.allInputDeviceDiagnostics(
+            selectedDeviceID: selectedDeviceID,
+            selectedDeviceUID: selectedDeviceUID,
+            defaultInputDeviceID: defaultInputDeviceID,
+            listedDevicesByID: listedDevicesByID,
+            listedDevicesByUID: listedDevicesByUID
+        )
+        let selectedInputDeviceID: UInt32?
+        if let selectedDeviceID {
+            selectedInputDeviceID = UInt32(selectedDeviceID)
+        } else {
+            selectedInputDeviceID = nil
+        }
+        let defaultInputDeviceIDValue: UInt32?
+        if let defaultInputDeviceID {
+            defaultInputDeviceIDValue = UInt32(defaultInputDeviceID)
+        } else {
+            defaultInputDeviceIDValue = nil
+        }
+        let selectedInputDeviceName = selectedDevice?.name
+        let previewErrorValue = previewError?.diagnosticsValue
+        let lastInputOnlyCaptureFailure = AudioInputCaptureDiagnosticsStore.lastFailure()
+
+        return AudioInputDiagnosticsReport(
+            selectedInputDeviceUID: selectedDeviceUID,
+            selectedInputDeviceID: selectedInputDeviceID,
+            selectedInputDeviceName: selectedInputDeviceName,
+            selectedInputUsesBluetoothTransport: selectedDeviceUsesBluetoothTransport,
+            previewActive: isPreviewActive,
+            previewAudioLevel: previewAudioLevel,
+            previewRawLevel: previewRawLevel,
+            previewError: previewErrorValue,
+            defaultInputDeviceID: defaultInputDeviceIDValue,
+            lastInputOnlyCaptureFailure: lastInputOnlyCaptureFailure,
+            devices: devices
+        )
     }
 
     init(
@@ -871,6 +1060,10 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         channelCount(for: deviceID, scope: kAudioDevicePropertyScopeInput)
     }
 
+    private static func outputChannelCount(for deviceID: AudioDeviceID) -> Int {
+        channelCount(for: deviceID, scope: kAudioDevicePropertyScopeOutput)
+    }
+
     private static func channelCount(for deviceID: AudioDeviceID, scope: AudioObjectPropertyScope) -> Int {
         var size: UInt32 = 0
         var address = AudioObjectPropertyAddress(
@@ -899,6 +1092,137 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         return channels
     }
 
+    private static func allInputDeviceDiagnostics(
+        selectedDeviceID: AudioDeviceID?,
+        selectedDeviceUID: String?,
+        defaultInputDeviceID: AudioDeviceID?,
+        listedDevicesByID: [AudioDeviceID: AudioInputDevice],
+        listedDevicesByUID: [String: AudioInputDevice]
+    ) -> [AudioInputDiagnosticsReport.Device] {
+        var deviceIDs = Set(inputCapableAudioDeviceIDs())
+        deviceIDs.formUnion(listedDevicesByID.keys)
+
+        return deviceIDs.sorted().map { deviceID in
+            inputDeviceDiagnostics(
+                for: deviceID,
+                selectedDeviceID: selectedDeviceID,
+                selectedDeviceUID: selectedDeviceUID,
+                defaultInputDeviceID: defaultInputDeviceID,
+                listedDevicesByID: listedDevicesByID,
+                listedDevicesByUID: listedDevicesByUID
+            )
+        }
+    }
+
+    private static func inputDeviceDiagnostics(
+        for deviceID: AudioDeviceID,
+        selectedDeviceID: AudioDeviceID?,
+        selectedDeviceUID: String?,
+        defaultInputDeviceID: AudioDeviceID?,
+        listedDevicesByID: [AudioDeviceID: AudioInputDevice],
+        listedDevicesByUID: [String: AudioInputDevice]
+    ) -> AudioInputDiagnosticsReport.Device {
+        let coreAudioUID = deviceUID(for: deviceID)
+        var listedDevice = listedDevicesByID[deviceID]
+        if listedDevice == nil, let coreAudioUID {
+            listedDevice = listedDevicesByUID[coreAudioUID]
+        }
+
+        let transport = transportType(for: deviceID)
+        let transportName = transport.map { value in transportTypeName(value) }
+        let transportFourCC = transport.map { value in transportTypeFourCC(value) }
+        let isAggregateOrVirtual = transport.map { value in isAggregateOrVirtualTransport(value) } ?? false
+        let isSelectedByID = selectedDeviceID == deviceID
+        let isSelectedByUID = selectedDeviceID == nil && listedDevice?.uid == selectedDeviceUID
+        let formatDiagnostic = inputOnlyCaptureFormatDiagnostic(for: deviceID)
+
+        return AudioInputDiagnosticsReport.Device(
+            deviceID: UInt32(deviceID),
+            uid: coreAudioUID ?? listedDevice?.uid,
+            name: deviceName(for: deviceID) ?? listedDevice?.name,
+            inputChannels: inputChannelCount(for: deviceID),
+            outputChannels: outputChannelCount(for: deviceID),
+            nominalSampleRate: nominalSampleRate(for: deviceID),
+            transportType: transport,
+            transportTypeName: transportName,
+            transportTypeFourCC: transportFourCC,
+            isDefaultInput: defaultInputDeviceID == deviceID,
+            isSelected: isSelectedByID || isSelectedByUID,
+            isAggregateOrVirtual: isAggregateOrVirtual,
+            listedByTypeWhisper: listedDevice != nil,
+            compatibility: listedDevice?.compatibility.diagnosticsValue ?? "notListed",
+            inputOnlyCaptureFormat: formatDiagnostic.format,
+            inputOnlyCaptureFormatError: formatDiagnostic.error
+        )
+    }
+
+    private static func inputCapableAudioDeviceIDs() -> [AudioDeviceID] {
+        var size: UInt32 = 0
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        let sizeStatus = AudioObjectGetPropertyDataSize(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address, 0, nil, &size
+        )
+        guard sizeStatus == noErr, size > 0 else { return [] }
+
+        let deviceCount = Int(size) / MemoryLayout<AudioDeviceID>.size
+        var deviceIDs = [AudioDeviceID](repeating: 0, count: deviceCount)
+        let status = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address, 0, nil, &size, &deviceIDs
+        )
+        guard status == noErr else { return [] }
+        return deviceIDs.filter { inputChannelCount(for: $0) > 0 }
+    }
+
+    private static func nominalSampleRate(for deviceID: AudioDeviceID) -> Double? {
+        var sampleRate = Float64(0)
+        var size = UInt32(MemoryLayout<Float64>.size)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyNominalSampleRate,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &sampleRate)
+        guard status == noErr else { return nil }
+        return sampleRate
+    }
+
+    private static func inputOnlyCaptureFormatDiagnostic(for deviceID: AudioDeviceID) -> (format: String?, error: String?) {
+        do {
+            let format = try CoreAudioHALInputCaptureSession.captureFormat(for: deviceID)
+            return (audioFormatDescription(format), nil)
+        } catch {
+            return (nil, diagnosticsErrorDescription(error))
+        }
+    }
+
+    private static func audioFormatDescription(_ format: AVAudioFormat) -> String {
+        "\(format.sampleRate) Hz/\(format.channelCount) ch/\(audioCommonFormatName(format.commonFormat))/interleaved=\(format.isInterleaved)"
+    }
+
+    private static func audioCommonFormatName(_ format: AVAudioCommonFormat) -> String {
+        switch format {
+        case .pcmFormatFloat32:
+            return "pcmFloat32"
+        case .pcmFormatFloat64:
+            return "pcmFloat64"
+        case .pcmFormatInt16:
+            return "pcmInt16"
+        case .pcmFormatInt32:
+            return "pcmInt32"
+        case .otherFormat:
+            return "other"
+        @unknown default:
+            return "unknown"
+        }
+    }
+
     func transportType(for deviceID: AudioDeviceID) -> UInt32? {
         transportResolver.transportType(for: deviceID)
     }
@@ -923,8 +1247,67 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
 
     private static func isAggregateDevice(_ deviceID: AudioDeviceID) -> Bool {
         guard let transportType = transportType(for: deviceID) else { return false }
-        return transportType == kAudioDeviceTransportTypeAggregate
+        return isAggregateOrVirtualTransport(transportType)
+    }
+
+    private static func isAggregateOrVirtualTransport(_ transportType: UInt32) -> Bool {
+        transportType == kAudioDeviceTransportTypeAggregate
             || transportType == kAudioDeviceTransportTypeVirtual
+    }
+
+    private static func transportTypeName(_ transportType: UInt32) -> String {
+        switch transportType {
+        case kAudioDeviceTransportTypeBuiltIn:
+            return "builtIn"
+        case kAudioDeviceTransportTypeAggregate:
+            return "aggregate"
+        case kAudioDeviceTransportTypeVirtual:
+            return "virtual"
+        case kAudioDeviceTransportTypePCI:
+            return "pci"
+        case kAudioDeviceTransportTypeUSB:
+            return "usb"
+        case kAudioDeviceTransportTypeFireWire:
+            return "fireWire"
+        case kAudioDeviceTransportTypeBluetooth:
+            return "bluetooth"
+        case kAudioDeviceTransportTypeBluetoothLE:
+            return "bluetoothLE"
+        case kAudioDeviceTransportTypeHDMI:
+            return "hdmi"
+        case kAudioDeviceTransportTypeDisplayPort:
+            return "displayPort"
+        case kAudioDeviceTransportTypeAirPlay:
+            return "airPlay"
+        case kAudioDeviceTransportTypeAVB:
+            return "avb"
+        default:
+            return "unknown(\(transportType))"
+        }
+    }
+
+    private static func transportTypeFourCC(_ transportType: UInt32) -> String {
+        let bytes = [
+            UInt8((transportType >> 24) & 0xFF),
+            UInt8((transportType >> 16) & 0xFF),
+            UInt8((transportType >> 8) & 0xFF),
+            UInt8(transportType & 0xFF),
+        ]
+        if bytes.allSatisfy({ $0 >= 0x20 && $0 < 0x7F }) {
+            return String(bytes.map { Character(UnicodeScalar($0)) })
+        }
+        return "\(transportType)"
+    }
+
+    private static func diagnosticsErrorDescription(_ error: Error) -> String {
+        if let selectedInputError = error as? SelectedInputDeviceError {
+            return selectedInputError.diagnosticsValue
+        }
+        if let localizedError = error as? LocalizedError,
+           let description = localizedError.errorDescription {
+            return description
+        }
+        return (error as NSError).localizedDescription
     }
 
     fileprivate static func audioDeviceID(fromUID uid: String) -> AudioDeviceID? {
@@ -1206,6 +1589,11 @@ final class AVAudioInputSelectionEngineValidator: AudioInputSelectionEngineValid
             try engine.start()
         } catch let error as SelectedInputDeviceError {
             throw error
+        } catch let error as CoreAudioHALInputOperationError {
+            if error.operation.contains("set current input device") {
+                throw SelectedInputDeviceError.incompatible(.cannotSetDevice)
+            }
+            throw SelectedInputDeviceError.incompatible(.engineStartFailed)
         } catch {
             throw SelectedInputDeviceError.incompatible(.engineStartFailed)
         }
@@ -1410,9 +1798,13 @@ protocol CoreAudioHALInputOperating: AnyObject {
     ) -> OSStatus
 }
 
-private struct CoreAudioHALInputOperationError: Error {
+struct CoreAudioHALInputOperationError: LocalizedError {
     let operation: String
     let status: OSStatus
+
+    var errorDescription: String? {
+        "\(operation) failed with status \(status) (\(audioStatusString(status)))"
+    }
 }
 
 final class CoreAudioHALInputOperations: CoreAudioHALInputOperating {
@@ -1468,7 +1860,7 @@ final class CoreAudioHALInputOperations: CoreAudioHALInputOperating {
             )
         } catch let error as CoreAudioHALInputOperationError {
             deviceHelperLogger.error("[\(label)] Could not set HAL input device \(deviceID): status=\(error.status)")
-            throw SelectedInputDeviceError.incompatible(.cannotSetDevice)
+            throw error
         }
     }
 
@@ -1637,7 +2029,18 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
     ) throws {
         self.operations = operations
 
-        let audioUnit = try operations.makeInputUnit()
+        let audioUnit: AudioUnit
+        do {
+            audioUnit = try operations.makeInputUnit()
+        } catch {
+            AudioInputCaptureDiagnosticsStore.recordFailure(
+                label: label,
+                deviceID: deviceID,
+                format: format,
+                error: error
+            )
+            throw error
+        }
         self.audioUnit = audioUnit
 
         do {
@@ -1665,11 +2068,18 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
             try operations.initialize(audioUnit, label: label)
             try operations.start(audioUnit, label: label)
 
+            AudioInputCaptureDiagnosticsStore.clear()
             deviceHelperLogger.info("[\(label)] Started input-only HAL capture for device \(deviceID), sampleRate=\(format.sampleRate), channels=\(format.channelCount), bufferSize=\(bufferSize)")
         } catch {
             operations.stop(audioUnit)
             operations.uninitialize(audioUnit)
             operations.dispose(audioUnit)
+            AudioInputCaptureDiagnosticsStore.recordFailure(
+                label: label,
+                deviceID: deviceID,
+                format: format,
+                error: error
+            )
             throw error
         }
     }

@@ -760,6 +760,44 @@ final class AudioDeviceServiceCompatibilityTests: XCTestCase {
 
         XCTAssertEqual(inputCaptureFactory.createdSessions.first?.stopCalls, 1)
     }
+
+    @MainActor
+    func testDiagnosticsReportIncludesSelectedUSBDeviceAndPreviewFailure() throws {
+        UserDefaults.standard.set("usb-input", forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let usbDeviceID = AudioDeviceID(711)
+        let inputCaptureFactory = FakeAudioInputCaptureFactory()
+        inputCaptureFactory.startError = SelectedInputDeviceError.incompatible(.engineStartFailed)
+        let transportResolver = FakeAudioDeviceTransportResolver(
+            transports: [usbDeviceID: kAudioDeviceTransportTypeUSB]
+        )
+        let service = AudioDeviceService(
+            initialInputDevices: [
+                AudioInputDevice(deviceID: usbDeviceID, name: "USB Mic", uid: "usb-input")
+            ],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false,
+            transportResolver: transportResolver,
+            inputCaptureFactory: inputCaptureFactory
+        )
+        service.hasMicrophonePermissionOverride = true
+        service.audioDeviceIDResolverOverride = { uid in
+            uid == "usb-input" ? usbDeviceID : nil
+        }
+
+        service.startPreview()
+        let report = service.diagnosticsReport()
+        let selectedDevice = try XCTUnwrap(report.devices.first { $0.deviceID == UInt32(usbDeviceID) })
+
+        XCTAssertFalse(service.isPreviewActive)
+        XCTAssertEqual(report.selectedInputDeviceUID, "usb-input")
+        XCTAssertEqual(report.selectedInputDeviceID, UInt32(usbDeviceID))
+        XCTAssertEqual(report.selectedInputDeviceName, "USB Mic")
+        XCTAssertEqual(report.previewError, "incompatible:engineStartFailed")
+        XCTAssertFalse(report.selectedInputUsesBluetoothTransport)
+        XCTAssertTrue(selectedDevice.isSelected)
+        XCTAssertTrue(selectedDevice.listedByTypeWhisper)
+        XCTAssertEqual(selectedDevice.compatibility, "incompatible:engineStartFailed")
+    }
 }
 
 final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
@@ -1271,6 +1309,44 @@ final class CoreAudioHALInputCaptureSessionTests: XCTestCase {
             XCTAssertEqual(error as? SelectedInputDeviceError, .incompatible(.cannotSetDevice))
         }
         XCTAssertEqual(operations.disposeCalls, 1)
+    }
+
+    func testSessionRecordsInputOnlyCaptureFailureDiagnostics() throws {
+        AudioInputCaptureDiagnosticsStore.clear()
+        defer { AudioInputCaptureDiagnosticsStore.clear() }
+
+        let operations = FakeCoreAudioHALInputOperations()
+        operations.currentDeviceError = CoreAudioHALInputOperationError(
+            operation: "test-hal set current input device",
+            status: OSStatus(-50)
+        )
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 1,
+            interleaved: false
+        ))
+
+        XCTAssertThrowsError(try CoreAudioHALInputCaptureSession(
+            deviceID: AudioDeviceID(902),
+            format: format,
+            bufferSize: 128,
+            label: "test-hal",
+            operations: operations,
+            onBuffer: { _ in }
+        )) { error in
+            XCTAssertTrue(error is CoreAudioHALInputOperationError)
+        }
+
+        let failure = try XCTUnwrap(AudioInputCaptureDiagnosticsStore.lastFailure())
+        XCTAssertEqual(failure.label, "test-hal")
+        XCTAssertEqual(failure.deviceID, 902)
+        XCTAssertEqual(failure.operation, "test-hal set current input device")
+        XCTAssertEqual(failure.status, -50)
+        XCTAssertEqual(failure.statusString, "-50")
+        XCTAssertEqual(failure.errorDescription, "test-hal set current input device failed with status -50 (-50)")
+        XCTAssertEqual(failure.formatSampleRate, 48_000)
+        XCTAssertEqual(failure.formatChannelCount, 1)
     }
 }
 

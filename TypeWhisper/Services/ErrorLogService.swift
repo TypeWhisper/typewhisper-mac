@@ -55,6 +55,7 @@ private struct DiagnosticsReport: Encodable {
         let audioDuckingLevel: Double
         let mediaPauseEnabled: Bool
         let defaultOutput: AudioOutputInfo?
+        let inputDiagnostics: AudioInputDiagnosticsReport
     }
 
     struct PluginInfo: Encodable {
@@ -102,6 +103,7 @@ private struct DiagnosticsReport: Encodable {
         let message: String
     }
 
+    let schemaVersion: Int
     let exportedAt: Date
     let app: AppInfo
     let system: SystemInfo
@@ -162,6 +164,7 @@ final class ErrorLogService: ObservableObject {
         let outputSnapshot = CoreAudioOutputVolumeController().defaultOutputSnapshot()
 
         return DiagnosticsReport(
+            schemaVersion: 2,
             exportedAt: Date(),
             app: .init(
                 version: AppConstants.appVersion,
@@ -207,7 +210,8 @@ final class ErrorLogService: ObservableObject {
                         volume: $0.volume,
                         transportType: $0.transportType
                     )
-                }
+                },
+                inputDiagnostics: container.audioDeviceService.diagnosticsReport()
             ),
             plugins: pluginManager.loadedPlugins.map {
                 .init(
