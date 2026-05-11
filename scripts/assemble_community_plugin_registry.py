@@ -11,6 +11,8 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
+from plugin_registry_metadata import remove_top_level_release_metadata
+
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_COMMUNITY_DIR = REPO_ROOT / "PluginRegistry" / "community-v1"
@@ -345,6 +347,8 @@ def assemble_registry(base_registry: dict, community_entries: list[dict]) -> tup
             continue
         if plugin.get("source", "official") == "community":
             continue
+        plugin = copy.deepcopy(plugin)
+        remove_top_level_release_metadata(plugin)
         plugin_id = plugin.get("id")
         if isinstance(plugin_id, str):
             official_ids.add(plugin_id)

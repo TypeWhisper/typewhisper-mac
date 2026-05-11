@@ -83,6 +83,61 @@ final class PluginRegistryServiceTests: XCTestCase {
         XCTAssertEqual(plugins.first?.downloadCount, 100)
     }
 
+    func testTopLevelReleaseMetadataDoesNotAffectMultiReleaseMatching() throws {
+        let data = Data(
+            """
+            {
+              "schemaVersion": 2,
+              "plugins": [
+                {
+                  "id": "com.typewhisper.future",
+                  "name": "Future Plugin",
+                  "author": "TypeWhisper",
+                  "description": "New releases are gated by host version.",
+                  "category": "transcription",
+                  "version": "9.9.9",
+                  "minHostVersion": "1.0.0",
+                  "sdkCompatibilityVersion": "v1",
+                  "size": 1,
+                  "downloadURL": "https://example.com/stale-top-level.zip",
+                  "releases": [
+                    {
+                      "version": "1.2.0",
+                      "minHostVersion": "1.4.0",
+                      "sdkCompatibilityVersion": "v1",
+                      "size": 20,
+                      "downloadURL": "https://example.com/requires-1.4.zip"
+                    },
+                    {
+                      "version": "1.1.6",
+                      "minHostVersion": "1.2.2",
+                      "sdkCompatibilityVersion": "v1",
+                      "size": 10,
+                      "downloadURL": "https://example.com/compatible-1.3.zip"
+                    }
+                  ]
+                }
+              ]
+            }
+            """.utf8
+        )
+
+        let response = try JSONDecoder().decode(PluginRegistryResponse.self, from: data)
+        let pre14Plugins = response.resolvedPlugins(
+            appVersion: "1.3.3",
+            sdkCompatibilityVersion: sdkCompatibilityVersion
+        )
+        let plugins14 = response.resolvedPlugins(
+            appVersion: "1.4.0",
+            sdkCompatibilityVersion: sdkCompatibilityVersion
+        )
+
+        XCTAssertEqual(pre14Plugins.first?.version, "1.1.6")
+        XCTAssertEqual(pre14Plugins.first?.downloadURL, "https://example.com/compatible-1.3.zip")
+        XCTAssertEqual(plugins14.first?.version, "1.2.0")
+        XCTAssertEqual(plugins14.first?.downloadURL, "https://example.com/requires-1.4.zip")
+    }
+
     func testRegistryEntryDecodesMultipleCategoryIdentifiers() throws {
         let data = Data(
             """

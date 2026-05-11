@@ -260,6 +260,9 @@ jobs:
             python3 << PYEOF
           import json, os, re, sys, tempfile
 
+          sys.path.insert(0, os.path.join(os.environ["GITHUB_WORKSPACE"], "scripts"))
+          from plugin_registry_metadata import format_findings, normalize_registry_release_metadata
+
           target_registries = os.environ["TARGET_REGISTRIES"].split()
 
           version = "$PLUGIN_VERSION"
@@ -354,6 +357,10 @@ jobs:
                   new_entry["releases"] = [build_release()]
                   registry["plugins"].append(new_entry)
                   print(f"{target_registry}: added new plugin {manifest['id']} v{version}")
+
+              metadata_findings = normalize_registry_release_metadata(registry)
+              for line in format_findings(metadata_findings):
+                  print(f"{target_registry}: removed {line}")
 
               # Atomic write: write to a temp file in the same directory, fsync,
               # then rename into place. Prevents a half-written registry file from
