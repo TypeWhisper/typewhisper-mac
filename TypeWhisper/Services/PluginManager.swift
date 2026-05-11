@@ -203,6 +203,13 @@ final class PluginManager: ObservableObject {
             .sorted { $0.priority < $1.priority }
     }
 
+    var fileJobAutomations: [FileJobAutomationPlugin] {
+        loadedPlugins
+            .filter { $0.isEnabled }
+            .compactMap { $0.instance as? FileJobAutomationPlugin }
+            .sorted { $0.priority < $1.priority }
+    }
+
     var llmProviders: [LLMProviderPlugin] {
         loadedPlugins
             .filter { $0.isEnabled }

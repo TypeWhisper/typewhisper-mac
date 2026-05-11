@@ -80,6 +80,15 @@ let package = Package(
             ]
         ),
         .target(
+            name: "FileJobScriptPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/FileJobScriptPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
             name: "ObsidianPlugin",
             dependencies: ["TypeWhisperPluginSDK"],
             path: "Plugins/ObsidianPlugin",
@@ -175,6 +184,14 @@ let package = Package(
                 "FillerWordsPlugin",
             ],
             path: "Plugins/FillerWordsPlugin/Tests"
+        ),
+        .testTarget(
+            name: "FileJobScriptPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "FileJobScriptPlugin",
+            ],
+            path: "Plugins/FileJobScriptPlugin/Tests"
         ),
         .testTarget(
             name: "ObsidianPluginTests",
