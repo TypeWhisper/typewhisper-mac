@@ -2516,7 +2516,6 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = D20500000000000000000003 /* Build configuration list for PBXNativeTarget "SupertonicPlugin" */;
 			buildPhases = (
-				D20400000000000000000004 /* Copy ONNX Runtime Module Map */,
 				D20400000000000000000002 /* Sources */,
 				D20400000000000000000003 /* Frameworks */,
 				D20400000000000000000001 /* Resources */,
@@ -3239,29 +3238,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
-
-/* Begin PBXShellScriptBuildPhase section */
-		D20400000000000000000004 /* Copy ONNX Runtime Module Map */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			name = "Copy ONNX Runtime Module Map";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(BUILD_DIR)/GeneratedModuleMaps/OnnxRuntimeBindings.modulemap",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "set -e\nDEST=\"${BUILD_DIR}/GeneratedModuleMaps\"\nmkdir -p \"$DEST\"\nSEARCH_ROOTS=\"${DERIVED_DATA_DIR:-} ${HOME}/Library/Developer/Xcode/DerivedData\"\nMODULEMAP=\"\"\nfor ROOT in $SEARCH_ROOTS; do\n  if [ -n \"$ROOT\" ] && [ -d \"$ROOT\" ]; then\n    MODULEMAP=$(find \"$ROOT\" -path '*/SourcePackages/checkouts/onnxruntime-swift-package-manager/build/GeneratedModuleMaps/OnnxRuntimeBindings.modulemap' -print -quit)\n    if [ -n \"$MODULEMAP\" ]; then\n      break\n    fi\n  fi\ndone\nif [ -z \"$MODULEMAP\" ]; then\n  echo \"Missing OnnxRuntimeBindings.modulemap\" >&2\n  exit 1\nfi\ncp \"$MODULEMAP\" \"$DEST/OnnxRuntimeBindings.modulemap\"\n";
-		};
-/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		D7199BC8CB6EE00511EFCC10 /* Sources */ = {
