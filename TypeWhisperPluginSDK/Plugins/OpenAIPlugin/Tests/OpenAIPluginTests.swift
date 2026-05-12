@@ -576,6 +576,30 @@ final class OpenAIPluginTests: XCTestCase {
         XCTAssertFalse(plugin.authStatus(for: .tts).isAvailable)
     }
 
+    func testOpenAIKeepsSeparateLLMModelSelectionForAuthModes() throws {
+        let host = try PluginTestHostServices(defaults: [
+            "authMode": "chatgpt",
+            "selectedLLMModel": "gpt-5.3-codex-spark",
+        ])
+        let plugin = OpenAIPlugin()
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.selectedLLMModelId, "gpt-5.3-codex-spark")
+        XCTAssertEqual(host.userDefault(forKey: "selectedChatGPTLLMModel") as? String, "gpt-5.3-codex-spark")
+
+        plugin.setAuthMode(.apiKey)
+        XCTAssertEqual(plugin.selectedLLMModelId, "gpt-5.5")
+        plugin.selectLLMModel("gpt-4.1-mini")
+
+        plugin.setAuthMode(.chatGPT)
+        XCTAssertEqual(plugin.selectedLLMModelId, "gpt-5.3-codex-spark")
+        XCTAssertEqual(host.userDefault(forKey: "selectedChatGPTLLMModel") as? String, "gpt-5.3-codex-spark")
+        XCTAssertEqual(host.userDefault(forKey: "selectedAPILLMModel") as? String, "gpt-4.1-mini")
+
+        plugin.setAuthMode(.apiKey)
+        XCTAssertEqual(plugin.selectedLLMModelId, "gpt-4.1-mini")
+    }
+
     func testOpenAIUsesResponsesAPIForGPT5ModelsOnly() {
         XCTAssertTrue(OpenAIPlugin.usesResponsesAPI(for: "gpt-5.5"))
         XCTAssertTrue(OpenAIPlugin.usesResponsesAPI(for: "gpt-5.4-mini"))

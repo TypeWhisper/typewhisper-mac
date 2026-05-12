@@ -9,7 +9,7 @@ import os
 
 // MARK: - OAuth Helpers
 
-private enum OpenAIAuthMode: String, Codable, CaseIterable, Hashable, Sendable {
+enum OpenAIAuthMode: String, Codable, CaseIterable, Hashable, Sendable {
     case apiKey = "api-key"
     case chatGPT = "chatgpt"
 }
@@ -1735,6 +1735,8 @@ final class OpenAIPlugin: NSObject,
     fileprivate var _apiKey: String?
     fileprivate var _selectedModelId: String?
     fileprivate var _selectedLLMModelId: String?
+    fileprivate var _selectedAPILLMModelId: String?
+    fileprivate var _selectedChatGPTLLMModelId: String?
     fileprivate var _fetchedLLMModels: [OpenAIFetchedModel] = []
     fileprivate var _fetchedChatGPTModels: [OpenAIChatGPTModel] = []
     fileprivate var _selectedVoiceId: String?
@@ -1776,6 +1778,8 @@ final class OpenAIPlugin: NSObject,
         reasoningEffort: "reasoningEffort",
         selectedModel: "selectedModel",
         selectedLLMModel: "selectedLLMModel",
+        selectedAPILLMModel: "selectedAPILLMModel",
+        selectedChatGPTLLMModel: "selectedChatGPTLLMModel",
         selectedVoice: "selectedVoice",
         ttsInstructions: "ttsInstructions",
         transcriptionContext: "transcriptionContext",
@@ -1854,8 +1858,18 @@ final class OpenAIPlugin: NSObject,
 
         _selectedModelId = host.userDefault(forKey: Self.storageKeys.selectedModel) as? String
             ?? transcriptionModels.first?.id
-        _selectedLLMModelId = host.userDefault(forKey: Self.storageKeys.selectedLLMModel) as? String
-            ?? supportedModels.first?.id
+        let legacySelectedLLMModel = host.userDefault(forKey: Self.storageKeys.selectedLLMModel) as? String
+        _selectedAPILLMModelId = host.userDefault(forKey: Self.storageKeys.selectedAPILLMModel) as? String
+        _selectedChatGPTLLMModelId = host.userDefault(forKey: Self.storageKeys.selectedChatGPTLLMModel) as? String
+        if _selectedAPILLMModelId == nil, _selectedChatGPTLLMModelId == nil {
+            switch _authMode {
+            case .apiKey:
+                _selectedAPILLMModelId = legacySelectedLLMModel
+            case .chatGPT:
+                _selectedChatGPTLLMModelId = legacySelectedLLMModel
+            }
+        }
+        _selectedLLMModelId = currentModeSelectedLLMModelId()
         _selectedVoiceId = host.userDefault(forKey: Self.storageKeys.selectedVoice) as? String
             ?? OpenAITTSConfiguration.defaultVoiceId
         _ttsInstructions = host.userDefault(forKey: Self.storageKeys.ttsInstructions) as? String ?? ""
@@ -2392,8 +2406,7 @@ final class OpenAIPlugin: NSObject,
     }
 
     func selectLLMModel(_ modelId: String) {
-        _selectedLLMModelId = modelId
-        host?.setUserDefault(modelId, forKey: Self.storageKeys.selectedLLMModel)
+        persistCurrentLLMSelection(modelId)
     }
 
     var selectedLLMModelId: String? { _selectedLLMModelId }
@@ -2532,7 +2545,7 @@ final class OpenAIPlugin: NSObject,
         }
     }
 
-    fileprivate func setAuthMode(_ mode: OpenAIAuthMode) {
+    func setAuthMode(_ mode: OpenAIAuthMode) {
         _authMode = mode
         host?.setUserDefault(mode.rawValue, forKey: Self.storageKeys.authMode)
         normalizeSelectedLLMModel()
@@ -2876,13 +2889,35 @@ final class OpenAIPlugin: NSObject,
     }
 
     private func normalizeSelectedLLMModel() {
+        _selectedLLMModelId = currentModeSelectedLLMModelId()
         let availableIDs = Set(supportedModels.map(\.id))
         guard let selected = _selectedLLMModelId, availableIDs.contains(selected) else {
-            let fallback = supportedModels.first?.id
-            _selectedLLMModelId = fallback
-            host?.setUserDefault(fallback, forKey: Self.storageKeys.selectedLLMModel)
+            persistCurrentLLMSelection(supportedModels.first?.id)
             return
         }
+        persistCurrentLLMSelection(selected)
+    }
+
+    private func currentModeSelectedLLMModelId() -> String? {
+        switch _authMode {
+        case .apiKey:
+            return _selectedAPILLMModelId
+        case .chatGPT:
+            return _selectedChatGPTLLMModelId
+        }
+    }
+
+    private func persistCurrentLLMSelection(_ modelId: String?) {
+        switch _authMode {
+        case .apiKey:
+            _selectedAPILLMModelId = modelId
+            host?.setUserDefault(modelId, forKey: Self.storageKeys.selectedAPILLMModel)
+        case .chatGPT:
+            _selectedChatGPTLLMModelId = modelId
+            host?.setUserDefault(modelId, forKey: Self.storageKeys.selectedChatGPTLLMModel)
+        }
+        _selectedLLMModelId = modelId
+        host?.setUserDefault(modelId, forKey: Self.storageKeys.selectedLLMModel)
     }
 
     private func storeOAuthTokens(_ tokens: OpenAIOAuthTokenResponse, preferredAccountID: String? = nil) {
