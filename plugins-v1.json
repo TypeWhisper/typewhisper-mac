@@ -1351,6 +1351,33 @@
           "downloadCount": 390
         }
       ]
+    },
+    {
+      "id": "com.typewhisper.tts.supertonic",
+      "name": "Supertonic (Experimental)",
+      "author": "TypeWhisper",
+      "description": "Experimental local text-to-speech with Supertonic 3 ONNX models. Requires accepting the OpenRAIL-M model license before downloading model assets.",
+      "descriptions": {
+        "de": "Experimentelles lokales Text-to-Speech mit Supertonic-3-ONNX-Modellen. Vor dem Download der Modellassets muss die OpenRAIL-M-Modelllizenz akzeptiert werden."
+      },
+      "category": "tts",
+      "downloadCount": 0,
+      "iconSystemName": "waveform.circle.fill",
+      "requiresAPIKey": false,
+      "hosting": "local",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "minHostVersion": "1.4.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 8771828,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-supertonic-v1.0.0/SupertonicPlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        }
+      ]
     }
   ]
 }
