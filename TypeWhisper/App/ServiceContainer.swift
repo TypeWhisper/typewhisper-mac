@@ -149,7 +149,8 @@ final class ServiceContainer: ObservableObject {
 
 
         // HTTP API
-        let router = APIRouter()
+        let apiAuthenticator = LocalAPIAuthenticator()
+        let router = APIRouter(apiTokenProvider: apiAuthenticator.tokenForEnforcedRequests)
         let handlers = APIHandlers(
             modelManager: modelManagerService,
             audioFileService: audioFileService,
@@ -161,7 +162,7 @@ final class ServiceContainer: ObservableObject {
         )
         handlers.register(on: router)
         httpServer = HTTPServer(router: router)
-        apiServerViewModel = APIServerViewModel(httpServer: httpServer)
+        apiServerViewModel = APIServerViewModel(httpServer: httpServer, apiAuthenticator: apiAuthenticator)
         historyViewModel = HistoryViewModel(
             historyService: historyService,
             textDiffService: textDiffService,

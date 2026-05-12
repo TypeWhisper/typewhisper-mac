@@ -696,8 +696,77 @@ final class APIRouterAndHandlersTests: XCTestCase {
             HTTPRequest(method: "GET", path: "/missing", queryParams: [:], headers: [:], body: Data())
         )
 
-        XCTAssertEqual(optionsResponse.status, 200)
+        XCTAssertEqual(optionsResponse.status, 204)
         XCTAssertEqual(notFoundResponse.status, 404)
+    }
+
+    func testRouterRequiresAPITokenForRegisteredRoutes() async throws {
+        let router = APIRouter(apiTokenProvider: { "test-token" })
+        router.register("GET", "/v1/status") { _ in
+            .json(["status": "ready"])
+        }
+        router.register("GET", "/v1/models") { _ in
+            .json(["ok": true])
+        }
+
+        let publicStatus = await router.route(
+            HTTPRequest(method: "GET", path: "/v1/status", queryParams: [:], headers: [:], body: Data())
+        )
+        let missingToken = await router.route(
+            HTTPRequest(method: "GET", path: "/v1/models", queryParams: [:], headers: [:], body: Data())
+        )
+        let badToken = await router.route(
+            HTTPRequest(
+                method: "GET",
+                path: "/v1/models",
+                queryParams: [:],
+                headers: ["authorization": "Bearer wrong-token"],
+                body: Data()
+            )
+        )
+        let goodBearerToken = await router.route(
+            HTTPRequest(
+                method: "GET",
+                path: "/v1/models",
+                queryParams: [:],
+                headers: ["authorization": "Bearer test-token"],
+                body: Data()
+            )
+        )
+        let goodHeaderToken = await router.route(
+            HTTPRequest(
+                method: "GET",
+                path: "/v1/models",
+                queryParams: [:],
+                headers: ["x-typewhisper-api-token": "test-token"],
+                body: Data()
+            )
+        )
+
+        XCTAssertEqual(publicStatus.status, 200)
+        XCTAssertEqual(missingToken.status, 401)
+        XCTAssertEqual(badToken.status, 401)
+        XCTAssertEqual(goodBearerToken.status, 200)
+        XCTAssertEqual(goodHeaderToken.status, 200)
+    }
+
+    func testLocalAPIAuthenticatorEnforcesTokenOnlyWhenEnabled() {
+        let authenticator = LocalAPIAuthenticator(initialToken: "test-token", requiresAuthentication: false)
+
+        XCTAssertNil(authenticator.tokenForEnforcedRequests())
+
+        authenticator.setRequiresAuthentication(true)
+        XCTAssertEqual(authenticator.tokenForEnforcedRequests(), "test-token")
+
+        authenticator.setRequiresAuthentication(false)
+        XCTAssertNil(authenticator.tokenForEnforcedRequests())
+    }
+
+    func testSerializedResponseOmitsWildcardCORSHeaders() {
+        let responseText = String(decoding: HTTPResponse.json(["ok": true]).serialized(), as: UTF8.self)
+
+        XCTAssertFalse(responseText.contains("Access-Control-Allow-Origin: *"))
+        XCTAssertFalse(responseText.contains("Access-Control-Allow-Headers: Content-Type"))
     }
 
     func testAPIHandlersExposeStatusHistoryAndRules() async throws {

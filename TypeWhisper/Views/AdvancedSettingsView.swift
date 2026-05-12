@@ -249,6 +249,12 @@ struct AdvancedSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
+                Toggle(String(localized: "Require API Token"), isOn: $viewModel.requiresAuthentication)
+
+                Text(String(localized: "Off by default for compatibility with existing local integrations. New clients can use api-discovery.json or send the bearer token."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 if viewModel.isEnabled {
                     HStack {
                         Image(systemName: "circle.fill")

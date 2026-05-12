@@ -149,6 +149,16 @@ let package = Package(
                 .process("manifest.json"),
             ]
         ),
+        .target(
+            name: "WebhookPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/WebhookPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
         .testTarget(
             name: "TypeWhisperPluginSDKTests",
             dependencies: ["TypeWhisperPluginSDK"]
@@ -259,6 +269,15 @@ let package = Package(
                 "AssemblyAIPlugin",
             ],
             path: "Plugins/AssemblyAIPlugin/Tests"
+        ),
+        .testTarget(
+            name: "WebhookPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "WebhookPlugin",
+            ],
+            path: "Plugins/WebhookPlugin/Tests"
         ),
     ]
 )

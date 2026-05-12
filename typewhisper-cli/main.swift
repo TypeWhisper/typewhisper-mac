@@ -3,6 +3,7 @@ import Foundation
 let args = CommandLine.arguments.dropFirst()
 
 var portOverride: UInt16?
+var apiTokenOverride = ProcessInfo.processInfo.environment["TYPEWHISPER_API_TOKEN"]
 var jsonOutput = false
 var devMode = false
 var command: String?
@@ -31,6 +32,12 @@ while let arg = argIterator.next() {
             exit(1)
         }
         portOverride = p
+    case "--api-token":
+        guard let next = argIterator.next(), !next.isEmpty else {
+            printError("Error: --api-token requires a value.")
+            exit(1)
+        }
+        apiTokenOverride = next
     case "--json":
         jsonOutput = true
     case "--dev":
@@ -101,8 +108,10 @@ guard let command else {
     exit(1)
 }
 
-let port = portOverride ?? PortDiscovery.discoverPort(dev: devMode)
-let client = CLIClient(port: port)
+let discovery = PortDiscovery.discover(dev: devMode)
+let port = portOverride ?? discovery.port
+let apiToken = apiTokenOverride?.isEmpty == false ? apiTokenOverride : discovery.token
+let client = CLIClient(port: port, apiToken: apiToken)
 
 do {
     switch command {
@@ -161,6 +170,7 @@ func printUsage() {
 
         Global options:
           --port <N>           Server port (default: auto-detect)
+          --api-token <TOKEN>   API bearer token (default: auto-detect)
           --dev                Connect to TypeWhisper Dev instance
           --json               Output as JSON
           --help, -h           Show help
