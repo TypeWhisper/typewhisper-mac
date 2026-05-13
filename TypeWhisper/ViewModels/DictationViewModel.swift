@@ -1629,11 +1629,10 @@ final class DictationViewModel: ObservableObject {
     }
 
     func recoverLastRecording(openSettingsWindow: Bool = true) {
-        guard let url = audioRecordingService.latestRecoveryRecordingURL else { return }
+        guard audioRecordingService.latestRecoveryRecordingURL != nil else { return }
 
-        FileTranscriptionViewModel.shared.addFiles([url])
         if let navigationCoordinator = SettingsNavigationCoordinator.shared {
-            navigationCoordinator.navigate(to: .fileTranscription)
+            navigationCoordinator.navigate(to: .dictationRecovery)
         }
         if openSettingsWindow {
             ManagedAppWindowOpener.shared.open(id: "settings")

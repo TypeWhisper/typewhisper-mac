@@ -49,6 +49,7 @@ final class ServiceContainer: ObservableObject {
 
     // ViewModels
     let fileTranscriptionViewModel: FileTranscriptionViewModel
+    let dictationRecoveryViewModel: DictationRecoveryViewModel
     let settingsViewModel: SettingsViewModel
     let dictationViewModel: DictationViewModel
     let historyViewModel: HistoryViewModel
@@ -117,6 +118,12 @@ final class ServiceContainer: ObservableObject {
         // ViewModels (created before HTTP API so DictationViewModel is available)
         fileTranscriptionViewModel = FileTranscriptionViewModel(
             modelManager: modelManagerService,
+            audioFileService: audioFileService
+        )
+        dictationRecoveryViewModel = DictationRecoveryViewModel(
+            audioRecordingService: audioRecordingService,
+            modelManager: modelManagerService,
+            historyService: historyService,
             audioFileService: audioFileService
         )
         settingsViewModel = SettingsViewModel(modelManager: modelManagerService)
@@ -194,6 +201,7 @@ final class ServiceContainer: ObservableObject {
 
         // Set shared references
         FileTranscriptionViewModel._shared = fileTranscriptionViewModel
+        DictationRecoveryViewModel._shared = dictationRecoveryViewModel
         SettingsViewModel._shared = settingsViewModel
         DictationViewModel._shared = dictationViewModel
         APIServerViewModel._shared = apiServerViewModel
@@ -218,6 +226,8 @@ final class ServiceContainer: ObservableObject {
 
         modelManagerService.observePluginManager()
         promptProcessingService.observePluginManager()
+        fileTranscriptionViewModel.observePluginManager()
+        dictationRecoveryViewModel.observePluginManager()
         settingsViewModel.observePluginManager()
         watchFolderViewModel.observePluginManager()
     }

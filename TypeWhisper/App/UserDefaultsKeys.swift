@@ -102,6 +102,16 @@ enum UserDefaultsKeys {
     static let recorderMicDuckingMode = "recorderMicDuckingMode"
     static let recorderTrackMode = "recorderTrackMode"
 
+    // MARK: - File Transcription
+    static let fileTranscriptionEngine = "fileTranscriptionEngine"
+    static let fileTranscriptionModel = "fileTranscriptionModel"
+    static let fileTranscriptionLanguage = "fileTranscriptionLanguage"
+
+    // MARK: - Dictation Recovery
+    static let dictationRecoveryEngine = "dictationRecoveryEngine"
+    static let dictationRecoveryModel = "dictationRecoveryModel"
+    static let dictationRecoveryLanguage = "dictationRecoveryLanguage"
+
     // MARK: - Watch Folder
     static let watchFolderBookmark = "watchFolderBookmark"
     static let watchFolderOutputBookmark = "watchFolderOutputBookmark"

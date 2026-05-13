@@ -395,6 +395,29 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         XCTAssertTrue(try recoveryFileNames(in: directory).isEmpty)
     }
 
+    func testRecordingSuccessDiscardKeepsPreviousStoredRecoveryAudio() async throws {
+        let directory = makeRecoveryTestDirectory()
+        let store = DictationRecoveryAudioStore(directory: directory)
+        store.startNewRecording()
+        store.append([0.5])
+        let existingRecovery = try XCTUnwrap(store.preserveActiveRecording())
+
+        let service = AudioRecordingService(recoveryAudioStore: store)
+        service.hasMicrophonePermissionOverride = true
+        service.startRecordingOverride = {}
+        service.stopRecordingOverride = { _ in service.getCurrentBuffer() }
+
+        try service.startRecording()
+        service.testingProcessConvertedSamples([0.25, -0.25])
+        _ = await service.stopRecording(policy: .immediate)
+        service.discardActiveRecoveryRecording()
+
+        XCTAssertEqual(service.recoveryRecordingURLs, [existingRecovery])
+        XCTAssertEqual(service.latestRecoveryRecordingURL, existingRecovery)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: existingRecovery.path))
+        XCTAssertEqual(try recoveryFileNames(in: directory), [existingRecovery.lastPathComponent])
+    }
+
     func testTranscriptionFailureCanPreserveStoppedRecoveryAudio() async throws {
         let directory = makeRecoveryTestDirectory()
         let store = DictationRecoveryAudioStore(directory: directory)

@@ -88,6 +88,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     /// tears down the session, and resumes any paused media / restores ducking.
     /// Reset to nil at the start of each `startRecording`.
     @Published private(set) var recoveryError: AudioRecordingError?
+    @Published private(set) var recoverableRecordingURLs: [URL]
     @Published private(set) var recoverableRecordingURL: URL?
     var hasMicrophonePermissionOverride: Bool?
     var inputAvailabilityOverride: ((AudioDeviceID?) -> Bool)?
@@ -170,7 +171,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         self.inputReadinessChecker = inputReadinessChecker
         self.inputCaptureFactory = inputCaptureFactory
         self.recoveryAudioStore = recoveryAudioStore
-        self.recoverableRecordingURL = recoveryAudioStore.latestRecoveryURL
+        let recoveryURLs = recoveryAudioStore.recoveryURLs
+        self.recoverableRecordingURLs = recoveryURLs
+        self.recoverableRecordingURL = recoveryURLs.first
         recoveryNotificationQueue.underlyingQueue = recoveryQueue
     }
 
@@ -275,7 +278,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         try validateRecordingInputAvailability()
         clearRecordingBuffer(requestUptimeNanoseconds: requestUptimeNanoseconds)
         recoveryAudioStore.startNewRecording()
-        publishRecoverableRecordingURL(recoveryAudioStore.latestRecoveryURL)
+        publishRecoverableRecordingURLs(recoveryAudioStore.recoveryURLs)
 
         let routeActivationRequest = selectedRouteActivationRequest
         outputVolumeGuard.captureBaseline()
@@ -565,6 +568,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         inputActivationGuard.restore(reason: "recording-recovery-failure")
         processingQueue.sync { }
         let recoveryURL = preserveActiveRecoveryRecording()
+        let recoveryURLs = recoveryRecordingURLs
         clearRecordingBuffer()
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
@@ -572,6 +576,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             self.isRecording = false
             self.audioLevel = 0
             self.rawAudioLevel = 0
+            self.recoverableRecordingURLs = recoveryURLs
             self.recoverableRecordingURL = recoveryURL
         }
     }
@@ -1071,28 +1076,45 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         recoveryAudioStore.latestRecoveryURL
     }
 
+    var recoveryRecordingURLs: [URL] {
+        recoveryAudioStore.recoveryURLs
+    }
+
     @discardableResult
     func preserveActiveRecoveryRecording() -> URL? {
         let url = recoveryAudioStore.preserveActiveRecording()
-        publishRecoverableRecordingURL(url)
+        publishRecoverableRecordingURLs(recoveryAudioStore.recoveryURLs)
         return url
     }
 
     func discardActiveRecoveryRecording() {
-        discardActiveRecoveryRecording(keepingLatest: false)
+        discardActiveRecoveryRecording(keepingLatest: true)
+    }
+
+    func discardRecoveryRecording(at url: URL) {
+        recoveryAudioStore.discardRecovery(at: url)
+        publishRecoverableRecordingURLs(recoveryAudioStore.recoveryURLs)
+    }
+
+    func discardAllRecoveryRecordings() {
+        recoveryAudioStore.discardAllRecoveries()
+        publishRecoverableRecordingURLs([])
     }
 
     private func discardActiveRecoveryRecording(keepingLatest: Bool) {
         recoveryAudioStore.discardActiveRecording(keepingLatest: keepingLatest)
-        publishRecoverableRecordingURL(recoveryAudioStore.latestRecoveryURL)
+        publishRecoverableRecordingURLs(recoveryAudioStore.recoveryURLs)
     }
 
-    private func publishRecoverableRecordingURL(_ url: URL?) {
+    private func publishRecoverableRecordingURLs(_ urls: [URL]) {
+        let latestURL = urls.first
         if Thread.isMainThread {
-            recoverableRecordingURL = url
+            recoverableRecordingURLs = urls
+            recoverableRecordingURL = latestURL
         } else {
             DispatchQueue.main.async { [weak self] in
-                self?.recoverableRecordingURL = url
+                self?.recoverableRecordingURLs = urls
+                self?.recoverableRecordingURL = latestURL
             }
         }
     }

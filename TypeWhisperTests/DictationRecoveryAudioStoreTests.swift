@@ -22,44 +22,115 @@ final class DictationRecoveryAudioStoreTests: XCTestCase {
         XCTAssertEqual(readInt16(data, at: 46), 16_383)
         XCTAssertEqual(readInt16(data, at: 48), -16_383)
         XCTAssertEqual(store.latestRecoveryURL, url)
+        XCTAssertEqual(store.recoveryURLs, [url])
     }
 
-    func testPreserveDeletesEmptyRecording() throws {
-        let directory = makeTemporaryDirectory()
-        let store = DictationRecoveryAudioStore(directory: directory)
-
-        store.startNewRecording()
-
-        XCTAssertNil(store.preserveActiveRecording())
-        XCTAssertNil(store.latestRecoveryURL)
-        XCTAssertTrue(try fileNames(in: directory).isEmpty)
-    }
-
-    func testDiscardDeletesActiveAndLatestRecovery() throws {
+    func testPreserveKeepsMultipleTimestampedRecoveries() throws {
         let directory = makeTemporaryDirectory()
         let store = DictationRecoveryAudioStore(directory: directory)
 
         store.startNewRecording()
         store.append([0.1])
-        let preserved = try XCTUnwrap(store.preserveActiveRecording())
-        XCTAssertTrue(FileManager.default.fileExists(atPath: preserved.path))
+        let first = try XCTUnwrap(store.preserveActiveRecording())
+
+        store.startNewRecording()
+        store.append([0.2])
+        let second = try XCTUnwrap(store.preserveActiveRecording())
+
+        XCTAssertNotEqual(first, second)
+        XCTAssertTrue(first.lastPathComponent.hasPrefix("dictation-recovery-"))
+        XCTAssertTrue(second.lastPathComponent.hasPrefix("dictation-recovery-"))
+        XCTAssertEqual(Set(store.recoveryURLs), Set([first, second]))
+        XCTAssertEqual(store.latestRecoveryURL, second)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: first.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: second.path))
+    }
+
+    func testPreserveDeletesEmptyRecordingWithoutDeletingExistingRecoveries() throws {
+        let directory = makeTemporaryDirectory()
+        let store = DictationRecoveryAudioStore(directory: directory)
+
+        store.startNewRecording()
+        store.append([0.1])
+        let existingRecovery = try XCTUnwrap(store.preserveActiveRecording())
+
+        store.startNewRecording()
+
+        XCTAssertEqual(store.preserveActiveRecording(), existingRecovery)
+        XCTAssertEqual(store.latestRecoveryURL, existingRecovery)
+        XCTAssertEqual(store.recoveryURLs, [existingRecovery])
+        XCTAssertTrue(try fileNames(in: directory).contains(existingRecovery.lastPathComponent))
+    }
+
+    func testDiscardActiveKeepsStoredRecoveriesAndDiscardRecoveryDeletesSelectedFile() throws {
+        let directory = makeTemporaryDirectory()
+        let store = DictationRecoveryAudioStore(directory: directory)
+
+        store.startNewRecording()
+        store.append([0.1])
+        let first = try XCTUnwrap(store.preserveActiveRecording())
 
         store.startNewRecording()
         store.append([0.2])
         store.discardActiveRecording()
 
+        XCTAssertEqual(store.recoveryURLs, [first])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: first.path))
+
+        store.startNewRecording()
+        store.append([0.3])
+        let second = try XCTUnwrap(store.preserveActiveRecording())
+        XCTAssertEqual(Set(store.recoveryURLs), Set([first, second]))
+
+        store.discardRecovery(at: second)
+
+        XCTAssertEqual(store.recoveryURLs, [first])
+        XCTAssertEqual(store.latestRecoveryURL, first)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: first.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: second.path))
+    }
+
+    func testDiscardAllRecoveriesDeletesStoredFiles() throws {
+        let directory = makeTemporaryDirectory()
+        let store = DictationRecoveryAudioStore(directory: directory)
+
+        store.startNewRecording()
+        store.append([0.1])
+        _ = try XCTUnwrap(store.preserveActiveRecording())
+        store.startNewRecording()
+        store.append([0.2])
+        _ = try XCTUnwrap(store.preserveActiveRecording())
+
+        store.discardAllRecoveries()
+
         XCTAssertNil(store.latestRecoveryURL)
+        XCTAssertTrue(store.recoveryURLs.isEmpty)
         XCTAssertTrue(try fileNames(in: directory).isEmpty)
     }
 
+    func testDiscardRecoveryIgnoresMatchingFileOutsideRecoveryDirectory() throws {
+        let directory = makeTemporaryDirectory()
+        let outsideDirectory = makeTemporaryDirectory()
+        let outsideURL = outsideDirectory
+            .appendingPathComponent("dictation-recovery-outside")
+            .appendingPathExtension("wav")
+        FileManager.default.createFile(atPath: outsideURL.path, contents: Data([1, 2, 3]))
+
+        let store = DictationRecoveryAudioStore(directory: directory)
+
+        store.discardRecovery(at: outsideURL)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outsideURL.path))
+    }
+
     @MainActor
-    func testRecoverLastRecordingQueuesWavAndNavigatesWithoutPicker() throws {
+    func testRecoverLastRecordingNavigatesToRecoveryWithoutQueueOrPicker() throws {
         let appSupportDirectory = makeTemporaryDirectory()
         let recoveryDirectory = appSupportDirectory.appendingPathComponent("dictation-recovery", isDirectory: true)
         let store = DictationRecoveryAudioStore(directory: recoveryDirectory)
         store.startNewRecording()
         store.append([0.1, -0.1])
-        let recoveryURL = try XCTUnwrap(store.preserveActiveRecording())
+        _ = try XCTUnwrap(store.preserveActiveRecording())
 
         let previousFileTranscriptionViewModel = FileTranscriptionViewModel._shared
         let previousSettingsNavigationCoordinator = SettingsNavigationCoordinator.shared
@@ -85,14 +156,15 @@ final class DictationRecoveryAudioStoreTests: XCTestCase {
 
         dictationViewModel.recoverLastRecording(openSettingsWindow: false)
 
-        XCTAssertEqual(fileTranscriptionViewModel.files.map(\.url), [recoveryURL])
-        XCTAssertEqual(navigationCoordinator.request?.tab, .fileTranscription)
+        XCTAssertTrue(fileTranscriptionViewModel.files.isEmpty)
+        XCTAssertEqual(navigationCoordinator.request?.tab, .dictationRecovery)
         XCTAssertFalse(fileTranscriptionViewModel.showFilePickerFromMenu)
     }
 
     private func makeTemporaryDirectory() -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("DictationRecoveryAudioStoreTests-\(UUID().uuidString)", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         addTeardownBlock {
             try? FileManager.default.removeItem(at: directory)
         }

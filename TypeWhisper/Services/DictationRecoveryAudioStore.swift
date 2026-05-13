@@ -10,33 +10,42 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
         static let bytesPerSample = 2
         static let wavHeaderByteCount = 44
         static let activeFileName = "active-dictation-recovery.wav"
-        static let latestFileName = "last-dictation-recovery.wav"
+        static let legacyLatestFileName = "last-dictation-recovery.wav"
+        static let recoveryFilePrefix = "dictation-recovery-"
+        static let recoveryFileExtension = "wav"
     }
 
     private let directory: URL
     private let activeFileURL: URL
-    private let latestFileURL: URL
     private let fileManager: FileManager
     private let queue = DispatchQueue(label: "com.typewhisper.dictation-recovery-audio", qos: .utility)
 
     private var activeHandle: FileHandle?
     private var activeSampleCount = 0
     private var hasActiveRecording = false
+    private var recoverySerialNumber: UInt64 = 0
 
     init(
         directory: URL = AppConstants.appSupportDirectory
             .appendingPathComponent("dictation-recovery", isDirectory: true),
         fileManager: FileManager = .default
     ) {
-        self.directory = directory
-        self.activeFileURL = directory.appendingPathComponent(Constants.activeFileName)
-        self.latestFileURL = directory.appendingPathComponent(Constants.latestFileName)
+        try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        let standardizedDirectory = directory.resolvingSymlinksInPath().standardizedFileURL
+        self.directory = standardizedDirectory
+        self.activeFileURL = standardizedDirectory.appendingPathComponent(Constants.activeFileName)
         self.fileManager = fileManager
+    }
+
+    var recoveryURLs: [URL] {
+        queue.sync {
+            storedRecoveryURLs()
+        }
     }
 
     var latestRecoveryURL: URL? {
         queue.sync {
-            fileManager.fileExists(atPath: latestFileURL.path) ? latestFileURL : nil
+            storedRecoveryURLs().first
         }
     }
 
@@ -80,7 +89,7 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
     func preserveActiveRecording() -> URL? {
         queue.sync {
             guard hasActiveRecording else {
-                return fileManager.fileExists(atPath: latestFileURL.path) ? latestFileURL : nil
+                return storedRecoveryURLs().first
             }
 
             closeActiveHandle()
@@ -89,40 +98,118 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
             guard activeSampleCount > 0 else {
                 activeSampleCount = 0
                 removeItemIfExists(at: activeFileURL)
-                removeItemIfExists(at: latestFileURL)
-                return nil
+                return storedRecoveryURLs().first
             }
 
             finalizeActiveWavHeader(sampleCount: activeSampleCount)
-            removeItemIfExists(at: latestFileURL)
+            let recoveryURL = makeUniqueRecoveryFileURL()
 
             do {
-                try fileManager.moveItem(at: activeFileURL, to: latestFileURL)
+                try fileManager.moveItem(at: activeFileURL, to: recoveryURL)
                 activeSampleCount = 0
-                return latestFileURL
+                return canonicalFileURL(recoveryURL)
             } catch {
                 activeSampleCount = 0
                 removeItemIfExists(at: activeFileURL)
-                return fileManager.fileExists(atPath: latestFileURL.path) ? latestFileURL : nil
+                return storedRecoveryURLs().first
             }
         }
     }
 
-    func discardActiveRecording(keepingLatest: Bool = false) {
+    func discardActiveRecording(keepingLatest: Bool = true) {
         queue.sync {
             closeActiveHandle()
             activeSampleCount = 0
             hasActiveRecording = false
             removeItemIfExists(at: activeFileURL)
             if !keepingLatest {
-                removeItemIfExists(at: latestFileURL)
+                removeStoredRecoveries()
             }
         }
     }
 
     func discardLatestRecovery() {
         queue.sync {
-            removeItemIfExists(at: latestFileURL)
+            guard let latestRecoveryURL = storedRecoveryURLs().first else { return }
+            removeItemIfExists(at: latestRecoveryURL)
+        }
+    }
+
+    func discardRecovery(at url: URL) {
+        queue.sync {
+            guard isStoredRecoveryFile(url) else { return }
+            removeItemIfExists(at: url)
+        }
+    }
+
+    func discardAllRecoveries() {
+        queue.sync {
+            removeStoredRecoveries()
+        }
+    }
+
+    private func storedRecoveryURLs() -> [URL] {
+        guard fileManager.fileExists(atPath: directory.path),
+              let urls = try? fileManager.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: [.contentModificationDateKey],
+                options: [.skipsHiddenFiles]
+              )
+        else {
+            return []
+        }
+
+        return urls
+            .filter(isStoredRecoveryFile)
+            .map { directory.appendingPathComponent($0.lastPathComponent) }
+            .sorted { lhs, rhs in
+                let lhsDate = contentModificationDate(for: lhs)
+                let rhsDate = contentModificationDate(for: rhs)
+                if lhsDate != rhsDate {
+                    return lhsDate > rhsDate
+                }
+                return lhs.lastPathComponent > rhs.lastPathComponent
+            }
+    }
+
+    private func isStoredRecoveryFile(_ url: URL) -> Bool {
+        let canonicalURL = canonicalFileURL(url)
+        guard canonicalURL.deletingLastPathComponent() == directory else { return false }
+        guard url.pathExtension.lowercased() == Constants.recoveryFileExtension else { return false }
+        let fileName = url.lastPathComponent
+        return fileName == Constants.legacyLatestFileName || fileName.hasPrefix(Constants.recoveryFilePrefix)
+    }
+
+    private func contentModificationDate(for url: URL) -> Date {
+        (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+    }
+
+    private func canonicalFileURL(_ url: URL) -> URL {
+        url.resolvingSymlinksInPath().standardizedFileURL
+    }
+
+    private func makeUniqueRecoveryFileURL() -> URL {
+        try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        recoverySerialNumber += 1
+        let baseName = "\(Constants.recoveryFilePrefix)\(Self.recoveryTimestamp(from: Date()))-\(String(format: "%04llu", recoverySerialNumber))"
+        var candidate = directory
+            .appendingPathComponent(baseName)
+            .appendingPathExtension(Constants.recoveryFileExtension)
+        var collisionIndex = 2
+
+        while fileManager.fileExists(atPath: candidate.path) {
+            candidate = directory
+                .appendingPathComponent("\(baseName)-\(collisionIndex)")
+                .appendingPathExtension(Constants.recoveryFileExtension)
+            collisionIndex += 1
+        }
+
+        return candidate
+    }
+
+    private func removeStoredRecoveries() {
+        for url in storedRecoveryURLs() {
+            removeItemIfExists(at: url)
         }
     }
 
@@ -185,6 +272,13 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
         data.appendASCII("data")
         data.appendLittleEndian(dataByteCount)
         return data
+    }
+
+    private static func recoveryTimestamp(from date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss-SSS"
+        return formatter.string(from: date)
     }
 }
 
