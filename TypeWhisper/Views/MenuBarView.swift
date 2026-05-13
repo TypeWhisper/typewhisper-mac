@@ -203,13 +203,19 @@ enum MenuBarMenuSection: String, CaseIterable, Hashable {
     }
 
     var items: [MenuBarMenuItem] {
+        items(hasRecoverableRecording: true)
+    }
+
+    func items(hasRecoverableRecording: Bool) -> [MenuBarMenuItem] {
         switch self {
         case .general:
             [.settings, .history, .errorLog]
         case .recorder:
             [.toggleRecorder]
         case .transcription:
-            [.transcribeFile, .recoverLastRecording, .recentTranscriptions, .copyLastTranscription, .readBackLastTranscription]
+            hasRecoverableRecording
+                ? [.transcribeFile, .recoverLastRecording, .recentTranscriptions, .copyLastTranscription, .readBackLastTranscription]
+                : [.transcribeFile, .recentTranscriptions, .copyLastTranscription, .readBackLastTranscription]
         case .updates:
             [.checkForUpdates]
         }
@@ -230,7 +236,7 @@ struct MenuBarView: View {
 
             ForEach(MenuBarMenuSection.allCases, id: \.self) { section in
                 Section(String(localized: section.titleResource)) {
-                    ForEach(section.items, id: \.self) { item in
+                    ForEach(section.items(hasRecoverableRecording: status.hasRecoverableRecording), id: \.self) { item in
                         menuItem(for: item)
                     }
                 }
@@ -304,7 +310,6 @@ struct MenuBarView: View {
             } label: {
                 Label(String(localized: "Recover Last Recording"), systemImage: "waveform")
             }
-            .disabled(!status.hasRecoverableRecording)
 
         case .recentTranscriptions:
             Button {
