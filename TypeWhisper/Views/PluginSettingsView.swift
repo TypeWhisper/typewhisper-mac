@@ -25,7 +25,7 @@ final class PluginSettingsWindowManager {
             defer: false
         )
         let hostingView = NSHostingView(
-            rootView: settingsView
+            rootView: PluginSettingsWindowContent(settingsView: settingsView)
                 .environment(\.pluginSettingsClose, { [weak window] in
                     window?.close()
                 })
@@ -52,6 +52,18 @@ final class PluginSettingsWindowManager {
         window.delegate = delegate
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+}
+
+private struct PluginSettingsWindowContent: View {
+    let settingsView: AnyView
+
+    var body: some View {
+        ScrollView(.vertical, showsIndicators: true) {
+            settingsView
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 
