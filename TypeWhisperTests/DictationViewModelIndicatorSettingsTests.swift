@@ -280,7 +280,7 @@ final class MenuBarGroupingTests: XCTestCase {
         )
         XCTAssertEqual(
             MenuBarMenuSection.transcription.items,
-            [.transcribeFile, .recentTranscriptions, .copyLastTranscription, .readBackLastTranscription]
+            [.transcribeFile, .recoverLastRecording, .recentTranscriptions, .copyLastTranscription, .readBackLastTranscription]
         )
         XCTAssertEqual(
             MenuBarMenuSection.updates.items,
