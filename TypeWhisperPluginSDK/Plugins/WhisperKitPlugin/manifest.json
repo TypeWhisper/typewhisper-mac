@@ -9,9 +9,9 @@
         "arm64"
     ],
     "author": "TypeWhisper",
-    "description": "Local speech-to-text powered by WhisperKit. 7 model sizes, 99 languages, streaming support.",
+    "description": "Local speech-to-text powered by WhisperKit. 8 model sizes, 99 languages, streaming support.",
     "descriptions": {
-        "de": "Lokale Spracherkennung mit WhisperKit. 7 Modellgroessen, 99 Sprachen, Streaming-Unterstuetzung."
+        "de": "Lokale Spracherkennung mit WhisperKit. 8 Modellgroessen, 99 Sprachen, Streaming-Unterstuetzung."
     },
     "category": "transcription",
     "iconSystemName": "waveform",

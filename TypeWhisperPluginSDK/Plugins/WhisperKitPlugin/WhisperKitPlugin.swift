@@ -697,6 +697,12 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
             ramRequirement: "8 GB+"
         ),
         WhisperModelDef(
+            id: "distil-whisper_distil-large-v3_turbo",
+            displayName: "Distil Large v3 Turbo",
+            sizeDescription: "~600 MB",
+            ramRequirement: "8 GB+"
+        ),
+        WhisperModelDef(
             id: "distil-whisper_distil-large-v3",
             displayName: "Distil Large v3",
             sizeDescription: "~594 MB",
@@ -720,7 +726,7 @@ struct WhisperModelDef: Identifiable {
         switch displayName {
         case "Tiny", "Base":
             return gb < 8
-        case "Small", "Medium", "Large v3 Turbo":
+        case "Small", "Medium", "Large v3 Turbo", "Distil Large v3 Turbo":
             return gb >= 8 && gb <= 16
         case "Large v3":
             return gb > 16

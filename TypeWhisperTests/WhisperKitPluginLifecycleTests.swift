@@ -40,6 +40,16 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
         return MockHostServices(pluginDataDirectory: pluginDataDirectory, defaults: defaults)
     }
 
+    func testAvailableModelsIncludeDistilLargeV3Turbo() {
+        let model = WhisperKitPlugin.availableModels.first {
+            $0.id == "distil-whisper_distil-large-v3_turbo"
+        }
+
+        XCTAssertEqual(model?.displayName, "Distil Large v3 Turbo")
+        XCTAssertEqual(model?.sizeDescription, "~600 MB")
+        XCTAssertEqual(model?.ramRequirement, "8 GB+")
+    }
+
     func testActivationPromotesPersistedLoadedModelToSelectedModelWhenSelectionMissing() async throws {
         let host = try makeHost(defaults: ["loadedModel": "openai_whisper-tiny"])
         defer { TestSupport.remove(host.pluginDataDirectory) }
