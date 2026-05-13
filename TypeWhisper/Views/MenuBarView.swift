@@ -10,6 +10,7 @@ private final class MenuBarState: ObservableObject {
     @Published var isModelReady: Bool
     @Published var hasRecentTranscriptions: Bool
     @Published var canCopyLastTranscription: Bool
+    @Published var hasRecoverableRecording: Bool
     @Published var recorderState: AudioRecorderViewModel.RecorderState
     @Published var canToggleRecorder: Bool
     @Published var recentTranscriptionsMenuShortcut: HotkeyService.MenuShortcutDescriptor?
@@ -21,6 +22,7 @@ private final class MenuBarState: ObservableObject {
     init() {
         let dictation = DictationViewModel.shared
         let modelManager = ServiceContainer.shared.modelManagerService
+        let audioRecordingService = ServiceContainer.shared.audioRecordingService
         let historyService = ServiceContainer.shared.historyService
         let recentTranscriptionStore = ServiceContainer.shared.recentTranscriptionStore
         let recorder = AudioRecorderViewModel.shared
@@ -30,6 +32,7 @@ private final class MenuBarState: ObservableObject {
         let hasRecentTranscriptions = recentTranscriptionStore.latestEntry(historyRecords: historyService.records) != nil
         self.hasRecentTranscriptions = hasRecentTranscriptions
         self.canCopyLastTranscription = hasRecentTranscriptions
+        self.hasRecoverableRecording = audioRecordingService.latestRecoveryRecordingURL != nil
         self.recorderState = recorder.state
         self.canToggleRecorder = recorder.canToggleRecording
         self.recentTranscriptionsMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .recentTranscriptions)
@@ -73,6 +76,13 @@ private final class MenuBarState: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.refreshCopyAvailability()
+            }
+            .store(in: &cancellables)
+
+        audioRecordingService.$recoverableRecordingURL
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] url in
+                self?.hasRecoverableRecording = url != nil
             }
             .store(in: &cancellables)
 
@@ -162,6 +172,7 @@ enum MenuBarMenuItem: Hashable {
     case errorLog
     case toggleRecorder
     case transcribeFile
+    case recoverLastRecording
     case recentTranscriptions
     case copyLastTranscription
     case readBackLastTranscription
@@ -198,7 +209,7 @@ enum MenuBarMenuSection: String, CaseIterable, Hashable {
         case .recorder:
             [.toggleRecorder]
         case .transcription:
-            [.transcribeFile, .recentTranscriptions, .copyLastTranscription, .readBackLastTranscription]
+            [.transcribeFile, .recoverLastRecording, .recentTranscriptions, .copyLastTranscription, .readBackLastTranscription]
         case .updates:
             [.checkForUpdates]
         }
@@ -286,6 +297,14 @@ struct MenuBarView: View {
                 Label(String(localized: "Transcribe File..."), systemImage: "doc.text")
             }
             .disabled(!status.isModelReady)
+
+        case .recoverLastRecording:
+            Button {
+                DictationViewModel.shared.recoverLastRecording()
+            } label: {
+                Label(String(localized: "Recover Last Recording"), systemImage: "waveform")
+            }
+            .disabled(!status.hasRecoverableRecording)
 
         case .recentTranscriptions:
             Button {

@@ -377,6 +377,92 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         XCTAssertTrue(error.localizedDescription.contains("expected 48000.0 Hz/1 ch"))
         XCTAssertTrue(error.localizedDescription.contains("got 0.0 Hz/0 ch"))
     }
+
+    func testRecordingSuccessDiscardDeletesRecoveryAudio() async throws {
+        let directory = makeRecoveryTestDirectory()
+        let store = DictationRecoveryAudioStore(directory: directory)
+        let service = AudioRecordingService(recoveryAudioStore: store)
+        service.hasMicrophonePermissionOverride = true
+        service.startRecordingOverride = {}
+        service.stopRecordingOverride = { _ in service.getCurrentBuffer() }
+
+        try service.startRecording()
+        service.testingProcessConvertedSamples([0.25, -0.25])
+        _ = await service.stopRecording(policy: .immediate)
+        service.discardActiveRecoveryRecording()
+
+        XCTAssertNil(service.latestRecoveryRecordingURL)
+        XCTAssertTrue(try recoveryFileNames(in: directory).isEmpty)
+    }
+
+    func testTranscriptionFailureCanPreserveStoppedRecoveryAudio() async throws {
+        let directory = makeRecoveryTestDirectory()
+        let store = DictationRecoveryAudioStore(directory: directory)
+        let service = AudioRecordingService(recoveryAudioStore: store)
+        service.hasMicrophonePermissionOverride = true
+        service.startRecordingOverride = {}
+        service.stopRecordingOverride = { _ in service.getCurrentBuffer() }
+
+        try service.startRecording()
+        service.testingProcessConvertedSamples([0.25, -0.25, 0.5])
+        _ = await service.stopRecording(policy: .immediate)
+        let url = try XCTUnwrap(service.preserveActiveRecoveryRecording())
+
+        let data = try Data(contentsOf: url)
+        XCTAssertEqual(readRecoveryUInt32(data, at: 40), UInt32(3 * 2))
+        XCTAssertEqual(service.latestRecoveryRecordingURL, url)
+    }
+
+    func testRecoveryCircuitBreakerPreservesBufferedRecoveryAudio() throws {
+        let directory = makeRecoveryTestDirectory()
+        let store = DictationRecoveryAudioStore(directory: directory)
+        let service = AudioRecordingService(recoveryAudioStore: store)
+        service.hasMicrophonePermissionOverride = true
+        service.startRecordingOverride = {}
+
+        try service.startRecording()
+        service.testingProcessConvertedSamples([0.25, -0.25, 0.5])
+        service.testingFailActiveRecordingDueToRecovery(.engineStartFailed("test circuit breaker"))
+
+        let url = try XCTUnwrap(service.latestRecoveryRecordingURL)
+        let data = try Data(contentsOf: url)
+        XCTAssertEqual(readRecoveryUInt32(data, at: 40), UInt32(3 * 2))
+    }
+
+    func testRecordingCancelDiscardDeletesRecoveryAudio() async throws {
+        let directory = makeRecoveryTestDirectory()
+        let store = DictationRecoveryAudioStore(directory: directory)
+        let service = AudioRecordingService(recoveryAudioStore: store)
+        service.hasMicrophonePermissionOverride = true
+        service.startRecordingOverride = {}
+        service.stopRecordingOverride = { _ in service.getCurrentBuffer() }
+
+        try service.startRecording()
+        service.testingProcessConvertedSamples([0.1, 0.2])
+        _ = await service.stopRecording(policy: .immediate)
+        service.discardActiveRecoveryRecording()
+
+        XCTAssertNil(service.latestRecoveryRecordingURL)
+        XCTAssertTrue(try recoveryFileNames(in: directory).isEmpty)
+    }
+
+    private func makeRecoveryTestDirectory() -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AudioEngineRecoverySupportTests-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: directory)
+        }
+        return directory
+    }
+
+    private func recoveryFileNames(in directory: URL) throws -> [String] {
+        guard FileManager.default.fileExists(atPath: directory.path) else { return [] }
+        return try FileManager.default.contentsOfDirectory(atPath: directory.path)
+    }
+
+    private func readRecoveryUInt32(_ data: Data, at offset: Int) -> UInt32 {
+        data[offset..<(offset + 4)].reversed().reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
+    }
 }
 
 final class AudioDeviceServiceCompatibilityTests: XCTestCase {

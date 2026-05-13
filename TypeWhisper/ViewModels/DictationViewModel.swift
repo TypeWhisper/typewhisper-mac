@@ -587,13 +587,18 @@ final class DictationViewModel: ObservableObject {
         lastStreamingParams = nil
     }
 
-    private func abortActiveRecordingImmediately(sessionMessage: String) {
+    private func abortActiveRecordingImmediately(sessionMessage: String, preserveRecoveryAudio: Bool = false) {
         clearDeferredRecordingContext()
         restoreRecordingSideEffects()
         streamingHandler.stop()
         stopRecordingTimer()
         Task {
             _ = await audioRecordingService.stopRecording(policy: .immediate)
+            if preserveRecoveryAudio {
+                audioRecordingService.preserveActiveRecoveryRecording()
+            } else {
+                audioRecordingService.discardActiveRecoveryRecording()
+            }
         }
         cancelActiveDictationSessionIfNeeded(message: sessionMessage)
         hotkeyService.cancelDictation()
@@ -666,7 +671,7 @@ final class DictationViewModel: ObservableObject {
                 defer { self.audioRecordingService.clearRecoveryError() }
                 guard self.state == .recording, !self.isStopInFlight else { return }
                 let errorMessage = error.localizedDescription
-                self.abortActiveRecordingImmediately(sessionMessage: errorMessage)
+                self.abortActiveRecordingImmediately(sessionMessage: errorMessage, preserveRecoveryAudio: true)
                 self.accessibilityAnnouncementService.announceError(errorMessage)
                 self.showError(errorMessage, category: "recording")
             }
@@ -729,6 +734,7 @@ final class DictationViewModel: ObservableObject {
             cancelActiveDictationSessionIfNeeded(message: cancelledMessage)
             transcriptionTask?.cancel()
             transcriptionTask = nil
+            audioRecordingService.discardActiveRecoveryRecording()
             showNotchFeedback(message: cancelledMessage, icon: "xmark.circle", duration: 1.5)
         default:
             break
@@ -997,6 +1003,7 @@ final class DictationViewModel: ObservableObject {
             lastStreamingParams = nil
             stopRecordingTimer()
             _ = await audioRecordingService.stopRecording(policy: .immediate)
+            audioRecordingService.discardActiveRecoveryRecording()
             if let sessionID {
                 failDictationSession(id: sessionID, error: discardMessage)
             }
@@ -1042,6 +1049,7 @@ final class DictationViewModel: ObservableObject {
 
         switch decision {
         case .discardTooShort:
+            audioRecordingService.discardActiveRecoveryRecording()
             let errorMessage = String(localized: "Too short, hold the hotkey a bit longer")
             if let sessionID {
                 failDictationSession(id: sessionID, error: errorMessage)
@@ -1053,6 +1061,7 @@ final class DictationViewModel: ObservableObject {
             )
             return
         case .discardNoSpeech:
+            audioRecordingService.discardActiveRecoveryRecording()
             logger.info("Peak level too low (\(String(format: "%.4f", peakLevel))) - no speech detected")
             let errorMessage = String(localized: "No speech detected")
             if let sessionID {
@@ -1117,6 +1126,7 @@ final class DictationViewModel: ObservableObject {
                 var text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !text.isEmpty else {
                     logger.info("Transcription returned empty text (duration: \(String(format: "%.2f", result.duration))s, engine: \(result.engineUsed))")
+                    audioRecordingService.preserveActiveRecoveryRecording()
                     let errorMessage = String(localized: "No speech recognized")
                     if let sessionID {
                         failDictationSession(id: sessionID, error: errorMessage)
@@ -1241,6 +1251,7 @@ final class DictationViewModel: ObservableObject {
                     ruleName: self.effectiveRuleName
                 )))
 
+                audioRecordingService.discardActiveRecoveryRecording()
                 soundService.play(.transcriptionSuccess, enabled: soundFeedbackEnabled)
                 let wordCount = text.split(separator: " ").count
                 let detectedLang = result.detectedLanguage ?? language
@@ -1275,6 +1286,7 @@ final class DictationViewModel: ObservableObject {
                 }
             } catch {
                 guard !Task.isCancelled else { return }
+                audioRecordingService.preserveActiveRecoveryRecording()
                 EventBus.shared.emit(.transcriptionFailed(TranscriptionFailedPayload(
                     error: error.localizedDescription,
                     appName: capturedActiveApp?.name,
@@ -1610,6 +1622,22 @@ final class DictationViewModel: ObservableObject {
     func readBackLastTranscription() {
         guard let text = lastTranscribedText else { return }
         speechFeedbackService.readBack(text: text, language: lastTranscriptionLanguage)
+    }
+
+    var canRecoverLastRecording: Bool {
+        audioRecordingService.latestRecoveryRecordingURL != nil
+    }
+
+    func recoverLastRecording(openSettingsWindow: Bool = true) {
+        guard let url = audioRecordingService.latestRecoveryRecordingURL else { return }
+
+        FileTranscriptionViewModel.shared.addFiles([url])
+        if let navigationCoordinator = SettingsNavigationCoordinator.shared {
+            navigationCoordinator.navigate(to: .fileTranscription)
+        }
+        if openSettingsWindow {
+            ManagedAppWindowOpener.shared.open(id: "settings")
+        }
     }
 
     func triggerWorkflowPalette() {
