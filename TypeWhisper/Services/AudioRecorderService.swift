@@ -440,11 +440,11 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         var displayName: String {
             switch self {
             case .aggressive:
-                return String(localized: "Aggressiv")
+                return String(localized: "Aggressive")
             case .medium:
-                return String(localized: "Mittel")
+                return String(localized: "Medium")
             case .off:
-                return String(localized: "Aus")
+                return String(localized: "Off")
             }
         }
     }

@@ -864,6 +864,16 @@
         }
       }
     },
+    "Aggressive" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aggressiv"
+          }
+        }
+      }
+    },
     "AI enhanced" : {
       "localizations" : {
         "de" : {
@@ -4087,6 +4097,16 @@
         }
       }
     },
+    "Medium" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mittel"
+          }
+        }
+      }
+    },
     "Model" : {
       "localizations" : {
         "de" : {
@@ -4652,7 +4672,6 @@
       }
     },
     "Off" : {
-      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
