@@ -1,13 +1,54 @@
+@preconcurrency import AVFoundation
 import Foundation
 import OSLog
 import SwiftUI
 import FluidAudio
 import TypeWhisperPluginSDK
 
+private let parakeetLiveSampleRate: Double = 16_000
+
+private func makeParakeetLiveAudioBuffer(from samples: [Float]) throws -> AVAudioPCMBuffer {
+    guard let format = AVAudioFormat(
+        commonFormat: .pcmFormatFloat32,
+        sampleRate: parakeetLiveSampleRate,
+        channels: 1,
+        interleaved: false
+    ) else {
+        throw PluginTranscriptionError.apiError("Unable to create Parakeet live audio format")
+    }
+
+    guard let buffer = AVAudioPCMBuffer(
+        pcmFormat: format,
+        frameCapacity: AVAudioFrameCount(samples.count)
+    ) else {
+        throw PluginTranscriptionError.apiError("Unable to create Parakeet live audio buffer")
+    }
+
+    buffer.frameLength = AVAudioFrameCount(samples.count)
+    guard let destination = buffer.floatChannelData?.pointee else {
+        throw PluginTranscriptionError.apiError("Unable to access Parakeet live audio buffer")
+    }
+
+    samples.withUnsafeBufferPointer { source in
+        if let baseAddress = source.baseAddress {
+            destination.update(from: baseAddress, count: samples.count)
+        }
+    }
+
+    return buffer
+}
+
+private func combinedParakeetLiveTranscript(confirmed: String, volatile: String) -> String {
+    [confirmed, volatile]
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+        .joined(separator: " ")
+}
+
 // MARK: - Plugin Entry Point
 
 @objc(ParakeetPlugin)
-final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, TranscriptPreviewFallbackPolicyProviding, PluginSettingsActivityReporting, @unchecked Sendable {
+final class ParakeetPlugin: NSObject, LiveTranscriptionCapablePlugin, DictionaryTermsCapabilityProviding, TranscriptPreviewFallbackPolicyProviding, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.parakeet"
     static let pluginName = "Parakeet"
     private static let logger = Logger(subsystem: "com.typewhisper.plugin.parakeet", category: "Transcription")
@@ -16,6 +57,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
 
     fileprivate var host: HostServices?
     fileprivate var asrManager: AsrManager?
+    fileprivate var loadedAsrModels: AsrModels?
     fileprivate var loadedModelId: String?
     fileprivate var _selectedModelId: String?
     var modelState: ParakeetModelState = .notLoaded
@@ -68,6 +110,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
     func deactivate() {
         clearVocabularyBoostingState(resetModelState: true)
         asrManager = nil
+        loadedAsrModels = nil
         loadedModelId = nil
         _selectedModelId = nil
         modelState = .notLoaded
@@ -105,6 +148,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
 
     var selectedModelId: String? { _selectedModelId }
     var allowsTranscriptPreviewFallback: Bool { false }
+    var supportsStreaming: Bool { true }
 
     func selectModel(_ modelId: String) {
         guard let version = ParakeetVersion.from(modelId: modelId) else { return }
@@ -192,6 +236,44 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
         }
 
         return PluginTranscriptionResult(text: finalResult.text, detectedLanguage: nil, segments: segments)
+    }
+
+    func createLiveTranscriptionSession(
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        guard !translate else {
+            throw PluginTranscriptionError.apiError("Parakeet does not support translation")
+        }
+
+        guard let loadedAsrModels else {
+            throw PluginTranscriptionError.notConfigured
+        }
+
+        if vocabularyBoostingEnabled {
+            await configureBoostingIfNeeded(prompt: prompt)
+        }
+
+        let manager = SlidingWindowAsrManager(config: .streaming)
+        try await manager.loadModels(loadedAsrModels)
+
+        if vocabularyBoostingEnabled,
+           let customVocabulary,
+           let ctcModels {
+            do {
+                try await manager.configureVocabularyBoosting(
+                    vocabulary: customVocabulary,
+                    ctcModels: ctcModels
+                )
+            } catch {
+                Self.logger.warning("Live vocabulary boosting setup failed: \(error.localizedDescription)")
+            }
+        }
+
+        try await manager.startStreaming(source: .microphone)
+        return ParakeetLiveTranscriptionSession(manager: manager, onProgress: onProgress)
     }
 
     private static func fluidAudioLanguage(for language: String?) -> Language? {
@@ -454,6 +536,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
             downloadProgress = 1.0
 
             asrManager = manager
+            loadedAsrModels = models
             loadedModelId = selectedVersion.modelDef.id
             _selectedModelId = selectedVersion.modelDef.id
             modelState = .ready
@@ -481,6 +564,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
     func unloadModel(clearPersistence: Bool = true) {
         clearVocabularyBoostingState(resetModelState: true)
         asrManager = nil
+        loadedAsrModels = nil
         loadedModelId = nil
         modelState = .notLoaded
         downloadProgress = 0
@@ -562,6 +646,88 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
 
     func applyHuggingFaceTokenToEnvironment() {
         PluginHuggingFaceTokenHelper.applyTokenToEnvironment(_hfToken)
+    }
+}
+
+// MARK: - Live Transcription
+
+private actor ParakeetLiveTranscriptionSession: LiveTranscriptionSession {
+    private let manager: SlidingWindowAsrManager
+    private var updateTask: Task<Void, Never>?
+    private var isCancelled = false
+
+    init(
+        manager: SlidingWindowAsrManager,
+        onProgress: @escaping @Sendable (String) -> Bool
+    ) {
+        self.manager = manager
+        self.updateTask = Self.startUpdateTask(manager: manager, onProgress: onProgress)
+    }
+
+    func appendAudio(samples: [Float]) async throws {
+        guard !isCancelled, !samples.isEmpty else { return }
+        let buffer = try makeParakeetLiveAudioBuffer(from: samples)
+        await manager.streamAudio(buffer)
+    }
+
+    func finish() async throws -> PluginTranscriptionResult {
+        guard !isCancelled else {
+            return PluginTranscriptionResult(text: "", detectedLanguage: nil, segments: [])
+        }
+
+        do {
+            let finalText = try await manager.finish()
+            await stop()
+            return PluginTranscriptionResult(
+                text: finalText.trimmingCharacters(in: .whitespacesAndNewlines),
+                detectedLanguage: nil,
+                segments: []
+            )
+        } catch {
+            await stop()
+            throw error
+        }
+    }
+
+    func cancel() async {
+        await stop()
+    }
+
+    private func stop() async {
+        guard !isCancelled else { return }
+        isCancelled = true
+        updateTask?.cancel()
+        updateTask = nil
+        await manager.cancel()
+    }
+
+    private static func startUpdateTask(
+        manager: SlidingWindowAsrManager,
+        onProgress: @escaping @Sendable (String) -> Bool
+    ) -> Task<Void, Never> {
+        Task {
+            var lastProgressText = ""
+
+            for await _ in await manager.transcriptionUpdates {
+                guard !Task.isCancelled else { return }
+
+                let confirmed = await manager.confirmedTranscript
+                let volatile = await manager.volatileTranscript
+                let combinedText = combinedParakeetLiveTranscript(
+                    confirmed: confirmed,
+                    volatile: volatile
+                )
+                guard !combinedText.isEmpty, combinedText != lastProgressText else {
+                    continue
+                }
+
+                lastProgressText = combinedText
+                if !onProgress(combinedText) {
+                    await manager.cancel()
+                    return
+                }
+            }
+        }
     }
 }
 

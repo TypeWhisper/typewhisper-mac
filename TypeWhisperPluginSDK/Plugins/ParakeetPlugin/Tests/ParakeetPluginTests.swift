@@ -112,6 +112,15 @@ final class ParakeetPluginTests: XCTestCase {
         XCTAssertFalse(fallbackPolicy.allowsTranscriptPreviewFallback)
     }
 
+    func testProvidesLiveTranscriptionSessionCapability() throws {
+        let plugin = ParakeetPlugin()
+        let livePlugin: any LiveTranscriptionCapablePlugin = plugin
+        let fallbackPolicy: any TranscriptPreviewFallbackPolicyProviding = plugin
+
+        XCTAssertTrue(livePlugin.supportsStreaming)
+        XCTAssertFalse(fallbackPolicy.allowsTranscriptPreviewFallback)
+    }
+
     func testDictionaryTermsSupportReflectsStoredBoostingPreference() throws {
         let defaultHost = try PluginTestHostServices()
         let defaultPlugin = makePlugin()
