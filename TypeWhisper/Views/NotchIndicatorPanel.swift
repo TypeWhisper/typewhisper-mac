@@ -136,6 +136,12 @@ class NotchIndicatorPanel: NSPanel {
             screen = resolveScreen()
             cachedScreen = screen
         }
+
+        if IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(on: screen) {
+            suppressForForeignFullscreen()
+            return
+        }
+
         notchGeometry.update(for: screen)
 
         let screenFrame = screen.frame
@@ -167,6 +173,16 @@ class NotchIndicatorPanel: NSPanel {
             }
             self.showTask = nil
         }
+    }
+
+    private func suppressForForeignFullscreen() {
+        cachedScreen = nil
+        showTask?.cancel()
+        showTask = nil
+        dismissTask?.cancel()
+        dismissTask = nil
+        notchGeometry.isPresented = false
+        orderOut(nil)
     }
 
     private func resolveScreen() -> NSScreen {

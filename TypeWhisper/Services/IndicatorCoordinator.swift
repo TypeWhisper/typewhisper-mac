@@ -116,6 +116,195 @@ final class IndicatorCoordinator {
     }
 }
 
+enum IndicatorWindowFrameLookup {
+    nonisolated static func frontmostWindowFrame(for processIdentifier: pid_t) -> CGRect? {
+        guard let windowList = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements],
+            kCGNullWindowID
+        ) as? [[String: Any]] else {
+            return nil
+        }
+
+        var fallbackFrame: CGRect?
+
+        for windowInfo in windowList {
+            guard let rawBounds = windowInfo[kCGWindowBounds as String] else {
+                continue
+            }
+
+            let boundsDictionary = rawBounds as! CFDictionary
+
+            guard let ownerPID = windowInfo[kCGWindowOwnerPID as String] as? pid_t,
+                  ownerPID == processIdentifier,
+                  let bounds = CGRect(
+                    dictionaryRepresentation: boundsDictionary
+                  ),
+                  !bounds.isEmpty else {
+                continue
+            }
+
+            let alpha = windowInfo[kCGWindowAlpha as String] as? Double ?? 1
+            guard alpha > 0 else { continue }
+
+            let layer = windowInfo[kCGWindowLayer as String] as? Int ?? 0
+            if layer == 0 {
+                return bounds
+            }
+
+            if fallbackFrame == nil {
+                fallbackFrame = bounds
+            }
+        }
+
+        return fallbackFrame
+    }
+
+    nonisolated static func focusedWindowFrame() -> CGRect? {
+        let systemWide = AXUIElementCreateSystemWide()
+
+        var focusedApplication: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            systemWide,
+            kAXFocusedApplicationAttribute as CFString,
+            &focusedApplication
+        ) == .success,
+              let focusedApplication else {
+            return nil
+        }
+        let applicationElement = focusedApplication as! AXUIElement
+
+        var focusedWindow: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            applicationElement,
+            kAXFocusedWindowAttribute as CFString,
+            &focusedWindow
+        ) == .success,
+              let focusedWindow else {
+            return nil
+        }
+        let windowElement = focusedWindow as! AXUIElement
+
+        var positionValue: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            windowElement,
+            kAXPositionAttribute as CFString,
+            &positionValue
+        ) == .success,
+              let positionValue else {
+            return nil
+        }
+        let axPosition = positionValue as! AXValue
+
+        var sizeValue: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            windowElement,
+            kAXSizeAttribute as CFString,
+            &sizeValue
+        ) == .success,
+              let sizeValue else {
+            return nil
+        }
+        let axSize = sizeValue as! AXValue
+
+        var position = CGPoint.zero
+        var size = CGSize.zero
+
+        guard AXValueGetValue(axPosition, .cgPoint, &position),
+              AXValueGetValue(axSize, .cgSize, &size),
+              size.width > 0,
+              size.height > 0 else {
+            return nil
+        }
+
+        return CGRect(origin: position, size: size)
+    }
+}
+
+enum IndicatorFullscreenSuppressionPolicy {
+    private static let minimumHorizontalCoverage: CGFloat = 0.5
+    private static let minimumVerticalCoverage: CGFloat = 0.5
+
+    @MainActor
+    static func shouldSuppressIndicator(
+        on screen: NSScreen,
+        frontmostApplicationProvider: () -> NSRunningApplication? = {
+            ActivationSourceTracker.shared.lastExternalApplication ?? NSWorkspace.shared.frontmostApplication
+        },
+        focusedWindowFrameProvider: () -> CGRect? = IndicatorWindowFrameLookup.focusedWindowFrame,
+        windowFrameProvider: (pid_t) -> CGRect? = IndicatorWindowFrameLookup.frontmostWindowFrame(for:),
+        appBundleIdentifier: String? = Bundle.main.bundleIdentifier
+    ) -> Bool {
+        guard let application = frontmostApplicationProvider() else {
+            return false
+        }
+
+        guard application.processIdentifier != NSRunningApplication.current.processIdentifier else {
+            return false
+        }
+
+        let windowFrame = focusedWindowFrameProvider()
+            ?? windowFrameProvider(application.processIdentifier)
+
+        return shouldSuppressIndicator(
+            screenFrame: screen.frame,
+            safeAreaTopInset: screen.safeAreaInsets.top,
+            windowFrame: windowFrame,
+            frontmostBundleIdentifier: application.bundleIdentifier,
+            appBundleIdentifier: appBundleIdentifier
+        )
+    }
+
+    static func shouldSuppressIndicator(
+        screenFrame: CGRect,
+        safeAreaTopInset: CGFloat,
+        windowFrame: CGRect?,
+        frontmostBundleIdentifier: String?,
+        appBundleIdentifier: String?
+    ) -> Bool {
+        guard safeAreaTopInset > 0,
+              let candidateWindowFrame = windowFrame,
+              !screenFrame.isEmpty,
+              !candidateWindowFrame.isEmpty,
+              !isTypeWhisperBundleIdentifier(frontmostBundleIdentifier, appBundleIdentifier: appBundleIdentifier) else {
+            return false
+        }
+
+        let screenFrame = screenFrame.standardized
+        let windowFrame = candidateWindowFrame.standardized
+        let notchStripHeight = min(safeAreaTopInset, screenFrame.height)
+        let notchStrip = CGRect(
+            x: screenFrame.minX,
+            y: screenFrame.maxY - notchStripHeight,
+            width: screenFrame.width,
+            height: notchStripHeight
+        )
+
+        let intersection = windowFrame.intersection(notchStrip)
+        guard !intersection.isNull, !intersection.isEmpty else {
+            return false
+        }
+
+        let horizontalCoverage = intersection.width / notchStrip.width
+        let verticalCoverage = intersection.height / notchStrip.height
+
+        return horizontalCoverage >= minimumHorizontalCoverage
+            && verticalCoverage >= minimumVerticalCoverage
+    }
+
+    private static func isTypeWhisperBundleIdentifier(
+        _ bundleIdentifier: String?,
+        appBundleIdentifier: String?
+    ) -> Bool {
+        guard let bundleIdentifier else { return false }
+        if let appBundleIdentifier, bundleIdentifier == appBundleIdentifier {
+            return true
+        }
+
+        return bundleIdentifier == "com.typewhisper.mac"
+            || bundleIdentifier == "com.typewhisper.mac.dev"
+    }
+}
+
 @MainActor
 final class IndicatorScreenResolver {
     typealias FocusedElementPositionProvider = () -> CGPoint?
@@ -138,14 +327,14 @@ final class IndicatorScreenResolver {
         focusedElementPositionProvider: @escaping FocusedElementPositionProvider = {
             ServiceContainer.shared.textInsertionService.focusedElementPosition()
         },
-        focusedWindowFrameProvider: @escaping FocusedWindowFrameProvider = IndicatorScreenResolver.focusedWindowFrame,
+        focusedWindowFrameProvider: @escaping FocusedWindowFrameProvider = IndicatorWindowFrameLookup.focusedWindowFrame,
         frontmostApplicationProvider: @escaping FrontmostApplicationProvider = {
             ActivationSourceTracker.shared.lastExternalApplication ?? NSWorkspace.shared.frontmostApplication
         },
         mouseLocationProvider: @escaping MouseLocationProvider = { NSEvent.mouseLocation },
         screensProvider: @escaping ScreensProvider = { NSScreen.screens },
         mainScreenProvider: @escaping MainScreenProvider = { NSScreen.main },
-        windowFrameProvider: @escaping WindowFrameProvider = IndicatorScreenResolver.frontmostWindowFrame(for:)
+        windowFrameProvider: @escaping WindowFrameProvider = IndicatorWindowFrameLookup.frontmostWindowFrame(for:)
     ) {
         self.focusedElementPositionProvider = focusedElementPositionProvider
         self.focusedWindowFrameProvider = focusedWindowFrameProvider
@@ -210,108 +399,6 @@ final class IndicatorScreenResolver {
 
         let center = CGPoint(x: frame.midX, y: frame.midY)
         return screen(containing: center)
-    }
-
-    nonisolated private static func frontmostWindowFrame(for processIdentifier: pid_t) -> CGRect? {
-        guard let windowList = CGWindowListCopyWindowInfo(
-            [.optionOnScreenOnly, .excludeDesktopElements],
-            kCGNullWindowID
-        ) as? [[String: Any]] else {
-            return nil
-        }
-
-        var fallbackFrame: CGRect?
-
-        for windowInfo in windowList {
-            guard let rawBounds = windowInfo[kCGWindowBounds as String] else {
-                continue
-            }
-
-            let boundsDictionary = rawBounds as! CFDictionary
-
-            guard let ownerPID = windowInfo[kCGWindowOwnerPID as String] as? pid_t,
-                  ownerPID == processIdentifier,
-                  let bounds = CGRect(
-                    dictionaryRepresentation: boundsDictionary
-                  ),
-                  !bounds.isEmpty else {
-                continue
-            }
-
-            let alpha = windowInfo[kCGWindowAlpha as String] as? Double ?? 1
-            guard alpha > 0 else { continue }
-
-            let layer = windowInfo[kCGWindowLayer as String] as? Int ?? 0
-            if layer == 0 {
-                return bounds
-            }
-
-            if fallbackFrame == nil {
-                fallbackFrame = bounds
-            }
-        }
-
-        return fallbackFrame
-    }
-
-    nonisolated private static func focusedWindowFrame() -> CGRect? {
-        let systemWide = AXUIElementCreateSystemWide()
-
-        var focusedApplication: AnyObject?
-        guard AXUIElementCopyAttributeValue(
-            systemWide,
-            kAXFocusedApplicationAttribute as CFString,
-            &focusedApplication
-        ) == .success,
-              let focusedApplication else {
-            return nil
-        }
-        let applicationElement = focusedApplication as! AXUIElement
-
-        var focusedWindow: AnyObject?
-        guard AXUIElementCopyAttributeValue(
-            applicationElement,
-            kAXFocusedWindowAttribute as CFString,
-            &focusedWindow
-        ) == .success,
-              let focusedWindow else {
-            return nil
-        }
-        let windowElement = focusedWindow as! AXUIElement
-
-        var positionValue: AnyObject?
-        guard AXUIElementCopyAttributeValue(
-            windowElement,
-            kAXPositionAttribute as CFString,
-            &positionValue
-        ) == .success,
-              let positionValue else {
-            return nil
-        }
-        let axPosition = positionValue as! AXValue
-
-        var sizeValue: AnyObject?
-        guard AXUIElementCopyAttributeValue(
-            windowElement,
-            kAXSizeAttribute as CFString,
-            &sizeValue
-        ) == .success,
-              let sizeValue else {
-            return nil
-        }
-        let axSize = sizeValue as! AXValue
-
-        var position = CGPoint.zero
-        var size = CGSize.zero
-
-        guard AXValueGetValue(axPosition, .cgPoint, &position),
-              AXValueGetValue(axSize, .cgSize, &size),
-              size.width > 0,
-              size.height > 0 else {
-            return nil
-        }
-
-        return CGRect(origin: position, size: size)
     }
 
 }

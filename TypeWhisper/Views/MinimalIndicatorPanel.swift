@@ -105,6 +105,11 @@ class MinimalIndicatorPanel: NSPanel {
             cachedScreen = screen
         }
 
+        if IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(on: screen) {
+            suppressForForeignFullscreen()
+            return
+        }
+
         let screenFrame = screen.visibleFrame
         let x = screenFrame.midX - Self.panelWidth / 2
 
@@ -121,6 +126,11 @@ class MinimalIndicatorPanel: NSPanel {
             self,
             displayMode: DictationViewModel.shared.notchIndicatorDisplay
         )
+    }
+
+    private func suppressForForeignFullscreen() {
+        cachedScreen = nil
+        orderOut(nil)
     }
 
     private func resolveScreen() -> NSScreen {

@@ -208,6 +208,66 @@ final class IndicatorScreenResolverTests: XCTestCase {
     }
 }
 
+final class IndicatorFullscreenSuppressionPolicyTests: XCTestCase {
+    private let notchedScreenFrame = CGRect(x: 0, y: 0, width: 3024, height: 1964)
+
+    func testSuppressesForeignFullscreenWindowThatOverlapsNotchStrip() {
+        let fullscreenWindow = CGRect(x: 0, y: 0, width: 3024, height: 1964)
+
+        XCTAssertTrue(
+            IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                screenFrame: notchedScreenFrame,
+                safeAreaTopInset: 74,
+                windowFrame: fullscreenWindow,
+                frontmostBundleIdentifier: "com.apple.ScreenSharing",
+                appBundleIdentifier: "com.typewhisper.mac.dev"
+            )
+        )
+    }
+
+    func testDoesNotSuppressOnNonNotchedScreen() {
+        let fullscreenWindow = CGRect(x: 0, y: 0, width: 3024, height: 1964)
+
+        XCTAssertFalse(
+            IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                screenFrame: notchedScreenFrame,
+                safeAreaTopInset: 0,
+                windowFrame: fullscreenWindow,
+                frontmostBundleIdentifier: "com.apple.ScreenSharing",
+                appBundleIdentifier: "com.typewhisper.mac.dev"
+            )
+        )
+    }
+
+    func testDoesNotSuppressNormalWindowBelowNotchStrip() {
+        let maximizedWindowBelowMenuBar = CGRect(x: 0, y: 0, width: 3024, height: 1880)
+
+        XCTAssertFalse(
+            IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                screenFrame: notchedScreenFrame,
+                safeAreaTopInset: 74,
+                windowFrame: maximizedWindowBelowMenuBar,
+                frontmostBundleIdentifier: "com.apple.TextEdit",
+                appBundleIdentifier: "com.typewhisper.mac.dev"
+            )
+        )
+    }
+
+    func testDoesNotSuppressTypeWhisperWindows() {
+        let fullscreenWindow = CGRect(x: 0, y: 0, width: 3024, height: 1964)
+
+        XCTAssertFalse(
+            IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                screenFrame: notchedScreenFrame,
+                safeAreaTopInset: 74,
+                windowFrame: fullscreenWindow,
+                frontmostBundleIdentifier: "com.typewhisper.mac.dev",
+                appBundleIdentifier: "com.typewhisper.mac.dev"
+            )
+        )
+    }
+}
+
 final class DockIconVisibilityTests: XCTestCase {
     func testDockIconStaysHiddenWhenMenuBarIconIsVisibleAndNoWindowIsOpen() {
         XCTAssertFalse(
