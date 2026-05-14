@@ -546,6 +546,18 @@ struct SetupWizardView: View {
         let isReady = engine?.isConfigured ?? false
         let registryPlugin = registryService.registry.first { $0.id == manifestId }
         let installState = registryService.installStates[manifestId]
+        let availability = SetupWizardRecommendationAvailability.resolve(
+            manifestId: manifestId,
+            isInstalled: isInstalled,
+            isReady: isReady,
+            registryPlugin: registryPlugin,
+            installState: installState,
+            fetchState: registryService.fetchState
+        )
+        let resolvedDescription = recommendationDescription(
+            fallback: description,
+            availability: availability
+        )
 
         HStack(spacing: 12) {
             Image(systemName: systemImage)
@@ -568,14 +580,15 @@ struct SetupWizardView: View {
                         .clipShape(Capsule())
                 }
 
-                Text(description)
+                Text(resolvedDescription)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             Spacer()
 
-            if isReady {
+            switch availability {
+            case .ready:
                 HStack(spacing: 4) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
@@ -583,9 +596,9 @@ struct SetupWizardView: View {
                         .font(.caption)
                         .foregroundStyle(.green)
                 }
-            } else if isInstalled {
+            case .setupRequired:
                 RecommendationSettingsButton(manifestId: manifestId)
-            } else if let installState {
+            case .installState(let installState):
                 switch installState {
                 case .downloading(let progress):
                     ProgressView(value: progress)
@@ -599,22 +612,54 @@ struct SetupWizardView: View {
                         .foregroundStyle(.red)
                         .lineLimit(1)
                 }
-            } else if let registryPlugin {
+            case .installAvailable:
                 Button(String(localized: "Install")) {
                     Task {
+                        guard let registryPlugin else { return }
                         await registryService.downloadAndInstall(registryPlugin)
                         PluginManager.shared.setPluginEnabled(registryPlugin.id, enabled: true)
                     }
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-            } else {
+            case .loading:
                 ProgressView()
                     .controlSize(.small)
+            case .unavailable(let reason):
+                unavailableRecommendationView(reason)
             }
         }
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 10).fill(.quaternary))
+    }
+
+    private func recommendationDescription(
+        fallback: String,
+        availability: SetupWizardRecommendationAvailability
+    ) -> String {
+        guard availability == .unavailable(.appleSiliconOnly) else {
+            return fallback
+        }
+
+        return localizedAppText(
+            "Parakeet runs locally and requires Apple Silicon. Intel Macs can use cloud Whisper through Groq or OpenAI.",
+            de: "Parakeet läuft lokal und braucht Apple Silicon. Intel-Macs können Cloud-Whisper über Groq oder OpenAI nutzen."
+        )
+    }
+
+    private func unavailableRecommendationView(_ reason: SetupWizardRecommendationUnavailableReason) -> some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            Label(reason.title, systemImage: "exclamationmark.triangle.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.orange)
+
+            Text(reason.message)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.trailing)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 190, alignment: .trailing)
+        }
     }
 
     // MARK: - Step 3: Hotkey
@@ -1220,6 +1265,82 @@ struct SetupWizardView: View {
         case .recentTranscriptions: return String(localized: "Recent Transcriptions")
         case .copyLastTranscription: return String(localized: "Copy Last Transcription")
         case .recorderToggle: return String(localized: "settings.tab.recorder")
+        }
+    }
+}
+
+// MARK: - Recommendation Availability
+
+enum SetupWizardRecommendationUnavailableReason: Equatable {
+    case appleSiliconOnly
+    case marketplaceUnavailable
+
+    var title: String {
+        switch self {
+        case .appleSiliconOnly:
+            localizedAppText("Apple Silicon only", de: "Nur Apple Silicon")
+        case .marketplaceUnavailable:
+            localizedAppText("Unavailable", de: "Nicht verfügbar")
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .appleSiliconOnly:
+            localizedAppText(
+                "Use Groq or OpenAI with a cloud Whisper model on Intel.",
+                de: "Nutze auf Intel Groq oder OpenAI mit einem Cloud-Whisper-Modell."
+            )
+        case .marketplaceUnavailable:
+            localizedAppText(
+                "No compatible download is available for this Mac.",
+                de: "Für diesen Mac ist kein kompatibler Download verfügbar."
+            )
+        }
+    }
+}
+
+enum SetupWizardRecommendationAvailability: Equatable {
+    case ready
+    case setupRequired
+    case installState(PluginRegistryService.InstallState)
+    case installAvailable
+    case loading
+    case unavailable(SetupWizardRecommendationUnavailableReason)
+
+    static func resolve(
+        manifestId: String,
+        isInstalled: Bool,
+        isReady: Bool,
+        registryPlugin: RegistryPlugin?,
+        installState: PluginRegistryService.InstallState?,
+        fetchState: PluginRegistryService.FetchState,
+        architecture: String = RuntimeArchitecture.current
+    ) -> SetupWizardRecommendationAvailability {
+        if isReady {
+            return .ready
+        }
+
+        if isInstalled {
+            return .setupRequired
+        }
+
+        if let installState {
+            return .installState(installState)
+        }
+
+        if registryPlugin != nil {
+            return .installAvailable
+        }
+
+        switch fetchState {
+        case .idle, .loading:
+            return .loading
+        case .loaded, .error(_):
+            if manifestId == "com.typewhisper.parakeet", architecture != "arm64" {
+                return .unavailable(.appleSiliconOnly)
+            }
+            return .unavailable(.marketplaceUnavailable)
         }
     }
 }

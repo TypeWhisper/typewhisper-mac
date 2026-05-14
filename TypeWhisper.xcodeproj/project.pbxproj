@@ -66,6 +66,7 @@
 		C23000000000000000000010 /* DeepgramPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000200 /* DeepgramPlugin.swift */; };
 		2F4D6A8B0C1E3F5A7B9D2C4E /* DictationViewModelIndicatorSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F4D6A8B0C1E3F5A7B9D2C4F /* DictationViewModelIndicatorSettingsTests.swift */; };
 		91B4D7E2C5A809F1632E4B7C /* PluginRegistryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B4D7E2C5A809F1632E4B7D /* PluginRegistryServiceTests.swift */; };
+		545000000000000000000002 /* SetupWizardRecommendationAvailabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 545000000000000000000001 /* SetupWizardRecommendationAvailabilityTests.swift */; };
 		91B4D7E2C5A809F1632E4B7E /* StreamingHandlerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B4D7E2C5A809F1632E4B7F /* StreamingHandlerTests.swift */; };
 		9A584149706C7567496E0100 /* XAIPluginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A584149706C7567496E0101 /* XAIPluginTests.swift */; };
 		9A584149706C7567496E0200 /* XAIPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A584149706C7567496E0210 /* XAIPlugin.swift */; };
@@ -741,6 +742,7 @@
 		2A7B3C4D5E6F708192A3B4C6 /* PromptWizardInferenceServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptWizardInferenceServiceTests.swift; sourceTree = "<group>"; };
 		2A7B3C4D5E6F708192A3B4C7 /* PromptActionsViewModelWizardTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptActionsViewModelWizardTests.swift; sourceTree = "<group>"; };
 		91B4D7E2C5A809F1632E4B7D /* PluginRegistryServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PluginRegistryServiceTests.swift; sourceTree = "<group>"; };
+		545000000000000000000001 /* SetupWizardRecommendationAvailabilityTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SetupWizardRecommendationAvailabilityTests.swift; sourceTree = "<group>"; };
 		D4A100000000000000000004 /* RecorderTranscriptionBufferTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecorderTranscriptionBufferTests.swift; sourceTree = "<group>"; };
 		91B4D7E2C5A809F1632E4B7F /* StreamingHandlerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StreamingHandlerTests.swift; sourceTree = "<group>"; };
 		9A584149706C7567496E0101 /* XAIPluginTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = XAIPluginTests.swift; sourceTree = "<group>"; };
@@ -1968,6 +1970,7 @@
 				A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */,
 				BDF548E65340A17A3A16590B /* PluginManifestValidationTests.swift */,
 				91B4D7E2C5A809F1632E4B7D /* PluginRegistryServiceTests.swift */,
+				545000000000000000000001 /* SetupWizardRecommendationAvailabilityTests.swift */,
 				B2D4F6A8C0E2143F9B7D5C1A /* PromptActionTemperaturePersistenceTests.swift */,
 				2A7B3C4D5E6F708192A3B4C7 /* PromptActionsViewModelWizardTests.swift */,
 				2A7B3C4D5E6F708192A3B4C5 /* PromptWizardComposerTests.swift */,
@@ -3297,6 +3300,7 @@
 				1E6EDB8B0D1573A05A610078 /* PluginManifestValidationTests.swift in Sources */,
 				F18A00000000000000000006 /* FillerWordsPlugin.swift in Sources */,
 				91B4D7E2C5A809F1632E4B7C /* PluginRegistryServiceTests.swift in Sources */,
+				545000000000000000000002 /* SetupWizardRecommendationAvailabilityTests.swift in Sources */,
 				A1C3E59B7D1042F9A8C6E2B1 /* PromptActionTemperaturePersistenceTests.swift in Sources */,
 				1F7A2C3D4E5B60718293A4C7 /* PromptActionsViewModelWizardTests.swift in Sources */,
 				1F7A2C3D4E5B60718293A4C5 /* PromptWizardComposerTests.swift in Sources */,
