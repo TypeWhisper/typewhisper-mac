@@ -185,7 +185,6 @@ struct IndicatorRecordingContent: View {
                     .padding(.horizontal, sizing.profilePaddingH)
                     .padding(.vertical, sizing.profilePaddingV)
                     .frame(maxWidth: NotchIndicatorLayout.profileChipMaxWidth, alignment: .leading)
-                    .background(.white.opacity(0.2), in: Capsule())
                     .accessibilityLabel(localizedAppText("Active workflow", de: "Aktiver Workflow"))
                     .accessibilityValue(name)
             } else {
