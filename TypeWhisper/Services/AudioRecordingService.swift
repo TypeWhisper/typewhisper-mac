@@ -94,6 +94,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     var inputAvailabilityOverride: ((AudioDeviceID?) -> Bool)?
     var startRecordingOverride: (() throws -> Void)?
     var stopRecordingOverride: ((StopPolicy) async -> [Float])?
+    var onFirstRecordingAudioBuffer: (() -> Void)?
 
     /// CoreAudio device ID to use for recording. nil = system default input.
     var selectedDeviceID: AudioDeviceID? {
@@ -1004,12 +1005,14 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let rms = sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(samples.count))
         let normalizedLevel = AudioLevelMeter.normalizedLevel(rms: rms)
         var requestToFirstBufferMs: Double?
+        var didReceiveFirstBuffer = false
 
         bufferLock.lock()
         sampleBuffer.append(contentsOf: samples)
         if rms > _peakRawAudioLevel { _peakRawAudioLevel = rms }
         if !hasLoggedFirstConvertedSample {
             hasLoggedFirstConvertedSample = true
+            didReceiveFirstBuffer = true
             requestToFirstBufferMs = Self.elapsedMilliseconds(
                 from: recordingRequestUptimeNanoseconds,
                 to: DispatchTime.now().uptimeNanoseconds
@@ -1028,8 +1031,17 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             guard let self else { return }
             self.audioLevel = normalizedLevel
             self.rawAudioLevel = rms
+            if didReceiveFirstBuffer {
+                self.onFirstRecordingAudioBuffer?()
+            }
         }
     }
+
+#if DEBUG
+    func testingNotifyFirstRecordingAudioBuffer() {
+        onFirstRecordingAudioBuffer?()
+    }
+#endif
 
     private func setLastStopGraceCaptureApplied(_ applied: Bool) {
         stopStateLock.withLock {

@@ -147,6 +147,7 @@ final class DictationViewModel: ObservableObject {
     @Published var activeRuleReasonLabel: String?
     @Published var activeRuleExplanation: String?
     @Published var processingPhase: String?
+    @Published private(set) var isRecordingInputReady = false
     @Published var actionFeedbackMessage: String?
     @Published var actionFeedbackIcon: String?
     @Published var actionFeedbackIsError: Bool = false
@@ -236,6 +237,10 @@ final class DictationViewModel: ObservableObject {
     private var isStopInFlight = false
     private var activeDictationSessionID: UUID?
     private var pendingPushToTalkDiscardMessage: String?
+    private var recordingStartCuePending = false
+    private var firstRecordingAudioBufferSeen = false
+    private var pendingRecordingStartedPayload: RecordingStartedPayload?
+    private var shouldPlayRecordingStartSoundWhenReady = false
     private var dictationSessions: [UUID: DictationSessionSnapshot] = [:]
     private var dictationSessionOrder: [UUID] = []
     private let maxTrackedDictationSessions = 100
@@ -377,6 +382,9 @@ final class DictationViewModel: ObservableObject {
         }
         streamingHandler.onStreamingStateChange = { [weak self] streaming in
             self?.isStreaming = streaming
+        }
+        audioRecordingService.onFirstRecordingAudioBuffer = { [weak self] in
+            self?.handleFirstRecordingAudioBuffer()
         }
 
         promptPaletteHandler.onShowNotchFeedback = { [weak self] message, icon, duration, isError, category in
@@ -579,6 +587,54 @@ final class DictationViewModel: ObservableObject {
         mediaPlaybackService.resumeIfWePaused()
     }
 
+    private func prepareRecordingStartCue(playsSound: Bool) {
+        isRecordingInputReady = false
+        recordingStartCuePending = true
+        firstRecordingAudioBufferSeen = false
+        pendingRecordingStartedPayload = nil
+        shouldPlayRecordingStartSoundWhenReady = playsSound
+    }
+
+    private func updateRecordingStartCuePayload(activeApp: (name: String?, bundleId: String?, url: String?)?) {
+        pendingRecordingStartedPayload = RecordingStartedPayload(
+            appName: activeApp?.name,
+            bundleIdentifier: activeApp?.bundleId
+        )
+        emitRecordingStartCueIfReady()
+    }
+
+    private func handleFirstRecordingAudioBuffer() {
+        firstRecordingAudioBufferSeen = true
+        emitRecordingStartCueIfReady()
+    }
+
+    private func emitRecordingStartCueIfReady() {
+        guard recordingStartCuePending,
+              firstRecordingAudioBufferSeen,
+              state == .recording,
+              let payload = pendingRecordingStartedPayload else {
+            return
+        }
+
+        recordingStartCuePending = false
+        isRecordingInputReady = true
+        if shouldPlayRecordingStartSoundWhenReady {
+            soundService.play(.recordingStarted, enabled: soundFeedbackEnabled)
+        }
+        accessibilityAnnouncementService.announceRecordingStarted()
+        EventBus.shared.emit(.recordingStarted(payload))
+    }
+
+    private func clearRecordingStartCueState(resetReadiness: Bool = true) {
+        if resetReadiness {
+            isRecordingInputReady = false
+        }
+        recordingStartCuePending = false
+        firstRecordingAudioBufferSeen = false
+        pendingRecordingStartedPayload = nil
+        shouldPlayRecordingStartSoundWhenReady = false
+    }
+
     private func clearDeferredRecordingContext() {
         metadataCaptureTask?.cancel()
         metadataCaptureTask = nil
@@ -588,6 +644,7 @@ final class DictationViewModel: ObservableObject {
     }
 
     private func abortActiveRecordingImmediately(sessionMessage: String, preserveRecoveryAudio: Bool = false) {
+        clearRecordingStartCueState()
         clearDeferredRecordingContext()
         restoreRecordingSideEffects()
         streamingHandler.stop()
@@ -747,6 +804,7 @@ final class DictationViewModel: ObservableObject {
         requestUptimeNanoseconds: UInt64 = DispatchTime.now().uptimeNanoseconds
     ) {
         let startTimestamp = CFAbsoluteTimeGetCurrent()
+        clearRecordingStartCueState()
 
         // Cancel any pending transcription from a previous recording
         if transcriptionTask != nil {
@@ -785,6 +843,7 @@ final class DictationViewModel: ObservableObject {
             audioRecordingService.hasExplicitDeviceSelection = audioDeviceService.selectedDeviceUID != nil
             let selectedInputUsesBluetooth = audioDeviceService.selectedDeviceUsesBluetoothTransport
             audioRecordingService.selectedInputDeviceUsesBluetoothTransport = selectedInputUsesBluetooth
+            prepareRecordingStartCue(playsSound: !selectedInputUsesBluetooth)
             let audioStartTimestamp = DispatchTime.now().uptimeNanoseconds
             try audioRecordingService.startRecording(requestUptimeNanoseconds: requestUptimeNanoseconds)
             let audioStartCompletedTimestamp = DispatchTime.now().uptimeNanoseconds
@@ -801,8 +860,6 @@ final class DictationViewModel: ObservableObject {
             modelManager.cancelAutoUnloadTimer()
             if selectedInputUsesBluetooth {
                 logger.info("Skipping recording start sound for Bluetooth input device")
-            } else {
-                soundService.play(.recordingStarted, enabled: soundFeedbackEnabled)
             }
             if mediaPauseEnabled { mediaPlaybackService.pauseIfPlaying() }
             if audioDuckingEnabled {
@@ -813,7 +870,6 @@ final class DictationViewModel: ObservableObject {
             // not from key press. Slow device init (e.g. iPhone Continuity ~2-3s)
             // would otherwise make the hold appear as "long press" → PTT stop.
             hotkeyService.resetKeyDownTime()
-            accessibilityAnnouncementService.announceRecordingStarted()
             partialText = ""
             isStopInFlight = false
             recordingStartTime = Date()
@@ -835,13 +891,10 @@ final class DictationViewModel: ObservableObject {
             } else {
                 clearActiveRuleState()
             }
+            updateRecordingStartCuePayload(activeApp: activeApp)
             let contextMs = (CFAbsoluteTimeGetCurrent() - contextStartTimestamp) * 1000
 
             startLiveStreaming(allowLiveTranscription: indicatorTranscriptPreviewEnabled || externalStreamingDisplayCount > 0)
-            EventBus.shared.emit(.recordingStarted(RecordingStartedPayload(
-                appName: capturedActiveApp?.name,
-                bundleIdentifier: capturedActiveApp?.bundleId
-            )))
             scheduleDeferredRecordingMetadataCapture(
                 activeApp: activeApp,
                 forcedWorkflowId: forcedWorkflowId
@@ -852,6 +905,7 @@ final class DictationViewModel: ObservableObject {
                 "Recording started: requestToAudioStartMs=\(Self.formatMilliseconds(requestToAudioStartMs), privacy: .public), audioStartMs=\(Self.formatMilliseconds(audioStartMs), privacy: .public), contextMs=\(String(format: "%.1f", contextMs), privacy: .public), totalStartMs=\(String(format: "%.1f", totalStartMs), privacy: .public)"
             )
         } catch {
+            clearRecordingStartCueState()
             clearDeferredRecordingContext()
             restoreRecordingSideEffects()
             let errorMessage: String
@@ -996,6 +1050,7 @@ final class DictationViewModel: ObservableObject {
     private func finalizeStopDictation() async {
         let sessionID = activeDictationSessionID
 
+        clearRecordingStartCueState(resetReadiness: false)
         restoreRecordingSideEffects()
         if let discardMessage = pendingPushToTalkDiscardMessage {
             pendingPushToTalkDiscardMessage = nil
@@ -1339,6 +1394,7 @@ final class DictationViewModel: ObservableObject {
         isStopInFlight = false
         activeDictationSessionID = nil
         pendingPushToTalkDiscardMessage = nil
+        clearRecordingStartCueState()
         clearRecordingCancelWarning()
         state = .idle
         partialText = ""

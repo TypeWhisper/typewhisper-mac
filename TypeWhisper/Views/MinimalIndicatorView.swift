@@ -114,6 +114,9 @@ struct MinimalIndicatorView: View {
         case .idle, .promptSelection, .promptProcessing:
             return String(localized: "Idle")
         case .recording:
+            if !viewModel.isRecordingInputReady {
+                return String(localized: "Preparing microphone")
+            }
             return String(localized: "Recording")
         case .processing:
             return String(localized: "Processing transcription")

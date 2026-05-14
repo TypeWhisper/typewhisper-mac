@@ -105,6 +105,34 @@ struct OverlayIndicatorView: View {
             }
         }
         .animation(.easeInOut(duration: 1.0), value: dotPulse)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var accessibilityLabel: String {
+        if let warning = viewModel.recordingCancelWarningMessage, viewModel.state == .recording {
+            return warning
+        }
+
+        if let feedback = viewModel.actionFeedbackMessage, viewModel.state == .inserting {
+            return feedback
+        }
+
+        switch viewModel.state {
+        case .idle, .promptSelection, .promptProcessing:
+            return String(localized: "Idle")
+        case .recording:
+            if !viewModel.isRecordingInputReady {
+                return String(localized: "Preparing microphone")
+            }
+            return String(localized: "Recording")
+        case .processing:
+            return String(localized: "Processing transcription")
+        case .inserting:
+            return String(localized: "Inserting text")
+        case .error(let message):
+            return String(localized: "Error - \(message)")
+        }
     }
 
     // MARK: - Expandable content (text + action feedback)

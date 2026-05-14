@@ -195,6 +195,9 @@ struct NotchIndicatorView: View {
             if let warning = viewModel.recordingCancelWarningMessage {
                 return warning
             }
+            if !viewModel.isRecordingInputReady {
+                return String(localized: "Preparing microphone")
+            }
             return String(localized: "Recording")
         case .processing:
             return String(localized: "Processing transcription")
