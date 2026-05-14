@@ -27,11 +27,11 @@ struct SetupWizardView: View {
         _selectedIndustryPreset = State(initialValue: IndustryPreset.selected())
         _promptProcessingService = ObservedObject(wrappedValue: PromptActionsViewModel.shared.promptProcessingService)
 
-        if UserDefaults.standard.data(forKey: UserDefaultsKeys.hybridHotkey) != nil {
+        if !DictationSettingsHandler.loadHotkeys(for: .hybrid).isEmpty {
             _selectedHotkeyMode = State(initialValue: .hybrid)
-        } else if UserDefaults.standard.data(forKey: UserDefaultsKeys.pttHotkey) != nil {
+        } else if !DictationSettingsHandler.loadHotkeys(for: .pushToTalk).isEmpty {
             _selectedHotkeyMode = State(initialValue: .pushToTalk)
-        } else if UserDefaults.standard.data(forKey: UserDefaultsKeys.toggleHotkey) != nil {
+        } else if !DictationSettingsHandler.loadHotkeys(for: .toggle).isEmpty {
             _selectedHotkeyMode = State(initialValue: .toggle)
         } else {
             _selectedHotkeyMode = State(initialValue: .hybrid)
@@ -1194,8 +1194,9 @@ struct SetupWizardView: View {
     }
 
     private var hasAnyHotkeySet: Bool {
-        [UserDefaultsKeys.hybridHotkey, UserDefaultsKeys.pttHotkey, UserDefaultsKeys.toggleHotkey]
-            .contains { UserDefaults.standard.data(forKey: $0) != nil }
+        !DictationSettingsHandler.loadHotkeys(for: .hybrid).isEmpty
+            || !DictationSettingsHandler.loadHotkeys(for: .pushToTalk).isEmpty
+            || !DictationSettingsHandler.loadHotkeys(for: .toggle).isEmpty
     }
 
     private func hotkeyLabel(for mode: HotkeySlotType) -> String {

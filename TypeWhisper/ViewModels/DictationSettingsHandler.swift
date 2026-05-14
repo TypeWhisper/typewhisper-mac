@@ -46,30 +46,66 @@ final class DictationSettingsHandler {
         onHotkeyLabelsChanged?()
     }
 
+    func addHotkey(_ hotkey: UnifiedHotkey, for slot: HotkeySlotType) {
+        hotkeyService.appendHotkey(hotkey, for: slot)
+        onHotkeyLabelsChanged?()
+    }
+
+    func replaceHotkey(_ existingHotkey: UnifiedHotkey, with newHotkey: UnifiedHotkey, for slot: HotkeySlotType) {
+        hotkeyService.replaceHotkey(existingHotkey, with: newHotkey, for: slot)
+        onHotkeyLabelsChanged?()
+    }
+
+    func removeHotkey(_ hotkey: UnifiedHotkey, for slot: HotkeySlotType) {
+        hotkeyService.removeHotkey(hotkey, for: slot)
+        onHotkeyLabelsChanged?()
+    }
+
+    func removeConflictingHotkey(_ hotkey: UnifiedHotkey, for slot: HotkeySlotType) {
+        hotkeyService.removeConflictingHotkey(hotkey, for: slot)
+        onHotkeyLabelsChanged?()
+    }
+
     func clearHotkey(for slot: HotkeySlotType) {
         hotkeyService.clearHotkey(for: slot)
         onHotkeyLabelsChanged?()
+    }
+
+    func hotkeys(for slot: HotkeySlotType) -> [UnifiedHotkey] {
+        hotkeyService.hotkeys(for: slot)
     }
 
     func isHotkeyAssigned(_ hotkey: UnifiedHotkey, excluding: HotkeySlotType) -> HotkeySlotType? {
         hotkeyService.isHotkeyAssigned(hotkey, excluding: excluding)
     }
 
-    static func loadHotkey(for slotType: HotkeySlotType) -> UnifiedHotkey? {
-        guard let data = UserDefaults.standard.data(forKey: slotType.defaultsKey) else {
-            return nil
+    static func loadHotkeys(for slotType: HotkeySlotType) -> [UnifiedHotkey] {
+        if let data = UserDefaults.standard.data(forKey: slotType.hotkeysDefaultsKey),
+           let hotkeys = try? JSONDecoder().decode([UnifiedHotkey].self, from: data) {
+            return hotkeys
         }
-        return try? JSONDecoder().decode(UnifiedHotkey.self, from: data)
+
+        guard let data = UserDefaults.standard.data(forKey: slotType.defaultsKey),
+              let hotkey = try? JSONDecoder().decode(UnifiedHotkey.self, from: data) else {
+            return []
+        }
+        return [hotkey]
+    }
+
+    static func loadHotkey(for slotType: HotkeySlotType) -> UnifiedHotkey? {
+        loadHotkeys(for: slotType).first
+    }
+
+    static func loadHotkeyLabels(for slotType: HotkeySlotType) -> [String] {
+        loadHotkeys(for: slotType).map { HotkeyService.displayName(for: $0) }
     }
 
     static func loadHotkeyLabel(for slotType: HotkeySlotType) -> String {
-        guard let hotkey = loadHotkey(for: slotType) else { return "" }
-        return HotkeyService.displayName(for: hotkey)
+        loadHotkeyLabels(for: slotType).first ?? ""
     }
 
     static func loadMenuShortcutDescriptor(for slotType: HotkeySlotType) -> HotkeyService.MenuShortcutDescriptor? {
-        guard let hotkey = loadHotkey(for: slotType) else { return nil }
-        return HotkeyService.menuShortcutDescriptor(for: hotkey)
+        loadHotkeys(for: slotType).compactMap { HotkeyService.menuShortcutDescriptor(for: $0) }.first
     }
 
     func registerInitialTriggerHotkeys() {

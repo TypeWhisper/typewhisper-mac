@@ -5532,6 +5532,116 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testGlobalSlotCanTriggerFromMultipleHotkeys() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeysForTesting([spaceHotkey(), commandOptionAHotkey()], for: .toggle)
+
+        var startCount = 0
+        service.onDictationStart = { _ in startCount += 1 }
+
+        let firstDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
+        let secondDown = try makeKeyboardEvent(
+            keyCode: 0x00,
+            keyDown: true,
+            flags: [.maskCommand, .maskAlternate]
+        )
+
+        XCTAssertTrue(service.processEventForTesting(firstDown, source: .monitor))
+        service.cancelDictation()
+        XCTAssertTrue(service.processEventForTesting(secondDown, source: .monitor))
+        XCTAssertEqual(startCount, 2)
+    }
+
+    @MainActor
+    func testLoadHotkeysMigratesLegacySingularUserDefaults() throws {
+        try withCleanHotkeyDefaults {
+            let defaults = UserDefaults.standard
+            let legacyHotkey = commandShiftCHotkey()
+            defaults.set(try JSONEncoder().encode(legacyHotkey), forKey: HotkeySlotType.copyLastTranscription.defaultsKey)
+
+            let service = HotkeyService()
+            service.loadHotkeysForTesting()
+
+            XCTAssertEqual(service.hotkeys(for: .copyLastTranscription), [legacyHotkey])
+
+            let pluralData = try XCTUnwrap(defaults.data(forKey: HotkeySlotType.copyLastTranscription.hotkeysDefaultsKey))
+            XCTAssertEqual(try JSONDecoder().decode([UnifiedHotkey].self, from: pluralData), [legacyHotkey])
+
+            let legacyData = try XCTUnwrap(defaults.data(forKey: HotkeySlotType.copyLastTranscription.defaultsKey))
+            XCTAssertEqual(try JSONDecoder().decode(UnifiedHotkey.self, from: legacyData), legacyHotkey)
+        }
+    }
+
+    @MainActor
+    func testClearingGlobalSlotRemovesPluralAndLegacyPersistence() throws {
+        try withCleanHotkeyDefaults {
+            let defaults = UserDefaults.standard
+            let service = HotkeyService()
+            service.suspendMonitoring()
+
+            service.updateHotkey(spaceHotkey(), for: .toggle)
+            service.appendHotkey(commandOptionAHotkey(), for: .toggle)
+
+            XCTAssertNotNil(defaults.data(forKey: HotkeySlotType.toggle.defaultsKey))
+            XCTAssertNotNil(defaults.data(forKey: HotkeySlotType.toggle.hotkeysDefaultsKey))
+
+            service.clearHotkey(for: .toggle)
+            service.suspendMonitoring()
+
+            XCTAssertNil(defaults.data(forKey: HotkeySlotType.toggle.defaultsKey))
+            XCTAssertNil(defaults.data(forKey: HotkeySlotType.toggle.hotkeysDefaultsKey))
+            XCTAssertTrue(service.hotkeys(for: .toggle).isEmpty)
+        }
+    }
+
+    @MainActor
+    func testRemovingConflictingGlobalHotkeyPreservesOtherBindingsInSlot() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeysForTesting([spaceHotkey(), commandOptionAHotkey()], for: .toggle)
+
+        service.removeConflictingHotkey(spaceHotkey(), for: .toggle)
+        service.suspendMonitoring()
+
+        XCTAssertEqual(service.hotkeys(for: .toggle), [commandOptionAHotkey()])
+    }
+
+    @MainActor
+    func testWorkflowConflictCheckDetectsAnyGlobalSlotBinding() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeysForTesting([spaceHotkey(), commandOptionAHotkey()], for: .toggle)
+
+        XCTAssertEqual(service.isHotkeyAssignedToGlobalSlot(commandOptionAHotkey()), .toggle)
+    }
+
+    private func withCleanHotkeyDefaults(_ body: () throws -> Void) throws {
+        let defaults = UserDefaults.standard
+        let keys = HotkeySlotType.allCases.flatMap { [$0.defaultsKey, $0.hotkeysDefaultsKey] }
+        let originals = keys.reduce(into: [String: Any]()) { result, key in
+            if let value = defaults.object(forKey: key) {
+                result[key] = value
+            }
+        }
+        keys.forEach { defaults.removeObject(forKey: $0) }
+        defer {
+            keys.forEach { key in
+                if let value = originals[key] {
+                    defaults.set(value, forKey: key)
+                } else {
+                    defaults.removeObject(forKey: key)
+                }
+            }
+        }
+
+        try body()
+    }
+
+    @MainActor
     private func spaceHotkey() -> UnifiedHotkey {
         UnifiedHotkey(
             keyCode: 0x31,

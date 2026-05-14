@@ -362,13 +362,13 @@ struct HomeSettingsView: View {
     // MARK: - Getting Started Card
 
     private var primaryHotkeyLabel: String {
-        if UserDefaults.standard.data(forKey: UserDefaultsKeys.hybridHotkey) != nil {
+        if !DictationSettingsHandler.loadHotkeys(for: .hybrid).isEmpty {
             return dictation.hybridHotkeyLabel
         }
-        if UserDefaults.standard.data(forKey: UserDefaultsKeys.pttHotkey) != nil {
+        if !DictationSettingsHandler.loadHotkeys(for: .pushToTalk).isEmpty {
             return dictation.pttHotkeyLabel
         }
-        if UserDefaults.standard.data(forKey: UserDefaultsKeys.toggleHotkey) != nil {
+        if !DictationSettingsHandler.loadHotkeys(for: .toggle).isEmpty {
             return dictation.toggleHotkeyLabel
         }
         return dictation.hybridHotkeyLabel
