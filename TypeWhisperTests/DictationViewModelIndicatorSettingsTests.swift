@@ -353,6 +353,44 @@ final class MenuBarGroupingTests: XCTestCase {
     }
 }
 
+final class MenuBarIconStateTests: XCTestCase {
+    func testRecordingIndicatorIsActiveDuringDictationRecording() {
+        XCTAssertTrue(
+            MenuBarIconState.isRecordingActive(
+                dictationState: .recording,
+                recorderState: .idle
+            )
+        )
+    }
+
+    func testRecordingIndicatorIsActiveDuringRecorderRecording() {
+        XCTAssertTrue(
+            MenuBarIconState.isRecordingActive(
+                dictationState: .idle,
+                recorderState: .recording
+            )
+        )
+    }
+
+    func testRecordingIndicatorIsInactiveWhileRecorderFinalizes() {
+        XCTAssertFalse(
+            MenuBarIconState.isRecordingActive(
+                dictationState: .idle,
+                recorderState: .finalizing
+            )
+        )
+    }
+
+    func testRecordingIndicatorIsInactiveWithoutActiveRecording() {
+        XCTAssertFalse(
+            MenuBarIconState.isRecordingActive(
+                dictationState: .processing,
+                recorderState: .idle
+            )
+        )
+    }
+}
+
 final class RecorderMenuActionStateTests: XCTestCase {
     func testRecorderToggleIsEnabledWhenIdleAndMicIsEnabled() {
         XCTAssertTrue(

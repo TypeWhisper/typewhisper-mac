@@ -40,6 +40,64 @@ enum DockIconVisibility {
     }
 }
 
+enum MenuBarIconState {
+    static func isRecordingActive(
+        dictationState: DictationViewModel.State,
+        recorderState: AudioRecorderViewModel.RecorderState
+    ) -> Bool {
+        dictationState == .recording || recorderState == .recording
+    }
+}
+
+private struct MenuBarExtraLabel: View {
+    @ObservedObject private var dictation = DictationViewModel.shared
+    @ObservedObject private var recorder = AudioRecorderViewModel.shared
+
+    private var title: String {
+        AppConstants.isDevelopment ? "TypeWhisper Dev" : "TypeWhisper"
+    }
+
+    private var isRecordingActive: Bool {
+        MenuBarIconState.isRecordingActive(
+            dictationState: dictation.state,
+            recorderState: recorder.state
+        )
+    }
+
+    var body: some View {
+        TypeWhisperLogoMark()
+            .foregroundStyle(isRecordingActive ? Color.red : Color.accentColor)
+            .frame(width: 18, height: 18)
+            .accessibilityLabel(Text(verbatim: title))
+            .accessibilityValue(
+                isRecordingActive
+                    ? Text(String(localized: "Recording..."))
+                    : Text(String(localized: "Idle"))
+            )
+    }
+}
+
+private struct TypeWhisperLogoMark: View {
+    private let relativeBarHeights: [CGFloat] = [0.5, 0.75, 1.0, 0.75, 0.5]
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = min(proxy.size.width, proxy.size.height)
+            let barWidth = size * 0.18
+            let spacing = size * 0.08
+
+            HStack(alignment: .center, spacing: spacing) {
+                ForEach(Array(relativeBarHeights.enumerated()), id: \.offset) { _, height in
+                    Capsule()
+                        .frame(width: barWidth, height: size * height)
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+        .aspectRatio(1, contentMode: .fit)
+    }
+}
+
 struct TypeWhisperApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @AppStorage(UserDefaultsKeys.showMenuBarIcon) private var showMenuBarIcon = true
@@ -56,8 +114,14 @@ struct TypeWhisperApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra(AppConstants.isDevelopment ? "TypeWhisper Dev" : "TypeWhisper", systemImage: "waveform", isInserted: $showMenuBarIcon) {
+        MenuBarExtra(isInserted: $showMenuBarIcon) {
             menuBarContent
+        } label: {
+            if AppConstants.isRunningTests {
+                EmptyView()
+            } else {
+                MenuBarExtraLabel()
+            }
         }
         .menuBarExtraStyle(.menu)
 
