@@ -9,6 +9,10 @@ final class LiveTranscriptPluginTests: XCTestCase {
         viewModel.paragraphs.map(\.text).joined(separator: " ")
     }
 
+    private func paragraphTexts(from viewModel: LiveTranscriptViewModel) -> [String] {
+        viewModel.paragraphs.map(\.text)
+    }
+
     func testAutoOpenDefaultsToDisabledWhenUnset() throws {
         let eventBus = PluginTestEventBus()
         let host = try PluginTestHostServices(eventBus: eventBus)
@@ -89,6 +93,30 @@ final class LiveTranscriptPluginTests: XCTestCase {
         XCTAssertEqual(displayedText(from: viewModel), "First sentence. Second sentence. Third sentence.")
     }
 
+    func testViewModelKeepsThreeSentenceParagraphsForCumulativeUpdates() {
+        let viewModel = LiveTranscriptViewModel()
+
+        viewModel.updateText("First sentence. Second sentence. Third sentence.", isFinal: false)
+        viewModel.updateText("First sentence. Second sentence. Third sentence. Fourth sentence.", isFinal: false)
+
+        XCTAssertEqual(paragraphTexts(from: viewModel), [
+            "First sentence. Second sentence. Third sentence.",
+            "Fourth sentence.",
+        ])
+    }
+
+    func testViewModelMergesTwoSentenceSlidingWindowUpdates() {
+        let viewModel = LiveTranscriptViewModel()
+
+        viewModel.updateText("First sentence. Second sentence. Third sentence. Fourth sentence.", isFinal: false)
+        viewModel.updateText("Third sentence. Fourth sentence. Fifth sentence.", isFinal: false)
+
+        XCTAssertEqual(
+            displayedText(from: viewModel),
+            "First sentence. Second sentence. Third sentence. Fourth sentence. Fifth sentence."
+        )
+    }
+
     func testViewModelDeduplicatesCleanedSegmentUpdatesAfterAppend() {
         let viewModel = LiveTranscriptViewModel()
 
@@ -96,6 +124,41 @@ final class LiveTranscriptPluginTests: XCTestCase {
         viewModel.updateText("This is test sentence. Now the next sentence.", isFinal: false)
 
         XCTAssertEqual(displayedText(from: viewModel), "This is a test sentence. Now the next sentence.")
+    }
+
+    func testViewModelDropsNoisyReporterSlidingWindowPrefix() {
+        let viewModel = LiveTranscriptViewModel()
+
+        viewModel.updateText(
+            "Das hier ist das klassische DJI-Setup. Also das sieht aus wie beim Mini 1, einfach dass die Dinger 2 sind. Das ueberrascht mich ein bisschen.",
+            isFinal: false
+        )
+        viewModel.updateText(
+            "Mini 1, einlech dass sie Dinge 2 ist. Aber jetzt muessen wir nichts anderes angucken.",
+            isFinal: false
+        )
+
+        XCTAssertEqual(
+            displayedText(from: viewModel),
+            "Das hier ist das klassische DJI-Setup. Also das sieht aus wie beim Mini 1, einfach dass die Dinger 2 sind. Das ueberrascht mich ein bisschen. Aber jetzt muessen wir nichts anderes angucken."
+        )
+    }
+
+    func testViewModelPreservesLegitimateShortRepetitions() {
+        let viewModel = LiveTranscriptViewModel()
+
+        viewModel.updateText("Eins. Eins. Zwei.", isFinal: false)
+
+        XCTAssertEqual(displayedText(from: viewModel), "Eins. Eins. Zwei.")
+    }
+
+    func testViewModelReplacesLiveTailWithCompletedSentence() {
+        let viewModel = LiveTranscriptViewModel()
+
+        viewModel.updateText("This is a partial", isFinal: false)
+        viewModel.updateText("This is a partial sentence.", isFinal: false)
+
+        XCTAssertEqual(displayedText(from: viewModel), "This is a partial sentence.")
     }
 
     func testViewModelIgnoresShorterResetUpdates() {

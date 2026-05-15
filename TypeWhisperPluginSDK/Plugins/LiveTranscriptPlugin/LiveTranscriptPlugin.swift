@@ -246,7 +246,8 @@ final class LiveTranscriptViewModel: ObservableObject {
     @Published var paragraphs: [TranscriptParagraph] = []
     @Published var isAutoScrollEnabled: Bool = true
 
-    private var previousFullText: String = ""
+    private var confirmedSentences: [String] = []
+    private var liveTail: String?
     private var recentTexts: [String] = []
     private let sentencesPerParagraph: Int = 3
 
@@ -262,7 +263,8 @@ final class LiveTranscriptViewModel: ObservableObject {
 
     func reset() {
         paragraphs = []
-        previousFullText = ""
+        confirmedSentences = []
+        liveTail = nil
         recentTexts = []
         isAutoScrollEnabled = true
     }
@@ -281,80 +283,262 @@ final class LiveTranscriptViewModel: ObservableObject {
         // Ring buffer dedup: ignore exact duplicates
         if recentTexts.contains(cleaned) { return }
 
-        let merged = removeConsecutiveDuplicateSentences(
-            mergeTranscript(previous: previousFullText, incoming: cleaned)
-        )
-        guard merged != previousFullText else {
+        let previousRenderedText = renderedText()
+        let segments = splitIntoCompletedSentencesAndTail(cleaned)
+
+        mergeCompletedSentences(segments.completed)
+        mergeLiveTail(segments.tail)
+
+        let merged = renderedText()
+        guard merged != previousRenderedText else {
             return
         }
 
         recentTexts.append(cleaned)
         if recentTexts.count > 3 { recentTexts.removeFirst() }
 
-        // Split full text at sentence boundaries
-        var newTexts = splitAtSentenceBoundaries(merged, sentencesPerParagraph: sentencesPerParagraph)
+        let renderedSegments = confirmedSentences + (liveTail.map { [$0] } ?? [])
+        var newTexts = splitSegmentsIntoParagraphs(renderedSegments, sentencesPerParagraph: sentencesPerParagraph)
         if newTexts.isEmpty { newTexts = [merged] }
 
         paragraphs = reconcileParagraphs(old: paragraphs, new: newTexts)
-
-        previousFullText = merged
     }
 
     // MARK: - Helpers
 
-    private func mergeTranscript(previous: String, incoming: String) -> String {
-        guard !previous.isEmpty else { return incoming }
-        guard !incoming.isEmpty else { return previous }
+    private func mergeCompletedSentences(_ incomingSentences: [String]) {
+        let incoming = deduplicatedSentences(incomingSentences)
+        guard !incoming.isEmpty else { return }
 
-        if incoming.hasPrefix(previous) {
-            return incoming
+        if confirmedSentences.isEmpty || isCumulativeReplacement(incoming) {
+            confirmedSentences = incoming
+            liveTail = nil
+            return
         }
 
-        if previous.contains(incoming) && incoming.count < previous.count {
-            return previous
+        let overlap = sentenceOverlapLength(previous: confirmedSentences, incoming: incoming)
+        let newSentences = overlap > 0 ? Array(incoming.dropFirst(overlap)) : incoming
+
+        for sentence in newSentences where !isAlreadyRepresented(sentence) {
+            confirmedSentences.append(sentence)
         }
 
-        let commonPrefix = commonPrefixLength(previous, incoming)
-        if commonPrefix > previous.count / 2 && incoming.count >= previous.count {
-            return incoming
-        }
-
-        let overlap = suffixPrefixOverlapLength(previous, incoming)
-        if overlap > 0 {
-            let tail = String(incoming.dropFirst(overlap)).trimmingCharacters(in: .whitespacesAndNewlines)
-            return appendTranscript(previous, tail)
-        }
-
-        return appendTranscript(previous, incoming)
+        liveTail = nil
     }
 
-    private func appendTranscript(_ previous: String, _ addition: String) -> String {
-        let addition = addition.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !addition.isEmpty else { return previous }
-
-        if previous.last?.isWhitespace == true || addition.first?.isWhitespace == true {
-            return previous + addition
+    private func mergeLiveTail(_ tail: String?) {
+        guard let tail = tail?.trimmingCharacters(in: .whitespacesAndNewlines), !tail.isEmpty else {
+            liveTail = nil
+            return
         }
-        return previous + " " + addition
+
+        if isAlreadyRepresented(tail) {
+            liveTail = nil
+            return
+        }
+
+        if let current = liveTail {
+            if tail.hasPrefix(current) || sentenceKey(tail) == sentenceKey(current) {
+                liveTail = tail
+                return
+            }
+            if current.hasPrefix(tail) {
+                return
+            }
+        }
+
+        liveTail = tail
     }
 
-    private func suffixPrefixOverlapLength(_ previous: String, _ incoming: String) -> Int {
+    private func isCumulativeReplacement(_ incoming: [String]) -> Bool {
+        guard incoming.count >= confirmedSentences.count else { return false }
+        guard !confirmedSentences.isEmpty else { return true }
+
+        for index in confirmedSentences.indices {
+            guard sentenceKey(confirmedSentences[index]) == sentenceKey(incoming[index]) else {
+                return false
+            }
+        }
+
+        return true
+    }
+
+    private func sentenceOverlapLength(previous: [String], incoming: [String]) -> Int {
         let maxLength = min(previous.count, incoming.count)
         guard maxLength > 0 else { return 0 }
 
         for length in stride(from: maxLength, through: 1, by: -1) {
-            let previousSuffix = previous.suffix(length)
-            guard previousSuffix == incoming.prefix(length) else { continue }
-            guard isMeaningfulOverlap(String(previousSuffix), length: length) else { continue }
+            let previousSlice = previous.suffix(length)
+            let incomingSlice = incoming.prefix(length)
+            guard zip(previousSlice, incomingSlice).allSatisfy(sentenceMatchesForSequence) else {
+                continue
+            }
             return length
         }
 
         return 0
     }
 
-    private func isMeaningfulOverlap(_ overlap: String, length: Int) -> Bool {
-        if length >= 8 { return true }
-        return overlap.last.map { ".!?".contains($0) } ?? false
+    private func isAlreadyRepresented(_ sentence: String) -> Bool {
+        confirmedSentences.contains { existing in
+            sentencesRepresentSameMeaning(existing, sentence) ||
+                isPartialDuplicate(existing: existing, incoming: sentence)
+        }
+    }
+
+    private func renderedText() -> String {
+        let segments = confirmedSentences + (liveTail.map { [$0] } ?? [])
+        return segments.joined(separator: " ")
+    }
+
+    private func deduplicatedSentences(_ sentences: [String]) -> [String] {
+        var result: [String] = []
+        for sentence in sentences {
+            let isDuplicate = result.contains { sentencesRepresentSameMeaning($0, sentence) }
+            if !isDuplicate {
+                result.append(sentence)
+            }
+        }
+        return result
+    }
+
+    private func splitIntoCompletedSentencesAndTail(_ text: String) -> (completed: [String], tail: String?) {
+        var sentences: [String] = []
+        var currentStart = text.startIndex
+        var i = text.startIndex
+
+        while i < text.endIndex {
+            if text[i] == "." || text[i] == "!" || text[i] == "?" {
+                let sentenceEnd = text.index(after: i)
+                let sentence = String(text[currentStart..<sentenceEnd]).trimmingCharacters(in: .whitespaces)
+                if !sentence.isEmpty { sentences.append(sentence) }
+                currentStart = sentenceEnd
+            }
+            i = text.index(after: i)
+        }
+
+        let tail: String?
+        if currentStart < text.endIndex {
+            let remaining = String(text[currentStart...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            tail = remaining.isEmpty ? nil : remaining
+        } else {
+            tail = nil
+        }
+
+        return (sentences, tail)
+    }
+
+    private func splitSegmentsIntoParagraphs(_ segments: [String], sentencesPerParagraph: Int) -> [String] {
+        guard !segments.isEmpty else { return [] }
+
+        var paragraphs: [String] = []
+        var current: [String] = []
+
+        for segment in segments {
+            current.append(segment)
+            if current.count >= sentencesPerParagraph {
+                paragraphs.append(current.joined(separator: " "))
+                current.removeAll()
+            }
+        }
+
+        if !current.isEmpty {
+            paragraphs.append(current.joined(separator: " "))
+        }
+
+        return paragraphs
+    }
+
+    private func sentenceMatchesForSequence(_ a: String, _ b: String) -> Bool {
+        if sentenceKey(a) == sentenceKey(b) {
+            return true
+        }
+        return sentencesRepresentSameMeaning(a, b)
+    }
+
+    private func sentencesRepresentSameMeaning(_ a: String, _ b: String) -> Bool {
+        let aWords = sentenceWords(a)
+        let bWords = sentenceWords(b)
+        guard aWords.count >= 2 && bWords.count >= 2 else { return false }
+
+        if sentenceKey(a) == sentenceKey(b) {
+            return true
+        }
+
+        return isSimilarSentence(a, b)
+    }
+
+    private func isPartialDuplicate(existing: String, incoming: String) -> Bool {
+        let existingWords = sentenceWords(existing)
+        let incomingWords = sentenceWords(incoming)
+        guard existingWords.count >= 4 && incomingWords.count >= 4 else { return false }
+
+        var matchedIndexes = Set<Int>()
+        var matchCount = 0
+
+        for incomingWord in incomingWords {
+            guard let matchIndex = existingWords.indices.first(where: { index in
+                !matchedIndexes.contains(index) && tokensMatch(existingWords[index], incomingWord)
+            }) else {
+                continue
+            }
+
+            matchedIndexes.insert(matchIndex)
+            matchCount += 1
+        }
+
+        let coverage = Double(matchCount) / Double(incomingWords.count)
+        return matchCount >= 4 && coverage >= 0.6
+    }
+
+    private func sentenceKey(_ sentence: String) -> String {
+        sentenceWords(sentence).joined(separator: " ")
+    }
+
+    private func sentenceWords(_ sentence: String) -> [String] {
+        sentence.lowercased().split(separator: " ").compactMap { rawWord in
+            let word = rawWord.trimmingCharacters(in: .punctuationCharacters)
+            return word.isEmpty ? nil : word
+        }
+    }
+
+    private func tokensMatch(_ a: String, _ b: String) -> Bool {
+        if a == b { return true }
+
+        let shortest = min(a.count, b.count)
+        let longest = max(a.count, b.count)
+        guard shortest >= 4 else { return false }
+
+        let allowedDistance = max(1, longest / 4)
+        return levenshteinDistance(a, b) <= allowedDistance
+    }
+
+    private func levenshteinDistance(_ a: String, _ b: String) -> Int {
+        let aChars = Array(a)
+        let bChars = Array(b)
+
+        if aChars.isEmpty { return bChars.count }
+        if bChars.isEmpty { return aChars.count }
+
+        var previousRow = Array(0...bChars.count)
+        var currentRow = Array(repeating: 0, count: bChars.count + 1)
+
+        for (aIndex, aChar) in aChars.enumerated() {
+            currentRow[0] = aIndex + 1
+
+            for (bIndex, bChar) in bChars.enumerated() {
+                let substitutionCost = aChar == bChar ? 0 : 1
+                currentRow[bIndex + 1] = min(
+                    previousRow[bIndex + 1] + 1,
+                    currentRow[bIndex] + 1,
+                    previousRow[bIndex] + substitutionCost
+                )
+            }
+
+            previousRow = currentRow
+        }
+
+        return previousRow[bChars.count]
     }
 
     private func removeConsecutiveDuplicateSentences(_ text: String) -> String {
@@ -396,62 +580,14 @@ final class LiveTranscriptViewModel: ObservableObject {
     }
 
     private func isSimilarSentence(_ a: String, _ b: String) -> Bool {
-        let aWords = Set(a.lowercased().split(separator: " ").map {
-            $0.trimmingCharacters(in: .punctuationCharacters)
-        }.filter { !$0.isEmpty })
-        let bWords = Set(b.lowercased().split(separator: " ").map {
-            $0.trimmingCharacters(in: .punctuationCharacters)
-        }.filter { !$0.isEmpty })
+        let aWords = Set(sentenceWords(a))
+        let bWords = Set(sentenceWords(b))
 
         guard aWords.count >= 2 && bWords.count >= 2 else { return false }
 
         let intersection = aWords.intersection(bWords)
         let similarity = Double(intersection.count) / Double(max(aWords.count, bWords.count))
         return similarity >= 0.7
-    }
-
-    private func commonPrefixLength(_ a: String, _ b: String) -> Int {
-        var count = 0
-        for (ca, cb) in zip(a, b) {
-            if ca != cb { break }
-            count += 1
-        }
-        return count
-    }
-
-    private func splitAtSentenceBoundaries(_ text: String, sentencesPerParagraph: Int) -> [String] {
-        var result: [String] = []
-        var currentStart = text.startIndex
-        var sentenceCount = 0
-        var i = text.startIndex
-
-        while i < text.endIndex {
-            let char = text[i]
-            if char == "." || char == "!" || char == "?" {
-                let nextIndex = text.index(after: i)
-                let isEnd = nextIndex == text.endIndex
-                let isFollowedBySpace = !isEnd && text[nextIndex].isWhitespace
-
-                if isEnd || isFollowedBySpace {
-                    sentenceCount += 1
-                    if sentenceCount >= sentencesPerParagraph {
-                        let endIdx = isFollowedBySpace ? nextIndex : text.endIndex
-                        let para = String(text[currentStart..<endIdx]).trimmingCharacters(in: .whitespaces)
-                        if !para.isEmpty { result.append(para) }
-                        currentStart = isFollowedBySpace ? nextIndex : text.endIndex
-                        sentenceCount = 0
-                    }
-                }
-            }
-            i = text.index(after: i)
-        }
-
-        if currentStart < text.endIndex {
-            let remaining = String(text[currentStart...]).trimmingCharacters(in: .whitespaces)
-            if !remaining.isEmpty { result.append(remaining) }
-        }
-
-        return result
     }
 
     private func reconcileParagraphs(old: [TranscriptParagraph], new: [String]) -> [TranscriptParagraph] {
