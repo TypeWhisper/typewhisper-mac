@@ -65,8 +65,9 @@ private struct MenuBarExtraLabel: View {
     }
 
     var body: some View {
-        TypeWhisperLogoMark()
-            .foregroundStyle(isRecordingActive ? Color.red : Color.accentColor)
+        Image(nsImage: MenuBarLogoMarkImage.image(isRecordingActive: isRecordingActive))
+            .resizable()
+            .renderingMode(isRecordingActive ? .original : .template)
             .frame(width: 18, height: 18)
             .accessibilityLabel(Text(verbatim: title))
             .accessibilityValue(
@@ -77,24 +78,51 @@ private struct MenuBarExtraLabel: View {
     }
 }
 
-private struct TypeWhisperLogoMark: View {
-    private let relativeBarHeights: [CGFloat] = [0.5, 0.75, 1.0, 0.75, 0.5]
+enum MenuBarLogoMarkImage {
+    static let size = CGSize(width: 18, height: 18)
+    private static let relativeBarHeights: [CGFloat] = [0.5, 0.75, 1.0, 0.75, 0.5]
 
-    var body: some View {
-        GeometryReader { proxy in
-            let size = min(proxy.size.width, proxy.size.height)
-            let barWidth = size * 0.18
-            let spacing = size * 0.08
+    static func image(isRecordingActive: Bool) -> NSImage {
+        let image = NSImage(size: size)
+        image.lockFocus()
 
-            HStack(alignment: .center, spacing: spacing) {
-                ForEach(Array(relativeBarHeights.enumerated()), id: \.offset) { _, height in
-                    Capsule()
-                        .frame(width: barWidth, height: size * height)
-                }
-            }
-            .frame(width: proxy.size.width, height: proxy.size.height)
+        NSGraphicsContext.current?.shouldAntialias = true
+        (isRecordingActive ? NSColor.systemRed : NSColor.black).setFill()
+
+        for rect in barRects(in: CGRect(origin: .zero, size: size)) {
+            NSBezierPath(
+                roundedRect: rect,
+                xRadius: rect.width / 2,
+                yRadius: rect.width / 2
+            ).fill()
         }
-        .aspectRatio(1, contentMode: .fit)
+
+        image.unlockFocus()
+        image.isTemplate = !isRecordingActive
+        return image
+    }
+
+    static func barRects(in rect: CGRect) -> [CGRect] {
+        let side = min(rect.width, rect.height) * 0.875
+        let barWidth = side / 7
+        let spacing = barWidth / 2
+        let totalWidth = (barWidth * CGFloat(relativeBarHeights.count))
+            + (spacing * CGFloat(relativeBarHeights.count - 1))
+        var x = rect.midX - (totalWidth / 2)
+
+        return relativeBarHeights.map { relativeHeight in
+            let height = side * relativeHeight
+            defer {
+                x += barWidth + spacing
+            }
+
+            return CGRect(
+                x: x,
+                y: rect.midY - (height / 2),
+                width: barWidth,
+                height: height
+            )
+        }
     }
 }
 
