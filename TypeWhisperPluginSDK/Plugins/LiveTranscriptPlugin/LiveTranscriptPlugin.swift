@@ -275,30 +275,85 @@ final class LiveTranscriptViewModel: ObservableObject {
         let trimmed = fullText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        // Ring buffer dedup: ignore exact duplicates
-        if recentTexts.contains(trimmed) { return }
+        let cleaned = removeConsecutiveDuplicateSentences(trimmed)
+        guard !cleaned.isEmpty else { return }
 
-        // Substring dedup: ignore if new text is a substring of previous (engine reset)
-        if !previousFullText.isEmpty && previousFullText.contains(trimmed) && trimmed.count < previousFullText.count {
+        // Ring buffer dedup: ignore exact duplicates
+        if recentTexts.contains(cleaned) { return }
+
+        let merged = mergeTranscript(previous: previousFullText, incoming: cleaned)
+        guard merged != previousFullText else {
             return
         }
-
-        // Remove engine hallucination: consecutive similar sentences
-        let cleaned = removeConsecutiveDuplicateSentences(trimmed)
 
         recentTexts.append(cleaned)
         if recentTexts.count > 3 { recentTexts.removeFirst() }
 
         // Split full text at sentence boundaries
-        var newTexts = splitAtSentenceBoundaries(cleaned, sentencesPerParagraph: sentencesPerParagraph)
-        if newTexts.isEmpty { newTexts = [cleaned] }
+        var newTexts = splitAtSentenceBoundaries(merged, sentencesPerParagraph: sentencesPerParagraph)
+        if newTexts.isEmpty { newTexts = [merged] }
 
         paragraphs = reconcileParagraphs(old: paragraphs, new: newTexts)
 
-        previousFullText = cleaned
+        previousFullText = merged
     }
 
     // MARK: - Helpers
+
+    private func mergeTranscript(previous: String, incoming: String) -> String {
+        guard !previous.isEmpty else { return incoming }
+        guard !incoming.isEmpty else { return previous }
+
+        if incoming.hasPrefix(previous) {
+            return incoming
+        }
+
+        if previous.contains(incoming) && incoming.count < previous.count {
+            return previous
+        }
+
+        let commonPrefix = commonPrefixLength(previous, incoming)
+        if commonPrefix > previous.count / 2 && incoming.count >= previous.count {
+            return incoming
+        }
+
+        let overlap = suffixPrefixOverlapLength(previous, incoming)
+        if overlap > 0 {
+            let tail = String(incoming.dropFirst(overlap)).trimmingCharacters(in: .whitespacesAndNewlines)
+            return appendTranscript(previous, tail)
+        }
+
+        return appendTranscript(previous, incoming)
+    }
+
+    private func appendTranscript(_ previous: String, _ addition: String) -> String {
+        let addition = addition.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !addition.isEmpty else { return previous }
+
+        if previous.last?.isWhitespace == true || addition.first?.isWhitespace == true {
+            return previous + addition
+        }
+        return previous + " " + addition
+    }
+
+    private func suffixPrefixOverlapLength(_ previous: String, _ incoming: String) -> Int {
+        let maxLength = min(previous.count, incoming.count)
+        guard maxLength > 0 else { return 0 }
+
+        for length in stride(from: maxLength, through: 1, by: -1) {
+            let previousSuffix = previous.suffix(length)
+            guard previousSuffix == incoming.prefix(length) else { continue }
+            guard isMeaningfulOverlap(String(previousSuffix), length: length) else { continue }
+            return length
+        }
+
+        return 0
+    }
+
+    private func isMeaningfulOverlap(_ overlap: String, length: Int) -> Bool {
+        if length >= 8 { return true }
+        return overlap.last.map { ".!?".contains($0) } ?? false
+    }
 
     private func removeConsecutiveDuplicateSentences(_ text: String) -> String {
         let sentences = splitIntoSentences(text)
