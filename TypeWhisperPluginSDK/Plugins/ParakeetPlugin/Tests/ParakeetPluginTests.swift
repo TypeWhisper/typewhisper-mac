@@ -121,6 +121,14 @@ final class ParakeetPluginTests: XCTestCase {
         XCTAssertFalse(fallbackPolicy.allowsTranscriptPreviewFallback)
     }
 
+    func testLivePreviewConfigUsesLowLatencyWindow() throws {
+        let firstUpdateLatency = parakeetLivePreviewConfig.chunkSeconds
+            + parakeetLivePreviewConfig.rightContextSeconds
+
+        XCTAssertLessThanOrEqual(firstUpdateLatency, 3.0)
+        XCTAssertEqual(parakeetLivePreviewConfig.minContextForConfirmation, 10.0)
+    }
+
     func testDictionaryTermsSupportReflectsStoredBoostingPreference() throws {
         let defaultHost = try PluginTestHostServices()
         let defaultPlugin = makePlugin()

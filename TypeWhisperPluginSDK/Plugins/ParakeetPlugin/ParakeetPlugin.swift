@@ -6,6 +6,14 @@ import FluidAudio
 import TypeWhisperPluginSDK
 
 private let parakeetLiveSampleRate: Double = 16_000
+let parakeetLivePreviewConfig = SlidingWindowAsrConfig(
+    chunkSeconds: 2.0,
+    hypothesisChunkSeconds: 1.0,
+    leftContextSeconds: 2.0,
+    rightContextSeconds: 0.5,
+    minContextForConfirmation: 10.0,
+    confirmationThreshold: 0.80
+)
 
 private func makeParakeetLiveAudioBuffer(from samples: [Float]) throws -> AVAudioPCMBuffer {
     guard let format = AVAudioFormat(
@@ -256,7 +264,7 @@ final class ParakeetPlugin: NSObject, LiveTranscriptionCapablePlugin, Dictionary
             await configureBoostingIfNeeded(prompt: prompt)
         }
 
-        let manager = SlidingWindowAsrManager(config: .streaming)
+        let manager = SlidingWindowAsrManager(config: parakeetLivePreviewConfig)
         try await manager.loadModels(loadedAsrModels)
 
         if vocabularyBoostingEnabled,
@@ -273,7 +281,27 @@ final class ParakeetPlugin: NSObject, LiveTranscriptionCapablePlugin, Dictionary
         }
 
         try await manager.startStreaming(source: .microphone)
-        return ParakeetLiveTranscriptionSession(manager: manager, onProgress: onProgress)
+        return ParakeetLiveTranscriptionSession(
+            manager: manager,
+            onProgress: onProgress,
+            finalTranscribe: { [weak self] samples in
+                guard let self else {
+                    throw PluginTranscriptionError.notConfigured
+                }
+
+                let audio = AudioData(
+                    samples: samples,
+                    wavData: Data(),
+                    duration: Double(samples.count) / parakeetLiveSampleRate
+                )
+                return try await self.transcribe(
+                    audio: audio,
+                    language: language,
+                    translate: false,
+                    prompt: prompt
+                )
+            }
+        )
     }
 
     private static func fluidAudioLanguage(for language: String?) -> Language? {
@@ -653,19 +681,24 @@ final class ParakeetPlugin: NSObject, LiveTranscriptionCapablePlugin, Dictionary
 
 private actor ParakeetLiveTranscriptionSession: LiveTranscriptionSession {
     private let manager: SlidingWindowAsrManager
+    private let finalTranscribe: @Sendable ([Float]) async throws -> PluginTranscriptionResult
     private var updateTask: Task<Void, Never>?
+    private var audioSamples: [Float] = []
     private var isCancelled = false
 
     init(
         manager: SlidingWindowAsrManager,
-        onProgress: @escaping @Sendable (String) -> Bool
+        onProgress: @escaping @Sendable (String) -> Bool,
+        finalTranscribe: @escaping @Sendable ([Float]) async throws -> PluginTranscriptionResult
     ) {
         self.manager = manager
+        self.finalTranscribe = finalTranscribe
         self.updateTask = Self.startUpdateTask(manager: manager, onProgress: onProgress)
     }
 
     func appendAudio(samples: [Float]) async throws {
         guard !isCancelled, !samples.isEmpty else { return }
+        audioSamples.append(contentsOf: samples)
         let buffer = try makeParakeetLiveAudioBuffer(from: samples)
         await manager.streamAudio(buffer)
     }
@@ -676,13 +709,13 @@ private actor ParakeetLiveTranscriptionSession: LiveTranscriptionSession {
         }
 
         do {
-            let finalText = try await manager.finish()
-            await stop()
-            return PluginTranscriptionResult(
-                text: finalText.trimmingCharacters(in: .whitespacesAndNewlines),
-                detectedLanguage: nil,
-                segments: []
-            )
+            _ = try await manager.finish()
+            let finalSamples = audioSamples
+            await stop(cancelManager: false)
+            guard !finalSamples.isEmpty else {
+                return PluginTranscriptionResult(text: "", detectedLanguage: nil, segments: [])
+            }
+            return try await finalTranscribe(finalSamples)
         } catch {
             await stop()
             throw error
@@ -693,12 +726,14 @@ private actor ParakeetLiveTranscriptionSession: LiveTranscriptionSession {
         await stop()
     }
 
-    private func stop() async {
+    private func stop(cancelManager: Bool = true) async {
         guard !isCancelled else { return }
         isCancelled = true
         updateTask?.cancel()
         updateTask = nil
-        await manager.cancel()
+        if cancelManager {
+            await manager.cancel()
+        }
     }
 
     private static func startUpdateTask(
