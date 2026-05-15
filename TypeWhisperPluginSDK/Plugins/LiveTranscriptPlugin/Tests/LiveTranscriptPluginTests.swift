@@ -89,6 +89,15 @@ final class LiveTranscriptPluginTests: XCTestCase {
         XCTAssertEqual(displayedText(from: viewModel), "First sentence. Second sentence. Third sentence.")
     }
 
+    func testViewModelDeduplicatesCleanedSegmentUpdatesAfterAppend() {
+        let viewModel = LiveTranscriptViewModel()
+
+        viewModel.updateText("This is a test sentence.", isFinal: false)
+        viewModel.updateText("This is test sentence. Now the next sentence.", isFinal: false)
+
+        XCTAssertEqual(displayedText(from: viewModel), "This is a test sentence. Now the next sentence.")
+    }
+
     func testViewModelIgnoresShorterResetUpdates() {
         let viewModel = LiveTranscriptViewModel()
 

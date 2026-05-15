@@ -281,7 +281,9 @@ final class LiveTranscriptViewModel: ObservableObject {
         // Ring buffer dedup: ignore exact duplicates
         if recentTexts.contains(cleaned) { return }
 
-        let merged = mergeTranscript(previous: previousFullText, incoming: cleaned)
+        let merged = removeConsecutiveDuplicateSentences(
+            mergeTranscript(previous: previousFullText, incoming: cleaned)
+        )
         guard merged != previousFullText else {
             return
         }
