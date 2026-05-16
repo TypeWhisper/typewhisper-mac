@@ -838,6 +838,10 @@ private struct WorkflowEditorPage: View {
                     )
                 }
 
+                if shouldShowActionTargetSection {
+                    actionTargetSection
+                }
+
                 VStack(alignment: .leading, spacing: 0) {
                     Button {
                         withAnimation(.easeInOut(duration: 0.16)) {
@@ -902,6 +906,73 @@ private struct WorkflowEditorPage: View {
                         .padding(.top, 4)
                     }
                 }
+            }
+        }
+    }
+
+    private var shouldShowActionTargetSection: Bool {
+        draft.template != .dictation
+            && (!sortedActionPlugins.isEmpty || draft.targetActionPluginId != nil)
+    }
+
+    private var sortedActionPlugins: [ActionPlugin] {
+        pluginManager.actionPlugins.sorted {
+            $0.actionName.localizedCaseInsensitiveCompare($1.actionName) == .orderedAscending
+        }
+    }
+
+    private var selectedActionTargetIsUnavailable: Bool {
+        guard let targetActionPluginId = draft.targetActionPluginId else { return false }
+        return !sortedActionPlugins.contains { $0.actionId == targetActionPluginId }
+    }
+
+    private var actionTargetSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(localizedAppText("Action Target", de: "Action-Ziel"))
+                .font(.subheadline.weight(.semibold))
+
+            Picker(
+                localizedAppText("Target", de: "Ziel"),
+                selection: $draft.targetActionPluginId
+            ) {
+                Text(localizedAppText("Insert Text", de: "Text einfügen"))
+                    .tag(nil as String?)
+
+                ForEach(sortedActionPlugins, id: \.actionId) { plugin in
+                    Label(plugin.actionName, systemImage: plugin.actionIcon)
+                        .tag(plugin.actionId as String?)
+                }
+
+                if let targetActionPluginId = draft.targetActionPluginId,
+                   selectedActionTargetIsUnavailable {
+                    Text(
+                        localizedAppText(
+                            "Unavailable Action Target (\(targetActionPluginId))",
+                            de: "Nicht verfügbares Action-Ziel (\(targetActionPluginId))"
+                        )
+                    )
+                    .tag(targetActionPluginId as String?)
+                }
+            }
+
+            Text(
+                localizedAppText(
+                    "Leave this on Insert Text unless the workflow result should trigger a plugin action.",
+                    de: "Lass dies auf Text einfügen, wenn das Workflow-Ergebnis keine Plugin-Aktion auslösen soll."
+                )
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            if selectedActionTargetIsUnavailable {
+                Text(
+                    localizedAppText(
+                        "The selected action target is not currently enabled or installed. Saving keeps it unless you choose Insert Text or another action.",
+                        de: "Das ausgewählte Action-Ziel ist aktuell nicht aktiviert oder installiert. Speichern behält es bei, solange du nicht Text einfügen oder eine andere Aktion wählst."
+                    )
+                )
+                .font(.caption)
+                .foregroundStyle(.orange)
             }
         }
     }
@@ -1987,7 +2058,7 @@ struct WorkflowDraft {
     var cloudModel: String?
     private let temperatureModeRaw: String?
     private let temperatureValue: Double?
-    private let targetActionPluginId: String?
+    var targetActionPluginId: String?
 
     init(template: WorkflowTemplate) {
         self.name = template.definition.name
@@ -2048,7 +2119,7 @@ struct WorkflowDraft {
         self.cloudModel = behavior.cloudModel
         self.temperatureModeRaw = behavior.temperatureModeRaw
         self.temperatureValue = behavior.temperatureValue
-        self.targetActionPluginId = output.targetActionPluginId
+        self.targetActionPluginId = workflow.template == .dictation ? nil : output.targetActionPluginId
 
         if let trigger = workflow.trigger {
             self.appBundleIdentifiers = trigger.appBundleIdentifiers
@@ -2109,24 +2180,25 @@ struct WorkflowDraft {
             " Spoken language: \(workflowInputLanguageSummary(for: inputLanguageSelection)).",
             de: " Gesprochene Sprache: \(workflowInputLanguageSummary(for: inputLanguageSelection))."
         )
+        let outputRouteSentence = workflowOutputRouteSentence(targetActionPluginId: targetActionPluginId)
 
         if triggerMode == .manual {
             return localizedAppText(
-                "\(resolvedName) is available as \(template.definition.name) from the Workflow Palette.\(languageSentence)",
-                de: "\(resolvedName) ist als \(template.definition.name) über die Workflow-Palette verfügbar.\(languageSentence)"
+                "\(resolvedName) is available as \(template.definition.name) from the Workflow Palette.\(languageSentence)\(outputRouteSentence)",
+                de: "\(resolvedName) ist als \(template.definition.name) über die Workflow-Palette verfügbar.\(languageSentence)\(outputRouteSentence)"
             )
         }
 
         if triggerMode == .global {
             return localizedAppText(
-                "\(resolvedName) runs always as \(template.definition.name).\(languageSentence)",
-                de: "\(resolvedName) läuft immer als \(template.definition.name).\(languageSentence)"
+                "\(resolvedName) runs always as \(template.definition.name).\(languageSentence)\(outputRouteSentence)",
+                de: "\(resolvedName) läuft immer als \(template.definition.name).\(languageSentence)\(outputRouteSentence)"
             )
         }
 
         return localizedAppText(
-            "\(resolvedName) runs as \(template.definition.name) via \(triggerReviewText).\(languageSentence)",
-            de: "\(resolvedName) läuft als \(template.definition.name) über \(triggerReviewText).\(languageSentence)"
+            "\(resolvedName) runs as \(template.definition.name) via \(triggerReviewText).\(languageSentence)\(outputRouteSentence)",
+            de: "\(resolvedName) läuft als \(template.definition.name) über \(triggerReviewText).\(languageSentence)\(outputRouteSentence)"
         )
     }
 
@@ -2159,6 +2231,7 @@ struct WorkflowDraft {
             outputFormat = ""
             providerId = nil
             cloudModel = nil
+            targetActionPluginId = nil
             if triggerMode == .manual {
                 triggerMode = .automatic
             }
@@ -2538,6 +2611,14 @@ private func workflowSummaryText(for workflow: Workflow) -> String {
     }
 }
 
+private func workflowOutputRouteSentence(targetActionPluginId: String?) -> String {
+    guard targetActionPluginId != nil else { return "" }
+    return localizedAppText(
+        " Output: action plugin.",
+        de: " Ausgabe: Action-Plugin."
+    )
+}
+
 private func workflowInputLanguageSummary(for selection: LanguageSelection) -> String {
     switch selection {
     case .inheritGlobal:
@@ -2651,31 +2732,32 @@ private func workflowReviewText(for workflow: Workflow) -> String {
         ". Spoken language: \(workflowInputLanguageSummary(for: workflow.inputLanguageSelection))",
         de: ". Gesprochene Sprache: \(workflowInputLanguageSummary(for: workflow.inputLanguageSelection))"
     )
+    let outputRouteSentence = workflowOutputRouteSentence(targetActionPluginId: workflow.output.targetActionPluginId)
 
     if workflow.trigger?.kind == .global {
         return localizedAppText(
-            "\(summary) runs always\(languageSentence)",
-            de: "\(summary) läuft immer\(languageSentence)"
+            "\(summary) runs always\(languageSentence)\(outputRouteSentence)",
+            de: "\(summary) läuft immer\(languageSentence)\(outputRouteSentence)"
         )
     }
 
     if workflow.trigger?.kind == .manual {
         return localizedAppText(
-            "\(summary) is available from the Workflow Palette\(languageSentence)",
-            de: "\(summary) ist über die Workflow-Palette verfügbar\(languageSentence)"
+            "\(summary) is available from the Workflow Palette\(languageSentence)\(outputRouteSentence)",
+            de: "\(summary) ist über die Workflow-Palette verfügbar\(languageSentence)\(outputRouteSentence)"
         )
     }
 
     if triggerDetail.isEmpty {
         return localizedAppText(
-            "\(summary) via \(triggerSummary)\(languageSentence)",
-            de: "\(summary) über \(triggerSummary)\(languageSentence)"
+            "\(summary) via \(triggerSummary)\(languageSentence)\(outputRouteSentence)",
+            de: "\(summary) über \(triggerSummary)\(languageSentence)\(outputRouteSentence)"
         )
     }
 
     return localizedAppText(
-        "\(summary) via \(triggerSummary): \(triggerDetail)\(languageSentence)",
-        de: "\(summary) über \(triggerSummary): \(triggerDetail)\(languageSentence)"
+        "\(summary) via \(triggerSummary): \(triggerDetail)\(languageSentence)\(outputRouteSentence)",
+        de: "\(summary) über \(triggerSummary): \(triggerDetail)\(languageSentence)\(outputRouteSentence)"
     )
 }
 

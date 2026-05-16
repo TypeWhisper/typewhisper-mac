@@ -31,12 +31,12 @@
         }
       }
     },
-    "Create a new PromptAction with this system prompt and set \"Create Linear Issue\" as the action target:" : {
+    "Create a Workflow with this system prompt and set \"Create Linear Issue\" as the action target:" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Erstelle eine neue PromptAction mit diesem Prompt und setze \"Create Linear Issue\" als Aktionsziel:"
+            "value" : "Erstelle einen Workflow mit diesem Prompt und setze \"Create Linear Issue\" als Action-Ziel:"
           }
         }
       }

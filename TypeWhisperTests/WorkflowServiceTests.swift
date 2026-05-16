@@ -248,6 +248,53 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(trigger.hotkeyBehavior, .processSelectedText)
     }
 
+    func testWorkflowDraftPersistsEditedActionTargetForNonDictationWorkflow() throws {
+        var draft = WorkflowDraft(template: .summary)
+
+        draft.targetActionPluginId = "plugin.action"
+
+        XCTAssertEqual(draft.resolvedOutput().targetActionPluginId, "plugin.action")
+    }
+
+    func testWorkflowDraftDropsActionTargetForDictationTemplate() throws {
+        var draft = WorkflowDraft(template: .summary)
+        draft.targetActionPluginId = "plugin.action"
+
+        draft.selectTemplate(.dictation)
+
+        XCTAssertNil(draft.targetActionPluginId)
+        XCTAssertNil(draft.resolvedOutput().targetActionPluginId)
+    }
+
+    func testWorkflowDraftDropsStoredActionTargetForDictationWorkflow() throws {
+        let workflow = Workflow(
+            name: "Plain Dictation",
+            template: .dictation,
+            trigger: .hotkeys([
+                UnifiedHotkey(keyCode: 17, modifierFlags: 0, isFn: false)
+            ]),
+            output: WorkflowOutput(targetActionPluginId: "plugin.action")
+        )
+
+        let draft = WorkflowDraft(workflow)
+
+        XCTAssertNil(draft.targetActionPluginId)
+        XCTAssertNil(draft.resolvedOutput().targetActionPluginId)
+    }
+
+    func testWorkflowDraftPreservesUnavailableActionTargetWhenSaving() throws {
+        let workflow = Workflow(
+            name: "Archive Note",
+            template: .summary,
+            trigger: .manual(),
+            output: WorkflowOutput(targetActionPluginId: "plugin.unavailable")
+        )
+
+        let output = WorkflowDraft(workflow).resolvedOutput()
+
+        XCTAssertEqual(output.targetActionPluginId, "plugin.unavailable")
+    }
+
     func testWorkflowDraftPreservesDictationTranscriptionOverridesWhenSaving() throws {
         let hotkey = UnifiedHotkey(keyCode: 15, modifierFlags: NSEvent.ModifierFlags.command.rawValue, isFn: false)
         let workflow = Workflow(

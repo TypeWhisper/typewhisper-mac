@@ -499,7 +499,7 @@ private struct ObsidianSettingsView: View {
                     Text("Recommended Prompt", bundle: bundle)
                         .font(.headline)
 
-                    Text("Create a new PromptAction with this system prompt and set \"Save to Obsidian\" as the action target:", bundle: bundle)
+                    Text("Create a Workflow with this system prompt and set \"Save to Obsidian\" as the action target:", bundle: bundle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
