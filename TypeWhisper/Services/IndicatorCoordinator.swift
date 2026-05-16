@@ -253,9 +253,10 @@ enum IndicatorWindowFrameLookup {
 enum IndicatorFullscreenSuppressionPolicy {
     private static let minimumHorizontalCoverage: CGFloat = 0.5
     private static let minimumVerticalCoverage: CGFloat = 0.5
-    private nonisolated(unsafe) static var lastSuppression: IndicatorFullscreenSuppressionDiagnostics?
+    @MainActor private static var lastSuppression: IndicatorFullscreenSuppressionDiagnostics?
 
-    nonisolated static func lastSuppressionDiagnostics() -> IndicatorFullscreenSuppressionDiagnostics? {
+    @MainActor
+    static func lastSuppressionDiagnostics() -> IndicatorFullscreenSuppressionDiagnostics? {
         lastSuppression
     }
 
@@ -360,6 +361,7 @@ enum IndicatorFullscreenSuppressionPolicy {
             || bundleIdentifier == "com.typewhisper.mac.dev"
     }
 
+    @MainActor
     private static func recordSuppression(
         screenFrame: CGRect,
         safeAreaTopInset: CGFloat,
