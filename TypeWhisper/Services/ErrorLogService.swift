@@ -1,6 +1,7 @@
 import AVFoundation
 import Foundation
 import os.log
+import TypeWhisperPluginSDK
 
 private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "ErrorLogService")
 
@@ -29,6 +30,8 @@ private struct DiagnosticsReport: Encodable {
         let selectedModelId: String?
         let isModelReady: Bool
         let supportsStreaming: Bool
+        let supportsLiveTranscriptionSession: Bool
+        let allowsTranscriptPreviewFallback: Bool
         let supportsTranslation: Bool
     }
 
@@ -64,6 +67,16 @@ private struct DiagnosticsReport: Encodable {
         let version: String
         let enabled: Bool
         let bundled: Bool
+        let runtimeLoaded: Bool
+        let providerId: String?
+        let selectedModelId: String?
+        let isConfigured: Bool?
+        let supportsStreaming: Bool?
+        let supportsLiveTranscriptionSession: Bool?
+        let allowsTranscriptPreviewFallback: Bool?
+        let storedSelectedModelId: String?
+        let storedLoadedModelId: String?
+        let storedSelectedVersion: String?
     }
 
     struct SettingsSnapshot: Encodable {
@@ -78,6 +91,15 @@ private struct DiagnosticsReport: Encodable {
         let memoryEnabled: Bool
         let memoryCaptureScope: String
         let appFormattingEnabled: Bool
+        let indicatorStyle: String
+        let indicatorSupportsTranscriptPreview: Bool
+        let indicatorTranscriptPreviewEnabled: Bool
+        let indicatorTranscriptPreviewAvailable: Bool
+        let indicatorTranscriptPreviewFontSizeOffset: Int
+        let notchIndicatorVisibility: String
+        let notchIndicatorDisplay: String
+        let overlayPosition: String
+        let externalStreamingDisplayCount: Int?
         let soundFeedbackEnabled: Bool
         let spokenFeedbackEnabled: Bool
         let showMenuBarIcon: Bool
@@ -163,9 +185,12 @@ final class ErrorLogService: ObservableObject {
         let defaults = UserDefaults.standard
         let pluginManager = PluginManager.shared ?? container.pluginManager
         let outputSnapshot = CoreAudioOutputVolumeController().defaultOutputSnapshot()
+        let indicatorStyle = DictationViewModel.loadIndicatorStyle(defaults: defaults)
+        let indicatorPreviewEnabled = DictationViewModel.loadIndicatorTranscriptPreviewEnabled(defaults: defaults)
+        let indicatorPreviewOffset = DictationViewModel.loadIndicatorTranscriptPreviewFontSizeOffset(defaults: defaults)
 
         return DiagnosticsReport(
-            schemaVersion: 2,
+            schemaVersion: 3,
             exportedAt: Date(),
             app: .init(
                 version: AppConstants.appVersion,
@@ -188,6 +213,8 @@ final class ErrorLogService: ObservableObject {
                 selectedModelId: container.modelManagerService.selectedModelId,
                 isModelReady: container.modelManagerService.isModelReady,
                 supportsStreaming: container.modelManagerService.supportsStreaming,
+                supportsLiveTranscriptionSession: container.modelManagerService.supportsLiveTranscriptionSession(),
+                allowsTranscriptPreviewFallback: container.modelManagerService.allowsTranscriptPreviewFallback(),
                 supportsTranslation: container.modelManagerService.supportsTranslation
             ),
             api: .init(
@@ -215,12 +242,29 @@ final class ErrorLogService: ObservableObject {
                 inputDiagnostics: container.audioDeviceService.diagnosticsReport()
             ),
             plugins: pluginManager.loadedPlugins.map {
-                .init(
+                let engine = $0.instance as? TranscriptionEnginePlugin
+                let fallbackPolicy = engine as? TranscriptPreviewFallbackPolicyProviding
+                let allowsTranscriptPreviewFallback: Bool? = if engine != nil {
+                    fallbackPolicy?.allowsTranscriptPreviewFallback ?? true
+                } else {
+                    nil
+                }
+                return DiagnosticsReport.PluginInfo(
                     id: $0.manifest.id,
                     name: $0.manifest.name,
                     version: $0.manifest.version,
                     enabled: $0.isEnabled,
-                    bundled: $0.isBundled
+                    bundled: $0.isBundled,
+                    runtimeLoaded: $0.isRuntimeLoaded,
+                    providerId: engine?.providerId,
+                    selectedModelId: engine?.selectedModelId,
+                    isConfigured: engine?.isConfigured,
+                    supportsStreaming: engine?.supportsStreaming,
+                    supportsLiveTranscriptionSession: engine.map { $0 is LiveTranscriptionCapablePlugin },
+                    allowsTranscriptPreviewFallback: allowsTranscriptPreviewFallback,
+                    storedSelectedModelId: defaults.string(forKey: Self.pluginDefaultKey(pluginId: $0.manifest.id, key: "selectedModel")),
+                    storedLoadedModelId: defaults.string(forKey: Self.pluginDefaultKey(pluginId: $0.manifest.id, key: "loadedModel")),
+                    storedSelectedVersion: defaults.string(forKey: Self.pluginDefaultKey(pluginId: $0.manifest.id, key: "selectedVersion"))
                 )
             },
             settings: .init(
@@ -235,6 +279,15 @@ final class ErrorLogService: ObservableObject {
                 memoryEnabled: defaults.bool(forKey: UserDefaultsKeys.memoryEnabled),
                 memoryCaptureScope: MemoryCaptureScope.load(from: defaults).rawValue,
                 appFormattingEnabled: defaults.bool(forKey: UserDefaultsKeys.appFormattingEnabled),
+                indicatorStyle: indicatorStyle.rawValue,
+                indicatorSupportsTranscriptPreview: indicatorStyle.supportsTranscriptPreview,
+                indicatorTranscriptPreviewEnabled: indicatorPreviewEnabled,
+                indicatorTranscriptPreviewAvailable: indicatorStyle.supportsTranscriptPreview && indicatorPreviewEnabled,
+                indicatorTranscriptPreviewFontSizeOffset: indicatorPreviewOffset,
+                notchIndicatorVisibility: defaults.string(forKey: UserDefaultsKeys.notchIndicatorVisibility) ?? NotchIndicatorVisibility.duringActivity.rawValue,
+                notchIndicatorDisplay: defaults.string(forKey: UserDefaultsKeys.notchIndicatorDisplay) ?? NotchIndicatorDisplay.activeScreen.rawValue,
+                overlayPosition: defaults.string(forKey: UserDefaultsKeys.overlayPosition) ?? OverlayPosition.top.rawValue,
+                externalStreamingDisplayCount: DictationViewModel._shared?.externalStreamingDisplayCount,
                 soundFeedbackEnabled: defaults.object(forKey: UserDefaultsKeys.soundFeedbackEnabled) as? Bool ?? true,
                 spokenFeedbackEnabled: defaults.bool(forKey: UserDefaultsKeys.spokenFeedbackEnabled),
                 showMenuBarIcon: defaults.object(forKey: UserDefaultsKeys.showMenuBarIcon) as? Bool ?? true,
@@ -257,6 +310,10 @@ final class ErrorLogService: ObservableObject {
                 .init(timestamp: $0.timestamp, category: $0.category, message: $0.message)
             }
         )
+    }
+
+    private static func pluginDefaultKey(pluginId: String, key: String) -> String {
+        "plugin.\(pluginId).\(key)"
     }
 
     private func loadEntries() {
