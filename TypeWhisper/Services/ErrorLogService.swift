@@ -138,6 +138,7 @@ private struct DiagnosticsReport: Encodable {
     let audio: AudioInfo
     let plugins: [PluginInfo]
     let settings: SettingsSnapshot
+    let lastIndicatorFullscreenSuppression: IndicatorFullscreenSuppressionDiagnostics?
     let counts: Counts
     let errors: [ErrorEntrySnapshot]
 }
@@ -193,7 +194,7 @@ final class ErrorLogService: ObservableObject {
         let indicatorPreviewOffset = DictationViewModel.loadIndicatorTranscriptPreviewFontSizeOffset(defaults: defaults)
 
         return DiagnosticsReport(
-            schemaVersion: 3,
+            schemaVersion: 4,
             exportedAt: Date(),
             app: .init(
                 version: AppConstants.appVersion,
@@ -301,6 +302,7 @@ final class ErrorLogService: ObservableObject {
                 setupWizardCompleted: defaults.bool(forKey: UserDefaultsKeys.setupWizardCompleted),
                 preferredAppLanguage: defaults.string(forKey: UserDefaultsKeys.preferredAppLanguage)
             ),
+            lastIndicatorFullscreenSuppression: IndicatorFullscreenSuppressionPolicy.lastSuppressionDiagnostics(),
             counts: .init(
                 historyRecords: container.historyService.records.count,
                 profiles: container.profileService.profiles.count,

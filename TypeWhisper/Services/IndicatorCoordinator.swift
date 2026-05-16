@@ -223,6 +223,11 @@ enum IndicatorWindowFrameLookup {
 enum IndicatorFullscreenSuppressionPolicy {
     private static let minimumHorizontalCoverage: CGFloat = 0.5
     private static let minimumVerticalCoverage: CGFloat = 0.5
+    private nonisolated(unsafe) static var lastSuppression: IndicatorFullscreenSuppressionDiagnostics?
+
+    nonisolated static func lastSuppressionDiagnostics() -> IndicatorFullscreenSuppressionDiagnostics? {
+        lastSuppression
+    }
 
     @MainActor
     static func shouldSuppressIndicator(
@@ -245,13 +250,24 @@ enum IndicatorFullscreenSuppressionPolicy {
         let windowFrame = focusedWindowFrameProvider()
             ?? windowFrameProvider(application.processIdentifier)
 
-        return shouldSuppressIndicator(
+        let shouldSuppress = shouldSuppressIndicator(
             screenFrame: screen.frame,
             safeAreaTopInset: screen.safeAreaInsets.top,
             windowFrame: windowFrame,
             frontmostBundleIdentifier: application.bundleIdentifier,
             appBundleIdentifier: appBundleIdentifier
         )
+
+        if shouldSuppress {
+            recordSuppression(
+                screenFrame: screen.frame,
+                safeAreaTopInset: screen.safeAreaInsets.top,
+                windowFrame: windowFrame,
+                frontmostApplication: application
+            )
+        }
+
+        return shouldSuppress
     }
 
     static func shouldSuppressIndicator(
@@ -302,6 +318,66 @@ enum IndicatorFullscreenSuppressionPolicy {
 
         return bundleIdentifier == "com.typewhisper.mac"
             || bundleIdentifier == "com.typewhisper.mac.dev"
+    }
+
+    private static func recordSuppression(
+        screenFrame: CGRect,
+        safeAreaTopInset: CGFloat,
+        windowFrame: CGRect?,
+        frontmostApplication: NSRunningApplication
+    ) {
+        guard let windowFrame else { return }
+
+        let screenFrame = screenFrame.standardized
+        let standardizedWindowFrame = windowFrame.standardized
+        let notchStripHeight = min(safeAreaTopInset, screenFrame.height)
+        let notchStrip = CGRect(
+            x: screenFrame.minX,
+            y: screenFrame.maxY - notchStripHeight,
+            width: screenFrame.width,
+            height: notchStripHeight
+        )
+        let intersection = standardizedWindowFrame.intersection(notchStrip)
+        let horizontalCoverage = intersection.isNull || intersection.isEmpty ? 0 : intersection.width / notchStrip.width
+        let verticalCoverage = intersection.isNull || intersection.isEmpty ? 0 : intersection.height / notchStrip.height
+
+        lastSuppression = IndicatorFullscreenSuppressionDiagnostics(
+            timestamp: Date(),
+            frontmostBundleIdentifier: frontmostApplication.bundleIdentifier,
+            frontmostLocalizedName: frontmostApplication.localizedName,
+            frontmostProcessIdentifier: frontmostApplication.processIdentifier,
+            screenFrame: .init(screenFrame),
+            safeAreaTopInset: Double(safeAreaTopInset),
+            windowFrame: .init(standardizedWindowFrame),
+            horizontalCoverage: Double(horizontalCoverage),
+            verticalCoverage: Double(verticalCoverage)
+        )
+    }
+}
+
+struct IndicatorFullscreenSuppressionDiagnostics: Encodable, Equatable, Sendable {
+    let timestamp: Date
+    let frontmostBundleIdentifier: String?
+    let frontmostLocalizedName: String?
+    let frontmostProcessIdentifier: pid_t
+    let screenFrame: IndicatorRectDiagnostics
+    let safeAreaTopInset: Double
+    let windowFrame: IndicatorRectDiagnostics
+    let horizontalCoverage: Double
+    let verticalCoverage: Double
+}
+
+struct IndicatorRectDiagnostics: Encodable, Equatable, Sendable {
+    let x: Double
+    let y: Double
+    let width: Double
+    let height: Double
+
+    init(_ rect: CGRect) {
+        x = Double(rect.origin.x)
+        y = Double(rect.origin.y)
+        width = Double(rect.size.width)
+        height = Double(rect.size.height)
     }
 }
 
