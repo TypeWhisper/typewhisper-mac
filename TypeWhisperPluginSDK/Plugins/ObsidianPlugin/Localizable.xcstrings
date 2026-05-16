@@ -51,22 +51,22 @@
         }
       }
     },
-    "Copy Prompt" : {
+    "Copy Instruction" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Prompt kopieren"
+            "value" : "Anweisung kopieren"
           }
         }
       }
     },
-    "Create a Workflow with this system prompt and set \"Save to Obsidian\" as the action target:" : {
+    "Create a Custom Workflow, paste this into Instruction, and set Action Target to \"Save to Obsidian\"." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Erstelle einen Workflow mit diesem Prompt und setze \"Save to Obsidian\" als Action-Ziel:"
+            "value" : "Erstelle einen eigenen Workflow, füge dies in Anweisung ein und setze das Action-Ziel auf \"Save to Obsidian\"."
           }
         }
       }
@@ -141,12 +141,12 @@
         }
       }
     },
-    "Recommended Prompt" : {
+    "Workflow Instruction" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Empfohlener Prompt"
+            "value" : "Workflow-Anweisung"
           }
         }
       }
