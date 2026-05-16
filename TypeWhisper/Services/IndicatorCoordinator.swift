@@ -160,9 +160,10 @@ enum IndicatorWindowFrameLookup {
     }
 
     nonisolated static func focusedWindowFrame() -> CGRect? {
-        guard let windowElement = focusedWindowElement() else {
+        guard let focusedWindow = focusedWindowElement() else {
             return nil
         }
+        let windowElement = focusedWindow as! AXUIElement
 
         var positionValue: AnyObject?
         guard AXUIElementCopyAttributeValue(
@@ -200,9 +201,10 @@ enum IndicatorWindowFrameLookup {
     }
 
     nonisolated static func focusedWindowIsFullscreen() -> Bool? {
-        guard let windowElement = focusedWindowElement() else {
+        guard let focusedWindow = focusedWindowElement() else {
             return nil
         }
+        let windowElement = focusedWindow as! AXUIElement
 
         var fullScreenValue: AnyObject?
         guard AXUIElementCopyAttributeValue(
@@ -221,7 +223,7 @@ enum IndicatorWindowFrameLookup {
         return (fullScreenValue as? NSNumber)?.boolValue
     }
 
-    private nonisolated static func focusedWindowElement() -> AXUIElement? {
+    private nonisolated static func focusedWindowElement() -> AnyObject? {
         let systemWide = AXUIElementCreateSystemWide()
 
         var focusedApplication: AnyObject?
@@ -244,7 +246,7 @@ enum IndicatorWindowFrameLookup {
               let focusedWindow else {
             return nil
         }
-        return focusedWindow as! AXUIElement
+        return focusedWindow
     }
 }
 
