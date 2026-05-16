@@ -160,29 +160,9 @@ enum IndicatorWindowFrameLookup {
     }
 
     nonisolated static func focusedWindowFrame() -> CGRect? {
-        let systemWide = AXUIElementCreateSystemWide()
-
-        var focusedApplication: AnyObject?
-        guard AXUIElementCopyAttributeValue(
-            systemWide,
-            kAXFocusedApplicationAttribute as CFString,
-            &focusedApplication
-        ) == .success,
-              let focusedApplication else {
+        guard let windowElement = focusedWindowElement() else {
             return nil
         }
-        let applicationElement = focusedApplication as! AXUIElement
-
-        var focusedWindow: AnyObject?
-        guard AXUIElementCopyAttributeValue(
-            applicationElement,
-            kAXFocusedWindowAttribute as CFString,
-            &focusedWindow
-        ) == .success,
-              let focusedWindow else {
-            return nil
-        }
-        let windowElement = focusedWindow as! AXUIElement
 
         var positionValue: AnyObject?
         guard AXUIElementCopyAttributeValue(
@@ -218,6 +198,54 @@ enum IndicatorWindowFrameLookup {
 
         return CGRect(origin: position, size: size)
     }
+
+    nonisolated static func focusedWindowIsFullscreen() -> Bool? {
+        guard let windowElement = focusedWindowElement() else {
+            return nil
+        }
+
+        var fullScreenValue: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            windowElement,
+            "AXFullScreen" as CFString,
+            &fullScreenValue
+        ) == .success,
+              let fullScreenValue else {
+            return nil
+        }
+
+        if let isFullscreen = fullScreenValue as? Bool {
+            return isFullscreen
+        }
+
+        return (fullScreenValue as? NSNumber)?.boolValue
+    }
+
+    private nonisolated static func focusedWindowElement() -> AXUIElement? {
+        let systemWide = AXUIElementCreateSystemWide()
+
+        var focusedApplication: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            systemWide,
+            kAXFocusedApplicationAttribute as CFString,
+            &focusedApplication
+        ) == .success,
+              let focusedApplication else {
+            return nil
+        }
+        let applicationElement = focusedApplication as! AXUIElement
+
+        var focusedWindow: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            applicationElement,
+            kAXFocusedWindowAttribute as CFString,
+            &focusedWindow
+        ) == .success,
+              let focusedWindow else {
+            return nil
+        }
+        return focusedWindow as! AXUIElement
+    }
 }
 
 enum IndicatorFullscreenSuppressionPolicy {
@@ -236,6 +264,7 @@ enum IndicatorFullscreenSuppressionPolicy {
             ActivationSourceTracker.shared.lastExternalApplication ?? NSWorkspace.shared.frontmostApplication
         },
         focusedWindowFrameProvider: () -> CGRect? = IndicatorWindowFrameLookup.focusedWindowFrame,
+        focusedWindowFullscreenProvider: () -> Bool? = IndicatorWindowFrameLookup.focusedWindowIsFullscreen,
         windowFrameProvider: (pid_t) -> CGRect? = IndicatorWindowFrameLookup.frontmostWindowFrame(for:),
         appBundleIdentifier: String? = Bundle.main.bundleIdentifier
     ) -> Bool {
@@ -249,11 +278,13 @@ enum IndicatorFullscreenSuppressionPolicy {
 
         let windowFrame = focusedWindowFrameProvider()
             ?? windowFrameProvider(application.processIdentifier)
+        let focusedWindowIsFullscreen = focusedWindowFullscreenProvider()
 
         let shouldSuppress = shouldSuppressIndicator(
             screenFrame: screen.frame,
             safeAreaTopInset: screen.safeAreaInsets.top,
             windowFrame: windowFrame,
+            focusedWindowIsFullscreen: focusedWindowIsFullscreen,
             frontmostBundleIdentifier: application.bundleIdentifier,
             appBundleIdentifier: appBundleIdentifier
         )
@@ -263,6 +294,7 @@ enum IndicatorFullscreenSuppressionPolicy {
                 screenFrame: screen.frame,
                 safeAreaTopInset: screen.safeAreaInsets.top,
                 windowFrame: windowFrame,
+                focusedWindowIsFullscreen: focusedWindowIsFullscreen,
                 frontmostApplication: application
             )
         }
@@ -274,6 +306,7 @@ enum IndicatorFullscreenSuppressionPolicy {
         screenFrame: CGRect,
         safeAreaTopInset: CGFloat,
         windowFrame: CGRect?,
+        focusedWindowIsFullscreen: Bool? = nil,
         frontmostBundleIdentifier: String?,
         appBundleIdentifier: String?
     ) -> Bool {
@@ -287,6 +320,11 @@ enum IndicatorFullscreenSuppressionPolicy {
 
         let screenFrame = screenFrame.standardized
         let windowFrame = candidateWindowFrame.standardized
+
+        if let focusedWindowIsFullscreen, !focusedWindowIsFullscreen {
+            return false
+        }
+
         let notchStripHeight = min(safeAreaTopInset, screenFrame.height)
         let notchStrip = CGRect(
             x: screenFrame.minX,
@@ -324,6 +362,7 @@ enum IndicatorFullscreenSuppressionPolicy {
         screenFrame: CGRect,
         safeAreaTopInset: CGFloat,
         windowFrame: CGRect?,
+        focusedWindowIsFullscreen: Bool?,
         frontmostApplication: NSRunningApplication
     ) {
         guard let windowFrame else { return }
@@ -349,6 +388,7 @@ enum IndicatorFullscreenSuppressionPolicy {
             screenFrame: .init(screenFrame),
             safeAreaTopInset: Double(safeAreaTopInset),
             windowFrame: .init(standardizedWindowFrame),
+            focusedWindowIsFullscreen: focusedWindowIsFullscreen,
             horizontalCoverage: Double(horizontalCoverage),
             verticalCoverage: Double(verticalCoverage)
         )
@@ -363,6 +403,7 @@ struct IndicatorFullscreenSuppressionDiagnostics: Encodable, Equatable, Sendable
     let screenFrame: IndicatorRectDiagnostics
     let safeAreaTopInset: Double
     let windowFrame: IndicatorRectDiagnostics
+    let focusedWindowIsFullscreen: Bool?
     let horizontalCoverage: Double
     let verticalCoverage: Double
 }

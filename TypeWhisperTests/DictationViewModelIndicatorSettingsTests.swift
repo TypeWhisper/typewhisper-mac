@@ -226,6 +226,36 @@ final class IndicatorFullscreenSuppressionPolicyTests: XCTestCase {
         )
     }
 
+    func testSuppressesForeignAXFullscreenWindowThatOverlapsNotchStrip() {
+        let fullscreenWindow = CGRect(x: 0, y: 0, width: 3024, height: 1964)
+
+        XCTAssertTrue(
+            IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                screenFrame: notchedScreenFrame,
+                safeAreaTopInset: 74,
+                windowFrame: fullscreenWindow,
+                focusedWindowIsFullscreen: true,
+                frontmostBundleIdentifier: "com.apple.ScreenSharing",
+                appBundleIdentifier: "com.typewhisper.mac.dev"
+            )
+        )
+    }
+
+    func testDoesNotSuppressForeignMaximizedWindowWhenAXReportsNotFullscreen() {
+        let maximizedWindow = CGRect(x: 0, y: 0, width: 3024, height: 1964)
+
+        XCTAssertFalse(
+            IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                screenFrame: notchedScreenFrame,
+                safeAreaTopInset: 74,
+                windowFrame: maximizedWindow,
+                focusedWindowIsFullscreen: false,
+                frontmostBundleIdentifier: "com.google.Chrome",
+                appBundleIdentifier: "com.typewhisper.mac.dev"
+            )
+        )
+    }
+
     func testDoesNotSuppressOnNonNotchedScreen() {
         let fullscreenWindow = CGRect(x: 0, y: 0, width: 3024, height: 1964)
 
