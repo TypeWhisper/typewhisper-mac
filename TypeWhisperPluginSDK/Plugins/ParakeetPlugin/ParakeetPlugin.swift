@@ -6,14 +6,7 @@ import FluidAudio
 import TypeWhisperPluginSDK
 
 private let parakeetLiveSampleRate: Double = 16_000
-let parakeetLivePreviewConfig = SlidingWindowAsrConfig(
-    chunkSeconds: 2.0,
-    hypothesisChunkSeconds: 1.0,
-    leftContextSeconds: 2.0,
-    rightContextSeconds: 0.5,
-    minContextForConfirmation: 10.0,
-    confirmationThreshold: 0.80
-)
+let parakeetLivePreviewConfig = SlidingWindowAsrConfig.streaming
 
 private func makeParakeetLiveAudioBuffer(from samples: [Float]) throws -> AVAudioPCMBuffer {
     guard let format = AVAudioFormat(

@@ -121,11 +121,9 @@ final class ParakeetPluginTests: XCTestCase {
         XCTAssertFalse(fallbackPolicy.allowsTranscriptPreviewFallback)
     }
 
-    func testLivePreviewConfigUsesLowLatencyWindow() throws {
-        let firstUpdateLatency = parakeetLivePreviewConfig.chunkSeconds
-            + parakeetLivePreviewConfig.rightContextSeconds
-
-        XCTAssertLessThanOrEqual(firstUpdateLatency, 3.0)
+    func testLivePreviewConfigUsesStableStreamingWindow() throws {
+        XCTAssertEqual(parakeetLivePreviewConfig.chunkSeconds, 11.0)
+        XCTAssertEqual(parakeetLivePreviewConfig.rightContextSeconds, 2.0)
         XCTAssertEqual(parakeetLivePreviewConfig.minContextForConfirmation, 10.0)
     }
 

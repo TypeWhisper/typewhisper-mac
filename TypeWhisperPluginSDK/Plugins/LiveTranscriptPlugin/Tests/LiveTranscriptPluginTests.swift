@@ -161,6 +161,42 @@ final class LiveTranscriptPluginTests: XCTestCase {
         XCTAssertEqual(displayedText(from: viewModel), "This is a partial sentence.")
     }
 
+    func testViewModelAllowsRecentVolatileSentencesToBeCorrected() {
+        let viewModel = LiveTranscriptViewModel()
+
+        viewModel.updateText(
+            "Ich bin in Koeln geboren und auch mit ganzem Herzen an Koin. Und jetzt sind sie wieder in einer Stadt. Am proben Fluss gelandes.",
+            isFinal: false
+        )
+        viewModel.updateText(
+            "Ich bin in Koeln geboren und auch mit ganzem Herzen an Koeln. Und jetzt sind sie wieder. Wieder in einer Stadt am grossen Fluss gelandet. Genau.",
+            isFinal: false
+        )
+
+        XCTAssertEqual(
+            displayedText(from: viewModel),
+            "Ich bin in Koeln geboren und auch mit ganzem Herzen an Koeln. Und jetzt sind sie wieder. Wieder in einer Stadt am grossen Fluss gelandet. Genau."
+        )
+    }
+
+    func testViewModelDoesNotReplaceConfirmedTextWhenLaterWindowRepeatsOldSentences() {
+        let viewModel = LiveTranscriptViewModel()
+
+        viewModel.updateText(
+            "First sentence. Second sentence. Third sentence. Fourth sentence. Fifth sentence. Sixth sentence.",
+            isFinal: false
+        )
+        viewModel.updateText(
+            "First sentence. Second sentence. New quoted sentence.",
+            isFinal: false
+        )
+
+        XCTAssertEqual(
+            displayedText(from: viewModel),
+            "First sentence. Second sentence. Third sentence. Fourth sentence. Fifth sentence. Sixth sentence. New quoted sentence."
+        )
+    }
+
     func testViewModelIgnoresShorterResetUpdates() {
         let viewModel = LiveTranscriptViewModel()
 

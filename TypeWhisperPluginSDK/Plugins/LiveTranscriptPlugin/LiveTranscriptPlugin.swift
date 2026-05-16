@@ -247,6 +247,7 @@ final class LiveTranscriptViewModel: ObservableObject {
     @Published var isAutoScrollEnabled: Bool = true
 
     private var confirmedSentences: [String] = []
+    private var mutableSentences: [String] = []
     private var liveTail: String?
     private var recentTexts: [String] = []
     private let sentencesPerParagraph: Int = 3
@@ -264,6 +265,7 @@ final class LiveTranscriptViewModel: ObservableObject {
     func reset() {
         paragraphs = []
         confirmedSentences = []
+        mutableSentences = []
         liveTail = nil
         recentTexts = []
         isAutoScrollEnabled = true
@@ -286,7 +288,7 @@ final class LiveTranscriptViewModel: ObservableObject {
         let previousRenderedText = renderedText()
         let segments = splitIntoCompletedSentencesAndTail(cleaned)
 
-        mergeCompletedSentences(segments.completed)
+        mergeCompletedSentences(segments.completed, isFinal: isFinal)
         mergeLiveTail(segments.tail)
 
         let merged = renderedText()
@@ -297,7 +299,7 @@ final class LiveTranscriptViewModel: ObservableObject {
         recentTexts.append(cleaned)
         if recentTexts.count > 3 { recentTexts.removeFirst() }
 
-        let renderedSegments = confirmedSentences + (liveTail.map { [$0] } ?? [])
+        let renderedSegments = completedSentences() + (liveTail.map { [$0] } ?? [])
         var newTexts = splitSegmentsIntoParagraphs(renderedSegments, sentencesPerParagraph: sentencesPerParagraph)
         if newTexts.isEmpty { newTexts = [merged] }
 
@@ -306,23 +308,26 @@ final class LiveTranscriptViewModel: ObservableObject {
 
     // MARK: - Helpers
 
-    private func mergeCompletedSentences(_ incomingSentences: [String]) {
+    private func mergeCompletedSentences(_ incomingSentences: [String], isFinal: Bool) {
         let incoming = deduplicatedSentences(incomingSentences)
         guard !incoming.isEmpty else { return }
 
-        if confirmedSentences.isEmpty || isCumulativeReplacement(incoming) {
-            confirmedSentences = incoming
-            liveTail = nil
-            return
+        var working = completedSentences()
+        if working.isEmpty || isCumulativeReplacement(incoming, previous: working) {
+            working = incoming
+        } else if let replacement = replacementMatch(
+            previous: working,
+            incoming: incoming,
+            minimumStartIndex: confirmedSentences.count
+        ) {
+            working = Array(working.prefix(replacement.startIndex)) + incoming
+        } else {
+            for sentence in incoming where !isAlreadyRepresented(sentence, in: working) {
+                working.append(sentence)
+            }
         }
 
-        let overlap = sentenceOverlapLength(previous: confirmedSentences, incoming: incoming)
-        let newSentences = overlap > 0 ? Array(incoming.dropFirst(overlap)) : incoming
-
-        for sentence in newSentences where !isAlreadyRepresented(sentence) {
-            confirmedSentences.append(sentence)
-        }
-
+        applyCompletedSentences(working, isFinal: isFinal)
         liveTail = nil
     }
 
@@ -350,12 +355,27 @@ final class LiveTranscriptViewModel: ObservableObject {
         liveTail = tail
     }
 
-    private func isCumulativeReplacement(_ incoming: [String]) -> Bool {
-        guard incoming.count >= confirmedSentences.count else { return false }
-        guard !confirmedSentences.isEmpty else { return true }
+    private func completedSentences() -> [String] {
+        confirmedSentences + mutableSentences
+    }
 
-        for index in confirmedSentences.indices {
-            guard sentenceKey(confirmedSentences[index]) == sentenceKey(incoming[index]) else {
+    private func applyCompletedSentences(_ sentences: [String], isFinal: Bool) {
+        if isFinal || sentences.count <= sentencesPerParagraph {
+            confirmedSentences = isFinal ? sentences : []
+            mutableSentences = isFinal ? [] : sentences
+            return
+        }
+
+        confirmedSentences = Array(sentences.dropLast(sentencesPerParagraph))
+        mutableSentences = Array(sentences.suffix(sentencesPerParagraph))
+    }
+
+    private func isCumulativeReplacement(_ incoming: [String], previous: [String]) -> Bool {
+        guard incoming.count >= previous.count else { return false }
+        guard !previous.isEmpty else { return true }
+
+        for index in previous.indices {
+            guard sentenceKey(previous[index]) == sentenceKey(incoming[index]) else {
                 return false
             }
         }
@@ -363,31 +383,42 @@ final class LiveTranscriptViewModel: ObservableObject {
         return true
     }
 
-    private func sentenceOverlapLength(previous: [String], incoming: [String]) -> Int {
+    private func replacementMatch(
+        previous: [String],
+        incoming: [String],
+        minimumStartIndex: Int
+    ) -> (startIndex: Int, length: Int)? {
         let maxLength = min(previous.count, incoming.count)
-        guard maxLength > 0 else { return 0 }
+        guard maxLength > 0 else { return nil }
+        guard minimumStartIndex < previous.count else { return nil }
 
-        for length in stride(from: maxLength, through: 1, by: -1) {
-            let previousSlice = previous.suffix(length)
+        for length in stride(from: maxLength, through: 2, by: -1) {
+            guard minimumStartIndex <= previous.count - length else { continue }
             let incomingSlice = incoming.prefix(length)
-            guard zip(previousSlice, incomingSlice).allSatisfy(sentenceMatchesForSequence) else {
-                continue
+            for startIndex in minimumStartIndex...(previous.count - length) {
+                let previousSlice = previous[startIndex..<(startIndex + length)]
+                if zip(previousSlice, incomingSlice).allSatisfy(sentenceMatchesForSequence) {
+                    return (startIndex, length)
+                }
             }
-            return length
         }
 
-        return 0
+        return nil
     }
 
     private func isAlreadyRepresented(_ sentence: String) -> Bool {
-        confirmedSentences.contains { existing in
+        isAlreadyRepresented(sentence, in: completedSentences())
+    }
+
+    private func isAlreadyRepresented(_ sentence: String, in candidates: [String]) -> Bool {
+        candidates.contains { existing in
             sentencesRepresentSameMeaning(existing, sentence) ||
                 isPartialDuplicate(existing: existing, incoming: sentence)
         }
     }
 
     private func renderedText() -> String {
-        let segments = confirmedSentences + (liveTail.map { [$0] } ?? [])
+        let segments = completedSentences() + (liveTail.map { [$0] } ?? [])
         return segments.joined(separator: " ")
     }
 
@@ -453,7 +484,9 @@ final class LiveTranscriptViewModel: ObservableObject {
         if sentenceKey(a) == sentenceKey(b) {
             return true
         }
-        return sentencesRepresentSameMeaning(a, b)
+        return sentencesRepresentSameMeaning(a, b) ||
+            isPartialDuplicate(existing: a, incoming: b) ||
+            isPartialDuplicate(existing: b, incoming: a)
     }
 
     private func sentencesRepresentSameMeaning(_ a: String, _ b: String) -> Bool {
