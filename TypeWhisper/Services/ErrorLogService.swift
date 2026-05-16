@@ -91,6 +91,8 @@ private struct DiagnosticsReport: Encodable {
         let memoryEnabled: Bool
         let memoryCaptureScope: String
         let appFormattingEnabled: Bool
+        let modelAutoUnloadSeconds: Int
+        let modelAutoUnloadPolicy: String
         let indicatorStyle: String
         let indicatorSupportsTranscriptPreview: Bool
         let indicatorTranscriptPreviewEnabled: Bool
@@ -185,6 +187,7 @@ final class ErrorLogService: ObservableObject {
         let defaults = UserDefaults.standard
         let pluginManager = PluginManager.shared ?? container.pluginManager
         let outputSnapshot = CoreAudioOutputVolumeController().defaultOutputSnapshot()
+        let modelAutoUnloadSeconds = defaults.integer(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
         let indicatorStyle = DictationViewModel.loadIndicatorStyle(defaults: defaults)
         let indicatorPreviewEnabled = DictationViewModel.loadIndicatorTranscriptPreviewEnabled(defaults: defaults)
         let indicatorPreviewOffset = DictationViewModel.loadIndicatorTranscriptPreviewFontSizeOffset(defaults: defaults)
@@ -279,6 +282,8 @@ final class ErrorLogService: ObservableObject {
                 memoryEnabled: defaults.bool(forKey: UserDefaultsKeys.memoryEnabled),
                 memoryCaptureScope: MemoryCaptureScope.load(from: defaults).rawValue,
                 appFormattingEnabled: defaults.bool(forKey: UserDefaultsKeys.appFormattingEnabled),
+                modelAutoUnloadSeconds: modelAutoUnloadSeconds,
+                modelAutoUnloadPolicy: Self.modelAutoUnloadPolicy(seconds: modelAutoUnloadSeconds),
                 indicatorStyle: indicatorStyle.rawValue,
                 indicatorSupportsTranscriptPreview: indicatorStyle.supportsTranscriptPreview,
                 indicatorTranscriptPreviewEnabled: indicatorPreviewEnabled,
@@ -314,6 +319,17 @@ final class ErrorLogService: ObservableObject {
 
     private static func pluginDefaultKey(pluginId: String, key: String) -> String {
         "plugin.\(pluginId).\(key)"
+    }
+
+    private static func modelAutoUnloadPolicy(seconds: Int) -> String {
+        switch seconds {
+        case 0:
+            return "never"
+        case -1:
+            return "immediate"
+        default:
+            return "afterSeconds"
+        }
     }
 
     private func loadEntries() {
