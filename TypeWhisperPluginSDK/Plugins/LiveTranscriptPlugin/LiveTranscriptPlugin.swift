@@ -9,6 +9,26 @@ struct PluginHotkey: Codable, Equatable {
     let modifierFlags: UInt
 }
 
+// MARK: - Appearance
+
+private enum LiveTranscriptAppearance {
+    static let defaultFontSize = 14.0
+    static let defaultWindowWidth = 420.0
+    static let defaultWindowHeight = 320.0
+    static let defaultBackgroundOpacity = 0.92
+
+    static let fontSizeRange = 10.0...24.0
+    static let windowWidthRange = 300.0...900.0
+    static let windowHeightRange = 180.0...650.0
+    static let backgroundOpacityRange = 0.20...0.95
+
+    static let minimumWindowSize = NSSize(width: 250, height: 150)
+
+    static func clamped(_ value: Double, to range: ClosedRange<Double>) -> Double {
+        min(max(value, range.lowerBound), range.upperBound)
+    }
+}
+
 // MARK: - Plugin Entry Point
 
 @objc(LiveTranscriptPlugin)
@@ -23,7 +43,10 @@ final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendab
     private var autoCloseTask: Task<Void, Never>?
 
     fileprivate var _autoOpen: Bool = false
-    fileprivate var _fontSize: Double = 14.0
+    fileprivate var _fontSize: Double = LiveTranscriptAppearance.defaultFontSize
+    fileprivate var _windowWidth: Double = LiveTranscriptAppearance.defaultWindowWidth
+    fileprivate var _windowHeight: Double = LiveTranscriptAppearance.defaultWindowHeight
+    fileprivate var _backgroundOpacity: Double = LiveTranscriptAppearance.defaultBackgroundOpacity
     private let autoCloseDelay: Double = 4.0
 
     fileprivate var toggleHotkey: PluginHotkey?
@@ -31,6 +54,7 @@ final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendab
     private var localMonitor: Any?
     private var hotkeyIsDown: Bool = false
     private var streamingDisplayActive = false
+    private var hasCompletedTranscript = false
 
     required override init() {
         super.init()
@@ -39,7 +63,30 @@ final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendab
     func activate(host: HostServices) {
         self.host = host
         _autoOpen = host.userDefault(forKey: "autoOpen") as? Bool ?? false
-        _fontSize = host.userDefault(forKey: "fontSize") as? Double ?? 14.0
+        _fontSize = Self.clampedUserDefault(
+            host,
+            key: "fontSize",
+            defaultValue: LiveTranscriptAppearance.defaultFontSize,
+            range: LiveTranscriptAppearance.fontSizeRange
+        )
+        _windowWidth = Self.clampedUserDefault(
+            host,
+            key: "windowWidth",
+            defaultValue: LiveTranscriptAppearance.defaultWindowWidth,
+            range: LiveTranscriptAppearance.windowWidthRange
+        )
+        _windowHeight = Self.clampedUserDefault(
+            host,
+            key: "windowHeight",
+            defaultValue: LiveTranscriptAppearance.defaultWindowHeight,
+            range: LiveTranscriptAppearance.windowHeightRange
+        )
+        _backgroundOpacity = Self.clampedUserDefault(
+            host,
+            key: "backgroundOpacity",
+            defaultValue: LiveTranscriptAppearance.defaultBackgroundOpacity,
+            range: LiveTranscriptAppearance.backgroundOpacityRange
+        )
 
         if let data = host.userDefault(forKey: "toggleHotkey") as? Data {
             toggleHotkey = try? JSONDecoder().decode(PluginHotkey.self, from: data)
@@ -74,10 +121,47 @@ final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendab
     }
 
     @MainActor
+    var displayedTextForTesting: String {
+        viewModel?.paragraphs.map(\.text).joined(separator: " ") ?? ""
+    }
+
+    var appearanceForTesting: (fontSize: Double, windowWidth: Double, windowHeight: Double, backgroundOpacity: Double) {
+        (_fontSize, _windowWidth, _windowHeight, _backgroundOpacity)
+    }
+
+    @MainActor
     func updateAutoOpenPreference(_ enabled: Bool) {
         _autoOpen = enabled
         host?.setUserDefault(enabled, forKey: "autoOpen")
         refreshStreamingDisplayActive()
+    }
+
+    @MainActor
+    func updateFontSizePreference(_ value: Double) {
+        _fontSize = LiveTranscriptAppearance.clamped(value, to: LiveTranscriptAppearance.fontSizeRange)
+        host?.setUserDefault(_fontSize, forKey: "fontSize")
+        applyAppearanceToVisiblePanel()
+    }
+
+    @MainActor
+    func updateWindowWidthPreference(_ value: Double) {
+        _windowWidth = LiveTranscriptAppearance.clamped(value, to: LiveTranscriptAppearance.windowWidthRange)
+        host?.setUserDefault(_windowWidth, forKey: "windowWidth")
+        applyAppearanceToVisiblePanel(applyWindowSize: true)
+    }
+
+    @MainActor
+    func updateWindowHeightPreference(_ value: Double) {
+        _windowHeight = LiveTranscriptAppearance.clamped(value, to: LiveTranscriptAppearance.windowHeightRange)
+        host?.setUserDefault(_windowHeight, forKey: "windowHeight")
+        applyAppearanceToVisiblePanel(applyWindowSize: true)
+    }
+
+    @MainActor
+    func updateBackgroundOpacityPreference(_ value: Double) {
+        _backgroundOpacity = LiveTranscriptAppearance.clamped(value, to: LiveTranscriptAppearance.backgroundOpacityRange)
+        host?.setUserDefault(_backgroundOpacity, forKey: "backgroundOpacity")
+        applyAppearanceToVisiblePanel()
     }
 
     private func setStreamingDisplayActiveIfNeeded(_ active: Bool) {
@@ -91,6 +175,24 @@ final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendab
         setStreamingDisplayActiveIfNeeded(_autoOpen || panel?.isVisible == true)
     }
 
+    private static func clampedUserDefault(
+        _ host: HostServices,
+        key: String,
+        defaultValue: Double,
+        range: ClosedRange<Double>
+    ) -> Double {
+        let rawValue: Double?
+        if let value = host.userDefault(forKey: key) as? Double {
+            rawValue = value
+        } else if let value = host.userDefault(forKey: key) as? Int {
+            rawValue = Double(value)
+        } else {
+            rawValue = nil
+        }
+
+        return LiveTranscriptAppearance.clamped(rawValue ?? defaultValue, to: range)
+    }
+
     // MARK: - Event Handling
 
     @MainActor
@@ -98,12 +200,19 @@ final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendab
         switch event {
         case .recordingStarted:
             autoCloseTask?.cancel()
+            hasCompletedTranscript = false
             if _autoOpen { showPanel() }
             viewModel?.reset()
 
         case .partialTranscriptionUpdate(let payload):
+            guard !hasCompletedTranscript else { return }
             viewModel?.updateText(payload.text, isFinal: payload.isFinal)
             if payload.isFinal { scheduleAutoClose() }
+
+        case .transcriptionCompleted(let payload):
+            hasCompletedTranscript = true
+            viewModel?.updateText(payload.finalText, isFinal: true)
+            scheduleAutoClose()
 
         case .recordingStopped:
             scheduleAutoClose()
@@ -118,12 +227,28 @@ final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendab
     @MainActor
     private func showPanel() {
         if panel == nil {
-            let vm = viewModel ?? LiveTranscriptViewModel()
+            let vm = viewModel ?? LiveTranscriptViewModel(
+                fontSize: _fontSize,
+                backgroundOpacity: _backgroundOpacity
+            )
             viewModel = vm
-            panel = LiveTranscriptPanel(viewModel: vm, fontSize: _fontSize)
+            panel = LiveTranscriptPanel(viewModel: vm, windowSize: configuredWindowSize)
         }
+        applyAppearanceToVisiblePanel()
         panel?.orderFront(nil)
         refreshStreamingDisplayActive()
+    }
+
+    private var configuredWindowSize: NSSize {
+        NSSize(width: _windowWidth, height: _windowHeight)
+    }
+
+    @MainActor
+    private func applyAppearanceToVisiblePanel(applyWindowSize: Bool = false) {
+        viewModel?.updateAppearance(fontSize: _fontSize, backgroundOpacity: _backgroundOpacity)
+        if applyWindowSize {
+            panel?.applyWindowSize(configuredWindowSize)
+        }
     }
 
     @MainActor
@@ -245,12 +370,10 @@ final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendab
 final class LiveTranscriptViewModel: ObservableObject {
     @Published var paragraphs: [TranscriptParagraph] = []
     @Published var isAutoScrollEnabled: Bool = true
+    @Published var fontSize: Double
+    @Published var backgroundOpacity: Double
 
-    private var confirmedSentences: [String] = []
-    private var mutableSentences: [String] = []
-    private var liveTail: String?
-    private var recentTexts: [String] = []
-    private let sentencesPerParagraph: Int = 3
+    private var currentText: String?
 
     struct TranscriptParagraph: Identifiable {
         let id: UUID
@@ -262,12 +385,22 @@ final class LiveTranscriptViewModel: ObservableObject {
         }
     }
 
+    init(
+        fontSize: Double = LiveTranscriptAppearance.defaultFontSize,
+        backgroundOpacity: Double = LiveTranscriptAppearance.defaultBackgroundOpacity
+    ) {
+        self.fontSize = fontSize
+        self.backgroundOpacity = backgroundOpacity
+    }
+
+    func updateAppearance(fontSize: Double, backgroundOpacity: Double) {
+        self.fontSize = fontSize
+        self.backgroundOpacity = backgroundOpacity
+    }
+
     func reset() {
         paragraphs = []
-        confirmedSentences = []
-        mutableSentences = []
-        liveTail = nil
-        recentTexts = []
+        currentText = nil
         isAutoScrollEnabled = true
     }
 
@@ -275,375 +408,101 @@ final class LiveTranscriptViewModel: ObservableObject {
         isAutoScrollEnabled = true
     }
 
-    func updateText(_ fullText: String, isFinal: Bool) {
-        let trimmed = fullText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-
-        let cleaned = removeConsecutiveDuplicateSentences(trimmed)
-        guard !cleaned.isEmpty else { return }
-
-        // Ring buffer dedup: ignore exact duplicates
-        if recentTexts.contains(cleaned) { return }
-
-        let previousRenderedText = renderedText()
-        let segments = splitIntoCompletedSentencesAndTail(cleaned)
-
-        mergeCompletedSentences(segments.completed, isFinal: isFinal)
-        mergeLiveTail(segments.tail)
-
-        let merged = renderedText()
-        guard merged != previousRenderedText else {
-            return
-        }
-
-        recentTexts.append(cleaned)
-        if recentTexts.count > 3 { recentTexts.removeFirst() }
-
-        let renderedSegments = completedSentences() + (liveTail.map { [$0] } ?? [])
-        var newTexts = splitSegmentsIntoParagraphs(renderedSegments, sentencesPerParagraph: sentencesPerParagraph)
-        if newTexts.isEmpty { newTexts = [merged] }
-
-        paragraphs = reconcileParagraphs(old: paragraphs, new: newTexts)
-    }
-
-    // MARK: - Helpers
-
-    private func mergeCompletedSentences(_ incomingSentences: [String], isFinal: Bool) {
-        let incoming = deduplicatedSentences(incomingSentences)
-        guard !incoming.isEmpty else { return }
-
-        var working = completedSentences()
-        if working.isEmpty || isCumulativeReplacement(incoming, previous: working) {
-            working = incoming
-        } else if let replacement = replacementMatch(
-            previous: working,
-            incoming: incoming,
-            minimumStartIndex: confirmedSentences.count
-        ) {
-            working = Array(working.prefix(replacement.startIndex)) + incoming
-        } else {
-            for sentence in incoming where !isAlreadyRepresented(sentence, in: working) {
-                working.append(sentence)
-            }
-        }
-
-        applyCompletedSentences(working, isFinal: isFinal)
-        liveTail = nil
-    }
-
-    private func mergeLiveTail(_ tail: String?) {
-        guard let tail = tail?.trimmingCharacters(in: .whitespacesAndNewlines), !tail.isEmpty else {
-            liveTail = nil
-            return
-        }
-
-        if isAlreadyRepresented(tail) {
-            liveTail = nil
-            return
-        }
-
-        if let current = liveTail {
-            if tail.hasPrefix(current) || sentenceKey(tail) == sentenceKey(current) {
-                liveTail = tail
-                return
-            }
-            if current.hasPrefix(tail) {
-                return
-            }
-        }
-
-        liveTail = tail
-    }
-
-    private func completedSentences() -> [String] {
-        confirmedSentences + mutableSentences
-    }
-
-    private func applyCompletedSentences(_ sentences: [String], isFinal: Bool) {
-        if isFinal || sentences.count <= sentencesPerParagraph {
-            confirmedSentences = isFinal ? sentences : []
-            mutableSentences = isFinal ? [] : sentences
-            return
-        }
-
-        confirmedSentences = Array(sentences.dropLast(sentencesPerParagraph))
-        mutableSentences = Array(sentences.suffix(sentencesPerParagraph))
-    }
-
-    private func isCumulativeReplacement(_ incoming: [String], previous: [String]) -> Bool {
-        guard incoming.count >= previous.count else { return false }
-        guard !previous.isEmpty else { return true }
-
-        for index in previous.indices {
-            guard sentenceKey(previous[index]) == sentenceKey(incoming[index]) else {
-                return false
-            }
-        }
-
-        return true
-    }
-
-    private func replacementMatch(
-        previous: [String],
-        incoming: [String],
-        minimumStartIndex: Int
-    ) -> (startIndex: Int, length: Int)? {
-        let maxLength = min(previous.count, incoming.count)
-        guard maxLength > 0 else { return nil }
-        guard minimumStartIndex < previous.count else { return nil }
-
-        for length in stride(from: maxLength, through: 2, by: -1) {
-            guard minimumStartIndex <= previous.count - length else { continue }
-            let incomingSlice = incoming.prefix(length)
-            for startIndex in minimumStartIndex...(previous.count - length) {
-                let previousSlice = previous[startIndex..<(startIndex + length)]
-                if zip(previousSlice, incomingSlice).allSatisfy(sentenceMatchesForSequence) {
-                    return (startIndex, length)
-                }
-            }
-        }
-
-        return nil
-    }
-
-    private func isAlreadyRepresented(_ sentence: String) -> Bool {
-        isAlreadyRepresented(sentence, in: completedSentences())
-    }
-
-    private func isAlreadyRepresented(_ sentence: String, in candidates: [String]) -> Bool {
-        candidates.contains { existing in
-            sentencesRepresentSameMeaning(existing, sentence) ||
-                isPartialDuplicate(existing: existing, incoming: sentence)
-        }
-    }
-
-    private func renderedText() -> String {
-        let segments = completedSentences() + (liveTail.map { [$0] } ?? [])
-        return segments.joined(separator: " ")
-    }
-
-    private func deduplicatedSentences(_ sentences: [String]) -> [String] {
-        var result: [String] = []
-        for sentence in sentences {
-            let isDuplicate = result.contains { sentencesRepresentSameMeaning($0, sentence) }
-            if !isDuplicate {
-                result.append(sentence)
-            }
-        }
-        return result
-    }
-
-    private func splitIntoCompletedSentencesAndTail(_ text: String) -> (completed: [String], tail: String?) {
-        var sentences: [String] = []
-        var currentStart = text.startIndex
-        var i = text.startIndex
-
-        while i < text.endIndex {
-            if text[i] == "." || text[i] == "!" || text[i] == "?" {
-                let sentenceEnd = text.index(after: i)
-                let sentence = String(text[currentStart..<sentenceEnd]).trimmingCharacters(in: .whitespaces)
-                if !sentence.isEmpty { sentences.append(sentence) }
-                currentStart = sentenceEnd
-            }
-            i = text.index(after: i)
-        }
-
-        let tail: String?
-        if currentStart < text.endIndex {
-            let remaining = String(text[currentStart...]).trimmingCharacters(in: .whitespacesAndNewlines)
-            tail = remaining.isEmpty ? nil : remaining
-        } else {
-            tail = nil
-        }
-
-        return (sentences, tail)
-    }
-
-    private func splitSegmentsIntoParagraphs(_ segments: [String], sentencesPerParagraph: Int) -> [String] {
-        guard !segments.isEmpty else { return [] }
-
-        var paragraphs: [String] = []
-        var current: [String] = []
-
-        for segment in segments {
-            current.append(segment)
-            if current.count >= sentencesPerParagraph {
-                paragraphs.append(current.joined(separator: " "))
-                current.removeAll()
-            }
-        }
-
-        if !current.isEmpty {
-            paragraphs.append(current.joined(separator: " "))
-        }
-
-        return paragraphs
-    }
-
-    private func sentenceMatchesForSequence(_ a: String, _ b: String) -> Bool {
-        if sentenceKey(a) == sentenceKey(b) {
-            return true
-        }
-        return sentencesRepresentSameMeaning(a, b) ||
-            isPartialDuplicate(existing: a, incoming: b) ||
-            isPartialDuplicate(existing: b, incoming: a)
-    }
-
-    private func sentencesRepresentSameMeaning(_ a: String, _ b: String) -> Bool {
-        let aWords = sentenceWords(a)
-        let bWords = sentenceWords(b)
-        guard aWords.count >= 2 && bWords.count >= 2 else { return false }
-
-        if sentenceKey(a) == sentenceKey(b) {
-            return true
-        }
-
-        return isSimilarSentence(a, b)
-    }
-
-    private func isPartialDuplicate(existing: String, incoming: String) -> Bool {
-        let existingWords = sentenceWords(existing)
-        let incomingWords = sentenceWords(incoming)
-        guard existingWords.count >= 4 && incomingWords.count >= 4 else { return false }
-
-        var matchedIndexes = Set<Int>()
-        var matchCount = 0
-
-        for incomingWord in incomingWords {
-            guard let matchIndex = existingWords.indices.first(where: { index in
-                !matchedIndexes.contains(index) && tokensMatch(existingWords[index], incomingWord)
-            }) else {
-                continue
-            }
-
-            matchedIndexes.insert(matchIndex)
-            matchCount += 1
-        }
-
-        let coverage = Double(matchCount) / Double(incomingWords.count)
-        return matchCount >= 4 && coverage >= 0.6
-    }
-
-    private func sentenceKey(_ sentence: String) -> String {
-        sentenceWords(sentence).joined(separator: " ")
-    }
-
-    private func sentenceWords(_ sentence: String) -> [String] {
-        sentence.lowercased().split(separator: " ").compactMap { rawWord in
-            let word = rawWord.trimmingCharacters(in: .punctuationCharacters)
-            return word.isEmpty ? nil : word
-        }
-    }
-
-    private func tokensMatch(_ a: String, _ b: String) -> Bool {
-        if a == b { return true }
-
-        let shortest = min(a.count, b.count)
-        let longest = max(a.count, b.count)
-        guard shortest >= 4 else { return false }
-
-        let allowedDistance = max(1, longest / 4)
-        return levenshteinDistance(a, b) <= allowedDistance
-    }
-
-    private func levenshteinDistance(_ a: String, _ b: String) -> Int {
-        let aChars = Array(a)
-        let bChars = Array(b)
-
-        if aChars.isEmpty { return bChars.count }
-        if bChars.isEmpty { return aChars.count }
-
-        var previousRow = Array(0...bChars.count)
-        var currentRow = Array(repeating: 0, count: bChars.count + 1)
-
-        for (aIndex, aChar) in aChars.enumerated() {
-            currentRow[0] = aIndex + 1
-
-            for (bIndex, bChar) in bChars.enumerated() {
-                let substitutionCost = aChar == bChar ? 0 : 1
-                currentRow[bIndex + 1] = min(
-                    previousRow[bIndex + 1] + 1,
-                    currentRow[bIndex] + 1,
-                    previousRow[bIndex] + substitutionCost
-                )
-            }
-
-            previousRow = currentRow
-        }
-
-        return previousRow[bChars.count]
-    }
-
-    private func removeConsecutiveDuplicateSentences(_ text: String) -> String {
-        let sentences = splitIntoSentences(text)
-        guard sentences.count >= 2 else { return text }
-
-        var result: [String] = [sentences[0]]
-        for i in 1..<sentences.count {
-            let isDuplicate = result.contains { isSimilarSentence($0, sentences[i]) }
-            if !isDuplicate {
-                result.append(sentences[i])
-            }
-        }
-
-        return result.joined(separator: " ")
-    }
-
-    private func splitIntoSentences(_ text: String) -> [String] {
-        var sentences: [String] = []
-        var currentStart = text.startIndex
-        var i = text.startIndex
-
-        while i < text.endIndex {
-            if text[i] == "." || text[i] == "!" || text[i] == "?" {
-                let sentenceEnd = text.index(after: i)
-                let sentence = String(text[currentStart..<sentenceEnd]).trimmingCharacters(in: .whitespaces)
-                if !sentence.isEmpty { sentences.append(sentence) }
-                currentStart = sentenceEnd
-            }
-            i = text.index(after: i)
-        }
-
-        if currentStart < text.endIndex {
-            let remaining = String(text[currentStart...]).trimmingCharacters(in: .whitespaces)
-            if !remaining.isEmpty { sentences.append(remaining) }
-        }
-
-        return sentences
-    }
-
-    private func isSimilarSentence(_ a: String, _ b: String) -> Bool {
-        let aWords = Set(sentenceWords(a))
-        let bWords = Set(sentenceWords(b))
-
-        guard aWords.count >= 2 && bWords.count >= 2 else { return false }
-
-        let intersection = aWords.intersection(bWords)
-        let similarity = Double(intersection.count) / Double(max(aWords.count, bWords.count))
-        return similarity >= 0.7
-    }
-
-    private func reconcileParagraphs(old: [TranscriptParagraph], new: [String]) -> [TranscriptParagraph] {
-        var result: [TranscriptParagraph] = []
-        for (index, text) in new.enumerated() {
-            if index < old.count && old[index].text == text {
-                result.append(old[index])
-            } else if index < old.count {
-                result.append(TranscriptParagraph(id: old[index].id, text: text))
-            } else {
-                result.append(TranscriptParagraph(text: text))
-            }
-        }
-        return result
+    func updateText(_ fullText: String, isFinal _: Bool) {
+        let text = fullText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, text != currentText else { return }
+
+        currentText = text
+        paragraphs = [TranscriptParagraph(id: paragraphs.first?.id ?? UUID(), text: text)]
     }
 }
 
 // MARK: - Panel
 
-final class LiveTranscriptPanel: NSPanel {
-    init(viewModel: LiveTranscriptViewModel, fontSize: Double) {
+enum LiveTranscriptPanelFrameStore {
+    static func defaultsKey(for autosaveName: String) -> String {
+        "LiveTranscriptPanelFrame.\(autosaveName)"
+    }
+
+    static func storedString(for frame: NSRect) -> String {
+        NSStringFromRect(frame)
+    }
+
+    static func restorableFrame(
+        from storedString: String?,
+        screenVisibleFrames: [NSRect],
+        minimumSize: NSSize
+    ) -> NSRect? {
+        guard let storedString, !storedString.isEmpty else { return nil }
+
+        let storedFrame = NSRectFromString(storedString)
+        guard isFinite(storedFrame) else { return nil }
+        guard storedFrame.width > 0, storedFrame.height > 0 else { return nil }
+
+        let frame = NSRect(
+            x: storedFrame.minX,
+            y: storedFrame.minY,
+            width: max(storedFrame.width, minimumSize.width),
+            height: max(storedFrame.height, minimumSize.height)
+        )
+        guard isVisibleEnough(frame, in: screenVisibleFrames) else { return nil }
+
+        return frame
+    }
+
+    static func restore(
+        autosaveName: String,
+        defaults: UserDefaults = .standard,
+        screenVisibleFrames: [NSRect] = NSScreen.screens.map(\.visibleFrame),
+        minimumSize: NSSize
+    ) -> NSRect? {
+        restorableFrame(
+            from: defaults.string(forKey: defaultsKey(for: autosaveName)),
+            screenVisibleFrames: screenVisibleFrames,
+            minimumSize: minimumSize
+        )
+    }
+
+    static func save(frame: NSRect, autosaveName: String, defaults: UserDefaults = .standard) {
+        defaults.set(storedString(for: frame), forKey: defaultsKey(for: autosaveName))
+    }
+
+    private static func isFinite(_ frame: NSRect) -> Bool {
+        frame.minX.isFinite &&
+            frame.minY.isFinite &&
+            frame.width.isFinite &&
+            frame.height.isFinite
+    }
+
+    private static func isVisibleEnough(_ frame: NSRect, in screenVisibleFrames: [NSRect]) -> Bool {
+        guard !screenVisibleFrames.isEmpty else { return true }
+
+        let minimumVisibleWidth = min(80.0, max(1.0, frame.width))
+        let minimumVisibleHeight = min(80.0, max(1.0, frame.height))
+
+        return screenVisibleFrames.contains { screenFrame in
+            let intersection = frame.intersection(screenFrame)
+            return !intersection.isNull &&
+                !intersection.isEmpty &&
+                intersection.width >= minimumVisibleWidth &&
+                intersection.height >= minimumVisibleHeight
+        }
+    }
+}
+
+final class LiveTranscriptPanel: NSPanel, NSWindowDelegate {
+    private let transcriptFrameAutosaveName: String
+    private var shouldPersistFrameChanges = false
+
+    init(
+        viewModel: LiveTranscriptViewModel,
+        windowSize: NSSize,
+        frameAutosaveName: String = "LiveTranscriptPanel"
+    ) {
+        self.transcriptFrameAutosaveName = frameAutosaveName
+
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 320),
+            contentRect: NSRect(x: 0, y: 0, width: windowSize.width, height: windowSize.height),
             styleMask: [.resizable, .nonactivatingPanel, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -659,26 +518,57 @@ final class LiveTranscriptPanel: NSPanel {
         hidesOnDeactivate = false
         isMovableByWindowBackground = true
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        minSize = NSSize(width: 250, height: 150)
+        minSize = LiveTranscriptAppearance.minimumWindowSize
         animationBehavior = .utilityWindow
-        setFrameAutosaveName("LiveTranscriptPanel")
+        delegate = self
 
-        let hostingView = NSHostingView(rootView: LiveTranscriptView(viewModel: viewModel, fontSize: fontSize))
+        let hostingView = NSHostingView(rootView: LiveTranscriptView(viewModel: viewModel))
         hostingView.sizingOptions = []
         contentView = hostingView
 
-        center()
+        if let savedFrame = LiveTranscriptPanelFrameStore.restore(
+            autosaveName: frameAutosaveName,
+            minimumSize: LiveTranscriptAppearance.minimumWindowSize
+        ) {
+            setFrame(savedFrame, display: false)
+        } else {
+            center()
+        }
+        shouldPersistFrameChanges = true
+        persistCurrentFrame()
     }
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    func windowDidMove(_: Notification) {
+        persistCurrentFrame()
+    }
+
+    func windowDidResize(_: Notification) {
+        persistCurrentFrame()
+    }
+
+    override func close() {
+        persistCurrentFrame()
+        delegate = nil
+        super.close()
+    }
+
+    func applyWindowSize(_ size: NSSize) {
+        setContentSize(size)
+    }
+
+    private func persistCurrentFrame() {
+        guard shouldPersistFrameChanges else { return }
+        LiveTranscriptPanelFrameStore.save(frame: frame, autosaveName: transcriptFrameAutosaveName)
+    }
 }
 
 // MARK: - Main View
 
 struct LiveTranscriptView: View {
     @ObservedObject var viewModel: LiveTranscriptViewModel
-    let fontSize: Double
     private let bundle = pluginModuleBundle
 
     var body: some View {
@@ -687,7 +577,7 @@ struct LiveTranscriptView: View {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     ForEach(viewModel.paragraphs) { paragraph in
                         Text(paragraph.text)
-                            .font(.system(size: CGFloat(fontSize)))
+                            .font(.system(size: CGFloat(viewModel.fontSize)))
                             .foregroundStyle(.white.opacity(0.85))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .fixedSize(horizontal: false, vertical: true)
@@ -746,7 +636,7 @@ struct LiveTranscriptView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color.black.opacity(0.92))
+                .fill(Color.black.opacity(viewModel.backgroundOpacity))
         )
     }
 }
@@ -806,76 +696,132 @@ private struct ScrollWheelDetector: NSViewRepresentable {
 private struct LiveTranscriptSettingsView: View {
     let plugin: LiveTranscriptPlugin
     @State private var autoOpen: Bool = false
-    @State private var fontSize: Double = 14.0
+    @State private var fontSize: Double = LiveTranscriptAppearance.defaultFontSize
+    @State private var windowWidth: Double = LiveTranscriptAppearance.defaultWindowWidth
+    @State private var windowHeight: Double = LiveTranscriptAppearance.defaultWindowHeight
+    @State private var backgroundOpacity: Double = LiveTranscriptAppearance.defaultBackgroundOpacity
     @State private var currentHotkey: PluginHotkey?
     @State private var isRecording: Bool = false
     private let bundle = Bundle(for: LiveTranscriptPlugin.self)
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Toggle(isOn: $autoOpen) {
-                VStack(alignment: .leading) {
-                    Text("Auto-open on recording", bundle: bundle)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Toggle(isOn: $autoOpen) {
+                    VStack(alignment: .leading) {
+                        Text("Auto-open on recording", bundle: bundle)
+                            .font(.headline)
+                        Text("Show the transcript window automatically when recording starts.", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .onChange(of: autoOpen) { _, newValue in
+                    plugin.updateAutoOpenPreference(newValue)
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Font size", bundle: bundle)
                         .font(.headline)
-                    Text("Show the transcript window automatically when recording starts.", bundle: bundle)
+                    HStack {
+                        Slider(value: $fontSize, in: LiveTranscriptAppearance.fontSizeRange, step: 1)
+                            .onChange(of: fontSize) { _, newValue in
+                                plugin.updateFontSizePreference(newValue)
+                            }
+                        Text("\(Int(fontSize))pt")
+                            .monospacedDigit()
+                            .frame(width: 40, alignment: .trailing)
+                    }
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Window size", bundle: bundle)
+                        .font(.headline)
+                    HStack {
+                        Text("Width", bundle: bundle)
+                            .frame(width: 48, alignment: .leading)
+                        Slider(value: $windowWidth, in: LiveTranscriptAppearance.windowWidthRange, step: 20)
+                            .onChange(of: windowWidth) { _, newValue in
+                                plugin.updateWindowWidthPreference(newValue)
+                            }
+                        Text("\(Int(windowWidth))")
+                            .monospacedDigit()
+                            .frame(width: 44, alignment: .trailing)
+                    }
+                    HStack {
+                        Text("Height", bundle: bundle)
+                            .frame(width: 48, alignment: .leading)
+                        Slider(value: $windowHeight, in: LiveTranscriptAppearance.windowHeightRange, step: 20)
+                            .onChange(of: windowHeight) { _, newValue in
+                                plugin.updateWindowHeightPreference(newValue)
+                            }
+                        Text("\(Int(windowHeight))")
+                            .monospacedDigit()
+                            .frame(width: 44, alignment: .trailing)
+                    }
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Background opacity", bundle: bundle)
+                        .font(.headline)
+                    HStack {
+                        Slider(value: $backgroundOpacity, in: LiveTranscriptAppearance.backgroundOpacityRange, step: 0.05)
+                            .onChange(of: backgroundOpacity) { _, newValue in
+                                plugin.updateBackgroundOpacityPreference(newValue)
+                            }
+                        Text("\(Int(backgroundOpacity * 100))%")
+                            .monospacedDigit()
+                            .frame(width: 44, alignment: .trailing)
+                    }
+                    Text("Lower values keep more of the app behind the transcript visible.", bundle: bundle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-            }
-            .onChange(of: autoOpen) { _, newValue in
-                plugin.updateAutoOpenPreference(newValue)
-            }
 
-            Divider()
+                Divider()
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Font size", bundle: bundle)
-                    .font(.headline)
-                HStack {
-                    Slider(value: $fontSize, in: 10...24, step: 1)
-                        .onChange(of: fontSize) { _, newValue in
-                            plugin._fontSize = newValue
-                            plugin.host?.setUserDefault(newValue, forKey: "fontSize")
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Toggle Shortcut", bundle: bundle)
+                        .font(.headline)
+                    Text("Show or hide the transcript window with a keyboard shortcut.", bundle: bundle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    HStack(spacing: 8) {
+                        HotkeyRecorderButton(
+                            hotkey: $currentHotkey,
+                            isRecording: $isRecording,
+                            plugin: plugin
+                        )
+
+                        if currentHotkey != nil {
+                            Button {
+                                currentHotkey = nil
+                                plugin.updateHotkey(nil)
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
                         }
-                    Text("\(Int(fontSize))pt")
-                        .monospacedDigit()
-                        .frame(width: 40, alignment: .trailing)
-                }
-            }
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Toggle Shortcut", bundle: bundle)
-                    .font(.headline)
-                Text("Show or hide the transcript window with a keyboard shortcut.", bundle: bundle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                HStack(spacing: 8) {
-                    HotkeyRecorderButton(
-                        hotkey: $currentHotkey,
-                        isRecording: $isRecording,
-                        plugin: plugin
-                    )
-
-                    if currentHotkey != nil {
-                        Button {
-                            currentHotkey = nil
-                            plugin.updateHotkey(nil)
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
                     }
                 }
             }
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding()
         .onAppear {
             autoOpen = plugin._autoOpen
             fontSize = plugin._fontSize
+            windowWidth = plugin._windowWidth
+            windowHeight = plugin._windowHeight
+            backgroundOpacity = plugin._backgroundOpacity
             currentHotkey = plugin.toggleHotkey
         }
     }
