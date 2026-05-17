@@ -253,6 +253,7 @@ enum IndicatorWindowFrameLookup {
 enum IndicatorFullscreenSuppressionPolicy {
     private static let minimumHorizontalCoverage: CGFloat = 0.5
     private static let minimumVerticalCoverage: CGFloat = 0.5
+    private static let minimumFullscreenDimensionCoverage: CGFloat = 0.98
     @MainActor private static var lastSuppression: IndicatorFullscreenSuppressionDiagnostics?
 
     @MainActor
@@ -324,7 +325,9 @@ enum IndicatorFullscreenSuppressionPolicy {
         let screenFrame = screenFrame.standardized
         let windowFrame = candidateWindowFrame.standardized
 
-        if let focusedWindowIsFullscreen, !focusedWindowIsFullscreen {
+        if let focusedWindowIsFullscreen {
+            guard focusedWindowIsFullscreen else { return false }
+        } else if !isFullscreenLikeWindow(screenFrame: screenFrame, windowFrame: windowFrame) {
             return false
         }
 
@@ -346,6 +349,16 @@ enum IndicatorFullscreenSuppressionPolicy {
 
         return horizontalCoverage >= minimumHorizontalCoverage
             && verticalCoverage >= minimumVerticalCoverage
+    }
+
+    private static func isFullscreenLikeWindow(screenFrame: CGRect, windowFrame: CGRect) -> Bool {
+        guard screenFrame.width > 0, screenFrame.height > 0 else { return false }
+
+        let widthCoverage = min(windowFrame.width / screenFrame.width, 1)
+        let heightCoverage = min(windowFrame.height / screenFrame.height, 1)
+
+        return widthCoverage >= minimumFullscreenDimensionCoverage
+            && heightCoverage >= minimumFullscreenDimensionCoverage
     }
 
     private static func isTypeWhisperBundleIdentifier(
