@@ -187,6 +187,45 @@ final class LiveTranscriptPluginTests: XCTestCase {
         XCTAssertEqual(restoredFrame.height, movedFrame.height, accuracy: 1)
     }
 
+    func testManualPanelResizePersistsWindowSizePreferences() async throws {
+        let autosaveKey = LiveTranscriptPanelFrameStore.defaultsKey(for: "LiveTranscriptPanel")
+        let previousAutosaveValue = UserDefaults.standard.object(forKey: autosaveKey)
+        defer {
+            NSApp.windows.compactMap { $0 as? LiveTranscriptPanel }.forEach { $0.close() }
+            if let previousAutosaveValue {
+                UserDefaults.standard.set(previousAutosaveValue, forKey: autosaveKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: autosaveKey)
+            }
+        }
+
+        UserDefaults.standard.removeObject(forKey: autosaveKey)
+        let eventBus = PluginTestEventBus()
+        let host = try PluginTestHostServices(defaults: [
+            "autoOpen": true,
+            "windowWidth": 420.0,
+            "windowHeight": 320.0,
+        ], eventBus: eventBus)
+        let plugin = LiveTranscriptPlugin()
+
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+
+        await eventBus.emit(.recordingStarted(RecordingStartedPayload(appName: "Notes")))
+
+        let panel = try XCTUnwrap(NSApp.windows.compactMap { $0 as? LiveTranscriptPanel }.last)
+        panel.setContentSize(NSSize(width: 760, height: 460))
+        panel.windowDidResize(Notification(name: NSWindow.didResizeNotification, object: panel))
+
+        let storedWidth = try XCTUnwrap(host.userDefault(forKey: "windowWidth") as? Double)
+        let storedHeight = try XCTUnwrap(host.userDefault(forKey: "windowHeight") as? Double)
+        let appearance = plugin.appearanceForTesting
+        XCTAssertEqual(storedWidth, 760.0, accuracy: 1)
+        XCTAssertEqual(storedHeight, 460.0, accuracy: 1)
+        XCTAssertEqual(appearance.windowWidth, 760.0, accuracy: 1)
+        XCTAssertEqual(appearance.windowHeight, 460.0, accuracy: 1)
+    }
+
     func testDeactivationUnsubscribesAndClearsStreamingDisplay() throws {
         let eventBus = PluginTestEventBus()
         let host = try PluginTestHostServices(eventBus: eventBus)
@@ -303,6 +342,16 @@ final class LiveTranscriptPluginTests: XCTestCase {
         viewModel.updateText("Ich bin an Koeln.", isFinal: true)
 
         XCTAssertEqual(displayedText(from: viewModel), "Ich bin an Koeln.")
+    }
+
+    func testFinalEmptyUpdateClearsPreviewText() {
+        let viewModel = LiveTranscriptViewModel()
+
+        viewModel.updateText("Incorrect live preview.", isFinal: false)
+        viewModel.updateText("   ", isFinal: true)
+
+        XCTAssertEqual(displayedText(from: viewModel), "")
+        XCTAssertTrue(viewModel.paragraphs.isEmpty)
     }
 
     func testViewModelAllowsProviderCorrectionsByReplacingSnapshot() {

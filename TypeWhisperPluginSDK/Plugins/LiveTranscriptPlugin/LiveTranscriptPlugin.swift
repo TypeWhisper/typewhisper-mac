@@ -32,7 +32,7 @@ private enum LiveTranscriptAppearance {
 // MARK: - Plugin Entry Point
 
 @objc(LiveTranscriptPlugin)
-final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendable {
+final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, ObservableObject, @unchecked Sendable {
     static let pluginId = "com.typewhisper.livetranscript"
     static let pluginName = "Live Transcript"
 
@@ -44,8 +44,8 @@ final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendab
 
     fileprivate var _autoOpen: Bool = false
     fileprivate var _fontSize: Double = LiveTranscriptAppearance.defaultFontSize
-    fileprivate var _windowWidth: Double = LiveTranscriptAppearance.defaultWindowWidth
-    fileprivate var _windowHeight: Double = LiveTranscriptAppearance.defaultWindowHeight
+    @Published fileprivate var _windowWidth: Double = LiveTranscriptAppearance.defaultWindowWidth
+    @Published fileprivate var _windowHeight: Double = LiveTranscriptAppearance.defaultWindowHeight
     fileprivate var _backgroundOpacity: Double = LiveTranscriptAppearance.defaultBackgroundOpacity
     private let autoCloseDelay: Double = 4.0
 
@@ -158,6 +158,18 @@ final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendab
     }
 
     @MainActor
+    private func updateWindowSizeFromPanel(_ size: NSSize) {
+        let width = LiveTranscriptAppearance.clamped(Double(size.width), to: LiveTranscriptAppearance.windowWidthRange)
+        let height = LiveTranscriptAppearance.clamped(Double(size.height), to: LiveTranscriptAppearance.windowHeightRange)
+        guard width != _windowWidth || height != _windowHeight else { return }
+
+        _windowWidth = width
+        _windowHeight = height
+        host?.setUserDefault(width, forKey: "windowWidth")
+        host?.setUserDefault(height, forKey: "windowHeight")
+    }
+
+    @MainActor
     func updateBackgroundOpacityPreference(_ value: Double) {
         _backgroundOpacity = LiveTranscriptAppearance.clamped(value, to: LiveTranscriptAppearance.backgroundOpacityRange)
         host?.setUserDefault(_backgroundOpacity, forKey: "backgroundOpacity")
@@ -232,7 +244,13 @@ final class LiveTranscriptPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendab
                 backgroundOpacity: _backgroundOpacity
             )
             viewModel = vm
-            panel = LiveTranscriptPanel(viewModel: vm, windowSize: configuredWindowSize)
+            panel = LiveTranscriptPanel(
+                viewModel: vm,
+                windowSize: configuredWindowSize,
+                onContentSizeChanged: { [weak self] size in
+                    self?.updateWindowSizeFromPanel(size)
+                }
+            )
         }
         applyAppearanceToVisiblePanel()
         panel?.orderFront(nil)
@@ -408,9 +426,15 @@ final class LiveTranscriptViewModel: ObservableObject {
         isAutoScrollEnabled = true
     }
 
-    func updateText(_ fullText: String, isFinal _: Bool) {
+    func updateText(_ fullText: String, isFinal: Bool) {
         let text = fullText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, text != currentText else { return }
+        if text.isEmpty {
+            guard isFinal else { return }
+            currentText = ""
+            paragraphs = []
+            return
+        }
+        guard text != currentText || isFinal else { return }
 
         currentText = text
         paragraphs = [TranscriptParagraph(id: paragraphs.first?.id ?? UUID(), text: text)]
@@ -492,14 +516,18 @@ enum LiveTranscriptPanelFrameStore {
 
 final class LiveTranscriptPanel: NSPanel, NSWindowDelegate {
     private let transcriptFrameAutosaveName: String
+    private let onContentSizeChanged: ((NSSize) -> Void)?
     private var shouldPersistFrameChanges = false
+    private var lastNotifiedContentSize: NSSize?
 
     init(
         viewModel: LiveTranscriptViewModel,
         windowSize: NSSize,
-        frameAutosaveName: String = "LiveTranscriptPanel"
+        frameAutosaveName: String = "LiveTranscriptPanel",
+        onContentSizeChanged: ((NSSize) -> Void)? = nil
     ) {
         self.transcriptFrameAutosaveName = frameAutosaveName
+        self.onContentSizeChanged = onContentSizeChanged
 
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: windowSize.width, height: windowSize.height),
@@ -557,11 +585,22 @@ final class LiveTranscriptPanel: NSPanel, NSWindowDelegate {
 
     func applyWindowSize(_ size: NSSize) {
         setContentSize(size)
+        persistCurrentFrame()
     }
 
     private func persistCurrentFrame() {
         guard shouldPersistFrameChanges else { return }
         LiveTranscriptPanelFrameStore.save(frame: frame, autosaveName: transcriptFrameAutosaveName)
+        notifyContentSizeIfNeeded()
+    }
+
+    private func notifyContentSizeIfNeeded() {
+        let size = contentLayoutRect.size
+        guard lastNotifiedContentSize?.width != size.width ||
+            lastNotifiedContentSize?.height != size.height else { return }
+
+        lastNotifiedContentSize = size
+        onContentSizeChanged?(size)
     }
 }
 
@@ -694,11 +733,9 @@ private struct ScrollWheelDetector: NSViewRepresentable {
 // MARK: - Settings View
 
 private struct LiveTranscriptSettingsView: View {
-    let plugin: LiveTranscriptPlugin
+    @ObservedObject var plugin: LiveTranscriptPlugin
     @State private var autoOpen: Bool = false
     @State private var fontSize: Double = LiveTranscriptAppearance.defaultFontSize
-    @State private var windowWidth: Double = LiveTranscriptAppearance.defaultWindowWidth
-    @State private var windowHeight: Double = LiveTranscriptAppearance.defaultWindowHeight
     @State private var backgroundOpacity: Double = LiveTranscriptAppearance.defaultBackgroundOpacity
     @State private var currentHotkey: PluginHotkey?
     @State private var isRecording: Bool = false
@@ -744,22 +781,34 @@ private struct LiveTranscriptSettingsView: View {
                     HStack {
                         Text("Width", bundle: bundle)
                             .frame(width: 48, alignment: .leading)
-                        Slider(value: $windowWidth, in: LiveTranscriptAppearance.windowWidthRange, step: 20)
-                            .onChange(of: windowWidth) { _, newValue in
-                                plugin.updateWindowWidthPreference(newValue)
-                            }
-                        Text("\(Int(windowWidth))")
+                        Slider(
+                            value: Binding(
+                                get: { plugin._windowWidth },
+                                set: { newValue in
+                                    plugin.updateWindowWidthPreference(newValue)
+                                }
+                            ),
+                            in: LiveTranscriptAppearance.windowWidthRange,
+                            step: 20
+                        )
+                        Text("\(Int(plugin._windowWidth))")
                             .monospacedDigit()
                             .frame(width: 44, alignment: .trailing)
                     }
                     HStack {
                         Text("Height", bundle: bundle)
                             .frame(width: 48, alignment: .leading)
-                        Slider(value: $windowHeight, in: LiveTranscriptAppearance.windowHeightRange, step: 20)
-                            .onChange(of: windowHeight) { _, newValue in
-                                plugin.updateWindowHeightPreference(newValue)
-                            }
-                        Text("\(Int(windowHeight))")
+                        Slider(
+                            value: Binding(
+                                get: { plugin._windowHeight },
+                                set: { newValue in
+                                    plugin.updateWindowHeightPreference(newValue)
+                                }
+                            ),
+                            in: LiveTranscriptAppearance.windowHeightRange,
+                            step: 20
+                        )
+                        Text("\(Int(plugin._windowHeight))")
                             .monospacedDigit()
                             .frame(width: 44, alignment: .trailing)
                     }
@@ -819,8 +868,6 @@ private struct LiveTranscriptSettingsView: View {
         .onAppear {
             autoOpen = plugin._autoOpen
             fontSize = plugin._fontSize
-            windowWidth = plugin._windowWidth
-            windowHeight = plugin._windowHeight
             backgroundOpacity = plugin._backgroundOpacity
             currentHotkey = plugin.toggleHotkey
         }
