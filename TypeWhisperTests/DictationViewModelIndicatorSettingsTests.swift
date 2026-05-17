@@ -256,6 +256,22 @@ final class IndicatorFullscreenSuppressionPolicyTests: XCTestCase {
         )
     }
 
+    func testDoesNotSuppressForeignMaximizedWindowWhenAXFullscreenIsUnavailable() {
+        let screenFrame = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        let maximizedWindowBelowMenuBar = CGRect(x: 7, y: 46, width: 1497, height: 929)
+
+        XCTAssertFalse(
+            IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                screenFrame: screenFrame,
+                safeAreaTopInset: 32,
+                windowFrame: maximizedWindowBelowMenuBar,
+                focusedWindowIsFullscreen: nil,
+                frontmostBundleIdentifier: "com.microsoft.VSCode",
+                appBundleIdentifier: "com.typewhisper.mac.dev"
+            )
+        )
+    }
+
     func testDoesNotSuppressOnNonNotchedScreen() {
         let fullscreenWindow = CGRect(x: 0, y: 0, width: 3024, height: 1964)
 
