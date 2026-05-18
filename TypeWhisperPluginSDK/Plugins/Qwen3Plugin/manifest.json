@@ -2,7 +2,7 @@
     "id": "com.typewhisper.qwen3",
     "name": "Qwen3 ASR",
     "version": "1.1.0",
-    "minHostVersion": "1.2.1",
+    "minHostVersion": "1.4.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "supportedArchitectures": [

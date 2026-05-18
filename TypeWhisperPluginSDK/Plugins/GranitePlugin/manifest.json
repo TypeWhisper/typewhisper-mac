@@ -2,7 +2,7 @@
     "id": "com.typewhisper.granite",
     "name": "Granite Speech",
     "version": "1.0.2",
-    "minHostVersion": "1.2.1",
+    "minHostVersion": "1.4.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "supportedArchitectures": [

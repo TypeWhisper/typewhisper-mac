@@ -54,6 +54,24 @@ final class PluginManifestValidationTests: XCTestCase {
         }
     }
 
+    func testDownloadedModelManagingPluginReleasesRequireHost14() throws {
+        let manifestPaths = [
+            "TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/manifest.json",
+            "TypeWhisperPluginSDK/Plugins/Gemma4Plugin/manifest.json",
+            "TypeWhisperPluginSDK/Plugins/Qwen3Plugin/manifest.json",
+            "TypeWhisperPluginSDK/Plugins/VoxtralPlugin/manifest.json",
+            "TypeWhisperPluginSDK/Plugins/GranitePlugin/manifest.json",
+            "TypeWhisperPluginSDK/Plugins/SupertonicPlugin/manifest.json",
+        ]
+
+        for relativePath in manifestPaths {
+            let manifestURL = TestSupport.repoRoot.appendingPathComponent(relativePath)
+            let data = try Data(contentsOf: manifestURL)
+            let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
+            XCTAssertEqual(manifest.minHostVersion, "1.4.0", relativePath)
+        }
+    }
+
     func testOpenAIPluginManifestDeclaresCloudHostingWithoutAPIKeyRequirement() throws {
         let manifestURL = TestSupport.repoRoot.appendingPathComponent("TypeWhisperPluginSDK/Plugins/OpenAIPlugin/manifest.json")
         let data = try Data(contentsOf: manifestURL)
