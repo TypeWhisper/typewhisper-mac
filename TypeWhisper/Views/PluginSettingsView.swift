@@ -937,10 +937,11 @@ private struct IntegrationIcon: View {
     let systemName: String
     let tint: Color
     var resourceURL: URL?
+    @State private var loadedImage: NSImage?
 
     var body: some View {
         Group {
-            if let resourceURL, let image = NSImage(contentsOf: resourceURL) {
+            if let image = loadedImage {
                 Image(nsImage: image)
                     .resizable()
                     .scaledToFit()
@@ -952,6 +953,20 @@ private struct IntegrationIcon: View {
             }
         }
         .frame(width: 30, height: 30)
+        .task(id: resourceURL) {
+            guard let resourceURL else {
+                loadedImage = nil
+                return
+            }
+
+            loadedImage = nil
+            let imageData = await Task.detached(priority: .utility) {
+                try? Data(contentsOf: resourceURL)
+            }.value
+
+            guard !Task.isCancelled else { return }
+            loadedImage = imageData.flatMap(NSImage.init(data:))
+        }
     }
 }
 
