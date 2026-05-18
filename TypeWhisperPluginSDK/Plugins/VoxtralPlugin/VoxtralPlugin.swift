@@ -113,7 +113,7 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
             host?.setUserDefault(nil, forKey: "loadedModel")
         }
 
-        deleteModelFiles(modelDef)
+        try deleteModelFiles(modelDef)
         host?.notifyCapabilitiesChanged()
     }
 
@@ -240,14 +240,16 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         host?.notifyCapabilitiesChanged()
     }
 
-    fileprivate func deleteModelFiles(_ modelDef: VoxtralModelDef) {
+    fileprivate func deleteModelFiles(_ modelDef: VoxtralModelDef) throws {
         guard let modelsDir = host?.pluginDataDirectory.appendingPathComponent("models") else { return }
         let repoDir = modelsDir.appendingPathComponent("huggingface")
             .appendingPathComponent("hub")
         // HubCache stores repos under models--org--name pattern
         let subdirectory = "models--" + modelDef.repoId.replacingOccurrences(of: "/", with: "--")
         let modelDir = repoDir.appendingPathComponent(subdirectory)
-        try? FileManager.default.removeItem(at: modelDir)
+        if FileManager.default.fileExists(atPath: modelDir.path) {
+            try FileManager.default.removeItem(at: modelDir)
+        }
     }
 
     func restoreLoadedModel(allowDownloads: Bool = true) async {
@@ -541,7 +543,7 @@ private struct VoxtralSettingsView: View {
                         .foregroundStyle(.green)
                     Button(String(localized: "Unload", bundle: bundle)) {
                         plugin.unloadModel()
-                        plugin.deleteModelFiles(modelDef)
+                        try? plugin.deleteModelFiles(modelDef)
                         modelState = plugin.modelState
                     }
                     .buttonStyle(.bordered)

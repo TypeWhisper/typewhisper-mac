@@ -209,7 +209,7 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
             host?.setUserDefault(nil, forKey: "loadedModel")
         }
 
-        deleteModelFiles(modelDef)
+        try deleteModelFiles(modelDef)
         host?.notifyCapabilitiesChanged()
     }
 
@@ -439,9 +439,11 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
         host?.notifyCapabilitiesChanged()
     }
 
-    func deleteModelFiles(_ modelDef: Gemma4ModelDef) {
+    func deleteModelFiles(_ modelDef: Gemma4ModelDef) throws {
         let repoDir = localModelDirectory(for: modelDef.repoId)
-        try? FileManager.default.removeItem(at: repoDir)
+        if FileManager.default.fileExists(atPath: repoDir.path) {
+            try FileManager.default.removeItem(at: repoDir)
+        }
     }
 
     func resetCachedModel(_ modelDef: Gemma4ModelDef) {
@@ -450,7 +452,7 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
         downloadProgress = 0
         modelState = .notLoaded
         host?.setUserDefault(nil, forKey: "loadedModel")
-        deleteModelFiles(modelDef)
+        try? deleteModelFiles(modelDef)
         host?.notifyCapabilitiesChanged()
     }
 

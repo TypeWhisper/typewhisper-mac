@@ -100,12 +100,16 @@ final class PluginManifestValidationTests: XCTestCase {
 
 @MainActor
 final class PluginDownloadedModelManagementTests: XCTestCase {
-    private final class MockDownloadedModelPlugin: NSObject, TypeWhisperPlugin, PluginDownloadedModelManaging, @unchecked Sendable {
+    private final class MockDownloadedModelPlugin: NSObject, TypeWhisperPlugin, PluginDownloadedModelManaging, PluginSettingsActivityReporting, @unchecked Sendable {
         static let pluginId = "com.typewhisper.tests.downloaded-models"
         static let pluginName = "Downloaded Models Test Plugin"
 
         var downloadedModels: [PluginModelInfo]
+        var currentSettingsActivity: PluginSettingsActivity?
         var shouldFailDeletion = false
+        var shouldSuspendDeletion = false
+        var deletionDidStart: (() -> Void)?
+        private var deletionResume: CheckedContinuation<Void, Never>?
         private(set) var deletedModelIds: [String] = []
         private(set) var didDeactivate = false
 
@@ -134,8 +138,20 @@ final class PluginDownloadedModelManagementTests: XCTestCase {
                 )
             }
 
+            deletionDidStart?()
+            if shouldSuspendDeletion {
+                await withCheckedContinuation { continuation in
+                    deletionResume = continuation
+                }
+            }
+
             deletedModelIds.append(modelId)
             downloadedModels.removeAll { $0.id == modelId }
+        }
+
+        func resumeDeletion() {
+            deletionResume?.resume()
+            deletionResume = nil
         }
     }
 
@@ -222,6 +238,77 @@ final class PluginDownloadedModelManagementTests: XCTestCase {
         }
 
         XCTAssertEqual(plugin.downloadedModels.map(\.id), ["only"])
+        XCTAssertEqual(manager.loadedPlugins.first?.isEnabled, true)
+        XCTAssertFalse(plugin.didDeactivate)
+    }
+
+    func testDeletionDuringPluginModelActivityThrowsBusyAndLeavesModel() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginDownloadedModels")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let pluginId = "com.typewhisper.tests.downloaded.busy"
+        let manager = PluginManager(appSupportDirectory: appSupportDirectory)
+        let plugin = MockDownloadedModelPlugin(downloadedModels: [
+            PluginModelInfo(id: "only", displayName: "Only", downloaded: true)
+        ])
+        plugin.currentSettingsActivity = PluginSettingsActivity(message: "Downloading model", progress: 0.5)
+        manager.loadedPlugins = [
+            try makeLoadedPlugin(plugin: plugin, pluginId: pluginId, directory: appSupportDirectory)
+        ]
+
+        do {
+            try await manager.deleteDownloadedModel(pluginId: pluginId, modelId: "only")
+            XCTFail("Expected deletion to be blocked while the plugin reports activity")
+        } catch PluginModelManagementError.pluginBusy(let name) {
+            XCTAssertEqual(name, "Downloaded Models Test Plugin")
+        } catch {
+            XCTFail("Expected pluginBusy, got \(error)")
+        }
+
+        XCTAssertEqual(plugin.downloadedModels.map(\.id), ["only"])
+        XCTAssertTrue(plugin.deletedModelIds.isEmpty)
+        XCTAssertEqual(manager.loadedPlugins.first?.isEnabled, true)
+        XCTAssertFalse(plugin.didDeactivate)
+    }
+
+    func testConcurrentDeletionForSamePluginThrowsBusy() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginDownloadedModels")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let pluginId = "com.typewhisper.tests.downloaded.concurrent"
+        let manager = PluginManager(appSupportDirectory: appSupportDirectory)
+        let plugin = MockDownloadedModelPlugin(downloadedModels: [
+            PluginModelInfo(id: "one", displayName: "One", downloaded: true),
+            PluginModelInfo(id: "two", displayName: "Two", downloaded: true),
+        ])
+        plugin.shouldSuspendDeletion = true
+        let deletionStarted = expectation(description: "first deletion started")
+        plugin.deletionDidStart = {
+            deletionStarted.fulfill()
+        }
+        manager.loadedPlugins = [
+            try makeLoadedPlugin(plugin: plugin, pluginId: pluginId, directory: appSupportDirectory)
+        ]
+
+        let firstDeletion = Task {
+            try await manager.deleteDownloadedModel(pluginId: pluginId, modelId: "one")
+        }
+        await fulfillment(of: [deletionStarted], timeout: 1)
+
+        do {
+            try await manager.deleteDownloadedModel(pluginId: pluginId, modelId: "two")
+            XCTFail("Expected concurrent deletion to be blocked")
+        } catch PluginModelManagementError.pluginBusy(let name) {
+            XCTAssertEqual(name, "Downloaded Models Test Plugin")
+        } catch {
+            XCTFail("Expected pluginBusy, got \(error)")
+        }
+
+        plugin.resumeDeletion()
+        try await firstDeletion.value
+
+        XCTAssertEqual(plugin.deletedModelIds, ["one"])
+        XCTAssertEqual(plugin.downloadedModels.map(\.id), ["two"])
         XCTAssertEqual(manager.loadedPlugins.first?.isEnabled, true)
         XCTAssertFalse(plugin.didDeactivate)
     }

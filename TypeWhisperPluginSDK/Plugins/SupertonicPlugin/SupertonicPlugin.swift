@@ -128,7 +128,7 @@ final class SupertonicPlugin: NSObject, TTSProviderPlugin, PluginSettingsActivit
 
     func deleteDownloadedModel(_ modelId: String) async throws {
         guard modelId == Self.downloadedModelId else { return }
-        deleteCachedModel()
+        try deleteCachedModel()
     }
 
     @MainActor
@@ -229,9 +229,9 @@ final class SupertonicPlugin: NSObject, TTSProviderPlugin, PluginSettingsActivit
         }
     }
 
-    func deleteCachedModel() {
+    func deleteCachedModel() throws {
         clearSynthesizerCache()
-        modelAssetManager.deleteModelFiles()
+        try modelAssetManager.deleteModelFiles()
         downloadProgress = 0
         modelState = .notDownloaded
         host?.notifyCapabilitiesChanged()
@@ -386,7 +386,7 @@ private struct SupertonicSettingsView: View {
                         .foregroundStyle(.green)
                     Spacer()
                     Button("Delete cached model") {
-                        plugin.deleteCachedModel()
+                        try? plugin.deleteCachedModel()
                         refreshFromPlugin()
                     }
                     .controlSize(.small)

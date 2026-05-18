@@ -169,8 +169,10 @@ struct SupertonicModelAssetManager: Sendable {
         try install(files: files, licenseAccepted: true)
     }
 
-    func deleteModelFiles() {
-        try? FileManager.default.removeItem(at: modelDirectory)
+    func deleteModelFiles() throws {
+        if FileManager.default.fileExists(atPath: modelDirectory.path) {
+            try FileManager.default.removeItem(at: modelDirectory)
+        }
     }
 
     private func remoteAssetPaths(token: String?) async throws -> [String] {

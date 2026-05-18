@@ -188,6 +188,7 @@ enum PluginModelManagementError: LocalizedError {
     case pluginNotLoaded(String)
     case unsupported(String)
     case modelNotFound(String)
+    case pluginBusy(String)
 
     var errorDescription: String? {
         switch self {
@@ -199,6 +200,8 @@ enum PluginModelManagementError: LocalizedError {
             return "\(name) does not expose downloaded model management."
         case .modelNotFound(let modelId):
             return "Downloaded model '\(modelId)' was not found."
+        case .pluginBusy(let name):
+            return "\(name) is currently updating models. Try again when the operation finishes."
         }
     }
 }
@@ -216,6 +219,7 @@ final class PluginManager: ObservableObject {
     let pluginsDirectory: URL
     private var ruleNamesProvider: @MainActor () -> [String] = { [] }
     private var workflowProvider: @MainActor () -> [PluginWorkflowInfo] = { [] }
+    private var deletingModelPluginIds = Set<String>()
 
     var postProcessors: [PostProcessorPlugin] {
         loadedPlugins
@@ -677,8 +681,19 @@ final class PluginManager: ObservableObject {
         guard let modelManager = plugin.instance as? any PluginDownloadedModelManaging else {
             throw PluginModelManagementError.unsupported(plugin.manifest.name)
         }
+        if let activityReporter = plugin.instance as? any PluginSettingsActivityReporting,
+           let activity = activityReporter.currentSettingsActivity,
+           !activity.isError {
+            throw PluginModelManagementError.pluginBusy(plugin.manifest.name)
+        }
         guard modelManager.downloadedModels.contains(where: { $0.id == modelId }) else {
             throw PluginModelManagementError.modelNotFound(modelId)
+        }
+        guard deletingModelPluginIds.insert(pluginId).inserted else {
+            throw PluginModelManagementError.pluginBusy(plugin.manifest.name)
+        }
+        defer {
+            deletingModelPluginIds.remove(pluginId)
         }
 
         try await modelManager.deleteDownloadedModel(modelId)

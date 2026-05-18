@@ -125,7 +125,7 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
             host?.setUserDefault(nil, forKey: "loadedModel")
         }
 
-        deleteModelFiles(modelDef)
+        try deleteModelFiles(modelDef)
         host?.notifyCapabilitiesChanged()
     }
 
@@ -451,9 +451,11 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
         host?.notifyCapabilitiesChanged()
     }
 
-    fileprivate func deleteModelFiles(_ modelDef: WhisperModelDef) {
+    fileprivate func deleteModelFiles(_ modelDef: WhisperModelDef) throws {
         let modelPath = resolvedModelPath(for: modelDef)
-        try? FileManager.default.removeItem(at: modelPath)
+        if FileManager.default.fileExists(atPath: modelPath.path) {
+            try FileManager.default.removeItem(at: modelPath)
+        }
     }
 
     func restoreLoadedModel(allowDownloads: Bool = true) async {
@@ -1141,7 +1143,7 @@ private struct WhisperKitSettingsView: View {
         if case .ready(let loadedId) = modelState, loadedId == modelDef.id {
             plugin.unloadModel()
         }
-        plugin.deleteModelFiles(modelDef)
+        try? plugin.deleteModelFiles(modelDef)
         syncViewStateFromPlugin()
     }
 
