@@ -1012,104 +1012,218 @@ private struct InstalledPluginRow: View {
     let onUpdate: () -> Void
     let onUninstall: () -> Void
     @State private var pluginActivity: PluginSettingsActivity?
+    @State private var modelsExpanded = false
+    @State private var modelPendingDeletion: PluginModelInfo?
+    @State private var deletingModelId: String?
+    @State private var modelDeleteError: String?
 
     private let activityTimer = Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            IntegrationIcon(
-                systemName: registryPlugin?.iconSystemName ?? plugin.manifest.iconSystemName ?? "puzzlepiece.extension",
-                tint: source.tint,
-                resourceURL: plugin.iconResourceURL
-            )
+        let models = downloadedModels
 
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 6) {
-                    Text(plugin.manifest.name)
-                        .font(.headline)
-                        .lineLimit(1)
-                    Text("v\(plugin.manifest.version)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+        VStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 12) {
+                IntegrationIcon(
+                    systemName: registryPlugin?.iconSystemName ?? plugin.manifest.iconSystemName ?? "puzzlepiece.extension",
+                    tint: source.tint,
+                    resourceURL: plugin.iconResourceURL
+                )
 
-                PluginBadgeLine(source: source, hosting: hosting, categories: categories)
-
-                if let description = registryPlugin?.localizedDescription {
-                    Text(description)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                } else if let author = plugin.manifest.author {
-                    Text(author)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-
-                if let externalNotice {
-                    Text(externalNotice.detailText)
-                        .font(.caption2)
-                        .foregroundStyle(externalNotice.badgeColor)
-                        .lineLimit(1)
-                }
-
-                if let state = installState {
-                    PluginInstallStateView(state: state, name: plugin.manifest.name)
-                } else if case .updateAvailable = installInfo {
-                    Button {
-                        onUpdate()
-                    } label: {
-                        Label(String(localized: "Update"), systemImage: "arrow.down.circle")
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 6) {
+                        Text(plugin.manifest.name)
+                            .font(.headline)
+                            .lineLimit(1)
+                        Text("v\(plugin.manifest.version)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                    .controlSize(.small)
-                } else if let pluginActivity {
-                    PluginSettingsActivityView(activity: pluginActivity)
+
+                    PluginBadgeLine(source: source, hosting: hosting, categories: categories)
+
+                    if let description = registryPlugin?.localizedDescription {
+                        Text(description)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    } else if let author = plugin.manifest.author {
+                        Text(author)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    if !models.isEmpty {
+                        Button {
+                            modelsExpanded.toggle()
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: modelsExpanded ? "chevron.down" : "chevron.right")
+                                    .font(.caption2.weight(.semibold))
+                                    .frame(width: 10)
+                                Label(downloadedModelCountTitle(models.count), systemImage: "externaldrive")
+                                    .labelStyle(.titleAndIcon)
+                            }
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(downloadedModelCountTitle(models.count))
+                    }
+
+                    if let externalNotice {
+                        Text(externalNotice.detailText)
+                            .font(.caption2)
+                            .foregroundStyle(externalNotice.badgeColor)
+                            .lineLimit(1)
+                    }
+
+                    if let state = installState {
+                        PluginInstallStateView(state: state, name: plugin.manifest.name)
+                    } else if case .updateAvailable = installInfo {
+                        Button {
+                            onUpdate()
+                        } label: {
+                            Label(String(localized: "Update"), systemImage: "arrow.down.circle")
+                        }
+                        .controlSize(.small)
+                    } else if let pluginActivity {
+                        PluginSettingsActivityView(activity: pluginActivity)
+                    }
+                }
+
+                Spacer(minLength: 12)
+
+                HStack(spacing: 8) {
+                    Toggle("", isOn: Binding(
+                        get: { plugin.isEnabled },
+                        set: { enabled in
+                            PluginManager.shared.setPluginEnabled(plugin.id, enabled: enabled)
+                        }
+                    ))
+                    .labelsHidden()
+                    .accessibilityLabel(String(localized: "Enable \(plugin.manifest.name)"))
+
+                    if plugin.supportsSettingsWindow {
+                        Button {
+                            PluginSettingsWindowManager.shared.present(plugin)
+                        } label: {
+                            Image(systemName: "gear")
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(String(localized: "Settings for \(plugin.manifest.name)"))
+                    }
+
+                    if !plugin.isBundled {
+                        Button {
+                            onUninstall()
+                        } label: {
+                            Image(systemName: "trash")
+                                .foregroundStyle(.red)
+                        }
+                        .buttonStyle(.borderless)
+                        .help(String(localized: "Uninstall"))
+                        .accessibilityLabel(String(localized: "Uninstall \(plugin.manifest.name)"))
+                    }
                 }
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
 
-            Spacer(minLength: 12)
+            if modelsExpanded && !models.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(Array(models.enumerated()), id: \.element.id) { index, model in
+                        DownloadedPluginModelRow(
+                            model: model,
+                            isDeleting: deletingModelId == model.id,
+                            onDelete: {
+                                modelPendingDeletion = model
+                            }
+                        )
+                        .disabled(deletingModelId != nil)
 
-            HStack(spacing: 8) {
-                Toggle("", isOn: Binding(
-                    get: { plugin.isEnabled },
-                    set: { enabled in
-                        PluginManager.shared.setPluginEnabled(plugin.id, enabled: enabled)
+                        if index < models.count - 1 {
+                            Divider()
+                                .padding(.leading, 96)
+                        }
                     }
-                ))
-                .labelsHidden()
-                .accessibilityLabel(String(localized: "Enable \(plugin.manifest.name)"))
-
-                if plugin.supportsSettingsWindow {
-                    Button {
-                        PluginSettingsWindowManager.shared.present(plugin)
-                    } label: {
-                        Image(systemName: "gear")
-                    }
-                    .buttonStyle(.borderless)
-                    .accessibilityLabel(String(localized: "Settings for \(plugin.manifest.name)"))
                 }
-
-                if !plugin.isBundled {
-                    Button {
-                        onUninstall()
-                    } label: {
-                        Image(systemName: "trash")
-                            .foregroundStyle(.red)
-                    }
-                    .buttonStyle(.borderless)
-                    .help(String(localized: "Uninstall"))
-                    .accessibilityLabel(String(localized: "Uninstall \(plugin.manifest.name)"))
-                }
+                .padding(.bottom, 8)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
         .onAppear {
             refreshPluginActivity()
         }
         .onReceive(activityTimer) { _ in
             refreshPluginActivity()
+        }
+        .alert(
+            String(localized: "Remove Downloaded Model"),
+            isPresented: Binding(
+                get: { modelPendingDeletion != nil },
+                set: { if !$0 { modelPendingDeletion = nil } }
+            ),
+            presenting: modelPendingDeletion
+        ) { model in
+            Button(String(localized: "Remove"), role: .destructive) {
+                deleteDownloadedModel(model)
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {
+                modelPendingDeletion = nil
+            }
+        } message: { model in
+            Text(deleteConfirmationMessage(for: model, downloadedCount: models.count))
+        }
+        .alert(
+            String(localized: "Could Not Remove Model"),
+            isPresented: Binding(
+                get: { modelDeleteError != nil },
+                set: { if !$0 { modelDeleteError = nil } }
+            )
+        ) {
+            Button(String(localized: "OK")) { modelDeleteError = nil }
+        } message: {
+            if let modelDeleteError {
+                Text(modelDeleteError)
+            }
+        }
+    }
+
+    private var downloadedModels: [PluginModelInfo] {
+        guard plugin.isRuntimeLoaded,
+              let modelManager = plugin.instance as? any PluginDownloadedModelManaging else {
+            return []
+        }
+        return modelManager.downloadedModels
+            .sorted { $0.displayName.localizedCompare($1.displayName) == .orderedAscending }
+    }
+
+    private func downloadedModelCountTitle(_ count: Int) -> String {
+        if count == 1 {
+            return String(localized: "1 downloaded model")
+        }
+        return String(localized: "\(count) downloaded models")
+    }
+
+    private func deleteConfirmationMessage(for model: PluginModelInfo, downloadedCount: Int) -> String {
+        if downloadedCount <= 1 {
+            return String(localized: "Remove \(model.displayName)? This will delete the downloaded model files and disable \(plugin.manifest.name).")
+        }
+        return String(localized: "Remove \(model.displayName)? This will delete the downloaded model files. \(plugin.manifest.name) will stay installed and enabled.")
+    }
+
+    private func deleteDownloadedModel(_ model: PluginModelInfo) {
+        modelPendingDeletion = nil
+        deletingModelId = model.id
+
+        Task { @MainActor in
+            do {
+                try await PluginManager.shared.deleteDownloadedModel(pluginId: plugin.id, modelId: model.id)
+            } catch {
+                modelDeleteError = error.localizedDescription
+            }
+            deletingModelId = nil
         }
     }
 
@@ -1119,6 +1233,72 @@ private struct InstalledPluginRow: View {
             return
         }
         pluginActivity = (plugin.instance as? any PluginSettingsActivityReporting)?.currentSettingsActivity
+    }
+}
+
+private struct DownloadedPluginModelRow: View {
+    let model: PluginModelInfo
+    let isDeleting: Bool
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: model.loaded == true ? "checkmark.circle.fill" : "externaldrive")
+                .foregroundStyle(model.loaded == true ? .green : .secondary)
+                .frame(width: 18)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(model.displayName)
+                        .font(.caption.weight(.medium))
+                        .lineLimit(1)
+
+                    if model.loaded == true {
+                        Text(String(localized: "Loaded"))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.green)
+                    }
+                }
+
+                if !model.sizeDescription.isEmpty || model.languageCount > 0 {
+                    Text(modelDetailText)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 12)
+
+            if isDeleting {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Button {
+                    onDelete()
+                } label: {
+                    Image(systemName: "trash")
+                        .foregroundStyle(.red)
+                }
+                .buttonStyle(.borderless)
+                .help(String(localized: "Remove downloaded model"))
+                .accessibilityLabel(String(localized: "Remove \(model.displayName)"))
+            }
+        }
+        .padding(.leading, 62)
+        .padding(.trailing, 14)
+        .padding(.vertical, 7)
+    }
+
+    private var modelDetailText: String {
+        var parts: [String] = []
+        if !model.sizeDescription.isEmpty {
+            parts.append(model.sizeDescription)
+        }
+        if model.languageCount > 0 {
+            parts.append(String(localized: "\(model.languageCount) languages"))
+        }
+        return parts.joined(separator: " - ")
     }
 }
 

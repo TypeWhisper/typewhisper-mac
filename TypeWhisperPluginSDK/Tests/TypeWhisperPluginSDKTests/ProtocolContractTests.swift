@@ -96,6 +96,33 @@ private final class MockTranscriptionPlugin: NSObject, TranscriptionEnginePlugin
     }
 }
 
+@objc(MockDownloadedModelPlugin)
+private final class MockDownloadedModelPlugin: NSObject, TypeWhisperPlugin, PluginDownloadedModelManaging, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.downloaded-models"
+    static let pluginName = "Mock Downloaded Models"
+
+    private(set) var deletedModelIds: [String] = []
+    var downloadedModels: [PluginModelInfo] = [
+        PluginModelInfo(
+            id: "local-small",
+            displayName: "Local Small",
+            sizeDescription: "1 GB",
+            downloaded: true,
+            loaded: true
+        )
+    ]
+
+    required override init() {}
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    func deleteDownloadedModel(_ modelId: String) async throws {
+        deletedModelIds.append(modelId)
+        downloadedModels.removeAll { $0.id == modelId }
+    }
+}
+
 @objc(MockAuthRoleStatusPlugin)
 private final class MockAuthRoleStatusPlugin: NSObject, TypeWhisperPlugin, PluginAuthRoleStatusProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.mock.auth-roles"
@@ -459,6 +486,21 @@ final class ProtocolContractTests: XCTestCase {
         XCTAssertFalse(legacyPlugin is any TranscriptionModelCatalogProviding)
         XCTAssertEqual(legacyPlugin.modelCatalog.map(\.id), ["tiny"])
         XCTAssertEqual(catalogPlugin.modelCatalog.map(\.id), ["tiny", "large"])
+    }
+
+    func testDownloadedModelManagingProtocolIsOptionalAndUsesModelInfo() async throws {
+        let legacyPlugin = MockTranscriptionPlugin()
+        let downloadedModelPlugin = MockDownloadedModelPlugin()
+
+        XCTAssertFalse(legacyPlugin is any PluginDownloadedModelManaging)
+        XCTAssertEqual(downloadedModelPlugin.downloadedModels.map(\.id), ["local-small"])
+        XCTAssertEqual(downloadedModelPlugin.downloadedModels.first?.downloaded, true)
+        XCTAssertEqual(downloadedModelPlugin.downloadedModels.first?.loaded, true)
+
+        try await downloadedModelPlugin.deleteDownloadedModel("local-small")
+
+        XCTAssertEqual(downloadedModelPlugin.deletedModelIds, ["local-small"])
+        XCTAssertTrue(downloadedModelPlugin.downloadedModels.isEmpty)
     }
 
     func testStructuredTranscriptionProtocolIsOptionalAndCarriesSpeakerMetadata() async throws {

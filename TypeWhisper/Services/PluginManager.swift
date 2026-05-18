@@ -183,6 +183,26 @@ enum ExternalBundleNotice: Equatable {
     }
 }
 
+enum PluginModelManagementError: LocalizedError {
+    case pluginNotFound
+    case pluginNotLoaded(String)
+    case unsupported(String)
+    case modelNotFound(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .pluginNotFound:
+            return "Plugin not found."
+        case .pluginNotLoaded(let name):
+            return "\(name) is disabled. Enable the plugin before managing downloaded models."
+        case .unsupported(let name):
+            return "\(name) does not expose downloaded model management."
+        case .modelNotFound(let modelId):
+            return "Downloaded model '\(modelId)' was not found."
+        }
+    }
+}
+
 // MARK: - Plugin Manager
 
 @MainActor
@@ -645,6 +665,29 @@ final class PluginManager: ObservableObject {
     /// Notify observers that plugin state changed (e.g. a model was loaded/unloaded)
     func notifyPluginStateChanged() {
         readinessRevision += 1
+    }
+
+    func deleteDownloadedModel(pluginId: String, modelId: String) async throws {
+        guard let plugin = loadedPlugins.first(where: { $0.manifest.id == pluginId }) else {
+            throw PluginModelManagementError.pluginNotFound
+        }
+        guard plugin.isRuntimeLoaded else {
+            throw PluginModelManagementError.pluginNotLoaded(plugin.manifest.name)
+        }
+        guard let modelManager = plugin.instance as? any PluginDownloadedModelManaging else {
+            throw PluginModelManagementError.unsupported(plugin.manifest.name)
+        }
+        guard modelManager.downloadedModels.contains(where: { $0.id == modelId }) else {
+            throw PluginModelManagementError.modelNotFound(modelId)
+        }
+
+        try await modelManager.deleteDownloadedModel(modelId)
+
+        if modelManager.downloadedModels.isEmpty {
+            setPluginEnabled(pluginId, enabled: false)
+        } else {
+            notifyPluginStateChanged()
+        }
     }
 
     // MARK: - Dynamic Plugin Management

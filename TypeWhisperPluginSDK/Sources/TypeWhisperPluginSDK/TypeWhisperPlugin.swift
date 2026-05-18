@@ -163,6 +163,14 @@ public protocol LLMProviderPlugin: TypeWhisperPlugin {
     func process(systemPrompt: String, userText: String, model: String?) async throws -> String
 }
 
+/// Optional extension for plugins that manage downloaded model assets.
+/// Hosts can use this to show and remove model caches without knowing the
+/// plugin's storage layout.
+public protocol PluginDownloadedModelManaging: TypeWhisperPlugin {
+    var downloadedModels: [PluginModelInfo] { get }
+    func deleteDownloadedModel(_ modelId: String) async throws
+}
+
 /// Optional protocol for LLM plugins that can describe why they are currently unavailable.
 /// This lets the host distinguish local model setup from missing remote credentials.
 public protocol LLMProviderSetupStatusProviding {

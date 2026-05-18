@@ -119,4 +119,66 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
         XCTAssertEqual(plugin.selectedModelId, "openai_whisper-tiny")
         XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, "openai_whisper-tiny")
     }
+
+    func testDeleteDownloadedModelRemovesFilesAndClearsPersistedSelection() async throws {
+        let modelId = "openai_whisper-tiny"
+        let host = try makeHost(defaults: ["selectedModel": modelId])
+        defer { TestSupport.remove(host.pluginDataDirectory) }
+
+        let plugin = WhisperKitPlugin()
+        plugin.activate(host: host)
+        host.setUserDefault(modelId, forKey: "loadedModel")
+
+        let modelDirectory = try makeUsableWhisperModelDirectory(host: host, modelId: modelId)
+
+        XCTAssertEqual(plugin.downloadedModels.map(\.id), [modelId])
+
+        try await plugin.deleteDownloadedModel(modelId)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: modelDirectory.path))
+        XCTAssertNil(plugin.selectedModelId)
+        XCTAssertNil(host.userDefault(forKey: "selectedModel"))
+        XCTAssertNil(host.userDefault(forKey: "loadedModel"))
+        XCTAssertGreaterThanOrEqual(host.capabilitiesChangedCount, 1)
+    }
+
+    private func makeUsableWhisperModelDirectory(
+        host: MockHostServices,
+        modelId: String
+    ) throws -> URL {
+        let modelDirectory = host.pluginDataDirectory
+            .appendingPathComponent("models", isDirectory: true)
+            .appendingPathComponent("models", isDirectory: true)
+            .appendingPathComponent("argmaxinc", isDirectory: true)
+            .appendingPathComponent("whisperkit-coreml", isDirectory: true)
+            .appendingPathComponent(modelId, isDirectory: true)
+        try FileManager.default.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
+
+        try Data("{}".utf8).write(to: modelDirectory.appendingPathComponent("config.json"))
+        try Data("{}".utf8).write(to: modelDirectory.appendingPathComponent("generation_config.json"))
+
+        for component in ["MelSpectrogram", "AudioEncoder", "TextDecoder"] {
+            let componentDirectory = modelDirectory.appendingPathComponent("\(component).mlmodelc", isDirectory: true)
+            try FileManager.default.createDirectory(
+                at: componentDirectory.appendingPathComponent("analytics", isDirectory: true),
+                withIntermediateDirectories: true
+            )
+            try FileManager.default.createDirectory(
+                at: componentDirectory.appendingPathComponent("weights", isDirectory: true),
+                withIntermediateDirectories: true
+            )
+
+            for file in ["metadata.json", "model.mil", "coremldata.bin"] {
+                try Data("x".utf8).write(to: componentDirectory.appendingPathComponent(file))
+            }
+            try Data("x".utf8).write(to: componentDirectory.appendingPathComponent("analytics/coremldata.bin"))
+            try Data("x".utf8).write(to: componentDirectory.appendingPathComponent("weights/weight.bin"))
+
+            if component == "AudioEncoder" || component == "TextDecoder" {
+                try Data("x".utf8).write(to: componentDirectory.appendingPathComponent("model.mlmodel"))
+            }
+        }
+
+        return modelDirectory
+    }
 }

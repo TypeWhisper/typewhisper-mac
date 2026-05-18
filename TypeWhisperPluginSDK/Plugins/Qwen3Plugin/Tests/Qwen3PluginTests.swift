@@ -1,5 +1,6 @@
 import XCTest
 import TypeWhisperPluginSDK
+import TypeWhisperPluginSDKTesting
 @testable import Qwen3Plugin
 
 final class Qwen3PluginTests: XCTestCase {
@@ -114,5 +115,30 @@ final class Qwen3PluginTests: XCTestCase {
                 "qwen3-asr-1.7b-8bit",
             ]
         )
+    }
+
+    func testDeleteDownloadedModelRemovesCacheAndClearsSelection() async throws {
+        let model = try XCTUnwrap(Qwen3Plugin.availableModels.first)
+        let host = try PluginTestHostServices(defaults: ["selectedModel": model.id])
+        let plugin = Qwen3Plugin()
+
+        plugin.activate(host: host)
+        host.setUserDefault(model.id, forKey: "loadedModel")
+
+        let modelDirectory = host.pluginDataDirectory
+            .appendingPathComponent("models", isDirectory: true)
+            .appendingPathComponent("mlx-audio", isDirectory: true)
+            .appendingPathComponent(model.repoId.replacingOccurrences(of: "/", with: "_"), isDirectory: true)
+        try FileManager.default.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
+        try Data("partial".utf8).write(to: modelDirectory.appendingPathComponent("model.safetensors"))
+
+        XCTAssertEqual(plugin.downloadedModels.map(\.id), [model.id])
+
+        try await plugin.deleteDownloadedModel(model.id)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: modelDirectory.path))
+        XCTAssertNil(plugin.selectedModelId)
+        XCTAssertNil(host.userDefault(forKey: "selectedModel"))
+        XCTAssertNil(host.userDefault(forKey: "loadedModel"))
     }
 }

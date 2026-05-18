@@ -9,7 +9,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(VoxtralPlugin)
-final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, @unchecked Sendable {
+final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, PluginDownloadedModelManaging, @unchecked Sendable {
     static let pluginId = "com.typewhisper.voxtral"
     static let pluginName = "Voxtral"
 
@@ -79,9 +79,42 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
                 id: def.id,
                 displayName: def.displayName,
                 sizeDescription: def.sizeDescription,
+                downloaded: hasDownloadedModel(def),
                 loaded: def.id == loadedModelId
             )
         }
+    }
+
+    var downloadedModels: [PluginModelInfo] {
+        Self.availableModels
+            .filter { hasDownloadedModel($0) }
+            .map { def in
+                PluginModelInfo(
+                    id: def.id,
+                    displayName: def.displayName,
+                    sizeDescription: def.sizeDescription,
+                    downloaded: true,
+                    loaded: def.id == loadedModelId
+                )
+            }
+    }
+
+    func deleteDownloadedModel(_ modelId: String) async throws {
+        guard let modelDef = Self.availableModels.first(where: { $0.id == modelId }) else { return }
+
+        if loadedModelId == modelId {
+            unloadModel(clearPersistence: true)
+        }
+        if _selectedModelId == modelId {
+            _selectedModelId = nil
+            host?.setUserDefault(nil, forKey: "selectedModel")
+        }
+        if host?.userDefault(forKey: "loadedModel") as? String == modelId {
+            host?.setUserDefault(nil, forKey: "loadedModel")
+        }
+
+        deleteModelFiles(modelDef)
+        host?.notifyCapabilitiesChanged()
     }
 
     var supportedLanguages: [String] {

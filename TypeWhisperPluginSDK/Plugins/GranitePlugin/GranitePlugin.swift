@@ -9,7 +9,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(GranitePlugin)
-final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, @unchecked Sendable {
+final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, @unchecked Sendable {
     static let pluginId = "com.typewhisper.granite"
     static let pluginName = "Granite Speech"
 
@@ -63,9 +63,42 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
                 id: def.id,
                 displayName: def.displayName,
                 sizeDescription: def.sizeDescription,
+                downloaded: hasDownloadedModel(def),
                 loaded: def.id == loadedModelId
             )
         }
+    }
+
+    var downloadedModels: [PluginModelInfo] {
+        Self.availableModels
+            .filter { hasDownloadedModel($0) }
+            .map { def in
+                PluginModelInfo(
+                    id: def.id,
+                    displayName: def.displayName,
+                    sizeDescription: def.sizeDescription,
+                    downloaded: true,
+                    loaded: def.id == loadedModelId
+                )
+            }
+    }
+
+    func deleteDownloadedModel(_ modelId: String) async throws {
+        guard let modelDef = Self.availableModels.first(where: { $0.id == modelId }) else { return }
+
+        if loadedModelId == modelId {
+            unloadModel(clearPersistence: true)
+        }
+        if _selectedModelId == modelId {
+            _selectedModelId = nil
+            host?.setUserDefault(nil, forKey: "selectedModel")
+        }
+        if host?.userDefault(forKey: "loadedModel") as? String == modelId {
+            host?.setUserDefault(nil, forKey: "loadedModel")
+        }
+
+        deleteModelFiles(modelDef)
+        host?.notifyCapabilitiesChanged()
     }
 
     var supportedLanguages: [String] {

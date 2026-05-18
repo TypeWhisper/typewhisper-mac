@@ -58,9 +58,10 @@ protocol SupertonicSynthesizing: AnyObject, Sendable {
 }
 
 @objc(SupertonicPlugin)
-final class SupertonicPlugin: NSObject, TTSProviderPlugin, PluginSettingsActivityReporting, @unchecked Sendable {
+final class SupertonicPlugin: NSObject, TTSProviderPlugin, PluginSettingsActivityReporting, PluginDownloadedModelManaging, @unchecked Sendable {
     static let pluginId = "com.typewhisper.tts.supertonic"
     static let pluginName = "Supertonic (Experimental)"
+    private static let downloadedModelId = "supertonic-3"
 
     private let logger = Logger(subsystem: "com.typewhisper.tts.supertonic", category: "Plugin")
     private var host: HostServices?
@@ -110,6 +111,24 @@ final class SupertonicPlugin: NSObject, TTSProviderPlugin, PluginSettingsActivit
     var settingsSummary: String? {
         let voice = selectedVoiceId ?? "M1"
         return "Voice: \(voice) - Speed: \(String(format: "%.2fx", selectedSpeed)) - \(selectedQuality.displayName)"
+    }
+
+    var downloadedModels: [PluginModelInfo] {
+        guard modelAssetManager.hasDownloadedModel() else { return [] }
+        return [
+            PluginModelInfo(
+                id: Self.downloadedModelId,
+                displayName: "Supertonic 3",
+                sizeDescription: "Local TTS assets",
+                downloaded: true,
+                loaded: modelState == .ready
+            )
+        ]
+    }
+
+    func deleteDownloadedModel(_ modelId: String) async throws {
+        guard modelId == Self.downloadedModelId else { return }
+        deleteCachedModel()
     }
 
     @MainActor
