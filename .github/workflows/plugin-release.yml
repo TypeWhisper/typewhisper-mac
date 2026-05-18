@@ -60,6 +60,7 @@ jobs:
             voxtral) TARGET="VoxtralPlugin" ;;
             deepgram) TARGET="DeepgramPlugin" ;;
             assemblyai) TARGET="AssemblyAIPlugin" ;;
+            smallest-pulse) TARGET="SmallestAIPlugin" ;;
             obsidian) TARGET="ObsidianPlugin" ;;
             script) TARGET="ScriptPlugin" ;;
             file-job-script) TARGET="FileJobScriptPlugin" ;;

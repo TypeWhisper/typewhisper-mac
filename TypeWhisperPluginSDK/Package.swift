@@ -160,6 +160,17 @@ let package = Package(
             ]
         ),
         .target(
+            name: "SmallestAIPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/SmallestAIPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+                .process("smallest.svg"),
+            ]
+        ),
+        .target(
             name: "WebhookPlugin",
             dependencies: ["TypeWhisperPluginSDK"],
             path: "Plugins/WebhookPlugin",
@@ -288,6 +299,15 @@ let package = Package(
                 "AssemblyAIPlugin",
             ],
             path: "Plugins/AssemblyAIPlugin/Tests"
+        ),
+        .testTarget(
+            name: "SmallestAIPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "SmallestAIPlugin",
+            ],
+            path: "Plugins/SmallestAIPlugin/Tests"
         ),
         .testTarget(
             name: "WebhookPluginTests",

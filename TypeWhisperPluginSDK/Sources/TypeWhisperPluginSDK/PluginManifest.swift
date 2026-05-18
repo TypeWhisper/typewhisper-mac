@@ -22,6 +22,7 @@ public struct PluginManifest: Codable, Equatable, Sendable {
     public let requiresAPIKey: Bool?
     public let hosting: PluginHosting?
     public let iconSystemName: String?
+    public let iconResourceName: String?
     public let category: String?
     public let categories: [String]?
 
@@ -38,6 +39,7 @@ public struct PluginManifest: Codable, Equatable, Sendable {
         requiresAPIKey: Bool? = nil,
         hosting: PluginHosting? = nil,
         iconSystemName: String? = nil,
+        iconResourceName: String? = nil,
         category: String? = nil,
         categories: [String]? = nil
     ) {
@@ -53,6 +55,7 @@ public struct PluginManifest: Codable, Equatable, Sendable {
         self.requiresAPIKey = requiresAPIKey
         self.hosting = hosting
         self.iconSystemName = iconSystemName
+        self.iconResourceName = iconResourceName
         self.category = category
         self.categories = categories
     }

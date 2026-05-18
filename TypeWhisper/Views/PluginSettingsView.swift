@@ -936,12 +936,36 @@ private struct PluginBadgeLine: View {
 private struct IntegrationIcon: View {
     let systemName: String
     let tint: Color
+    var resourceURL: URL?
 
     var body: some View {
-        Image(systemName: systemName)
-            .font(.system(size: 18, weight: .medium))
-            .foregroundStyle(tint)
-            .frame(width: 30, height: 30)
+        Group {
+            if let resourceURL, let image = NSImage(contentsOf: resourceURL) {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 24, height: 24)
+            } else {
+                Image(systemName: systemName)
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(tint)
+            }
+        }
+        .frame(width: 30, height: 30)
+    }
+}
+
+private extension LoadedPlugin {
+    var iconResourceURL: URL? {
+        guard let resourceName = manifest.iconResourceName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !resourceName.isEmpty else {
+            return nil
+        }
+
+        let resourcesURL = bundle.resourceURL ?? sourceURL.appendingPathComponent("Contents/Resources")
+        let url = resourcesURL.appendingPathComponent(resourceName)
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        return url
     }
 }
 
@@ -964,7 +988,8 @@ private struct InstalledPluginRow: View {
         HStack(alignment: .top, spacing: 12) {
             IntegrationIcon(
                 systemName: registryPlugin?.iconSystemName ?? plugin.manifest.iconSystemName ?? "puzzlepiece.extension",
-                tint: source.tint
+                tint: source.tint,
+                resourceURL: plugin.iconResourceURL
             )
 
             VStack(alignment: .leading, spacing: 5) {
