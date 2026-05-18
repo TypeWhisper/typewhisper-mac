@@ -962,9 +962,25 @@ private extension LoadedPlugin {
             return nil
         }
 
-        let resourcesURL = bundle.resourceURL ?? sourceURL.appendingPathComponent("Contents/Resources")
-        let url = resourcesURL.appendingPathComponent(resourceName)
-        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        let resourcesURL = (bundle.resourceURL ?? sourceURL.appendingPathComponent("Contents/Resources"))
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+        let url = resourcesURL
+            .appendingPathComponent(resourceName)
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+
+        guard url.pathComponents.starts(with: resourcesURL.pathComponents),
+              url.pathComponents.count > resourcesURL.pathComponents.count else {
+            return nil
+        }
+
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+              !isDirectory.boolValue else {
+            return nil
+        }
+
         return url
     }
 }

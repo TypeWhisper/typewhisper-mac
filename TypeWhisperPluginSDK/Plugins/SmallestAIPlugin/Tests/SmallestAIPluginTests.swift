@@ -144,6 +144,60 @@ final class SmallestAIPluginTests: XCTestCase {
         }
     }
 
+    func testValidateAPIKeyDistinguishesInvalidKeyFromTransientFailures() async {
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"message":"unauthorized"}"#.utf8),
+                    Self.httpResponse(url: "https://api.smallest.ai/waves/v1/pulse/get_text", statusCode: 401)
+                ),
+                .success(
+                    Data(#"{"message":"server unavailable"}"#.utf8),
+                    Self.httpResponse(url: "https://api.smallest.ai/waves/v1/pulse/get_text", statusCode: 503)
+                )
+            ])
+        }
+
+        let plugin = SmallestAIPlugin()
+        let invalidKeyResult = await plugin.validateApiKey("bad-key")
+        let serverErrorResult = await plugin.validateApiKey("maybe-valid-key")
+
+        XCTAssertEqual(invalidKeyResult, .invalidKey)
+        XCTAssertEqual(serverErrorResult, .transientError)
+
+        PluginHTTPClientTestHarness.reset()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [.failure(URLError(.timedOut))])
+        }
+        let timeoutResult = await plugin.validateApiKey("timeout-key")
+        XCTAssertEqual(timeoutResult, .transientError)
+    }
+
+    func testSetAPIKeyKeepsStateUnchangedWhenSecretStoreFails() throws {
+        let host = FailingSecretHost()
+        let plugin = SmallestAIPlugin()
+        plugin.activate(host: host)
+
+        XCTAssertFalse(plugin.isConfigured)
+        XCTAssertThrowsError(try plugin.setApiKey("smallest-key"))
+        XCTAssertFalse(plugin.isConfigured)
+        XCTAssertEqual(host.capabilitiesChangedCount, 0)
+        XCTAssertNil(host.loadSecret(key: "api-key"))
+    }
+
+    func testRemoveAPIKeyKeepsStateUnchangedWhenSecretStoreFails() throws {
+        let host = FailingSecretHost(secrets: ["api-key": "existing-key"])
+        let plugin = SmallestAIPlugin()
+        plugin.activate(host: host)
+
+        XCTAssertTrue(plugin.isConfigured)
+        XCTAssertThrowsError(try plugin.removeApiKey())
+        XCTAssertTrue(plugin.isConfigured)
+        XCTAssertEqual(host.capabilitiesChangedCount, 0)
+        XCTAssertEqual(host.loadSecret(key: "api-key"), "existing-key")
+    }
+
     private static func httpResponse(url: String, statusCode: Int) -> HTTPURLResponse {
         HTTPURLResponse(
             url: URL(string: url)!,
@@ -151,5 +205,48 @@ final class SmallestAIPluginTests: XCTestCase {
             httpVersion: nil,
             headerFields: nil
         )!
+    }
+}
+
+private final class FailingSecretHost: HostServices, @unchecked Sendable {
+    private let lock = NSLock()
+    private var secrets: [String: String]
+    private var capabilitiesChangedCountStorage = 0
+
+    let pluginDataDirectory = FileManager.default.temporaryDirectory
+    let eventBus: EventBusProtocol = PluginTestEventBus()
+    var activeAppBundleId: String?
+    var activeAppName: String?
+    var availableRuleNames: [String] = []
+    var availableWorkflows: [PluginWorkflowInfo] = []
+
+    init(secrets: [String: String] = [:]) {
+        self.secrets = secrets
+    }
+
+    func storeSecret(key: String, value: String) throws {
+        throw NSError(domain: "SmallestAIPluginTests", code: 1)
+    }
+
+    func loadSecret(key: String) -> String? {
+        lock.withLock { secrets[key] }
+    }
+
+    func userDefault(forKey key: String) -> Any? {
+        nil
+    }
+
+    func setUserDefault(_ value: Any?, forKey key: String) {}
+
+    func notifyCapabilitiesChanged() {
+        lock.withLock {
+            capabilitiesChangedCountStorage += 1
+        }
+    }
+
+    func setStreamingDisplayActive(_ active: Bool) {}
+
+    var capabilitiesChangedCount: Int {
+        lock.withLock { capabilitiesChangedCountStorage }
     }
 }

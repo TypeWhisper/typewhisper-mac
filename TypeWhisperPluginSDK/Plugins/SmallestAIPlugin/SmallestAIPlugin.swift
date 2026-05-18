@@ -4,7 +4,7 @@ import os
 import TypeWhisperPluginSDK
 
 @objc(SmallestAIPlugin)
-final class SmallestAIPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+final class SmallestAIPlugin: NSObject, TranscriptionEnginePlugin {
     static let pluginId = "com.typewhisper.smallest-pulse"
     static let pluginName = "Smallest Pulse"
 
@@ -12,10 +12,7 @@ final class SmallestAIPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Se
     private static let defaultLanguageMode = "multi-eu"
     private static let validationWAV = makeSilentWAV(duration: 0.25)
 
-    fileprivate var host: HostServices?
-    fileprivate var _apiKey: String?
-    fileprivate var _selectedModelId: String?
-
+    private let state = SmallestAIPluginState()
     private let logger = Logger(subsystem: "com.typewhisper.smallest-pulse", category: "Plugin")
 
     required override init() {
@@ -23,21 +20,23 @@ final class SmallestAIPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Se
     }
 
     func activate(host: HostServices) {
-        self.host = host
-        _apiKey = host.loadSecret(key: "api-key")
-        _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
-            ?? Self.defaultLanguageMode
+        state.activate(
+            host: host,
+            apiKey: host.loadSecret(key: "api-key"),
+            selectedModelId: host.userDefault(forKey: "selectedModel") as? String
+                ?? Self.defaultLanguageMode
+        )
     }
 
     func deactivate() {
-        host = nil
+        state.deactivate()
     }
 
     var providerId: String { "smallest-pulse" }
     var providerDisplayName: String { "Smallest Pulse" }
 
     var isConfigured: Bool {
-        guard let key = _apiKey else { return false }
+        guard let key = state.snapshot().apiKey else { return false }
         return !key.isEmpty
     }
 
@@ -50,11 +49,11 @@ final class SmallestAIPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Se
         ]
     }
 
-    var selectedModelId: String? { _selectedModelId ?? Self.defaultLanguageMode }
+    var selectedModelId: String? { state.snapshot().selectedModelId ?? Self.defaultLanguageMode }
 
     func selectModel(_ modelId: String) {
-        _selectedModelId = modelId
-        host?.setUserDefault(modelId, forKey: "selectedModel")
+        state.currentHost()?.setUserDefault(modelId, forKey: "selectedModel")
+        state.updateSelectedModelId(modelId)
     }
 
     var supportsTranslation: Bool { false }
@@ -77,7 +76,8 @@ final class SmallestAIPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Se
         guard !translate else {
             throw PluginTranscriptionError.apiError("Smallest Pulse does not support translation.")
         }
-        guard let apiKey = _apiKey, !apiKey.isEmpty else {
+        let snapshot = state.snapshot()
+        guard let apiKey = snapshot.apiKey, !apiKey.isEmpty else {
             throw PluginTranscriptionError.notConfigured
         }
 
@@ -85,7 +85,7 @@ final class SmallestAIPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Se
             wavData: audio.wavData,
             apiKey: apiKey,
             requestedLanguage: language,
-            selectedLanguageMode: selectedModelId
+            selectedLanguageMode: snapshot.selectedModelId ?? Self.defaultLanguageMode
         )
 
         let (data, response) = try await PluginHTTPClient.data(for: request)
@@ -97,31 +97,41 @@ final class SmallestAIPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Se
         AnyView(SmallestAISettingsView(plugin: self))
     }
 
-    fileprivate func setApiKey(_ key: String) {
-        _apiKey = key
-        if let host {
-            do {
-                try host.storeSecret(key: "api-key", value: key)
-            } catch {
-                logger.error("Failed to store API key: \(error.localizedDescription)")
-            }
+    var apiKeyForSettings: String? {
+        state.snapshot().apiKey
+    }
+
+    func setApiKey(_ key: String) throws {
+        guard let host = state.currentHost() else {
+            throw SmallestAIPluginConfigurationError.missingHost
+        }
+
+        do {
+            try host.storeSecret(key: "api-key", value: key)
+            state.updateApiKey(key)
             host.notifyCapabilitiesChanged()
+        } catch {
+            logger.error("Failed to store API key: \(error.localizedDescription)")
+            throw error
         }
     }
 
-    fileprivate func removeApiKey() {
-        _apiKey = nil
-        if let host {
-            do {
-                try host.storeSecret(key: "api-key", value: "")
-            } catch {
-                logger.error("Failed to delete API key: \(error.localizedDescription)")
-            }
+    func removeApiKey() throws {
+        guard let host = state.currentHost() else {
+            throw SmallestAIPluginConfigurationError.missingHost
+        }
+
+        do {
+            try host.storeSecret(key: "api-key", value: "")
+            state.updateApiKey(nil)
             host.notifyCapabilitiesChanged()
+        } catch {
+            logger.error("Failed to delete API key: \(error.localizedDescription)")
+            throw error
         }
     }
 
-    fileprivate func validateApiKey(_ key: String) async -> Bool {
+    func validateApiKey(_ key: String) async -> APIKeyValidationResult {
         do {
             let request = try Self.makePreRecordedRequest(
                 wavData: Self.validationWAV,
@@ -130,10 +140,76 @@ final class SmallestAIPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Se
                 selectedLanguageMode: Self.defaultLanguageMode
             )
             let (data, response) = try await PluginHTTPClient.data(for: request)
-            try Self.validateHTTPResponse(data: data, response: response)
-            return true
+            return Self.apiKeyValidationResult(data: data, response: response)
+        } catch let error as PluginTranscriptionError {
+            return Self.apiKeyValidationResult(for: error)
         } catch {
-            return false
+            return .transientError
+        }
+    }
+
+    enum APIKeyValidationResult: Equatable {
+        case valid
+        case invalidKey
+        case transientError
+    }
+}
+
+private struct SmallestAIPluginStateSnapshot: Sendable {
+    let apiKey: String?
+    let selectedModelId: String?
+}
+
+private final class SmallestAIPluginState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var host: HostServices?
+    private var apiKey: String?
+    private var selectedModelId: String?
+
+    func activate(host: HostServices, apiKey: String?, selectedModelId: String?) {
+        lock.withLock {
+            self.host = host
+            self.apiKey = apiKey
+            self.selectedModelId = selectedModelId
+        }
+    }
+
+    func deactivate() {
+        lock.withLock {
+            host = nil
+        }
+    }
+
+    func currentHost() -> HostServices? {
+        lock.withLock { host }
+    }
+
+    func snapshot() -> SmallestAIPluginStateSnapshot {
+        lock.withLock {
+            SmallestAIPluginStateSnapshot(apiKey: apiKey, selectedModelId: selectedModelId)
+        }
+    }
+
+    func updateApiKey(_ apiKey: String?) {
+        lock.withLock {
+            self.apiKey = apiKey
+        }
+    }
+
+    func updateSelectedModelId(_ selectedModelId: String) {
+        lock.withLock {
+            self.selectedModelId = selectedModelId
+        }
+    }
+}
+
+private enum SmallestAIPluginConfigurationError: LocalizedError {
+    case missingHost
+
+    var errorDescription: String? {
+        switch self {
+        case .missingHost:
+            "Smallest Pulse is not connected to TypeWhisper."
         }
     }
 }
@@ -235,6 +311,30 @@ extension SmallestAIPlugin {
         }
     }
 
+    static func apiKeyValidationResult(data: Data, response: URLResponse) -> APIKeyValidationResult {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            return .transientError
+        }
+
+        switch httpResponse.statusCode {
+        case 200:
+            return .valid
+        case 401, 403:
+            return .invalidKey
+        default:
+            return .transientError
+        }
+    }
+
+    static func apiKeyValidationResult(for error: PluginTranscriptionError) -> APIKeyValidationResult {
+        switch error {
+        case .invalidApiKey:
+            return .invalidKey
+        default:
+            return .transientError
+        }
+    }
+
     struct PreRecordedResponse: Decodable {
         let status: String?
         let transcription: String?
@@ -285,7 +385,8 @@ private struct SmallestAISettingsView: View {
     let plugin: SmallestAIPlugin
     @State private var apiKeyInput = ""
     @State private var isValidating = false
-    @State private var validationResult: Bool?
+    @State private var validationResult: SmallestAIPlugin.APIKeyValidationResult?
+    @State private var settingsErrorMessage: String?
     @State private var showApiKey = false
     @State private var selectedModel = ""
     private let bundle = Bundle(for: SmallestAIPlugin.self)
@@ -315,9 +416,7 @@ private struct SmallestAISettingsView: View {
 
                     if plugin.isConfigured {
                         Button(String(localized: "Remove", bundle: bundle)) {
-                            apiKeyInput = ""
-                            validationResult = nil
-                            plugin.removeApiKey()
+                            removeApiKey()
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
@@ -339,17 +438,22 @@ private struct SmallestAISettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                } else if let result = validationResult {
+                } else if let settingsErrorMessage {
                     HStack(spacing: 4) {
-                        Image(systemName: result ? "checkmark.circle.fill" : "xmark.circle.fill")
-                            .foregroundStyle(result ? .green : .red)
-                        Text(
-                            result
-                                ? String(localized: "Valid API Key", bundle: bundle)
-                                : String(localized: "Invalid API Key", bundle: bundle)
-                        )
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.red)
+                        Text(settingsErrorMessage)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                } else if let result = validationResult {
+                    let feedback = validationFeedback(for: result)
+                    HStack(spacing: 4) {
+                        Image(systemName: feedback.systemName)
+                            .foregroundStyle(feedback.color)
+                        Text(feedback.message)
                         .font(.caption)
-                        .foregroundStyle(result ? .green : .red)
+                        .foregroundStyle(feedback.color)
                     }
                 }
             }
@@ -379,7 +483,7 @@ private struct SmallestAISettingsView: View {
         }
         .padding()
         .onAppear {
-            if let key = plugin._apiKey, !key.isEmpty {
+            if let key = plugin.apiKeyForSettings, !key.isEmpty {
                 apiKeyInput = key
             }
             selectedModel = plugin.selectedModelId ?? plugin.transcriptionModels.first?.id ?? ""
@@ -390,17 +494,60 @@ private struct SmallestAISettingsView: View {
         let trimmedKey = apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedKey.isEmpty else { return }
 
-        plugin.setApiKey(trimmedKey)
-
         isValidating = true
         validationResult = nil
+        settingsErrorMessage = nil
 
         Task {
-            let isValid = await plugin.validateApiKey(trimmedKey)
+            let result = await plugin.validateApiKey(trimmedKey)
             await MainActor.run {
                 isValidating = false
-                validationResult = isValid
+                validationResult = result
+                guard result == .valid else { return }
+
+                do {
+                    try plugin.setApiKey(trimmedKey)
+                } catch {
+                    validationResult = nil
+                    settingsErrorMessage = error.localizedDescription
+                }
             }
+        }
+    }
+
+    private func removeApiKey() {
+        do {
+            try plugin.removeApiKey()
+            apiKeyInput = ""
+            validationResult = nil
+            settingsErrorMessage = nil
+        } catch {
+            settingsErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func validationFeedback(
+        for result: SmallestAIPlugin.APIKeyValidationResult
+    ) -> (systemName: String, message: String, color: Color) {
+        switch result {
+        case .valid:
+            return (
+                "checkmark.circle.fill",
+                String(localized: "Valid API Key", bundle: bundle),
+                .green
+            )
+        case .invalidKey:
+            return (
+                "xmark.circle.fill",
+                String(localized: "Invalid API Key", bundle: bundle),
+                .red
+            )
+        case .transientError:
+            return (
+                "exclamationmark.triangle.fill",
+                String(localized: "Could not validate API Key. Check your connection and try again.", bundle: bundle),
+                .orange
+            )
         }
     }
 }

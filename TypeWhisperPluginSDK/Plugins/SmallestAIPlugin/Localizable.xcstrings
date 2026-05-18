@@ -21,6 +21,16 @@
         }
       }
     },
+    "Could not validate API Key. Check your connection and try again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API-Key konnte nicht geprueft werden. Pruefe die Verbindung und versuche es erneut."
+          }
+        }
+      }
+    },
     "Invalid API Key" : {
       "localizations" : {
         "de" : {
