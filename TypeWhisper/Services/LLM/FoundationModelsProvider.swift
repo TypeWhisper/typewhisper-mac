@@ -46,7 +46,7 @@ enum AppleIntelligenceResponseSanitizer {
         }
 
         let fallback = originalUserText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return fallback.isEmpty ? text : fallback
+        return fallback
     }
 
     private static func isTypeWhisperScaffoldLine(_ line: String) -> Bool {
@@ -81,20 +81,20 @@ enum AppleIntelligenceResponseSanitizer {
             return text
         }
 
-        var seenBlocks: Set<String> = []
         var uniqueBlocks: [String] = []
+        var previousBlock: String?
 
         for block in blocks {
             let trimmedBlock = block.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmedBlock.isEmpty else {
                 continue
             }
-            guard !seenBlocks.contains(trimmedBlock) else {
+            guard trimmedBlock != previousBlock else {
                 continue
             }
 
-            seenBlocks.insert(trimmedBlock)
             uniqueBlocks.append(trimmedBlock)
+            previousBlock = trimmedBlock
         }
 
         return uniqueBlocks.joined(separator: "\n\n")

@@ -653,6 +653,48 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(sanitized, "Thanks for the update. I will follow up tomorrow.")
     }
 
+    func testAppleIntelligenceResponseSanitizerDoesNotReturnRawScaffoldWhenFallbackIsEmpty() {
+        let response = """
+        BEGIN TYPEWHISPER DICTATED TEXT
+        END TYPEWHISPER DICTATED TEXT
+        """
+
+        let sanitized = AppleIntelligenceResponseSanitizer.sanitize(
+            response,
+            originalUserText: "   "
+        )
+
+        XCTAssertEqual(sanitized, "")
+    }
+
+    func testAppleIntelligenceResponseSanitizerPreservesNonConsecutiveRepeatedBlocks() {
+        let response = """
+        BEGIN TYPEWHISPER DICTATED TEXT
+        Repeat this paragraph.
+
+        Keep this middle paragraph.
+
+        Repeat this paragraph.
+        END TYPEWHISPER DICTATED TEXT
+        """
+
+        let sanitized = AppleIntelligenceResponseSanitizer.sanitize(
+            response,
+            originalUserText: "repeat this paragraph keep this middle paragraph repeat this paragraph"
+        )
+
+        XCTAssertEqual(
+            sanitized,
+            """
+            Repeat this paragraph.
+
+            Keep this middle paragraph.
+
+            Repeat this paragraph.
+            """
+        )
+    }
+
     func testAllWorkflowSystemPromptsIncludeInputBoundary() throws {
         let templates: [(template: WorkflowTemplate, behavior: WorkflowBehavior)] = [
             (.cleanedText, WorkflowBehavior()),
