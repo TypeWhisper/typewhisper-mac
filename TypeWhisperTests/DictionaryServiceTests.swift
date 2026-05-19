@@ -111,6 +111,41 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testAPITermHelpersDeleteSingleTermWithoutClearingOthers() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        try service.setAPITerms([" TypeWhisper ", "WhisperKit", "typewhisper"], replaceExisting: true)
+
+        XCTAssertTrue(try service.deleteAPITerm("typewhisper"))
+        XCTAssertEqual(service.enabledTerms(), ["WhisperKit"])
+        XCTAssertFalse(try service.deleteAPITerm("Missing"))
+    }
+
+    @MainActor
+    func testAPICorrectionHelpersUpsertCaseInsensitiveAndPreserveUsageCount() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        try service.upsertAPICorrection(original: "teh", replacement: "the", caseSensitive: false)
+        XCTAssertEqual(service.applyCorrections(to: "teh"), "the")
+        XCTAssertEqual(service.corrections.first?.usageCount, 1)
+
+        try service.upsertAPICorrection(original: "TEH", replacement: "The", caseSensitive: true)
+
+        XCTAssertEqual(service.correctionsCount, 1)
+        XCTAssertEqual(service.corrections.first?.original, "TEH")
+        XCTAssertEqual(service.corrections.first?.replacement, "The")
+        XCTAssertEqual(service.corrections.first?.caseSensitive, true)
+        XCTAssertEqual(service.corrections.first?.usageCount, 1)
+        XCTAssertTrue(try service.deleteAPICorrection(original: "teh"))
+        XCTAssertEqual(service.correctionsCount, 0)
+        XCTAssertFalse(try service.deleteAPICorrection(original: "missing"))
+    }
+
+    @MainActor
     func testEnabledTermsAreNormalizedAndPromptRendererStaysBackwardCompatible() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

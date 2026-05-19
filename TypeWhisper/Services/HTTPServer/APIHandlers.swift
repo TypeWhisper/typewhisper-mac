@@ -48,6 +48,9 @@ final class APIHandlers: @unchecked Sendable {
         router.register("GET", "/v1/dictionary/terms", handler: handleGetDictionaryTerms)
         router.register("PUT", "/v1/dictionary/terms", handler: handlePutDictionaryTerms)
         router.register("DELETE", "/v1/dictionary/terms", handler: handleDeleteDictionaryTerms)
+        router.register("GET", "/v1/dictionary/corrections", handler: handleGetDictionaryCorrections)
+        router.register("PUT", "/v1/dictionary/corrections", handler: handlePutDictionaryCorrections)
+        router.register("DELETE", "/v1/dictionary/corrections", handler: handleDeleteDictionaryCorrections)
     }
 
     // MARK: - POST /v1/transcribe
@@ -712,23 +715,157 @@ final class APIHandlers: @unchecked Sendable {
             let count: Int
         }
 
-        return await MainActor.run {
-            dictionaryService.setTerms(payload.terms, replaceExisting: payload.replace ?? false)
-            let terms = dictionaryService.enabledTerms()
-            return .json(DictionaryTermsResponse(terms: terms, count: terms.count))
+        do {
+            return try await MainActor.run {
+                try dictionaryService.setAPITerms(payload.terms, replaceExisting: payload.replace ?? false)
+                let terms = dictionaryService.enabledTerms()
+                return .json(DictionaryTermsResponse(terms: terms, count: terms.count))
+            }
+        } catch {
+            return .error(status: 500, message: "Failed to save dictionary: \(error.localizedDescription)")
         }
     }
 
     private func handleDeleteDictionaryTerms(_ request: HTTPRequest) async -> HTTPResponse {
+        struct DeleteDictionaryTermRequest: Decodable {
+            let term: String
+        }
+
         struct DeleteResponse: Encodable {
             let deleted: Bool
             let count: Int
         }
 
-        return await MainActor.run {
-            dictionaryService.removeAllTerms()
-            return .json(DeleteResponse(deleted: true, count: 0))
+        guard !request.body.isEmpty else {
+            return .error(status: 400, message: "Missing JSON body")
         }
+
+        let payload: DeleteDictionaryTermRequest
+        do {
+            payload = try JSONDecoder().decode(DeleteDictionaryTermRequest.self, from: request.body)
+        } catch {
+            return .error(status: 400, message: "Invalid JSON body")
+        }
+
+        let term = payload.term.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !term.isEmpty else {
+            return .error(status: 400, message: "Missing or empty 'term'")
+        }
+
+        do {
+            return try await MainActor.run {
+                let deleted = try dictionaryService.deleteAPITerm(term)
+                let terms = dictionaryService.enabledTerms()
+                return .json(DeleteResponse(deleted: deleted, count: terms.count))
+            }
+        } catch {
+            return .error(status: 500, message: "Failed to save dictionary: \(error.localizedDescription)")
+        }
+    }
+
+    // MARK: - /v1/dictionary/corrections
+
+    private struct DictionaryCorrectionEntry: Encodable {
+        let original: String
+        let replacement: String
+        let caseSensitive: Bool
+    }
+
+    private struct DictionaryCorrectionsResponse: Encodable {
+        let corrections: [DictionaryCorrectionEntry]
+        let count: Int
+    }
+
+    private func handleGetDictionaryCorrections(_ request: HTTPRequest) async -> HTTPResponse {
+        await MainActor.run {
+            dictionaryCorrectionsResponse()
+        }
+    }
+
+    private func handlePutDictionaryCorrections(_ request: HTTPRequest) async -> HTTPResponse {
+        struct DictionaryCorrectionRequest: Decodable {
+            let original: String
+            let replacement: String
+            let caseSensitive: Bool?
+        }
+
+        guard !request.body.isEmpty else {
+            return .error(status: 400, message: "Missing JSON body")
+        }
+
+        let payload: DictionaryCorrectionRequest
+        do {
+            payload = try JSONDecoder().decode(DictionaryCorrectionRequest.self, from: request.body)
+        } catch {
+            return .error(status: 400, message: "Invalid JSON body")
+        }
+
+        let original = payload.original.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !original.isEmpty else {
+            return .error(status: 400, message: "Missing or empty 'original'")
+        }
+
+        do {
+            return try await MainActor.run {
+                try dictionaryService.upsertAPICorrection(
+                    original: original,
+                    replacement: payload.replacement,
+                    caseSensitive: payload.caseSensitive ?? false
+                )
+                return dictionaryCorrectionsResponse()
+            }
+        } catch {
+            return .error(status: 500, message: "Failed to save dictionary: \(error.localizedDescription)")
+        }
+    }
+
+    private func handleDeleteDictionaryCorrections(_ request: HTTPRequest) async -> HTTPResponse {
+        struct DeleteDictionaryCorrectionRequest: Decodable {
+            let original: String
+        }
+
+        struct DeleteResponse: Encodable {
+            let deleted: Bool
+            let count: Int
+        }
+
+        guard !request.body.isEmpty else {
+            return .error(status: 400, message: "Missing JSON body")
+        }
+
+        let payload: DeleteDictionaryCorrectionRequest
+        do {
+            payload = try JSONDecoder().decode(DeleteDictionaryCorrectionRequest.self, from: request.body)
+        } catch {
+            return .error(status: 400, message: "Invalid JSON body")
+        }
+
+        let original = payload.original.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !original.isEmpty else {
+            return .error(status: 400, message: "Missing or empty 'original'")
+        }
+
+        do {
+            return try await MainActor.run {
+                let deleted = try dictionaryService.deleteAPICorrection(original: original)
+                let count = dictionaryService.corrections.count
+                return .json(DeleteResponse(deleted: deleted, count: count))
+            }
+        } catch {
+            return .error(status: 500, message: "Failed to save dictionary: \(error.localizedDescription)")
+        }
+    }
+
+    @MainActor
+    private func dictionaryCorrectionsResponse() -> HTTPResponse {
+        let corrections = dictionaryService.corrections.map {
+            DictionaryCorrectionEntry(
+                original: $0.original,
+                replacement: $0.replacement ?? "",
+                caseSensitive: $0.caseSensitive
+            )
+        }
+        return .json(DictionaryCorrectionsResponse(corrections: corrections, count: corrections.count))
     }
 
     // MARK: - GET /v1/rules

@@ -842,7 +842,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual((toggledRules["rules"] as? [[String: Any]])?.first?["is_enabled"] as? Bool, false)
     }
 
-    func testDictionaryTermsEndpointsReplaceNormalizeAndClearTerms() async throws {
+    func testDictionaryTermsEndpointsReplaceMergeAndDeleteSingleTerm() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var context: APIContext?
         defer {
@@ -871,23 +871,210 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual(putResponse["count"] as? Int, 3)
         XCTAssertEqual(putResponse["terms"] as? [String], expectedTerms)
 
+        let mergeBody = try JSONSerialization.data(withJSONObject: [
+            "terms": ["Raycast", "qwen3"],
+        ])
+        let mergeResponse = try Self.jsonObject(await router.route(
+            HTTPRequest(
+                method: "PUT",
+                path: "/v1/dictionary/terms",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: mergeBody
+            )
+        ))
+        let expectedMergedTerms = ["qwen3", "Raycast", "TypeWhisper", "WhisperKit"]
+        XCTAssertEqual(mergeResponse["count"] as? Int, 4)
+        XCTAssertEqual(mergeResponse["terms"] as? [String], expectedMergedTerms)
+
         let getResponse = try Self.jsonObject(await router.route(
             HTTPRequest(method: "GET", path: "/v1/dictionary/terms", queryParams: [:], headers: [:], body: Data())
         ))
-        XCTAssertEqual(getResponse["terms"] as? [String], expectedTerms)
+        XCTAssertEqual(getResponse["terms"] as? [String], expectedMergedTerms)
         let enabledTerms = await MainActor.run { apiContext.dictionaryService.enabledTerms() }
-        XCTAssertEqual(enabledTerms, expectedTerms)
+        XCTAssertEqual(enabledTerms, expectedMergedTerms)
 
+        let deleteBody = try JSONSerialization.data(withJSONObject: ["term": "typewhisper"])
         let deleteResponse = try Self.jsonObject(await router.route(
-            HTTPRequest(method: "DELETE", path: "/v1/dictionary/terms", queryParams: [:], headers: [:], body: Data())
+            HTTPRequest(
+                method: "DELETE",
+                path: "/v1/dictionary/terms",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: deleteBody
+            )
         ))
         XCTAssertEqual(deleteResponse["deleted"] as? Bool, true)
-        XCTAssertEqual(deleteResponse["count"] as? Int, 0)
+        XCTAssertEqual(deleteResponse["count"] as? Int, 3)
 
         let finalGet = try Self.jsonObject(await router.route(
             HTTPRequest(method: "GET", path: "/v1/dictionary/terms", queryParams: [:], headers: [:], body: Data())
         ))
-        XCTAssertEqual(finalGet["terms"] as? [String], [])
+        XCTAssertEqual(finalGet["terms"] as? [String], ["qwen3", "Raycast", "WhisperKit"])
+
+        let missingDeleteResponse = try Self.jsonObject(await router.route(
+            HTTPRequest(
+                method: "DELETE",
+                path: "/v1/dictionary/terms",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: try JSONSerialization.data(withJSONObject: ["term": "Missing"])
+            )
+        ))
+        XCTAssertEqual(missingDeleteResponse["deleted"] as? Bool, false)
+        XCTAssertEqual(missingDeleteResponse["count"] as? Int, 3)
+
+        let missingTermDelete = await router.route(
+            HTTPRequest(
+                method: "DELETE",
+                path: "/v1/dictionary/terms",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: try JSONSerialization.data(withJSONObject: [:])
+            )
+        )
+        XCTAssertEqual(missingTermDelete.status, 400)
+
+        let emptyDelete = await router.route(
+            HTTPRequest(method: "DELETE", path: "/v1/dictionary/terms", queryParams: [:], headers: [:], body: Data())
+        )
+        XCTAssertEqual(emptyDelete.status, 400)
+    }
+
+    func testDictionaryCorrectionsEndpointsListUpsertDeleteAndValidateInput() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+        let router = apiContext.router
+
+        let initialGet = try Self.jsonObject(await router.route(
+            HTTPRequest(method: "GET", path: "/v1/dictionary/corrections", queryParams: [:], headers: [:], body: Data())
+        ))
+        XCTAssertEqual(initialGet["count"] as? Int, 0)
+        XCTAssertEqual((initialGet["corrections"] as? [[String: Any]])?.count, 0)
+
+        let putBody = try JSONSerialization.data(withJSONObject: [
+            "original": "teh",
+            "replacement": "the",
+            "caseSensitive": false,
+        ])
+        let putResponse = try Self.jsonObject(await router.route(
+            HTTPRequest(
+                method: "PUT",
+                path: "/v1/dictionary/corrections",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: putBody
+            )
+        ))
+        var corrections = try XCTUnwrap(putResponse["corrections"] as? [[String: Any]])
+        XCTAssertEqual(putResponse["count"] as? Int, 1)
+        XCTAssertEqual(corrections.first?["original"] as? String, "teh")
+        XCTAssertEqual(corrections.first?["replacement"] as? String, "the")
+        XCTAssertEqual(corrections.first?["caseSensitive"] as? Bool, false)
+
+        let upsertBody = try JSONSerialization.data(withJSONObject: [
+            "original": "TEH",
+            "replacement": "The",
+            "caseSensitive": true,
+        ])
+        let upsertResponse = try Self.jsonObject(await router.route(
+            HTTPRequest(
+                method: "PUT",
+                path: "/v1/dictionary/corrections",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: upsertBody
+            )
+        ))
+        corrections = try XCTUnwrap(upsertResponse["corrections"] as? [[String: Any]])
+        XCTAssertEqual(upsertResponse["count"] as? Int, 1)
+        XCTAssertEqual(corrections.first?["original"] as? String, "TEH")
+        XCTAssertEqual(corrections.first?["replacement"] as? String, "The")
+        XCTAssertEqual(corrections.first?["caseSensitive"] as? Bool, true)
+        let serviceCorrectionsCount = await MainActor.run { apiContext.dictionaryService.correctionsCount }
+        XCTAssertEqual(serviceCorrectionsCount, 1)
+
+        let emptyReplacementBody = try JSONSerialization.data(withJSONObject: [
+            "original": "¿",
+            "replacement": "",
+            "caseSensitive": false,
+        ])
+        let emptyReplacementResponse = try Self.jsonObject(await router.route(
+            HTTPRequest(
+                method: "PUT",
+                path: "/v1/dictionary/corrections",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: emptyReplacementBody
+            )
+        ))
+        XCTAssertEqual(emptyReplacementResponse["count"] as? Int, 2)
+
+        let deleteBody = try JSONSerialization.data(withJSONObject: ["original": "teh"])
+        let deleteResponse = try Self.jsonObject(await router.route(
+            HTTPRequest(
+                method: "DELETE",
+                path: "/v1/dictionary/corrections",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: deleteBody
+            )
+        ))
+        XCTAssertEqual(deleteResponse["deleted"] as? Bool, true)
+        XCTAssertEqual(deleteResponse["count"] as? Int, 1)
+
+        let missingDeleteBody = try JSONSerialization.data(withJSONObject: ["original": "missing"])
+        let missingDeleteResponse = try Self.jsonObject(await router.route(
+            HTTPRequest(
+                method: "DELETE",
+                path: "/v1/dictionary/corrections",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: missingDeleteBody
+            )
+        ))
+        XCTAssertEqual(missingDeleteResponse["deleted"] as? Bool, false)
+        XCTAssertEqual(missingDeleteResponse["count"] as? Int, 1)
+
+        let missingOriginalPut = await router.route(
+            HTTPRequest(
+                method: "PUT",
+                path: "/v1/dictionary/corrections",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: try JSONSerialization.data(withJSONObject: ["replacement": "value"])
+            )
+        )
+        XCTAssertEqual(missingOriginalPut.status, 400)
+
+        let missingReplacementPut = await router.route(
+            HTTPRequest(
+                method: "PUT",
+                path: "/v1/dictionary/corrections",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: try JSONSerialization.data(withJSONObject: ["original": "value"])
+            )
+        )
+        XCTAssertEqual(missingReplacementPut.status, 400)
+
+        let missingOriginalDelete = await router.route(
+            HTTPRequest(
+                method: "DELETE",
+                path: "/v1/dictionary/corrections",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: try JSONSerialization.data(withJSONObject: [:])
+            )
+        )
+        XCTAssertEqual(missingOriginalDelete.status, 400)
     }
 
     func testTranscribeEndpointPassesDictionaryTermsAsPrompt() async throws {

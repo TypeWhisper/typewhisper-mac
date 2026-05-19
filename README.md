@@ -293,6 +293,36 @@ curl "http://localhost:8978/v1/history?q=meeting&limit=10&offset=0"
 curl -X DELETE "http://localhost:8978/v1/history?id=<uuid>"
 ```
 
+### Dictionary
+
+```bash
+# List recognition terms
+curl http://localhost:8978/v1/dictionary/terms
+
+# Merge terms, or set replace=true to replace all terms
+curl -X PUT http://localhost:8978/v1/dictionary/terms \
+  -H "Content-Type: application/json" \
+  -d '{"terms":["TypeWhisper","WhisperKit"],"replace":false}'
+
+# Delete one term
+curl -X DELETE http://localhost:8978/v1/dictionary/terms \
+  -H "Content-Type: application/json" \
+  -d '{"term":"TypeWhisper"}'
+
+# List post-transcription corrections
+curl http://localhost:8978/v1/dictionary/corrections
+
+# Add or update one correction by original text
+curl -X PUT http://localhost:8978/v1/dictionary/corrections \
+  -H "Content-Type: application/json" \
+  -d '{"original":"teh","replacement":"the","caseSensitive":false}'
+
+# Delete one correction
+curl -X DELETE http://localhost:8978/v1/dictionary/corrections \
+  -H "Content-Type: application/json" \
+  -d '{"original":"teh"}'
+```
+
 ### Workflows
 
 ```bash
