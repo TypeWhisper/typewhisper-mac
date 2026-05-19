@@ -3459,7 +3459,14 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         XCTAssertTrue(memoryRetriever.requestedTexts.isEmpty)
         XCTAssertEqual(plugin.lastSystemPrompt, "Clean up the dictated text.")
-        XCTAssertEqual(plugin.lastUserText, "hello world")
+        XCTAssertEqual(
+            plugin.lastUserText,
+            """
+            BEGIN TYPEWHISPER DICTATED TEXT
+            hello world
+            END TYPEWHISPER DICTATED TEXT
+            """
+        )
         XCTAssertEqual(plugin.lastRequestedModel, "gemini-2.5-pro")
         XCTAssertEqual(plugin.lastTemperatureDirective, .custom(0.8))
     }

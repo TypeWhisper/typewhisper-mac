@@ -110,13 +110,22 @@ struct WorkflowTextProcessingService {
 
         let behavior = workflow.behavior
         let selection = llmSelectionProvider(workflow)
-        return try await promptProcessor(
+        let shouldBoundDictatedText = selection.providerId != PromptProcessingService.appleIntelligenceId
+        let workflowInput = shouldBoundDictatedText
+            ? TypeWhisperDictatedTextBoundary.wrap(text)
+            : text
+        let result = try await promptProcessor(
             systemPrompt,
-            text,
+            workflowInput,
             selection.providerId,
             selection.cloudModel,
             behavior.temperatureDirective
         )
+        guard shouldBoundDictatedText else {
+            return result
+        }
+
+        return TypeWhisperDictatedTextBoundary.sanitize(result, originalUserText: text)
     }
 
     func canProcess(
