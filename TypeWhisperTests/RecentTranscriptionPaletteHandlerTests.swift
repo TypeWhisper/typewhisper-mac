@@ -217,7 +217,7 @@ final class PromptPaletteHandlerTests: XCTestCase {
             workflowService: workflowService,
             promptProcessingService: PromptProcessingService(),
             workflowTextProcessingService: WorkflowTextProcessingService(
-                promptProcessor: { _, text, _, _, _ in "Processed: \(text)" },
+                promptProcessor: { _, _, _, _, _ in "Processed: Selected source" },
                 appleTranslator: nil
             ),
             soundService: SoundService(),
@@ -288,7 +288,7 @@ final class PromptPaletteHandlerTests: XCTestCase {
             workflowService: workflowService,
             promptProcessingService: PromptProcessingService(),
             workflowTextProcessingService: WorkflowTextProcessingService(
-                promptProcessor: { _, text, _, _, _ in "Processed: \(text)" },
+                promptProcessor: { _, _, _, _, _ in "Processed: Selected source" },
                 appleTranslator: nil
             ),
             soundService: SoundService(),
@@ -354,7 +354,7 @@ final class PromptPaletteHandlerTests: XCTestCase {
             workflowService: workflowService,
             promptProcessingService: PromptProcessingService(),
             workflowTextProcessingService: WorkflowTextProcessingService(
-                promptProcessor: { _, text, _, _, _ in "Processed: \(text)" },
+                promptProcessor: { _, _, _, _, _ in "Processed: Clipboard source" },
                 appleTranslator: nil
             ),
             soundService: SoundService(),
