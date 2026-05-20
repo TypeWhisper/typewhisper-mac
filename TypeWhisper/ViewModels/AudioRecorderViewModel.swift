@@ -272,7 +272,7 @@ final class AudioRecorderViewModel: ObservableObject {
     }
 
     func stopRecording() {
-        stopRecording(apiSessionID: nil)
+        stopRecording(apiSessionID: activeRecorderAPISessionID)
     }
 
     @discardableResult
@@ -297,12 +297,24 @@ final class AudioRecorderViewModel: ObservableObject {
         errorMessage = nil
         systemAudioWarningMessage = nil
         partialText = ""
+        state = .recording
 
-        let url = try await recorderService.startRecording(
-            micEnabled: requestedMicEnabled,
-            systemAudioEnabled: requestedSystemAudioEnabled,
-            format: outputFormat
-        )
+        let url: URL
+        do {
+            url = try await recorderService.startRecording(
+                micEnabled: requestedMicEnabled,
+                systemAudioEnabled: requestedSystemAudioEnabled,
+                format: outputFormat
+            )
+        } catch {
+            state = .idle
+            currentOutputURL = nil
+            if let apiSessionID {
+                activeRecorderAPISessionID = nil
+                recorderAPISessions.removeValue(forKey: apiSessionID)
+            }
+            throw error
+        }
         currentOutputURL = url
 
         if let apiSessionID {
@@ -315,8 +327,6 @@ final class AudioRecorderViewModel: ObservableObject {
                 error: nil
             ))
         }
-
-        state = .recording
 
         EventBus.shared.emit(.recordingStarted(RecordingStartedPayload()))
 

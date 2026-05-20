@@ -20,6 +20,42 @@ private func rtfAttributedStringContainsFontTrait(
 }
 
 final class APIRouterAndHandlersTests: XCTestCase {
+    private actor RecorderStartGate {
+        private var entries = 0
+        private var firstEntryContinuation: CheckedContinuation<Void, Never>?
+        private var releaseContinuation: CheckedContinuation<Void, Never>?
+        private var released = false
+
+        func enter() -> Int {
+            entries += 1
+            if entries == 1 {
+                firstEntryContinuation?.resume()
+                firstEntryContinuation = nil
+            }
+            return entries
+        }
+
+        func waitForFirstEntry() async {
+            if entries > 0 { return }
+            await withCheckedContinuation { continuation in
+                firstEntryContinuation = continuation
+            }
+        }
+
+        func waitForRelease() async {
+            if released { return }
+            await withCheckedContinuation { continuation in
+                releaseContinuation = continuation
+            }
+        }
+
+        func release() {
+            released = true
+            releaseContinuation?.resume()
+            releaseContinuation = nil
+        }
+    }
+
     @objc(APIRouterMockLLMProviderPlugin)
     private final class MockLLMProviderPlugin: NSObject, LLMProviderPlugin, LLMProviderSetupStatusProviding, LLMTemperatureControllableProvider, PluginSettingsActivityReporting, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.llm" }
@@ -1668,6 +1704,143 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual(completed["text"] as? String, "transcribed")
         let outputFile = try XCTUnwrap(completed["output_file"] as? String)
         XCTAssertTrue(FileManager.default.fileExists(atPath: outputFile))
+    }
+
+    func testRecorderSessionCompletesWhenAPIStartedRecordingStopsFromUI() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+        let router = apiContext.router
+        let recordingsDirectory = appSupportDirectory.appendingPathComponent("recordings")
+
+        await MainActor.run {
+            apiContext.audioRecorderService.recordingsDirectoryOverride = recordingsDirectory
+            apiContext.audioRecorderService.startRecordingOverride = { _, _, _, outputURL in
+                try Data("placeholder".utf8).write(to: outputURL)
+                return outputURL
+            }
+            apiContext.audioRecorderService.stopRecordingOverride = { outputURL in
+                try Data("recorded".utf8).write(to: outputURL)
+                return outputURL
+            }
+            apiContext.audioRecorderViewModel.transcriptionEnabled = false
+        }
+
+        let startResponse = await router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/recorder/start",
+                queryParams: ["mic": "true", "system_audio": "false"],
+                headers: [:],
+                body: Data()
+            )
+        )
+        let start = try Self.jsonObject(startResponse)
+        let startID = try XCTUnwrap(start["id"] as? String)
+        XCTAssertEqual(startResponse.status, 200)
+
+        await MainActor.run {
+            apiContext.audioRecorderViewModel.stopRecording()
+        }
+
+        var completedResponse: [String: Any]?
+        for _ in 0..<40 {
+            let response = try Self.jsonObject(
+                await router.route(
+                    HTTPRequest(
+                        method: "GET",
+                        path: "/v1/recorder/session",
+                        queryParams: ["id": startID],
+                        headers: [:],
+                        body: Data()
+                    )
+                )
+            )
+            if response["status"] as? String == "completed" {
+                completedResponse = response
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+
+        let completed = try XCTUnwrap(completedResponse)
+        XCTAssertEqual(completed["id"] as? String, startID)
+        let outputFile = try XCTUnwrap(completed["output_file"] as? String)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outputFile))
+    }
+
+    func testRecorderStartRejectsConcurrentStartWhileRecorderIsStarting() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+        let router = apiContext.router
+        let recordingsDirectory = appSupportDirectory.appendingPathComponent("recordings")
+        let gate = RecorderStartGate()
+
+        await MainActor.run {
+            apiContext.audioRecorderService.recordingsDirectoryOverride = recordingsDirectory
+            apiContext.audioRecorderService.startRecordingOverride = { _, _, _, outputURL in
+                try Data("placeholder".utf8).write(to: outputURL)
+                let entry = await gate.enter()
+                if entry == 1 {
+                    await gate.waitForRelease()
+                }
+                return outputURL
+            }
+            apiContext.audioRecorderService.stopRecordingOverride = { outputURL in
+                try Data("recorded".utf8).write(to: outputURL)
+                return outputURL
+            }
+            apiContext.audioRecorderViewModel.transcriptionEnabled = false
+        }
+
+        let firstStartTask = Task {
+            await router.route(
+                HTTPRequest(
+                    method: "POST",
+                    path: "/v1/recorder/start",
+                    queryParams: ["mic": "true", "system_audio": "false"],
+                    headers: [:],
+                    body: Data()
+                )
+            )
+        }
+        await gate.waitForFirstEntry()
+
+        let secondStartResponse = await router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/recorder/start",
+                queryParams: ["mic": "true", "system_audio": "false"],
+                headers: [:],
+                body: Data()
+            )
+        )
+        let secondStart = try Self.jsonObject(secondStartResponse)
+
+        await gate.release()
+        let firstStartResponse = await firstStartTask.value
+        XCTAssertEqual(firstStartResponse.status, 200)
+
+        let stopResponse = await router.route(
+            HTTPRequest(method: "POST", path: "/v1/recorder/stop", queryParams: [:], headers: [:], body: Data())
+        )
+        XCTAssertEqual(stopResponse.status, 200)
+
+        XCTAssertEqual(secondStartResponse.status, 409)
+        XCTAssertEqual((secondStart["error"] as? [String: Any])?["message"] as? String, "Already recording")
     }
 
     func testRecorderSessionRejectsInvalidID() async throws {
