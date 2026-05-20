@@ -3,6 +3,123 @@ import AppKit
 import Combine
 import ApplicationServices
 
+struct IndicatorPresentationState: Equatable {
+    enum Source: Equatable {
+        case dictation
+        case recorder
+    }
+
+    let source: Source
+    let state: DictationViewModel.State
+
+    var isActiveDuringActivity: Bool {
+        switch state {
+        case .recording, .processing, .inserting, .error:
+            return true
+        case .idle, .promptSelection, .promptProcessing:
+            return false
+        }
+    }
+
+    static func resolve(
+        dictationState: DictationViewModel.State,
+        recorderState: AudioRecorderViewModel.RecorderState
+    ) -> IndicatorPresentationState {
+        switch dictationState {
+        case .recording, .processing, .inserting, .error:
+            return IndicatorPresentationState(source: .dictation, state: dictationState)
+        case .idle, .promptSelection, .promptProcessing:
+            if recorderState == .recording {
+                return IndicatorPresentationState(source: .recorder, state: .recording)
+            }
+            return IndicatorPresentationState(source: .dictation, state: dictationState)
+        }
+    }
+
+    static func shouldShow(
+        visibility: NotchIndicatorVisibility,
+        presentation: IndicatorPresentationState
+    ) -> Bool {
+        switch visibility {
+        case .always:
+            return true
+        case .duringActivity:
+            return presentation.isActiveDuringActivity
+        case .never:
+            return false
+        }
+    }
+}
+
+struct IndicatorPresentationData {
+    let source: IndicatorPresentationState.Source
+    let state: DictationViewModel.State
+    let recordingDuration: TimeInterval
+    let audioLevel: Float
+    let partialText: String
+    let activeRuleName: String?
+    let activeAppIcon: NSImage?
+    let isRecordingInputReady: Bool
+    let recordingCancelWarningMessage: String?
+    let processingPhase: String?
+    let actionFeedbackMessage: String?
+    let actionFeedbackIcon: String?
+    let actionFeedbackIsError: Bool
+    let externalStreamingDisplayCount: Int
+
+    var isRecorder: Bool {
+        source == .recorder
+    }
+
+    @MainActor
+    static func make(
+        dictation: DictationViewModel,
+        recorder: AudioRecorderViewModel
+    ) -> IndicatorPresentationData {
+        let presentation = IndicatorPresentationState.resolve(
+            dictationState: dictation.state,
+            recorderState: recorder.state
+        )
+
+        switch presentation.source {
+        case .dictation:
+            return IndicatorPresentationData(
+                source: .dictation,
+                state: presentation.state,
+                recordingDuration: dictation.recordingDuration,
+                audioLevel: dictation.audioLevel,
+                partialText: dictation.partialText,
+                activeRuleName: dictation.activeRuleName,
+                activeAppIcon: dictation.activeAppIcon,
+                isRecordingInputReady: dictation.isRecordingInputReady,
+                recordingCancelWarningMessage: dictation.recordingCancelWarningMessage,
+                processingPhase: dictation.processingPhase,
+                actionFeedbackMessage: dictation.actionFeedbackMessage,
+                actionFeedbackIcon: dictation.actionFeedbackIcon,
+                actionFeedbackIsError: dictation.actionFeedbackIsError,
+                externalStreamingDisplayCount: dictation.externalStreamingDisplayCount
+            )
+        case .recorder:
+            return IndicatorPresentationData(
+                source: .recorder,
+                state: presentation.state,
+                recordingDuration: recorder.duration,
+                audioLevel: max(recorder.micLevel, recorder.systemLevel),
+                partialText: recorder.partialText,
+                activeRuleName: nil,
+                activeAppIcon: nil,
+                isRecordingInputReady: true,
+                recordingCancelWarningMessage: nil,
+                processingPhase: nil,
+                actionFeedbackMessage: nil,
+                actionFeedbackIcon: nil,
+                actionFeedbackIsError: false,
+                externalStreamingDisplayCount: dictation.externalStreamingDisplayCount
+            )
+        }
+    }
+}
+
 /// Coordinates the display of different indicator styles (Notch vs Overlay).
 @MainActor
 final class IndicatorCoordinator {
@@ -47,15 +164,15 @@ final class IndicatorCoordinator {
         case .notch:
             overlayPanel.dismiss()
             minimalPanel.dismiss()
-            notchPanel.updateVisibility(state: vm.state, vm: vm)
+            notchPanel.updateVisibility(vm: vm)
         case .overlay:
             notchPanel.dismiss()
             minimalPanel.dismiss()
-            overlayPanel.updateVisibility(state: vm.state, vm: vm)
+            overlayPanel.updateVisibility(vm: vm)
         case .minimal:
             notchPanel.dismiss()
             overlayPanel.dismiss()
-            minimalPanel.updateVisibility(state: vm.state, vm: vm)
+            minimalPanel.updateVisibility(vm: vm)
         }
     }
 

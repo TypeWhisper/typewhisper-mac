@@ -81,7 +81,7 @@ struct IndicatorAppIconView: View {
 // MARK: - Left Status Indicator
 
 struct IndicatorLeftStatus: View {
-    @ObservedObject var viewModel: DictationViewModel
+    let presentation: IndicatorPresentationData
     let sizing: IndicatorSizing
     let dotPulse: Bool
     let hasActionFeedback: Bool
@@ -93,19 +93,19 @@ struct IndicatorLeftStatus: View {
 
     @ViewBuilder
     private var statusContent: some View {
-        switch viewModel.state {
+        switch presentation.state {
         case .idle, .promptSelection, .promptProcessing:
             Color.clear.frame(width: 0, height: 0)
         case .recording:
-            if !viewModel.isRecordingInputReady {
+            if !presentation.isRecordingInputReady {
                 IndicatorPreparingView(sizing: sizing)
-            } else if let icon = viewModel.activeAppIcon {
+            } else if let icon = presentation.activeAppIcon {
                 IndicatorAppIconView(icon: icon, sizing: sizing)
             } else {
-                IndicatorDot(audioLevel: viewModel.audioLevel, dotPulse: dotPulse, sizing: sizing)
+                IndicatorDot(audioLevel: presentation.audioLevel, dotPulse: dotPulse, sizing: sizing)
             }
         case .processing:
-            if let icon = viewModel.activeAppIcon {
+            if let icon = presentation.activeAppIcon {
                 IndicatorAppIconView(icon: icon, sizing: sizing)
             } else {
                 ProgressView()
@@ -115,7 +115,7 @@ struct IndicatorLeftStatus: View {
         case .inserting:
             if hasActionFeedback {
                 Color.clear.frame(width: 0, height: 0)
-            } else if let icon = viewModel.activeAppIcon {
+            } else if let icon = presentation.activeAppIcon {
                 IndicatorAppIconView(icon: icon, sizing: sizing)
             } else {
                 Image(systemName: "checkmark.circle.fill")
@@ -123,7 +123,7 @@ struct IndicatorLeftStatus: View {
                     .font(.system(size: sizing.symbolSize))
             }
         case .error:
-            if let icon = viewModel.activeAppIcon {
+            if let icon = presentation.activeAppIcon {
                 IndicatorAppIconView(icon: icon, borderColor: .red, sizing: sizing)
             } else {
                 Image(systemName: "xmark.circle.fill")
@@ -168,7 +168,7 @@ struct IndicatorDot: View {
 // MARK: - Recording Content
 
 struct IndicatorRecordingContent: View {
-    @ObservedObject var viewModel: DictationViewModel
+    let presentation: IndicatorPresentationData
     let content: NotchIndicatorContent
     let sizing: IndicatorSizing
     let dotPulse: Bool
@@ -176,27 +176,27 @@ struct IndicatorRecordingContent: View {
     var body: some View {
         switch content {
         case .indicator:
-            if viewModel.isRecordingInputReady {
-                IndicatorDot(audioLevel: viewModel.audioLevel, dotPulse: dotPulse, sizing: sizing)
+            if presentation.isRecordingInputReady {
+                IndicatorDot(audioLevel: presentation.audioLevel, dotPulse: dotPulse, sizing: sizing)
             } else {
                 IndicatorPreparingView(sizing: sizing)
             }
         case .timer:
-            Text(formatDuration(viewModel.recordingDuration))
+            Text(formatDuration(presentation.recordingDuration))
                 .font(.system(size: sizing.timerFontSize, weight: .medium).monospacedDigit())
                 .foregroundStyle(.white.opacity(sizing.timerOpacity))
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
                 .accessibilityLabel(String(localized: "Recording timer"))
-                .accessibilityValue(formatDuration(viewModel.recordingDuration))
+                .accessibilityValue(formatDuration(presentation.recordingDuration))
         case .waveform:
             AudioWaveformView(
-                audioLevel: viewModel.audioLevel,
-                isSetup: !viewModel.isRecordingInputReady || (viewModel.recordingDuration < 0.5 && viewModel.audioLevel < 0.05),
+                audioLevel: presentation.audioLevel,
+                isSetup: !presentation.isRecordingInputReady || (presentation.recordingDuration < 0.5 && presentation.audioLevel < 0.05),
                 compact: true
             )
         case .profile:
-            if let name = viewModel.activeRuleName {
+            if let name = presentation.activeRuleName {
                 Text(name)
                     .font(.system(size: sizing.profileFontSize, weight: .medium))
                     .foregroundStyle(.white)

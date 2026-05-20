@@ -4,6 +4,7 @@ import SwiftUI
 /// Supports top and bottom positioning.
 struct OverlayIndicatorView: View {
     @ObservedObject private var viewModel = DictationViewModel.shared
+    @ObservedObject private var recorder = AudioRecorderViewModel.shared
     @State private var textExpanded = false
     @State private var dotPulse = false
 
@@ -11,16 +12,20 @@ struct OverlayIndicatorView: View {
     private let sizing: IndicatorSizing = .overlay
     private var closedWidth: CGFloat { 280 }
 
+    private var presentation: IndicatorPresentationData {
+        IndicatorPresentationData.make(dictation: viewModel, recorder: recorder)
+    }
+
     private var suppressStreamingText: Bool {
-        viewModel.externalStreamingDisplayCount > 0
+        !presentation.isRecorder && presentation.externalStreamingDisplayCount > 0
     }
 
     private var hasActionFeedback: Bool {
-        viewModel.state == .inserting && viewModel.actionFeedbackMessage != nil
+        presentation.state == .inserting && presentation.actionFeedbackMessage != nil
     }
 
     private var hasRecordingCancelWarning: Bool {
-        viewModel.state == .recording && viewModel.recordingCancelWarningMessage != nil
+        presentation.state == .recording && presentation.recordingCancelWarningMessage != nil
     }
 
     private var showTranscriptPreview: Bool {
@@ -74,10 +79,10 @@ struct OverlayIndicatorView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isTop ? .top : .bottom)
         .preferredColorScheme(.dark)
         .animation(.easeInOut(duration: 0.3), value: textExpanded)
-        .animation(.easeInOut(duration: 0.2), value: viewModel.state)
-        .animation(.easeOut(duration: 0.08), value: viewModel.audioLevel)
-        .onChange(of: viewModel.state) {
-            if viewModel.state == .recording {
+        .animation(.easeInOut(duration: 0.2), value: presentation.state)
+        .animation(.easeOut(duration: 0.08), value: presentation.audioLevel)
+        .onChange(of: presentation.state) {
+            if presentation.state == .recording {
                 withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
                     dotPulse = true
                 }
@@ -94,7 +99,7 @@ struct OverlayIndicatorView: View {
             }
         }
         .onChange(of: viewModel.indicatorTranscriptPreviewEnabled) {
-            if showTranscriptPreview, viewModel.state == .recording, !viewModel.partialText.isEmpty {
+            if showTranscriptPreview, presentation.state == .recording, !presentation.partialText.isEmpty {
                 withAnimation(.easeOut(duration: 0.25)) {
                     textExpanded = true
                 }
@@ -110,19 +115,19 @@ struct OverlayIndicatorView: View {
     }
 
     private var accessibilityLabel: String {
-        if let warning = viewModel.recordingCancelWarningMessage, viewModel.state == .recording {
+        if let warning = presentation.recordingCancelWarningMessage, presentation.state == .recording {
             return warning
         }
 
-        if let feedback = viewModel.actionFeedbackMessage, viewModel.state == .inserting {
+        if let feedback = presentation.actionFeedbackMessage, presentation.state == .inserting {
             return feedback
         }
 
-        switch viewModel.state {
+        switch presentation.state {
         case .idle, .promptSelection, .promptProcessing:
             return String(localized: "Idle")
         case .recording:
-            if !viewModel.isRecordingInputReady {
+            if !presentation.isRecordingInputReady {
                 return String(localized: "Preparing microphone")
             }
             return String(localized: "Recording")
@@ -141,7 +146,7 @@ struct OverlayIndicatorView: View {
     private var expandableContent: some View {
         if hasRecordingCancelWarning {
             IndicatorActionFeedback(
-                message: viewModel.recordingCancelWarningMessage ?? "",
+                message: presentation.recordingCancelWarningMessage ?? "",
                 icon: "exclamationmark.triangle.fill",
                 isError: false,
                 iconColor: .yellow,
@@ -149,16 +154,16 @@ struct OverlayIndicatorView: View {
             )
         } else if isTop {
             // Top position: text expands downward, action feedback below text
-            if viewModel.state == .recording, showTranscriptPreview {
+            if presentation.state == .recording, showTranscriptPreview {
                 IndicatorExpandableText(
-                    text: viewModel.partialText,
+                    text: presentation.partialText,
                     fontSize: transcriptFontSize,
                     expandedHeight: transcriptExpandedHeight,
                     expanded: textExpanded,
                     contentPadding: contentPadding
                 )
-                .onChange(of: viewModel.partialText) {
-                    if showTranscriptPreview, !viewModel.partialText.isEmpty, !textExpanded {
+                .onChange(of: presentation.partialText) {
+                    if showTranscriptPreview, !presentation.partialText.isEmpty, !textExpanded {
                         withAnimation(.easeOut(duration: 0.25)) {
                             textExpanded = true
                         }
@@ -169,9 +174,9 @@ struct OverlayIndicatorView: View {
             if hasActionFeedback {
                 Divider().background(Color.white.opacity(0.1))
                 IndicatorActionFeedback(
-                    message: viewModel.actionFeedbackMessage ?? "",
-                    icon: viewModel.actionFeedbackIcon,
-                    isError: viewModel.actionFeedbackIsError,
+                    message: presentation.actionFeedbackMessage ?? "",
+                    icon: presentation.actionFeedbackIcon,
+                    isError: presentation.actionFeedbackIsError,
                     iconColor: nil,
                     contentPadding: contentPadding
                 )
@@ -180,25 +185,25 @@ struct OverlayIndicatorView: View {
             // Bottom position: action feedback on top, text above status bar
             if hasActionFeedback {
                 IndicatorActionFeedback(
-                    message: viewModel.actionFeedbackMessage ?? "",
-                    icon: viewModel.actionFeedbackIcon,
-                    isError: viewModel.actionFeedbackIsError,
+                    message: presentation.actionFeedbackMessage ?? "",
+                    icon: presentation.actionFeedbackIcon,
+                    isError: presentation.actionFeedbackIsError,
                     iconColor: nil,
                     contentPadding: contentPadding
                 )
                 Divider().background(Color.white.opacity(0.1))
             }
 
-            if viewModel.state == .recording, showTranscriptPreview {
+            if presentation.state == .recording, showTranscriptPreview {
                 IndicatorExpandableText(
-                    text: viewModel.partialText,
+                    text: presentation.partialText,
                     fontSize: transcriptFontSize,
                     expandedHeight: transcriptExpandedHeight,
                     expanded: textExpanded,
                     contentPadding: contentPadding
                 )
-                .onChange(of: viewModel.partialText) {
-                    if showTranscriptPreview, !viewModel.partialText.isEmpty, !textExpanded {
+                .onChange(of: presentation.partialText) {
+                    if showTranscriptPreview, !presentation.partialText.isEmpty, !textExpanded {
                         withAnimation(.easeOut(duration: 0.25)) {
                             textExpanded = true
                         }
@@ -214,15 +219,15 @@ struct OverlayIndicatorView: View {
     private var statusBar: some View {
         HStack(spacing: 12) {
             IndicatorLeftStatus(
-                viewModel: viewModel,
+                presentation: presentation,
                 sizing: sizing,
                 dotPulse: dotPulse,
                 hasActionFeedback: hasActionFeedback
             )
 
-            if case .recording = viewModel.state {
+            if case .recording = presentation.state {
                 IndicatorRecordingContent(
-                    viewModel: viewModel,
+                    presentation: presentation,
                     content: viewModel.notchIndicatorLeftContent,
                     sizing: sizing,
                     dotPulse: dotPulse
@@ -231,15 +236,15 @@ struct OverlayIndicatorView: View {
 
             Spacer()
 
-            if case .recording = viewModel.state {
+            if case .recording = presentation.state {
                 IndicatorRecordingContent(
-                    viewModel: viewModel,
+                    presentation: presentation,
                     content: viewModel.notchIndicatorRightContent,
                     sizing: sizing,
                     dotPulse: dotPulse
                 )
-            } else if case .processing = viewModel.state {
-                if let phase = viewModel.processingPhase {
+            } else if case .processing = presentation.state {
+                if let phase = presentation.processingPhase {
                     Text(phase)
                         .font(.system(size: 12))
                         .foregroundStyle(.white.opacity(0.7))
