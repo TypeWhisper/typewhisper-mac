@@ -148,6 +148,10 @@ struct RegistryPluginRelease: Decodable, Equatable {
                 architecture: architecture
             )
     }
+
+    func isTrusted(for source: PluginDistributionSource) -> Bool {
+        PluginRegistryService.isTrustedRegistryDownloadURL(downloadURL, source: source)
+    }
 }
 
 struct RegistryPluginEntry: Decodable {
@@ -226,6 +230,7 @@ struct RegistryPluginEntry: Decodable {
                     currentOSVersion: currentOSVersion,
                     architecture: architecture
                 )
+                && $0.isTrusted(for: source)
             }
             .max { first, second in
                 PluginRegistryService.compareVersions(first.version, second.version) == .orderedAscending
@@ -399,6 +404,23 @@ final class PluginRegistryService: ObservableObject {
             return .communityV1
         }
         return .v1
+    }
+
+    nonisolated static func isTrustedRegistryDownloadURL(
+        _ downloadURL: String,
+        source: PluginDistributionSource
+    ) -> Bool {
+        guard source == .community else { return true }
+        guard let components = URLComponents(string: downloadURL),
+              components.scheme == "https",
+              components.host?.lowercased() == "github.com"
+        else {
+            return false
+        }
+
+        return components.path.hasPrefix(
+            "/TypeWhisper/typewhisper-mac/releases/download/"
+        )
     }
 
     init(

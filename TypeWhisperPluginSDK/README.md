@@ -505,12 +505,18 @@ let wavData = PluginWavEncoder.encode(samples, sampleRate: 16000)
 
 To distribute via the TypeWhisper plugin marketplace:
 
-1. Build your plugin in Release configuration
-2. ZIP the `.bundle`: `ditto -ck --sequesterRsrc MyPlugin.bundle MyPlugin.zip`
-3. Host the ZIP (GitHub Releases, your own server, etc.)
-4. Submit a PR adding `PluginRegistry/community-v1/com.yourname.myplugin.json`
-   on `main`. The registry workflow validates the PR and publishes the merged
-   feed to `gh-pages/plugins-community-v1.json` after merge.
+1. Submit plugin source for review, or link to a reviewed source repository.
+2. Submit a PR adding `PluginRegistry/community-v1/com.yourname.myplugin.json`
+   on `main`.
+3. Keep `releases[]` omitted or empty until a TypeWhisper maintainer publishes
+   the installable artifact.
+4. After review, a maintainer runs `plugin-release.yml` with
+   `distribution_source=community`. The workflow builds, signs, hosts, and
+   publishes the TypeWhisper-owned ZIP to `gh-pages/plugins-community-v1.json`.
+
+Community marketplace artifacts must be built and hosted by TypeWhisper.
+Contributor-hosted ZIPs, personal GitHub Release assets, and other external
+artifact URLs are not supported in the community registry.
 
 Registry feeds:
 
@@ -532,23 +538,19 @@ Registry entry format:
   "hosting": "local|cloud",
   "requiresAPIKey": false,
   "iconSystemName": "star.fill",
-  "releases": [
-    {
-      "version": "1.0.0",
-      "minHostVersion": "1.4.0",
-      "sdkCompatibilityVersion": "v1",
-      "minOSVersion": "14.0",
-      "supportedArchitectures": ["arm64"],
-      "size": 12345678,
-      "downloadURL": "https://example.com/MyPlugin.zip"
-    }
-  ]
+  "releases": []
 }
 ```
 
 `source` is registry metadata for the TypeWhisper Integrations UI. Omit it for official marketplace entries; TypeWhisper treats missing values as `official`. Use `"source": "community"` for community-maintained plugins submitted to the `1.4+` community feed. This field is not required in the plugin bundle manifest.
 
-Release metadata belongs only inside `releases[]`. Do not duplicate `version`, `minHostVersion`, `sdkCompatibilityVersion`, `minOSVersion`, `supportedArchitectures`, `size`, or `downloadURL` as top-level registry fields. `category` and `categories` remain plugin-level metadata.
+Release metadata belongs only inside `releases[]`. Community entries may omit
+`releases[]` or keep it empty while source review is in progress. Once a
+TypeWhisper maintainer publishes the artifact, release entries are written with
+`version`, `minHostVersion`, `sdkCompatibilityVersion`, `minOSVersion`,
+`supportedArchitectures`, `size`, and a TypeWhisper-owned `downloadURL`.
+Do not duplicate release fields as top-level registry fields. `category` and
+`categories` remain plugin-level metadata.
 
 ---
 

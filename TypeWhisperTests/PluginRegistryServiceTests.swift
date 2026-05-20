@@ -522,7 +522,7 @@ final class PluginRegistryServiceTests: XCTestCase {
                       "minHostVersion": "1.4.0",
                       "sdkCompatibilityVersion": "v1",
                       "size": 12,
-                      "downloadURL": "https://example.com/community.zip"
+                      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-community-v1.0.0/CommunityPlugin.zip"
                     }
                   ]
                 }
@@ -538,6 +538,71 @@ final class PluginRegistryServiceTests: XCTestCase {
         )
 
         XCTAssertEqual(plugins.map(\.source), [.official, .community])
+    }
+
+    func testCommunityPluginWithExternalDownloadURLDoesNotResolve() throws {
+        let data = Data(
+            """
+            {
+              "schemaVersion": 1,
+              "plugins": [
+                {
+                  "id": "com.community.external",
+                  "source": "community",
+                  "name": "External Community Plugin",
+                  "author": "Community Author",
+                  "description": "Community entry with an external ZIP.",
+                  "category": "utility",
+                  "releases": [
+                    {
+                      "version": "1.0.0",
+                      "minHostVersion": "1.4.0",
+                      "sdkCompatibilityVersion": "v1",
+                      "size": 12,
+                      "downloadURL": "https://github.com/contributor/plugin/releases/download/v1.0.0/Plugin.zip"
+                    }
+                  ]
+                }
+              ]
+            }
+            """.utf8
+        )
+
+        let response = try JSONDecoder().decode(PluginRegistryResponse.self, from: data)
+        let plugins = response.resolvedPlugins(
+            appVersion: "1.4.0",
+            sdkCompatibilityVersion: sdkCompatibilityVersion
+        )
+
+        XCTAssertTrue(plugins.isEmpty)
+    }
+
+    func testCommunityPluginSourceMetadataWithoutReleasesDoesNotResolve() throws {
+        let data = Data(
+            """
+            {
+              "schemaVersion": 1,
+              "plugins": [
+                {
+                  "id": "com.community.source-only",
+                  "source": "community",
+                  "name": "Source Only Community Plugin",
+                  "author": "Community Author",
+                  "description": "Reviewed source without a published artifact.",
+                  "category": "utility"
+                }
+              ]
+            }
+            """.utf8
+        )
+
+        let response = try JSONDecoder().decode(PluginRegistryResponse.self, from: data)
+        let plugins = response.resolvedPlugins(
+            appVersion: "1.4.0",
+            sdkCompatibilityVersion: sdkCompatibilityVersion
+        )
+
+        XCTAssertTrue(plugins.isEmpty)
     }
 
     @MainActor

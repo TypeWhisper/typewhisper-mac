@@ -4,8 +4,11 @@
 from __future__ import annotations
 
 import copy
+import sys
 import unittest
+from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from plugin_registry_metadata import (
     find_top_level_release_metadata,
     normalize_registry_release_metadata,
