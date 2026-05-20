@@ -13,13 +13,13 @@
     "iconSystemName": "building.columns",
     "releases": [
         {
-            "version": "0.3.0",
+            "version": "0.3.1",
             "minHostVersion": "1.4.0",
             "sdkCompatibilityVersion": "v1",
             "minOSVersion": "14.0",
             "supportedArchitectures": ["arm64"],
-            "size": 190488,
-            "downloadURL": "https://github.com/cschnatz/mempalace-typewhisper-plugin/releases/download/v0.3.0/MemPalacePlugin.zip"
+            "size": 193554,
+            "downloadURL": "https://github.com/cschnatz/mempalace-typewhisper-plugin/releases/download/v0.3.1/MemPalacePlugin.zip"
         }
     ]
 }

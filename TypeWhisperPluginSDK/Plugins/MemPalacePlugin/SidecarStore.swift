@@ -67,9 +67,12 @@ actor SidecarStore {
         isDirty = true
     }
 
+    /// Returns true if the on-disk file is consistent with in-memory state
+    /// (either no-op because not dirty, or persist succeeded). Returns false
+    /// only if a write was attempted and failed.
     @discardableResult
     func flush() -> Bool {
-        guard isDirty else { return false }
+        guard isDirty else { return true }
         let array = Array(records.values)
         do {
             let data = try JSONEncoder.memoryEncoder.encode(array)

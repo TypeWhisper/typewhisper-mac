@@ -129,14 +129,65 @@ struct MemPalaceGetDrawerResult: Decodable {
 }
 
 // MARK: - HTTP abstraction
+//
+// Why not `PluginHTTPClient` from the SDK: that helper logs
+// `request.url?.absoluteString` to the OS log before and after every request.
+// Since the MemPalace API key is embedded in the URL path
+// (`/mcp/<api-key>`), routing through the shared SDK helper would leak the
+// credential to the OS log. We use a plugin-owned `URLSession` instead.
+//
+// Trade-off: we forego the SDK's connection warming. To partially recover,
+// we keep one ephemeral session per client instance and reuse it across
+// requests, and we mirror a minimal transient-error retry-once policy.
 
 protocol MemPalaceMCPHTTP: Sendable {
     func data(for request: URLRequest) async throws -> (Data, URLResponse)
 }
 
-struct DefaultMemPalaceMCPHTTP: MemPalaceMCPHTTP {
+final class NonLoggingMemPalaceMCPHTTP: MemPalaceMCPHTTP, @unchecked Sendable {
+    private let session: URLSession
+
+    init() {
+        let config = URLSessionConfiguration.ephemeral
+        config.httpCookieStorage = nil
+        config.urlCache = nil
+        config.timeoutIntervalForRequest = 20
+        config.timeoutIntervalForResource = 60
+        self.session = URLSession(configuration: config)
+    }
+
+    deinit {
+        session.finishTasksAndInvalidate()
+    }
+
+    func invalidate() {
+        session.finishTasksAndInvalidate()
+    }
+
     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
-        try await PluginHTTPClient.data(for: request)
+        do {
+            return try await session.data(for: request)
+        } catch {
+            // Retry once on transient network errors (network blip, DNS
+            // hiccup). Permanent errors (auth, bad request) fall through on
+            // the second try just like the first.
+            if let urlError = error as? URLError, urlError.isTransient {
+                return try await session.data(for: request)
+            }
+            throw error
+        }
+    }
+}
+
+private extension URLError {
+    var isTransient: Bool {
+        switch code {
+        case .timedOut, .cannotConnectToHost, .networkConnectionLost,
+             .notConnectedToInternet, .dnsLookupFailed, .resourceUnavailable:
+            return true
+        default:
+            return false
+        }
     }
 }
 
@@ -147,7 +198,7 @@ final class MemPalaceMCPClient {
     private let http: MemPalaceMCPHTTP
     private let idGenerator: AtomicCounter
 
-    init(baseURL: URL, apiKey: String, http: MemPalaceMCPHTTP = DefaultMemPalaceMCPHTTP()) {
+    init(baseURL: URL, apiKey: String, http: MemPalaceMCPHTTP = NonLoggingMemPalaceMCPHTTP()) {
         // /mcp/{token} — API-key in URL path. Aggressively percent-encode the
         // key: alphanumerics only, so '#', '@', '?', '/' etc. are escaped and
         // never re-interpreted as URL syntax.
@@ -158,6 +209,15 @@ final class MemPalaceMCPClient {
             ?? URL(string: "\(trimmedBase)/mcp/invalid")!
         self.http = http
         self.idGenerator = AtomicCounter()
+    }
+
+    /// Invalidate the underlying URLSession so retained-but-replaced clients
+    /// release their resources promptly. Called by the plugin when it rebuilds
+    /// the client after a config or API key change.
+    func invalidate() {
+        if let session = http as? NonLoggingMemPalaceMCPHTTP {
+            session.invalidate()
+        }
     }
 
     // MARK: - Public API matching MemPalace tools

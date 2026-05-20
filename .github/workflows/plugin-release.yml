@@ -68,6 +68,7 @@ jobs:
             granite) TARGET="GranitePlugin" ;;
             cloudflare-asr) TARGET="CloudflareASRPlugin" ;;
             file-memory) TARGET="FileMemoryPlugin" ;;
+            mempalace) TARGET="MemPalacePlugin" ;;
             openai-vector-memory) TARGET="OpenAIVectorMemoryPlugin" ;;
             fireworks) TARGET="FireworksPlugin" ;;
             gladia) TARGET="GladiaPlugin" ;;

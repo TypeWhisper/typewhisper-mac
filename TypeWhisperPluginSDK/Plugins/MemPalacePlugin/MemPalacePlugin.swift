@@ -117,7 +117,6 @@ public final class MemPalacePlugin: NSObject, TypeWhisperPlugin, MemoryStoragePl
             return
         }
 
-        var firstError: Error?
         for entry in entries {
             do {
                 let drawerId = try await client.addDrawer(
@@ -129,18 +128,24 @@ public final class MemPalacePlugin: NSObject, TypeWhisperPlugin, MemoryStoragePl
                 await sidecar.upsert(entry, drawerId: drawerId)
             } catch {
                 // Network / API error: enqueue for retry, keep trying remaining entries.
-                logger.notice("store failed for entry \(entry.id.uuidString); enqueued: \(error.localizedDescription)")
+                // The queue IS the acceptance path — the entry is durably saved
+                // and will be replayed by the background drain loop. TypeWhisper's
+                // MemoryService treats a thrown store() as "memory not accepted",
+                // so we must NOT throw here; just log and continue.
+                logger.notice("store failed for entry \(entry.id.uuidString); enqueued for retry: \(error.localizedDescription)")
                 await queue.enqueue(entry, wing: config.wing, room: config.room)
-                if firstError == nil { firstError = error }
             }
         }
-        await sidecar.flush()
+
+        let sidecarOK = await sidecar.flush()
+        if !sidecarOK {
+            // Sidecar persistence is the only place where the memory could be
+            // lost (queue.enqueue already flushed itself). Surface this as a
+            // real failure.
+            throw MemPalaceMCPError.toolError("sidecar persist failed")
+        }
         cachedMemoryCount = await sidecar.count
         host?.notifyCapabilitiesChanged()
-
-        // Surface the first error to the host so the user gets a signal, but
-        // the memory is not lost — it lives in the queue.
-        if let error = firstError { throw error }
     }
 
     public func search(_ query: MemoryQuery) async throws -> [TypeWhisperPluginSDK.MemorySearchResult] {
@@ -276,6 +281,9 @@ public final class MemPalacePlugin: NSObject, TypeWhisperPlugin, MemoryStoragePl
     // MARK: - Internals
 
     private func rebuildClient() {
+        // Invalidate the previous client's URLSession to release sockets and
+        // avoid leaking resources when the user updates config or API key.
+        client?.invalidate()
         guard let url = config.resolvedBaseURL,
               let key = apiKey, !key.isEmpty,
               config.isValid
