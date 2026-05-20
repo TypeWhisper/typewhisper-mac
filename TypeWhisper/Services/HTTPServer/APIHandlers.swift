@@ -11,6 +11,7 @@ final class APIHandlers: @unchecked Sendable {
     private let workflowService: WorkflowService
     private let dictionaryService: DictionaryService
     private let dictationViewModel: DictationViewModel
+    private let audioRecorderViewModel: AudioRecorderViewModel
 
     init(
         modelManager: ModelManagerService,
@@ -19,7 +20,8 @@ final class APIHandlers: @unchecked Sendable {
         historyService: HistoryService,
         workflowService: WorkflowService,
         dictionaryService: DictionaryService,
-        dictationViewModel: DictationViewModel
+        dictationViewModel: DictationViewModel,
+        audioRecorderViewModel: AudioRecorderViewModel
     ) {
         self.modelManager = modelManager
         self.audioFileService = audioFileService
@@ -28,6 +30,7 @@ final class APIHandlers: @unchecked Sendable {
         self.workflowService = workflowService
         self.dictionaryService = dictionaryService
         self.dictationViewModel = dictationViewModel
+        self.audioRecorderViewModel = audioRecorderViewModel
     }
 
     func register(on router: APIRouter) {
@@ -45,6 +48,10 @@ final class APIHandlers: @unchecked Sendable {
         router.register("POST", "/v1/dictation/stop", handler: handleStopDictation)
         router.register("GET", "/v1/dictation/status", handler: handleDictationStatus)
         router.register("GET", "/v1/dictation/transcription", handler: handleDictationTranscription)
+        router.register("POST", "/v1/recorder/start", handler: handleStartRecorder)
+        router.register("POST", "/v1/recorder/stop", handler: handleStopRecorder)
+        router.register("GET", "/v1/recorder/status", handler: handleRecorderStatus)
+        router.register("GET", "/v1/recorder/session", handler: handleRecorderSession)
         router.register("GET", "/v1/dictionary/terms", handler: handleGetDictionaryTerms)
         router.register("PUT", "/v1/dictionary/terms", handler: handlePutDictionaryTerms)
         router.register("DELETE", "/v1/dictionary/terms", handler: handleDeleteDictionaryTerms)
@@ -1067,7 +1074,118 @@ final class APIHandlers: @unchecked Sendable {
         }
     }
 
+    // MARK: - POST /v1/recorder/start
+
+    private func handleStartRecorder(_ request: HTTPRequest) async -> HTTPResponse {
+        let micEnabled: Bool?
+        let systemAudioEnabled: Bool?
+        do {
+            micEnabled = try parseOptionalBooleanQuery(request, name: "mic")
+            systemAudioEnabled = try parseOptionalBooleanQuery(request, name: "system_audio")
+        } catch {
+            return .error(status: 400, message: error.localizedDescription)
+        }
+
+        do {
+            let id = try await audioRecorderViewModel.apiStartRecording(
+                micEnabled: micEnabled,
+                systemAudioEnabled: systemAudioEnabled
+            )
+
+            struct StartResponse: Encodable {
+                let id: String
+                let status: String
+            }
+            return .json(StartResponse(id: id.uuidString, status: "recording"))
+        } catch AudioRecorderViewModel.RecorderAPIError.noSourceEnabled {
+            return .error(status: 400, message: AudioRecorderViewModel.RecorderAPIError.noSourceEnabled.localizedDescription)
+        } catch AudioRecorderViewModel.RecorderAPIError.alreadyRecording {
+            return .error(status: 409, message: AudioRecorderViewModel.RecorderAPIError.alreadyRecording.localizedDescription)
+        } catch AudioRecorderViewModel.RecorderAPIError.finalizing {
+            return .error(status: 409, message: AudioRecorderViewModel.RecorderAPIError.finalizing.localizedDescription)
+        } catch {
+            return .error(status: 409, message: error.localizedDescription)
+        }
+    }
+
+    // MARK: - POST /v1/recorder/stop
+
+    private func handleStopRecorder(_ request: HTTPRequest) async -> HTTPResponse {
+        do {
+            let id = try await audioRecorderViewModel.apiStopRecording()
+
+            struct StopResponse: Encodable {
+                let id: String
+                let status: String
+            }
+            return .json(StopResponse(id: id.uuidString, status: "finalizing"))
+        } catch {
+            return .error(status: 409, message: error.localizedDescription)
+        }
+    }
+
+    // MARK: - GET /v1/recorder/status
+
+    private func handleRecorderStatus(_ request: HTTPRequest) async -> HTTPResponse {
+        let recording = await audioRecorderViewModel.apiRecorderIsRecording
+
+        struct RecorderStatusResponse: Encodable {
+            let recording: Bool
+        }
+        return .json(RecorderStatusResponse(recording: recording))
+    }
+
+    // MARK: - GET /v1/recorder/session
+
+    private func handleRecorderSession(_ request: HTTPRequest) async -> HTTPResponse {
+        guard let idString = request.queryParams["id"],
+              let uuid = UUID(uuidString: idString) else {
+            return .error(status: 400, message: "Missing or invalid 'id' query parameter")
+        }
+        guard let session = await audioRecorderViewModel.apiRecorderSession(id: uuid) else {
+            return .error(status: 404, message: "Recorder session not found")
+        }
+
+        struct RecorderSessionResponse: Encodable {
+            let id: String
+            let status: String
+            let text: String?
+            let output_file: String?
+            let error: String?
+        }
+        return .json(RecorderSessionResponse(
+            id: session.id.uuidString,
+            status: session.status.rawValue,
+            text: session.text,
+            output_file: session.outputFile,
+            error: session.error
+        ))
+    }
+
     // MARK: - Helpers
+
+    private enum BooleanQueryError: LocalizedError {
+        case invalid(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .invalid(let name):
+                "Invalid '\(name)' query parameter"
+            }
+        }
+    }
+
+    private func parseOptionalBooleanQuery(_ request: HTTPRequest, name: String) throws -> Bool? {
+        guard let value = request.queryParams[name] else { return nil }
+        switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "true", "1":
+            return true
+        case "false", "0":
+            return false
+        default:
+            throw BooleanQueryError.invalid(name)
+        }
+    }
 
     private func extractBoundary(from contentType: String) -> String? {
         for part in contentType.components(separatedBy: ";") {

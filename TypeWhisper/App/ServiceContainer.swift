@@ -153,6 +153,11 @@ final class ServiceContainer: ObservableObject {
             errorLogService: errorLogService,
             mediaPlaybackService: mediaPlaybackService
         )
+        audioRecorderViewModel = AudioRecorderViewModel(
+            recorderService: audioRecorderService,
+            modelManager: modelManagerService,
+            dictionaryService: dictionaryService
+        )
 
 
         // HTTP API
@@ -165,7 +170,8 @@ final class ServiceContainer: ObservableObject {
             historyService: historyService,
             workflowService: workflowService,
             dictionaryService: dictionaryService,
-            dictationViewModel: dictationViewModel
+            dictationViewModel: dictationViewModel,
+            audioRecorderViewModel: audioRecorderViewModel
         )
         handlers.register(on: router)
         httpServer = HTTPServer(router: router)
@@ -193,7 +199,6 @@ final class ServiceContainer: ObservableObject {
             promptProcessingService: promptProcessingService,
             profileService: profileService
         )
-        audioRecorderViewModel = AudioRecorderViewModel(recorderService: audioRecorderService, modelManager: modelManagerService, dictionaryService: dictionaryService)
         watchFolderViewModel = WatchFolderViewModel(
             watchFolderService: watchFolderService,
             modelManager: modelManagerService

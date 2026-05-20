@@ -454,6 +454,10 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     @Published private(set) var micLevel: Float = 0
     @Published private(set) var systemLevel: Float = 0
     @Published private(set) var systemAudioWarningMessage: String?
+    var recordingsDirectoryOverride: URL?
+    var startRecordingOverride: ((_ micEnabled: Bool, _ systemAudioEnabled: Bool, _ format: OutputFormat, _ outputURL: URL) async throws -> URL)?
+    var stopRecordingOverride: ((_ outputURL: URL) async throws -> URL?)?
+    var currentBufferOverride: (() -> [Float])?
 
     private var audioEngine: AVAudioEngine?
     private let micFileLock = OSAllocatedUnfairLock<AVAudioFile?>(initialState: nil)
@@ -488,7 +492,10 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     static let recordingsDirectoryName = "TypeWhisper Recordings"
 
     var recordingsDirectory: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        if let recordingsDirectoryOverride {
+            return recordingsDirectoryOverride
+        }
+        return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent(Self.recordingsDirectoryName)
     }
 
@@ -496,6 +503,9 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
     /// Thread-safe snapshot of the current 16kHz mono buffer for streaming transcription.
     func getCurrentBuffer() -> [Float] {
+        if let currentBufferOverride {
+            return currentBufferOverride()
+        }
         let micEnabled = self.micEnabled
         let systemAudioEnabled = self.systemAudioEnabled
         let micDuckingMode = self.micDuckingMode
@@ -517,6 +527,11 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
     /// Returns at most the last `maxDuration` seconds of 16kHz audio.
     func getRecentBuffer(maxDuration: TimeInterval) -> [Float] {
+        if let currentBufferOverride {
+            let samples = currentBufferOverride()
+            let maxSampleCount = Int(maxDuration * Self.transcriptionSampleRate)
+            return Array(samples.suffix(maxSampleCount))
+        }
         let micEnabled = self.micEnabled
         let systemAudioEnabled = self.systemAudioEnabled
         let micDuckingMode = self.micDuckingMode
@@ -540,6 +555,11 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
     /// Returns audio appended since `sampleOffset` and the updated absolute offset.
     func getBufferDelta(since sampleOffset: Int) -> (samples: [Float], nextOffset: Int) {
+        if let currentBufferOverride {
+            let samples = currentBufferOverride()
+            let startIndex = min(max(0, sampleOffset), samples.count)
+            return (Array(samples.dropFirst(startIndex)), samples.count)
+        }
         let micEnabled = self.micEnabled
         let systemAudioEnabled = self.systemAudioEnabled
         let micDuckingMode = self.micDuckingMode
@@ -562,6 +582,9 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
     /// Total duration of transcription buffer in seconds.
     var totalBufferDuration: TimeInterval {
+        if let currentBufferOverride {
+            return Double(currentBufferOverride().count) / Self.transcriptionSampleRate
+        }
         return transcriptionBufferLock.withLock { buffer in
             Double(buffer.mixedSampleCount) / Self.transcriptionSampleRate
         }
@@ -591,31 +614,40 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         let outputURL = dir.appendingPathComponent("Recording \(timestamp).\(format.fileExtension)")
         self.finalOutputURL = outputURL
 
-        // Setup temp files
-        let tempDir = FileManager.default.temporaryDirectory
-        let sessionId = UUID().uuidString
+        if let startRecordingOverride {
+            do {
+                self.finalOutputURL = try await startRecordingOverride(micEnabled, systemAudioEnabled, format, outputURL)
+            } catch {
+                await rollbackFailedStart()
+                throw error
+            }
+        } else {
+            // Setup temp files
+            let tempDir = FileManager.default.temporaryDirectory
+            let sessionId = UUID().uuidString
 
-        do {
-            // Start mic recording
-            if micEnabled {
-                guard AVAudioApplication.shared.recordPermission == .granted else {
-                    throw RecorderError.microphonePermissionDenied
+            do {
+                // Start mic recording
+                if micEnabled {
+                    guard AVAudioApplication.shared.recordPermission == .granted else {
+                        throw RecorderError.microphonePermissionDenied
+                    }
+
+                    let micURL = tempDir.appendingPathComponent("mic-\(sessionId).wav")
+                    self.micTempURL = micURL
+                    try startMicRecording(outputURL: micURL)
                 }
 
-                let micURL = tempDir.appendingPathComponent("mic-\(sessionId).wav")
-                self.micTempURL = micURL
-                try startMicRecording(outputURL: micURL)
+                // Start system audio recording
+                if systemAudioEnabled {
+                    let sysURL = tempDir.appendingPathComponent("sys-\(sessionId).wav")
+                    self.systemTempURL = sysURL
+                    try await startSystemAudioRecording(outputURL: sysURL)
+                }
+            } catch {
+                await rollbackFailedStart()
+                throw error
             }
-
-            // Start system audio recording
-            if systemAudioEnabled {
-                let sysURL = tempDir.appendingPathComponent("sys-\(sessionId).wav")
-                self.systemTempURL = sysURL
-                try await startSystemAudioRecording(outputURL: sysURL)
-            }
-        } catch {
-            await rollbackFailedStart()
-            throw error
         }
 
         // Start duration timer
@@ -634,7 +666,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             self.isRecording = true
         }
 
-        return outputURL
+        return finalOutputURL ?? outputURL
     }
 
     func stopRecording() async -> URL? {
@@ -642,6 +674,33 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         durationTimer?.invalidate()
         durationTimer = nil
         endSystemAudioMonitoring()
+
+        if let stopRecordingOverride, let finalURL = finalOutputURL {
+            let completedURL: URL?
+            do {
+                completedURL = try await stopRecordingOverride(finalURL)
+            } catch {
+                logger.error("Failed to finalize recording with override: \(error.localizedDescription)")
+                cleanupTempFile(finalURL)
+                completedURL = nil
+            }
+
+            cleanupTempFile(micTempURL)
+            cleanupTempFile(systemTempURL)
+            micTempURL = nil
+            systemTempURL = nil
+            finalOutputURL = nil
+            startTime = nil
+
+            DispatchQueue.main.async {
+                self.isRecording = false
+                self.duration = 0
+                self.micLevel = 0
+                self.systemLevel = 0
+            }
+
+            return completedURL
+        }
 
         // Stop mic
         if micEnabled {

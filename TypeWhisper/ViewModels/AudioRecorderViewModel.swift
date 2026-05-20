@@ -21,6 +21,38 @@ final class AudioRecorderViewModel: ObservableObject {
         case idle, recording, finalizing
     }
 
+    enum RecorderAPISessionStatus: String {
+        case recording, finalizing, completed, failed
+    }
+
+    struct RecorderAPISessionSnapshot {
+        let id: UUID
+        let status: RecorderAPISessionStatus
+        let text: String?
+        let outputFile: String?
+        let error: String?
+    }
+
+    enum RecorderAPIError: LocalizedError {
+        case noSourceEnabled
+        case alreadyRecording
+        case finalizing
+        case notRecording
+
+        var errorDescription: String? {
+            switch self {
+            case .noSourceEnabled:
+                "At least one audio source must be enabled."
+            case .alreadyRecording:
+                "Already recording"
+            case .finalizing:
+                "Recorder is finalizing"
+            case .notRecording:
+                "Not recording"
+            }
+        }
+    }
+
     private struct FinalTranscriptionRequest {
         let outputURL: URL
         let buffer: [Float]
@@ -97,6 +129,8 @@ final class AudioRecorderViewModel: ObservableObject {
     private let streamingHandler: StreamingHandler
     private var cancellables = Set<AnyCancellable>()
     private var currentOutputURL: URL?
+    private var activeRecorderAPISessionID: UUID?
+    private var recorderAPISessions: [UUID: RecorderAPISessionSnapshot] = [:]
 
     init(recorderService: AudioRecorderService, modelManager: ModelManagerService, dictionaryService: DictionaryService) {
         self.recorderService = recorderService
@@ -224,27 +258,13 @@ final class AudioRecorderViewModel: ObservableObject {
     }
 
     func startRecording() {
-        guard state == .idle else { return }
-        errorMessage = nil
-        systemAudioWarningMessage = nil
-        partialText = ""
         Task {
             do {
-                let url = try await recorderService.startRecording(
+                _ = try await beginRecording(
                     micEnabled: micEnabled,
                     systemAudioEnabled: systemAudioEnabled,
-                    format: outputFormat
+                    apiSessionID: nil
                 )
-                currentOutputURL = url
-                state = .recording
-
-                EventBus.shared.emit(.recordingStarted(RecordingStartedPayload()))
-
-                if transcriptionEnabled {
-                    startStreamingTranscription()
-                } else {
-                    isTranscribing = false
-                }
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -252,6 +272,64 @@ final class AudioRecorderViewModel: ObservableObject {
     }
 
     func stopRecording() {
+        stopRecording(apiSessionID: nil)
+    }
+
+    @discardableResult
+    private func beginRecording(
+        micEnabled requestedMicEnabled: Bool,
+        systemAudioEnabled requestedSystemAudioEnabled: Bool,
+        apiSessionID: UUID?
+    ) async throws -> URL {
+        switch state {
+        case .idle:
+            break
+        case .recording:
+            throw RecorderAPIError.alreadyRecording
+        case .finalizing:
+            throw RecorderAPIError.finalizing
+        }
+
+        guard requestedMicEnabled || requestedSystemAudioEnabled else {
+            throw RecorderAPIError.noSourceEnabled
+        }
+
+        errorMessage = nil
+        systemAudioWarningMessage = nil
+        partialText = ""
+
+        let url = try await recorderService.startRecording(
+            micEnabled: requestedMicEnabled,
+            systemAudioEnabled: requestedSystemAudioEnabled,
+            format: outputFormat
+        )
+        currentOutputURL = url
+
+        if let apiSessionID {
+            activeRecorderAPISessionID = apiSessionID
+            storeRecorderAPISession(RecorderAPISessionSnapshot(
+                id: apiSessionID,
+                status: .recording,
+                text: nil,
+                outputFile: url.path,
+                error: nil
+            ))
+        }
+
+        state = .recording
+
+        EventBus.shared.emit(.recordingStarted(RecordingStartedPayload()))
+
+        if transcriptionEnabled {
+            startStreamingTranscription()
+        } else {
+            isTranscribing = false
+        }
+
+        return url
+    }
+
+    private func stopRecording(apiSessionID: UUID?) {
         let recordingDuration = duration
 
         Task {
@@ -271,6 +349,9 @@ final class AudioRecorderViewModel: ObservableObject {
                     liveSessionResult: liveSessionResult
                 )
                 state = .finalizing
+                if let apiSessionID {
+                    markRecorderAPISessionFinalizing(id: apiSessionID, outputURL: url)
+                }
             } else {
                 finalTranscriptionRequest = nil
                 state = .idle
@@ -294,6 +375,93 @@ final class AudioRecorderViewModel: ObservableObject {
             if url != nil {
                 loadRecordings()
             }
+
+            if let apiSessionID {
+                if let url {
+                    completeRecorderAPISession(id: apiSessionID, outputURL: url)
+                } else {
+                    failRecorderAPISession(id: apiSessionID, error: "Failed to finalize recording")
+                }
+            }
+        }
+    }
+
+    // MARK: - HTTP API
+
+    var apiRecorderIsRecording: Bool {
+        state == .recording
+    }
+
+    func apiStartRecording(micEnabled micOverride: Bool?, systemAudioEnabled systemAudioOverride: Bool?) async throws -> UUID {
+        let resolvedMicEnabled = micOverride ?? micEnabled
+        let resolvedSystemAudioEnabled = systemAudioOverride ?? systemAudioEnabled
+        let sessionID = UUID()
+        _ = try await beginRecording(
+            micEnabled: resolvedMicEnabled,
+            systemAudioEnabled: resolvedSystemAudioEnabled,
+            apiSessionID: sessionID
+        )
+        return sessionID
+    }
+
+    func apiStopRecording() throws -> UUID {
+        guard state == .recording else {
+            throw RecorderAPIError.notRecording
+        }
+        guard let sessionID = activeRecorderAPISessionID else {
+            throw RecorderAPIError.notRecording
+        }
+        if let currentOutputURL {
+            markRecorderAPISessionFinalizing(id: sessionID, outputURL: currentOutputURL)
+        }
+        state = .finalizing
+        stopRecording(apiSessionID: sessionID)
+        return sessionID
+    }
+
+    func apiRecorderSession(id: UUID) -> RecorderAPISessionSnapshot? {
+        recorderAPISessions[id]
+    }
+
+    private func storeRecorderAPISession(_ session: RecorderAPISessionSnapshot) {
+        recorderAPISessions[session.id] = session
+    }
+
+    private func markRecorderAPISessionFinalizing(id: UUID, outputURL: URL) {
+        storeRecorderAPISession(RecorderAPISessionSnapshot(
+            id: id,
+            status: .finalizing,
+            text: nil,
+            outputFile: outputURL.path,
+            error: nil
+        ))
+    }
+
+    private func completeRecorderAPISession(id: UUID, outputURL: URL) {
+        let text = partialText.trimmingCharacters(in: .whitespacesAndNewlines)
+        storeRecorderAPISession(RecorderAPISessionSnapshot(
+            id: id,
+            status: .completed,
+            text: text.isEmpty ? nil : text,
+            outputFile: outputURL.path,
+            error: nil
+        ))
+        if activeRecorderAPISessionID == id {
+            activeRecorderAPISessionID = nil
+        }
+    }
+
+    private func failRecorderAPISession(id: UUID, error: String) {
+        let outputFile = recorderAPISessions[id]?.outputFile
+        storeRecorderAPISession(RecorderAPISessionSnapshot(
+            id: id,
+            status: .failed,
+            text: nil,
+            outputFile: outputFile,
+            error: error
+        ))
+        if activeRecorderAPISessionID == id {
+            activeRecorderAPISessionID = nil
         }
     }
 
