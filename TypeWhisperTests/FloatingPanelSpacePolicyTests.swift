@@ -48,4 +48,18 @@ final class FloatingPanelSpacePolicyTests: XCTestCase {
         XCTAssertGreaterThan(level.rawValue, NSWindow.Level.statusBar.rawValue)
         XCTAssertLessThan(level.rawValue, Int(CGShieldingWindowLevel()))
     }
+
+    @MainActor
+    func testIndicatorPolicyExcludesPanelFromScreenCapture() {
+        let panel = NSPanel(
+            contentRect: .zero,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+
+        FloatingPanelSpacePolicy.applyIndicatorPolicy(to: panel, displayMode: .activeScreen)
+
+        XCTAssertEqual(panel.sharingType, .none)
+    }
 }
