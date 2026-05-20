@@ -45,8 +45,10 @@ actor SidecarStore {
 
     func entries(offset: Int, limit: Int) -> [MemoryEntry] {
         let sorted = records.values.map(\.entry).sorted { $0.createdAt > $1.createdAt }
-        let start = min(offset, sorted.count)
-        let end = min(start + limit, sorted.count)
+        let safeOffset = max(0, offset)
+        let safeLimit = max(0, limit)
+        let start = min(safeOffset, sorted.count)
+        let end = min(start + safeLimit, sorted.count)
         return Array(sorted[start..<end])
     }
 
@@ -60,6 +62,10 @@ actor SidecarStore {
 
     func idsPointing(at drawerId: String) -> [UUID] {
         records.values.filter { $0.drawerId == drawerId }.map(\.entry.id)
+    }
+
+    func idsForDrawers(_ drawerIds: Set<String>) -> [UUID] {
+        records.values.filter { drawerIds.contains($0.drawerId) }.map(\.entry.id)
     }
 
     func clear() {

@@ -6,7 +6,8 @@ import os
 private let logger = Logger(subsystem: "com.mempalace.memory", category: "plugin")
 
 @objc(MemPalacePlugin)
-public final class MemPalacePlugin: NSObject, TypeWhisperPlugin, MemoryStoragePlugin, @unchecked Sendable {
+@MainActor
+public final class MemPalacePlugin: NSObject, @preconcurrency TypeWhisperPlugin, @preconcurrency MemoryStoragePlugin {
     public static let pluginId = "com.mempalace.memory"
     public static let pluginName = "MemPalace"
 
@@ -78,16 +79,16 @@ public final class MemPalacePlugin: NSObject, TypeWhisperPlugin, MemoryStoragePl
     public func deactivate() {
         queueDrainTask?.cancel()
         queueDrainTask = nil
-        // Synchronous flush: block until persist completes so a host quit
-        // immediately after deactivate() does not lose the last mutations.
+        // Detached flush captures the actor references by value, so it can
+        // outlive `self` and finish persisting after deactivate() returns.
+        // Blocking the MainActor on a DispatchSemaphore would deadlock the
+        // host UI; instead we trust that the OS won't reap the process
+        // mid-flush for a benign user action like toggling a plugin.
         if let sidecar, let queue = self.queue {
-            let semaphore = DispatchSemaphore(value: 0)
-            Task {
+            Task.detached {
                 await sidecar.flush()
                 await queue.flush()
-                semaphore.signal()
             }
-            _ = semaphore.wait(timeout: .now() + 2)
         }
         host = nil
         client = nil
@@ -230,13 +231,34 @@ public final class MemPalacePlugin: NSObject, TypeWhisperPlugin, MemoryStoragePl
     public func deleteAll() async throws {
         guard let client, let sidecar else { throw MemPalaceMCPError.missingAPIKey }
         let drawerIds = await sidecar.allDrawerIds()
+
+        // Track successes and failures separately. We only remove sidecar
+        // mappings whose remote drawer is confirmed deleted; otherwise the
+        // user would lose the local handle for an orphaned remote memory.
+        var successfulDrawers: Set<String> = []
+        var firstError: Error?
         for drawerId in drawerIds {
-            try? await client.deleteDrawer(drawerId)
+            do {
+                try await client.deleteDrawer(drawerId)
+                successfulDrawers.insert(drawerId)
+            } catch {
+                logger.notice("deleteAll: server delete failed for \(drawerId): \(error.localizedDescription)")
+                if firstError == nil { firstError = error }
+            }
         }
-        await sidecar.clear()
+
+        // Remove only successfully-deleted UUIDs from sidecar.
+        let uuidsToRemove = await sidecar.idsForDrawers(successfulDrawers)
+        for uuid in uuidsToRemove {
+            await sidecar.remove(uuid)
+        }
         await sidecar.flush()
-        cachedMemoryCount = 0
+        cachedMemoryCount = await sidecar.count
         host?.notifyCapabilitiesChanged()
+
+        if let error = firstError {
+            throw error
+        }
     }
 
     // MARK: - Settings hooks

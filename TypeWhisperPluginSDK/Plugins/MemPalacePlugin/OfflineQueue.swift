@@ -32,15 +32,29 @@ actor OfflineQueue {
     var isEmpty: Bool { items.isEmpty }
 
     func enqueue(_ entry: MemoryEntry, wing: String, room: String) {
-        items.append(
-            QueuedStore(
+        // Dedupe by entry.id: if the same memory is being re-enqueued (e.g.
+        // the user retries a failed dictation, or a drain batch returned the
+        // entry after another store() ran), replace the existing item so we
+        // never create duplicate remote drawers for one local entry.
+        if let existing = items.firstIndex(where: { $0.entry.id == entry.id }) {
+            items[existing] = QueuedStore(
                 entry: entry,
                 wing: wing,
                 room: room,
-                attemptCount: 0,
-                firstQueuedAt: Date()
+                attemptCount: items[existing].attemptCount,
+                firstQueuedAt: items[existing].firstQueuedAt
             )
-        )
+        } else {
+            items.append(
+                QueuedStore(
+                    entry: entry,
+                    wing: wing,
+                    room: room,
+                    attemptCount: 0,
+                    firstQueuedAt: Date()
+                )
+            )
+        }
         isDirty = true
         flush()
     }

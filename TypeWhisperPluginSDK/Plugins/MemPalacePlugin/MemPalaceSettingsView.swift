@@ -236,19 +236,43 @@ struct MemPalaceSettingsView: View {
     }
 
     private func deleteEntry(_ id: UUID) async {
-        try? await plugin.delete([id])
+        do {
+            try await plugin.delete([id])
+            statusMessage = ""
+            statusIsError = false
+        } catch {
+            statusMessage = String(localized: "Delete failed: ") + error.localizedDescription
+            statusIsError = true
+        }
         memories = await plugin.listAllSidecarEntries()
     }
 
     private func updateEntry(_ entry: MemoryEntry, newContent: String) async {
         var updated = entry
         updated.content = newContent
-        try? await plugin.update(updated)
+        do {
+            try await plugin.update(updated)
+            statusMessage = ""
+            statusIsError = false
+        } catch {
+            statusMessage = String(localized: "Update failed: ") + error.localizedDescription
+            statusIsError = true
+        }
         memories = await plugin.listAllSidecarEntries()
     }
 
     private func clearAll() async {
-        try? await plugin.deleteAll()
-        memories = []
+        do {
+            try await plugin.deleteAll()
+            memories = []
+            statusMessage = ""
+            statusIsError = false
+        } catch {
+            // Partial-failure case: some drawers stayed on server.
+            // Refresh from sidecar to show what's actually left.
+            memories = await plugin.listAllSidecarEntries()
+            statusMessage = String(localized: "Some deletions failed: ") + error.localizedDescription
+            statusIsError = true
+        }
     }
 }

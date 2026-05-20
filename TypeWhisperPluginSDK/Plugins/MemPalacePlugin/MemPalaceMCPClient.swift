@@ -193,7 +193,11 @@ private extension URLError {
 
 // MARK: - MCP client (JSON-RPC 2.0 over /mcp/{api-key})
 
-final class MemPalaceMCPClient {
+/// Sendable: all stored properties are immutable `let` references to Sendable
+/// types (URL, MemPalaceMCPHTTP protocol with Sendable refinement, AtomicCounter
+/// which uses an NSLock internally). The MainActor plugin sends this across
+/// the actor boundary into the client's own async methods.
+final class MemPalaceMCPClient: @unchecked Sendable {
     private let endpoint: URL
     private let http: MemPalaceMCPHTTP
     private let idGenerator: AtomicCounter

@@ -1,7 +1,7 @@
 {
     "id": "com.mempalace.memory",
     "name": "MemPalace",
-    "version": "0.3.1",
+    "version": "0.3.2",
     "minHostVersion": "1.4.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
