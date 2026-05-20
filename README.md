@@ -349,6 +349,77 @@ curl http://localhost:8978/v1/dictation/status
 curl "http://localhost:8978/v1/dictation/transcription?id=<uuid>"
 ```
 
+Dictation control records microphone audio for system-wide insertion. A completed dictation session returns text that TypeWhisper can paste back into the active app.
+
+### Recorder Control
+
+Recorder control uses the same recorder path as the TypeWhisper UI, including microphone capture, optional system audio capture, mixing, finalization, and final transcription. Use it for automations that need a saved recording file or meeting/system-audio transcription without auto-pasting into another app.
+
+```bash
+# Start recorder with microphone and system audio
+curl -X POST "http://localhost:8978/v1/recorder/start?mic=true&system_audio=true"
+
+# Stop the active API recorder session
+curl -X POST http://localhost:8978/v1/recorder/stop
+
+# Check whether the recorder is currently recording
+curl http://localhost:8978/v1/recorder/status
+
+# Fetch status/result for a specific recorder session
+curl "http://localhost:8978/v1/recorder/session?id=<uuid>"
+```
+
+`POST /v1/recorder/start` accepts optional query flags:
+- `mic` - `true`, `false`, `1`, or `0`. If omitted, TypeWhisper uses the current recorder microphone setting.
+- `system_audio` - `true`, `false`, `1`, or `0`. If omitted, TypeWhisper uses the current recorder system-audio setting.
+
+At least one source must be enabled. If both resolved sources are disabled, the API returns `400 Bad Request`.
+
+Start response:
+
+```json
+{
+  "id": "8F8C1F45-6D03-44D2-A38C-0C4DE4F7E5F7",
+  "status": "recording"
+}
+```
+
+Stop response:
+
+```json
+{
+  "id": "8F8C1F45-6D03-44D2-A38C-0C4DE4F7E5F7",
+  "status": "finalizing"
+}
+```
+
+Status response:
+
+```json
+{
+  "recording": true
+}
+```
+
+Session response:
+
+```json
+{
+  "id": "8F8C1F45-6D03-44D2-A38C-0C4DE4F7E5F7",
+  "status": "completed",
+  "text": "Meeting notes from the recording.",
+  "output_file": "/Users/alex/Documents/TypeWhisper Recordings/Recording 2026-05-20 14-30-00.m4a"
+}
+```
+
+Recorder sessions move through `recording -> finalizing -> completed` or `failed`. If recorder transcription is disabled or produces no transcript, `text` is omitted and `output_file` still points to the finalized recording when available. Failed sessions include an `error` field.
+
+Conflict and lookup behavior:
+- Starting while the recorder is already recording or finalizing returns `409 Conflict`.
+- Stopping without an active API recorder session returns `409 Conflict`.
+- Polling with a missing or invalid `id` returns `400 Bad Request`.
+- Polling a valid but unknown session id returns `404 Not Found`.
+
 ## CLI Tool
 
 TypeWhisper includes a command-line tool for shell-friendly transcription. It is part of the advanced automation surface and connects to the running local API server.
