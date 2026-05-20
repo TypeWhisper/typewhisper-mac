@@ -34,11 +34,15 @@ jobs:
       cancel-in-progress: true
     steps:
       - name: Parse tag
+        env:
+          INPUT_PLUGIN_NAME: ${{ inputs.plugin_name }}
+          INPUT_PLUGIN_VERSION: ${{ inputs.plugin_version }}
+          INPUT_DISTRIBUTION_SOURCE: ${{ inputs.distribution_source }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            PLUGIN_NAME="${{ inputs.plugin_name }}"
-            PLUGIN_VERSION="${{ inputs.plugin_version }}"
-            DISTRIBUTION_SOURCE="${{ inputs.distribution_source }}"
+            PLUGIN_NAME="$INPUT_PLUGIN_NAME"
+            PLUGIN_VERSION="$INPUT_PLUGIN_VERSION"
+            DISTRIBUTION_SOURCE="$INPUT_DISTRIBUTION_SOURCE"
             TAG="plugin-${PLUGIN_NAME}-v${PLUGIN_VERSION}"
           else
             TAG="${GITHUB_REF_NAME}"
@@ -263,14 +267,19 @@ jobs:
           PYEOF
           )
 
+          COMMUNITY_METADATA_PATH="PluginRegistry/community-v1/${PLUGIN_ID}.json"
           if [ "$DISTRIBUTION_SOURCE" = "community" ]; then
-            COMMUNITY_METADATA_PATH="PluginRegistry/community-v1/${PLUGIN_ID}.json"
             if [ ! -f "$COMMUNITY_METADATA_PATH" ]; then
               echo "Missing community registry metadata for ${PLUGIN_ID}: ${COMMUNITY_METADATA_PATH}"
               exit 1
             fi
             TARGET_REGISTRIES="plugins-community-v1.json"
           else
+            if [ -f "$COMMUNITY_METADATA_PATH" ]; then
+              echo "Plugin ${PLUGIN_ID} has community metadata; dispatch with distribution_source=community"
+              exit 1
+            fi
+
             TARGET_REGISTRY=$(python3 << PYEOF
           import json, os
 
