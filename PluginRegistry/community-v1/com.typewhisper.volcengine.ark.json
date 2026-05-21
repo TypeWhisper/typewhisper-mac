@@ -11,16 +11,5 @@
   "category": "llm",
   "hosting": "cloud",
   "requiresAPIKey": true,
-  "iconSystemName": "flame.fill",
-  "releases": [
-    {
-      "version": "1.0.0",
-      "minHostVersion": "1.4.0",
-      "sdkCompatibilityVersion": "v1",
-      "minOSVersion": "14.0",
-      "supportedArchitectures": ["arm64"],
-      "size": 191312,
-      "downloadURL": "https://github.com/moshoujingli/typewhisper-ark-plugin/releases/download/v1.0.0/ArkPlugin.zip"
-    }
-  ]
+  "iconSystemName": "flame.fill"
 }
