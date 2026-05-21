@@ -17,6 +17,7 @@ extension UserDefaults {
 
 extension Notification.Name {
     static let openManagedAppWindow = Notification.Name("openManagedAppWindow")
+    static let resetSetupWizardWindow = Notification.Name("resetSetupWizardWindow")
 }
 
 enum DockIconBehavior: String, CaseIterable {
@@ -50,6 +51,7 @@ enum MenuBarIconState {
 }
 
 private struct MenuBarExtraLabel: View {
+    @Environment(\.openWindow) private var openWindow
     @ObservedObject private var dictation = DictationViewModel.shared
     @ObservedObject private var recorder = AudioRecorderViewModel.shared
 
@@ -75,6 +77,25 @@ private struct MenuBarExtraLabel: View {
                     ? Text(String(localized: "Recording..."))
                     : Text(String(localized: "Idle"))
             )
+            .onAppear {
+                ManagedAppWindowOpener.shared.openWindow = openWindow
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .openManagedAppWindow)) { notification in
+                guard let id = notification.userInfo?["id"] as? String else { return }
+                ManagedAppWindowOpener.shared.openWindow = openWindow
+                openWindow(id: id)
+            }
+    }
+}
+
+private struct ManagedWindowOpenerRegistrar: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        EmptyView()
+            .onAppear {
+                ManagedAppWindowOpener.shared.openWindow = openWindow
+            }
     }
 }
 
@@ -152,8 +173,20 @@ struct TypeWhisperApp: App {
             }
         }
         .menuBarExtraStyle(.menu)
+        .commands {
+            CommandGroup(after: .appInfo) {
+                ManagedWindowOpenerRegistrar()
+            }
+        }
 
         settingsScene
+
+        Window(String(localized: "TypeWhisper Setup"), id: "setup") {
+            setupContent
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+        .defaultSize(width: 820, height: 560)
 
         Window(String(localized: "History"), id: "history") {
             historyContent
@@ -208,6 +241,15 @@ struct TypeWhisperApp: App {
                 .task {
                     refreshStartupSheet()
                 }
+        }
+    }
+
+    @ViewBuilder
+    private var setupContent: some View {
+        if AppConstants.isRunningTests {
+            EmptyView()
+        } else {
+            SetupWizardView()
         }
     }
 
@@ -341,6 +383,10 @@ final class ManagedAppWindowOpener {
     var openWindow: OpenWindowAction?
 
     func open(id: String) {
+        open(id: id, remainingAttempts: 10)
+    }
+
+    private func open(id: String, remainingAttempts: Int) {
         let sourceApplication = sourceApplicationForActivation()
         NSApp.setActivationPolicy(.regular)
 
@@ -360,6 +406,11 @@ final class ManagedAppWindowOpener {
                 object: nil,
                 userInfo: ["id": id]
             )
+            if remainingAttempts > 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    self.open(id: id, remainingAttempts: remainingAttempts - 1)
+                }
+            }
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
@@ -493,13 +544,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             AudioRecorderViewModel.shared.toggleRecording()
         }
 
-        // Auto-open Settings with setup wizard when microphone permission is not yet granted
-        if AVAudioApplication.shared.recordPermission != .granted {
+        // Auto-open the standalone setup assistant while first-run setup is incomplete.
+        if HomeViewModel.shared.showSetupWizard {
             UserDefaults.standard.set(false, forKey: UserDefaultsKeys.setupWizardCompleted)
             HomeViewModel.shared.showSetupWizard = true
             NSApp.setActivationPolicy(.regular)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                self.openSettingsWindow()
+                self.openSetupWindow()
             }
         } else if PostUpdatePromptCoordinator.shared.shouldAutoOpenSettingsOnLaunch {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
@@ -555,7 +606,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         if !hasVisibleManagedWindow {
-            openSettingsWindow()
+            if HomeViewModel.shared.showSetupWizard {
+                openSetupWindow()
+            } else {
+                openSettingsWindow()
+            }
         }
         return true
     }
@@ -570,6 +625,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         ManagedAppWindowOpener.shared.open(id: "settings")
     }
 
+    private func openSetupWindow() {
+        ManagedAppWindowOpener.shared.open(id: "setup")
+    }
+
     private func handleIncomingURL(_ url: URL) {
         guard SupporterDiscordService.canHandleCallbackURL(url) else { return }
 
@@ -582,13 +641,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
 
     private func isManagedWindow(_ window: NSWindow) -> Bool {
         if let identifier = window.identifier?.rawValue.lowercased() {
-            if identifier.contains("settings") || identifier.contains("history") || identifier.contains("errors") {
+            if identifier.contains("settings")
+                || identifier.contains("setup")
+                || identifier.contains("history")
+                || identifier.contains("errors") {
                 return true
             }
         }
 
         let title = window.title
         return title == String(localized: "Settings")
+            || title == String(localized: "TypeWhisper Setup")
             || title == String(localized: "History")
             || title == String(localized: "Error Log")
     }

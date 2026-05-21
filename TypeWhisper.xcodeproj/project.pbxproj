@@ -258,6 +258,7 @@
 		AA00000000000000000196 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000186 /* Assets.xcassets */; };
 		AA00000000000000000197 /* WidgetDataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000180 /* WidgetDataService.swift */; };
 		AA00000000000000000198 /* TypeWhisperWidgetExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = BB00000000000000000188 /* TypeWhisperWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		5E7A00000000000000000001 /* SpeechAnalyzerPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000159 /* SpeechAnalyzerPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		AA00000000000000000199 /* VoxtralPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000191 /* VoxtralPlugin.swift */; };
 		AA00000000000000000200 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000192 /* manifest.json */; };
 		AA00000000000000000201 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000193 /* Localizable.xcstrings */; };
@@ -423,6 +424,13 @@
 			remoteGlobalIDString = DD00000000000000000014;
 			remoteInfo = TypeWhisperWidgetExtension;
 		};
+		5E7A00000000000000000003 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000012;
+			remoteInfo = SpeechAnalyzerPlugin;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -457,6 +465,17 @@
 				AA00000000000000000198 /* TypeWhisperWidgetExtension.appex in Embed App Extensions */,
 			);
 			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5E7A00000000000000000002 /* Embed Built-In Plugins */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				5E7A00000000000000000001 /* SpeechAnalyzerPlugin.bundle in Embed Built-In Plugins */,
+			);
+			name = "Embed Built-In Plugins";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -2064,12 +2083,14 @@
 				FF00000000000000000004 /* CopyFiles */,
 				FF00000000000000000036 /* Embed Frameworks */,
 				FF00000000000000000081 /* Embed App Extensions */,
+				5E7A00000000000000000002 /* Embed Built-In Plugins */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				GG00000000000000000001 /* PBXTargetDependency */,
 				GG00000000000000000009 /* PBXTargetDependency */,
+				5E7A00000000000000000004 /* PBXTargetDependency */,
 			);
 			name = TypeWhisper;
 			packageProductDependencies = (
@@ -3876,6 +3897,11 @@
 			isa = PBXTargetDependency;
 			target = DD00000000000000000014 /* TypeWhisperWidgetExtension */;
 			targetProxy = HH00000000000000000009 /* PBXContainerItemProxy */;
+		};
+		5E7A00000000000000000004 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000012 /* SpeechAnalyzerPlugin */;
+			targetProxy = 5E7A00000000000000000003 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 

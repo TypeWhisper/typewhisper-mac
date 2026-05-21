@@ -9,12 +9,7 @@ struct HomeSettingsView: View {
     @AppStorage(UserDefaultsKeys.workUsagePromptDismissed) private var workUsagePromptDismissed = false
 
     var body: some View {
-        if viewModel.showSetupWizard {
-            SetupWizardView()
-                .frame(minWidth: 500, minHeight: 400)
-        } else {
-            dashboardView
-        }
+        dashboardView
     }
 
     private var dashboardView: some View {
@@ -56,19 +51,6 @@ struct HomeSettingsView: View {
 
                     // Row 3: Recent transcriptions
                     recentTranscriptionsSection
-
-                    // Footer
-                    HStack {
-                        Spacer()
-                        Button {
-                            viewModel.resetSetupWizard()
-                        } label: {
-                            Label(String(localized: "Run setup again"), systemImage: "arrow.counterclockwise")
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
-                    }
 
                     #if DEBUG
                     HStack(spacing: 8) {

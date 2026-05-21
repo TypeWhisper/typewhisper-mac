@@ -144,6 +144,7 @@ final class DictationSettingsHandler {
             guard let self else { return false }
             return !self.textInsertionService.isAccessibilityGranted
         }
+        var hasResumedHotkeyMonitoring = !needsAccessibility()
         permissionPollTask?.cancel()
         permissionPollTask = Task { [weak self] in
             for _ in 0..<30 {
@@ -151,6 +152,10 @@ final class DictationSettingsHandler {
                 guard !Task.isCancelled else { return }
                 DispatchQueue.main.async { [weak self] in
                     self?.onObjectWillChange?()
+                    if !hasResumedHotkeyMonitoring, !needsAccessibility() {
+                        hasResumedHotkeyMonitoring = true
+                        self?.hotkeyService.resumeMonitoring()
+                    }
                 }
                 if !needsMic(), !needsAccessibility() { return }
             }

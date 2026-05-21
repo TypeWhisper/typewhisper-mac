@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import ApplicationServices
 import Carbon.HIToolbox
 import Combine
 import os
@@ -284,6 +285,8 @@ final class HotkeyService: ObservableObject {
     private var recentEventTapDispatches: [HotkeyDispatchKey: Date] = [:]
     private var capsLockOriginSuppressionUntil: Date?
 
+    var accessibilityTrustedProvider: () -> Bool = { AXIsProcessTrusted() }
+
     private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "HotkeyService")
 
     // Modifier keyCodes that generate flagsChanged instead of keyDown/keyUp
@@ -477,6 +480,12 @@ final class HotkeyService: ObservableObject {
     private func setupMonitor() {
         tearDownMonitor()
 
+        guard accessibilityTrustedProvider() else {
+            logger.info("Accessibility permission not granted, installing local hotkey monitor only")
+            installLocalEventMonitor()
+            return
+        }
+
         // Try CGEventTap first - it can suppress hotkey events from reaching other apps
         if setupEventTap() {
             logger.info("Using tail-appended CGEventTap for hotkey monitoring with NSEvent compatibility fallback")
@@ -487,6 +496,14 @@ final class HotkeyService: ObservableObject {
         // Fallback: NSEvent monitors (no event suppression)
         logger.info("CGEventTap unavailable, falling back to NSEvent monitors (hotkey events will pass through)")
         installEventMonitors(includeMouse: true)
+    }
+
+    private func installLocalEventMonitor() {
+        let mask: NSEvent.EventTypeMask = [.flagsChanged, .keyDown, .keyUp]
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
+            _ = self?.handleEvent(event, source: .monitor)
+            return event
+        }
     }
 
     private func installEventMonitors(includeMouse: Bool) {

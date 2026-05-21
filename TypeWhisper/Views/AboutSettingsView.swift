@@ -74,6 +74,28 @@ struct AboutSettingsView: View {
             }
 
             Section {
+                HStack {
+                    Spacer()
+                    Button {
+                        openSetupWizard()
+                    } label: {
+                        Label(
+                            localizedAppText("Open Setup Wizard", de: "Setup-Wizard öffnen"),
+                            systemImage: "sparkles"
+                        )
+                    }
+                    Spacer()
+                }
+
+                Text(localizedAppText(
+                    "Run the first-time setup flow again without changing your saved settings.",
+                    de: "Starte den Einrichtungsassistenten erneut, ohne deine gespeicherten Einstellungen zu ändern."
+                ))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            Section {
                 VStack(spacing: 4) {
                     Text(String(localized: "\u{00A9} 2024-2026 TypeWhisper Contributors"))
                         .font(.caption)
@@ -89,5 +111,11 @@ struct AboutSettingsView: View {
         .formStyle(.grouped)
         .padding()
         .frame(minWidth: 500, minHeight: 300)
+    }
+
+    private func openSetupWizard() {
+        UserDefaults.standard.set(0, forKey: UserDefaultsKeys.setupWizardCurrentStep)
+        NotificationCenter.default.post(name: .resetSetupWizardWindow, object: nil)
+        ManagedAppWindowOpener.shared.open(id: "setup")
     }
 }
