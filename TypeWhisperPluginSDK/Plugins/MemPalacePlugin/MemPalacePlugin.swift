@@ -228,10 +228,14 @@ public final class MemPalacePlugin: NSObject, @preconcurrency TypeWhisperPlugin,
         // Surface sidecar persistence failures: if the on-disk mapping write
         // fails after a remote delete succeeded, the deleted memory would
         // come back on next activate(). Reuse firstError so callers see only
-        // one signal, but prefer the remote error if both happened.
+        // one signal, but prefer the remote error if both happened. Only
+        // update UI state if the flush actually stuck — otherwise the host
+        // would show a count that doesn't survive restart.
         let sidecarOK = await sidecar.flush()
-        cachedMemoryCount = await sidecar.count
-        host?.notifyCapabilitiesChanged()
+        if sidecarOK {
+            cachedMemoryCount = await sidecar.count
+            host?.notifyCapabilitiesChanged()
+        }
 
         if let error = firstError {
             throw error
@@ -295,8 +299,10 @@ public final class MemPalacePlugin: NSObject, @preconcurrency TypeWhisperPlugin,
             await sidecar.remove(uuid)
         }
         let sidecarOK = await sidecar.flush()
-        cachedMemoryCount = await sidecar.count
-        host?.notifyCapabilitiesChanged()
+        if sidecarOK {
+            cachedMemoryCount = await sidecar.count
+            host?.notifyCapabilitiesChanged()
+        }
 
         if let error = firstError {
             throw error
