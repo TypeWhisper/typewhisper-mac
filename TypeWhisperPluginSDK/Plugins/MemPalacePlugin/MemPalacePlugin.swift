@@ -177,32 +177,61 @@ public final class MemPalacePlugin: NSObject, @preconcurrency TypeWhisperPlugin,
     public func delete(_ ids: [UUID]) async throws {
         guard let client, let sidecar else { throw MemPalaceMCPError.missingAPIKey }
 
-        // Codex fix: collect drawers safe to remove BEFORE mutating sidecar, so
-        // batched UUIDs sharing a drawer_id only trigger one server-DELETE.
-        var drawersToDelete: [String] = []
-        var seenDrawers: Set<String> = []
+        // Plan phase: figure out which drawers are safe to remove server-side,
+        // and which UUIDs each one owns. Co-tenancy: if a drawer has UUIDs not
+        // in this batch (content-hash duplicates), the drawer must stay on the
+        // server even after we remove its sidecar entries for the requested
+        // UUIDs.
         let idSet = Set(ids)
+        var drawerToOwnedUUIDs: [String: [UUID]] = [:]
+        var seenDrawers: Set<String> = []
 
         for id in ids {
             guard let record = await sidecar.record(for: id) else { continue }
             if seenDrawers.contains(record.drawerId) { continue }
             seenDrawers.insert(record.drawerId)
 
-            let remainingOwners = await sidecar.idsPointing(at: record.drawerId).filter { !idSet.contains($0) }
+            let allOwners = await sidecar.idsPointing(at: record.drawerId)
+            let remainingOwners = allOwners.filter { !idSet.contains($0) }
             if remainingOwners.isEmpty {
-                drawersToDelete.append(record.drawerId)
+                drawerToOwnedUUIDs[record.drawerId] = allOwners
             }
         }
 
-        for drawerId in drawersToDelete {
-            try await client.deleteDrawer(drawerId)
+        // Execute phase: per-drawer, server-delete first then remove sidecar
+        // mappings ONLY for that drawer's UUIDs. If a later drawer's delete
+        // throws, earlier successful drawers are already cleaned up locally
+        // — no stale handles to dead drawers.
+        var firstError: Error?
+        for (drawerId, ownedUUIDs) in drawerToOwnedUUIDs {
+            do {
+                try await client.deleteDrawer(drawerId)
+                for uuid in ownedUUIDs {
+                    await sidecar.remove(uuid)
+                }
+            } catch {
+                logger.notice("delete: server delete failed for \(drawerId): \(error.localizedDescription)")
+                if firstError == nil { firstError = error }
+            }
         }
+
+        // For UUIDs whose drawer still has co-tenants (no server delete needed),
+        // still drop the local mapping — the user asked to remove these UUIDs
+        // and the drawer survives via the other owners.
         for id in ids {
-            await sidecar.remove(id)
+            guard let record = await sidecar.record(for: id) else { continue }
+            if drawerToOwnedUUIDs[record.drawerId] == nil {
+                await sidecar.remove(id)
+            }
         }
+
         await sidecar.flush()
         cachedMemoryCount = await sidecar.count
         host?.notifyCapabilitiesChanged()
+
+        if let error = firstError {
+            throw error
+        }
     }
 
     public func update(_ entry: MemoryEntry) async throws {

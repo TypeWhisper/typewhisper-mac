@@ -246,10 +246,15 @@ final class MemPalaceMCPClient: @unchecked Sendable {
             "mempalace_delete_drawer",
             arguments: ["drawer_id": drawerId]
         )
+        guard !result.success else { return }
         // success=false with "not found" is acceptable for our co-tenancy/cleanup flows.
-        if !result.success, let err = result.error, !err.lowercased().contains("not found") {
-            throw MemPalaceMCPError.toolError(err)
+        if let err = result.error, err.lowercased().contains("not found") {
+            return
         }
+        // success=false with any other error message — or no error at all —
+        // means the server refused the delete. Surface it instead of pretending
+        // the drawer is gone.
+        throw MemPalaceMCPError.toolError(result.error ?? "delete_drawer failed")
     }
 
     func updateDrawer(_ drawerId: String, content: String) async throws {
