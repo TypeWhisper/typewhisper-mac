@@ -225,12 +225,19 @@ public final class MemPalacePlugin: NSObject, @preconcurrency TypeWhisperPlugin,
             }
         }
 
-        await sidecar.flush()
+        // Surface sidecar persistence failures: if the on-disk mapping write
+        // fails after a remote delete succeeded, the deleted memory would
+        // come back on next activate(). Reuse firstError so callers see only
+        // one signal, but prefer the remote error if both happened.
+        let sidecarOK = await sidecar.flush()
         cachedMemoryCount = await sidecar.count
         host?.notifyCapabilitiesChanged()
 
         if let error = firstError {
             throw error
+        }
+        if !sidecarOK {
+            throw MemPalaceMCPError.toolError("sidecar persist failed")
         }
     }
 
@@ -239,7 +246,13 @@ public final class MemPalacePlugin: NSObject, @preconcurrency TypeWhisperPlugin,
         guard let record = await sidecar.record(for: entry.id) else { return }
         try await client.updateDrawer(record.drawerId, content: entry.content)
         await sidecar.upsert(entry, drawerId: record.drawerId)
-        await sidecar.flush()
+        // Surface persistence failure — the remote update succeeded but a
+        // failed sidecar write means the next listAll/search would return the
+        // stale content. The caller needs to know.
+        let sidecarOK = await sidecar.flush()
+        if !sidecarOK {
+            throw MemPalaceMCPError.toolError("sidecar persist failed")
+        }
     }
 
     public func listAll(offset: Int, limit: Int) async throws -> [MemoryEntry] {
@@ -281,12 +294,15 @@ public final class MemPalacePlugin: NSObject, @preconcurrency TypeWhisperPlugin,
         for uuid in uuidsToRemove {
             await sidecar.remove(uuid)
         }
-        await sidecar.flush()
+        let sidecarOK = await sidecar.flush()
         cachedMemoryCount = await sidecar.count
         host?.notifyCapabilitiesChanged()
 
         if let error = firstError {
             throw error
+        }
+        if !sidecarOK {
+            throw MemPalaceMCPError.toolError("sidecar persist failed")
         }
     }
 
