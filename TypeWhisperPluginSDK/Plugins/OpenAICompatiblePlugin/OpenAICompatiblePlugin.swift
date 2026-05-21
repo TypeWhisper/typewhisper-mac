@@ -17,6 +17,7 @@ final class OpenAICompatiblePlugin: NSObject, TranscriptionEnginePlugin, Diction
     fileprivate var _llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue
     fileprivate var _llmTemperatureValue: Double = 0.3
     fileprivate var _fetchedModels: [FetchedModel] = []
+    private static let transcriptionRequestTimeout: TimeInterval = 600
 
     required override init() {
         super.init()
@@ -112,7 +113,8 @@ final class OpenAICompatiblePlugin: NSObject, TranscriptionEnginePlugin, Diction
             modelName: modelId,
             language: language,
             translate: translate,
-            prompt: prompt
+            prompt: prompt,
+            requestTimeout: Self.transcriptionRequestTimeout
         )
     }
 

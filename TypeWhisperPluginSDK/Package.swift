@@ -9,6 +9,13 @@ let package = Package(
         .library(name: "TypeWhisperPluginSDK", type: .dynamic, targets: ["TypeWhisperPluginSDK"]),
         .library(name: "TypeWhisperPluginSDKTesting", targets: ["TypeWhisperPluginSDKTesting"]),
     ],
+    dependencies: [
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", branch: "main"),
+        .package(url: "https://github.com/Blaizzy/mlx-audio-swift.git", revision: "2685c640d4079641a01ef3489cacb684c34109fd"),
+        .package(url: "https://github.com/huggingface/swift-huggingface.git", exact: "0.9.0"),
+        .package(url: "https://github.com/ml-explore/mlx-swift.git", exact: "0.31.3"),
+        .package(url: "https://github.com/microsoft/onnxruntime-swift-package-manager.git", from: "1.24.2"),
+    ],
     targets: [
         .target(name: "TypeWhisperPluginSDK"),
         .target(
@@ -26,11 +33,69 @@ let package = Package(
             ]
         ),
         .target(
+            name: "OpenAIPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/OpenAIPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
+            name: "Qwen3Plugin",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                .product(name: "HuggingFace", package: "swift-huggingface"),
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXAudioCore", package: "mlx-audio-swift"),
+                .product(name: "MLXAudioSTT", package: "mlx-audio-swift"),
+            ],
+            path: "Plugins/Qwen3Plugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
+            name: "ParakeetPlugin",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                .product(name: "FluidAudio", package: "FluidAudio"),
+            ],
+            path: "Plugins/ParakeetPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
             name: "FillerWordsPlugin",
             dependencies: ["TypeWhisperPluginSDK"],
             path: "Plugins/FillerWordsPlugin",
             exclude: ["Tests"],
             resources: [
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
+            name: "FileJobScriptPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/FileJobScriptPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
+            name: "LinearPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/LinearPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
                 .process("manifest.json"),
             ]
         ),
@@ -48,6 +113,18 @@ let package = Package(
             name: "SystemTTSPlugin",
             dependencies: ["TypeWhisperPluginSDK"],
             path: "Plugins/SystemTTSPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
+            name: "SupertonicPlugin",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                .product(name: "onnxruntime", package: "onnxruntime-swift-package-manager"),
+            ],
+            path: "Plugins/SupertonicPlugin",
             exclude: ["Tests"],
             resources: [
                 .process("manifest.json"),
@@ -72,6 +149,37 @@ let package = Package(
                 .process("manifest.json"),
             ]
         ),
+        .target(
+            name: "AssemblyAIPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/AssemblyAIPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
+            name: "SmallestAIPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/SmallestAIPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+                .process("smallest.svg"),
+            ]
+        ),
+        .target(
+            name: "WebhookPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/WebhookPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
         .testTarget(
             name: "TypeWhisperPluginSDKTests",
             dependencies: ["TypeWhisperPluginSDK"]
@@ -86,6 +194,33 @@ let package = Package(
             path: "Plugins/OpenAICompatiblePlugin/Tests"
         ),
         .testTarget(
+            name: "OpenAIPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "OpenAIPlugin",
+            ],
+            path: "Plugins/OpenAIPlugin/Tests"
+        ),
+        .testTarget(
+            name: "Qwen3PluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "Qwen3Plugin",
+            ],
+            path: "Plugins/Qwen3Plugin/Tests"
+        ),
+        .testTarget(
+            name: "ParakeetPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "ParakeetPlugin",
+            ],
+            path: "Plugins/ParakeetPlugin/Tests"
+        ),
+        .testTarget(
             name: "FillerWordsPluginTests",
             dependencies: [
                 "TypeWhisperPluginSDK",
@@ -93,6 +228,23 @@ let package = Package(
                 "FillerWordsPlugin",
             ],
             path: "Plugins/FillerWordsPlugin/Tests"
+        ),
+        .testTarget(
+            name: "FileJobScriptPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "FileJobScriptPlugin",
+            ],
+            path: "Plugins/FileJobScriptPlugin/Tests"
+        ),
+        .testTarget(
+            name: "LinearPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "LinearPlugin",
+            ],
+            path: "Plugins/LinearPlugin/Tests"
         ),
         .testTarget(
             name: "ObsidianPluginTests",
@@ -113,6 +265,15 @@ let package = Package(
             path: "Plugins/SystemTTSPlugin/Tests"
         ),
         .testTarget(
+            name: "SupertonicPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "SupertonicPlugin",
+            ],
+            path: "Plugins/SupertonicPlugin/Tests"
+        ),
+        .testTarget(
             name: "FileMemoryPluginTests",
             dependencies: [
                 "TypeWhisperPluginSDK",
@@ -129,6 +290,33 @@ let package = Package(
                 "LiveTranscriptPlugin",
             ],
             path: "Plugins/LiveTranscriptPlugin/Tests"
+        ),
+        .testTarget(
+            name: "AssemblyAIPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "AssemblyAIPlugin",
+            ],
+            path: "Plugins/AssemblyAIPlugin/Tests"
+        ),
+        .testTarget(
+            name: "SmallestAIPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "SmallestAIPlugin",
+            ],
+            path: "Plugins/SmallestAIPlugin/Tests"
+        ),
+        .testTarget(
+            name: "WebhookPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "WebhookPlugin",
+            ],
+            path: "Plugins/WebhookPlugin/Tests"
         ),
     ]
 )

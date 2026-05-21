@@ -1,0 +1,110 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - "v*"
+      - "!v*-daily*"
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "26 3 * * 1"
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+env:
+  SCHEME: TypeWhisper
+  PROJECT: TypeWhisper.xcodeproj
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: ${{ matrix.timeout-minutes }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+            runner: ubuntu-latest
+            timeout-minutes: 10
+          - language: python
+            build-mode: none
+            runner: ubuntu-latest
+            timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-and-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
+
+  analyze-swift:
+    name: Analyze (swift)
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-daily')
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
+        with:
+          xcode-version: "26.3"
+
+      - name: Resolve Swift packages
+        run: |
+          for attempt in 1 2 3; do
+            echo "Attempt $attempt of 3"
+            if xcodebuild -resolvePackageDependencies \
+              -project "$PROJECT" \
+              -scheme "$SCHEME"; then
+              exit 0
+            fi
+            echo "Package resolution failed, retrying in 10s..."
+            sleep 10
+          done
+          exit 1
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: swift
+          build-mode: manual
+          queries: security-and-quality
+
+      - name: Build Swift for CodeQL
+        run: |
+          set -o pipefail
+          xcodebuild -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration Debug \
+            -derivedDataPath codeql-build \
+            -destination 'generic/platform=macOS' \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO | tee codeql-swift-build.log
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:swift"

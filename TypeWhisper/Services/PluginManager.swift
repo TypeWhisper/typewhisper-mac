@@ -150,8 +150,10 @@ struct LoadedPlugin: Identifiable {
         !(instance is UnloadedPluginPlaceholder)
     }
 
+    @MainActor
     var supportsSettingsWindow: Bool {
-        isRuntimeLoaded && instance.settingsView != nil
+        guard isRuntimeLoaded else { return false }
+        return instance.settingsView != nil
     }
 }
 
@@ -167,6 +169,18 @@ struct IncompatibleExternalBundle: Equatable, Sendable {
     let reason: Reason
 }
 
+extension IncompatibleExternalBundle.Reason {
+    var diagnosticsValue: String {
+        switch self {
+        case .sdkCompatibility(let expected, let actual):
+            if let actual {
+                return "sdkCompatibility:expected=\(expected),actual=\(actual)"
+            }
+            return "sdkCompatibility:expected=\(expected),actual=missing"
+        }
+    }
+}
+
 enum ExternalBundleNotice: Equatable {
     case legacyBundlePresent(version: String)
     case incompatibleWithCurrentRuntime(version: String)
@@ -179,6 +193,42 @@ enum ExternalBundleNotice: Equatable {
         }
         return false
     }
+
+    var diagnosticsValue: String {
+        switch self {
+        case .legacyBundlePresent(let version):
+            return "legacyBundlePresent:version=\(version)"
+        case .incompatibleWithCurrentRuntime(let version):
+            return "incompatibleWithCurrentRuntime:version=\(version)"
+        case .bundledFallbackActive(let version):
+            return "bundledFallbackActive:version=\(version)"
+        case .boundaryUpgradeRequired(let installedVersion, let availableVersion):
+            return "boundaryUpgradeRequired:installed=\(installedVersion),available=\(availableVersion)"
+        }
+    }
+}
+
+enum PluginModelManagementError: LocalizedError {
+    case pluginNotFound
+    case pluginNotLoaded(String)
+    case unsupported(String)
+    case modelNotFound(String)
+    case pluginBusy(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .pluginNotFound:
+            return "Plugin not found."
+        case .pluginNotLoaded(let name):
+            return "\(name) is disabled. Enable the plugin before managing downloaded models."
+        case .unsupported(let name):
+            return "\(name) does not expose downloaded model management."
+        case .modelNotFound(let modelId):
+            return "Downloaded model '\(modelId)' was not found."
+        case .pluginBusy(let name):
+            return "\(name) is currently updating models. Try again when the operation finishes."
+        }
+    }
 }
 
 // MARK: - Plugin Manager
@@ -189,15 +239,24 @@ final class PluginManager: ObservableObject {
 
     @Published var loadedPlugins: [LoadedPlugin] = []
     @Published private(set) var incompatibleExternalBundles: [String: IncompatibleExternalBundle] = [:]
+    @Published private(set) var readinessRevision = 0
 
     let pluginsDirectory: URL
     private var ruleNamesProvider: @MainActor () -> [String] = { [] }
     private var workflowProvider: @MainActor () -> [PluginWorkflowInfo] = { [] }
+    private var deletingModelPluginIds = Set<String>()
 
     var postProcessors: [PostProcessorPlugin] {
         loadedPlugins
             .filter { $0.isEnabled }
             .compactMap { $0.instance as? PostProcessorPlugin }
+            .sorted { $0.priority < $1.priority }
+    }
+
+    var fileJobAutomations: [FileJobAutomationPlugin] {
+        loadedPlugins
+            .filter { $0.isEnabled }
+            .compactMap { $0.instance as? FileJobAutomationPlugin }
             .sorted { $0.priority < $1.priority }
     }
 
@@ -634,7 +693,41 @@ final class PluginManager: ObservableObject {
 
     /// Notify observers that plugin state changed (e.g. a model was loaded/unloaded)
     func notifyPluginStateChanged() {
-        objectWillChange.send()
+        readinessRevision += 1
+    }
+
+    func deleteDownloadedModel(pluginId: String, modelId: String) async throws {
+        guard let plugin = loadedPlugins.first(where: { $0.manifest.id == pluginId }) else {
+            throw PluginModelManagementError.pluginNotFound
+        }
+        guard plugin.isRuntimeLoaded else {
+            throw PluginModelManagementError.pluginNotLoaded(plugin.manifest.name)
+        }
+        guard let modelManager = plugin.instance as? any PluginDownloadedModelManaging else {
+            throw PluginModelManagementError.unsupported(plugin.manifest.name)
+        }
+        if let activityReporter = plugin.instance as? any PluginSettingsActivityReporting,
+           let activity = activityReporter.currentSettingsActivity,
+           !activity.isError {
+            throw PluginModelManagementError.pluginBusy(plugin.manifest.name)
+        }
+        guard modelManager.downloadedModels.contains(where: { $0.id == modelId }) else {
+            throw PluginModelManagementError.modelNotFound(modelId)
+        }
+        guard deletingModelPluginIds.insert(pluginId).inserted else {
+            throw PluginModelManagementError.pluginBusy(plugin.manifest.name)
+        }
+        defer {
+            deletingModelPluginIds.remove(pluginId)
+        }
+
+        try await modelManager.deleteDownloadedModel(modelId)
+
+        if modelManager.downloadedModels.isEmpty {
+            setPluginEnabled(pluginId, enabled: false)
+        } else {
+            notifyPluginStateChanged()
+        }
     }
 
     // MARK: - Dynamic Plugin Management

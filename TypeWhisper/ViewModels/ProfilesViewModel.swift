@@ -92,65 +92,6 @@ private func appendLanguageSearchTerm(_ value: String?, to terms: inout [String]
     terms.append(trimmed)
 }
 
-func localizedAppLanguageFlag(for code: String) -> String? {
-    guard code != "auto" else { return nil }
-
-    let components = NSLocale.components(fromLocaleIdentifier: code)
-    let regionKey = NSLocale.Key.countryCode.rawValue
-    let scriptKey = NSLocale.Key.scriptCode.rawValue
-    let languageKey = NSLocale.Key.languageCode.rawValue
-
-    if let region = components[regionKey]?.uppercased(),
-       region.count == 2 {
-        return emojiFlag(forRegionCode: region)
-    }
-
-    // Script-only variants like zh-Hans / zh-Hant should not get a country flag.
-    if components[scriptKey] != nil {
-        return nil
-    }
-
-    guard let languageCode = components[languageKey]?.lowercased() else {
-        return nil
-    }
-
-    let inferredRegionByLanguage = [
-        "ar": "SA",
-        "cs": "CZ",
-        "da": "DK",
-        "de": "DE",
-        "en": "US",
-        "el": "GR",
-        "es": "ES",
-        "fi": "FI",
-        "fr": "FR",
-        "he": "IL",
-        "hi": "IN",
-        "hu": "HU",
-        "id": "ID",
-        "it": "IT",
-        "ja": "JP",
-        "ko": "KR",
-        "nl": "NL",
-        "no": "NO",
-        "pl": "PL",
-        "ro": "RO",
-        "ru": "RU",
-        "sv": "SE",
-        "th": "TH",
-        "tr": "TR",
-        "uk": "UA",
-        "vi": "VN",
-        "zh": "CN"
-    ]
-
-    guard let inferredRegion = inferredRegionByLanguage[languageCode] else {
-        return nil
-    }
-
-    return emojiFlag(forRegionCode: inferredRegion)
-}
-
 func localizedAppLanguageBadgeText(for code: String) -> String {
     let components = NSLocale.components(fromLocaleIdentifier: code)
     let languageKey = NSLocale.Key.languageCode.rawValue
@@ -165,21 +106,16 @@ func localizedAppLanguageBadgeText(for code: String) -> String {
     return languageCode.uppercased()
 }
 
-private func emojiFlag(forRegionCode regionCode: String) -> String? {
-    let normalized = regionCode.uppercased()
-    guard normalized.count == 2 else { return nil }
+struct LocalizedAppLanguageBadgeDescriptor: Equatable {
+    let text: String
+    let accessibilityLabel: String
+}
 
-    let base: UInt32 = 127397
-    var scalars = String.UnicodeScalarView()
-
-    for scalar in normalized.unicodeScalars {
-        guard let regionalIndicator = UnicodeScalar(base + scalar.value) else {
-            return nil
-        }
-        scalars.append(regionalIndicator)
-    }
-
-    return String(scalars)
+func localizedAppLanguageBadgeDescriptor(for code: String) -> LocalizedAppLanguageBadgeDescriptor {
+    LocalizedAppLanguageBadgeDescriptor(
+        text: localizedAppLanguageBadgeText(for: code),
+        accessibilityLabel: localizedAppLanguageName(for: code)
+    )
 }
 
 func localizedAppLanguageNames(for codes: [String]) -> [String] {

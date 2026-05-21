@@ -72,8 +72,9 @@ final class ModelManagerService: ObservableObject {
     /// True when the selected engine plugin exists. The actual model readiness check
     /// happens in transcribe() which handles restoration via triggerRestoreModel().
     var canTranscribe: Bool {
-        guard let providerId = selectedProviderId else { return false }
-        return PluginManager.shared.transcriptionEngine(for: providerId) != nil
+        guard let providerId = selectedProviderId,
+              let engine = PluginManager.shared.transcriptionEngine(for: providerId) else { return false }
+        return canUseForTranscription(engine)
     }
 
     var activeEngineName: String? {
@@ -87,6 +88,20 @@ final class ModelManagerService: ObservableObject {
         return plugin.selectedModelId
     }
 
+    func selectedModelId(for providerId: String?) -> String? {
+        guard let providerId,
+              let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else { return nil }
+        return plugin.selectedModelId
+    }
+
+    func resolvedModelId(engineOverrideId: String? = nil, cloudModelOverride: String? = nil) -> String? {
+        if let cloudModelOverride {
+            return cloudModelOverride
+        }
+        let providerId = engineOverrideId ?? selectedProviderId
+        return selectedModelId(for: providerId)
+    }
+
     var activeModelName: String? {
         guard let providerId = selectedProviderId,
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId),
@@ -98,6 +113,11 @@ final class ModelManagerService: ObservableObject {
     func selectProvider(_ providerId: String) {
         selectedProviderId = providerId
         UserDefaults.standard.set(providerId, forKey: providerKey)
+    }
+
+    func clearProviderSelection() {
+        selectedProviderId = nil
+        UserDefaults.standard.removeObject(forKey: providerKey)
     }
 
     func selectModel(_ providerId: String, modelId: String) {
@@ -152,6 +172,28 @@ final class ModelManagerService: ObservableObject {
         return (plugin as? any TranscriptPreviewFallbackPolicyProviding)?.allowsTranscriptPreviewFallback ?? true
     }
 
+    func transcriptionAuthStatus(for engine: TranscriptionEnginePlugin) -> PluginAuthRoleStatus {
+        // Legacy plugins may use isConfigured for loaded-model state, so absence of the
+        // optional auth-role protocol should not make auto-unloaded local engines unselectable.
+        PluginAuthRoleStatusResolver.status(
+            for: engine,
+            role: .transcription,
+            legacyIsConfigured: true
+        )
+    }
+
+    func transcriptionAuthStatus(for providerId: String?) -> PluginAuthRoleStatus? {
+        guard let providerId,
+              let engine = PluginManager.shared.transcriptionEngine(for: providerId) else {
+            return nil
+        }
+        return transcriptionAuthStatus(for: engine)
+    }
+
+    func canUseForTranscription(_ engine: TranscriptionEnginePlugin) -> Bool {
+        transcriptionAuthStatus(for: engine).isAvailable
+    }
+
     /// Resolve display name for a given engine/model override combination
     func resolvedModelDisplayName(engineOverrideId: String? = nil, cloudModelOverride: String? = nil) -> String? {
         let providerId = engineOverrideId ?? selectedProviderId
@@ -175,17 +217,17 @@ final class ModelManagerService: ObservableObject {
     /// If the selected plugin is missing, fall back to the first available engine.
     func restoreProviderSelection() {
         if let providerId = selectedProviderId,
-           PluginManager.shared.transcriptionEngine(for: providerId) != nil {
+           let engine = PluginManager.shared.transcriptionEngine(for: providerId),
+           canUseForTranscription(engine) {
             return
         }
         // Selected provider doesn't exist - find a fallback
-        if let fallback = PluginManager.shared.transcriptionEngines.first(where: { $0.isConfigured }) {
+        if let fallback = PluginManager.shared.transcriptionEngines.first(where: { $0.isConfigured && canUseForTranscription($0) }) {
             selectProvider(fallback.providerId)
-        } else if let anyEngine = PluginManager.shared.transcriptionEngines.first {
+        } else if let anyEngine = PluginManager.shared.transcriptionEngines.first(where: { canUseForTranscription($0) }) {
             selectProvider(anyEngine.providerId)
         } else {
-            selectedProviderId = nil
-            UserDefaults.standard.removeObject(forKey: providerKey)
+            clearProviderSelection()
         }
     }
 
@@ -265,6 +307,13 @@ final class ModelManagerService: ObservableObject {
             throw TranscriptionEngineError.modelNotLoaded
         }
 
+        let authStatus = transcriptionAuthStatus(for: plugin)
+        guard authStatus.isAvailable else {
+            throw TranscriptionEngineError.unsupportedTask(
+                authStatus.unavailableReason ?? "Transcription is not available for this engine."
+            )
+        }
+
         if !plugin.isConfigured {
             await triggerRestoreModel(plugin)
         }
@@ -316,7 +365,7 @@ final class ModelManagerService: ObservableObject {
             duration: bufferedDuration,
             processingTime: processingTime,
             engineUsed: handle.providerId,
-            segments: result.segments.map { TranscriptionSegment(text: $0.text, start: $0.start, end: $0.end) }
+            segments: Self.transcriptionSegments(from: result.segments)
         )
     }
 
@@ -352,6 +401,13 @@ final class ModelManagerService: ObservableObject {
             throw TranscriptionEngineError.modelNotLoaded
         }
 
+        let authStatus = transcriptionAuthStatus(for: plugin)
+        guard authStatus.isAvailable else {
+            throw TranscriptionEngineError.unsupportedTask(
+                authStatus.unavailableReason ?? "Transcription is not available for this engine."
+            )
+        }
+
         if !plugin.isConfigured {
             await triggerRestoreModel(plugin)
         }
@@ -383,7 +439,7 @@ final class ModelManagerService: ObservableObject {
             duration: audio.duration,
             processingTime: processingTime,
             engineUsed: providerId,
-            segments: result.segments.map { TranscriptionSegment(text: $0.text, start: $0.start, end: $0.end) }
+            segments: Self.transcriptionSegments(from: result.segments)
         )
     }
 
@@ -422,6 +478,13 @@ final class ModelManagerService: ObservableObject {
             throw TranscriptionEngineError.modelNotLoaded
         }
 
+        let authStatus = transcriptionAuthStatus(for: plugin)
+        guard authStatus.isAvailable else {
+            throw TranscriptionEngineError.unsupportedTask(
+                authStatus.unavailableReason ?? "Transcription is not available for this engine."
+            )
+        }
+
         if !plugin.isConfigured {
             await triggerRestoreModel(plugin)
         }
@@ -454,7 +517,7 @@ final class ModelManagerService: ObservableObject {
             duration: audio.duration,
             processingTime: processingTime,
             engineUsed: providerId,
-            segments: result.segments.map { TranscriptionSegment(text: $0.text, start: $0.start, end: $0.end) }
+            segments: Self.transcriptionSegments(from: result.segments)
         )
     }
 
@@ -535,7 +598,9 @@ final class ModelManagerService: ObservableObject {
     }
 
     private func pluginSupportsLanguageHints(_ plugin: TranscriptionEnginePlugin) -> Bool {
-        plugin is LanguageHintTranscriptionEnginePlugin || plugin is LiveLanguageHintTranscriptionCapablePlugin
+        plugin is LanguageHintTranscriptionEnginePlugin
+            || plugin is StructuredLanguageHintTranscriptionEnginePlugin
+            || plugin is LiveLanguageHintTranscriptionCapablePlugin
     }
 
     private func transcribeWithResolvedLanguageSelection(
@@ -544,10 +609,10 @@ final class ModelManagerService: ObservableObject {
         languageSelection: PluginLanguageSelection,
         task: TranscriptionTask,
         prompt: String?
-    ) async throws -> PluginTranscriptionResult {
+    ) async throws -> PluginStructuredTranscriptionResult {
         if !languageSelection.languageHints.isEmpty,
-           let hintPlugin = plugin as? LanguageHintTranscriptionEnginePlugin {
-            return try await hintPlugin.transcribe(
+           let structuredHintPlugin = plugin as? StructuredLanguageHintTranscriptionEnginePlugin {
+            return try await structuredHintPlugin.transcribeStructured(
                 audio: audio,
                 languageSelection: languageSelection,
                 translate: task == .translate,
@@ -555,12 +620,31 @@ final class ModelManagerService: ObservableObject {
             )
         }
 
-        return try await plugin.transcribe(
+        if !languageSelection.languageHints.isEmpty,
+           let hintPlugin = plugin as? LanguageHintTranscriptionEnginePlugin {
+            return Self.structuredResult(from: try await hintPlugin.transcribe(
+                audio: audio,
+                languageSelection: languageSelection,
+                translate: task == .translate,
+                prompt: prompt
+            ))
+        }
+
+        if let structuredPlugin = plugin as? StructuredTranscriptionEnginePlugin {
+            return try await structuredPlugin.transcribeStructured(
+                audio: audio,
+                language: languageSelection.requestedLanguage,
+                translate: task == .translate,
+                prompt: prompt
+            )
+        }
+
+        return Self.structuredResult(from: try await plugin.transcribe(
             audio: audio,
             language: languageSelection.requestedLanguage,
             translate: task == .translate,
             prompt: prompt
-        )
+        ))
     }
 
     private func transcribeWithResolvedLanguageSelection(
@@ -570,26 +654,50 @@ final class ModelManagerService: ObservableObject {
         task: TranscriptionTask,
         prompt: String?,
         onProgress: @Sendable @escaping (String) -> Bool
-    ) async throws -> PluginTranscriptionResult {
+    ) async throws -> PluginStructuredTranscriptionResult {
+        if !languageSelection.languageHints.isEmpty,
+           let structuredHintPlugin = plugin as? StructuredLanguageHintTranscriptionEnginePlugin,
+           !plugin.supportsStreaming {
+            let result = try await structuredHintPlugin.transcribeStructured(
+                audio: audio,
+                languageSelection: languageSelection,
+                translate: task == .translate,
+                prompt: prompt
+            )
+            let _ = onProgress(result.text)
+            return result
+        }
+
         if !languageSelection.languageHints.isEmpty,
            let hintPlugin = plugin as? LanguageHintTranscriptionEnginePlugin {
-            return try await hintPlugin.transcribe(
+            return Self.structuredResult(from: try await hintPlugin.transcribe(
                 audio: audio,
                 languageSelection: languageSelection,
                 translate: task == .translate,
                 prompt: prompt,
                 onProgress: onProgress
-            )
+            ))
         }
 
         if plugin.supportsStreaming {
-            return try await plugin.transcribe(
+            return Self.structuredResult(from: try await plugin.transcribe(
                 audio: audio,
                 language: languageSelection.requestedLanguage,
                 translate: task == .translate,
                 prompt: prompt,
                 onProgress: onProgress
+            ))
+        }
+
+        if let structuredPlugin = plugin as? StructuredTranscriptionEnginePlugin {
+            let result = try await structuredPlugin.transcribeStructured(
+                audio: audio,
+                language: languageSelection.requestedLanguage,
+                translate: task == .translate,
+                prompt: prompt
             )
+            let _ = onProgress(result.text)
+            return result
         }
 
         let result = try await plugin.transcribe(
@@ -599,7 +707,39 @@ final class ModelManagerService: ObservableObject {
             prompt: prompt
         )
         let _ = onProgress(result.text)
-        return result
+        return Self.structuredResult(from: result)
+    }
+
+    nonisolated private static func structuredResult(
+        from result: PluginTranscriptionResult
+    ) -> PluginStructuredTranscriptionResult {
+        PluginStructuredTranscriptionResult(
+            text: result.text,
+            detectedLanguage: result.detectedLanguage,
+            segments: result.segments.map {
+                PluginStructuredTranscriptionSegment(text: $0.text, start: $0.start, end: $0.end)
+            }
+        )
+    }
+
+    nonisolated private static func transcriptionSegments(
+        from segments: [PluginStructuredTranscriptionSegment]
+    ) -> [TranscriptionSegment] {
+        segments.map {
+            TranscriptionSegment(
+                text: $0.text,
+                start: $0.start,
+                end: $0.end,
+                speakerLabel: $0.speakerLabel,
+                speakerConfidence: $0.speakerConfidence
+            )
+        }
+    }
+
+    nonisolated private static func transcriptionSegments(
+        from segments: [PluginTranscriptionSegment]
+    ) -> [TranscriptionSegment] {
+        segments.map { TranscriptionSegment(text: $0.text, start: $0.start, end: $0.end) }
     }
 
     /// Trigger model restore via ObjC dispatch (avoids Swift protocol witness table issues

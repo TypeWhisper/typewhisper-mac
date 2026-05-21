@@ -86,6 +86,34 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         XCTAssertEqual(store.sessions[0].requestedPaths, ["/v1/models"])
     }
 
+    func testTranscribeUsesLongTimeoutForLocalCompatibleServers() async throws {
+        let host = try PluginTestHostServices(
+            defaults: [
+                "baseURL": "https://example.test",
+                "selectedModel": "large-v3",
+            ]
+        )
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"text":"hello"}"#.utf8),
+                    Self.httpResponse(url: "https://example.test/v1/audio/transcriptions", statusCode: 200)
+                )
+            ])
+        }
+
+        let audio = AudioData(samples: [0, 0, 0], wavData: Data("wav".utf8), duration: 1.0)
+        let result = try await plugin.transcribe(audio: audio, language: nil, translate: false, prompt: nil)
+
+        XCTAssertEqual(result.text, "hello")
+        XCTAssertEqual(store.sessions[0].requestedPaths, ["/v1/audio/transcriptions"])
+        XCTAssertEqual(store.sessions[0].requestedRequests.first?.timeoutInterval, 600)
+    }
+
     func testProcessFailsWithoutSelectedModel() async throws {
         let host = try PluginTestHostServices(defaults: ["baseURL": "https://example.test"])
         let plugin = OpenAICompatiblePlugin()

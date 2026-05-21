@@ -2,7 +2,7 @@
     "id": "com.typewhisper.voxtral",
     "name": "Voxtral",
     "version": "1.0.6",
-    "minHostVersion": "1.2.1",
+    "minHostVersion": "1.4.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "supportedArchitectures": [

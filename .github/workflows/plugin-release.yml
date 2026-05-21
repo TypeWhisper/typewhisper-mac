@@ -14,6 +14,14 @@ on:
         description: Plugin version, for example `1.2.1`
         required: true
         type: string
+      distribution_source:
+        description: Registry distribution source
+        required: false
+        default: official
+        type: choice
+        options:
+          - official
+          - community
 
 permissions:
   contents: write
@@ -22,25 +30,51 @@ jobs:
   build:
     runs-on: macos-15
     concurrency:
-      group: plugin-release-${{ github.event_name == 'workflow_dispatch' && format('{0}-v{1}', inputs.plugin_name, inputs.plugin_version) || github.ref_name }}
+      group: plugin-release-${{ github.event_name == 'workflow_dispatch' && format('{0}-{1}-v{2}', inputs.distribution_source, inputs.plugin_name, inputs.plugin_version) || github.ref_name }}
       cancel-in-progress: true
     steps:
       - name: Parse tag
+        env:
+          INPUT_PLUGIN_NAME: ${{ inputs.plugin_name }}
+          INPUT_PLUGIN_VERSION: ${{ inputs.plugin_version }}
+          INPUT_DISTRIBUTION_SOURCE: ${{ inputs.distribution_source }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            PLUGIN_NAME="${{ inputs.plugin_name }}"
-            PLUGIN_VERSION="${{ inputs.plugin_version }}"
+            PLUGIN_NAME="$INPUT_PLUGIN_NAME"
+            PLUGIN_VERSION="$INPUT_PLUGIN_VERSION"
+            DISTRIBUTION_SOURCE="$INPUT_DISTRIBUTION_SOURCE"
             TAG="plugin-${PLUGIN_NAME}-v${PLUGIN_VERSION}"
           else
             TAG="${GITHUB_REF_NAME}"
             # Extract plugin name and version from tag: plugin-qwen3-v1.0.0
-            PLUGIN_NAME=$(echo "$TAG" | sed 's/^plugin-//' | sed 's/-v[0-9].*//')
-            PLUGIN_VERSION=$(echo "$TAG" | sed 's/.*-v//')
+            if [[ "$TAG" =~ ^plugin-([A-Za-z0-9_-]+)-v([0-9A-Za-z.+-]+)$ ]]; then
+              PLUGIN_NAME="${BASH_REMATCH[1]}"
+              PLUGIN_VERSION="${BASH_REMATCH[2]}"
+            else
+              echo "Invalid plugin release tag: $TAG"
+              exit 1
+            fi
+            DISTRIBUTION_SOURCE="official"
           fi
-          echo "TAG=$TAG" >> $GITHUB_ENV
-          echo "PLUGIN_NAME=$PLUGIN_NAME" >> $GITHUB_ENV
-          echo "PLUGIN_VERSION=$PLUGIN_VERSION" >> $GITHUB_ENV
-          echo "Plugin: $PLUGIN_NAME, Version: $PLUGIN_VERSION, Tag: $TAG"
+          if [[ ! "$PLUGIN_NAME" =~ ^[A-Za-z0-9_-]+$ ]]; then
+            echo "Invalid plugin name: $PLUGIN_NAME"
+            exit 1
+          fi
+          if [[ ! "$PLUGIN_VERSION" =~ ^[0-9A-Za-z.+-]+$ ]]; then
+            echo "Invalid plugin version: $PLUGIN_VERSION"
+            exit 1
+          fi
+          case "$DISTRIBUTION_SOURCE" in
+            official|community) ;;
+            *) echo "Unknown distribution source: $DISTRIBUTION_SOURCE" && exit 1 ;;
+          esac
+          {
+            echo "TAG=$TAG"
+            echo "PLUGIN_NAME=$PLUGIN_NAME"
+            echo "PLUGIN_VERSION=$PLUGIN_VERSION"
+            echo "DISTRIBUTION_SOURCE=$DISTRIBUTION_SOURCE"
+          } >> "$GITHUB_ENV"
+          echo "Plugin: $PLUGIN_NAME, Version: $PLUGIN_VERSION, Source: $DISTRIBUTION_SOURCE, Tag: $TAG"
 
       - name: Resolve target name
         run: |
@@ -60,8 +94,10 @@ jobs:
             voxtral) TARGET="VoxtralPlugin" ;;
             deepgram) TARGET="DeepgramPlugin" ;;
             assemblyai) TARGET="AssemblyAIPlugin" ;;
+            smallest-pulse) TARGET="SmallestAIPlugin" ;;
             obsidian) TARGET="ObsidianPlugin" ;;
             script) TARGET="ScriptPlugin" ;;
+            file-job-script) TARGET="FileJobScriptPlugin" ;;
             livetranscript) TARGET="LiveTranscriptPlugin" ;;
             granite) TARGET="GranitePlugin" ;;
             cloudflare-asr) TARGET="CloudflareASRPlugin" ;;
@@ -78,18 +114,19 @@ jobs:
             cohere) TARGET="CoherePlugin" ;;
             speechmatics) TARGET="SpeechmaticsPlugin" ;;
             system-tts) TARGET="SystemTTSPlugin" ;;
+            supertonic) TARGET="SupertonicPlugin" ;;
             filler-words) TARGET="FillerWordsPlugin" ;;
             xai) TARGET="XAIPlugin" ;;
             *) echo "Unknown plugin: $PLUGIN_NAME" && exit 1 ;;
           esac
           # Set deployment target and Swift embedding per plugin
-          # All plugins use Xcode 26.2 (mlx-audio-swift requires Swift 6.2 for package resolution,
-          # and workspace-state.json v7 from Xcode 26.2 is incompatible with Xcode 16.2)
+          # All plugins use Xcode 26.3 (mlx-audio-swift requires Swift 6.2+ for package resolution,
+          # and workspace-state.json v7 from Xcode 26.x is incompatible with Xcode 16.2)
           # - SpeechAnalyzer: macOS 26 deployment target
           # - Qwen3/Voxtral/Granite/Gemma4: macOS 14 + embed Swift compat libs (MLX uses Swift 6.2 features)
           # - All others: macOS 14, no compat libs needed (simple Foundation/SDK code)
           EMBED_SWIFT_LIBS="NO"
-          XCODE_VERSION="26.2"
+          XCODE_VERSION="26.3"
           if [ "$TARGET" = "SpeechAnalyzerPlugin" ]; then
             DEPLOY_TARGET="26.0"
           elif [ "$TARGET" = "Qwen3Plugin" ] || [ "$TARGET" = "VoxtralPlugin" ] || [ "$TARGET" = "GranitePlugin" ] || [ "$TARGET" = "Gemma4Plugin" ]; then
@@ -106,6 +143,13 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Validate community plugin registry metadata
+        run: |
+          if [ "$DISTRIBUTION_SOURCE" != "community" ]; then
+            exit 0
+          fi
+          python3 scripts/assemble_community_plugin_registry.py
 
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
@@ -227,7 +271,31 @@ jobs:
             echo "Missing manifest for ${TARGET}: $MANIFEST_PATH"
             exit 1
           fi
-          TARGET_REGISTRY=$(python3 << PYEOF
+          PLUGIN_ID=$(python3 << PYEOF
+          import json, os
+
+          manifest_path = "$MANIFEST_PATH"
+          src_manifest = os.path.join("$GITHUB_WORKSPACE", manifest_path) if manifest_path else ""
+          with open(src_manifest) as mf:
+              manifest = json.load(mf)
+          print(manifest["id"])
+          PYEOF
+          )
+
+          COMMUNITY_METADATA_PATH="PluginRegistry/community-v1/${PLUGIN_ID}.json"
+          if [ "$DISTRIBUTION_SOURCE" = "community" ]; then
+            if [ ! -f "$COMMUNITY_METADATA_PATH" ]; then
+              echo "Missing community registry metadata for ${PLUGIN_ID}: ${COMMUNITY_METADATA_PATH}"
+              exit 1
+            fi
+            TARGET_REGISTRIES="plugins-community-v1.json"
+          else
+            if [ -f "$COMMUNITY_METADATA_PATH" ]; then
+              echo "Plugin ${PLUGIN_ID} has community metadata; dispatch with distribution_source=community"
+              exit 1
+            fi
+
+            TARGET_REGISTRY=$(python3 << PYEOF
           import json, os
 
           manifest_path = "$MANIFEST_PATH"
@@ -239,13 +307,16 @@ jobs:
               raise SystemExit("manifest.json is missing sdkCompatibilityVersion")
           print(f"plugins-{sdk_compat}.json")
           PYEOF
-          )
+            )
 
-          export TARGET_REGISTRY
-          TARGET_REGISTRIES="$TARGET_REGISTRY"
-          if [[ "$TARGET_REGISTRY" =~ ^plugins-(v[0-9]+)\.json$ ]]; then
-            TARGET_REGISTRIES="$TARGET_REGISTRIES plugins-community-${BASH_REMATCH[1]}.json"
+            TARGET_REGISTRIES="$TARGET_REGISTRY"
+            if [[ "$TARGET_REGISTRY" =~ ^plugins-(v[0-9]+)\.json$ ]]; then
+              TARGET_REGISTRIES="$TARGET_REGISTRIES plugins-community-${BASH_REMATCH[1]}.json"
+            fi
           fi
+
+          export COMMUNITY_METADATA_PATH
+          export DISTRIBUTION_SOURCE
           export TARGET_REGISTRIES
           echo "Updating registry file(s): $TARGET_REGISTRIES"
 
@@ -260,7 +331,11 @@ jobs:
             python3 << PYEOF
           import json, os, re, sys, tempfile
 
+          sys.path.insert(0, os.path.join(os.environ["GITHUB_WORKSPACE"], "scripts"))
+          from plugin_registry_metadata import format_findings, normalize_registry_release_metadata
+
           target_registries = os.environ["TARGET_REGISTRIES"].split()
+          distribution_source = os.environ.get("DISTRIBUTION_SOURCE", "official")
 
           version = "$PLUGIN_VERSION"
           size = int("$ZIP_SIZE")
@@ -273,6 +348,20 @@ jobs:
 
           with open(src_manifest) as mf:
               manifest = json.load(mf)
+          metadata = manifest
+          if distribution_source == "community":
+              metadata_path = os.environ.get("COMMUNITY_METADATA_PATH")
+              if not metadata_path:
+                  raise SystemExit("COMMUNITY_METADATA_PATH is required for community releases")
+              src_metadata = os.path.join(os.environ["GITHUB_WORKSPACE"], metadata_path)
+              with open(src_metadata) as mf:
+                  metadata = json.load(mf)
+              if metadata.get("id") != manifest.get("id"):
+                  raise SystemExit(
+                      f"community metadata id {metadata.get('id')} does not match manifest id {manifest.get('id')}"
+                  )
+              if metadata.get("source") != "community":
+                  raise SystemExit("community registry metadata must set source=community")
 
           # Semver-tolerant version sort key. Accepts "1.2.3", "1.2.3-beta.4",
           # "1.2.3+build.5" etc. Pre-release tags sort before matching release
@@ -296,16 +385,29 @@ jobs:
 
           def sync_plugin_metadata(plugin):
               plugin["id"] = manifest["id"]
-              plugin["name"] = manifest["name"]
-              plugin["author"] = manifest.get("author", plugin.get("author", "TypeWhisper"))
-              plugin["description"] = manifest.get("description", plugin.get("description", ""))
-              plugin["descriptions"] = manifest.get("descriptions", plugin.get("descriptions", {}))
-              plugin["category"] = manifest.get("category", plugin.get("category", "utility"))
+              plugin["name"] = metadata["name"]
+              plugin["author"] = metadata.get("author", plugin.get("author", "TypeWhisper"))
+              plugin["description"] = metadata.get("description", plugin.get("description", ""))
+              plugin["category"] = metadata.get("category", plugin.get("category", "utility"))
               plugin["downloadCount"] = plugin.get("downloadCount", 0)
 
+              if distribution_source == "community":
+                  plugin["source"] = "community"
+              else:
+                  plugin.pop("source", None)
+
+              if metadata.get("descriptions"):
+                  plugin["descriptions"] = metadata["descriptions"]
+              elif distribution_source == "community":
+                  plugin.pop("descriptions", None)
+              if metadata.get("categories"):
+                  plugin["categories"] = metadata["categories"]
+              elif distribution_source == "community":
+                  plugin.pop("categories", None)
+
               for field in ["iconSystemName", "requiresAPIKey", "hosting"]:
-                  if field in manifest and manifest[field] is not None:
-                      plugin[field] = manifest[field]
+                  if field in metadata and metadata[field] is not None:
+                      plugin[field] = metadata[field]
                   else:
                       plugin.pop(field, None)
 
@@ -354,6 +456,10 @@ jobs:
                   new_entry["releases"] = [build_release()]
                   registry["plugins"].append(new_entry)
                   print(f"{target_registry}: added new plugin {manifest['id']} v{version}")
+
+              metadata_findings = normalize_registry_release_metadata(registry)
+              for line in format_findings(metadata_findings):
+                  print(f"{target_registry}: removed {line}")
 
               # Atomic write: write to a temp file in the same directory, fsync,
               # then rename into place. Prevents a half-written registry file from

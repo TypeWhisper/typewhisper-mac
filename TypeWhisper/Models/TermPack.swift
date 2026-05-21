@@ -24,6 +24,7 @@ struct TermPack: Identifiable {
     let source: Source
     let version: String?
     let author: String?
+    let requiresCommercialLicense: Bool
 
     let defaultName: String
     let defaultDescription: String
@@ -56,7 +57,7 @@ struct TermPack: Identifiable {
     }
 
     /// Built-in convenience init - same signature as the old memberwise init
-    init(id: String, nameKey: String, descriptionKey: String, icon: String, terms: [String]) {
+    init(id: String, nameKey: String, descriptionKey: String, icon: String, terms: [String], requiresCommercialLicense: Bool = false) {
         self.id = id
         self.defaultName = nameKey
         self.defaultDescription = descriptionKey
@@ -66,6 +67,7 @@ struct TermPack: Identifiable {
         self.source = .builtIn
         self.version = nil
         self.author = nil
+        self.requiresCommercialLicense = requiresCommercialLicense
         self.localizedNames = nil
         self.localizedDescriptions = nil
     }
@@ -74,7 +76,8 @@ struct TermPack: Identifiable {
     init(id: String, name: String, description: String, icon: String,
          terms: [String], corrections: [TermPackCorrection],
          version: String, author: String,
-         localizedNames: [String: String]?, localizedDescriptions: [String: String]?) {
+         localizedNames: [String: String]?, localizedDescriptions: [String: String]?,
+         requiresCommercialLicense: Bool = false) {
         self.id = id
         self.defaultName = name
         self.defaultDescription = description
@@ -84,6 +87,7 @@ struct TermPack: Identifiable {
         self.source = .community
         self.version = version
         self.author = author
+        self.requiresCommercialLicense = requiresCommercialLicense
         self.localizedNames = localizedNames
         self.localizedDescriptions = localizedDescriptions
     }
@@ -177,4 +181,65 @@ struct TermPack: Identifiable {
             ]
         )
     ]
+}
+
+enum IndustryPreset: String, CaseIterable, Identifiable {
+    case general
+    case realEstate = "real-estate"
+    case architecture
+    case legal
+
+    var id: String { rawValue }
+
+    var termPackID: String? {
+        switch self {
+        case .general:
+            nil
+        case .realEstate, .architecture, .legal:
+            rawValue
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .general:
+            String(localized: "General writing")
+        case .realEstate:
+            String(localized: "Real Estate")
+        case .architecture:
+            String(localized: "Architecture")
+        case .legal:
+            String(localized: "Legal")
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .general:
+            String(localized: "Start with TypeWhisper defaults. You can add term packs later.")
+        case .realEstate:
+            String(localized: "Prepare property, viewing, and client vocabulary.")
+        case .architecture:
+            String(localized: "Prepare planning, construction, and defect vocabulary.")
+        case .legal:
+            String(localized: "Prepare legal dictation vocabulary for drafts and notes.")
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .general: "text.alignleft"
+        case .realEstate: "house"
+        case .architecture: "ruler"
+        case .legal: "scale.3d"
+        }
+    }
+
+    static func selected(defaults: UserDefaults = .standard) -> IndustryPreset {
+        guard let raw = defaults.string(forKey: UserDefaultsKeys.selectedIndustryPreset),
+              let preset = IndustryPreset(rawValue: raw) else {
+            return .general
+        }
+        return preset
+    }
 }

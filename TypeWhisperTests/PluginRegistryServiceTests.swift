@@ -83,6 +83,61 @@ final class PluginRegistryServiceTests: XCTestCase {
         XCTAssertEqual(plugins.first?.downloadCount, 100)
     }
 
+    func testTopLevelReleaseMetadataDoesNotAffectMultiReleaseMatching() throws {
+        let data = Data(
+            """
+            {
+              "schemaVersion": 2,
+              "plugins": [
+                {
+                  "id": "com.typewhisper.future",
+                  "name": "Future Plugin",
+                  "author": "TypeWhisper",
+                  "description": "New releases are gated by host version.",
+                  "category": "transcription",
+                  "version": "9.9.9",
+                  "minHostVersion": "1.0.0",
+                  "sdkCompatibilityVersion": "v1",
+                  "size": 1,
+                  "downloadURL": "https://example.com/stale-top-level.zip",
+                  "releases": [
+                    {
+                      "version": "1.2.0",
+                      "minHostVersion": "1.4.0",
+                      "sdkCompatibilityVersion": "v1",
+                      "size": 20,
+                      "downloadURL": "https://example.com/requires-1.4.zip"
+                    },
+                    {
+                      "version": "1.1.6",
+                      "minHostVersion": "1.2.2",
+                      "sdkCompatibilityVersion": "v1",
+                      "size": 10,
+                      "downloadURL": "https://example.com/compatible-1.3.zip"
+                    }
+                  ]
+                }
+              ]
+            }
+            """.utf8
+        )
+
+        let response = try JSONDecoder().decode(PluginRegistryResponse.self, from: data)
+        let pre14Plugins = response.resolvedPlugins(
+            appVersion: "1.3.3",
+            sdkCompatibilityVersion: sdkCompatibilityVersion
+        )
+        let plugins14 = response.resolvedPlugins(
+            appVersion: "1.4.0",
+            sdkCompatibilityVersion: sdkCompatibilityVersion
+        )
+
+        XCTAssertEqual(pre14Plugins.first?.version, "1.1.6")
+        XCTAssertEqual(pre14Plugins.first?.downloadURL, "https://example.com/compatible-1.3.zip")
+        XCTAssertEqual(plugins14.first?.version, "1.2.0")
+        XCTAssertEqual(plugins14.first?.downloadURL, "https://example.com/requires-1.4.zip")
+    }
+
     func testRegistryEntryDecodesMultipleCategoryIdentifiers() throws {
         let data = Data(
             """
@@ -467,7 +522,7 @@ final class PluginRegistryServiceTests: XCTestCase {
                       "minHostVersion": "1.4.0",
                       "sdkCompatibilityVersion": "v1",
                       "size": 12,
-                      "downloadURL": "https://example.com/community.zip"
+                      "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-community-v1.0.0/CommunityPlugin.zip"
                     }
                   ]
                 }
@@ -483,6 +538,71 @@ final class PluginRegistryServiceTests: XCTestCase {
         )
 
         XCTAssertEqual(plugins.map(\.source), [.official, .community])
+    }
+
+    func testCommunityPluginWithExternalDownloadURLDoesNotResolve() throws {
+        let data = Data(
+            """
+            {
+              "schemaVersion": 1,
+              "plugins": [
+                {
+                  "id": "com.community.external",
+                  "source": "community",
+                  "name": "External Community Plugin",
+                  "author": "Community Author",
+                  "description": "Community entry with an external ZIP.",
+                  "category": "utility",
+                  "releases": [
+                    {
+                      "version": "1.0.0",
+                      "minHostVersion": "1.4.0",
+                      "sdkCompatibilityVersion": "v1",
+                      "size": 12,
+                      "downloadURL": "https://github.com/contributor/plugin/releases/download/v1.0.0/Plugin.zip"
+                    }
+                  ]
+                }
+              ]
+            }
+            """.utf8
+        )
+
+        let response = try JSONDecoder().decode(PluginRegistryResponse.self, from: data)
+        let plugins = response.resolvedPlugins(
+            appVersion: "1.4.0",
+            sdkCompatibilityVersion: sdkCompatibilityVersion
+        )
+
+        XCTAssertTrue(plugins.isEmpty)
+    }
+
+    func testCommunityPluginSourceMetadataWithoutReleasesDoesNotResolve() throws {
+        let data = Data(
+            """
+            {
+              "schemaVersion": 1,
+              "plugins": [
+                {
+                  "id": "com.community.source-only",
+                  "source": "community",
+                  "name": "Source Only Community Plugin",
+                  "author": "Community Author",
+                  "description": "Reviewed source without a published artifact.",
+                  "category": "utility"
+                }
+              ]
+            }
+            """.utf8
+        )
+
+        let response = try JSONDecoder().decode(PluginRegistryResponse.self, from: data)
+        let plugins = response.resolvedPlugins(
+            appVersion: "1.4.0",
+            sdkCompatibilityVersion: sdkCompatibilityVersion
+        )
+
+        XCTAssertTrue(plugins.isEmpty)
     }
 
     @MainActor
@@ -609,5 +729,177 @@ final class PluginRegistryServiceTests: XCTestCase {
 
         XCTAssertEqual(service.fetchState, .loaded)
         XCTAssertEqual(service.registry.map(\.id), ["com.typewhisper.cached"])
+    }
+
+    @MainActor
+    func testHostFingerprintChangeForcesRegistryRefreshInsideThrottleWindow() async throws {
+        let suiteName = "PluginRegistryServiceTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let cacheDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginRegistryFingerprint")
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+            TestSupport.remove(cacheDirectory)
+        }
+
+        var requestCount = 0
+        let service = PluginRegistryService(
+            registryBaseURL: URL(string: "https://example.com")!,
+            cacheDirectory: cacheDirectory,
+            cacheDuration: 0,
+            userDefaults: defaults,
+            infoDictionary: [
+                "CFBundleShortVersionString": "1.4.0",
+                "TypeWhisperReleaseChannel": AppConstants.ReleaseChannel.stable.rawValue,
+            ],
+            fetchData: { request in
+                requestCount += 1
+                let response = HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!
+                return (Self.registryPayload(pluginId: "com.typewhisper.fingerprint"), response)
+            }
+        )
+        let now = Date(timeIntervalSince1970: 2_000)
+
+        let initialFetch = await service.refreshRegistryForHostUpdateIfNeeded(currentFingerprint: "1.4.0+803@stable", now: now)
+        let throttledFetch = await service.refreshRegistryForHostUpdateIfNeeded(
+            currentFingerprint: "1.4.0+803@stable",
+            now: now.addingTimeInterval(60)
+        )
+        let fingerprintFetch = await service.refreshRegistryForHostUpdateIfNeeded(
+            currentFingerprint: "1.4.1+804@stable",
+            now: now.addingTimeInterval(120)
+        )
+
+        XCTAssertTrue(initialFetch)
+        XCTAssertFalse(throttledFetch)
+        XCTAssertTrue(fingerprintFetch)
+        XCTAssertEqual(requestCount, 2)
+    }
+
+    @MainActor
+    func testUnchangedHostFingerprintPreservesBackgroundUpdateThrottle() async throws {
+        let suiteName = "PluginRegistryServiceTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let cacheDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginRegistryFingerprintThrottle")
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+            TestSupport.remove(cacheDirectory)
+        }
+
+        var requestCount = 0
+        let service = PluginRegistryService(
+            registryBaseURL: URL(string: "https://example.com")!,
+            cacheDirectory: cacheDirectory,
+            cacheDuration: 0,
+            userDefaults: defaults,
+            infoDictionary: [
+                "CFBundleShortVersionString": "1.4.0",
+                "TypeWhisperReleaseChannel": AppConstants.ReleaseChannel.stable.rawValue,
+            ],
+            fetchData: { request in
+                requestCount += 1
+                let response = HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!
+                return (Self.registryPayload(pluginId: "com.typewhisper.throttle"), response)
+            }
+        )
+        let now = Date(timeIntervalSince1970: 3_000)
+
+        let initialFetch = await service.refreshRegistryForHostUpdateIfNeeded(currentFingerprint: "1.4.0+803@stable", now: now)
+        let throttledFetch = await service.refreshRegistryForHostUpdateIfNeeded(
+            currentFingerprint: "1.4.0+803@stable",
+            now: now.addingTimeInterval(23 * 3600)
+        )
+        let expiredFetch = await service.refreshRegistryForHostUpdateIfNeeded(
+            currentFingerprint: "1.4.0+803@stable",
+            now: now.addingTimeInterval(25 * 3600)
+        )
+
+        XCTAssertTrue(initialFetch)
+        XCTAssertFalse(throttledFetch)
+        XCTAssertTrue(expiredFetch)
+        XCTAssertEqual(requestCount, 2)
+    }
+
+    @MainActor
+    func testHostFingerprintRefreshDoesNotAdvanceThrottleWhenOnlyCacheFallbackLoads() async throws {
+        let suiteName = "PluginRegistryServiceTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let cacheDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginRegistryFingerprintCacheFallback")
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+            TestSupport.remove(cacheDirectory)
+        }
+
+        try Self.registryPayload(pluginId: "com.typewhisper.cached-fallback")
+            .write(to: cacheDirectory.appendingPathComponent("plugins-community-v1.json"))
+
+        var requestCount = 0
+        let service = PluginRegistryService(
+            registryBaseURL: URL(string: "https://example.com")!,
+            cacheDirectory: cacheDirectory,
+            cacheDuration: 0,
+            userDefaults: defaults,
+            infoDictionary: [
+                "CFBundleShortVersionString": "1.4.0",
+                "TypeWhisperReleaseChannel": AppConstants.ReleaseChannel.stable.rawValue,
+            ],
+            fetchData: { _ in
+                requestCount += 1
+                throw URLError(.notConnectedToInternet)
+            }
+        )
+        let now = Date(timeIntervalSince1970: 4_000)
+
+        let fallbackFetch = await service.refreshRegistryForHostUpdateIfNeeded(
+            currentFingerprint: "1.4.0+803@stable",
+            now: now
+        )
+        let retryFetch = await service.refreshRegistryForHostUpdateIfNeeded(
+            currentFingerprint: "1.4.0+803@stable",
+            now: now.addingTimeInterval(60)
+        )
+
+        XCTAssertFalse(fallbackFetch)
+        XCTAssertFalse(retryFetch)
+        XCTAssertEqual(requestCount, 2)
+        XCTAssertEqual(service.fetchState, .loaded)
+        XCTAssertEqual(service.registry.map(\.id), ["com.typewhisper.cached-fallback"])
+    }
+
+    private static func registryPayload(pluginId: String) -> Data {
+        Data(
+            """
+            {
+              "schemaVersion": 1,
+              "plugins": [
+                {
+                  "id": "\(pluginId)",
+                  "name": "Cached Plugin",
+                  "author": "TypeWhisper",
+                  "description": "Cacheable entry",
+                  "category": "utility",
+                  "releases": [
+                    {
+                      "version": "1.0.0",
+                      "minHostVersion": "1.4.0",
+                      "sdkCompatibilityVersion": "v1",
+                      "size": 10,
+                      "downloadURL": "https://example.com/cached.zip"
+                    }
+                  ]
+                }
+              ]
+            }
+            """.utf8
+        )
     }
 }

@@ -111,6 +111,18 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
         case .recorderToggle: return UserDefaultsKeys.recorderToggleHotkey
         }
     }
+
+    var hotkeysDefaultsKey: String {
+        switch self {
+        case .hybrid: return UserDefaultsKeys.hybridHotkeys
+        case .pushToTalk: return UserDefaultsKeys.pttHotkeys
+        case .toggle: return UserDefaultsKeys.toggleHotkeys
+        case .promptPalette: return UserDefaultsKeys.promptPaletteHotkeys
+        case .recentTranscriptions: return UserDefaultsKeys.recentTranscriptionsHotkeys
+        case .copyLastTranscription: return UserDefaultsKeys.copyLastTranscriptionHotkeys
+        case .recorderToggle: return UserDefaultsKeys.recorderToggleHotkeys
+        }
+    }
 }
 
 /// Manages global hotkeys for dictation and standalone app actions.
@@ -154,14 +166,14 @@ final class HotkeyService: ObservableObject {
 
     @Published private(set) var currentMode: HotkeyMode?
 
-    var onDictationStart: (() -> Void)?
+    var onDictationStart: ((UInt64) -> Void)?
     var onDictationStop: (() -> Void)?
     var onPromptPaletteToggle: (() -> Void)?
     var onRecentTranscriptionsToggle: (() -> Void)?
     var onCopyLastTranscription: (() -> Void)?
     var onRecorderToggle: (() -> Void)?
-    var onProfileDictationStart: ((UUID) -> Void)?
-    var onWorkflowDictationStart: ((UUID) -> Void)?
+    var onProfileDictationStart: ((UUID, UInt64) -> Void)?
+    var onWorkflowDictationStart: ((UUID, UInt64) -> Void)?
     var onWorkflowTextProcessing: ((UUID) -> Void)?
     var onCancelPressed: (() -> Void)?
     var onPushToTalkInterruption: (() -> Void)?
@@ -170,6 +182,7 @@ final class HotkeyService: ObservableObject {
     private var keyDownTime: Date?
     private var isActive = false
     private var activeSlotType: HotkeySlotType?
+    private var activeGlobalHotkey: UnifiedHotkey?
     private(set) var activeProfileId: UUID?
     private(set) var activeWorkflowId: UUID?
     private var pushToTalkInterruptionSignaled = false
@@ -179,6 +192,10 @@ final class HotkeyService: ObservableObject {
     private static let monitorDedupWindow: TimeInterval = 0.12
     private static let capsLockKeyCode: UInt16 = 0x39
     private static let capsLockSuppressionWindow: TimeInterval = 0.25
+
+    nonisolated static func requestTimestamp() -> UInt64 {
+        DispatchTime.now().uptimeNanoseconds
+    }
 
     // MARK: - Per-Slot State
 
@@ -204,15 +221,9 @@ final class HotkeyService: ObservableObject {
         }
     }
 
-    private var slots: [HotkeySlotType: SlotState] = [
-        .hybrid: SlotState(),
-        .pushToTalk: SlotState(),
-        .toggle: SlotState(),
-        .promptPalette: SlotState(),
-        .recentTranscriptions: SlotState(),
-        .copyLastTranscription: SlotState(),
-        .recorderToggle: SlotState(),
-    ]
+    private var slots: [HotkeySlotType: [SlotState]] = HotkeySlotType.allCases.reduce(into: [:]) { result, slotType in
+        result[slotType] = []
+    }
 
     // MARK: - Per-Profile Hotkey State
 
@@ -292,26 +303,55 @@ final class HotkeyService: ObservableObject {
         setupMonitor()
     }
 
+    func hotkeys(for slotType: HotkeySlotType) -> [UnifiedHotkey] {
+        slots[slotType]?.compactMap(\.hotkey) ?? []
+    }
+
     func updateHotkey(_ hotkey: UnifiedHotkey, for slotType: HotkeySlotType) {
-        slots[slotType] = SlotState(hotkey: hotkey)
-        UserDefaults.standard.set(try? JSONEncoder().encode(hotkey), forKey: slotType.defaultsKey)
-        tearDownMonitor()
-        setupMonitor()
+        setHotkeys([hotkey], for: slotType)
+    }
+
+    func appendHotkey(_ hotkey: UnifiedHotkey, for slotType: HotkeySlotType) {
+        var existing = hotkeys(for: slotType)
+        guard !existing.contains(where: { $0.conflicts(with: hotkey) }) else { return }
+        existing.append(hotkey)
+        setHotkeys(existing, for: slotType)
+    }
+
+    func replaceHotkey(_ existingHotkey: UnifiedHotkey, with newHotkey: UnifiedHotkey, for slotType: HotkeySlotType) {
+        var existing = hotkeys(for: slotType)
+        guard let index = existing.firstIndex(of: existingHotkey) else {
+            appendHotkey(newHotkey, for: slotType)
+            return
+        }
+
+        existing[index] = newHotkey
+        let updated = existing.enumerated().compactMap { offset, hotkey -> UnifiedHotkey? in
+            if offset == index { return hotkey }
+            return hotkey.conflicts(with: newHotkey) ? nil : hotkey
+        }
+        setHotkeys(updated, for: slotType)
+    }
+
+    func removeHotkey(_ hotkey: UnifiedHotkey, for slotType: HotkeySlotType) {
+        let updated = hotkeys(for: slotType).filter { $0 != hotkey }
+        setHotkeys(updated, for: slotType)
+    }
+
+    func removeConflictingHotkey(_ hotkey: UnifiedHotkey, for slotType: HotkeySlotType) {
+        let updated = hotkeys(for: slotType).filter { !$0.conflicts(with: hotkey) }
+        setHotkeys(updated, for: slotType)
     }
 
     func clearHotkey(for slotType: HotkeySlotType) {
-        slots[slotType] = SlotState()
-        UserDefaults.standard.removeObject(forKey: slotType.defaultsKey)
-        tearDownMonitor()
-        setupMonitor()
+        setHotkeys([], for: slotType)
     }
 
     /// Returns which slot already has this hotkey assigned, excluding a given slot.
     /// Also detects conflicts between single-tap and double-tap variants of the same key.
     func isHotkeyAssigned(_ hotkey: UnifiedHotkey, excluding: HotkeySlotType) -> HotkeySlotType? {
         for slotType in HotkeySlotType.allCases where slotType != excluding {
-            guard let existing = slots[slotType]?.hotkey else { continue }
-            if existing.conflicts(with: hotkey) {
+            if hotkeys(for: slotType).contains(where: { $0.conflicts(with: hotkey) }) {
                 return slotType
             }
         }
@@ -327,6 +367,7 @@ final class HotkeyService: ObservableObject {
     func cancelDictation() {
         isActive = false
         activeSlotType = nil
+        activeGlobalHotkey = nil
         activeProfileId = nil
         activeWorkflowId = nil
         currentMode = nil
@@ -336,11 +377,8 @@ final class HotkeyService: ObservableObject {
 
     // MARK: - Profile Hotkeys
 
-    func registerProfileHotkeys(_ entries: [(id: UUID, hotkey: UnifiedHotkey)]) {
+    func registerProfileHotkeys(_: [(id: UUID, hotkey: UnifiedHotkey)]) {
         profileSlots.removeAll()
-        for entry in entries {
-            profileSlots[entry.id] = ProfileHotkeyState(profileId: entry.id, hotkey: entry.hotkey)
-        }
         tearDownMonitor()
         setupMonitor()
     }
@@ -356,12 +394,7 @@ final class HotkeyService: ObservableObject {
         setupMonitor()
     }
 
-    func isHotkeyAssignedToProfile(_ hotkey: UnifiedHotkey, excludingProfileId: UUID?) -> UUID? {
-        for (id, state) in profileSlots where id != excludingProfileId {
-            if state.hotkey.conflicts(with: hotkey) {
-                return id
-            }
-        }
+    func isHotkeyAssignedToProfile(_: UnifiedHotkey, excludingProfileId _: UUID?) -> UUID? {
         return nil
     }
 
@@ -378,8 +411,7 @@ final class HotkeyService: ObservableObject {
 
     func isHotkeyAssignedToGlobalSlot(_ hotkey: UnifiedHotkey) -> HotkeySlotType? {
         for slotType in HotkeySlotType.allCases {
-            guard let existing = slots[slotType]?.hotkey else { continue }
-            if existing.conflicts(with: hotkey) {
+            if hotkeys(for: slotType).contains(where: { $0.conflicts(with: hotkey) }) {
                 return slotType
             }
         }
@@ -389,10 +421,54 @@ final class HotkeyService: ObservableObject {
     private func loadHotkeys() {
         let defaults = UserDefaults.standard
         for slotType in HotkeySlotType.allCases {
+            if let data = defaults.data(forKey: slotType.hotkeysDefaultsKey),
+               let hotkeys = try? JSONDecoder().decode([UnifiedHotkey].self, from: data) {
+                let uniqueHotkeys = Self.uniqueHotkeys(hotkeys)
+                slots[slotType] = uniqueHotkeys.map { SlotState(hotkey: $0) }
+                persistHotkeys(uniqueHotkeys, for: slotType)
+                continue
+            }
+
             if let data = defaults.data(forKey: slotType.defaultsKey),
                let hotkey = try? JSONDecoder().decode(UnifiedHotkey.self, from: data) {
-                slots[slotType] = SlotState(hotkey: hotkey)
+                slots[slotType] = [SlotState(hotkey: hotkey)]
+                persistHotkeys([hotkey], for: slotType)
+                continue
             }
+
+            slots[slotType] = []
+        }
+    }
+
+    private func setHotkeys(_ hotkeys: [UnifiedHotkey], for slotType: HotkeySlotType) {
+        let uniqueHotkeys = Self.uniqueHotkeys(hotkeys)
+        slots[slotType] = uniqueHotkeys.map { SlotState(hotkey: $0) }
+        persistHotkeys(uniqueHotkeys, for: slotType)
+        tearDownMonitor()
+        setupMonitor()
+    }
+
+    private func persistHotkeys(_ hotkeys: [UnifiedHotkey], for slotType: HotkeySlotType) {
+        let defaults = UserDefaults.standard
+        guard !hotkeys.isEmpty else {
+            defaults.removeObject(forKey: slotType.hotkeysDefaultsKey)
+            defaults.removeObject(forKey: slotType.defaultsKey)
+            return
+        }
+
+        if let data = try? JSONEncoder().encode(hotkeys) {
+            defaults.set(data, forKey: slotType.hotkeysDefaultsKey)
+        }
+        if let first = hotkeys.first,
+           let data = try? JSONEncoder().encode(first) {
+            defaults.set(data, forKey: slotType.defaultsKey)
+        }
+    }
+
+    private nonisolated static func uniqueHotkeys(_ hotkeys: [UnifiedHotkey]) -> [UnifiedHotkey] {
+        hotkeys.reduce(into: []) { uniqueHotkeys, hotkey in
+            guard !uniqueHotkeys.contains(where: { $0.conflicts(with: hotkey) }) else { return }
+            uniqueHotkeys.append(hotkey)
         }
     }
 
@@ -546,28 +622,33 @@ final class HotkeyService: ObservableObject {
 
         // Global slots
         for slotType in HotkeySlotType.allCases {
-            guard var state = slots[slotType], let hotkey = state.hotkey else { continue }
-            let fnTriggerMode: FnTriggerMode = slotType == .toggle ? .releaseOnly : .pressThenRelease
-            if shouldSuppressForCapsLockOrigin(event, hotkey: hotkey, keyWasDown: state.keyWasDown) {
-                state.resetTransientState()
-                slots[slotType] = state
-                continue
+            guard var states = slots[slotType] else { continue }
+            for index in states.indices {
+                var state = states[index]
+                guard let hotkey = state.hotkey else { continue }
+                let fnTriggerMode: FnTriggerMode = slotType == .toggle ? .releaseOnly : .pressThenRelease
+                if shouldSuppressForCapsLockOrigin(event, hotkey: hotkey, keyWasDown: state.keyWasDown) {
+                    state.resetTransientState()
+                    states[index] = state
+                    continue
+                }
+                let (keyDown, keyUp, isMatch) = processKeyEvent(
+                    event,
+                    hotkey: hotkey,
+                    state: &state,
+                    fnTriggerMode: fnTriggerMode
+                )
+                states[index] = state
+                if isMatch { shouldSuppress = true }
+                dispatchGlobalMatch(
+                    slotType: slotType,
+                    hotkey: hotkey,
+                    keyDown: keyDown,
+                    keyUp: keyUp,
+                    source: source
+                )
             }
-            let (keyDown, keyUp, isMatch) = processKeyEvent(
-                event,
-                hotkey: hotkey,
-                state: &state,
-                fnTriggerMode: fnTriggerMode
-            )
-            slots[slotType] = state
-            if isMatch { shouldSuppress = true }
-            dispatchGlobalMatch(
-                slotType: slotType,
-                hotkey: hotkey,
-                keyDown: keyDown,
-                keyUp: keyUp,
-                source: source
-            )
+            slots[slotType] = states
         }
 
         // Profile slots
@@ -709,7 +790,7 @@ final class HotkeyService: ObservableObject {
             if source != .eventTap {
                 logFallbackMatchIfNeeded(hotkey: hotkey, source: source)
             }
-            handleKeyDown(slotType: slotType)
+            handleKeyDown(slotType: slotType, hotkey: hotkey)
         } else if keyUp, shouldDispatch(
             target: .slot(slotType),
             phase: .up,
@@ -783,7 +864,7 @@ final class HotkeyService: ObservableObject {
               activeProfileId == nil,
               activeWorkflowId == nil,
               event.type == .keyDown,
-              let hotkey = slots[.pushToTalk]?.hotkey,
+              let hotkey = activeGlobalHotkey,
               isExtraKeyDuringActivePushToTalk(event, hotkey: hotkey) else {
             return
         }
@@ -830,7 +911,15 @@ final class HotkeyService: ObservableObject {
 
 #if DEBUG
     func setHotkeyForTesting(_ hotkey: UnifiedHotkey, for slotType: HotkeySlotType) {
-        slots[slotType] = SlotState(hotkey: hotkey)
+        slots[slotType] = [SlotState(hotkey: hotkey)]
+    }
+
+    func setHotkeysForTesting(_ hotkeys: [UnifiedHotkey], for slotType: HotkeySlotType) {
+        slots[slotType] = Self.uniqueHotkeys(hotkeys).map { SlotState(hotkey: $0) }
+    }
+
+    func loadHotkeysForTesting() {
+        loadHotkeys()
     }
 
     @discardableResult
@@ -1060,8 +1149,8 @@ final class HotkeyService: ObservableObject {
             let current = event.modifierFlags.intersection(relevantMask)
             let activeModifierKeyCodes = Self.modifierKeyCodes(from: event.modifierFlags)
             let physicalModifiersMatch = hotkey.modifierKeyCodes.isEmpty
-                || hotkey.modifierKeyCodes.isSubset(of: activeModifierKeyCodes)
-            let allDown = current.contains(requiredFlags) && physicalModifiersMatch
+                || activeModifierKeyCodes == hotkey.modifierKeyCodes
+            let allDown = current == requiredFlags && physicalModifiersMatch
             let anyRequiredStillDown = hotkey.modifierKeyCodes.isEmpty
                 ? !current.intersection(requiredFlags).isEmpty
                 : !activeModifierKeyCodes.intersection(hotkey.modifierKeyCodes).isEmpty
@@ -1110,7 +1199,7 @@ final class HotkeyService: ObservableObject {
 
     // MARK: - Key Down / Up (Global Slots)
 
-    private func handleKeyDown(slotType: HotkeySlotType) {
+    private func handleKeyDown(slotType: HotkeySlotType, hotkey: UnifiedHotkey) {
         if slotType == .promptPalette {
             onPromptPaletteToggle?()
             return
@@ -1132,6 +1221,7 @@ final class HotkeyService: ObservableObject {
             // Any hotkey stops active recording
             isActive = false
             activeSlotType = nil
+            activeGlobalHotkey = nil
             activeProfileId = nil
             activeWorkflowId = nil
             currentMode = nil
@@ -1139,14 +1229,16 @@ final class HotkeyService: ObservableObject {
             pushToTalkInterruptionSignaled = false
             onDictationStop?()
         } else {
+            let requestTimestamp = Self.requestTimestamp()
             activeSlotType = slotType
+            activeGlobalHotkey = hotkey
             activeProfileId = nil
             activeWorkflowId = nil
             keyDownTime = Date()
             isActive = true
             pushToTalkInterruptionSignaled = false
             currentMode = slotType == .toggle ? .toggle : .pushToTalk
-            onDictationStart?()
+            onDictationStart?(requestTimestamp)
         }
     }
 
@@ -1161,6 +1253,7 @@ final class HotkeyService: ObservableObject {
             } else {
                 isActive = false
                 activeSlotType = nil
+                activeGlobalHotkey = nil
                 currentMode = nil
                 keyDownTime = nil
                 pushToTalkInterruptionSignaled = false
@@ -1169,6 +1262,7 @@ final class HotkeyService: ObservableObject {
         case .pushToTalk:
             isActive = false
             activeSlotType = nil
+            activeGlobalHotkey = nil
             currentMode = nil
             keyDownTime = nil
             pushToTalkInterruptionSignaled = false
@@ -1193,6 +1287,7 @@ final class HotkeyService: ObservableObject {
             // Any hotkey stops active recording
             isActive = false
             activeSlotType = nil
+            activeGlobalHotkey = nil
             activeProfileId = nil
             activeWorkflowId = nil
             currentMode = nil
@@ -1200,14 +1295,16 @@ final class HotkeyService: ObservableObject {
             pushToTalkInterruptionSignaled = false
             onDictationStop?()
         } else {
+            let requestTimestamp = Self.requestTimestamp()
             activeProfileId = profileId
             activeWorkflowId = nil
             activeSlotType = nil
+            activeGlobalHotkey = nil
             keyDownTime = Date()
             isActive = true
             pushToTalkInterruptionSignaled = false
             currentMode = .pushToTalk // hybrid behavior
-            onProfileDictationStart?(profileId)
+            onProfileDictationStart?(profileId, requestTimestamp)
         }
     }
 
@@ -1221,6 +1318,7 @@ final class HotkeyService: ObservableObject {
         } else {
             isActive = false
             activeSlotType = nil
+            activeGlobalHotkey = nil
             activeProfileId = nil
             activeWorkflowId = nil
             currentMode = nil
@@ -1241,6 +1339,7 @@ final class HotkeyService: ObservableObject {
         if isActive {
             isActive = false
             activeSlotType = nil
+            activeGlobalHotkey = nil
             activeProfileId = nil
             activeWorkflowId = nil
             currentMode = nil
@@ -1248,14 +1347,16 @@ final class HotkeyService: ObservableObject {
             pushToTalkInterruptionSignaled = false
             onDictationStop?()
         } else {
+            let requestTimestamp = Self.requestTimestamp()
             activeProfileId = nil
             activeWorkflowId = workflowId
             activeSlotType = nil
+            activeGlobalHotkey = nil
             keyDownTime = Date()
             isActive = true
             pushToTalkInterruptionSignaled = false
             currentMode = .pushToTalk
-            onWorkflowDictationStart?(workflowId)
+            onWorkflowDictationStart?(workflowId, requestTimestamp)
         }
     }
 
@@ -1269,6 +1370,7 @@ final class HotkeyService: ObservableObject {
         } else {
             isActive = false
             activeSlotType = nil
+            activeGlobalHotkey = nil
             activeProfileId = nil
             activeWorkflowId = nil
             currentMode = nil

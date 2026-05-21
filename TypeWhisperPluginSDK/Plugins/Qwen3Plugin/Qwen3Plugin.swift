@@ -8,7 +8,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(Qwen3Plugin)
-final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, @unchecked Sendable {
+final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, @unchecked Sendable {
     static let pluginId = "com.typewhisper.qwen3"
     static let pluginName = "Qwen3 ASR"
 
@@ -24,7 +24,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     private static let primaryParams = STTGenerateParameters(
         maxTokens: 2048,
         temperature: 0.0,
-        language: "English",
+        language: nil,
         chunkDuration: 30.0,
         minChunkDuration: 1.0
     )
@@ -32,7 +32,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     private static let fallbackParams = STTGenerateParameters(
         maxTokens: 1536,
         temperature: 0.0,
-        language: "English",
+        language: nil,
         chunkDuration: 15.0,
         minChunkDuration: 1.0
     )
@@ -79,23 +79,46 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
                 id: def.id,
                 displayName: def.displayName,
                 sizeDescription: def.sizeDescription,
+                downloaded: hasDownloadedModel(def),
                 loaded: def.id == loadedModelId
             )
         }
     }
 
+    var downloadedModels: [PluginModelInfo] {
+        Self.availableModels
+            .filter { hasDownloadedModel($0) }
+            .map { def in
+                PluginModelInfo(
+                    id: def.id,
+                    displayName: def.displayName,
+                    sizeDescription: def.sizeDescription,
+                    downloaded: true,
+                    loaded: def.id == loadedModelId
+                )
+            }
+    }
+
+    func deleteDownloadedModel(_ modelId: String) async throws {
+        guard let modelDef = Self.availableModels.first(where: { $0.id == modelId }) else { return }
+
+        if loadedModelId == modelId {
+            unloadModel(clearPersistence: true)
+        }
+        if _selectedModelId == modelId {
+            _selectedModelId = nil
+            host?.setUserDefault(nil, forKey: "selectedModel")
+        }
+        if host?.userDefault(forKey: "loadedModel") as? String == modelId {
+            host?.setUserDefault(nil, forKey: "loadedModel")
+        }
+
+        try deleteModelFiles(modelDef)
+        host?.notifyCapabilitiesChanged()
+    }
+
     var supportedLanguages: [String] {
-        [
-            "af", "am", "ar", "az", "be", "bg", "bn", "bs", "ca", "cs",
-            "cy", "da", "de", "el", "en", "es", "et", "fa", "fi", "fr",
-            "gl", "gu", "ha", "he", "hi", "hr", "hu", "hy", "id", "is",
-            "it", "ja", "jw", "ka", "kk", "km", "kn", "ko", "lo", "lt",
-            "lv", "mk", "ml", "mn", "mr", "ms", "my", "ne", "nl", "no",
-            "pa", "pl", "ps", "pt", "ro", "ru", "sd", "si", "sk", "sl",
-            "sn", "so", "sq", "sr", "su", "sv", "sw", "ta", "te", "tg",
-            "th", "tk", "tl", "tr", "tt", "uk", "ur", "uz", "vi", "yo",
-            "yue", "zh",
-        ]
+        Self.qwenSupportedLanguageCodes
     }
 
     var selectedModelId: String? { _selectedModelId }
@@ -132,6 +155,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         )
         let primaryText = Self.normalizeTranscript(primaryOutput.text)
         let text: String
+        let outputLanguageName: String?
 
         if QwenTranscriptGuard.isLikelyLooped(primaryText) {
             let fallbackOutput = Self.generate(
@@ -145,16 +169,27 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
 
             if fallbackText.isEmpty {
                 text = primaryText
+                outputLanguageName = primaryOutput.language
             } else if QwenTranscriptGuard.isLikelyLooped(fallbackText) {
                 text = QwenTranscriptGuard.preferredTranscript(primary: primaryText, fallback: fallbackText)
+                outputLanguageName = primaryOutput.language ?? fallbackOutput.language
             } else {
                 text = fallbackText
+                outputLanguageName = fallbackOutput.language
             }
         } else {
             text = primaryText
+            outputLanguageName = primaryOutput.language
         }
 
-        return PluginTranscriptionResult(text: text, detectedLanguage: language)
+        let resultLanguageName = outputLanguageName ?? languageName
+        let cleanedText = QwenTranscriptGuard.removingLikelyTrailingArtifact(
+            from: text,
+            languageName: resultLanguageName
+        )
+        let detectedLanguage = Self.languageCode(forQwenLanguageName: resultLanguageName) ?? language
+
+        return PluginTranscriptionResult(text: cleanedText, detectedLanguage: detectedLanguage)
     }
 
     // MARK: - Model Management
@@ -196,13 +231,15 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         host?.notifyCapabilitiesChanged()
     }
 
-    fileprivate func deleteModelFiles(_ modelDef: Qwen3ModelDef) {
+    fileprivate func deleteModelFiles(_ modelDef: Qwen3ModelDef) throws {
         guard let modelsDir = host?.pluginDataDirectory.appendingPathComponent("models") else { return }
         let subdirectory = modelDef.repoId.replacingOccurrences(of: "/", with: "_")
         let modelDir = modelsDir
             .appendingPathComponent("mlx-audio")
             .appendingPathComponent(subdirectory)
-        try? FileManager.default.removeItem(at: modelDir)
+        if FileManager.default.fileExists(atPath: modelDir.path) {
+            try FileManager.default.removeItem(at: modelDir)
+        }
     }
 
     func restoreLoadedModel(allowDownloads: Bool = true) async {
@@ -266,36 +303,98 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
             id: "qwen3-asr-0.6b-4bit",
             displayName: "Qwen3 0.6B (4-bit)",
             repoId: "mlx-community/Qwen3-ASR-0.6B-4bit",
-            sizeDescription: "~400 MB",
-            ramRequirement: "8 GB+"
+            sizeDescription: "~0.7 GB",
+            ramRequirement: "8 GB+",
+            usageHint: "Smallest download; use when memory matters more than quality."
+        ),
+        Qwen3ModelDef(
+            id: "qwen3-asr-0.6b-5bit",
+            displayName: "Qwen3 0.6B (5-bit)",
+            repoId: "mlx-community/Qwen3-ASR-0.6B-5bit",
+            sizeDescription: "~0.8 GB",
+            ramRequirement: "8 GB+",
+            usageHint: "Slightly more precision than 4-bit with a similar footprint."
+        ),
+        Qwen3ModelDef(
+            id: "qwen3-asr-0.6b-6bit",
+            displayName: "Qwen3 0.6B (6-bit)",
+            repoId: "mlx-community/Qwen3-ASR-0.6B-6bit",
+            sizeDescription: "~0.9 GB",
+            ramRequirement: "8 GB+",
+            usageHint: "Fast pick for 8 GB Macs and casual dictation.",
+            recommendation: .lowMemory
         ),
         Qwen3ModelDef(
             id: "qwen3-asr-0.6b-8bit",
             displayName: "Qwen3 0.6B (8-bit)",
             repoId: "mlx-community/Qwen3-ASR-0.6B-8bit",
-            sizeDescription: "~800 MB",
-            ramRequirement: "16 GB+"
+            sizeDescription: "~1.0 GB",
+            ramRequirement: "16 GB+",
+            usageHint: "Higher-precision small model when 0.6B quality matters."
+        ),
+        Qwen3ModelDef(
+            id: "qwen3-asr-0.6b-bf16",
+            displayName: "Qwen3 0.6B (BF16)",
+            repoId: "mlx-community/Qwen3-ASR-0.6B-bf16",
+            sizeDescription: "~1.6 GB",
+            ramRequirement: "16 GB+",
+            usageHint: "Unquantized small model; useful for comparison or validation."
         ),
         Qwen3ModelDef(
             id: "qwen3-asr-1.7b-4bit",
             displayName: "Qwen3 1.7B (4-bit)",
             repoId: "mlx-community/Qwen3-ASR-1.7B-4bit",
-            sizeDescription: "~1 GB",
-            ramRequirement: "16 GB+"
+            sizeDescription: "~1.6 GB",
+            ramRequirement: "16 GB+",
+            usageHint: "Smallest 1.7B option; use when 6-bit is too heavy."
+        ),
+        Qwen3ModelDef(
+            id: "qwen3-asr-1.7b-5bit",
+            displayName: "Qwen3 1.7B (5-bit)",
+            repoId: "mlx-community/Qwen3-ASR-1.7B-5bit",
+            sizeDescription: "~1.8 GB",
+            ramRequirement: "16 GB+",
+            usageHint: "Middle ground if the default 6-bit model is tight on memory."
+        ),
+        Qwen3ModelDef(
+            id: "qwen3-asr-1.7b-6bit",
+            displayName: "Qwen3 1.7B (6-bit)",
+            repoId: "mlx-community/Qwen3-ASR-1.7B-6bit",
+            sizeDescription: "~2.0 GB",
+            ramRequirement: "16 GB+",
+            usageHint: "Best default for most 16 GB+ Macs.",
+            recommendation: .balanced
         ),
         Qwen3ModelDef(
             id: "qwen3-asr-1.7b-8bit",
             displayName: "Qwen3 1.7B (8-bit)",
             repoId: "mlx-community/Qwen3-ASR-1.7B-8bit",
-            sizeDescription: "~2 GB",
-            ramRequirement: "32 GB+"
+            sizeDescription: "~2.5 GB",
+            ramRequirement: "32 GB+",
+            usageHint: "Higher-quality pick for 32 GB+ Macs.",
+            recommendation: .highQuality
+        ),
+        Qwen3ModelDef(
+            id: "qwen3-asr-1.7b-bf16",
+            displayName: "Qwen3 1.7B (BF16)",
+            repoId: "mlx-community/Qwen3-ASR-1.7B-bf16",
+            sizeDescription: "~4.1 GB",
+            ramRequirement: "32 GB+",
+            usageHint: "Largest unquantized model; use for max-fidelity validation."
         ),
     ]
 
     // MARK: - Helpers
 
-    // ISO 639-1 code to English language name (used by Qwen3 ASR API)
-    private static let languageNames: [String: String] = [
+    static let qwenSupportedLanguageCodes: [String] = [
+        "zh", "en", "yue", "ar", "de", "fr", "es", "pt", "id", "it",
+        "ko", "ru", "th", "vi", "ja", "tr", "hi", "ms", "nl", "sv",
+        "da", "fi", "pl", "cs", "fil", "tl", "fa", "el", "ro", "hu",
+        "mk",
+    ]
+
+    // Language code to English language name used by the Qwen3 ASR API.
+    private static let languageNamesByCode: [String: String] = [
         "zh": "Chinese", "en": "English", "yue": "Cantonese",
         "ar": "Arabic", "de": "German", "fr": "French",
         "es": "Spanish", "pt": "Portuguese", "id": "Indonesian",
@@ -304,16 +403,43 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         "tr": "Turkish", "hi": "Hindi", "ms": "Malay",
         "nl": "Dutch", "sv": "Swedish", "da": "Danish",
         "fi": "Finnish", "pl": "Polish", "cs": "Czech",
-        "fil": "Filipino", "fa": "Persian", "el": "Greek",
+        "fil": "Filipino", "tl": "Filipino", "fa": "Persian", "el": "Greek",
         "hu": "Hungarian", "mk": "Macedonian", "ro": "Romanian",
     ]
 
-    fileprivate static func resolveLanguageName(_ isoCode: String?) -> String {
-        guard let code = isoCode else { return "English" }
-        return languageNames[code] ?? "English"
+    private static let languageCodesByName: [String: String] = {
+        var result: [String: String] = [:]
+        for (code, name) in languageNamesByCode {
+            if result[name.lowercased()] == nil || code != "tl" {
+                result[name.lowercased()] = code
+            }
+        }
+        return result
+    }()
+
+    static func resolveLanguageName(_ isoCode: String?) -> String? {
+        guard let code = isoCode?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              !code.isEmpty else {
+            return nil
+        }
+        return languageNamesByCode[code]
     }
 
-    private static func contextBiasString(from prompt: String?) -> String {
+    static func languageCode(forQwenLanguageName languageName: String?) -> String? {
+        guard let languageName = languageName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !languageName.isEmpty else {
+            return nil
+        }
+
+        let names = languageName
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+        guard names.count == 1 else { return nil }
+        return languageCodesByName[names[0]]
+    }
+
+    static func contextBiasString(from prompt: String?) -> String {
         Qwen3ContextBiasFormatter.format(prompt: prompt)
     }
 
@@ -322,7 +448,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         audio: MLXArray,
         params: STTGenerateParameters,
         context: String,
-        language: String
+        language: String?
     ) -> STTOutput {
         model.generate(
             audio: audio,
@@ -350,6 +476,32 @@ struct Qwen3ModelDef: Identifiable {
     let repoId: String
     let sizeDescription: String
     let ramRequirement: String
+    let usageHint: String
+    let recommendation: Qwen3ModelRecommendation?
+
+    init(
+        id: String,
+        displayName: String,
+        repoId: String,
+        sizeDescription: String,
+        ramRequirement: String,
+        usageHint: String,
+        recommendation: Qwen3ModelRecommendation? = nil
+    ) {
+        self.id = id
+        self.displayName = displayName
+        self.repoId = repoId
+        self.sizeDescription = sizeDescription
+        self.ramRequirement = ramRequirement
+        self.usageHint = usageHint
+        self.recommendation = recommendation
+    }
+}
+
+enum Qwen3ModelRecommendation: Equatable {
+    case lowMemory
+    case balanced
+    case highQuality
 }
 
 enum Qwen3ModelState: Equatable {
@@ -372,6 +524,27 @@ enum Qwen3ModelState: Equatable {
 // MARK: - QwenTranscriptGuard (Loop Detection)
 
 enum QwenTranscriptGuard {
+    static func removingLikelyTrailingArtifact(from text: String, languageName: String?) -> String {
+        guard isFrench(languageName) else { return text }
+
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return text }
+
+        let artifactPattern = #"(?i)[.!?;:]\s+oui[.!?]*$"#
+        guard let artifactRange = trimmed.range(of: artifactPattern, options: .regularExpression) else {
+            return text
+        }
+
+        let artifact = String(trimmed[artifactRange])
+        guard let punctuation = artifact.first else { return text }
+
+        let prefix = trimmed[..<artifactRange.lowerBound]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !prefix.isEmpty else { return text }
+
+        return "\(prefix)\(punctuation)"
+    }
+
     static func isLikelyLooped(_ text: String) -> Bool {
         let words = words(in: text)
         guard words.count >= 16 else { return false }
@@ -402,6 +575,18 @@ enum QwenTranscriptGuard {
             .lowercased()
             .split(whereSeparator: { !$0.isLetter && !$0.isNumber && $0 != "'" })
             .map(String.init)
+    }
+
+    private static func isFrench(_ languageName: String?) -> Bool {
+        guard let languageName = languageName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !languageName.isEmpty else {
+            return false
+        }
+
+        return languageName
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .contains("french")
     }
 
     private struct LoopMetrics {
@@ -482,6 +667,10 @@ private struct Qwen3SettingsView: View {
 
     private let pollTimer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
+    nonisolated init(plugin: Qwen3Plugin) {
+        self.plugin = plugin
+    }
+
     private var trimmedHfTokenInput: String {
         hfTokenInput.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -494,12 +683,16 @@ private struct Qwen3SettingsView: View {
         !storedHfToken.isEmpty
     }
 
+    private var quickPickModels: [Qwen3ModelDef] {
+        Qwen3Plugin.availableModels.filter { $0.recommendation != nil }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Qwen3 ASR (MLX)")
                 .font(.headline)
 
-            Text("Local speech-to-text powered by MLX on Apple Silicon. 30 languages, no API key required.", bundle: bundle)
+            Text("Local Qwen3-ASR speech-to-text powered by MLX on Apple Silicon. 30 languages plus Chinese dialect coverage, no API key required.", bundle: bundle)
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
@@ -580,6 +773,8 @@ private struct Qwen3SettingsView: View {
                     .font(.subheadline)
                     .fontWeight(.medium)
 
+                quickPickGuide
+
                 ForEach(Qwen3Plugin.availableModels) { modelDef in
                     modelRow(modelDef)
                 }
@@ -630,12 +825,54 @@ private struct Qwen3SettingsView: View {
     }
 
     @ViewBuilder
+    private var quickPickGuide: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Quick picks", bundle: bundle)
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
+
+            ForEach(quickPickModels) { modelDef in
+                if let recommendation = modelDef.recommendation {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Image(systemName: recommendationSystemImage(for: recommendation))
+                            .font(.caption)
+                            .foregroundStyle(recommendationColor(for: recommendation))
+                            .frame(width: 14)
+
+                        Text(recommendationTitle(for: recommendation))
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundStyle(.primary)
+
+                        Text(modelDef.displayName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
     private func modelRow(_ modelDef: Qwen3ModelDef) -> some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(modelDef.displayName)
-                    .font(.body)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(modelDef.displayName)
+                        .font(.body)
+
+                    if let recommendation = modelDef.recommendation {
+                        recommendationBadge(recommendation)
+                    }
+                }
+
                 Text("\(modelDef.sizeDescription) - RAM: \(modelDef.ramRequirement)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Text(localizedUsageHint(for: modelDef))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -651,7 +888,7 @@ private struct Qwen3SettingsView: View {
                         .foregroundStyle(.green)
                     Button(String(localized: "Unload", bundle: bundle)) {
                         plugin.unloadModel()
-                        plugin.deleteModelFiles(modelDef)
+                        try? plugin.deleteModelFiles(modelDef)
                         modelState = plugin.modelState
                     }
                     .buttonStyle(.bordered)
@@ -674,6 +911,92 @@ private struct Qwen3SettingsView: View {
             }
         }
         .padding(.vertical, 4)
+    }
+
+    @ViewBuilder
+    private func recommendationBadge(_ recommendation: Qwen3ModelRecommendation) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: recommendationSystemImage(for: recommendation))
+                .imageScale(.small)
+            Text(recommendationShortLabel(for: recommendation))
+        }
+        .font(.caption2)
+        .fontWeight(.semibold)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .foregroundStyle(recommendationColor(for: recommendation))
+        .background(recommendationColor(for: recommendation).opacity(0.12), in: Capsule())
+    }
+
+    private func recommendationSystemImage(for recommendation: Qwen3ModelRecommendation) -> String {
+        switch recommendation {
+        case .lowMemory:
+            "bolt.fill"
+        case .balanced:
+            "checkmark.seal.fill"
+        case .highQuality:
+            "star.fill"
+        }
+    }
+
+    private func recommendationColor(for recommendation: Qwen3ModelRecommendation) -> Color {
+        switch recommendation {
+        case .lowMemory:
+            .blue
+        case .balanced:
+            .green
+        case .highQuality:
+            .purple
+        }
+    }
+
+    private func recommendationShortLabel(for recommendation: Qwen3ModelRecommendation) -> String {
+        switch recommendation {
+        case .lowMemory:
+            String(localized: "8 GB pick", bundle: bundle)
+        case .balanced:
+            String(localized: "Recommended", bundle: bundle)
+        case .highQuality:
+            String(localized: "32 GB quality", bundle: bundle)
+        }
+    }
+
+    private func recommendationTitle(for recommendation: Qwen3ModelRecommendation) -> String {
+        switch recommendation {
+        case .lowMemory:
+            String(localized: "Fast / 8 GB", bundle: bundle)
+        case .balanced:
+            String(localized: "Best default", bundle: bundle)
+        case .highQuality:
+            String(localized: "Quality / 32 GB", bundle: bundle)
+        }
+    }
+
+    private func localizedUsageHint(for modelDef: Qwen3ModelDef) -> String {
+        switch modelDef.id {
+        case "qwen3-asr-0.6b-4bit":
+            String(localized: "Smallest download; use when memory matters more than quality.", bundle: bundle)
+        case "qwen3-asr-0.6b-5bit":
+            String(localized: "Slightly more precision than 4-bit with a similar footprint.", bundle: bundle)
+        case "qwen3-asr-0.6b-6bit":
+            String(localized: "Fast pick for 8 GB Macs and casual dictation.", bundle: bundle)
+        case "qwen3-asr-0.6b-8bit":
+            String(localized: "Higher-precision small model when 0.6B quality matters.", bundle: bundle)
+        case "qwen3-asr-0.6b-bf16":
+            String(localized: "Unquantized small model; useful for comparison or validation.", bundle: bundle)
+        case "qwen3-asr-1.7b-4bit":
+            String(localized: "Smallest 1.7B option; use when 6-bit is too heavy.", bundle: bundle)
+        case "qwen3-asr-1.7b-5bit":
+            String(localized: "Middle ground if the default 6-bit model is tight on memory.", bundle: bundle)
+        case "qwen3-asr-1.7b-6bit":
+            String(localized: "Best default for most 16 GB+ Macs.", bundle: bundle)
+        case "qwen3-asr-1.7b-8bit":
+            String(localized: "Higher-quality pick for 32 GB+ Macs.", bundle: bundle)
+        case "qwen3-asr-1.7b-bf16":
+            String(localized: "Largest unquantized model; use for max-fidelity validation.", bundle: bundle)
+        default:
+            modelDef.usageHint
+        }
     }
 
     private func validateAndSaveHuggingFaceToken() {

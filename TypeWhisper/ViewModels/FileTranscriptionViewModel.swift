@@ -2,9 +2,20 @@ import Foundation
 import Combine
 import AppKit
 import UniformTypeIdentifiers
+import TypeWhisperPluginSDK
 
 @MainActor
 final class FileTranscriptionViewModel: ObservableObject {
+    typealias AudioSamplesLoader = @MainActor (URL) async throws -> [Float]
+    typealias TranscriptionRunner = @MainActor (
+        [Float],
+        LanguageSelection,
+        TranscriptionTask,
+        String?,
+        String?
+    ) async throws -> TranscriptionResult
+    typealias EngineReadinessChecker = @MainActor (String?) -> Bool
+
     nonisolated(unsafe) static var _shared: FileTranscriptionViewModel?
     static var shared: FileTranscriptionViewModel {
         guard let instance = _shared else {
@@ -41,28 +52,97 @@ final class FileTranscriptionViewModel: ObservableObject {
     @Published var showFilePickerFromMenu = false
     @Published var batchState: BatchState = .idle
     @Published var currentIndex: Int = 0
-    @Published var languageSelection: LanguageSelection = .auto
+    @Published var languageSelection: LanguageSelection = .auto {
+        didSet {
+            defaults.set(
+                languageSelection.storedValue(nilBehavior: .auto),
+                forKey: UserDefaultsKeys.fileTranscriptionLanguage
+            )
+        }
+    }
     @Published var selectedTask: TranscriptionTask = .transcribe
+    @Published var selectedEngine: String? {
+        didSet {
+            defaults.set(selectedEngine, forKey: UserDefaultsKeys.fileTranscriptionEngine)
+            guard isInitialized, oldValue != selectedEngine else { return }
+            selectedModel = nil
+            normalizeLanguageSelectionForResolvedEngine()
+        }
+    }
+    @Published var selectedModel: String? {
+        didSet { defaults.set(selectedModel, forKey: UserDefaultsKeys.fileTranscriptionModel) }
+    }
 
     private let modelManager: ModelManagerService
     private let audioFileService: AudioFileService
+    private let defaults: UserDefaults
+    private let audioSamplesLoader: AudioSamplesLoader
+    private let transcriptionRunner: TranscriptionRunner
+    private let engineReadinessChecker: EngineReadinessChecker?
+    private var cancellables = Set<AnyCancellable>()
+    private var isInitialized = false
 
     static let allowedContentTypes: [UTType] = [
         .wav, .mp3, .mpeg4Audio, .aiff, .audio,
         .mpeg4Movie, .quickTimeMovie, .avi, .movie
     ]
 
-    init(modelManager: ModelManagerService, audioFileService: AudioFileService) {
+    init(
+        modelManager: ModelManagerService,
+        audioFileService: AudioFileService,
+        defaults: UserDefaults = .standard,
+        audioSamplesLoader: AudioSamplesLoader? = nil,
+        transcriptionRunner: TranscriptionRunner? = nil,
+        engineReadinessChecker: EngineReadinessChecker? = nil
+    ) {
         self.modelManager = modelManager
         self.audioFileService = audioFileService
+        self.defaults = defaults
+        self.audioSamplesLoader = audioSamplesLoader ?? { [audioFileService] url in
+            try await audioFileService.loadAudioSamples(from: url)
+        }
+        self.transcriptionRunner = transcriptionRunner ?? { [modelManager] samples, languageSelection, task, engineOverrideId, cloudModelOverride in
+            try await modelManager.transcribe(
+                audioSamples: samples,
+                languageSelection: languageSelection,
+                task: task,
+                engineOverrideId: engineOverrideId,
+                cloudModelOverride: cloudModelOverride
+            )
+        }
+        self.engineReadinessChecker = engineReadinessChecker
+        self.languageSelection = LanguageSelection(
+            storedValue: defaults.string(forKey: UserDefaultsKeys.fileTranscriptionLanguage),
+            nilBehavior: .auto
+        )
+        self.selectedEngine = defaults.string(forKey: UserDefaultsKeys.fileTranscriptionEngine)
+        self.selectedModel = defaults.string(forKey: UserDefaultsKeys.fileTranscriptionModel)
+        self.isInitialized = true
+        reconcileSelectionWithAvailablePlugins()
     }
 
     var canTranscribe: Bool {
-        !files.isEmpty && modelManager.isModelReady && batchState != .processing
+        !files.isEmpty && selectedEngineIsReady && batchState != .processing
     }
 
     var supportsTranslation: Bool {
-        modelManager.supportsTranslation
+        resolvedEngine?.supportsTranslation ?? false
+    }
+
+    var availableEngines: [TranscriptionEnginePlugin] {
+        guard let pluginManager = PluginManager.shared else { return [] }
+        return pluginManager.transcriptionEngines
+    }
+
+    var resolvedEngine: TranscriptionEnginePlugin? {
+        let engineId = selectedEngine ?? modelManager.selectedProviderId
+        guard let engineId else { return nil }
+        guard let pluginManager = PluginManager.shared else { return nil }
+        return pluginManager.transcriptionEngine(for: engineId)
+    }
+
+    var selectedEngineSupportedLanguages: [String] {
+        resolvedEngine?.supportedLanguages.sorted() ?? []
     }
 
     var hasResults: Bool {
@@ -73,6 +153,21 @@ final class FileTranscriptionViewModel: ObservableObject {
 
     var completedFiles: Int {
         files.filter { $0.state == .done }.count
+    }
+
+    func observePluginManager() {
+        guard let pluginManager = PluginManager.shared else { return }
+        pluginManager.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.reconcileSelectionWithAvailablePlugins()
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+    }
+
+    func canUseForTranscription(_ engine: TranscriptionEnginePlugin) -> Bool {
+        modelManager.canUseForTranscription(engine)
     }
 
     func addFiles(_ urls: [URL]) {
@@ -125,16 +220,16 @@ final class FileTranscriptionViewModel: ObservableObject {
         files[index].state = .loading
 
         do {
-            let samples = try await audioFileService.loadAudioSamples(from: files[index].url)
+            let samples = try await audioSamplesLoader(files[index].url)
 
             files[index].state = .transcribing
 
-            let result = try await modelManager.transcribe(
-                audioSamples: samples,
-                languageSelection: languageSelection,
-                task: selectedTask,
-                engineOverrideId: nil,
-                cloudModelOverride: nil
+            let result = try await transcriptionRunner(
+                samples,
+                languageSelection,
+                selectedTask,
+                selectedEngine,
+                selectedModel
             )
 
             files[index].result = result
@@ -212,5 +307,33 @@ final class FileTranscriptionViewModel: ObservableObject {
         files = []
         batchState = .idle
         currentIndex = 0
+    }
+
+    private var selectedEngineIsReady: Bool {
+        if let engineReadinessChecker {
+            return engineReadinessChecker(selectedEngine)
+        }
+
+        guard let engine = resolvedEngine else { return false }
+        guard modelManager.canUseForTranscription(engine) else { return false }
+        return engine.isConfigured
+    }
+
+    private func reconcileSelectionWithAvailablePlugins() {
+        guard let pluginManager = PluginManager.shared else { return }
+        if let selectedEngine,
+           pluginManager.transcriptionEngine(for: selectedEngine) == nil {
+            self.selectedEngine = nil
+            selectedModel = nil
+        }
+        normalizeLanguageSelectionForResolvedEngine()
+    }
+
+    private func normalizeLanguageSelectionForResolvedEngine() {
+        guard let engine = resolvedEngine else { return }
+        let normalized = languageSelection.normalizedForSupportedLanguages(engine.supportedLanguages)
+        if normalized != languageSelection {
+            languageSelection = normalized
+        }
     }
 }

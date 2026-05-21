@@ -6,57 +6,30 @@ struct HotkeySettingsView: View {
     var body: some View {
         Form {
             Section(String(localized: "Hotkeys")) {
-                HotkeyRecorderView(
-                    label: dictation.hybridHotkeyLabel,
+                MultiHotkeySlotRecorder(
+                    slot: .hybrid,
                     title: String(localized: "Hybrid"),
-                    subtitle: String(localized: "Short press to toggle, hold to push-to-talk."),
-                    onRecord: { hotkey in
-                        if let conflict = dictation.isHotkeyAssigned(hotkey, excluding: .hybrid) {
-                            dictation.clearHotkey(for: conflict)
-                        }
-                        dictation.setHotkey(hotkey, for: .hybrid)
-                    },
-                    onClear: { dictation.clearHotkey(for: .hybrid) }
+                    subtitle: String(localized: "Short press to toggle, hold to push-to-talk.")
                 )
 
-                HotkeyRecorderView(
-                    label: dictation.pttHotkeyLabel,
+                MultiHotkeySlotRecorder(
+                    slot: .pushToTalk,
                     title: String(localized: "Push-to-Talk"),
-                    subtitle: String(localized: "Hold to record, release to stop."),
-                    onRecord: { hotkey in
-                        if let conflict = dictation.isHotkeyAssigned(hotkey, excluding: .pushToTalk) {
-                            dictation.clearHotkey(for: conflict)
-                        }
-                        dictation.setHotkey(hotkey, for: .pushToTalk)
-                    },
-                    onClear: { dictation.clearHotkey(for: .pushToTalk) }
+                    subtitle: String(localized: "Hold to record, release to stop.")
                 )
 
-                HotkeyRecorderView(
-                    label: dictation.toggleHotkeyLabel,
+                MultiHotkeySlotRecorder(
+                    slot: .toggle,
                     title: String(localized: "Toggle"),
-                    subtitle: String(localized: "Press to start, press again to stop."),
-                    onRecord: { hotkey in
-                        if let conflict = dictation.isHotkeyAssigned(hotkey, excluding: .toggle) {
-                            dictation.clearHotkey(for: conflict)
-                        }
-                        dictation.setHotkey(hotkey, for: .toggle)
-                    },
-                    onClear: { dictation.clearHotkey(for: .toggle) }
+                    subtitle: String(localized: "Press to start, press again to stop.")
                 )
             }
 
             Section(localizedAppText("Workflow Palette", de: "Workflow-Palette")) {
-                HotkeyRecorderView(
-                    label: dictation.promptPaletteHotkeyLabel,
+                MultiHotkeySlotRecorder(
+                    slot: .promptPalette,
                     title: localizedAppText("Palette shortcut", de: "Palette-Shortcut"),
-                    onRecord: { hotkey in
-                        if let conflict = dictation.isHotkeyAssigned(hotkey, excluding: .promptPalette) {
-                            dictation.clearHotkey(for: conflict)
-                        }
-                        dictation.setHotkey(hotkey, for: .promptPalette)
-                    },
-                    onClear: { dictation.clearHotkey(for: .promptPalette) }
+                    subtitle: nil
                 )
 
                 Text(localizedAppText(
@@ -68,50 +41,120 @@ struct HotkeySettingsView: View {
             }
 
             Section(String(localized: "settings.tab.recorder")) {
-                HotkeyRecorderView(
-                    label: dictation.recorderToggleHotkeyLabel,
+                MultiHotkeySlotRecorder(
+                    slot: .recorderToggle,
                     title: String(localized: "recorder.shortcut.title"),
-                    subtitle: String(localized: "recorder.shortcut.description"),
-                    onRecord: { hotkey in
-                        if let conflict = dictation.isHotkeyAssigned(hotkey, excluding: .recorderToggle) {
-                            dictation.clearHotkey(for: conflict)
-                        }
-                        dictation.setHotkey(hotkey, for: .recorderToggle)
-                    },
-                    onClear: { dictation.clearHotkey(for: .recorderToggle) }
+                    subtitle: String(localized: "recorder.shortcut.description")
                 )
             }
 
             Section(String(localized: "Recent Transcriptions")) {
-                HotkeyRecorderView(
-                    label: dictation.recentTranscriptionsHotkeyLabel,
+                MultiHotkeySlotRecorder(
+                    slot: .recentTranscriptions,
                     title: String(localized: "Recent transcription shortcut"),
-                    subtitle: String(localized: "Open your latest transcriptions and insert one into the focused app."),
-                    onRecord: { hotkey in
-                        if let conflict = dictation.isHotkeyAssigned(hotkey, excluding: .recentTranscriptions) {
-                            dictation.clearHotkey(for: conflict)
-                        }
-                        dictation.setHotkey(hotkey, for: .recentTranscriptions)
-                    },
-                    onClear: { dictation.clearHotkey(for: .recentTranscriptions) }
+                    subtitle: String(localized: "Open your latest transcriptions and insert one into the focused app.")
                 )
 
-                HotkeyRecorderView(
-                    label: dictation.copyLastTranscriptionHotkeyLabel,
+                MultiHotkeySlotRecorder(
+                    slot: .copyLastTranscription,
                     title: String(localized: "Copy last transcription shortcut"),
-                    subtitle: String(localized: "Copy your latest transcription to the clipboard."),
-                    onRecord: { hotkey in
-                        if let conflict = dictation.isHotkeyAssigned(hotkey, excluding: .copyLastTranscription) {
-                            dictation.clearHotkey(for: conflict)
-                        }
-                        dictation.setHotkey(hotkey, for: .copyLastTranscription)
-                    },
-                    onClear: { dictation.clearHotkey(for: .copyLastTranscription) }
+                    subtitle: String(localized: "Copy your latest transcription to the clipboard.")
                 )
             }
         }
         .formStyle(.grouped)
         .padding()
         .frame(minWidth: 500, minHeight: 300)
+    }
+}
+
+private struct MultiHotkeySlotRecorder: View {
+    @ObservedObject private var dictation = DictationViewModel.shared
+
+    let slot: HotkeySlotType
+    let title: String
+    let subtitle: String?
+
+    var body: some View {
+        let hotkeys = dictation.hotkeys(for: slot)
+
+        Group {
+            if hotkeys.isEmpty {
+                HotkeyRecorderView(
+                    label: "",
+                    title: title,
+                    subtitle: subtitle,
+                    onRecord: { hotkey in record(hotkey) },
+                    onClear: { dictation.clearHotkey(for: slot) }
+                )
+            } else {
+                assignedHotkeysRow(hotkeys)
+            }
+        }
+    }
+
+    private func assignedHotkeysRow(_ hotkeys: [UnifiedHotkey]) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer(minLength: 12)
+
+            HStack(spacing: 8) {
+                ForEach(hotkeys, id: \.self) { hotkey in
+                    HotkeyRecorderView(
+                        label: HotkeyService.displayName(for: hotkey),
+                        presentation: .compactChip,
+                        onRecord: { newHotkey in record(newHotkey, replacing: hotkey) },
+                        onClear: { dictation.removeHotkey(hotkey, for: slot) }
+                    )
+                }
+
+                addShortcutButton
+            }
+        }
+    }
+
+    private var addShortcutButton: some View {
+        HotkeyRecorderView(
+            label: "",
+            title: localizedAppText("Add Shortcut", de: "Shortcut hinzufügen"),
+            presentation: .iconButton(systemName: "plus.circle"),
+            onRecord: { hotkey in record(hotkey) },
+            onClear: {}
+        )
+    }
+
+    private func record(_ hotkey: UnifiedHotkey, replacing existingHotkey: UnifiedHotkey? = nil) {
+        if let existingHotkey, existingHotkey.conflicts(with: hotkey) {
+            dictation.replaceHotkey(existingHotkey, with: hotkey, for: slot)
+            return
+        }
+
+        let currentHotkeys = dictation.hotkeys(for: slot)
+        if currentHotkeys.contains(where: { candidate in
+            if let existingHotkey, candidate == existingHotkey {
+                return false
+            }
+            return candidate.conflicts(with: hotkey)
+        }) {
+            return
+        }
+
+        if let conflict = dictation.isHotkeyAssigned(hotkey, excluding: slot) {
+            dictation.removeConflictingHotkey(hotkey, for: conflict)
+        }
+
+        if let existingHotkey {
+            dictation.replaceHotkey(existingHotkey, with: hotkey, for: slot)
+        } else {
+            dictation.addHotkey(hotkey, for: slot)
+        }
     }
 }

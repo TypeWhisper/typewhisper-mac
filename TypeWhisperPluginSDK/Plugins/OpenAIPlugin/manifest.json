@@ -2,16 +2,16 @@
     "id": "com.typewhisper.openai",
     "name": "OpenAI / ChatGPT",
     "version": "1.1.1",
-    "minHostVersion": "1.2.2",
+    "minHostVersion": "1.4.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
-    "description": "Cloud transcription plus OpenAI/ChatGPT prompts. Use an API key or ChatGPT login.",
+    "description": "Cloud transcription, OpenAI/ChatGPT prompts, and text-to-speech. Use an API key for STT/TTS or ChatGPT login for prompts.",
     "descriptions": {
-        "de": "Cloud-Transkription plus OpenAI-/ChatGPT-Prompts. Nutzbar per API-Key oder ChatGPT-Login."
+        "de": "Cloud-Transkription, OpenAI-/ChatGPT-Prompts und Text-to-Speech. STT/TTS brauchen einen API-Key, Prompts funktionieren auch per ChatGPT-Login."
     },
     "category": "transcription",
-    "categories": ["transcription", "llm"],
+    "categories": ["transcription", "llm", "tts"],
     "hosting": "cloud",
     "iconSystemName": "brain",
     "principalClass": "OpenAIPlugin",

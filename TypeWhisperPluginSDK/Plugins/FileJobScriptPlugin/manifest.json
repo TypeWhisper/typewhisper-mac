@@ -1,0 +1,16 @@
+{
+    "id": "com.typewhisper.file-job-script",
+    "name": "File Job Script",
+    "version": "1.0.0",
+    "minHostVersion": "1.4.0",
+    "sdkCompatibilityVersion": "v1",
+    "minOSVersion": "14.0",
+    "author": "TypeWhisper",
+    "description": "Run shell scripts for watch-folder file jobs. Scripts can replace the final exported artifact.",
+    "descriptions": {
+        "de": "Shell-Skripte fuer Watch-Folder-Dateijobs ausfuehren. Skripte koennen das finale Export-Artefakt ersetzen."
+    },
+    "category": "file-automation",
+    "iconSystemName": "folder.badge.gearshape",
+    "principalClass": "FileJobScriptPlugin"
+}

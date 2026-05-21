@@ -246,7 +246,6 @@ struct IndicatorPreviewView: View {
                 .padding(.horizontal, 5)
                 .padding(.vertical, 2)
                 .frame(maxWidth: NotchIndicatorLayout.profileChipMaxWidth, alignment: .leading)
-                .background(.white.opacity(0.2), in: Capsule())
         case .none:
             Color.clear.frame(width: 0)
         }

@@ -7,6 +7,7 @@
 - `xcodebuild -project TypeWhisper.xcodeproj -scheme TypeWhisper -configuration Release -derivedDataPath build -destination 'generic/platform=macOS' CODE_SIGN_IDENTITY='-' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO`
 - `bash scripts/check_first_party_warnings.sh build.log`
 - Review `README.md`, `SECURITY.md`, `docs/support-matrix.md`, `docs/release-readiness.md`, `TypeWhisperPluginSDK/Plugins/README.md`, and `TypeWhisperPluginSDK/README.md`
+- If README screenshots changed, run `scripts/update-readme-screenshots.sh`; otherwise verify the gallery with `scripts/update-readme-screenshots.sh --check`
 - Confirm marketplace plugin manifests and registry releases carry the current `sdkCompatibilityVersion`
 - Confirm `MARKETING_VERSION = 1.4.0` across the app, CLI, and widgets
 - Prepare or refresh `docs/release-notes/1.4.0.md`
@@ -44,7 +45,8 @@
 - Notch, Overlay, and Minimal indicator styles
 - Transcript preview toggle for Notch and Overlay
 - Plugin enable/disable
-- MLX plugin settings: save and remove HuggingFace token, then verify download error copy for Qwen3, Granite, and Voxtral
+- Local model plugin settings: save and remove HuggingFace token, then verify download error copy for Qwen3, Granite, Voxtral, and Supertonic
+- Supertonic plugin: verify OpenRAIL-M license checkbox gates the first model download and that changed license revision requires re-acceptance
 - Gemma 4 plugin: verify E2B/E4B 4-bit download and load, and verify E4B 8-bit plus 26B-A4B remain visible but disabled with explanatory copy
 - Community term pack download and apply
 - Built-in term packs render localized metadata in English and German

@@ -864,6 +864,16 @@
         }
       }
     },
+    "Aggressive" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aggressiv"
+          }
+        }
+      }
+    },
     "AI enhanced" : {
       "localizations" : {
         "de" : {
@@ -924,6 +934,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Alle verfügbaren Plugins sind bereits installiert."
+          }
+        }
+      }
+    },
+    "All dictations" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Diktate"
           }
         }
       }
@@ -1418,6 +1438,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Abgebrochen"
+          }
+        }
+      }
+    },
+    "Capture From" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erfassen aus"
           }
         }
       }
@@ -3196,13 +3226,13 @@
         }
       }
     },
-    "If you need a commercial license for proprietary or otherwise non-GPL-compliant use, purchase it on Polar.sh and enter the key below." : {
+    "If you need non-GPL terms, procurement, support, or proprietary redistribution rights, purchase a commercial license on Polar.sh and enter the key below." : {
       "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wenn du eine kommerzielle Lizenz für proprietären oder nicht GPL-konformen Gebrauch brauchst, kaufe sie auf Polar.sh und gib den Key unten ein."
+            "value" : "Wenn du Nicht-GPL-Bedingungen, Beschaffung, Support oder proprietäre Weiterverteilungsrechte brauchst, kaufe eine kommerzielle Lizenz auf Polar.sh und gib den Key unten ein."
           }
         }
       }
@@ -3921,6 +3951,26 @@
         }
       }
     },
+    "Memory extraction runs for every eligible transcription after the minimum text length and cooldown checks." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Memory-Extraktion läuft für jede geeignete Transkription nach Mindestlänge und Cooldown."
+          }
+        }
+      }
+    },
+    "Memory extraction runs only when the transcription was produced by a known workflow." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Memory-Extraktion läuft nur, wenn die Transkription von einem bekannten Workflow erzeugt wurde."
+          }
+        }
+      }
+    },
     "Menu bar icon" : {
       "localizations" : {
         "de" : {
@@ -4038,6 +4088,16 @@
       }
     },
     "Mittel" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mittel"
+          }
+        }
+      }
+    },
+    "Medium" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -4612,7 +4672,6 @@
       }
     },
     "Off" : {
-      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -4961,12 +5020,12 @@
         }
       }
     },
-    "Personal use and GPL-compliant open-source use are free. Proprietary or otherwise non-GPL-compliant use requires a commercial license." : {
+    "The GPL version is free to install and run as-is, including internal use. Non-GPL terms, procurement, support, or proprietary redistribution require a commercial license." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Privater und GPL-konformer Open-Source-Gebrauch sind kostenlos. Proprietärer oder nicht GPL-konformer Gebrauch erfordert eine kommerzielle Lizenz."
+            "value" : "Die GPL-Version darf kostenlos unverändert installiert und ausgeführt werden, auch intern. Nicht-GPL-Bedingungen, Beschaffung, Support oder proprietäre Weiterverteilung erfordern eine kommerzielle Lizenz."
           }
         }
       }
@@ -6753,7 +6812,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Aufnahme"
+            "value" : "Recorder"
           }
         },
         "en" : {
@@ -7915,22 +7974,22 @@
         }
       }
     },
-    "TypeWhisper is free for personal use. If you'd like to support development, grab a supporter license for a Discord role and an in-app badge." : {
+    "TypeWhisper is open source under GPLv3. If you'd like to support development, grab a supporter license for a Discord role and an in-app badge." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper ist für den privaten Gebrauch kostenlos. Wenn du die Entwicklung unterstützen möchtest, hol dir eine Supporter-Lizenz für eine Discord-Rolle und ein In-App-Badge."
+            "value" : "TypeWhisper ist Open Source unter GPLv3. Wenn du die Entwicklung unterstützen möchtest, hol dir eine Supporter-Lizenz für eine Discord-Rolle und ein In-App-Badge."
           }
         }
       }
     },
-    "TypeWhisper is open source.\nPersonal use and GPL-compliant open-source use are free.\nProprietary or otherwise non-GPL-compliant use requires a commercial license." : {
+    "TypeWhisper is open source under GPLv3.\nYou can install and run the GPL version as-is.\nUse a commercial license for non-GPL terms, procurement, support, or proprietary redistribution." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper ist Open Source.\nDie private Nutzung und die GPL-konforme Open-Source-Nutzung sind kostenlos.\nFür proprietäre oder anderweitig nicht GPL-konforme Nutzung ist eine kommerzielle Lizenz erforderlich."
+            "value" : "TypeWhisper ist Open Source unter GPLv3.\nDu darfst die GPL-Version unverändert installieren und ausführen.\nNutze eine kommerzielle Lizenz für Nicht-GPL-Bedingungen, Beschaffung, Support oder proprietäre Weiterverteilung."
           }
         }
       }
@@ -8792,6 +8851,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Wörter"
+          }
+        }
+      }
+    },
+    "Workflow dictations only" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur Workflow-Diktate"
           }
         }
       }

@@ -242,13 +242,17 @@ struct Gemma4SettingsView: View {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                     Button(String(localized: "Unload", bundle: bundle)) {
-                        plugin.unloadModel()
-                        plugin.deleteModelFiles(modelDef)
-                        modelState = plugin.modelState
+                        resetCachedModel(modelDef)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
+            } else if isRecoverableCachedModelError(for: modelDef) {
+                Button(String(localized: "Delete cached model", bundle: bundle)) {
+                    resetCachedModel(modelDef)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             } else if let experimentalWarning = modelDef.experimentalWarning {
                 VStack(alignment: .trailing, spacing: 6) {
                     Text("Experimental", bundle: bundle)
@@ -278,6 +282,24 @@ struct Gemma4SettingsView: View {
             }
         }
         .padding(.vertical, 4)
+    }
+
+    private func isRecoverableCachedModelError(for modelDef: Gemma4ModelDef) -> Bool {
+        if case .error = modelState,
+           selectedModelId == modelDef.id,
+           plugin.isModelDownloaded(modelDef) {
+            return true
+        }
+        return false
+    }
+
+    private func resetCachedModel(_ modelDef: Gemma4ModelDef) {
+        loadTask?.cancel()
+        loadTask = nil
+        isPolling = false
+        plugin.resetCachedModel(modelDef)
+        modelState = plugin.modelState
+        downloadProgress = plugin.currentDownloadProgress
     }
 
     private func startLoading(_ modelDef: Gemma4ModelDef) {

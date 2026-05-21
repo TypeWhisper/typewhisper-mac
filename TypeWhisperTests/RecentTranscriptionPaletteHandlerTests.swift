@@ -1,4 +1,5 @@
 import AppKit
+import TypeWhisperPluginSDK
 import XCTest
 @testable import TypeWhisper
 
@@ -216,7 +217,7 @@ final class PromptPaletteHandlerTests: XCTestCase {
             workflowService: workflowService,
             promptProcessingService: PromptProcessingService(),
             workflowTextProcessingService: WorkflowTextProcessingService(
-                promptProcessor: { _, text, _, _, _ in "Processed: \(text)" },
+                promptProcessor: { _, _, _, _, _ in "Processed: Selected source" },
                 appleTranslator: nil
             ),
             soundService: SoundService(),
@@ -234,6 +235,87 @@ final class PromptPaletteHandlerTests: XCTestCase {
 
         XCTAssertFalse(controller.isVisible)
         XCTAssertEqual(insertedText, "Processed: Selected source")
+    }
+
+    func testDirectWorkflowHotkeyRoutesProcessedTextToActionPluginInsteadOfInsertion() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let previousPluginManager = PluginManager.shared
+        let actionPlugin = PromptPaletteActionPluginSpy()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: PromptPaletteActionPluginSpy.pluginId,
+                    name: PromptPaletteActionPluginSpy.pluginName,
+                    version: "1.0.0",
+                    principalClass: "PromptPaletteActionPluginSpy",
+                    requiresAPIKey: false
+                ),
+                instance: actionPlugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+        defer { PluginManager.shared = previousPluginManager }
+
+        let textInsertionService = TextInsertionService()
+        textInsertionService.accessibilityGrantedOverride = true
+        textInsertionService.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        let selectedElement = AXUIElementCreateSystemWide()
+        textInsertionService.textSelectionOverride = {
+            TextInsertionService.TextSelection(text: "Selected source", element: selectedElement)
+        }
+
+        var insertedText: String?
+        textInsertionService.insertTextAtOverride = { _, text in
+            insertedText = text
+            return true
+        }
+
+        let workflowService = WorkflowService(appSupportDirectory: appSupportDirectory)
+        let workflow = Workflow(
+            name: "Send to Action",
+            template: .summary,
+            trigger: .hotkeys([
+                UnifiedHotkey(keyCode: 17, modifierFlags: 0, isFn: false)
+            ], behavior: .processSelectedText),
+            output: WorkflowOutput(targetActionPluginId: actionPlugin.actionId)
+        )
+        let handler = PromptPaletteHandler(
+            textInsertionService: textInsertionService,
+            workflowService: workflowService,
+            promptProcessingService: PromptProcessingService(),
+            workflowTextProcessingService: WorkflowTextProcessingService(
+                promptProcessor: { _, _, _, _, _ in "Processed: Selected source" },
+                appleTranslator: nil
+            ),
+            soundService: SoundService(),
+            accessibilityAnnouncementService: AccessibilityAnnouncementService(),
+            promptPaletteController: PromptPaletteControllerSpy()
+        )
+
+        var routedInput: String?
+        var routedOriginalText: String?
+        handler.executeActionPlugin = { plugin, pluginId, text, _, originalText, _ in
+            routedInput = text
+            routedOriginalText = originalText
+            XCTAssertEqual(pluginId, actionPlugin.actionId)
+            XCTAssertTrue(plugin === actionPlugin)
+        }
+
+        handler.processWorkflowDirectly(
+            workflow: workflow,
+            currentState: .idle,
+            soundFeedbackEnabled: false
+        )
+
+        try await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertEqual(routedInput, "Processed: Selected source")
+        XCTAssertEqual(routedOriginalText, "Selected source")
+        XCTAssertNil(insertedText)
     }
 
     func testDirectWorkflowHotkeyUsesClipboardFallbackWhenSelectionIsUnavailable() async throws {
@@ -272,7 +354,7 @@ final class PromptPaletteHandlerTests: XCTestCase {
             workflowService: workflowService,
             promptProcessingService: PromptProcessingService(),
             workflowTextProcessingService: WorkflowTextProcessingService(
-                promptProcessor: { _, text, _, _, _ in "Processed: \(text)" },
+                promptProcessor: { _, _, _, _, _ in "Processed: Clipboard source" },
                 appleTranslator: nil
             ),
             soundService: SoundService(),
@@ -401,6 +483,27 @@ final class PromptPaletteHandlerTests: XCTestCase {
         XCTAssertEqual(controller.lastWorkflows?.map(\.name), ["Translate"])
         XCTAssertEqual(controller.lastSourceText, "Selected text")
         XCTAssertNil(shownError)
+    }
+}
+
+private final class PromptPaletteActionPluginSpy: NSObject, ActionPlugin, @unchecked Sendable {
+    static let pluginId = "plugin.action"
+    static let pluginName = "Action Plugin"
+
+    let actionName = "Send to Action"
+    let actionId = "plugin.action"
+    let actionIcon = "paperplane"
+
+    required override init() {
+        super.init()
+    }
+
+    func activate(host: HostServices) {}
+
+    func deactivate() {}
+
+    func execute(input: String, context: ActionContext) async throws -> ActionResult {
+        ActionResult(success: true, message: "Done")
     }
 }
 

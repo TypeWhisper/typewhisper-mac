@@ -21,6 +21,7 @@ struct RemoteTermPack: Codable {
     let corrections: [TermPackCorrection]?
     let names: [String: String]?
     let descriptions: [String: String]?
+    let requiresCommercialLicense: Bool?
 
     func toTermPack() -> TermPack {
         TermPack(
@@ -33,7 +34,8 @@ struct RemoteTermPack: Codable {
             version: version,
             author: author,
             localizedNames: names,
-            localizedDescriptions: descriptions
+            localizedDescriptions: descriptions,
+            requiresCommercialLicense: requiresCommercialLicense ?? false
         )
     }
 }
@@ -61,7 +63,7 @@ final class TermPackRegistryService: ObservableObject {
     }
 
     init(
-        registryURL: URL = URL(string: "https://typewhisper.github.io/typewhisper-mac/termpacks.json")!,
+        registryURL: URL = URL(string: "https://typewhisper.github.io/typewhisper-termpacks/termpacks.json")!,
         cacheDuration: TimeInterval = 300,
         userDefaults: UserDefaults = .standard,
         fetchData: @escaping (URLRequest) async throws -> (Data, URLResponse) = { request in

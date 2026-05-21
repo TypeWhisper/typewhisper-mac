@@ -3,6 +3,123 @@ import AppKit
 import Combine
 import ApplicationServices
 
+struct IndicatorPresentationState: Equatable {
+    enum Source: Equatable {
+        case dictation
+        case recorder
+    }
+
+    let source: Source
+    let state: DictationViewModel.State
+
+    var isActiveDuringActivity: Bool {
+        switch state {
+        case .recording, .processing, .inserting, .error:
+            return true
+        case .idle, .promptSelection, .promptProcessing:
+            return false
+        }
+    }
+
+    static func resolve(
+        dictationState: DictationViewModel.State,
+        recorderState: AudioRecorderViewModel.RecorderState
+    ) -> IndicatorPresentationState {
+        switch dictationState {
+        case .recording, .processing, .inserting, .error:
+            return IndicatorPresentationState(source: .dictation, state: dictationState)
+        case .idle, .promptSelection, .promptProcessing:
+            if recorderState == .recording {
+                return IndicatorPresentationState(source: .recorder, state: .recording)
+            }
+            return IndicatorPresentationState(source: .dictation, state: dictationState)
+        }
+    }
+
+    static func shouldShow(
+        visibility: NotchIndicatorVisibility,
+        presentation: IndicatorPresentationState
+    ) -> Bool {
+        switch visibility {
+        case .always:
+            return true
+        case .duringActivity:
+            return presentation.isActiveDuringActivity
+        case .never:
+            return false
+        }
+    }
+}
+
+struct IndicatorPresentationData {
+    let source: IndicatorPresentationState.Source
+    let state: DictationViewModel.State
+    let recordingDuration: TimeInterval
+    let audioLevel: Float
+    let partialText: String
+    let activeRuleName: String?
+    let activeAppIcon: NSImage?
+    let isRecordingInputReady: Bool
+    let recordingCancelWarningMessage: String?
+    let processingPhase: String?
+    let actionFeedbackMessage: String?
+    let actionFeedbackIcon: String?
+    let actionFeedbackIsError: Bool
+    let externalStreamingDisplayCount: Int
+
+    var isRecorder: Bool {
+        source == .recorder
+    }
+
+    @MainActor
+    static func make(
+        dictation: DictationViewModel,
+        recorder: AudioRecorderViewModel
+    ) -> IndicatorPresentationData {
+        let presentation = IndicatorPresentationState.resolve(
+            dictationState: dictation.state,
+            recorderState: recorder.state
+        )
+
+        switch presentation.source {
+        case .dictation:
+            return IndicatorPresentationData(
+                source: .dictation,
+                state: presentation.state,
+                recordingDuration: dictation.recordingDuration,
+                audioLevel: dictation.audioLevel,
+                partialText: dictation.partialText,
+                activeRuleName: dictation.activeRuleName,
+                activeAppIcon: dictation.activeAppIcon,
+                isRecordingInputReady: dictation.isRecordingInputReady,
+                recordingCancelWarningMessage: dictation.recordingCancelWarningMessage,
+                processingPhase: dictation.processingPhase,
+                actionFeedbackMessage: dictation.actionFeedbackMessage,
+                actionFeedbackIcon: dictation.actionFeedbackIcon,
+                actionFeedbackIsError: dictation.actionFeedbackIsError,
+                externalStreamingDisplayCount: dictation.externalStreamingDisplayCount
+            )
+        case .recorder:
+            return IndicatorPresentationData(
+                source: .recorder,
+                state: presentation.state,
+                recordingDuration: recorder.duration,
+                audioLevel: max(recorder.micLevel, recorder.systemLevel),
+                partialText: recorder.partialText,
+                activeRuleName: nil,
+                activeAppIcon: nil,
+                isRecordingInputReady: true,
+                recordingCancelWarningMessage: nil,
+                processingPhase: nil,
+                actionFeedbackMessage: nil,
+                actionFeedbackIcon: nil,
+                actionFeedbackIsError: false,
+                externalStreamingDisplayCount: dictation.externalStreamingDisplayCount
+            )
+        }
+    }
+}
+
 /// Coordinates the display of different indicator styles (Notch vs Overlay).
 @MainActor
 final class IndicatorCoordinator {
@@ -47,15 +164,15 @@ final class IndicatorCoordinator {
         case .notch:
             overlayPanel.dismiss()
             minimalPanel.dismiss()
-            notchPanel.updateVisibility(state: vm.state, vm: vm)
+            notchPanel.updateVisibility(vm: vm)
         case .overlay:
             notchPanel.dismiss()
             minimalPanel.dismiss()
-            overlayPanel.updateVisibility(state: vm.state, vm: vm)
+            overlayPanel.updateVisibility(vm: vm)
         case .minimal:
             notchPanel.dismiss()
             overlayPanel.dismiss()
-            minimalPanel.updateVisibility(state: vm.state, vm: vm)
+            minimalPanel.updateVisibility(vm: vm)
         }
     }
 
@@ -116,6 +233,329 @@ final class IndicatorCoordinator {
     }
 }
 
+enum IndicatorWindowFrameLookup {
+    nonisolated static func frontmostWindowFrame(for processIdentifier: pid_t) -> CGRect? {
+        guard let windowList = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements],
+            kCGNullWindowID
+        ) as? [[String: Any]] else {
+            return nil
+        }
+
+        var fallbackFrame: CGRect?
+
+        for windowInfo in windowList {
+            guard let rawBounds = windowInfo[kCGWindowBounds as String] else {
+                continue
+            }
+
+            let boundsDictionary = rawBounds as! CFDictionary
+
+            guard let ownerPID = windowInfo[kCGWindowOwnerPID as String] as? pid_t,
+                  ownerPID == processIdentifier,
+                  let bounds = CGRect(
+                    dictionaryRepresentation: boundsDictionary
+                  ),
+                  !bounds.isEmpty else {
+                continue
+            }
+
+            let alpha = windowInfo[kCGWindowAlpha as String] as? Double ?? 1
+            guard alpha > 0 else { continue }
+
+            let layer = windowInfo[kCGWindowLayer as String] as? Int ?? 0
+            if layer == 0 {
+                return bounds
+            }
+
+            if fallbackFrame == nil {
+                fallbackFrame = bounds
+            }
+        }
+
+        return fallbackFrame
+    }
+
+    nonisolated static func focusedWindowFrame() -> CGRect? {
+        guard let focusedWindow = focusedWindowElement() else {
+            return nil
+        }
+        let windowElement = focusedWindow as! AXUIElement
+
+        var positionValue: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            windowElement,
+            kAXPositionAttribute as CFString,
+            &positionValue
+        ) == .success,
+              let positionValue else {
+            return nil
+        }
+        let axPosition = positionValue as! AXValue
+
+        var sizeValue: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            windowElement,
+            kAXSizeAttribute as CFString,
+            &sizeValue
+        ) == .success,
+              let sizeValue else {
+            return nil
+        }
+        let axSize = sizeValue as! AXValue
+
+        var position = CGPoint.zero
+        var size = CGSize.zero
+
+        guard AXValueGetValue(axPosition, .cgPoint, &position),
+              AXValueGetValue(axSize, .cgSize, &size),
+              size.width > 0,
+              size.height > 0 else {
+            return nil
+        }
+
+        return CGRect(origin: position, size: size)
+    }
+
+    nonisolated static func focusedWindowIsFullscreen() -> Bool? {
+        guard let focusedWindow = focusedWindowElement() else {
+            return nil
+        }
+        let windowElement = focusedWindow as! AXUIElement
+
+        var fullScreenValue: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            windowElement,
+            "AXFullScreen" as CFString,
+            &fullScreenValue
+        ) == .success,
+              let fullScreenValue else {
+            return nil
+        }
+
+        if let isFullscreen = fullScreenValue as? Bool {
+            return isFullscreen
+        }
+
+        return (fullScreenValue as? NSNumber)?.boolValue
+    }
+
+    private nonisolated static func focusedWindowElement() -> AnyObject? {
+        let systemWide = AXUIElementCreateSystemWide()
+
+        var focusedApplication: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            systemWide,
+            kAXFocusedApplicationAttribute as CFString,
+            &focusedApplication
+        ) == .success,
+              let focusedApplication else {
+            return nil
+        }
+        let applicationElement = focusedApplication as! AXUIElement
+
+        var focusedWindow: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            applicationElement,
+            kAXFocusedWindowAttribute as CFString,
+            &focusedWindow
+        ) == .success,
+              let focusedWindow else {
+            return nil
+        }
+        return focusedWindow
+    }
+}
+
+enum IndicatorFullscreenSuppressionPolicy {
+    private static let minimumHorizontalCoverage: CGFloat = 0.5
+    private static let minimumVerticalCoverage: CGFloat = 0.5
+    private static let minimumFullscreenDimensionCoverage: CGFloat = 0.98
+    @MainActor private static var lastSuppression: IndicatorFullscreenSuppressionDiagnostics?
+
+    @MainActor
+    static func lastSuppressionDiagnostics() -> IndicatorFullscreenSuppressionDiagnostics? {
+        lastSuppression
+    }
+
+    @MainActor
+    static func shouldSuppressIndicator(
+        on screen: NSScreen,
+        frontmostApplicationProvider: () -> NSRunningApplication? = {
+            ActivationSourceTracker.shared.lastExternalApplication ?? NSWorkspace.shared.frontmostApplication
+        },
+        focusedWindowFrameProvider: () -> CGRect? = IndicatorWindowFrameLookup.focusedWindowFrame,
+        focusedWindowFullscreenProvider: () -> Bool? = IndicatorWindowFrameLookup.focusedWindowIsFullscreen,
+        windowFrameProvider: (pid_t) -> CGRect? = IndicatorWindowFrameLookup.frontmostWindowFrame(for:),
+        appBundleIdentifier: String? = Bundle.main.bundleIdentifier
+    ) -> Bool {
+        guard let application = frontmostApplicationProvider() else {
+            return false
+        }
+
+        guard application.processIdentifier != NSRunningApplication.current.processIdentifier else {
+            return false
+        }
+
+        let windowFrame = focusedWindowFrameProvider()
+            ?? windowFrameProvider(application.processIdentifier)
+        let focusedWindowIsFullscreen = focusedWindowFullscreenProvider()
+
+        let shouldSuppress = shouldSuppressIndicator(
+            screenFrame: screen.frame,
+            safeAreaTopInset: screen.safeAreaInsets.top,
+            windowFrame: windowFrame,
+            focusedWindowIsFullscreen: focusedWindowIsFullscreen,
+            frontmostBundleIdentifier: application.bundleIdentifier,
+            appBundleIdentifier: appBundleIdentifier
+        )
+
+        if shouldSuppress {
+            recordSuppression(
+                screenFrame: screen.frame,
+                safeAreaTopInset: screen.safeAreaInsets.top,
+                windowFrame: windowFrame,
+                focusedWindowIsFullscreen: focusedWindowIsFullscreen,
+                frontmostApplication: application
+            )
+        }
+
+        return shouldSuppress
+    }
+
+    static func shouldSuppressIndicator(
+        screenFrame: CGRect,
+        safeAreaTopInset: CGFloat,
+        windowFrame: CGRect?,
+        focusedWindowIsFullscreen: Bool? = nil,
+        frontmostBundleIdentifier: String?,
+        appBundleIdentifier: String?
+    ) -> Bool {
+        guard safeAreaTopInset > 0,
+              let candidateWindowFrame = windowFrame,
+              !screenFrame.isEmpty,
+              !candidateWindowFrame.isEmpty,
+              !isTypeWhisperBundleIdentifier(frontmostBundleIdentifier, appBundleIdentifier: appBundleIdentifier) else {
+            return false
+        }
+
+        let screenFrame = screenFrame.standardized
+        let windowFrame = candidateWindowFrame.standardized
+
+        if let focusedWindowIsFullscreen {
+            guard focusedWindowIsFullscreen else { return false }
+        } else if !isFullscreenLikeWindow(screenFrame: screenFrame, windowFrame: windowFrame) {
+            return false
+        }
+
+        let notchStripHeight = min(safeAreaTopInset, screenFrame.height)
+        let notchStrip = CGRect(
+            x: screenFrame.minX,
+            y: screenFrame.maxY - notchStripHeight,
+            width: screenFrame.width,
+            height: notchStripHeight
+        )
+
+        let intersection = windowFrame.intersection(notchStrip)
+        guard !intersection.isNull, !intersection.isEmpty else {
+            return false
+        }
+
+        let horizontalCoverage = intersection.width / notchStrip.width
+        let verticalCoverage = intersection.height / notchStrip.height
+
+        return horizontalCoverage >= minimumHorizontalCoverage
+            && verticalCoverage >= minimumVerticalCoverage
+    }
+
+    private static func isFullscreenLikeWindow(screenFrame: CGRect, windowFrame: CGRect) -> Bool {
+        guard screenFrame.width > 0, screenFrame.height > 0 else { return false }
+
+        let widthCoverage = min(windowFrame.width / screenFrame.width, 1)
+        let heightCoverage = min(windowFrame.height / screenFrame.height, 1)
+
+        return widthCoverage >= minimumFullscreenDimensionCoverage
+            && heightCoverage >= minimumFullscreenDimensionCoverage
+    }
+
+    private static func isTypeWhisperBundleIdentifier(
+        _ bundleIdentifier: String?,
+        appBundleIdentifier: String?
+    ) -> Bool {
+        guard let bundleIdentifier else { return false }
+        if let appBundleIdentifier, bundleIdentifier == appBundleIdentifier {
+            return true
+        }
+
+        return bundleIdentifier == "com.typewhisper.mac"
+            || bundleIdentifier == "com.typewhisper.mac.dev"
+    }
+
+    @MainActor
+    private static func recordSuppression(
+        screenFrame: CGRect,
+        safeAreaTopInset: CGFloat,
+        windowFrame: CGRect?,
+        focusedWindowIsFullscreen: Bool?,
+        frontmostApplication: NSRunningApplication
+    ) {
+        guard let windowFrame else { return }
+
+        let screenFrame = screenFrame.standardized
+        let standardizedWindowFrame = windowFrame.standardized
+        let notchStripHeight = min(safeAreaTopInset, screenFrame.height)
+        let notchStrip = CGRect(
+            x: screenFrame.minX,
+            y: screenFrame.maxY - notchStripHeight,
+            width: screenFrame.width,
+            height: notchStripHeight
+        )
+        let intersection = standardizedWindowFrame.intersection(notchStrip)
+        let horizontalCoverage = intersection.isNull || intersection.isEmpty ? 0 : intersection.width / notchStrip.width
+        let verticalCoverage = intersection.isNull || intersection.isEmpty ? 0 : intersection.height / notchStrip.height
+
+        lastSuppression = IndicatorFullscreenSuppressionDiagnostics(
+            timestamp: Date(),
+            frontmostBundleIdentifier: frontmostApplication.bundleIdentifier,
+            frontmostLocalizedName: frontmostApplication.localizedName,
+            frontmostProcessIdentifier: frontmostApplication.processIdentifier,
+            screenFrame: .init(screenFrame),
+            safeAreaTopInset: Double(safeAreaTopInset),
+            windowFrame: .init(standardizedWindowFrame),
+            focusedWindowIsFullscreen: focusedWindowIsFullscreen,
+            horizontalCoverage: Double(horizontalCoverage),
+            verticalCoverage: Double(verticalCoverage)
+        )
+    }
+}
+
+struct IndicatorFullscreenSuppressionDiagnostics: Encodable, Equatable, Sendable {
+    let timestamp: Date
+    let frontmostBundleIdentifier: String?
+    let frontmostLocalizedName: String?
+    let frontmostProcessIdentifier: pid_t
+    let screenFrame: IndicatorRectDiagnostics
+    let safeAreaTopInset: Double
+    let windowFrame: IndicatorRectDiagnostics
+    let focusedWindowIsFullscreen: Bool?
+    let horizontalCoverage: Double
+    let verticalCoverage: Double
+}
+
+struct IndicatorRectDiagnostics: Encodable, Equatable, Sendable {
+    let x: Double
+    let y: Double
+    let width: Double
+    let height: Double
+
+    init(_ rect: CGRect) {
+        x = Double(rect.origin.x)
+        y = Double(rect.origin.y)
+        width = Double(rect.size.width)
+        height = Double(rect.size.height)
+    }
+}
+
 @MainActor
 final class IndicatorScreenResolver {
     typealias FocusedElementPositionProvider = () -> CGPoint?
@@ -138,14 +578,14 @@ final class IndicatorScreenResolver {
         focusedElementPositionProvider: @escaping FocusedElementPositionProvider = {
             ServiceContainer.shared.textInsertionService.focusedElementPosition()
         },
-        focusedWindowFrameProvider: @escaping FocusedWindowFrameProvider = IndicatorScreenResolver.focusedWindowFrame,
+        focusedWindowFrameProvider: @escaping FocusedWindowFrameProvider = IndicatorWindowFrameLookup.focusedWindowFrame,
         frontmostApplicationProvider: @escaping FrontmostApplicationProvider = {
             ActivationSourceTracker.shared.lastExternalApplication ?? NSWorkspace.shared.frontmostApplication
         },
         mouseLocationProvider: @escaping MouseLocationProvider = { NSEvent.mouseLocation },
         screensProvider: @escaping ScreensProvider = { NSScreen.screens },
         mainScreenProvider: @escaping MainScreenProvider = { NSScreen.main },
-        windowFrameProvider: @escaping WindowFrameProvider = IndicatorScreenResolver.frontmostWindowFrame(for:)
+        windowFrameProvider: @escaping WindowFrameProvider = IndicatorWindowFrameLookup.frontmostWindowFrame(for:)
     ) {
         self.focusedElementPositionProvider = focusedElementPositionProvider
         self.focusedWindowFrameProvider = focusedWindowFrameProvider
@@ -210,108 +650,6 @@ final class IndicatorScreenResolver {
 
         let center = CGPoint(x: frame.midX, y: frame.midY)
         return screen(containing: center)
-    }
-
-    nonisolated private static func frontmostWindowFrame(for processIdentifier: pid_t) -> CGRect? {
-        guard let windowList = CGWindowListCopyWindowInfo(
-            [.optionOnScreenOnly, .excludeDesktopElements],
-            kCGNullWindowID
-        ) as? [[String: Any]] else {
-            return nil
-        }
-
-        var fallbackFrame: CGRect?
-
-        for windowInfo in windowList {
-            guard let rawBounds = windowInfo[kCGWindowBounds as String] else {
-                continue
-            }
-
-            let boundsDictionary = rawBounds as! CFDictionary
-
-            guard let ownerPID = windowInfo[kCGWindowOwnerPID as String] as? pid_t,
-                  ownerPID == processIdentifier,
-                  let bounds = CGRect(
-                    dictionaryRepresentation: boundsDictionary
-                  ),
-                  !bounds.isEmpty else {
-                continue
-            }
-
-            let alpha = windowInfo[kCGWindowAlpha as String] as? Double ?? 1
-            guard alpha > 0 else { continue }
-
-            let layer = windowInfo[kCGWindowLayer as String] as? Int ?? 0
-            if layer == 0 {
-                return bounds
-            }
-
-            if fallbackFrame == nil {
-                fallbackFrame = bounds
-            }
-        }
-
-        return fallbackFrame
-    }
-
-    nonisolated private static func focusedWindowFrame() -> CGRect? {
-        let systemWide = AXUIElementCreateSystemWide()
-
-        var focusedApplication: AnyObject?
-        guard AXUIElementCopyAttributeValue(
-            systemWide,
-            kAXFocusedApplicationAttribute as CFString,
-            &focusedApplication
-        ) == .success,
-              let focusedApplication else {
-            return nil
-        }
-        let applicationElement = focusedApplication as! AXUIElement
-
-        var focusedWindow: AnyObject?
-        guard AXUIElementCopyAttributeValue(
-            applicationElement,
-            kAXFocusedWindowAttribute as CFString,
-            &focusedWindow
-        ) == .success,
-              let focusedWindow else {
-            return nil
-        }
-        let windowElement = focusedWindow as! AXUIElement
-
-        var positionValue: AnyObject?
-        guard AXUIElementCopyAttributeValue(
-            windowElement,
-            kAXPositionAttribute as CFString,
-            &positionValue
-        ) == .success,
-              let positionValue else {
-            return nil
-        }
-        let axPosition = positionValue as! AXValue
-
-        var sizeValue: AnyObject?
-        guard AXUIElementCopyAttributeValue(
-            windowElement,
-            kAXSizeAttribute as CFString,
-            &sizeValue
-        ) == .success,
-              let sizeValue else {
-            return nil
-        }
-        let axSize = sizeValue as! AXValue
-
-        var position = CGPoint.zero
-        var size = CGSize.zero
-
-        guard AXValueGetValue(axPosition, .cgPoint, &position),
-              AXValueGetValue(axSize, .cgSize, &size),
-              size.width > 0,
-              size.height > 0 else {
-            return nil
-        }
-
-        return CGRect(origin: position, size: size)
     }
 
 }

@@ -8,11 +8,13 @@ struct SetupWizardView: View {
     @ObservedObject private var audioDevice = ServiceContainer.shared.audioDeviceService
     @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
     @ObservedObject private var promptActionsViewModel = PromptActionsViewModel.shared
+    @ObservedObject private var dictionaryViewModel = DictionaryViewModel.shared
     @ObservedObject private var promptProcessingService: PromptProcessingService
 
     @State private var currentStep: Int
     @State private var selectedProvider: String?
     @State private var selectedHotkeyMode: HotkeySlotType
+    @State private var selectedIndustryPreset: IndustryPreset
     @State private var trialSuccess = false
     @State private var trialText = ""
     @FocusState private var isTrialFieldFocused: Bool
@@ -22,13 +24,14 @@ struct SetupWizardView: View {
     init() {
         let saved = UserDefaults.standard.integer(forKey: UserDefaultsKeys.setupWizardCurrentStep)
         _currentStep = State(initialValue: min(saved, 5))
+        _selectedIndustryPreset = State(initialValue: IndustryPreset.selected())
         _promptProcessingService = ObservedObject(wrappedValue: PromptActionsViewModel.shared.promptProcessingService)
 
-        if UserDefaults.standard.data(forKey: UserDefaultsKeys.hybridHotkey) != nil {
+        if !DictationSettingsHandler.loadHotkeys(for: .hybrid).isEmpty {
             _selectedHotkeyMode = State(initialValue: .hybrid)
-        } else if UserDefaults.standard.data(forKey: UserDefaultsKeys.pttHotkey) != nil {
+        } else if !DictationSettingsHandler.loadHotkeys(for: .pushToTalk).isEmpty {
             _selectedHotkeyMode = State(initialValue: .pushToTalk)
-        } else if UserDefaults.standard.data(forKey: UserDefaultsKeys.toggleHotkey) != nil {
+        } else if !DictationSettingsHandler.loadHotkeys(for: .toggle).isEmpty {
             _selectedHotkeyMode = State(initialValue: .toggle)
         } else {
             _selectedHotkeyMode = State(initialValue: .hybrid)
@@ -111,43 +114,23 @@ struct SetupWizardView: View {
     // MARK: - Step 0: Welcome
 
     private var welcomeStep: some View {
-        VStack(spacing: 24) {
-            Spacer()
-
-            Image(nsImage: NSApplication.shared.applicationIconImage)
-                .resizable()
-                .frame(width: 96, height: 96)
-
-            Text(String(localized: "Welcome to TypeWhisper"))
-                .font(.largeTitle.weight(.bold))
-
-            Text(String(localized: "Voice-powered typing for your Mac"))
-                .font(.title3)
-                .foregroundStyle(.secondary)
-
-            VStack(alignment: .leading, spacing: 16) {
-                featureHighlight(
-                    icon: "waveform",
-                    title: String(localized: "Speak"),
-                    description: String(localized: "Press a hotkey and talk naturally in any app.")
-                )
-                featureHighlight(
-                    icon: "text.cursor",
-                    title: String(localized: "Type"),
-                    description: String(localized: "Your words appear as text instantly.")
-                )
-                featureHighlight(
-                    icon: "wand.and.stars",
-                    title: String(localized: "Enhance"),
-                    description: String(localized: "AI prompts can rewrite, translate, or summarize.")
-                )
+        VStack(spacing: 0) {
+            GeometryReader { proxy in
+                ScrollView {
+                    welcomeContent(twoColumn: proxy.size.width >= 640)
+                        .padding(.horizontal, proxy.size.width >= 520 ? 14 : 28)
+                        .padding(.top, 24)
+                        .padding(.bottom, 14)
+                        .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
+                }
             }
-            .frame(maxWidth: 380)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            Spacer()
+            Divider()
 
-            VStack(spacing: 12) {
+            VStack(spacing: 8) {
                 Button(String(localized: "Get Started")) {
+                    applyIndustrySelection()
                     withAnimation { currentStep = 1 }
                 }
                 .buttonStyle(.borderedProminent)
@@ -160,25 +143,143 @@ struct SetupWizardView: View {
                 .foregroundStyle(.secondary)
                 .font(.callout)
             }
-            .padding(.bottom, 24)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 28)
+            .padding(.vertical, 12)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    @ViewBuilder
+    private func welcomeContent(twoColumn: Bool) -> some View {
+        if twoColumn {
+            VStack(spacing: 16) {
+                welcomeHeader
+
+                HStack(alignment: .top, spacing: 24) {
+                    welcomeFeatureColumn
+                        .frame(width: 230, alignment: .leading)
+                    industryPresetColumn
+                        .frame(width: 360, alignment: .leading)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+        } else {
+            VStack(spacing: 16) {
+                welcomeHeader
+                welcomeFeatureColumn
+                industryPresetColumn
+            }
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    private var welcomeHeader: some View {
+        HStack(spacing: 12) {
+            Image(nsImage: NSApplication.shared.applicationIconImage)
+                .resizable()
+                .frame(width: 68, height: 68)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(String(localized: "Welcome to TypeWhisper"))
+                    .font(.title.weight(.bold))
+                    .lineLimit(1)
+
+                Text(String(localized: "Voice-powered typing for your Mac"))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private var welcomeFeatureColumn: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            featureHighlight(
+                icon: "waveform",
+                title: String(localized: "Speak"),
+                description: String(localized: "Press a hotkey and talk naturally in any app.")
+            )
+            featureHighlight(
+                icon: "text.cursor",
+                title: String(localized: "Type"),
+                description: String(localized: "Your words appear as text instantly.")
+            )
+            featureHighlight(
+                icon: "wand.and.stars",
+                title: String(localized: "Enhance"),
+                description: String(localized: "AI prompts can rewrite, translate, or summarize.")
+            )
+        }
+        .frame(maxWidth: 230, alignment: .leading)
+    }
+
+    private var industryPresetColumn: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(String(localized: "What kind of writing do you do most?"))
+                .font(.title3.weight(.semibold))
+
+            ForEach(IndustryPreset.allCases) { preset in
+                industryOption(preset)
+            }
+
+            Text(String(localized: "Industry term packs are prepared during setup and activated automatically when a commercial license is active."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: 360, alignment: .leading)
+    }
+
+    private func industryOption(_ preset: IndustryPreset) -> some View {
+        let isSelected = selectedIndustryPreset == preset
+
+        return HStack(spacing: 10) {
+            Image(systemName: isSelected ? "largecircle.fill.circle" : preset.systemImage)
+                .font(.callout)
+                .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                .frame(width: 22)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(preset.displayName)
+                    .font(.headline)
+                Text(preset.description)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .background(RoundedRectangle(cornerRadius: 8).fill(isSelected ? Color.accentColor.opacity(0.08) : Color.secondary.opacity(0.08)))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(isSelected ? Color.accentColor.opacity(0.35) : Color.clear, lineWidth: 1))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            selectedIndustryPreset = preset
+        }
+    }
+
+    private func applyIndustrySelection() {
+        dictionaryViewModel.applyIndustryPreset(selectedIndustryPreset)
+    }
+
     private func featureHighlight(icon: String, title: String, description: String) -> some View {
-        HStack(spacing: 14) {
+        HStack(alignment: .top, spacing: 10) {
             Image(systemName: icon)
-                .font(.title2)
+                .font(.title3)
                 .foregroundStyle(.blue)
-                .frame(width: 36, height: 36)
+                .frame(width: 24)
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(title)
                     .font(.headline)
                 Text(description)
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                    .lineLimit(2)
             }
         }
     }
@@ -445,6 +546,18 @@ struct SetupWizardView: View {
         let isReady = engine?.isConfigured ?? false
         let registryPlugin = registryService.registry.first { $0.id == manifestId }
         let installState = registryService.installStates[manifestId]
+        let availability = SetupWizardRecommendationAvailability.resolve(
+            manifestId: manifestId,
+            isInstalled: isInstalled,
+            isReady: isReady,
+            registryPlugin: registryPlugin,
+            installState: installState,
+            fetchState: registryService.fetchState
+        )
+        let resolvedDescription = recommendationDescription(
+            fallback: description,
+            availability: availability
+        )
 
         HStack(spacing: 12) {
             Image(systemName: systemImage)
@@ -467,14 +580,15 @@ struct SetupWizardView: View {
                         .clipShape(Capsule())
                 }
 
-                Text(description)
+                Text(resolvedDescription)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             Spacer()
 
-            if isReady {
+            switch availability {
+            case .ready:
                 HStack(spacing: 4) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
@@ -482,9 +596,9 @@ struct SetupWizardView: View {
                         .font(.caption)
                         .foregroundStyle(.green)
                 }
-            } else if isInstalled {
+            case .setupRequired:
                 RecommendationSettingsButton(manifestId: manifestId)
-            } else if let installState {
+            case .installState(let installState):
                 switch installState {
                 case .downloading(let progress):
                     ProgressView(value: progress)
@@ -498,22 +612,54 @@ struct SetupWizardView: View {
                         .foregroundStyle(.red)
                         .lineLimit(1)
                 }
-            } else if let registryPlugin {
+            case .installAvailable:
                 Button(String(localized: "Install")) {
                     Task {
+                        guard let registryPlugin else { return }
                         await registryService.downloadAndInstall(registryPlugin)
                         PluginManager.shared.setPluginEnabled(registryPlugin.id, enabled: true)
                     }
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-            } else {
+            case .loading:
                 ProgressView()
                     .controlSize(.small)
+            case .unavailable(let reason):
+                unavailableRecommendationView(reason)
             }
         }
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 10).fill(.quaternary))
+    }
+
+    private func recommendationDescription(
+        fallback: String,
+        availability: SetupWizardRecommendationAvailability
+    ) -> String {
+        guard availability == .unavailable(.appleSiliconOnly) else {
+            return fallback
+        }
+
+        return localizedAppText(
+            "Parakeet runs locally and requires Apple Silicon. Intel Macs can use cloud Whisper through Groq or OpenAI.",
+            de: "Parakeet läuft lokal und braucht Apple Silicon. Intel-Macs können Cloud-Whisper über Groq oder OpenAI nutzen."
+        )
+    }
+
+    private func unavailableRecommendationView(_ reason: SetupWizardRecommendationUnavailableReason) -> some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            Label(reason.title, systemImage: "exclamationmark.triangle.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.orange)
+
+            Text(reason.message)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.trailing)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 190, alignment: .trailing)
+        }
     }
 
     // MARK: - Step 3: Hotkey
@@ -1053,14 +1199,26 @@ struct SetupWizardView: View {
                     .buttonStyle(.bordered)
                 }
 
-                Button(String(localized: "Next")) {
-                    withAnimation { currentStep += 1 }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!canProceed)
+                nextButton
             }
         }
         .padding()
+    }
+
+    @ViewBuilder
+    private var nextButton: some View {
+        if canProceed {
+            Button(String(localized: "Next")) {
+                withAnimation { currentStep += 1 }
+            }
+            .buttonStyle(.borderedProminent)
+            .frame(minWidth: 72)
+        } else {
+            Button(String(localized: "Next")) {}
+                .buttonStyle(.bordered)
+                .disabled(true)
+                .frame(minWidth: 72)
+        }
     }
 
     // MARK: - Helpers
@@ -1076,12 +1234,14 @@ struct SetupWizardView: View {
     }
 
     private var hasAnyEngineReady: Bool {
-        pluginManager.transcriptionEngines.contains { $0.isConfigured }
+        _ = pluginManager.readinessRevision
+        return pluginManager.transcriptionEngines.contains { $0.isConfigured }
     }
 
     private var hasAnyHotkeySet: Bool {
-        [UserDefaultsKeys.hybridHotkey, UserDefaultsKeys.pttHotkey, UserDefaultsKeys.toggleHotkey]
-            .contains { UserDefaults.standard.data(forKey: $0) != nil }
+        !DictationSettingsHandler.loadHotkeys(for: .hybrid).isEmpty
+            || !DictationSettingsHandler.loadHotkeys(for: .pushToTalk).isEmpty
+            || !DictationSettingsHandler.loadHotkeys(for: .toggle).isEmpty
     }
 
     private func hotkeyLabel(for mode: HotkeySlotType) -> String {
@@ -1105,6 +1265,82 @@ struct SetupWizardView: View {
         case .recentTranscriptions: return String(localized: "Recent Transcriptions")
         case .copyLastTranscription: return String(localized: "Copy Last Transcription")
         case .recorderToggle: return String(localized: "settings.tab.recorder")
+        }
+    }
+}
+
+// MARK: - Recommendation Availability
+
+enum SetupWizardRecommendationUnavailableReason: Equatable {
+    case appleSiliconOnly
+    case marketplaceUnavailable
+
+    var title: String {
+        switch self {
+        case .appleSiliconOnly:
+            localizedAppText("Apple Silicon only", de: "Nur Apple Silicon")
+        case .marketplaceUnavailable:
+            localizedAppText("Unavailable", de: "Nicht verfügbar")
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .appleSiliconOnly:
+            localizedAppText(
+                "Use Groq or OpenAI with a cloud Whisper model on Intel.",
+                de: "Nutze auf Intel Groq oder OpenAI mit einem Cloud-Whisper-Modell."
+            )
+        case .marketplaceUnavailable:
+            localizedAppText(
+                "No compatible download is available for this Mac.",
+                de: "Für diesen Mac ist kein kompatibler Download verfügbar."
+            )
+        }
+    }
+}
+
+enum SetupWizardRecommendationAvailability: Equatable {
+    case ready
+    case setupRequired
+    case installState(PluginRegistryService.InstallState)
+    case installAvailable
+    case loading
+    case unavailable(SetupWizardRecommendationUnavailableReason)
+
+    static func resolve(
+        manifestId: String,
+        isInstalled: Bool,
+        isReady: Bool,
+        registryPlugin: RegistryPlugin?,
+        installState: PluginRegistryService.InstallState?,
+        fetchState: PluginRegistryService.FetchState,
+        architecture: String = RuntimeArchitecture.current
+    ) -> SetupWizardRecommendationAvailability {
+        if isReady {
+            return .ready
+        }
+
+        if isInstalled {
+            return .setupRequired
+        }
+
+        if let installState {
+            return .installState(installState)
+        }
+
+        if registryPlugin != nil {
+            return .installAvailable
+        }
+
+        switch fetchState {
+        case .idle, .loading:
+            return .loading
+        case .loaded, .error(_):
+            if manifestId == "com.typewhisper.parakeet", architecture != "arm64" {
+                return .unavailable(.appleSiliconOnly)
+            }
+            return .unavailable(.marketplaceUnavailable)
         }
     }
 }

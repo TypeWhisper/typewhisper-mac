@@ -35,6 +35,26 @@ final class SoundServiceTests: XCTestCase {
         )
     }
 
+    func testRecorderEchoHandlingLabelsUseEnglishSourceStringsWithGermanTranslations() throws {
+        XCTAssertEqual(
+            try TestSupport.localizedCatalogValue(for: "Aggressive", preferredLanguages: ["en-US"]),
+            "Aggressive"
+        )
+        XCTAssertEqual(try TestSupport.localizedCatalogValue(for: "Aggressive", language: "de"), "Aggressiv")
+
+        XCTAssertEqual(
+            try TestSupport.localizedCatalogValue(for: "Medium", preferredLanguages: ["en-US"]),
+            "Medium"
+        )
+        XCTAssertEqual(try TestSupport.localizedCatalogValue(for: "Medium", language: "de"), "Mittel")
+
+        XCTAssertEqual(
+            try TestSupport.localizedCatalogValue(for: "Off", preferredLanguages: ["en-US"]),
+            "Off"
+        )
+        XCTAssertEqual(try TestSupport.localizedCatalogValue(for: "Off", language: "de"), "Aus")
+    }
+
     @MainActor
     func testSoundResolutionCachesImportedCustomSounds() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()

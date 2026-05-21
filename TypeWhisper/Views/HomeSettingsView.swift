@@ -102,11 +102,11 @@ struct HomeSettingsView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(localizedAppText("Using TypeWhisper at work?", de: "Nutzt du TypeWhisper beruflich?"))
+                    Text(localizedAppText("Need commercial license terms?", de: "Brauchst du kommerzielle Lizenzbedingungen?"))
                         .font(.headline)
                     Text(localizedAppText(
-                        "Commercial pricing, lifetime options, and the team story are clearer on the website.",
-                        de: "Kommerzielle Preise, Lifetime-Optionen und die Team-Story sind auf der Website klarer erklärt."
+                        "Pricing, lifetime options, procurement, and support are clearer on the website.",
+                        de: "Preise, Lifetime-Optionen, Beschaffung und Support sind auf der Website klarer erklärt."
                     ))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -127,7 +127,7 @@ struct HomeSettingsView: View {
                 Button {
                     NSWorkspace.shared.open(AppConstants.Website.pricingURL)
                 } label: {
-                    Label(localizedAppText("See pricing on the website", de: "Preise auf der Website ansehen"), systemImage: "globe")
+                    Label(localizedAppText("See licensing on the website", de: "Lizenzierung auf der Website ansehen"), systemImage: "globe")
                 }
                 .buttonStyle(.borderedProminent)
 
@@ -362,13 +362,13 @@ struct HomeSettingsView: View {
     // MARK: - Getting Started Card
 
     private var primaryHotkeyLabel: String {
-        if UserDefaults.standard.data(forKey: UserDefaultsKeys.hybridHotkey) != nil {
+        if !DictationSettingsHandler.loadHotkeys(for: .hybrid).isEmpty {
             return dictation.hybridHotkeyLabel
         }
-        if UserDefaults.standard.data(forKey: UserDefaultsKeys.pttHotkey) != nil {
+        if !DictationSettingsHandler.loadHotkeys(for: .pushToTalk).isEmpty {
             return dictation.pttHotkeyLabel
         }
-        if UserDefaults.standard.data(forKey: UserDefaultsKeys.toggleHotkey) != nil {
+        if !DictationSettingsHandler.loadHotkeys(for: .toggle).isEmpty {
             return dictation.toggleHotkeyLabel
         }
         return dictation.hybridHotkeyLabel

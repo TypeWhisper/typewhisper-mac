@@ -4,6 +4,22 @@ struct TranscriptionSegment {
     let text: String
     let start: TimeInterval
     let end: TimeInterval
+    let speakerLabel: String?
+    let speakerConfidence: Double?
+
+    init(
+        text: String,
+        start: TimeInterval,
+        end: TimeInterval,
+        speakerLabel: String? = nil,
+        speakerConfidence: Double? = nil
+    ) {
+        self.text = text
+        self.start = start
+        self.end = end
+        self.speakerLabel = speakerLabel
+        self.speakerConfidence = speakerConfidence
+    }
 }
 
 struct TranscriptionResult {

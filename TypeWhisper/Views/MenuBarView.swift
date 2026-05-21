@@ -10,6 +10,7 @@ private final class MenuBarState: ObservableObject {
     @Published var isModelReady: Bool
     @Published var hasRecentTranscriptions: Bool
     @Published var canCopyLastTranscription: Bool
+    @Published var hasRecoverableRecording: Bool
     @Published var recorderState: AudioRecorderViewModel.RecorderState
     @Published var canToggleRecorder: Bool
     @Published var recentTranscriptionsMenuShortcut: HotkeyService.MenuShortcutDescriptor?
@@ -21,6 +22,7 @@ private final class MenuBarState: ObservableObject {
     init() {
         let dictation = DictationViewModel.shared
         let modelManager = ServiceContainer.shared.modelManagerService
+        let audioRecordingService = ServiceContainer.shared.audioRecordingService
         let historyService = ServiceContainer.shared.historyService
         let recentTranscriptionStore = ServiceContainer.shared.recentTranscriptionStore
         let recorder = AudioRecorderViewModel.shared
@@ -30,18 +32,15 @@ private final class MenuBarState: ObservableObject {
         let hasRecentTranscriptions = recentTranscriptionStore.latestEntry(historyRecords: historyService.records) != nil
         self.hasRecentTranscriptions = hasRecentTranscriptions
         self.canCopyLastTranscription = hasRecentTranscriptions
+        self.hasRecoverableRecording = audioRecordingService.latestRecoveryRecordingURL != nil
         self.recorderState = recorder.state
         self.canToggleRecorder = recorder.canToggleRecording
         self.recentTranscriptionsMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .recentTranscriptions)
         self.copyLastTranscriptionMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .copyLastTranscription)
         self.recorderToggleMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .recorderToggle)
-        if let name = modelManager.activeModelName, modelManager.isModelReady {
-            self.statusText = String(localized: "\(name) ready")
-            self.statusImage = "checkmark.circle.fill"
-        } else {
-            self.statusText = String(localized: "No model loaded")
-            self.statusImage = "exclamationmark.triangle.fill"
-        }
+        let modelStatus = Self.idleModelStatus(from: modelManager)
+        self.statusText = modelStatus.text
+        self.statusImage = modelStatus.image
 
         // React to dictation state changes (not audioLevel/duration/partialText)
         dictation.$state
@@ -80,6 +79,13 @@ private final class MenuBarState: ObservableObject {
             }
             .store(in: &cancellables)
 
+        audioRecordingService.$recoverableRecordingURL
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] url in
+                self?.hasRecoverableRecording = url != nil
+            }
+            .store(in: &cancellables)
+
         Publishers.CombineLatest3(
             recorder.$state.removeDuplicates(),
             recorder.$micEnabled.removeDuplicates(),
@@ -113,15 +119,23 @@ private final class MenuBarState: ObservableObject {
             statusText = String(localized: "Transcribing...")
             statusImage = "arrow.triangle.2.circlepath"
         default:
-            if let name = modelManager.activeModelName, modelManager.isModelReady {
-                statusText = String(localized: "\(name) ready")
-                statusImage = "checkmark.circle.fill"
-            } else {
-                statusText = String(localized: "No model loaded")
-                statusImage = "exclamationmark.triangle.fill"
-            }
+            let modelStatus = Self.idleModelStatus(from: modelManager)
+            statusText = modelStatus.text
+            statusImage = modelStatus.image
         }
         isModelReady = modelManager.isModelReady
+    }
+
+    private static func idleModelStatus(from modelManager: ModelManagerService) -> (text: String, image: String) {
+        guard let name = modelManager.activeModelName else {
+            return (String(localized: "No model loaded"), "exclamationmark.triangle.fill")
+        }
+
+        if modelManager.isModelReady {
+            return (String(localized: "\(name) ready"), "checkmark.circle.fill")
+        }
+
+        return (String(localized: "\(name) selected"), "clock.fill")
     }
 
     private func refreshCopyAvailability() {
@@ -158,6 +172,7 @@ enum MenuBarMenuItem: Hashable {
     case errorLog
     case toggleRecorder
     case transcribeFile
+    case recoverLastRecording
     case recentTranscriptions
     case copyLastTranscription
     case readBackLastTranscription
@@ -188,13 +203,19 @@ enum MenuBarMenuSection: String, CaseIterable, Hashable {
     }
 
     var items: [MenuBarMenuItem] {
+        items(hasRecoverableRecording: true)
+    }
+
+    func items(hasRecoverableRecording: Bool) -> [MenuBarMenuItem] {
         switch self {
         case .general:
             [.settings, .history, .errorLog]
         case .recorder:
             [.toggleRecorder]
         case .transcription:
-            [.transcribeFile, .recentTranscriptions, .copyLastTranscription, .readBackLastTranscription]
+            hasRecoverableRecording
+                ? [.transcribeFile, .recoverLastRecording, .recentTranscriptions, .copyLastTranscription, .readBackLastTranscription]
+                : [.transcribeFile, .recentTranscriptions, .copyLastTranscription, .readBackLastTranscription]
         case .updates:
             [.checkForUpdates]
         }
@@ -215,7 +236,7 @@ struct MenuBarView: View {
 
             ForEach(MenuBarMenuSection.allCases, id: \.self) { section in
                 Section(String(localized: section.titleResource)) {
-                    ForEach(section.items, id: \.self) { item in
+                    ForEach(section.items(hasRecoverableRecording: status.hasRecoverableRecording), id: \.self) { item in
                         menuItem(for: item)
                     }
                 }
@@ -282,6 +303,13 @@ struct MenuBarView: View {
                 Label(String(localized: "Transcribe File..."), systemImage: "doc.text")
             }
             .disabled(!status.isModelReady)
+
+        case .recoverLastRecording:
+            Button {
+                DictationViewModel.shared.recoverLastRecording()
+            } label: {
+                Label(String(localized: "Recover Last Recording"), systemImage: "waveform")
+            }
 
         case .recentTranscriptions:
             Button {

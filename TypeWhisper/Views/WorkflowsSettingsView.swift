@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import TypeWhisperPluginSDK
 
 enum WorkflowRoute: Equatable {
     case create
@@ -80,8 +81,16 @@ private struct MyWorkflowsPage: View {
     @State private var searchText = ""
     @State private var pendingDeleteWorkflowId: UUID?
 
+    private var trimmedSearchText: String {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var isFilteringWorkflows: Bool {
+        !trimmedSearchText.isEmpty
+    }
+
     private var filteredWorkflows: [Workflow] {
-        let trimmedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedQuery = trimmedSearchText
         guard !trimmedQuery.isEmpty else { return workflowService.workflows }
 
         return workflowService.workflows.filter { workflow in
@@ -107,6 +116,10 @@ private struct MyWorkflowsPage: View {
                         emptyState
                     } else {
                         searchField
+
+                        if isFilteringWorkflows {
+                            reorderDisabledNotice
+                        }
 
                         if filteredWorkflows.isEmpty {
                             filteredEmptyState
@@ -386,20 +399,62 @@ private struct MyWorkflowsPage: View {
         }
     }
 
+    private var reorderDisabledNotice: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: "line.3.horizontal.decrease.circle")
+                .font(.body)
+                .foregroundStyle(.secondary)
+
+            Text(
+                localizedAppText(
+                    "Reordering is disabled while search is active to keep the global workflow order deterministic.",
+                    de: "Die Sortierung ist während der Suche deaktiviert, damit die globale Workflow-Reihenfolge eindeutig bleibt."
+                )
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            Spacer(minLength: 0)
+
+            Button(localizedAppText("Clear Search", de: "Suche löschen")) {
+                searchText = ""
+            }
+            .buttonStyle(.link)
+            .font(.caption)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        }
+    }
+
     private var workflowsList: some View {
         let orderedIds = workflowService.workflows.map(\.id)
+        let canReorder = !isFilteringWorkflows
 
         return LazyVStack(spacing: 0) {
             ForEach(Array(filteredWorkflows.enumerated()), id: \.element.id) { index, workflow in
                 WorkflowRow(
                     workflow: workflow,
-                    canMoveUp: orderedIds.firstIndex(of: workflow.id).map { $0 > 0 } ?? false,
-                    canMoveDown: orderedIds.firstIndex(of: workflow.id).map { $0 < orderedIds.count - 1 } ?? false,
+                    canMoveUp: canReorder && (orderedIds.firstIndex(of: workflow.id).map { $0 > 0 } ?? false),
+                    canMoveDown: canReorder && (orderedIds.firstIndex(of: workflow.id).map { $0 < orderedIds.count - 1 } ?? false),
+                    isReorderingEnabled: canReorder,
                     onToggle: { workflowService.toggleWorkflow(workflow) },
                     onEdit: { navigation.editWorkflow(id: workflow.id) },
                     onDelete: { pendingDeleteWorkflowId = workflow.id },
                     onMoveUp: { move(workflow: workflow, by: -1) },
-                    onMoveDown: { move(workflow: workflow, by: 1) }
+                    onMoveDown: { move(workflow: workflow, by: 1) },
+                    onDropWorkflow: { droppedId in
+                        guard let draggedWorkflowId = UUID(uuidString: droppedId) else {
+                            return false
+                        }
+                        return workflowService.moveWorkflow(
+                            draggedWorkflowId: draggedWorkflowId,
+                            droppedOn: workflow.id
+                        )
+                    }
                 )
 
                 if index < filteredWorkflows.count - 1 {
@@ -431,11 +486,16 @@ private struct WorkflowRow: View {
     let workflow: Workflow
     let canMoveUp: Bool
     let canMoveDown: Bool
+    let isReorderingEnabled: Bool
     let onToggle: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
     let onMoveUp: () -> Void
     let onMoveDown: () -> Void
+    let onDropWorkflow: (String) -> Bool
+
+    @State private var isDropTargeted = false
+    @State private var isHovered = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -531,9 +591,89 @@ private struct WorkflowRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+        .background(rowBackgroundColor)
         .contentShape(Rectangle())
+        .onHover { hovering in
+            isHovered = hovering
+        }
         .onTapGesture {
             onEdit()
+        }
+        .workflowReordering(
+            isEnabled: isReorderingEnabled,
+            workflowId: workflow.id.uuidString,
+            isTargeted: $isDropTargeted
+        ) { droppedItems in
+            guard let droppedId = droppedItems.first else {
+                return false
+            }
+            return onDropWorkflow(droppedId)
+        }
+        .help(
+            isReorderingEnabled
+                ? localizedAppText("Drag to reorder workflow", de: "Workflow ziehen, um die Reihenfolge zu ändern")
+                : localizedAppText("Clear search to reorder workflows", de: "Suche löschen, um Workflows zu sortieren")
+        )
+        .accessibilityHint(
+            isReorderingEnabled
+                ? localizedAppText("Drag this row to reorder workflows.", de: "Ziehe diese Zeile, um Workflows zu sortieren.")
+                : localizedAppText("Reordering is disabled while search is active.", de: "Die Sortierung ist während aktiver Suche deaktiviert.")
+        )
+    }
+
+    private var rowBackgroundColor: Color {
+        if isDropTargeted {
+            return Color.accentColor.opacity(0.08)
+        }
+
+        if isHovered, isReorderingEnabled {
+            return Color.primary.opacity(0.035)
+        }
+
+        return Color.clear
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func workflowReordering(
+        isEnabled: Bool,
+        workflowId: String,
+        isTargeted: Binding<Bool>,
+        onDrop: @escaping ([String]) -> Bool
+    ) -> some View {
+        if isEnabled {
+            self
+                .draggable(workflowId)
+                .dropDestination(for: String.self) { droppedItems, _ in
+                    onDrop(droppedItems)
+                } isTargeted: { targeted in
+                    isTargeted.wrappedValue = targeted
+                }
+                .overlay {
+                    OpenHandCursorView()
+                        .allowsHitTesting(false)
+                }
+        } else {
+            self
+        }
+    }
+}
+
+private struct OpenHandCursorView: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        CursorView()
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    private final class CursorView: NSView {
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            nil
+        }
+
+        override func resetCursorRects() {
+            addCursorRect(bounds, cursor: .openHand)
         }
     }
 }
@@ -547,6 +687,7 @@ private struct WorkflowEditorPage: View {
     @ObservedObject private var historyService = ServiceContainer.shared.historyService
     @ObservedObject private var promptProcessingService = ServiceContainer.shared.promptProcessingService
     @ObservedObject private var settingsViewModel = SettingsViewModel.shared
+    @ObservedObject private var pluginManager = PluginManager.shared
     @ObservedObject private var navigation = WorkflowsNavigationCoordinator.shared
 
     @State private var draft: WorkflowDraft
@@ -668,6 +809,7 @@ private struct WorkflowEditorPage: View {
 
                 if draft.template == .dictation {
                     workflowInputLanguageEditor
+                    workflowTranscriptionEngineSection
                 }
 
                 if draft.template == .translation {
@@ -694,6 +836,10 @@ private struct WorkflowEditorPage: View {
                         ),
                         text: $draft.fineTuning
                     )
+                }
+
+                if shouldShowActionTargetSection {
+                    actionTargetSection
                 }
 
                 VStack(alignment: .leading, spacing: 0) {
@@ -758,6 +904,145 @@ private struct WorkflowEditorPage: View {
                             Toggle(localizedAppText("Press Enter after inserting", de: "Nach dem Einfügen Enter drücken"), isOn: $draft.autoEnter)
                         }
                         .padding(.top, 4)
+                    }
+                }
+            }
+        }
+    }
+
+    private var shouldShowActionTargetSection: Bool {
+        draft.template != .dictation
+            && (!sortedActionPlugins.isEmpty || draft.targetActionPluginId != nil)
+    }
+
+    private var sortedActionPlugins: [ActionPlugin] {
+        pluginManager.actionPlugins.sorted {
+            $0.actionName.localizedCaseInsensitiveCompare($1.actionName) == .orderedAscending
+        }
+    }
+
+    private var selectedActionTargetIsUnavailable: Bool {
+        guard let targetActionPluginId = draft.targetActionPluginId else { return false }
+        return !sortedActionPlugins.contains { $0.actionId == targetActionPluginId }
+    }
+
+    private var actionTargetSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(localizedAppText("Action Target", de: "Action-Ziel"))
+                .font(.subheadline.weight(.semibold))
+
+            Picker(
+                localizedAppText("Target", de: "Ziel"),
+                selection: $draft.targetActionPluginId
+            ) {
+                Text(localizedAppText("Insert Text", de: "Text einfügen"))
+                    .tag(nil as String?)
+
+                ForEach(sortedActionPlugins, id: \.actionId) { plugin in
+                    Label(plugin.actionName, systemImage: plugin.actionIcon)
+                        .tag(plugin.actionId as String?)
+                }
+
+                if let targetActionPluginId = draft.targetActionPluginId,
+                   selectedActionTargetIsUnavailable {
+                    Text(
+                        localizedAppText(
+                            "Unavailable Action Target (\(targetActionPluginId))",
+                            de: "Nicht verfügbares Action-Ziel (\(targetActionPluginId))"
+                        )
+                    )
+                    .tag(targetActionPluginId as String?)
+                }
+            }
+
+            Text(
+                localizedAppText(
+                    "Leave this on Insert Text unless the workflow result should trigger a plugin action.",
+                    de: "Lass dies auf Text einfügen, wenn das Workflow-Ergebnis keine Plugin-Aktion auslösen soll."
+                )
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            if selectedActionTargetIsUnavailable {
+                Text(
+                    localizedAppText(
+                        "The selected action target is not currently enabled or installed. Saving keeps it unless you choose Insert Text or another action.",
+                        de: "Das ausgewählte Action-Ziel ist aktuell nicht aktiviert oder installiert. Speichern behält es bei, solange du nicht Text einfügen oder eine andere Aktion wählst."
+                    )
+                )
+                .font(.caption)
+                .foregroundStyle(.orange)
+            }
+        }
+    }
+
+    private var workflowTranscriptionEngineSection: some View {
+        let engines = pluginManager.transcriptionEngines.sorted {
+            $0.providerDisplayName.localizedCaseInsensitiveCompare($1.providerDisplayName) == .orderedAscending
+        }
+
+        return VStack(alignment: .leading, spacing: 10) {
+            Text(localizedAppText("Transcription Engine", de: "Transkriptions-Engine"))
+                .font(.subheadline.weight(.semibold))
+
+            if engines.isEmpty {
+                Text(
+                    localizedAppText(
+                        "Install a transcription engine in Integrations before using workflow engine overrides.",
+                        de: "Installiere zuerst eine Transkriptions-Engine in Integrationen, bevor du Workflow-Engine-Overrides nutzt."
+                    )
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            } else {
+                Picker(
+                    localizedAppText("Engine", de: "Engine"),
+                    selection: workflowTranscriptionEngineBinding
+                ) {
+                    Text(localizedAppText("Use Global Engine", de: "Globale Engine verwenden"))
+                        .tag(nil as String?)
+                    ForEach(engines, id: \.providerId) { engine in
+                        Text(engine.providerDisplayName).tag(engine.providerId as String?)
+                    }
+                }
+
+                Text(
+                    draft.transcriptionEngineId == nil
+                        ? localizedAppText(
+                            "This workflow follows the global transcription engine setting.",
+                            de: "Dieser Workflow folgt der globalen Transkriptions-Engine-Einstellung."
+                        )
+                        : localizedAppText(
+                            "This workflow starts dictation with its own transcription engine.",
+                            de: "Dieser Workflow startet das Diktat mit einer eigenen Transkriptions-Engine."
+                        )
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+                if let engineId = draft.transcriptionEngineId {
+                    let models = transcriptionModels(for: engineId)
+                    if !models.isEmpty {
+                        Picker(
+                            localizedAppText("Model", de: "Modell"),
+                            selection: workflowTranscriptionModelBinding
+                        ) {
+                            Text(localizedAppText("Engine Default", de: "Engine-Standard"))
+                                .tag(nil as String?)
+                            ForEach(models, id: \.id) { model in
+                                Text(model.displayName).tag(model.id as String?)
+                            }
+                        }
+
+                        Text(
+                            localizedAppText(
+                                "Leave the model on Engine Default to follow the engine's selected model.",
+                                de: "Lass das Modell auf Engine-Standard, um dem ausgewählten Modell der Engine zu folgen."
+                            )
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -1248,6 +1533,7 @@ private struct WorkflowEditorPage: View {
         if let validationError = draft.validationError(
             hotkeyService: hotkeyService,
             workflowService: workflowService,
+            pluginManager: pluginManager,
             existingWorkflowId: workflow?.id
         ) {
             validationMessage = validationError
@@ -1335,6 +1621,11 @@ private struct WorkflowEditorPage: View {
         validationMessage = nil
     }
 
+    private func transcriptionModels(for engineId: String) -> [PluginModelInfo] {
+        guard let engine = pluginManager.transcriptionEngine(for: engineId) else { return [] }
+        return engine.modelCatalog
+    }
+
     private func selectedTemplateCard(definition: WorkflowTemplateDefinition) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: definition.systemImage)
@@ -1385,6 +1676,34 @@ private struct WorkflowEditorPage: View {
             get: { draft.cloudModel },
             set: { modelId in
                 draft.cloudModel = modelId
+            }
+        )
+    }
+
+    private var workflowTranscriptionEngineBinding: Binding<String?> {
+        Binding(
+            get: { draft.transcriptionEngineId },
+            set: { engineId in
+                draft.transcriptionEngineId = engineId
+                if engineId == nil {
+                    draft.transcriptionModelId = nil
+                    return
+                }
+
+                if let transcriptionModelId = draft.transcriptionModelId,
+                   let engineId,
+                   !transcriptionModels(for: engineId).contains(where: { $0.id == transcriptionModelId }) {
+                    draft.transcriptionModelId = nil
+                }
+            }
+        )
+    }
+
+    private var workflowTranscriptionModelBinding: Binding<String?> {
+        Binding(
+            get: { draft.transcriptionModelId },
+            set: { modelId in
+                draft.transcriptionModelId = modelId
             }
         )
     }
@@ -1731,13 +2050,15 @@ struct WorkflowDraft {
     var customInstruction: String
     var outputFormat: String
     var autoEnter: Bool
+    var transcriptionEngineId: String?
+    var transcriptionModelId: String?
 
     private var preservedBehaviorSettings: [String: String]
     var providerId: String?
     var cloudModel: String?
     private let temperatureModeRaw: String?
     private let temperatureValue: Double?
-    private let targetActionPluginId: String?
+    var targetActionPluginId: String?
 
     init(template: WorkflowTemplate) {
         self.name = template.definition.name
@@ -1760,6 +2081,8 @@ struct WorkflowDraft {
         self.customInstruction = ""
         self.outputFormat = ""
         self.autoEnter = false
+        self.transcriptionEngineId = nil
+        self.transcriptionModelId = nil
         self.preservedBehaviorSettings = [:]
         self.providerId = nil
         self.cloudModel = nil
@@ -1788,13 +2111,15 @@ struct WorkflowDraft {
         self.customInstruction = behavior.settings["instruction"] ?? behavior.settings["goal"] ?? behavior.settings["prompt"] ?? ""
         self.outputFormat = output.format ?? ""
         self.autoEnter = output.autoEnter
+        self.transcriptionEngineId = workflow.template == .dictation ? behavior.transcriptionEngineId : nil
+        self.transcriptionModelId = workflow.template == .dictation ? behavior.transcriptionModelId : nil
         self.hotkeyBehavior = .startDictation
         self.preservedBehaviorSettings = behavior.settings
         self.providerId = behavior.providerId
         self.cloudModel = behavior.cloudModel
         self.temperatureModeRaw = behavior.temperatureModeRaw
         self.temperatureValue = behavior.temperatureValue
-        self.targetActionPluginId = output.targetActionPluginId
+        self.targetActionPluginId = workflow.template == .dictation ? nil : output.targetActionPluginId
 
         if let trigger = workflow.trigger {
             self.appBundleIdentifiers = trigger.appBundleIdentifiers
@@ -1855,24 +2180,25 @@ struct WorkflowDraft {
             " Spoken language: \(workflowInputLanguageSummary(for: inputLanguageSelection)).",
             de: " Gesprochene Sprache: \(workflowInputLanguageSummary(for: inputLanguageSelection))."
         )
+        let outputRouteSentence = workflowOutputRouteSentence(targetActionPluginId: targetActionPluginId)
 
         if triggerMode == .manual {
             return localizedAppText(
-                "\(resolvedName) is available as \(template.definition.name) from the Workflow Palette.\(languageSentence)",
-                de: "\(resolvedName) ist als \(template.definition.name) über die Workflow-Palette verfügbar.\(languageSentence)"
+                "\(resolvedName) is available as \(template.definition.name) from the Workflow Palette.\(languageSentence)\(outputRouteSentence)",
+                de: "\(resolvedName) ist als \(template.definition.name) über die Workflow-Palette verfügbar.\(languageSentence)\(outputRouteSentence)"
             )
         }
 
         if triggerMode == .global {
             return localizedAppText(
-                "\(resolvedName) runs always as \(template.definition.name).\(languageSentence)",
-                de: "\(resolvedName) läuft immer als \(template.definition.name).\(languageSentence)"
+                "\(resolvedName) runs always as \(template.definition.name).\(languageSentence)\(outputRouteSentence)",
+                de: "\(resolvedName) läuft immer als \(template.definition.name).\(languageSentence)\(outputRouteSentence)"
             )
         }
 
         return localizedAppText(
-            "\(resolvedName) runs as \(template.definition.name) via \(triggerReviewText).\(languageSentence)",
-            de: "\(resolvedName) läuft als \(template.definition.name) über \(triggerReviewText).\(languageSentence)"
+            "\(resolvedName) runs as \(template.definition.name) via \(triggerReviewText).\(languageSentence)\(outputRouteSentence)",
+            de: "\(resolvedName) läuft als \(template.definition.name) über \(triggerReviewText).\(languageSentence)\(outputRouteSentence)"
         )
     }
 
@@ -1905,12 +2231,16 @@ struct WorkflowDraft {
             outputFormat = ""
             providerId = nil
             cloudModel = nil
+            targetActionPluginId = nil
             if triggerMode == .manual {
                 triggerMode = .automatic
             }
             if !hasEnabledAutomaticTriggerComponent {
                 isHotkeyTriggerEnabled = true
             }
+        } else {
+            transcriptionEngineId = nil
+            transcriptionModelId = nil
         }
     }
 
@@ -1918,6 +2248,7 @@ struct WorkflowDraft {
     func validationError(
         hotkeyService: HotkeyService,
         workflowService: WorkflowService,
+        pluginManager: PluginManager,
         existingWorkflowId: UUID?
     ) -> String? {
         if template == .dictation && triggerMode == .manual {
@@ -1925,6 +2256,26 @@ struct WorkflowDraft {
                 "Dictation Only workflows need a recording trigger.",
                 de: "Nur-Diktat-Workflows brauchen einen Aufnahme-Trigger."
             )
+        }
+
+        if template == .dictation,
+           let transcriptionEngineId,
+           !transcriptionEngineId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            guard let engine = pluginManager.transcriptionEngine(for: transcriptionEngineId) else {
+                return localizedAppText(
+                    "The selected transcription engine is not installed.",
+                    de: "Die ausgewählte Transkriptions-Engine ist nicht installiert."
+                )
+            }
+
+            if let transcriptionModelId,
+               !transcriptionModelId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               !engine.modelCatalog.contains(where: { $0.id == transcriptionModelId }) {
+                return localizedAppText(
+                    "The selected transcription model is not available for this engine.",
+                    de: "Das ausgewählte Transkriptionsmodell ist für diese Engine nicht verfügbar."
+                )
+            }
         }
 
         switch triggerMode {
@@ -2086,12 +2437,15 @@ struct WorkflowDraft {
 
         let trimmedProviderId = providerId?.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedCloudModel = cloudModel?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedTranscriptionEngineId = template == .dictation ? Self.trimmedOptional(transcriptionEngineId) : nil
 
         return WorkflowBehavior(
             settings: settings,
             fineTuning: usesLLMProcessing ? fineTuning.trimmingCharacters(in: .whitespacesAndNewlines) : "",
             providerId: usesLLMProcessing && trimmedProviderId?.isEmpty == false ? trimmedProviderId : nil,
             cloudModel: usesLLMProcessing && trimmedCloudModel?.isEmpty == false ? trimmedCloudModel : nil,
+            transcriptionEngineId: trimmedTranscriptionEngineId,
+            transcriptionModelId: trimmedTranscriptionEngineId != nil ? Self.trimmedOptional(transcriptionModelId) : nil,
             temperatureModeRaw: temperatureModeRaw,
             temperatureValue: temperatureValue
         )
@@ -2219,6 +2573,11 @@ struct WorkflowDraft {
             "English"
         }
     }
+
+    private static func trimmedOptional(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
+    }
 }
 
 private func workflowSummaryText(for workflow: Workflow) -> String {
@@ -2250,6 +2609,14 @@ private func workflowSummaryText(for workflow: Workflow) -> String {
     default:
         return templateName
     }
+}
+
+private func workflowOutputRouteSentence(targetActionPluginId: String?) -> String {
+    guard targetActionPluginId != nil else { return "" }
+    return localizedAppText(
+        " Output: action plugin.",
+        de: " Ausgabe: Action-Plugin."
+    )
 }
 
 private func workflowInputLanguageSummary(for selection: LanguageSelection) -> String {
@@ -2365,31 +2732,32 @@ private func workflowReviewText(for workflow: Workflow) -> String {
         ". Spoken language: \(workflowInputLanguageSummary(for: workflow.inputLanguageSelection))",
         de: ". Gesprochene Sprache: \(workflowInputLanguageSummary(for: workflow.inputLanguageSelection))"
     )
+    let outputRouteSentence = workflowOutputRouteSentence(targetActionPluginId: workflow.output.targetActionPluginId)
 
     if workflow.trigger?.kind == .global {
         return localizedAppText(
-            "\(summary) runs always\(languageSentence)",
-            de: "\(summary) läuft immer\(languageSentence)"
+            "\(summary) runs always\(languageSentence)\(outputRouteSentence)",
+            de: "\(summary) läuft immer\(languageSentence)\(outputRouteSentence)"
         )
     }
 
     if workflow.trigger?.kind == .manual {
         return localizedAppText(
-            "\(summary) is available from the Workflow Palette\(languageSentence)",
-            de: "\(summary) ist über die Workflow-Palette verfügbar\(languageSentence)"
+            "\(summary) is available from the Workflow Palette\(languageSentence)\(outputRouteSentence)",
+            de: "\(summary) ist über die Workflow-Palette verfügbar\(languageSentence)\(outputRouteSentence)"
         )
     }
 
     if triggerDetail.isEmpty {
         return localizedAppText(
-            "\(summary) via \(triggerSummary)\(languageSentence)",
-            de: "\(summary) über \(triggerSummary)\(languageSentence)"
+            "\(summary) via \(triggerSummary)\(languageSentence)\(outputRouteSentence)",
+            de: "\(summary) über \(triggerSummary)\(languageSentence)\(outputRouteSentence)"
         )
     }
 
     return localizedAppText(
-        "\(summary) via \(triggerSummary): \(triggerDetail)\(languageSentence)",
-        de: "\(summary) über \(triggerSummary): \(triggerDetail)\(languageSentence)"
+        "\(summary) via \(triggerSummary): \(triggerDetail)\(languageSentence)\(outputRouteSentence)",
+        de: "\(summary) über \(triggerSummary): \(triggerDetail)\(languageSentence)\(outputRouteSentence)"
     )
 }
 

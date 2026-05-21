@@ -6,6 +6,20 @@ import TypeWhisperPluginSDK
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "DictionaryService")
 
+enum DictionaryServiceMutationError: LocalizedError {
+    case unavailable
+    case saveFailed(Error)
+
+    var errorDescription: String? {
+        switch self {
+        case .unavailable:
+            return "Dictionary storage is unavailable"
+        case .saveFailed(let error):
+            return error.localizedDescription
+        }
+    }
+}
+
 @MainActor
 final class DictionaryService: ObservableObject {
     private var modelContainer: ModelContainer?
@@ -240,7 +254,17 @@ final class DictionaryService: ObservableObject {
     }
 
     func setTerms(_ rawTerms: [String], replaceExisting: Bool) {
-        guard let context = modelContext else { return }
+        do {
+            try setAPITerms(rawTerms, replaceExisting: replaceExisting)
+        } catch {
+            logger.error("Failed to set terms: \(error.localizedDescription)")
+        }
+    }
+
+    func setAPITerms(_ rawTerms: [String], replaceExisting: Bool) throws {
+        guard let context = modelContext else {
+            throw DictionaryServiceMutationError.unavailable
+        }
 
         let normalized = PluginDictionaryTerms.normalizedTerms(from: rawTerms)
         let normalizedByKey = Dictionary(uniqueKeysWithValues: normalized.map {
@@ -273,7 +297,37 @@ final class DictionaryService: ObservableObject {
                 loadEntries()
             } catch {
                 logger.error("Failed to set terms: \(error.localizedDescription)")
+                throw DictionaryServiceMutationError.saveFailed(error)
             }
+        }
+    }
+
+    func deleteAPITerm(_ rawTerm: String) throws -> Bool {
+        guard let context = modelContext else {
+            throw DictionaryServiceMutationError.unavailable
+        }
+
+        guard let normalizedTerm = PluginDictionaryTerms.normalizedTerms(from: [rawTerm]).first else {
+            return false
+        }
+
+        let desiredKey = normalizedTerm.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        guard let entry = entries.first(where: {
+            $0.type == .term &&
+            $0.original.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current) == desiredKey
+        }) else {
+            return false
+        }
+
+        context.delete(entry)
+
+        do {
+            try context.save()
+            loadEntries()
+            return true
+        } catch {
+            logger.error("Failed to delete term: \(error.localizedDescription)")
+            throw DictionaryServiceMutationError.saveFailed(error)
         }
     }
 
@@ -348,6 +402,63 @@ final class DictionaryService: ObservableObject {
             replacement: replacement,
             caseSensitive: false
         )
+    }
+
+    func upsertAPICorrection(original: String, replacement: String, caseSensitive: Bool) throws {
+        guard let context = modelContext else {
+            throw DictionaryServiceMutationError.unavailable
+        }
+
+        if let entry = entries.first(where: {
+            $0.type == .correction &&
+            $0.original.caseInsensitiveCompare(original) == .orderedSame
+        }) {
+            entry.original = original
+            entry.replacement = replacement
+            entry.caseSensitive = caseSensitive
+            entry.isEnabled = true
+        } else {
+            let entry = DictionaryEntry(
+                type: .correction,
+                original: original,
+                replacement: replacement,
+                caseSensitive: caseSensitive,
+                isEnabled: true
+            )
+            context.insert(entry)
+        }
+
+        do {
+            try context.save()
+            loadEntries()
+        } catch {
+            logger.error("Failed to upsert correction: \(error.localizedDescription)")
+            throw DictionaryServiceMutationError.saveFailed(error)
+        }
+    }
+
+    func deleteAPICorrection(original: String) throws -> Bool {
+        guard let context = modelContext else {
+            throw DictionaryServiceMutationError.unavailable
+        }
+
+        guard let entry = entries.first(where: {
+            $0.type == .correction &&
+            $0.original.caseInsensitiveCompare(original) == .orderedSame
+        }) else {
+            return false
+        }
+
+        context.delete(entry)
+
+        do {
+            try context.save()
+            loadEntries()
+            return true
+        } catch {
+            logger.error("Failed to delete correction: \(error.localizedDescription)")
+            throw DictionaryServiceMutationError.saveFailed(error)
+        }
     }
 
     private func incrementUsageCount(for entry: DictionaryEntry) {

@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct AdvancedSettingsView: View {
     @ObservedObject private var viewModel = APIServerViewModel.shared
@@ -8,10 +9,13 @@ struct AdvancedSettingsView: View {
     @ObservedObject private var dictation = DictationViewModel.shared
     @ObservedObject private var speechFeedbackService = ServiceContainer.shared.speechFeedbackService
     @ObservedObject private var pluginManager = PluginManager.shared
+    @ObservedObject private var errorLogService = ServiceContainer.shared.errorLogService
     @State private var cliInstalled = false
     @State private var cliSymlinkTarget = ""
     @State private var raycastInstalled = false
     @State private var showClearMemoryConfirmation = false
+    @State private var showDiagnosticsExportError = false
+    @State private var diagnosticsExportErrorMessage = ""
 
     @AppStorage(UserDefaultsKeys.historyEnabled) private var historyEnabled: Bool = true
     @AppStorage(UserDefaultsKeys.historyRetentionDays) private var historyRetentionDays: Int = 0
@@ -19,6 +23,25 @@ struct AdvancedSettingsView: View {
 
     var body: some View {
         Form {
+            // MARK: - Support Diagnostics
+            Section(localizedAppText("Support Diagnostics", de: "Support-Diagnose")) {
+                Button {
+                    exportDiagnostics()
+                } label: {
+                    Label(
+                        localizedAppText("Export Diagnostics", de: "Diagnose exportieren"),
+                        systemImage: "square.and.arrow.up"
+                    )
+                }
+
+                Text(localizedAppText(
+                    "Creates a JSON support report with app, system, permission, plugin, settings and audio device diagnostics.",
+                    de: "Erstellt einen JSON-Supportbericht mit App-, System-, Berechtigungs-, Plugin-, Einstellungs- und Audiogeräte-Diagnose."
+                ))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
             // MARK: - Memory
             Section(String(localized: "Memory")) {
                 Toggle(String(localized: "Enable Memory"), isOn: $memoryService.isEnabled)
@@ -27,6 +50,15 @@ struct AdvancedSettingsView: View {
                     .foregroundStyle(.secondary)
 
                 if memoryService.isEnabled {
+                    Picker(String(localized: "Capture From"), selection: $memoryService.captureScope) {
+                        ForEach(MemoryCaptureScope.allCases) { scope in
+                            Text(scope.localizedTitle).tag(scope)
+                        }
+                    }
+                    Text(memoryService.captureScope.localizedDescription)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
                     Picker(String(localized: "Extraction Provider"), selection: $memoryService.extractionProviderId) {
                         Text(String(localized: "None")).tag("")
                         ForEach(promptProcessingService.availableProviders, id: \.id) { provider in
@@ -174,6 +206,8 @@ struct AdvancedSettingsView: View {
                 }
             }
 
+            SpokenPunctuationSettingsSection()
+
             // MARK: - History
             Section(String(localized: "History")) {
                 Toggle(String(localized: "Save history"), isOn: $historyEnabled)
@@ -212,6 +246,12 @@ struct AdvancedSettingsView: View {
                     }
 
                 Text(String(localized: "Advanced automation interface for local tools. Disabled by default and bound to 127.0.0.1 only."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Toggle(String(localized: "Require API Token"), isOn: $viewModel.requiresAuthentication)
+
+                Text(String(localized: "Off by default for compatibility with existing local integrations. New clients can use api-discovery.json or send the bearer token."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -332,6 +372,11 @@ struct AdvancedSettingsView: View {
         .onReceive(pluginManager.$loadedPlugins) { _ in
             syncSpeechFeedbackAvailability()
         }
+        .alert(localizedAppText("Export Failed", de: "Export fehlgeschlagen"), isPresented: $showDiagnosticsExportError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(diagnosticsExportErrorMessage)
+        }
     }
 
     // MARK: - Examples
@@ -385,6 +430,35 @@ struct AdvancedSettingsView: View {
                 .help(String(localized: "Copy"))
             }
         }
+    }
+
+    // MARK: - Support Diagnostics
+
+    private func exportDiagnostics() {
+        let panel = NSSavePanel()
+        panel.title = localizedAppText("Export Diagnostics", de: "Diagnose exportieren")
+        panel.allowedContentTypes = [.json]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = diagnosticsFilename()
+
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            Task { @MainActor in
+                do {
+                    try await errorLogService.exportDiagnostics(to: url)
+                } catch {
+                    diagnosticsExportErrorMessage = error.localizedDescription
+                    showDiagnosticsExportError = true
+                }
+            }
+        }
+    }
+
+    private func diagnosticsFilename() -> String {
+        let timestamp = ISO8601DateFormatter()
+            .string(from: Date())
+            .replacingOccurrences(of: ":", with: "-")
+        return "typewhisper-diagnostics-\(timestamp).json"
     }
 
     // MARK: - CLI Installation

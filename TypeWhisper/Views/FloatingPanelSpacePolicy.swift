@@ -15,7 +15,7 @@ enum FloatingPanelSpacePolicy {
 
     private static let fixedDisplayIndicatorCollectionBehavior: NSWindow.CollectionBehavior = [
         .canJoinAllSpaces,
-        .fullScreenAuxiliary,
+        .fullScreenNone,
         .stationary,
         .ignoresCycle
     ]
@@ -38,6 +38,9 @@ enum FloatingPanelSpacePolicy {
     static func applyIndicatorPolicy(to panel: NSPanel, displayMode: NotchIndicatorDisplay) {
         panel.level = indicatorWindowLevel
         panel.collectionBehavior = indicatorCollectionBehavior(for: displayMode)
+        // Best-effort: keep passive indicators visible locally while excluding the
+        // window from capture APIs that honor AppKit sharing policy.
+        panel.sharingType = .none
     }
 
     @MainActor

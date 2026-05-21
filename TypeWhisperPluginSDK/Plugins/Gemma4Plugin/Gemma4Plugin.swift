@@ -90,7 +90,7 @@ private struct Gemma4TokenizerLoader: TokenizerLoader {
 // MARK: - Plugin Entry Point
 
 @objc(Gemma4Plugin)
-final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllableProvider, LLMProviderSetupStatusProviding, LLMModelSelectable, PluginSettingsActivityReporting, @unchecked Sendable {
+final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllableProvider, LLMProviderSetupStatusProviding, LLMModelSelectable, PluginSettingsActivityReporting, PluginDownloadedModelManaging, @unchecked Sendable {
     static let pluginId = "com.typewhisper.gemma4"
     static let pluginName = "Gemma 4"
     static let defaultGenerationTemperature = 0.1
@@ -176,6 +176,41 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
         return Self.availableModels
             .filter { $0.id == loadedModelId }
             .map { PluginModelInfo(id: $0.id, displayName: $0.displayName) }
+    }
+
+    var downloadedModels: [PluginModelInfo] {
+        Self.availableModels
+            .filter { hasDownloadedModel($0) }
+            .map { def in
+                PluginModelInfo(
+                    id: def.id,
+                    displayName: def.displayName,
+                    sizeDescription: def.sizeDescription,
+                    downloaded: true,
+                    loaded: def.id == loadedModelId
+                )
+            }
+    }
+
+    func deleteDownloadedModel(_ modelId: String) async throws {
+        guard let modelDef = Self.modelDefinition(for: modelId) else { return }
+
+        if loadedModelId == modelId {
+            modelContainer = nil
+            loadedModelId = nil
+            downloadProgress = 0
+            modelState = .notLoaded
+        }
+        if _selectedLLMModelId == modelId {
+            _selectedLLMModelId = nil
+            host?.setUserDefault(nil, forKey: "selectedLLMModel")
+        }
+        if host?.userDefault(forKey: "loadedModel") as? String == modelId {
+            host?.setUserDefault(nil, forKey: "loadedModel")
+        }
+
+        try deleteModelFiles(modelDef)
+        host?.notifyCapabilitiesChanged()
     }
 
     func process(systemPrompt: String, userText: String, model: String?) async throws -> String {
@@ -404,9 +439,21 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
         host?.notifyCapabilitiesChanged()
     }
 
-    func deleteModelFiles(_ modelDef: Gemma4ModelDef) {
+    func deleteModelFiles(_ modelDef: Gemma4ModelDef) throws {
         let repoDir = localModelDirectory(for: modelDef.repoId)
-        try? FileManager.default.removeItem(at: repoDir)
+        if FileManager.default.fileExists(atPath: repoDir.path) {
+            try FileManager.default.removeItem(at: repoDir)
+        }
+    }
+
+    func resetCachedModel(_ modelDef: Gemma4ModelDef) {
+        modelContainer = nil
+        loadedModelId = nil
+        downloadProgress = 0
+        modelState = .notLoaded
+        host?.setUserDefault(nil, forKey: "loadedModel")
+        try? deleteModelFiles(modelDef)
+        host?.notifyCapabilitiesChanged()
     }
 
     func restoreLoadedModel(allowDownloads: Bool = true) async {
@@ -524,12 +571,33 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
         }
 
         let rawMessage = String(describing: error).lowercased()
+        if isRecoverableCacheError(rawMessage) {
+            let bundle = Bundle(for: Gemma4Plugin.self)
+            return String(
+                localized: "The downloaded Gemma model cache appears incomplete or incompatible. Delete the cached model and download it again.",
+                bundle: bundle
+            )
+        }
+
         if rawMessage.contains("unsupported model type")
             || rawMessage.contains("model type gemma4 not supported") {
             return unsupportedModelMessage(for: modelDef)
         }
 
         return error.localizedDescription
+    }
+
+    private static func isRecoverableCacheError(_ rawMessage: String) -> Bool {
+        (rawMessage.contains("key ") && rawMessage.contains(" not found"))
+            || rawMessage.contains("missing key")
+            || rawMessage.contains("missing weight")
+            || rawMessage.contains("shape mismatch")
+            || rawMessage.contains("size mismatch")
+            || (rawMessage.contains("checkpoint")
+                && (rawMessage.contains("not found")
+                    || rawMessage.contains("missing")
+                    || rawMessage.contains("shape")
+                    || rawMessage.contains("mismatch")))
     }
 
     static func promptPrefillStepSize(for modelId: String?) -> Int {

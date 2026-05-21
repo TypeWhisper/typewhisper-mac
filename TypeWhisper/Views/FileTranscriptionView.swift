@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import TypeWhisperPluginSDK
 
 struct FileTranscriptionView: View {
     @ObservedObject private var viewModel = FileTranscriptionViewModel.shared
@@ -82,7 +83,7 @@ struct FileTranscriptionView: View {
                     }
                 }
 
-                Section(String(localized: "fileTranscription.transcription")) {
+                Section(localizedAppText("Watch Folder Transcription", de: "Ordner-Transkription")) {
                     Picker(String(localized: "watchFolder.engine"), selection: $watchFolder.selectedEngine) {
                         Text(String(localized: "watchFolder.engine.default")).tag(nil as String?)
                         Divider()
@@ -389,9 +390,11 @@ struct FileTranscriptionView: View {
     @ViewBuilder
     private var controls: some View {
         VStack(alignment: .leading, spacing: 12) {
+            fileTranscriptionSettings
+
             LanguageSelectionEditor(
                 selection: $viewModel.languageSelection,
-                availableLanguages: SettingsViewModel.shared.availableLanguages
+                availableLanguages: fileTranscriptionLanguageOptions
             )
 
             HStack {
@@ -453,6 +456,59 @@ struct FileTranscriptionView: View {
                 .disabled(viewModel.batchState == .processing)
                 .help(String(localized: "Clear All"))
                 .accessibilityLabel(String(localized: "Clear All"))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var fileTranscriptionSettings: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Picker(String(localized: "Engine"), selection: $viewModel.selectedEngine) {
+                Text(String(localized: "Default Engine")).tag(nil as String?)
+                Divider()
+                ForEach(viewModel.availableEngines, id: \.providerId) { engine in
+                    enginePickerLabel(for: engine)
+                        .tag(engine.providerId as String?)
+                        .disabled(!viewModel.canUseForTranscription(engine))
+                }
+            }
+            .controlSize(.small)
+            .disabled(viewModel.batchState == .processing)
+
+            if let engine = viewModel.resolvedEngine {
+                let models = engine.transcriptionModels
+                if models.count > 1 {
+                    Picker(String(localized: "Model"), selection: $viewModel.selectedModel) {
+                        Text(String(localized: "watchFolder.model.default")).tag(nil as String?)
+                        Divider()
+                        ForEach(models, id: \.id) { model in
+                            Text(model.displayName).tag(model.id as String?)
+                        }
+                    }
+                    .controlSize(.small)
+                    .disabled(viewModel.batchState == .processing)
+                }
+            }
+        }
+    }
+
+    private var fileTranscriptionLanguageOptions: [(code: String, name: String)] {
+        let supportedLanguages = viewModel.selectedEngineSupportedLanguages
+        guard !supportedLanguages.isEmpty else {
+            return SettingsViewModel.shared.availableLanguages
+        }
+        return localizedAppLanguageOptions(for: supportedLanguages)
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            .map { (code: $0.code, name: $0.name) }
+    }
+
+    @ViewBuilder
+    private func enginePickerLabel(for engine: TranscriptionEnginePlugin) -> some View {
+        HStack {
+            Text(engine.providerDisplayName)
+            if !viewModel.canUseForTranscription(engine) {
+                Text("(\(String(localized: "not ready")))")
+                    .foregroundStyle(.secondary)
             }
         }
     }

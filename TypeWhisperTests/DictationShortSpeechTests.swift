@@ -177,3 +177,21 @@ final class DictationShortSpeechTests: XCTestCase {
         return [Float](repeating: 0.1, count: count)
     }
 }
+
+final class DictationInsertionTextFormatterTests: XCTestCase {
+    func testAddsTrailingSpaceToNonEmptyTextWithoutTrailingWhitespace() {
+        XCTAssertEqual(DictationInsertionTextFormatter.textForInsertion("Hello"), "Hello ")
+    }
+
+    func testLeavesExistingTrailingSpaceUntouched() {
+        XCTAssertEqual(DictationInsertionTextFormatter.textForInsertion("Hello "), "Hello ")
+    }
+
+    func testLeavesExistingTrailingNewlineUntouched() {
+        XCTAssertEqual(DictationInsertionTextFormatter.textForInsertion("Hello\n"), "Hello\n")
+    }
+
+    func testLeavesEmptyTextUntouched() {
+        XCTAssertEqual(DictationInsertionTextFormatter.textForInsertion(""), "")
+    }
+}
