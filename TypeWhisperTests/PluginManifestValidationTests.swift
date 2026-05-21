@@ -1593,7 +1593,7 @@ final class PluginRegistryDestinationTests: XCTestCase {
 }
 
 final class PluginDiagnosticsSupportTests: XCTestCase {
-    func testPluginSourceClassifiesBundledManagedAndExternalPaths() throws {
+    func testPluginSourceClassifiesBundledManagedAndExternalPaths() async throws {
         let root = try TestSupport.makeTemporaryDirectory(prefix: "PluginDiagnostics")
         defer { TestSupport.remove(root) }
 
@@ -1605,21 +1605,21 @@ final class PluginDiagnosticsSupportTests: XCTestCase {
         let managedURL = try makeMockBundle(in: pluginsDirectory, name: "ManagedPlugin")
         let externalURL = try makeMockBundle(in: externalDirectory, name: "ExternalPlugin")
 
-        let bundled = PluginDiagnosticsSupport.sourceInfo(
+        let bundled = await PluginDiagnosticsSupport.sourceInfo(
             bundle: try XCTUnwrap(Bundle(url: bundledURL)),
             sourceURL: bundledURL,
             builtInPluginsURL: builtInPluginsURL,
             pluginsDirectory: pluginsDirectory,
             homeDirectory: root
         )
-        let managed = PluginDiagnosticsSupport.sourceInfo(
+        let managed = await PluginDiagnosticsSupport.sourceInfo(
             bundle: try XCTUnwrap(Bundle(url: managedURL)),
             sourceURL: managedURL,
             builtInPluginsURL: builtInPluginsURL,
             pluginsDirectory: pluginsDirectory,
             homeDirectory: root
         )
-        let external = PluginDiagnosticsSupport.sourceInfo(
+        let external = await PluginDiagnosticsSupport.sourceInfo(
             bundle: try XCTUnwrap(Bundle(url: externalURL)),
             sourceURL: externalURL,
             builtInPluginsURL: builtInPluginsURL,
@@ -1634,7 +1634,35 @@ final class PluginDiagnosticsSupportTests: XCTestCase {
         XCTAssertFalse(managed.pathHint.contains(root.path))
     }
 
-    func testPluginSourceReportsExecutableSizeAndHash() throws {
+    func testPluginSourcePathHintCanonicalizesSymlinkedBundles() async throws {
+        let root = try TestSupport.makeTemporaryDirectory(prefix: "PluginDiagnosticsSymlink")
+        defer { TestSupport.remove(root) }
+
+        let realHome = root.appendingPathComponent("real-home", isDirectory: true)
+        let symlinkHome = root.appendingPathComponent("symlink-home", isDirectory: true)
+        try FileManager.default.createDirectory(at: realHome, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: symlinkHome, withDestinationURL: realHome)
+
+        let pluginsDirectory = realHome.appendingPathComponent("Application Support/TypeWhisper/Plugins", isDirectory: true)
+        let bundleURL = try makeMockBundle(in: pluginsDirectory, name: "SymlinkPlugin")
+        let symlinkedBundleURL = symlinkHome
+            .appendingPathComponent("Application Support/TypeWhisper/Plugins", isDirectory: true)
+            .appendingPathComponent(bundleURL.lastPathComponent, isDirectory: true)
+
+        let source = await PluginDiagnosticsSupport.sourceInfo(
+            bundle: try XCTUnwrap(Bundle(url: symlinkedBundleURL)),
+            sourceURL: symlinkedBundleURL,
+            builtInPluginsURL: nil,
+            pluginsDirectory: pluginsDirectory,
+            homeDirectory: realHome
+        )
+
+        XCTAssertEqual(source.sourceKind, .managedExternal)
+        XCTAssertTrue(source.pathHint.hasPrefix("~/"))
+        XCTAssertFalse(source.pathHint.contains(symlinkHome.path))
+    }
+
+    func testPluginSourceReportsExecutableSizeAndHash() async throws {
         let root = try TestSupport.makeTemporaryDirectory(prefix: "PluginDiagnosticsHash")
         defer { TestSupport.remove(root) }
 
@@ -1645,7 +1673,7 @@ final class PluginDiagnosticsSupportTests: XCTestCase {
             executableData: Data("hash me".utf8)
         )
 
-        let source = PluginDiagnosticsSupport.sourceInfo(
+        let source = await PluginDiagnosticsSupport.sourceInfo(
             bundle: try XCTUnwrap(Bundle(url: bundleURL)),
             sourceURL: bundleURL,
             builtInPluginsURL: nil,

@@ -94,8 +94,8 @@ enum PluginDiagnosticsSupport {
         for url: URL,
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
     ) -> String {
-        let path = url.standardizedFileURL.path
-        let homePath = homeDirectory.standardizedFileURL.path
+        let path = url.resolvingSymlinksInPath().standardizedFileURL.path
+        let homePath = homeDirectory.resolvingSymlinksInPath().standardizedFileURL.path
         if path == homePath {
             return "~"
         }
@@ -111,8 +111,8 @@ enum PluginDiagnosticsSupport {
         builtInPluginsURL: URL?,
         pluginsDirectory: URL,
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
-    ) -> DiagnosticPluginSourceInfo {
-        let executableInfo = executableInfo(bundle: bundle, sourceURL: sourceURL)
+    ) async -> DiagnosticPluginSourceInfo {
+        let executableInfo = await executableInfo(bundle: bundle, sourceURL: sourceURL)
         let infoDictionary = bundle?.infoDictionary ?? bundleInfoDictionary(sourceURL: sourceURL)
         return DiagnosticPluginSourceInfo(
             sourceKind: pluginSourceKind(
@@ -129,13 +129,13 @@ enum PluginDiagnosticsSupport {
         )
     }
 
-    static func executableInfo(bundle: Bundle?, sourceURL: URL) -> DiagnosticExecutableInfo {
+    static func executableInfo(bundle: Bundle?, sourceURL: URL) async -> DiagnosticExecutableInfo {
         guard let executableURL = executableURL(bundle: bundle, sourceURL: sourceURL) else {
             return DiagnosticExecutableInfo(sizeBytes: nil, sha256: nil)
         }
 
         let size = (try? executableURL.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init)
-        return DiagnosticExecutableInfo(sizeBytes: size, sha256: sha256HexDigest(for: executableURL))
+        return DiagnosticExecutableInfo(sizeBytes: size, sha256: await sha256HexDigest(for: executableURL))
     }
 
     private static func executableURL(bundle: Bundle?, sourceURL: URL) -> URL? {
@@ -167,21 +167,23 @@ enum PluginDiagnosticsSupport {
         return dictionary
     }
 
-    private static func sha256HexDigest(for url: URL) -> String? {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
-        defer { try? handle.close() }
+    private static func sha256HexDigest(for url: URL) async -> String? {
+        await Task.detached(priority: .utility) {
+            guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+            defer { try? handle.close() }
 
-        var hasher = SHA256()
-        while true {
-            do {
-                guard let chunk = try handle.read(upToCount: 1024 * 1024), !chunk.isEmpty else { break }
-                hasher.update(data: chunk)
-            } catch {
-                return nil
+            var hasher = SHA256()
+            while true {
+                do {
+                    guard let chunk = try handle.read(upToCount: 1024 * 1024), !chunk.isEmpty else { break }
+                    hasher.update(data: chunk)
+                } catch {
+                    return nil
+                }
             }
-        }
 
-        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+            return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+        }.value
     }
 }
 
@@ -375,16 +377,18 @@ final class ErrorLogService: ObservableObject {
         saveEntries()
     }
 
-    func exportDiagnostics(to url: URL) throws {
-        let report = diagnosticsReport()
+    func exportDiagnostics(to url: URL) async throws {
+        let report = await diagnosticsReport()
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
         let data = try encoder.encode(report)
-        try data.write(to: url, options: .atomic)
+        try await Task.detached(priority: .utility) {
+            try data.write(to: url, options: .atomic)
+        }.value
     }
 
-    private func diagnosticsReport() -> DiagnosticsReport {
+    private func diagnosticsReport() async -> DiagnosticsReport {
         let container = ServiceContainer.shared
         let defaults = UserDefaults.standard
         let pluginManager = PluginManager.shared ?? container.pluginManager
@@ -393,6 +397,77 @@ final class ErrorLogService: ObservableObject {
         let indicatorStyle = DictationViewModel.loadIndicatorStyle(defaults: defaults)
         let indicatorPreviewEnabled = DictationViewModel.loadIndicatorTranscriptPreviewEnabled(defaults: defaults)
         let indicatorPreviewOffset = DictationViewModel.loadIndicatorTranscriptPreviewFontSizeOffset(defaults: defaults)
+
+        var pluginDiagnostics: [DiagnosticsReport.PluginInfo] = []
+        for loadedPlugin in pluginManager.loadedPlugins {
+            let engine = loadedPlugin.instance as? TranscriptionEnginePlugin
+            let fallbackPolicy = engine as? TranscriptPreviewFallbackPolicyProviding
+            let allowsTranscriptPreviewFallback: Bool? = if engine != nil {
+                fallbackPolicy?.allowsTranscriptPreviewFallback ?? true
+            } else {
+                nil
+            }
+            let activity = (loadedPlugin.instance as? any PluginSettingsActivityReporting)?.currentSettingsActivity
+            let registryEntry = container.pluginRegistryService.registry.first { $0.id == loadedPlugin.manifest.id }
+            let externalNotice = pluginManager.externalBundleNotice(
+                for: loadedPlugin.manifest.id,
+                registryPlugin: registryEntry
+            )
+            let pluginSource = await PluginDiagnosticsSupport.sourceInfo(
+                bundle: loadedPlugin.bundle,
+                sourceURL: loadedPlugin.sourceURL,
+                builtInPluginsURL: Bundle.main.builtInPlugInsURL,
+                pluginsDirectory: pluginManager.pluginsDirectory
+            )
+
+            pluginDiagnostics.append(DiagnosticsReport.PluginInfo(
+                id: loadedPlugin.manifest.id,
+                name: loadedPlugin.manifest.name,
+                version: loadedPlugin.manifest.version,
+                enabled: loadedPlugin.isEnabled,
+                bundled: loadedPlugin.isBundled,
+                runtimeLoaded: loadedPlugin.isRuntimeLoaded,
+                providerId: engine?.providerId,
+                selectedModelId: engine?.selectedModelId,
+                isConfigured: engine?.isConfigured,
+                supportsStreaming: engine?.supportsStreaming,
+                supportsLiveTranscriptionSession: engine.map { $0 is LiveTranscriptionCapablePlugin },
+                allowsTranscriptPreviewFallback: allowsTranscriptPreviewFallback,
+                storedSelectedModelId: defaults.string(forKey: Self.pluginDefaultKey(pluginId: loadedPlugin.manifest.id, key: "selectedModel")),
+                storedLoadedModelId: defaults.string(forKey: Self.pluginDefaultKey(pluginId: loadedPlugin.manifest.id, key: "loadedModel")),
+                storedSelectedVersion: defaults.string(forKey: Self.pluginDefaultKey(pluginId: loadedPlugin.manifest.id, key: "selectedVersion")),
+                source: pluginSource,
+                currentSettingsActivity: activity.map(DiagnosticPluginActivityInfo.init),
+                registryVersion: registryEntry?.version,
+                registrySource: registryEntry?.source.rawValue,
+                externalBundleNotice: externalNotice?.diagnosticsValue
+            ))
+        }
+
+        var skippedExternalBundleDiagnostics: [DiagnosticsReport.SkippedExternalBundleInfo] = []
+        for bundle in pluginManager.incompatibleExternalBundles.values.sorted(by: { $0.pluginName < $1.pluginName }) {
+            let registryEntry = container.pluginRegistryService.registry.first(where: { $0.id == bundle.pluginId })
+            let pluginSource = await PluginDiagnosticsSupport.sourceInfo(
+                bundle: Bundle(url: bundle.bundleURL),
+                sourceURL: bundle.bundleURL,
+                builtInPluginsURL: Bundle.main.builtInPlugInsURL,
+                pluginsDirectory: pluginManager.pluginsDirectory
+            )
+            skippedExternalBundleDiagnostics.append(DiagnosticsReport.SkippedExternalBundleInfo(
+                id: bundle.pluginId,
+                name: bundle.pluginName,
+                version: bundle.version,
+                reason: bundle.reason.diagnosticsValue,
+                source: pluginSource,
+                registryVersion: registryEntry?.version,
+                registrySource: registryEntry?.source.rawValue,
+                externalBundleNotice: PluginManager.externalBundleNotice(
+                    loadedPlugin: pluginManager.loadedPlugins.first(where: { $0.manifest.id == bundle.pluginId }),
+                    registryPlugin: registryEntry,
+                    incompatibleExternalBundle: bundle
+                )?.diagnosticsValue
+            ))
+        }
 
         return DiagnosticsReport(
             schemaVersion: 5,
@@ -451,72 +526,8 @@ final class ErrorLogService: ObservableObject {
                 },
                 inputDiagnostics: container.audioDeviceService.diagnosticsReport()
             ),
-            plugins: pluginManager.loadedPlugins.map { loadedPlugin in
-                let engine = loadedPlugin.instance as? TranscriptionEnginePlugin
-                let fallbackPolicy = engine as? TranscriptPreviewFallbackPolicyProviding
-                let allowsTranscriptPreviewFallback: Bool? = if engine != nil {
-                    fallbackPolicy?.allowsTranscriptPreviewFallback ?? true
-                } else {
-                    nil
-                }
-                let activity = (loadedPlugin.instance as? any PluginSettingsActivityReporting)?.currentSettingsActivity
-                let registryEntry = container.pluginRegistryService.registry.first { $0.id == loadedPlugin.manifest.id }
-                let externalNotice = pluginManager.externalBundleNotice(
-                    for: loadedPlugin.manifest.id,
-                    registryPlugin: registryEntry
-                )
-                return DiagnosticsReport.PluginInfo(
-                    id: loadedPlugin.manifest.id,
-                    name: loadedPlugin.manifest.name,
-                    version: loadedPlugin.manifest.version,
-                    enabled: loadedPlugin.isEnabled,
-                    bundled: loadedPlugin.isBundled,
-                    runtimeLoaded: loadedPlugin.isRuntimeLoaded,
-                    providerId: engine?.providerId,
-                    selectedModelId: engine?.selectedModelId,
-                    isConfigured: engine?.isConfigured,
-                    supportsStreaming: engine?.supportsStreaming,
-                    supportsLiveTranscriptionSession: engine.map { $0 is LiveTranscriptionCapablePlugin },
-                    allowsTranscriptPreviewFallback: allowsTranscriptPreviewFallback,
-                    storedSelectedModelId: defaults.string(forKey: Self.pluginDefaultKey(pluginId: loadedPlugin.manifest.id, key: "selectedModel")),
-                    storedLoadedModelId: defaults.string(forKey: Self.pluginDefaultKey(pluginId: loadedPlugin.manifest.id, key: "loadedModel")),
-                    storedSelectedVersion: defaults.string(forKey: Self.pluginDefaultKey(pluginId: loadedPlugin.manifest.id, key: "selectedVersion")),
-                    source: PluginDiagnosticsSupport.sourceInfo(
-                        bundle: loadedPlugin.bundle,
-                        sourceURL: loadedPlugin.sourceURL,
-                        builtInPluginsURL: Bundle.main.builtInPlugInsURL,
-                        pluginsDirectory: pluginManager.pluginsDirectory
-                    ),
-                    currentSettingsActivity: activity.map(DiagnosticPluginActivityInfo.init),
-                    registryVersion: registryEntry?.version,
-                    registrySource: registryEntry?.source.rawValue,
-                    externalBundleNotice: externalNotice?.diagnosticsValue
-                )
-            },
-            skippedExternalBundles: pluginManager.incompatibleExternalBundles.values
-                .sorted { $0.pluginName < $1.pluginName }
-                .map { bundle in
-                    let registryEntry = container.pluginRegistryService.registry.first(where: { $0.id == bundle.pluginId })
-                    return DiagnosticsReport.SkippedExternalBundleInfo(
-                        id: bundle.pluginId,
-                        name: bundle.pluginName,
-                        version: bundle.version,
-                        reason: bundle.reason.diagnosticsValue,
-                        source: PluginDiagnosticsSupport.sourceInfo(
-                            bundle: Bundle(url: bundle.bundleURL),
-                            sourceURL: bundle.bundleURL,
-                            builtInPluginsURL: Bundle.main.builtInPlugInsURL,
-                            pluginsDirectory: pluginManager.pluginsDirectory
-                        ),
-                        registryVersion: registryEntry?.version,
-                        registrySource: registryEntry?.source.rawValue,
-                        externalBundleNotice: PluginManager.externalBundleNotice(
-                            loadedPlugin: pluginManager.loadedPlugins.first(where: { $0.manifest.id == bundle.pluginId }),
-                            registryPlugin: registryEntry,
-                            incompatibleExternalBundle: bundle
-                        )?.diagnosticsValue
-                    )
-                },
+            plugins: pluginDiagnostics,
+            skippedExternalBundles: skippedExternalBundleDiagnostics,
             settings: .init(
                 bundledReleaseChannel: AppConstants.releaseChannel.rawValue,
                 selectedUpdateChannel: AppConstants.effectiveUpdateChannel.rawValue,

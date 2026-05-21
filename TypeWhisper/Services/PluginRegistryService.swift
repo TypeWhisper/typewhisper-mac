@@ -424,12 +424,13 @@ final class PluginRegistryService: ObservableObject {
 
     // MARK: - Fetch Registry
 
-    func fetchRegistry(force: Bool = false) async {
+    @discardableResult
+    func fetchRegistry(force: Bool = false) async -> Bool {
         if !force,
            let lastFetch = lastFetchDate,
            Date().timeIntervalSince(lastFetch) < cacheDuration,
            !registry.isEmpty {
-            return
+            return true
         }
 
         fetchState = .loading
@@ -444,19 +445,22 @@ final class PluginRegistryService: ObservableObject {
             request.cachePolicy = .reloadIgnoringLocalCacheData
             let (data, _) = try await fetchData(request)
 
-            try applyRegistryData(data, feed: feed)
+            try applyRegistryData(data, feed: feed, markFetchDate: true)
             try cacheRegistryData(data, feed: feed)
             logger.info("Fetched \(self.registry.count) plugin(s) from registry feed \(feed.rawValue, privacy: .public)")
+            return true
         } catch {
             do {
                 let cachedData = try Data(contentsOf: cacheURL(for: feed))
-                try applyRegistryData(cachedData, feed: feed)
+                try applyRegistryData(cachedData, feed: feed, markFetchDate: false)
                 logger.warning(
                     "Using cached plugin registry feed \(feed.rawValue, privacy: .public) after fetch failure: \(error.localizedDescription, privacy: .public)"
                 )
+                return false
             } catch {
                 fetchState = .error(error.localizedDescription)
                 logger.error("Failed to fetch registry: \(error.localizedDescription)")
+                return false
             }
         }
     }
@@ -487,8 +491,10 @@ final class PluginRegistryService: ObservableObject {
         }
 
         lastFetchDate = nil
-        await fetchRegistry(force: true)
-        updateAvailableUpdatesCount()
+        let refreshSucceeded = await fetchRegistry(force: true)
+        guard refreshSucceeded else {
+            return false
+        }
         userDefaults.set(now.timeIntervalSince1970, forKey: Self.lastUpdateCheckKey)
         userDefaults.set(currentFingerprint, forKey: Self.lastHostFingerprintCheckKey)
         return true
@@ -851,13 +857,15 @@ final class PluginRegistryService: ObservableObject {
         cacheDirectory.appendingPathComponent(feed.pathComponent)
     }
 
-    private func applyRegistryData(_ data: Data, feed: RegistryFeed) throws {
+    private func applyRegistryData(_ data: Data, feed: RegistryFeed, markFetchDate: Bool) throws {
         let response = try JSONDecoder().decode(PluginRegistryResponse.self, from: data)
         registry = response.resolvedPlugins(
             appVersion: resolvedAppVersion,
             sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion
         )
-        lastFetchDate = Date()
+        if markFetchDate {
+            lastFetchDate = Date()
+        }
         fetchState = .loaded
         updateAvailableUpdatesCount()
         logger.info("Resolved \(self.registry.count) compatible plugin(s) from \(feed.rawValue, privacy: .public)")

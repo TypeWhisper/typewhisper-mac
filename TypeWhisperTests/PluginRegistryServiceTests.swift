@@ -764,6 +764,52 @@ final class PluginRegistryServiceTests: XCTestCase {
         XCTAssertEqual(requestCount, 2)
     }
 
+    @MainActor
+    func testHostFingerprintRefreshDoesNotAdvanceThrottleWhenOnlyCacheFallbackLoads() async throws {
+        let suiteName = "PluginRegistryServiceTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let cacheDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginRegistryFingerprintCacheFallback")
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+            TestSupport.remove(cacheDirectory)
+        }
+
+        try Self.registryPayload(pluginId: "com.typewhisper.cached-fallback")
+            .write(to: cacheDirectory.appendingPathComponent("plugins-community-v1.json"))
+
+        var requestCount = 0
+        let service = PluginRegistryService(
+            registryBaseURL: URL(string: "https://example.com")!,
+            cacheDirectory: cacheDirectory,
+            cacheDuration: 0,
+            userDefaults: defaults,
+            infoDictionary: [
+                "CFBundleShortVersionString": "1.4.0",
+                "TypeWhisperReleaseChannel": AppConstants.ReleaseChannel.stable.rawValue,
+            ],
+            fetchData: { _ in
+                requestCount += 1
+                throw URLError(.notConnectedToInternet)
+            }
+        )
+        let now = Date(timeIntervalSince1970: 4_000)
+
+        let fallbackFetch = await service.refreshRegistryForHostUpdateIfNeeded(
+            currentFingerprint: "1.4.0+803@stable",
+            now: now
+        )
+        let retryFetch = await service.refreshRegistryForHostUpdateIfNeeded(
+            currentFingerprint: "1.4.0+803@stable",
+            now: now.addingTimeInterval(60)
+        )
+
+        XCTAssertFalse(fallbackFetch)
+        XCTAssertFalse(retryFetch)
+        XCTAssertEqual(requestCount, 2)
+        XCTAssertEqual(service.fetchState, .loaded)
+        XCTAssertEqual(service.registry.map(\.id), ["com.typewhisper.cached-fallback"])
+    }
+
     private static func registryPayload(pluginId: String) -> Data {
         Data(
             """
