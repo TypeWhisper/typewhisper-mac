@@ -1258,14 +1258,15 @@ final class DictationViewModel: ObservableObject {
                         activeApp: activeApp, language: language, originalText: result.text
                     )
                 } else {
+                    let insertionText = DictationInsertionTextFormatter.textForInsertion(text)
                     _ = try await textInsertionService.insertText(
-                        text,
+                        insertionText,
                         preserveClipboard: preserveClipboard,
                         autoEnter: self.effectiveAutoEnterEnabled,
                         outputFormat: self.effectiveOutputFormat
                     )
                     EventBus.shared.emit(.textInserted(TextInsertedPayload(
-                        text: text,
+                        text: insertionText,
                         appName: activeApp.name,
                         bundleIdentifier: activeApp.bundleId
                     )))
@@ -1786,6 +1787,14 @@ enum ShortSpeechDecision: Equatable {
 func hasConfirmedTranscriptionResultText(_ result: TranscriptionResult?) -> Bool {
     guard let result else { return false }
     return !result.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+}
+
+enum DictationInsertionTextFormatter {
+    static func textForInsertion(_ text: String) -> String {
+        guard let lastScalar = text.unicodeScalars.last else { return text }
+        guard !CharacterSet.whitespacesAndNewlines.contains(lastScalar) else { return text }
+        return text + " "
+    }
 }
 
 func classifyShortSpeech(
