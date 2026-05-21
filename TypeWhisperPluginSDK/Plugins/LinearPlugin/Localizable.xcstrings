@@ -21,22 +21,22 @@
         }
       }
     },
-    "Copy Prompt" : {
+    "Copy Instruction" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Prompt kopieren"
+            "value" : "Anweisung kopieren"
           }
         }
       }
     },
-    "Create a new PromptAction with this system prompt and set \"Create Linear Issue\" as the action target:" : {
+    "Create a Custom Workflow, paste this into Instruction, and set Action Target to \"Create Linear Issue\"." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Erstelle eine neue PromptAction mit diesem Prompt und setze \"Create Linear Issue\" als Aktionsziel:"
+            "value" : "Erstelle einen eigenen Workflow, füge dies in Anweisung ein und setze das Action-Ziel auf \"Create Linear Issue\"."
           }
         }
       }
@@ -121,12 +121,12 @@
         }
       }
     },
-    "Recommended Prompt" : {
+    "Workflow Instruction" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Empfohlener Prompt"
+            "value" : "Workflow-Anweisung"
           }
         }
       }

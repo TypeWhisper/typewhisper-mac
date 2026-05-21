@@ -199,6 +199,7 @@ final class LicenseService: ObservableObject {
     }
 
     var isSupporter: Bool { supporterStatus == .active && supporterTier != nil }
+    var hasCommercialLicense: Bool { licenseStatus == .active }
     var supporterClaimProof: SupporterClaimProof? {
         guard supporterStatus == .active,
               let supporterTier,

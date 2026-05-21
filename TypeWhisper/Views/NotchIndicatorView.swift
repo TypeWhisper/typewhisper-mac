@@ -7,6 +7,7 @@ import SwiftUI
 /// Blue glow emanates from the notch shape, reacting to audio level.
 struct NotchIndicatorView: View {
     @ObservedObject private var viewModel = DictationViewModel.shared
+    @ObservedObject private var recorder = AudioRecorderViewModel.shared
     @ObservedObject var geometry: NotchGeometry
     @State private var textExpanded = false
     @State private var dotPulse = false
@@ -16,15 +17,19 @@ struct NotchIndicatorView: View {
     private let processingBodyHeight: CGFloat = 28
     private let feedbackBodyHeight: CGFloat = 52
 
+    private var presentation: IndicatorPresentationData {
+        IndicatorPresentationData.make(dictation: viewModel, recorder: recorder)
+    }
+
     private var closedWidth: CGFloat {
-        if case .recording = viewModel.state {
+        if case .recording = presentation.state {
             return NotchIndicatorLayout.recordingClosedWidth(
                 hasNotch: geometry.hasNotch,
                 notchWidth: geometry.notchWidth,
                 leftContent: viewModel.notchIndicatorLeftContent,
                 rightContent: viewModel.notchIndicatorRightContent,
-                recordingDuration: viewModel.recordingDuration,
-                activeRuleName: viewModel.activeRuleName
+                recordingDuration: presentation.recordingDuration,
+                activeRuleName: presentation.activeRuleName
             )
         }
 
@@ -32,32 +37,32 @@ struct NotchIndicatorView: View {
     }
 
     private var leftStatusSpacing: CGFloat {
-        guard case .recording = viewModel.state else {
+        guard case .recording = presentation.state else {
             return 0
         }
 
         let leftContentWidth = NotchIndicatorLayout.recordingContentWidth(
             viewModel.notchIndicatorLeftContent,
-            recordingDuration: viewModel.recordingDuration,
-            activeRuleName: viewModel.activeRuleName
+            recordingDuration: presentation.recordingDuration,
+            activeRuleName: presentation.activeRuleName
         )
         return leftContentWidth > 0 ? NotchIndicatorLayout.leftContentSpacing : 0
     }
 
     private var suppressStreamingText: Bool {
-        viewModel.externalStreamingDisplayCount > 0
+        !presentation.isRecorder && presentation.externalStreamingDisplayCount > 0
     }
 
     private var hasActionFeedback: Bool {
-        viewModel.state == .inserting && viewModel.actionFeedbackMessage != nil
+        presentation.state == .inserting && presentation.actionFeedbackMessage != nil
     }
 
     private var hasRecordingCancelWarning: Bool {
-        viewModel.state == .recording && viewModel.recordingCancelWarningMessage != nil
+        presentation.state == .recording && presentation.recordingCancelWarningMessage != nil
     }
 
     private var hasProcessingPhase: Bool {
-        viewModel.state == .processing && viewModel.processingPhase != nil
+        presentation.state == .processing && presentation.processingPhase != nil
     }
 
     private var showTranscriptPreview: Bool {
@@ -65,11 +70,11 @@ struct NotchIndicatorView: View {
     }
 
     private var hasTranscriptSection: Bool {
-        viewModel.state == .recording && showTranscriptPreview
+        presentation.state == .recording && showTranscriptPreview
     }
 
     private var transcriptBodyVisible: Bool {
-        viewModel.state == .recording && showTranscriptPreview && textExpanded
+        presentation.state == .recording && showTranscriptPreview && textExpanded
     }
 
     private var expansionMode: NotchExpansionMode {
@@ -145,17 +150,17 @@ struct NotchIndicatorView: View {
         .animation(.easeOut(duration: 0.22), value: geometry.isPresented)
         .animation(.easeOut(duration: 0.24), value: currentWidth)
         .animation(.easeOut(duration: 0.24), value: expandedBodyHeight)
-        .animation(.easeInOut(duration: 0.18), value: viewModel.state)
-        .animation(.easeOut(duration: 0.08), value: viewModel.audioLevel)
-        .onChange(of: viewModel.partialText) {
-            if showTranscriptPreview, !viewModel.partialText.isEmpty, !textExpanded {
+        .animation(.easeInOut(duration: 0.18), value: presentation.state)
+        .animation(.easeOut(duration: 0.08), value: presentation.audioLevel)
+        .onChange(of: presentation.partialText) {
+            if showTranscriptPreview, !presentation.partialText.isEmpty, !textExpanded {
                 withAnimation(.easeOut(duration: 0.24)) {
                     textExpanded = true
                 }
             }
         }
-        .onChange(of: viewModel.state) {
-            if viewModel.state == .recording {
+        .onChange(of: presentation.state) {
+            if presentation.state == .recording {
                 withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
                     dotPulse = true
                 }
@@ -172,7 +177,7 @@ struct NotchIndicatorView: View {
             }
         }
         .onChange(of: viewModel.indicatorTranscriptPreviewEnabled) {
-            if showTranscriptPreview, viewModel.state == .recording, !viewModel.partialText.isEmpty {
+            if showTranscriptPreview, presentation.state == .recording, !presentation.partialText.isEmpty {
                 withAnimation(.easeOut(duration: 0.24)) {
                     textExpanded = true
                 }
@@ -188,18 +193,21 @@ struct NotchIndicatorView: View {
     }
 
     private var notchAccessibilityLabel: String {
-        switch viewModel.state {
+        switch presentation.state {
         case .idle, .promptSelection, .promptProcessing:
             return String(localized: "Idle")
         case .recording:
-            if let warning = viewModel.recordingCancelWarningMessage {
+            if let warning = presentation.recordingCancelWarningMessage {
                 return warning
+            }
+            if !presentation.isRecordingInputReady {
+                return String(localized: "Preparing microphone")
             }
             return String(localized: "Recording")
         case .processing:
             return String(localized: "Processing transcription")
         case .inserting:
-            if let feedback = viewModel.actionFeedbackMessage {
+            if let feedback = presentation.actionFeedbackMessage {
                 return feedback
             }
             return String(localized: "Inserting text")
@@ -229,7 +237,7 @@ struct NotchIndicatorView: View {
     private var expandedBodyContent: some View {
         if hasRecordingCancelWarning {
             IndicatorActionFeedback(
-                message: viewModel.recordingCancelWarningMessage ?? "",
+                message: presentation.recordingCancelWarningMessage ?? "",
                 icon: "exclamationmark.triangle.fill",
                 isError: false,
                 iconColor: .yellow,
@@ -237,7 +245,7 @@ struct NotchIndicatorView: View {
             )
         } else if hasTranscriptSection {
             IndicatorExpandableText(
-                text: viewModel.partialText,
+                text: presentation.partialText,
                 fontSize: transcriptFontSize,
                 expandedHeight: viewModel.indicatorTranscriptPreviewExpandedHeight(for: .notch),
                 expanded: true,
@@ -245,16 +253,16 @@ struct NotchIndicatorView: View {
             )
             .opacity(textExpanded ? 1 : 0.72)
         } else if hasProcessingPhase {
-            Text(viewModel.processingPhase ?? "")
+            Text(presentation.processingPhase ?? "")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.white.opacity(0.7))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
         } else if hasActionFeedback {
             IndicatorActionFeedback(
-                message: viewModel.actionFeedbackMessage ?? "",
-                icon: viewModel.actionFeedbackIcon,
-                isError: viewModel.actionFeedbackIsError,
+                message: presentation.actionFeedbackMessage ?? "",
+                icon: presentation.actionFeedbackIcon,
+                isError: presentation.actionFeedbackIsError,
                 iconColor: nil,
                 contentPadding: contentPadding
             )
@@ -268,7 +276,7 @@ struct NotchIndicatorView: View {
         HStack(spacing: 0) {
             HStack(spacing: leftStatusSpacing) {
                 IndicatorLeftStatus(
-                    viewModel: viewModel,
+                    presentation: presentation,
                     sizing: sizing,
                     dotPulse: dotPulse,
                     hasActionFeedback: hasActionFeedback
@@ -293,9 +301,9 @@ struct NotchIndicatorView: View {
 
     @ViewBuilder
     private var leftContent: some View {
-        if case .recording = viewModel.state {
+        if case .recording = presentation.state {
             IndicatorRecordingContent(
-                viewModel: viewModel,
+                presentation: presentation,
                 content: viewModel.notchIndicatorLeftContent,
                 sizing: sizing,
                 dotPulse: dotPulse
@@ -305,14 +313,14 @@ struct NotchIndicatorView: View {
 
     @ViewBuilder
     private var rightContent: some View {
-        if case .recording = viewModel.state {
+        if case .recording = presentation.state {
             IndicatorRecordingContent(
-                viewModel: viewModel,
+                presentation: presentation,
                 content: viewModel.notchIndicatorRightContent,
                 sizing: sizing,
                 dotPulse: dotPulse
             )
-        } else if case .processing = viewModel.state {
+        } else if case .processing = presentation.state {
             ProgressView()
                 .controlSize(.mini)
                 .tint(.white)

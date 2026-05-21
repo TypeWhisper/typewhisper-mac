@@ -21,7 +21,7 @@ enum SubtitleExporter {
         segments.enumerated().map { index, segment in
             let start = formatSRTTime(segment.start)
             let end = formatSRTTime(segment.end)
-            return "\(index + 1)\n\(start) --> \(end)\n\(segment.text)"
+            return "\(index + 1)\n\(start) --> \(end)\n\(displayText(for: segment))"
         }.joined(separator: "\n\n")
     }
 
@@ -32,7 +32,7 @@ enum SubtitleExporter {
             let end = formatVTTTime(segment.end)
             lines.append("\(index + 1)")
             lines.append("\(start) --> \(end)")
-            lines.append(segment.text)
+            lines.append(displayText(for: segment))
             lines.append("")
         }
         return lines.joined(separator: "\n")
@@ -51,6 +51,19 @@ enum SubtitleExporter {
     }
 
     // MARK: - Time Formatting
+
+    private static func displayText(for segment: TranscriptionSegment) -> String {
+        guard let speakerLabel = segment.speakerLabel?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !speakerLabel.isEmpty else {
+            return segment.text
+        }
+
+        let trimmedText = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedText.hasPrefix("\(speakerLabel):") {
+            return segment.text
+        }
+        return "\(speakerLabel): \(segment.text)"
+    }
 
     private static func formatSRTTime(_ time: TimeInterval) -> String {
         let hours = Int(time) / 3600

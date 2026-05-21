@@ -96,6 +96,54 @@ private final class MockTranscriptionPlugin: NSObject, TranscriptionEnginePlugin
     }
 }
 
+@objc(MockDownloadedModelPlugin)
+private final class MockDownloadedModelPlugin: NSObject, TypeWhisperPlugin, PluginDownloadedModelManaging, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.downloaded-models"
+    static let pluginName = "Mock Downloaded Models"
+
+    private(set) var deletedModelIds: [String] = []
+    var downloadedModels: [PluginModelInfo] = [
+        PluginModelInfo(
+            id: "local-small",
+            displayName: "Local Small",
+            sizeDescription: "1 GB",
+            downloaded: true,
+            loaded: true
+        )
+    ]
+
+    required override init() {}
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    func deleteDownloadedModel(_ modelId: String) async throws {
+        deletedModelIds.append(modelId)
+        downloadedModels.removeAll { $0.id == modelId }
+    }
+}
+
+@objc(MockAuthRoleStatusPlugin)
+private final class MockAuthRoleStatusPlugin: NSObject, TypeWhisperPlugin, PluginAuthRoleStatusProviding, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.auth-roles"
+    static let pluginName = "Mock Auth Roles"
+
+    required override init() {}
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    func authStatus(for role: PluginAuthRole) -> PluginAuthRoleStatus {
+        role == .transcription
+            ? PluginAuthRoleStatus(
+                isAvailable: false,
+                unavailableReason: "Transcription needs a key.",
+                requiredCredentialLabel: "API key"
+            )
+            : .available
+    }
+}
+
 @objc(MockDictionaryTermsPlugin)
 private final class MockDictionaryTermsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.mock.dictionary-terms"
@@ -175,6 +223,45 @@ private final class MockCatalogTranscriptionPlugin: NSObject, TranscriptionEngin
     }
 }
 
+@objc(MockStructuredTranscriptionPlugin)
+private final class MockStructuredTranscriptionPlugin: NSObject, StructuredTranscriptionEnginePlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.structured"
+    static let pluginName = "Mock Structured"
+
+    required override init() {}
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    var providerId: String { "mock-structured" }
+    var providerDisplayName: String { "Mock Structured" }
+    var isConfigured: Bool { true }
+    var transcriptionModels: [PluginModelInfo] { [] }
+    var selectedModelId: String? { nil }
+    func selectModel(_ modelId: String) {}
+    var supportsTranslation: Bool { false }
+
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "legacy", detectedLanguage: language)
+    }
+
+    func transcribeStructured(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginStructuredTranscriptionResult {
+        PluginStructuredTranscriptionResult(
+            text: "Speaker A: Hello",
+            detectedLanguage: language,
+            segments: [
+                PluginStructuredTranscriptionSegment(
+                    text: "Hello",
+                    start: 0.25,
+                    end: 1.5,
+                    speakerLabel: "Speaker A",
+                    speakerConfidence: 0.91
+                )
+            ]
+        )
+    }
+}
+
 private final class MockTTSPlaybackSession: TTSPlaybackSession, @unchecked Sendable {
     var isActive = true
     var onFinish: (@Sendable () -> Void)?
@@ -221,6 +308,34 @@ private final class MockTTSPlugin: NSObject, TTSProviderPlugin, @unchecked Senda
 }
 
 final class ProtocolContractTests: XCTestCase {
+    func testPluginAuthRolesExposeStableRawValues() {
+        XCTAssertEqual(PluginAuthRole.transcription.rawValue, "transcription")
+        XCTAssertEqual(PluginAuthRole.llm.rawValue, "llm")
+        XCTAssertEqual(PluginAuthRole.tts.rawValue, "tts")
+    }
+
+    func testPluginAuthRoleStatusResolverUsesProviderOverrideAndLegacyFallback() {
+        let roleAwarePlugin = MockAuthRoleStatusPlugin()
+        let roleStatus = PluginAuthRoleStatusResolver.status(
+            for: roleAwarePlugin,
+            role: .transcription,
+            legacyIsConfigured: true
+        )
+
+        XCTAssertFalse(roleStatus.isAvailable)
+        XCTAssertEqual(roleStatus.unavailableReason, "Transcription needs a key.")
+        XCTAssertEqual(roleStatus.requiredCredentialLabel, "API key")
+
+        let legacyPlugin = MockTranscriptionPlugin()
+        XCTAssertEqual(
+            PluginAuthRoleStatusResolver.status(for: legacyPlugin, role: .transcription, legacyIsConfigured: true),
+            .available
+        )
+        XCTAssertFalse(
+            PluginAuthRoleStatusResolver.status(for: legacyPlugin, role: .transcription, legacyIsConfigured: false).isAvailable
+        )
+    }
+
     func testHostServicesExposeRulesSecretsAndDefaults() throws {
         let host = MockHostServices(eventBus: MockEventBus(), availableRuleNames: ["Work", "Docs"])
 
@@ -263,6 +378,8 @@ final class ProtocolContractTests: XCTestCase {
                 fineTuning: "Keep speaker intent.",
                 providerId: "openai",
                 cloudModel: "gpt-5.4",
+                transcriptionEngineId: "whisperkit",
+                transcriptionModelId: "large-v3",
                 temperatureMode: .custom,
                 temperatureValue: 0.2
             ),
@@ -283,7 +400,28 @@ final class ProtocolContractTests: XCTestCase {
         XCTAssertEqual(host.availableWorkflows, [workflow])
         XCTAssertEqual(host.availableWorkflows.first?.trigger.websitePatterns, ["example.com"])
         XCTAssertEqual(host.availableWorkflows.first?.behavior.settings["triggerWord"], "cleanup")
+        XCTAssertEqual(host.availableWorkflows.first?.behavior.transcriptionEngineId, "whisperkit")
+        XCTAssertEqual(host.availableWorkflows.first?.behavior.transcriptionModelId, "large-v3")
         XCTAssertEqual(host.availableWorkflows.first?.output.targetActionPluginId, "com.example.action")
+    }
+
+    func testWorkflowBehaviorDecodesLegacyPayloadWithoutTranscriptionOverrides() throws {
+        let payload: [String: Any] = [
+            "settings": ["triggerWord": "cleanup"],
+            "fineTuning": "Keep speaker intent.",
+            "providerId": "openai",
+            "cloudModel": "gpt-5.4",
+            "temperatureMode": "custom",
+            "temperatureValue": 0.2
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+
+        let behavior = try JSONDecoder().decode(PluginWorkflowBehavior.self, from: data)
+
+        XCTAssertEqual(behavior.providerId, "openai")
+        XCTAssertEqual(behavior.cloudModel, "gpt-5.4")
+        XCTAssertNil(behavior.transcriptionEngineId)
+        XCTAssertNil(behavior.transcriptionModelId)
     }
 
     func testTranscriptionPluginUsesDefaultStreamingFallback() async throws {
@@ -304,7 +442,8 @@ final class ProtocolContractTests: XCTestCase {
 
         XCTAssertEqual(result.text, "transcribed")
         XCTAssertEqual(plugin.host?.availableRuleNames, ["Work"])
-        XCTAssertNil(plugin.settingsView)
+        let hasSettingsView = await MainActor.run { plugin.settingsView != nil }
+        XCTAssertFalse(hasSettingsView)
 
         plugin.deactivate()
         XCTAssertNil(plugin.host)
@@ -347,6 +486,84 @@ final class ProtocolContractTests: XCTestCase {
         XCTAssertFalse(legacyPlugin is any TranscriptionModelCatalogProviding)
         XCTAssertEqual(legacyPlugin.modelCatalog.map(\.id), ["tiny"])
         XCTAssertEqual(catalogPlugin.modelCatalog.map(\.id), ["tiny", "large"])
+    }
+
+    func testDownloadedModelManagingProtocolIsOptionalAndUsesModelInfo() async throws {
+        let legacyPlugin = MockTranscriptionPlugin()
+        let downloadedModelPlugin = MockDownloadedModelPlugin()
+
+        XCTAssertFalse(legacyPlugin is any PluginDownloadedModelManaging)
+        XCTAssertEqual(downloadedModelPlugin.downloadedModels.map(\.id), ["local-small"])
+        XCTAssertEqual(downloadedModelPlugin.downloadedModels.first?.downloaded, true)
+        XCTAssertEqual(downloadedModelPlugin.downloadedModels.first?.loaded, true)
+
+        try await downloadedModelPlugin.deleteDownloadedModel("local-small")
+
+        XCTAssertEqual(downloadedModelPlugin.deletedModelIds, ["local-small"])
+        XCTAssertTrue(downloadedModelPlugin.downloadedModels.isEmpty)
+    }
+
+    func testStructuredTranscriptionProtocolIsOptionalAndCarriesSpeakerMetadata() async throws {
+        let legacyPlugin = MockTranscriptionPlugin()
+        let structuredPlugin = MockStructuredTranscriptionPlugin()
+        let erasedStructuredPlugin: Any = structuredPlugin
+
+        XCTAssertFalse(legacyPlugin is any StructuredTranscriptionEnginePlugin)
+        XCTAssertTrue(erasedStructuredPlugin is any StructuredTranscriptionEnginePlugin)
+
+        let result = try await structuredPlugin.transcribeStructured(
+            audio: AudioData(samples: [0.1], wavData: Data([0x00]), duration: 1),
+            language: "en",
+            translate: false,
+            prompt: nil
+        )
+
+        XCTAssertEqual(result.text, "Speaker A: Hello")
+        XCTAssertEqual(result.detectedLanguage, "en")
+        XCTAssertEqual(result.segments.first?.text, "Hello")
+        XCTAssertEqual(result.segments.first?.speakerLabel, "Speaker A")
+        XCTAssertEqual(result.segments.first?.speakerConfidence, 0.91)
+    }
+
+    func testFileJobAutomationContextCarriesWatchFolderExportMetadata() throws {
+        let segment = FileJobTranscriptSegment(
+            text: "Hello",
+            start: 0.25,
+            end: 1.5,
+            speakerLabel: "Speaker A",
+            speakerConfidence: 0.91
+        )
+        let context = FileJobContext(
+            jobKind: .watchFolder,
+            sourceFilePath: "/tmp/in/meeting.wav",
+            outputDirectoryPath: "/tmp/out",
+            outputFilePath: "/tmp/out/meeting.srt",
+            outputFormat: "srt",
+            engineId: "whisperkit",
+            engineName: "WhisperKit",
+            modelId: "large-v3",
+            transcriptText: "Speaker A: Hello",
+            detectedLanguage: "en",
+            segments: [segment]
+        )
+        let artifact = FileJobArtifact(fileExtension: "srt", content: "1\n00:00:00,250 --> 00:00:01,500\nHello")
+        let result = FileJobAutomationResult(
+            artifact: artifact,
+            appliedSteps: ["File Job Script"],
+            outputPathWasWritten: true
+        )
+
+        XCTAssertEqual(FileJobKind.watchFolder.rawValue, "watch-folder")
+        XCTAssertEqual(context.sourceFileName, "meeting.wav")
+        XCTAssertEqual(context.outputFormat, "srt")
+        XCTAssertEqual(context.segments, [segment])
+        XCTAssertEqual(result.artifact, artifact)
+        XCTAssertEqual(result.appliedSteps, ["File Job Script"])
+        XCTAssertTrue(result.outputPathWasWritten)
+
+        let encoded = try JSONEncoder().encode(context)
+        let decoded = try JSONDecoder().decode(FileJobContext.self, from: encoded)
+        XCTAssertEqual(decoded, context)
     }
 
     func testTTSPluginCanPersistVoiceAndReceiveSpeakRequest() async throws {

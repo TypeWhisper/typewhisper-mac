@@ -21,12 +21,32 @@
         }
       }
     },
+    "Delete cached model" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zwischengespeichertes Modell löschen"
+          }
+        }
+      }
+    },
     "Download timed out while fetching Gemma 4 from Hugging Face. Please retry. Adding an optional HuggingFace token in this plugin can also increase download rate limits." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Der Download von Gemma 4 von Hugging Face hat zu lange gedauert. Bitte erneut versuchen. Ein optionaler HuggingFace-Token in diesem Plugin kann die Download-Rate-Limits erhoehen."
+          }
+        }
+      }
+    },
+    "The downloaded Gemma model cache appears incomplete or incompatible. Delete the cached model and download it again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der heruntergeladene Gemma-Modellcache scheint unvollständig oder inkompatibel zu sein. Lösche das zwischengespeicherte Modell und lade es erneut herunter."
           }
         }
       }

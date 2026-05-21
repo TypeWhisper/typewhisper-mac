@@ -17,7 +17,7 @@ enum UserDefaultsKeys {
     static let mediaPauseEnabled = "mediaPauseEnabled"
     static let transcribeShortQuietClipsAggressively = "transcribeShortQuietClipsAggressively"
 
-    // MARK: - Hotkey (JSON-encoded UnifiedHotkey per slot)
+    // MARK: - Hotkey (JSON-encoded UnifiedHotkey per slot, legacy mirror for first binding)
     static let hybridHotkey = "hybridHotkey"
     static let pttHotkey = "pttHotkey"
     static let toggleHotkey = "toggleHotkey"
@@ -25,6 +25,15 @@ enum UserDefaultsKeys {
     static let recentTranscriptionsHotkey = "recentTranscriptionsHotkey"
     static let copyLastTranscriptionHotkey = "copyLastTranscriptionHotkey"
     static let recorderToggleHotkey = "recorderToggleHotkey"
+
+    // MARK: - Hotkeys (JSON-encoded [UnifiedHotkey] per slot)
+    static let hybridHotkeys = "hybridHotkeys"
+    static let pttHotkeys = "pttHotkeys"
+    static let toggleHotkeys = "toggleHotkeys"
+    static let promptPaletteHotkeys = "promptPaletteHotkeys"
+    static let recentTranscriptionsHotkeys = "recentTranscriptionsHotkeys"
+    static let copyLastTranscriptionHotkeys = "copyLastTranscriptionHotkeys"
+    static let recorderToggleHotkeys = "recorderToggleHotkeys"
 
     // MARK: - Model / Engine
     static let selectedEngine = "selectedEngine"
@@ -42,6 +51,7 @@ enum UserDefaultsKeys {
     // MARK: - API Server
     static let apiServerEnabled = "apiServerEnabled"
     static let apiServerPort = "apiServerPort"
+    static let apiServerRequiresAuthentication = "apiServerRequiresAuthentication"
     static let updateChannel = "updateChannel"
 
     // MARK: - Audio Device
@@ -55,6 +65,7 @@ enum UserDefaultsKeys {
     static let activatedTermPacks = "activatedTermPacks" // Legacy - kept for migration cleanup
     static let activatedTermPackStates = "activatedTermPackStates"
     static let termPackRegistryLastUpdateCheck = "termPackRegistryLastUpdateCheck"
+    static let selectedIndustryPreset = "selectedIndustryPreset"
 
     // MARK: - History
     static let historyEnabled = "historyEnabled"
@@ -79,9 +90,11 @@ enum UserDefaultsKeys {
     static let memoryExtractionModel = "memoryExtractionModel"
     static let memoryMinTextLength = "memoryMinTextLength"
     static let memoryExtractionPrompt = "memoryExtractionPrompt"
+    static let memoryCaptureScope = "memoryCaptureScope"
 
     // MARK: - Formatting
     static let appFormattingEnabled = "appFormattingEnabled"
+    static let dictationPunctuationProfiles = "dictationPunctuationProfiles"
 
     // MARK: - Accessibility
     static let spokenFeedbackEnabled = "spokenFeedbackEnabled"
@@ -97,6 +110,16 @@ enum UserDefaultsKeys {
     static let recorderTranscriptionEnabled = "recorderTranscriptionEnabled"
     static let recorderMicDuckingMode = "recorderMicDuckingMode"
     static let recorderTrackMode = "recorderTrackMode"
+
+    // MARK: - File Transcription
+    static let fileTranscriptionEngine = "fileTranscriptionEngine"
+    static let fileTranscriptionModel = "fileTranscriptionModel"
+    static let fileTranscriptionLanguage = "fileTranscriptionLanguage"
+
+    // MARK: - Dictation Recovery
+    static let dictationRecoveryEngine = "dictationRecoveryEngine"
+    static let dictationRecoveryModel = "dictationRecoveryModel"
+    static let dictationRecoveryLanguage = "dictationRecoveryLanguage"
 
     // MARK: - Watch Folder
     static let watchFolderBookmark = "watchFolderBookmark"

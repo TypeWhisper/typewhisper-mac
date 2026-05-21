@@ -6,7 +6,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(WhisperKitPlugin)
-final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, @unchecked Sendable {
+final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, @unchecked Sendable {
     static let pluginId = "com.typewhisper.whisperkit"
     static let pluginName = "WhisperKit"
     private static let maxConditioningPromptChars = 500
@@ -90,9 +90,43 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
                 displayName: def.displayName,
                 sizeDescription: def.sizeDescription,
                 languageCount: 99,
+                downloaded: isModelDownloaded(def),
                 loaded: def.id == loadedModelId
             )
         }
+    }
+
+    var downloadedModels: [PluginModelInfo] {
+        Self.availableModels
+            .filter { isModelDownloaded($0) }
+            .map { def in
+                PluginModelInfo(
+                    id: def.id,
+                    displayName: def.displayName,
+                    sizeDescription: def.sizeDescription,
+                    languageCount: 99,
+                    downloaded: true,
+                    loaded: def.id == loadedModelId
+                )
+            }
+    }
+
+    func deleteDownloadedModel(_ modelId: String) async throws {
+        guard let modelDef = Self.availableModels.first(where: { $0.id == modelId }) else { return }
+
+        if loadedModelId == modelId {
+            unloadModel(clearPersistence: true)
+        }
+        if _selectedModelId == modelId {
+            _selectedModelId = nil
+            host?.setUserDefault(nil, forKey: "selectedModel")
+        }
+        if host?.userDefault(forKey: "loadedModel") as? String == modelId {
+            host?.setUserDefault(nil, forKey: "loadedModel")
+        }
+
+        try deleteModelFiles(modelDef)
+        host?.notifyCapabilitiesChanged()
     }
 
     var selectedModelId: String? { _selectedModelId }
@@ -417,9 +451,11 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
         host?.notifyCapabilitiesChanged()
     }
 
-    fileprivate func deleteModelFiles(_ modelDef: WhisperModelDef) {
+    fileprivate func deleteModelFiles(_ modelDef: WhisperModelDef) throws {
         let modelPath = resolvedModelPath(for: modelDef)
-        try? FileManager.default.removeItem(at: modelPath)
+        if FileManager.default.fileExists(atPath: modelPath.path) {
+            try FileManager.default.removeItem(at: modelPath)
+        }
     }
 
     func restoreLoadedModel(allowDownloads: Bool = true) async {
@@ -697,6 +733,12 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
             ramRequirement: "8 GB+"
         ),
         WhisperModelDef(
+            id: "distil-whisper_distil-large-v3_turbo",
+            displayName: "Distil Large v3 Turbo",
+            sizeDescription: "~600 MB",
+            ramRequirement: "8 GB+"
+        ),
+        WhisperModelDef(
             id: "distil-whisper_distil-large-v3",
             displayName: "Distil Large v3",
             sizeDescription: "~594 MB",
@@ -720,7 +762,7 @@ struct WhisperModelDef: Identifiable {
         switch displayName {
         case "Tiny", "Base":
             return gb < 8
-        case "Small", "Medium", "Large v3 Turbo":
+        case "Small", "Medium", "Large v3 Turbo", "Distil Large v3 Turbo":
             return gb >= 8 && gb <= 16
         case "Large v3":
             return gb > 16
@@ -1101,7 +1143,7 @@ private struct WhisperKitSettingsView: View {
         if case .ready(let loadedId) = modelState, loadedId == modelDef.id {
             plugin.unloadModel()
         }
-        plugin.deleteModelFiles(modelDef)
+        try? plugin.deleteModelFiles(modelDef)
         syncViewStateFromPlugin()
     }
 

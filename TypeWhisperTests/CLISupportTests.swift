@@ -40,6 +40,27 @@ final class CLISupportTests: XCTestCase {
         XCTAssertEqual(PortDiscovery.discoverPort(dev: true, applicationSupportDirectory: applicationSupportRoot), PortDiscovery.defaultPort)
     }
 
+    func testPortDiscoveryUsesTokenizedDiscoveryFileBeforeLegacyPortFile() throws {
+        let applicationSupportRoot = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(applicationSupportRoot) }
+
+        let appDirectory = applicationSupportRoot.appendingPathComponent("TypeWhisper", isDirectory: true)
+        try FileManager.default.createDirectory(at: appDirectory, withIntermediateDirectories: true)
+        try "9911".write(to: appDirectory.appendingPathComponent("api-port"), atomically: true, encoding: .utf8)
+        try """
+        {
+          "version": 1,
+          "port": 9922,
+          "token": "token-from-discovery"
+        }
+        """.write(to: appDirectory.appendingPathComponent("api-discovery.json"), atomically: true, encoding: .utf8)
+
+        let discovery = PortDiscovery.discover(dev: false, applicationSupportDirectory: applicationSupportRoot)
+
+        XCTAssertEqual(discovery, APIDiscovery(port: 9922, token: "token-from-discovery"))
+        XCTAssertEqual(PortDiscovery.discoverPort(dev: false, applicationSupportDirectory: applicationSupportRoot), 9922)
+    }
+
     func testCLITranscribeLanguageOptionsRejectMixedExactAndHintFlags() {
         let options = CLITranscribeLanguageOptions(language: "de", languageHints: ["en", "nl"])
         XCTAssertEqual(
@@ -87,6 +108,24 @@ final class CLISupportTests: XCTestCase {
         XCTAssertEqual(body["engine"] as? String, "mock")
         XCTAssertEqual(body["model"] as? String, "tiny")
         XCTAssertFalse(String(data: bodyData, encoding: .utf8)?.contains("distinctive-video-bytes") == true)
+    }
+
+    func testCLIClientSendsBearerTokenWhenConfigured() async throws {
+        let recorder = RequestRecorder()
+        let client = CLIClient(
+            port: 9876,
+            apiToken: "cli-token",
+            transport: { request in
+                recorder.record(request)
+                let body = #"{"models":[]}"#
+                return (Data(body.utf8), Self.httpResponse(url: request.url!, statusCode: 200))
+            }
+        )
+
+        _ = try await client.models()
+
+        let request = try XCTUnwrap(recorder.recordedRequest)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer cli-token")
     }
 
     func testCLIClientTranscribeStdinKeepsMultipartUploadPath() async throws {

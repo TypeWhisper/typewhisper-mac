@@ -168,14 +168,26 @@ class PromptProcessingService: ObservableObject {
     }
 
     func processWorkflow(prompt: String, text: String, behavior: WorkflowBehavior) async throws -> String {
-        try await process(
+        let effectiveId = normalizeProviderId(behavior.providerId ?? selectedProviderId)
+        let shouldBoundDictatedText = effectiveId != Self.appleIntelligenceId
+        let workflowInput = shouldBoundDictatedText
+            ? TypeWhisperDictatedTextBoundary.wrap(text)
+            : text
+
+        let result = try await process(
             prompt: prompt,
-            text: text,
+            text: workflowInput,
             providerOverride: behavior.providerId,
             cloudModelOverride: behavior.cloudModel,
             temperatureDirective: behavior.temperatureDirective,
             skipMemoryInjection: true
         )
+
+        guard shouldBoundDictatedText else {
+            return result
+        }
+
+        return TypeWhisperDictatedTextBoundary.sanitize(result, originalUserText: text)
     }
 
     static func requiresProcessActivityBudget(for plugin: any LLMProviderPlugin) -> Bool {

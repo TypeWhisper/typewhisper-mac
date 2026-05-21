@@ -5,12 +5,14 @@ on:
     paths:
       - 'PluginRegistry/community-v1/**'
       - 'scripts/assemble_community_plugin_registry.py'
+      - 'scripts/plugin_registry_metadata.py'
       - '.github/workflows/community-plugin-registry.yml'
   push:
     branches: [main]
     paths:
       - 'PluginRegistry/community-v1/**'
       - 'scripts/assemble_community_plugin_registry.py'
+      - 'scripts/plugin_registry_metadata.py'
       - '.github/workflows/community-plugin-registry.yml'
 
 permissions:

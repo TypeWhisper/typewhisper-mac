@@ -30,7 +30,10 @@ jobs:
             git reset --hard origin/gh-pages
 
             python3 << 'PYEOF'
-          import glob, json, os, re, tempfile
+          import glob, json, os, re, sys, tempfile
+
+          sys.path.insert(0, os.path.join(os.environ["GITHUB_WORKSPACE"], "scripts"))
+          from plugin_registry_metadata import format_findings, normalize_registry_release_metadata
 
           with open("/tmp/releases.json") as f:
               releases = json.load(f)
@@ -82,6 +85,12 @@ jobs:
                                   file_changed = True
                                   print(f"{os.path.basename(target_path)} {pid}@{version}: {release_old} -> {release_new}")
                           break
+
+              metadata_findings = normalize_registry_release_metadata(registry)
+              if metadata_findings:
+                  file_changed = True
+                  for line in format_findings(metadata_findings):
+                      print(f"{os.path.basename(target_path)} removed {line}")
 
               if not file_changed:
                   continue

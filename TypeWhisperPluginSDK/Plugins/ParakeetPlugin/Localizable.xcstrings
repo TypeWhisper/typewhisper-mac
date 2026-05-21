@@ -31,6 +31,16 @@
         }
       }
     },
+    "Done" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fertig"
+          }
+        }
+      }
+    },
     "Downloading CTC model..." : {
       "localizations" : {
         "de" : {

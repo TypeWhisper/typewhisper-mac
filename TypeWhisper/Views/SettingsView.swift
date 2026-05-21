@@ -1,9 +1,10 @@
 import SwiftUI
 import AppKit
+import TypeWhisperPluginSDK
 
 enum SettingsTab: Hashable {
     case home, general, recording, hotkeys, recorder
-    case fileTranscription, history, dictionary, snippets, workflows, profiles, prompts, integrations, advanced, license, about
+    case dictationRecovery, fileTranscription, history, dictionary, snippets, workflows, profiles, prompts, integrations, advanced, license, about
 }
 
 private struct SettingsDestination: Identifiable, Hashable {
@@ -23,6 +24,7 @@ private struct SettingsDestinationSection: Identifiable {
 struct SettingsView: View {
     @State private var selectedTab: SettingsTab = .home
     @ObservedObject private var fileTranscription = FileTranscriptionViewModel.shared
+    @ObservedObject private var dictationRecovery = DictationRecoveryViewModel.shared
     @ObservedObject private var registryService = PluginRegistryService.shared
     @ObservedObject private var homeViewModel = HomeViewModel.shared
     @ObservedObject private var promptActionsViewModel = PromptActionsViewModel.shared
@@ -40,6 +42,14 @@ struct SettingsView: View {
                 systemImage: "waveform.circle",
                 badge: nil
             ),
+            dictationRecovery.hasRecoveryContent
+                ? SettingsDestination(
+                    tab: .dictationRecovery,
+                    title: localizedAppText("Recovery", de: "Wiederherstellung"),
+                    systemImage: "waveform",
+                    badge: nil
+                )
+                : nil,
             SettingsDestination(tab: .fileTranscription, title: String(localized: "File Transcription"), systemImage: "doc.text", badge: nil),
             SettingsDestination(tab: .history, title: String(localized: "History"), systemImage: "clock.arrow.circlepath", badge: nil),
             SettingsDestination(tab: .dictionary, title: String(localized: "Dictionary"), systemImage: "book.closed", badge: nil),
@@ -59,7 +69,7 @@ struct SettingsView: View {
             SettingsDestination(tab: .advanced, title: String(localized: "Advanced"), systemImage: "gearshape.2", badge: nil),
             SettingsDestination(tab: .license, title: String(localized: "License"), systemImage: "key", badge: nil),
             SettingsDestination(tab: .about, title: String(localized: "About"), systemImage: "info.circle", badge: nil)
-        ]
+        ].compactMap { $0 }
     }
 
     private var destinationSections: [SettingsDestinationSection] {
@@ -83,9 +93,18 @@ struct SettingsView: View {
             }
         }
         .frame(minWidth: 950, idealWidth: 1050, minHeight: 550, idealHeight: 600)
-        .onAppear { navigateToFileTranscriptionIfNeeded() }
+        .onAppear {
+            navigateToFileTranscriptionIfNeeded()
+            navigateAwayFromMissingRecoveryIfNeeded()
+        }
         .onChange(of: fileTranscription.showFilePickerFromMenu) { _, _ in
             navigateToFileTranscriptionIfNeeded()
+        }
+        .onChange(of: dictationRecovery.hasRecovery) { _, _ in
+            navigateAwayFromMissingRecoveryIfNeeded()
+        }
+        .onChange(of: dictationRecovery.lastSavedHistoryRecordID) { _, _ in
+            navigateAwayFromMissingRecoveryIfNeeded()
         }
         .onChange(of: homeViewModel.navigateToHistory) { _, navigate in
             if navigate {
@@ -105,15 +124,23 @@ struct SettingsView: View {
                 selectedTab = .workflows
                 WorkflowsNavigationCoordinator.shared.showMine()
             default:
-                selectedTab = request.tab
+                selectedTab = Self.availableTab(request.tab, hasRecoveryContent: dictationRecovery.hasRecoveryContent)
             }
         }
+    }
+
+    static func availableTab(_ tab: SettingsTab, hasRecoveryContent: Bool) -> SettingsTab {
+        tab == .dictationRecovery && !hasRecoveryContent ? .recording : tab
     }
 
     private func navigateToFileTranscriptionIfNeeded() {
         if fileTranscription.showFilePickerFromMenu {
             selectedTab = .fileTranscription
         }
+    }
+
+    private func navigateAwayFromMissingRecoveryIfNeeded() {
+        selectedTab = Self.availableTab(selectedTab, hasRecoveryContent: dictationRecovery.hasRecoveryContent)
     }
 
     @ViewBuilder
@@ -129,6 +156,8 @@ struct SettingsView: View {
             HotkeySettingsView()
         case .recorder:
             AudioRecorderView(viewModel: AudioRecorderViewModel.shared)
+        case .dictationRecovery:
+            DictationRecoveryView()
         case .fileTranscription:
             FileTranscriptionView()
         case .history:
@@ -209,6 +238,10 @@ private func settingsDestination(_ destinations: [SettingsDestination], _ tab: S
     destinations.first(where: { $0.tab == tab })!
 }
 
+private func settingsDestinationIfAvailable(_ destinations: [SettingsDestination], _ tab: SettingsTab) -> SettingsDestination? {
+    destinations.first(where: { $0.tab == tab })
+}
+
 private func settingsTitle(_ destinations: [SettingsDestination], _ tab: SettingsTab) -> String {
     settingsDestination(destinations, tab).title
 }
@@ -222,6 +255,19 @@ private func settingsBadge(_ destinations: [SettingsDestination], _ tab: Setting
 }
 
 private func settingsDestinationSections(_ destinations: [SettingsDestination]) -> [SettingsDestinationSection] {
+    var coreDestinations = [
+        settingsDestination(destinations, .general),
+        settingsDestination(destinations, .recording)
+    ]
+    if let recoveryDestination = settingsDestinationIfAvailable(destinations, .dictationRecovery) {
+        coreDestinations.append(recoveryDestination)
+    }
+    coreDestinations.append(contentsOf: [
+        settingsDestination(destinations, .hotkeys),
+        settingsDestination(destinations, .fileTranscription),
+        settingsDestination(destinations, .recorder)
+    ])
+
     var workspaceDestinations = [
         settingsDestination(destinations, .history),
         settingsDestination(destinations, .dictionary),
@@ -238,13 +284,7 @@ private func settingsDestinationSections(_ destinations: [SettingsDestination]) 
         ),
         SettingsDestinationSection(
             id: "core",
-            destinations: [
-                settingsDestination(destinations, .general),
-                settingsDestination(destinations, .recording),
-                settingsDestination(destinations, .hotkeys),
-                settingsDestination(destinations, .fileTranscription),
-                settingsDestination(destinations, .recorder)
-            ]
+            destinations: coreDestinations
         ),
         SettingsDestinationSection(
             id: "workspace",
@@ -360,6 +400,28 @@ struct RecordingSettingsView: View {
         dictation.needsMicPermission || dictation.needsAccessibilityPermission
     }
 
+    private func transcriptionAuthNotice(for engines: [TranscriptionEnginePlugin]) -> String? {
+        engines
+            .map { modelManager.transcriptionAuthStatus(for: $0) }
+            .first { !$0.isAvailable }?
+            .unavailableReason
+    }
+
+    @ViewBuilder
+    private func enginePickerLabel(for engine: TranscriptionEnginePlugin) -> some View {
+        let authStatus = modelManager.transcriptionAuthStatus(for: engine)
+        HStack {
+            Text(engine.providerDisplayName)
+            if !authStatus.isAvailable {
+                Text("(\(String(localized: "unavailable")))")
+                    .foregroundStyle(.secondary)
+            } else if !engine.isConfigured {
+                Text("(\(String(localized: "not ready")))")
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
     var body: some View {
         Form {
             if needsPermissions {
@@ -376,13 +438,9 @@ struct RecordingSettingsView: View {
                         Text(String(localized: "None")).tag(nil as String?)
                         Divider()
                         ForEach(engines, id: \.providerId) { engine in
-                            HStack {
-                                Text(engine.providerDisplayName)
-                                if !engine.isConfigured {
-                                    Text("(\(String(localized: "not ready")))")
-                                        .foregroundStyle(.secondary)
-                                }
-                            }.tag(engine.providerId as String?)
+                            enginePickerLabel(for: engine)
+                                .tag(engine.providerId as String?)
+                                .disabled(!modelManager.canUseForTranscription(engine))
                         }
                     }
                     .onChange(of: selectedProvider) { _, newValue in
@@ -391,8 +449,15 @@ struct RecordingSettingsView: View {
                         }
                     }
 
+                    if let notice = transcriptionAuthNotice(for: engines) {
+                        Label(notice, systemImage: "key")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
                     if let providerId = selectedProvider,
-                       let engine = pluginManager.transcriptionEngine(for: providerId) {
+                       let engine = pluginManager.transcriptionEngine(for: providerId),
+                       modelManager.canUseForTranscription(engine) {
                         let models = engine.transcriptionModels
                         if models.count > 1 {
                             Picker(String(localized: "Model"), selection: Binding(
@@ -585,6 +650,7 @@ struct RecordingSettingsView: View {
         .padding()
         .frame(minWidth: 500, minHeight: 300)
         .onAppear {
+            modelManager.restoreProviderSelection()
             selectedProvider = modelManager.selectedProviderId
             customSounds = SoundChoice.installedCustomSounds()
         }

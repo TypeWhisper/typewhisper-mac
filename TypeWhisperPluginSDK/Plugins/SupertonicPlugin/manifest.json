@@ -1,0 +1,24 @@
+{
+    "id": "com.typewhisper.tts.supertonic",
+    "name": "Supertonic (Experimental)",
+    "version": "1.0.0",
+    "minHostVersion": "1.4.0",
+    "sdkCompatibilityVersion": "v1",
+    "minOSVersion": "14.0",
+    "supportedArchitectures": [
+        "arm64"
+    ],
+    "author": "TypeWhisper",
+    "description": "Experimental local text-to-speech with Supertonic 3 ONNX models. Requires accepting the OpenRAIL-M model license before downloading model assets.",
+    "descriptions": {
+        "de": "Experimentelles lokales Text-to-Speech mit Supertonic-3-ONNX-Modellen. Vor dem Download der Modellassets muss die OpenRAIL-M-Modelllizenz akzeptiert werden."
+    },
+    "category": "tts",
+    "categories": [
+        "tts"
+    ],
+    "hosting": "local",
+    "iconSystemName": "waveform.circle.fill",
+    "principalClass": "SupertonicPlugin",
+    "requiresAPIKey": false
+}

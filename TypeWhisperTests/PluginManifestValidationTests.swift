@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 import TypeWhisperPluginSDK
 @testable import TypeWhisper
@@ -53,14 +54,321 @@ final class PluginManifestValidationTests: XCTestCase {
         }
     }
 
+    func testDownloadedModelManagingPluginReleasesRequireHost14() throws {
+        let manifestPaths = [
+            "TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/manifest.json",
+            "TypeWhisperPluginSDK/Plugins/Gemma4Plugin/manifest.json",
+            "TypeWhisperPluginSDK/Plugins/Qwen3Plugin/manifest.json",
+            "TypeWhisperPluginSDK/Plugins/VoxtralPlugin/manifest.json",
+            "TypeWhisperPluginSDK/Plugins/GranitePlugin/manifest.json",
+            "TypeWhisperPluginSDK/Plugins/SupertonicPlugin/manifest.json",
+        ]
+
+        for relativePath in manifestPaths {
+            let manifestURL = TestSupport.repoRoot.appendingPathComponent(relativePath)
+            let data = try Data(contentsOf: manifestURL)
+            let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
+            XCTAssertEqual(manifest.minHostVersion, "1.4.0", relativePath)
+        }
+    }
+
     func testOpenAIPluginManifestDeclaresCloudHostingWithoutAPIKeyRequirement() throws {
         let manifestURL = TestSupport.repoRoot.appendingPathComponent("TypeWhisperPluginSDK/Plugins/OpenAIPlugin/manifest.json")
         let data = try Data(contentsOf: manifestURL)
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
 
+        XCTAssertEqual(manifest.minHostVersion, "1.4.0")
         XCTAssertEqual(manifest.hosting, .cloud)
         XCTAssertEqual(manifest.requiresAPIKey, false)
         XCTAssertEqual(manifest.resolvedHosting, .cloud)
+        XCTAssertEqual(manifest.resolvedCategoryIdentifiers, ["transcription", "llm", "tts"])
+    }
+
+    func testQwen3UnsupportedLanguageSelectionFallsBackToAuto() {
+        XCTAssertEqual(
+            LanguageSelection.exact("uk").normalizedForSupportedLanguages(Qwen3Plugin.qwenSupportedLanguageCodes),
+            .auto
+        )
+        XCTAssertEqual(
+            LanguageSelection.hints(["fr", "uk"]).normalizedForSupportedLanguages(Qwen3Plugin.qwenSupportedLanguageCodes),
+            .exact("fr")
+        )
+    }
+
+    @MainActor
+    func testNotifyPluginStateChangedIncrementsReadinessRevisionAndNotifiesObservers() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let manager = PluginManager(appSupportDirectory: appSupportDirectory)
+        let initialRevision = manager.readinessRevision
+        let notification = expectation(description: "plugin manager publishes readiness change")
+
+        let cancellable = manager.objectWillChange.sink {
+            notification.fulfill()
+        }
+
+        manager.notifyPluginStateChanged()
+
+        XCTAssertEqual(manager.readinessRevision, initialRevision + 1)
+        wait(for: [notification], timeout: 1)
+        withExtendedLifetime(cancellable) {}
+    }
+}
+
+@MainActor
+final class PluginDownloadedModelManagementTests: XCTestCase {
+    private final class MockDownloadedModelPlugin: NSObject, TypeWhisperPlugin, PluginDownloadedModelManaging, PluginSettingsActivityReporting, @unchecked Sendable {
+        static let pluginId = "com.typewhisper.tests.downloaded-models"
+        static let pluginName = "Downloaded Models Test Plugin"
+
+        var downloadedModels: [PluginModelInfo]
+        var currentSettingsActivity: PluginSettingsActivity?
+        var shouldFailDeletion = false
+        var shouldSuspendDeletion = false
+        var deletionDidStart: (() -> Void)?
+        private var deletionResume: CheckedContinuation<Void, Never>?
+        private(set) var deletedModelIds: [String] = []
+        private(set) var didDeactivate = false
+
+        required override init() {
+            self.downloadedModels = []
+            super.init()
+        }
+
+        init(downloadedModels: [PluginModelInfo]) {
+            self.downloadedModels = downloadedModels
+            super.init()
+        }
+
+        func activate(host: HostServices) {}
+
+        func deactivate() {
+            didDeactivate = true
+        }
+
+        func deleteDownloadedModel(_ modelId: String) async throws {
+            if shouldFailDeletion {
+                throw NSError(
+                    domain: "PluginDownloadedModelManagementTests",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "Deletion failed"]
+                )
+            }
+
+            deletionDidStart?()
+            if shouldSuspendDeletion {
+                await withCheckedContinuation { continuation in
+                    deletionResume = continuation
+                }
+            }
+
+            deletedModelIds.append(modelId)
+            downloadedModels.removeAll { $0.id == modelId }
+        }
+
+        func resumeDeletion() {
+            deletionResume?.resume()
+            deletionResume = nil
+        }
+    }
+
+    func testDeletingOneOfMultipleDownloadedModelsKeepsPluginEnabled() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginDownloadedModels")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let manager = PluginManager(appSupportDirectory: appSupportDirectory)
+        let plugin = MockDownloadedModelPlugin(downloadedModels: [
+            PluginModelInfo(id: "small", displayName: "Small", downloaded: true),
+            PluginModelInfo(id: "large", displayName: "Large", downloaded: true),
+        ])
+        manager.loadedPlugins = [
+            try makeLoadedPlugin(
+                plugin: plugin,
+                pluginId: "com.typewhisper.tests.downloaded.multiple",
+                directory: appSupportDirectory
+            )
+        ]
+
+        let initialRevision = manager.readinessRevision
+
+        try await manager.deleteDownloadedModel(
+            pluginId: "com.typewhisper.tests.downloaded.multiple",
+            modelId: "small"
+        )
+
+        XCTAssertEqual(plugin.deletedModelIds, ["small"])
+        XCTAssertEqual(plugin.downloadedModels.map(\.id), ["large"])
+        XCTAssertEqual(manager.loadedPlugins.first?.isEnabled, true)
+        XCTAssertFalse(plugin.didDeactivate)
+        XCTAssertEqual(manager.readinessRevision, initialRevision + 1)
+    }
+
+    func testDeletingLastDownloadedModelDisablesPlugin() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginDownloadedModels")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let pluginId = "com.typewhisper.tests.downloaded.single"
+        let defaultsKey = "plugin.\(pluginId).enabled"
+        let originalValue = UserDefaults.standard.object(forKey: defaultsKey)
+        defer { restoreDefault(key: defaultsKey, value: originalValue) }
+
+        let manager = PluginManager(appSupportDirectory: appSupportDirectory)
+        let plugin = MockDownloadedModelPlugin(downloadedModels: [
+            PluginModelInfo(id: "only", displayName: "Only", downloaded: true)
+        ])
+        manager.loadedPlugins = [
+            try makeLoadedPlugin(plugin: plugin, pluginId: pluginId, directory: appSupportDirectory)
+        ]
+
+        try await manager.deleteDownloadedModel(pluginId: pluginId, modelId: "only")
+
+        XCTAssertEqual(plugin.deletedModelIds, ["only"])
+        XCTAssertTrue(plugin.downloadedModels.isEmpty)
+        XCTAssertEqual(manager.loadedPlugins.first?.isEnabled, false)
+        XCTAssertTrue(plugin.didDeactivate)
+        XCTAssertEqual(UserDefaults.standard.bool(forKey: defaultsKey), false)
+    }
+
+    func testDeletionFailureDoesNotDisablePluginOrDropModel() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginDownloadedModels")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let pluginId = "com.typewhisper.tests.downloaded.failure"
+        let defaultsKey = "plugin.\(pluginId).enabled"
+        let originalValue = UserDefaults.standard.object(forKey: defaultsKey)
+        defer { restoreDefault(key: defaultsKey, value: originalValue) }
+
+        let manager = PluginManager(appSupportDirectory: appSupportDirectory)
+        let plugin = MockDownloadedModelPlugin(downloadedModels: [
+            PluginModelInfo(id: "only", displayName: "Only", downloaded: true)
+        ])
+        plugin.shouldFailDeletion = true
+        manager.loadedPlugins = [
+            try makeLoadedPlugin(plugin: plugin, pluginId: pluginId, directory: appSupportDirectory)
+        ]
+
+        do {
+            try await manager.deleteDownloadedModel(pluginId: pluginId, modelId: "only")
+            XCTFail("Expected deletion to fail")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, "Deletion failed")
+        }
+
+        XCTAssertEqual(plugin.downloadedModels.map(\.id), ["only"])
+        XCTAssertEqual(manager.loadedPlugins.first?.isEnabled, true)
+        XCTAssertFalse(plugin.didDeactivate)
+    }
+
+    func testDeletionDuringPluginModelActivityThrowsBusyAndLeavesModel() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginDownloadedModels")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let pluginId = "com.typewhisper.tests.downloaded.busy"
+        let manager = PluginManager(appSupportDirectory: appSupportDirectory)
+        let plugin = MockDownloadedModelPlugin(downloadedModels: [
+            PluginModelInfo(id: "only", displayName: "Only", downloaded: true)
+        ])
+        plugin.currentSettingsActivity = PluginSettingsActivity(message: "Downloading model", progress: 0.5)
+        manager.loadedPlugins = [
+            try makeLoadedPlugin(plugin: plugin, pluginId: pluginId, directory: appSupportDirectory)
+        ]
+
+        do {
+            try await manager.deleteDownloadedModel(pluginId: pluginId, modelId: "only")
+            XCTFail("Expected deletion to be blocked while the plugin reports activity")
+        } catch PluginModelManagementError.pluginBusy(let name) {
+            XCTAssertEqual(name, "Downloaded Models Test Plugin")
+        } catch {
+            XCTFail("Expected pluginBusy, got \(error)")
+        }
+
+        XCTAssertEqual(plugin.downloadedModels.map(\.id), ["only"])
+        XCTAssertTrue(plugin.deletedModelIds.isEmpty)
+        XCTAssertEqual(manager.loadedPlugins.first?.isEnabled, true)
+        XCTAssertFalse(plugin.didDeactivate)
+    }
+
+    func testConcurrentDeletionForSamePluginThrowsBusy() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginDownloadedModels")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let pluginId = "com.typewhisper.tests.downloaded.concurrent"
+        let manager = PluginManager(appSupportDirectory: appSupportDirectory)
+        let plugin = MockDownloadedModelPlugin(downloadedModels: [
+            PluginModelInfo(id: "one", displayName: "One", downloaded: true),
+            PluginModelInfo(id: "two", displayName: "Two", downloaded: true),
+        ])
+        plugin.shouldSuspendDeletion = true
+        let deletionStarted = expectation(description: "first deletion started")
+        plugin.deletionDidStart = {
+            deletionStarted.fulfill()
+        }
+        manager.loadedPlugins = [
+            try makeLoadedPlugin(plugin: plugin, pluginId: pluginId, directory: appSupportDirectory)
+        ]
+
+        let firstDeletion = Task {
+            try await manager.deleteDownloadedModel(pluginId: pluginId, modelId: "one")
+        }
+        await fulfillment(of: [deletionStarted], timeout: 1)
+
+        do {
+            try await manager.deleteDownloadedModel(pluginId: pluginId, modelId: "two")
+            XCTFail("Expected concurrent deletion to be blocked")
+        } catch PluginModelManagementError.pluginBusy(let name) {
+            XCTAssertEqual(name, "Downloaded Models Test Plugin")
+        } catch {
+            XCTFail("Expected pluginBusy, got \(error)")
+        }
+
+        plugin.resumeDeletion()
+        try await firstDeletion.value
+
+        XCTAssertEqual(plugin.deletedModelIds, ["one"])
+        XCTAssertEqual(plugin.downloadedModels.map(\.id), ["two"])
+        XCTAssertEqual(manager.loadedPlugins.first?.isEnabled, true)
+        XCTAssertFalse(plugin.didDeactivate)
+    }
+
+    private func makeLoadedPlugin(
+        plugin: MockDownloadedModelPlugin,
+        pluginId: String,
+        directory: URL
+    ) throws -> LoadedPlugin {
+        let bundleURL = directory.appendingPathComponent("\(pluginId).bundle", isDirectory: true)
+        let contentsURL = bundleURL.appendingPathComponent("Contents", isDirectory: true)
+        try FileManager.default.createDirectory(at: contentsURL, withIntermediateDirectories: true)
+        let infoPlist: [String: Any] = [
+            "CFBundleIdentifier": pluginId,
+            "CFBundleName": "Downloaded Models Test Plugin",
+            "CFBundlePackageType": "BNDL",
+            "CFBundleVersion": "1",
+        ]
+        let infoData = try PropertyListSerialization.data(fromPropertyList: infoPlist, format: .xml, options: 0)
+        try infoData.write(to: contentsURL.appendingPathComponent("Info.plist"))
+        let bundle = try XCTUnwrap(Bundle(url: bundleURL))
+        let manifest = PluginManifest(
+            id: pluginId,
+            name: "Downloaded Models Test Plugin",
+            version: "1.0.0",
+            principalClass: "MockDownloadedModelPlugin"
+        )
+        return LoadedPlugin(
+            manifest: manifest,
+            instance: plugin,
+            bundle: bundle,
+            sourceURL: bundleURL,
+            isEnabled: true
+        )
+    }
+
+    private func restoreDefault(key: String, value: Any?) {
+        if let value {
+            UserDefaults.standard.set(value, forKey: key)
+        } else {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
     }
 }
 
@@ -200,6 +508,100 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
             message,
             "Download timed out while fetching Gemma 4 from Hugging Face. Please retry. Adding an optional HuggingFace token in this plugin can also increase download rate limits."
         )
+    }
+
+    func testGemma4MissingWeightErrorsUseCacheRecoveryMessage() throws {
+        let model = try XCTUnwrap(Gemma4Plugin.modelDefinition(for: "gemma-4-e2b-it-4bit"))
+        let error = NSError(
+            domain: "Test",
+            code: 1,
+            userInfo: [
+                NSLocalizedDescriptionKey: "Key embed_vision.embedding_projection.weight not found in Gemma4MultiModalEmbedder.Linear"
+            ]
+        )
+
+        let message = Gemma4Plugin.userFacingLoadErrorMessage(for: error, modelDef: model)
+
+        XCTAssertEqual(
+            message,
+            "The downloaded Gemma model cache appears incomplete or incompatible. Delete the cached model and download it again."
+        )
+    }
+
+    func testGemma4CheckpointShapeErrorsUseCacheRecoveryMessage() throws {
+        let model = try XCTUnwrap(Gemma4Plugin.modelDefinition(for: "gemma-4-e4b-it-4bit"))
+        let error = NSError(
+            domain: "Test",
+            code: 1,
+            userInfo: [
+                NSLocalizedDescriptionKey: "Checkpoint tensor shape mismatch for language_model.layers.0.self_attn.q_proj.weight"
+            ]
+        )
+
+        let message = Gemma4Plugin.userFacingLoadErrorMessage(for: error, modelDef: model)
+
+        XCTAssertEqual(
+            message,
+            "The downloaded Gemma model cache appears incomplete or incompatible. Delete the cached model and download it again."
+        )
+    }
+
+    func testGemma4ResetCachedModelDeletesCacheAndClearsLoadedState() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let host = MockHostServices(pluginDataDirectory: appSupportDirectory)
+        let plugin = Gemma4Plugin()
+        let model = try XCTUnwrap(Gemma4Plugin.modelDefinition(for: "gemma-4-e2b-it-4bit"))
+        let modelDirectory = appSupportDirectory
+            .appendingPathComponent("models", isDirectory: true)
+            .appendingPathComponent(model.repoId, isDirectory: true)
+        try FileManager.default.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
+        try Data("partial".utf8).write(to: modelDirectory.appendingPathComponent("model.safetensors"))
+
+        plugin.activate(host: host)
+        try await Task.sleep(nanoseconds: 10_000_000)
+        host.setUserDefault(model.id, forKey: "loadedModel")
+        plugin.beginModelLoad(for: model, isAlreadyDownloaded: true)
+
+        plugin.resetCachedModel(model)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: modelDirectory.path))
+        XCTAssertNil(host.userDefault(forKey: "loadedModel"))
+        XCTAssertEqual(plugin.modelState, .notLoaded)
+        XCTAssertEqual(plugin.currentDownloadProgress, 0)
+        XCTAssertGreaterThanOrEqual(host.capabilitiesChangedCount, 2)
+    }
+
+    func testGemma4DeleteDownloadedModelClearsSelectionAndCache() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let model = try XCTUnwrap(Gemma4Plugin.modelDefinition(for: "gemma-4-e2b-it-4bit"))
+        let host = MockHostServices(
+            pluginDataDirectory: appSupportDirectory,
+            defaults: ["selectedLLMModel": model.id]
+        )
+        let plugin = Gemma4Plugin()
+        let modelDirectory = appSupportDirectory
+            .appendingPathComponent("models", isDirectory: true)
+            .appendingPathComponent(model.repoId, isDirectory: true)
+        try FileManager.default.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
+        try Data("partial".utf8).write(to: modelDirectory.appendingPathComponent("model.safetensors"))
+
+        plugin.activate(host: host)
+        try await Task.sleep(nanoseconds: 10_000_000)
+        host.setUserDefault(model.id, forKey: "loadedModel")
+
+        XCTAssertEqual(plugin.downloadedModels.map(\.id), [model.id])
+
+        try await plugin.deleteDownloadedModel(model.id)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: modelDirectory.path))
+        XCTAssertNil(plugin.selectedLLMModelId)
+        XCTAssertNil(host.userDefault(forKey: "selectedLLMModel"))
+        XCTAssertNil(host.userDefault(forKey: "loadedModel"))
+        XCTAssertGreaterThanOrEqual(host.capabilitiesChangedCount, 1)
     }
 
     func testGemma4ValidatesHuggingFaceTokenAgainstWhoAmIEndpoint() async throws {
@@ -374,172 +776,6 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         }
 
         XCTAssertFalse(isValid)
-    }
-
-    func testParakeetActivationLoadsStoredHuggingFaceToken() throws {
-        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-        defer { TestSupport.remove(appSupportDirectory) }
-
-        let host = MockHostServices(
-            pluginDataDirectory: appSupportDirectory,
-            secrets: ["hf-token": "hf_parakeet_saved"]
-        )
-        let plugin = ParakeetPlugin()
-
-        plugin.activate(host: host)
-
-        XCTAssertEqual(plugin.huggingFaceToken, "hf_parakeet_saved")
-    }
-
-    func testParakeetDisablesTranscriptPreviewFallback() throws {
-        let fallbackPolicy: any TranscriptPreviewFallbackPolicyProviding = ParakeetPlugin()
-
-        XCTAssertFalse(fallbackPolicy.allowsTranscriptPreviewFallback)
-    }
-
-    func testParakeetDictionaryTermsSupportReflectsStoredBoostingPreference() throws {
-        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-        defer { TestSupport.remove(appSupportDirectory) }
-
-        let defaultHost = MockHostServices(pluginDataDirectory: appSupportDirectory)
-        let defaultPlugin = ParakeetPlugin()
-        defaultPlugin.activate(host: defaultHost)
-        XCTAssertEqual(defaultPlugin.dictionaryTermsSupport, .requiresPluginSetting)
-
-        let enabledHost = MockHostServices(
-            pluginDataDirectory: appSupportDirectory,
-            defaults: ["vocabularyBoostingEnabled": true]
-        )
-        let enabledPlugin = ParakeetPlugin()
-        enabledPlugin.activate(host: enabledHost)
-        XCTAssertEqual(enabledPlugin.dictionaryTermsSupport, .supported)
-    }
-
-    func testParakeetEnablingVocabularyBoostingPersistsAndNotifiesCapabilityChange() throws {
-        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-        defer { TestSupport.remove(appSupportDirectory) }
-
-        let host = MockHostServices(pluginDataDirectory: appSupportDirectory)
-        let plugin = ParakeetPlugin()
-        plugin.activate(host: host)
-
-        plugin.setBoostingEnabled(true)
-
-        XCTAssertEqual(host.userDefault(forKey: "vocabularyBoostingEnabled") as? Bool, true)
-        XCTAssertEqual(plugin.dictionaryTermsSupport, .supported)
-        XCTAssertEqual(host.capabilitiesChangedCount, 1)
-
-        plugin.setBoostingEnabled(true)
-
-        XCTAssertEqual(host.capabilitiesChangedCount, 1)
-    }
-
-    func testParakeetDisablingVocabularyBoostingPersistsClearsVocabularyAndHidesCtcActivity() throws {
-        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-        defer { TestSupport.remove(appSupportDirectory) }
-
-        let host = MockHostServices(
-            pluginDataDirectory: appSupportDirectory,
-            defaults: ["vocabularyBoostingEnabled": true]
-        )
-        let plugin = ParakeetPlugin()
-        plugin.activate(host: host)
-        plugin.lastConfiguredPrompt = "TypeWhisper Madison"
-        plugin.lastBoostingTermCount = 2
-        plugin.ctcModelState = .downloading
-        XCTAssertEqual(plugin.currentSettingsActivity?.message, "Downloading vocabulary model")
-
-        plugin.setBoostingEnabled(false)
-
-        XCTAssertEqual(host.userDefault(forKey: "vocabularyBoostingEnabled") as? Bool, false)
-        XCTAssertEqual(plugin.dictionaryTermsSupport, .requiresPluginSetting)
-        XCTAssertNil(plugin.lastConfiguredPrompt)
-        XCTAssertEqual(plugin.lastBoostingTermCount, 0)
-        XCTAssertNil(plugin.currentSettingsActivity)
-        plugin.ctcModelState = .error("Vocabulary model failed")
-        XCTAssertNil(plugin.currentSettingsActivity)
-        XCTAssertEqual(host.capabilitiesChangedCount, 1)
-
-        plugin.setBoostingEnabled(false)
-
-        XCTAssertEqual(host.capabilitiesChangedCount, 1)
-    }
-
-    func testParakeetStoresAndClearsHuggingFaceTokenSecret() throws {
-        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-        defer { TestSupport.remove(appSupportDirectory) }
-
-        let host = MockHostServices(pluginDataDirectory: appSupportDirectory)
-        let plugin = ParakeetPlugin()
-        plugin.activate(host: host)
-
-        plugin.setHuggingFaceToken("  hf_parakeet_saved  ")
-        XCTAssertEqual(plugin.huggingFaceToken, "hf_parakeet_saved")
-        XCTAssertEqual(host.loadSecret(key: "hf-token"), "hf_parakeet_saved")
-
-        plugin.clearHuggingFaceToken()
-        XCTAssertNil(plugin.huggingFaceToken)
-        XCTAssertEqual(host.loadSecret(key: "hf-token"), "")
-    }
-
-    func testParakeetValidatesHuggingFaceTokenAgainstWhoAmIEndpoint() async throws {
-        let plugin = ParakeetPlugin()
-        let requestRecorder = RequestRecorder()
-
-        let isValid = await plugin.validateHuggingFaceToken("hf_parakeet_test") { request in
-            await requestRecorder.set(request)
-            let response = HTTPURLResponse(
-                url: try XCTUnwrap(request.url),
-                statusCode: 200,
-                httpVersion: nil,
-                headerFields: nil
-            )!
-            let data = Data(#"{"name":"typewhisper","type":"user"}"#.utf8)
-            return (data, response)
-        }
-
-        XCTAssertTrue(isValid)
-        let maybeRequest = await requestRecorder.get()
-        let request = try XCTUnwrap(maybeRequest)
-        XCTAssertEqual(request.url?.absoluteString, "https://huggingface.co/api/whoami-v2")
-        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer hf_parakeet_test")
-        XCTAssertEqual(request.httpMethod, "GET")
-    }
-
-    func testParakeetAppliesStoredHuggingFaceTokenToEnvironment() throws {
-        let envKeys = [
-            "HF_TOKEN",
-            "HUGGING_FACE_HUB_TOKEN",
-            "HUGGINGFACEHUB_API_TOKEN",
-        ]
-        let originalTokens = Dictionary(
-            uniqueKeysWithValues: envKeys.map { key in
-                (key, getenv(key).map { String(cString: $0) })
-            }
-        )
-        defer {
-            for key in envKeys {
-                if let originalToken = originalTokens[key] ?? nil {
-                    setenv(key, originalToken, 1)
-                } else {
-                    unsetenv(key)
-                }
-            }
-        }
-
-        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-        defer { TestSupport.remove(appSupportDirectory) }
-
-        let host = MockHostServices(pluginDataDirectory: appSupportDirectory)
-        let plugin = ParakeetPlugin()
-        plugin.activate(host: host)
-        plugin.setHuggingFaceToken("hf_env_parakeet")
-
-        plugin.applyHuggingFaceTokenToEnvironment()
-
-        for key in envKeys {
-            XCTAssertEqual(getenv(key).map { String(cString: $0) }, "hf_env_parakeet")
-        }
     }
 
     func testWhisperKitValidatesHuggingFaceTokenAgainstWhoAmIEndpoint() async throws {
@@ -819,21 +1055,24 @@ final class PluginManagerLoadOrderTests: XCTestCase {
 }
 
 final class Qwen3PluginContextFormattingTests: XCTestCase {
-    func testQwen3ContextFormatterReturnsEmptyStringForNilPrompt() throws {
-        XCTAssertEqual(Qwen3ContextBiasFormatter.format(prompt: nil), "")
+    func testQwen3ContextFormatterIncludesBaseInstructionWithoutPrompt() throws {
+        XCTAssertEqual(
+            Qwen3ContextBiasFormatter.format(prompt: nil),
+            Qwen3ContextBiasFormatter.baseInstruction
+        )
     }
 
     func testQwen3ContextFormatterWrapsSingleTerm() throws {
         XCTAssertEqual(
             Qwen3ContextBiasFormatter.format(prompt: "Qwen3"),
-            "Technical terms: Qwen3."
+            "\(Qwen3ContextBiasFormatter.baseInstruction)\nTechnical terms: Qwen3."
         )
     }
 
     func testQwen3ContextFormatterWrapsMultipleTermsAsCommaSeparatedSentence() throws {
         XCTAssertEqual(
             Qwen3ContextBiasFormatter.format(prompt: "Qwen3, MLX, LoRA"),
-            "Technical terms: Qwen3, MLX, LoRA."
+            "\(Qwen3ContextBiasFormatter.baseInstruction)\nTechnical terms: Qwen3, MLX, LoRA."
         )
     }
 
@@ -841,7 +1080,7 @@ final class Qwen3PluginContextFormattingTests: XCTestCase {
         let prompt = PluginDictionaryTerms.prompt(from: [" Kubernetes ", "MLX", "mlx", "TypeWhisper"])
         XCTAssertEqual(
             Qwen3ContextBiasFormatter.format(prompt: prompt),
-            "Technical terms: Kubernetes, MLX, TypeWhisper."
+            "\(Qwen3ContextBiasFormatter.baseInstruction)\nTechnical terms: Kubernetes, MLX, TypeWhisper."
         )
     }
 }
@@ -862,6 +1101,36 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
         var transcriptionModels: [PluginModelInfo] { [] }
         var selectedModelId: String? { nil }
         func selectModel(_ modelId: String) {}
+        func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+            PluginTranscriptionResult(text: "ok", detectedLanguage: language)
+        }
+    }
+
+    private final class MockRoleGatedTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, PluginAuthRoleStatusProviding, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.role-gated" }
+        static var pluginName: String { "Mock Role Gated" }
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+        var providerId: String { "mock-role-gated" }
+        var providerDisplayName: String { "Mock Role Gated" }
+        var isConfigured: Bool { true }
+        var supportsTranslation: Bool { false }
+        var supportedLanguages: [String] { ["en"] }
+        var transcriptionModels: [PluginModelInfo] { [] }
+        var selectedModelId: String? { nil }
+        func selectModel(_ modelId: String) {}
+
+        func authStatus(for role: PluginAuthRole) -> PluginAuthRoleStatus {
+            role == .transcription
+                ? PluginAuthRoleStatus(
+                    isAvailable: false,
+                    unavailableReason: "Transcription needs a separate credential.",
+                    requiredCredentialLabel: "API key"
+                )
+                : .available
+        }
+
         func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
             PluginTranscriptionResult(text: "ok", detectedLanguage: language)
         }
@@ -1067,6 +1336,55 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
         XCTAssertEqual(modelManager.selectedProviderId, "mock-compatible")
     }
 
+    func testModelManagerFallsBackWhenStoredProviderCannotUseTranscriptionRole() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let selectedEngineKey = UserDefaultsKeys.selectedEngine
+        let originalSelection = UserDefaults.standard.object(forKey: selectedEngineKey)
+        UserDefaults.standard.set("mock-role-gated", forKey: selectedEngineKey)
+        defer {
+            if let originalSelection {
+                UserDefaults.standard.set(originalSelection, forKey: selectedEngineKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: selectedEngineKey)
+            }
+        }
+
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.role-gated",
+                    name: "Mock Role Gated",
+                    version: "1.0.0",
+                    principalClass: "MockRoleGatedTranscriptionPlugin"
+                ),
+                instance: MockRoleGatedTranscriptionPlugin(),
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            ),
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.compatible",
+                    name: "Mock Compatible",
+                    version: "1.0.0",
+                    principalClass: "MockTranscriptionPlugin"
+                ),
+                instance: MockTranscriptionPlugin(),
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(modelManager.selectedProviderId, "mock-compatible")
+    }
+
     func testWatchFolderSelectionClearsMissingSavedEngine() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -1177,6 +1495,232 @@ final class PluginRegistryDestinationTests: XCTestCase {
         )
 
         XCTAssertEqual(destination, pluginsDirectory.appendingPathComponent("ParakeetPlugin.bundle"))
+    }
+
+    func testRepairEligibilityRequiresRegistryBackedExternalInstalledPlugin() {
+        let registryPlugin = makeRegistryPlugin(id: "com.typewhisper.qwen3")
+
+        XCTAssertTrue(
+            PluginRegistryService.canRepairInstalledPlugin(
+                isBundled: false,
+                registryPlugin: registryPlugin,
+                installInfo: .installed(version: "1.1.1"),
+                installState: nil
+            )
+        )
+        XCTAssertFalse(
+            PluginRegistryService.canRepairInstalledPlugin(
+                isBundled: true,
+                registryPlugin: registryPlugin,
+                installInfo: .installed(version: "1.1.1"),
+                installState: nil
+            )
+        )
+        XCTAssertFalse(
+            PluginRegistryService.canRepairInstalledPlugin(
+                isBundled: false,
+                registryPlugin: nil,
+                installInfo: .installed(version: "1.1.1"),
+                installState: nil
+            )
+        )
+        XCTAssertFalse(
+            PluginRegistryService.canRepairInstalledPlugin(
+                isBundled: false,
+                registryPlugin: registryPlugin,
+                installInfo: .updateAvailable(installed: "1.1.0", available: "1.1.1"),
+                installState: nil
+            )
+        )
+        XCTAssertFalse(
+            PluginRegistryService.canRepairInstalledPlugin(
+                isBundled: false,
+                registryPlugin: registryPlugin,
+                installInfo: .installed(version: "1.1.1"),
+                installState: .extracting
+            )
+        )
+    }
+
+    func testRepairInstallKeepsManagedBundlePathAndPluginDataDirectory() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginRepairDestination")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let pluginsDirectory = appSupportDirectory.appendingPathComponent("Plugins", isDirectory: true)
+        let pluginDataDirectory = appSupportDirectory
+            .appendingPathComponent("PluginData", isDirectory: true)
+            .appendingPathComponent("com.typewhisper.qwen3", isDirectory: true)
+        try FileManager.default.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: pluginDataDirectory, withIntermediateDirectories: true)
+        let sentinelURL = pluginDataDirectory.appendingPathComponent("model-cache-sentinel")
+        try Data("keep model cache".utf8).write(to: sentinelURL)
+
+        let existingURL = pluginsDirectory.appendingPathComponent("Qwen3Plugin.bundle", isDirectory: true)
+        let destination = PluginRegistryService.resolveInstallDestinationURL(
+            currentURL: existingURL,
+            builtInPluginsURL: nil,
+            pluginsDirectory: pluginsDirectory,
+            incomingBundleName: "Qwen3Plugin.bundle"
+        )
+
+        XCTAssertEqual(destination, existingURL)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: sentinelURL.path))
+    }
+
+    private func makeRegistryPlugin(id: String) -> RegistryPlugin {
+        RegistryPlugin(
+            id: id,
+            source: .official,
+            name: "Qwen3 ASR",
+            version: "1.1.1",
+            minHostVersion: "1.4.0",
+            sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+            minOSVersion: "14.0",
+            supportedArchitectures: ["arm64"],
+            author: "TypeWhisper",
+            description: "Local model plugin",
+            category: "transcription",
+            categories: ["transcription"],
+            size: 1,
+            downloadURL: "https://example.com/Qwen3Plugin.zip",
+            iconSystemName: "cpu",
+            requiresAPIKey: false,
+            hosting: .local,
+            descriptions: nil,
+            downloadCount: nil
+        )
+    }
+}
+
+final class PluginDiagnosticsSupportTests: XCTestCase {
+    func testPluginSourceClassifiesBundledManagedAndExternalPaths() async throws {
+        let root = try TestSupport.makeTemporaryDirectory(prefix: "PluginDiagnostics")
+        defer { TestSupport.remove(root) }
+
+        let builtInPluginsURL = root.appendingPathComponent("TypeWhisper.app/Contents/PlugIns", isDirectory: true)
+        let pluginsDirectory = root.appendingPathComponent("Application Support/TypeWhisper/Plugins", isDirectory: true)
+        let externalDirectory = root.appendingPathComponent("External", isDirectory: true)
+
+        let bundledURL = try makeMockBundle(in: builtInPluginsURL, name: "BundledPlugin")
+        let managedURL = try makeMockBundle(in: pluginsDirectory, name: "ManagedPlugin")
+        let externalURL = try makeMockBundle(in: externalDirectory, name: "ExternalPlugin")
+
+        let bundled = await PluginDiagnosticsSupport.sourceInfo(
+            bundle: try XCTUnwrap(Bundle(url: bundledURL)),
+            sourceURL: bundledURL,
+            builtInPluginsURL: builtInPluginsURL,
+            pluginsDirectory: pluginsDirectory,
+            homeDirectory: root
+        )
+        let managed = await PluginDiagnosticsSupport.sourceInfo(
+            bundle: try XCTUnwrap(Bundle(url: managedURL)),
+            sourceURL: managedURL,
+            builtInPluginsURL: builtInPluginsURL,
+            pluginsDirectory: pluginsDirectory,
+            homeDirectory: root
+        )
+        let external = await PluginDiagnosticsSupport.sourceInfo(
+            bundle: try XCTUnwrap(Bundle(url: externalURL)),
+            sourceURL: externalURL,
+            builtInPluginsURL: builtInPluginsURL,
+            pluginsDirectory: pluginsDirectory,
+            homeDirectory: root
+        )
+
+        XCTAssertEqual(bundled.sourceKind, .bundled)
+        XCTAssertEqual(managed.sourceKind, .managedExternal)
+        XCTAssertEqual(external.sourceKind, .externalOther)
+        XCTAssertTrue(managed.pathHint.hasPrefix("~/"))
+        XCTAssertFalse(managed.pathHint.contains(root.path))
+    }
+
+    func testPluginSourcePathHintCanonicalizesSymlinkedBundles() async throws {
+        let root = try TestSupport.makeTemporaryDirectory(prefix: "PluginDiagnosticsSymlink")
+        defer { TestSupport.remove(root) }
+
+        let realHome = root.appendingPathComponent("real-home", isDirectory: true)
+        let symlinkHome = root.appendingPathComponent("symlink-home", isDirectory: true)
+        try FileManager.default.createDirectory(at: realHome, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: symlinkHome, withDestinationURL: realHome)
+
+        let pluginsDirectory = realHome.appendingPathComponent("Application Support/TypeWhisper/Plugins", isDirectory: true)
+        let bundleURL = try makeMockBundle(in: pluginsDirectory, name: "SymlinkPlugin")
+        let symlinkedBundleURL = symlinkHome
+            .appendingPathComponent("Application Support/TypeWhisper/Plugins", isDirectory: true)
+            .appendingPathComponent(bundleURL.lastPathComponent, isDirectory: true)
+
+        let source = await PluginDiagnosticsSupport.sourceInfo(
+            bundle: try XCTUnwrap(Bundle(url: symlinkedBundleURL)),
+            sourceURL: symlinkedBundleURL,
+            builtInPluginsURL: nil,
+            pluginsDirectory: pluginsDirectory,
+            homeDirectory: realHome
+        )
+
+        XCTAssertEqual(source.sourceKind, .managedExternal)
+        XCTAssertTrue(source.pathHint.hasPrefix("~/"))
+        XCTAssertFalse(source.pathHint.contains(symlinkHome.path))
+    }
+
+    func testPluginSourceReportsExecutableSizeAndHash() async throws {
+        let root = try TestSupport.makeTemporaryDirectory(prefix: "PluginDiagnosticsHash")
+        defer { TestSupport.remove(root) }
+
+        let pluginsDirectory = root.appendingPathComponent("Plugins", isDirectory: true)
+        let bundleURL = try makeMockBundle(
+            in: pluginsDirectory,
+            name: "HashPlugin",
+            executableData: Data("hash me".utf8)
+        )
+
+        let source = await PluginDiagnosticsSupport.sourceInfo(
+            bundle: try XCTUnwrap(Bundle(url: bundleURL)),
+            sourceURL: bundleURL,
+            builtInPluginsURL: nil,
+            pluginsDirectory: pluginsDirectory,
+            homeDirectory: root
+        )
+
+        XCTAssertEqual(source.executableSizeBytes, 7)
+        XCTAssertEqual(source.executableSHA256?.count, 64)
+        XCTAssertEqual(source.bundleIdentifier, "com.typewhisper.tests.HashPlugin")
+        XCTAssertEqual(source.bundleShortVersion, "1.0.0")
+        XCTAssertEqual(source.bundleVersion, "1")
+    }
+
+    private func makeMockBundle(
+        in parentDirectory: URL,
+        name: String,
+        executableData: Data = Data("mock executable".utf8)
+    ) throws -> URL {
+        let bundleURL = parentDirectory.appendingPathComponent("\(name).bundle", isDirectory: true)
+        let contentsURL = bundleURL.appendingPathComponent("Contents", isDirectory: true)
+        let macOSURL = contentsURL.appendingPathComponent("MacOS", isDirectory: true)
+        try FileManager.default.createDirectory(at: macOSURL, withIntermediateDirectories: true)
+
+        let infoPlist = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>CFBundleExecutable</key>
+            <string>\(name)</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.typewhisper.tests.\(name)</string>
+            <key>CFBundleName</key>
+            <string>\(name)</string>
+            <key>CFBundlePackageType</key>
+            <string>BNDL</string>
+            <key>CFBundleShortVersionString</key>
+            <string>1.0.0</string>
+            <key>CFBundleVersion</key>
+            <string>1</string>
+        </dict>
+        </plist>
+        """
+        try Data(infoPlist.utf8).write(to: contentsURL.appendingPathComponent("Info.plist"))
+        try executableData.write(to: macOSURL.appendingPathComponent(name))
+        return bundleURL
     }
 }
 

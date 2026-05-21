@@ -40,6 +40,92 @@ enum DockIconVisibility {
     }
 }
 
+enum MenuBarIconState {
+    static func isRecordingActive(
+        dictationState: DictationViewModel.State,
+        recorderState: AudioRecorderViewModel.RecorderState
+    ) -> Bool {
+        dictationState == .recording || recorderState == .recording
+    }
+}
+
+private struct MenuBarExtraLabel: View {
+    @ObservedObject private var dictation = DictationViewModel.shared
+    @ObservedObject private var recorder = AudioRecorderViewModel.shared
+
+    private var title: String {
+        AppConstants.isDevelopment ? "TypeWhisper Dev" : "TypeWhisper"
+    }
+
+    private var isRecordingActive: Bool {
+        MenuBarIconState.isRecordingActive(
+            dictationState: dictation.state,
+            recorderState: recorder.state
+        )
+    }
+
+    var body: some View {
+        Image(nsImage: MenuBarLogoMarkImage.image(isRecordingActive: isRecordingActive))
+            .resizable()
+            .renderingMode(isRecordingActive ? .original : .template)
+            .frame(width: 18, height: 18)
+            .accessibilityLabel(Text(verbatim: title))
+            .accessibilityValue(
+                isRecordingActive
+                    ? Text(String(localized: "Recording..."))
+                    : Text(String(localized: "Idle"))
+            )
+    }
+}
+
+enum MenuBarLogoMarkImage {
+    static let size = CGSize(width: 18, height: 18)
+    private static let relativeBarHeights: [CGFloat] = [0.5, 0.75, 1.0, 0.75, 0.5]
+
+    static func image(isRecordingActive: Bool) -> NSImage {
+        let image = NSImage(size: size)
+        image.lockFocus()
+
+        NSGraphicsContext.current?.shouldAntialias = true
+        (isRecordingActive ? NSColor.systemRed : NSColor.black).setFill()
+
+        for rect in barRects(in: CGRect(origin: .zero, size: size)) {
+            NSBezierPath(
+                roundedRect: rect,
+                xRadius: rect.width / 2,
+                yRadius: rect.width / 2
+            ).fill()
+        }
+
+        image.unlockFocus()
+        image.isTemplate = !isRecordingActive
+        return image
+    }
+
+    static func barRects(in rect: CGRect) -> [CGRect] {
+        let side = min(rect.width, rect.height) * 0.875
+        let barWidth = side / 7
+        let spacing = barWidth / 2
+        let totalWidth = (barWidth * CGFloat(relativeBarHeights.count))
+            + (spacing * CGFloat(relativeBarHeights.count - 1))
+        var x = rect.midX - (totalWidth / 2)
+
+        return relativeBarHeights.map { relativeHeight in
+            let height = side * relativeHeight
+            defer {
+                x += barWidth + spacing
+            }
+
+            return CGRect(
+                x: x,
+                y: rect.midY - (height / 2),
+                width: barWidth,
+                height: height
+            )
+        }
+    }
+}
+
 struct TypeWhisperApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @AppStorage(UserDefaultsKeys.showMenuBarIcon) private var showMenuBarIcon = true
@@ -56,8 +142,14 @@ struct TypeWhisperApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra(AppConstants.isDevelopment ? "TypeWhisper Dev" : "TypeWhisper", systemImage: "waveform", isInserted: $showMenuBarIcon) {
+        MenuBarExtra(isInserted: $showMenuBarIcon) {
             menuBarContent
+        } label: {
+            if AppConstants.isRunningTests {
+                EmptyView()
+            } else {
+                MenuBarExtraLabel()
+            }
         }
         .menuBarExtraStyle(.menu)
 

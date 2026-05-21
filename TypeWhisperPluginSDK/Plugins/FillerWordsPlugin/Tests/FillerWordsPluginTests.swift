@@ -24,6 +24,7 @@ final class FillerWordsPluginTests: XCTestCase {
         XCTAssertEqual(result, "hello?")
     }
 
+    @MainActor
     func testActivationSeedsPluginScopedDefaultWords() throws {
         let host = try PluginTestHostServices()
         let plugin = FillerWordsPlugin()

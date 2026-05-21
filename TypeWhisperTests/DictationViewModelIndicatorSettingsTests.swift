@@ -1,4 +1,5 @@
 import XCTest
+import AppKit
 @testable import TypeWhisper
 
 final class DictationViewModelIndicatorSettingsTests: XCTestCase {
@@ -208,6 +209,112 @@ final class IndicatorScreenResolverTests: XCTestCase {
     }
 }
 
+final class IndicatorFullscreenSuppressionPolicyTests: XCTestCase {
+    private let notchedScreenFrame = CGRect(x: 0, y: 0, width: 3024, height: 1964)
+
+    func testSuppressesForeignFullscreenWindowThatOverlapsNotchStrip() {
+        let fullscreenWindow = CGRect(x: 0, y: 0, width: 3024, height: 1964)
+
+        XCTAssertTrue(
+            IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                screenFrame: notchedScreenFrame,
+                safeAreaTopInset: 74,
+                windowFrame: fullscreenWindow,
+                frontmostBundleIdentifier: "com.apple.ScreenSharing",
+                appBundleIdentifier: "com.typewhisper.mac.dev"
+            )
+        )
+    }
+
+    func testSuppressesForeignAXFullscreenWindowThatOverlapsNotchStrip() {
+        let fullscreenWindow = CGRect(x: 0, y: 0, width: 3024, height: 1964)
+
+        XCTAssertTrue(
+            IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                screenFrame: notchedScreenFrame,
+                safeAreaTopInset: 74,
+                windowFrame: fullscreenWindow,
+                focusedWindowIsFullscreen: true,
+                frontmostBundleIdentifier: "com.apple.ScreenSharing",
+                appBundleIdentifier: "com.typewhisper.mac.dev"
+            )
+        )
+    }
+
+    func testDoesNotSuppressForeignMaximizedWindowWhenAXReportsNotFullscreen() {
+        let maximizedWindow = CGRect(x: 0, y: 0, width: 3024, height: 1964)
+
+        XCTAssertFalse(
+            IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                screenFrame: notchedScreenFrame,
+                safeAreaTopInset: 74,
+                windowFrame: maximizedWindow,
+                focusedWindowIsFullscreen: false,
+                frontmostBundleIdentifier: "com.google.Chrome",
+                appBundleIdentifier: "com.typewhisper.mac.dev"
+            )
+        )
+    }
+
+    func testDoesNotSuppressForeignMaximizedWindowWhenAXFullscreenIsUnavailable() {
+        let screenFrame = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        let maximizedWindowBelowMenuBar = CGRect(x: 7, y: 46, width: 1497, height: 929)
+
+        XCTAssertFalse(
+            IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                screenFrame: screenFrame,
+                safeAreaTopInset: 32,
+                windowFrame: maximizedWindowBelowMenuBar,
+                focusedWindowIsFullscreen: nil,
+                frontmostBundleIdentifier: "com.microsoft.VSCode",
+                appBundleIdentifier: "com.typewhisper.mac.dev"
+            )
+        )
+    }
+
+    func testDoesNotSuppressOnNonNotchedScreen() {
+        let fullscreenWindow = CGRect(x: 0, y: 0, width: 3024, height: 1964)
+
+        XCTAssertFalse(
+            IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                screenFrame: notchedScreenFrame,
+                safeAreaTopInset: 0,
+                windowFrame: fullscreenWindow,
+                frontmostBundleIdentifier: "com.apple.ScreenSharing",
+                appBundleIdentifier: "com.typewhisper.mac.dev"
+            )
+        )
+    }
+
+    func testDoesNotSuppressNormalWindowBelowNotchStrip() {
+        let maximizedWindowBelowMenuBar = CGRect(x: 0, y: 0, width: 3024, height: 1880)
+
+        XCTAssertFalse(
+            IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                screenFrame: notchedScreenFrame,
+                safeAreaTopInset: 74,
+                windowFrame: maximizedWindowBelowMenuBar,
+                frontmostBundleIdentifier: "com.apple.TextEdit",
+                appBundleIdentifier: "com.typewhisper.mac.dev"
+            )
+        )
+    }
+
+    func testDoesNotSuppressTypeWhisperWindows() {
+        let fullscreenWindow = CGRect(x: 0, y: 0, width: 3024, height: 1964)
+
+        XCTAssertFalse(
+            IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                screenFrame: notchedScreenFrame,
+                safeAreaTopInset: 74,
+                windowFrame: fullscreenWindow,
+                frontmostBundleIdentifier: "com.typewhisper.mac.dev",
+                appBundleIdentifier: "com.typewhisper.mac.dev"
+            )
+        )
+    }
+}
+
 final class DockIconVisibilityTests: XCTestCase {
     func testDockIconStaysHiddenWhenMenuBarIconIsVisibleAndNoWindowIsOpen() {
         XCTAssertFalse(
@@ -279,13 +386,152 @@ final class MenuBarGroupingTests: XCTestCase {
             [.toggleRecorder]
         )
         XCTAssertEqual(
-            MenuBarMenuSection.transcription.items,
+            MenuBarMenuSection.transcription.items(hasRecoverableRecording: true),
+            [.transcribeFile, .recoverLastRecording, .recentTranscriptions, .copyLastTranscription, .readBackLastTranscription]
+        )
+        XCTAssertEqual(
+            MenuBarMenuSection.transcription.items(hasRecoverableRecording: false),
             [.transcribeFile, .recentTranscriptions, .copyLastTranscription, .readBackLastTranscription]
         )
         XCTAssertEqual(
             MenuBarMenuSection.updates.items,
             [.checkForUpdates]
         )
+    }
+}
+
+final class MenuBarIconStateTests: XCTestCase {
+    func testRecordingIndicatorIsActiveDuringDictationRecording() {
+        XCTAssertTrue(
+            MenuBarIconState.isRecordingActive(
+                dictationState: .recording,
+                recorderState: .idle
+            )
+        )
+    }
+
+    func testRecordingIndicatorIsActiveDuringRecorderRecording() {
+        XCTAssertTrue(
+            MenuBarIconState.isRecordingActive(
+                dictationState: .idle,
+                recorderState: .recording
+            )
+        )
+    }
+
+    func testRecordingIndicatorIsInactiveWhileRecorderFinalizes() {
+        XCTAssertFalse(
+            MenuBarIconState.isRecordingActive(
+                dictationState: .idle,
+                recorderState: .finalizing
+            )
+        )
+    }
+
+    func testRecordingIndicatorIsInactiveWithoutActiveRecording() {
+        XCTAssertFalse(
+            MenuBarIconState.isRecordingActive(
+                dictationState: .processing,
+                recorderState: .idle
+            )
+        )
+    }
+}
+
+final class IndicatorPresentationStateTests: XCTestCase {
+    func testRecorderRecordingShowsRecordingPresentationWhenDictationIsIdle() {
+        let presentation = IndicatorPresentationState.resolve(
+            dictationState: .idle,
+            recorderState: .recording
+        )
+
+        XCTAssertEqual(presentation.source, .recorder)
+        XCTAssertEqual(presentation.state, .recording)
+        XCTAssertTrue(presentation.isActiveDuringActivity)
+    }
+
+    func testRecorderFinalizingDoesNotShowRecorderActivity() {
+        let presentation = IndicatorPresentationState.resolve(
+            dictationState: .idle,
+            recorderState: .finalizing
+        )
+
+        XCTAssertEqual(presentation.source, .dictation)
+        XCTAssertEqual(presentation.state, .idle)
+        XCTAssertFalse(presentation.isActiveDuringActivity)
+    }
+
+    func testDictationActiveStatesWinOverRecorderRecording() {
+        let activeDictationStates: [DictationViewModel.State] = [
+            .recording,
+            .processing,
+            .inserting,
+            .error("failed")
+        ]
+
+        for state in activeDictationStates {
+            let presentation = IndicatorPresentationState.resolve(
+                dictationState: state,
+                recorderState: .recording
+            )
+
+            XCTAssertEqual(presentation.source, .dictation)
+            XCTAssertEqual(presentation.state, state)
+            XCTAssertTrue(presentation.isActiveDuringActivity)
+        }
+    }
+
+    func testVisibilityPolicyPreservesAlwaysDuringActivityAndNever() {
+        let recorderPresentation = IndicatorPresentationState.resolve(
+            dictationState: .idle,
+            recorderState: .recording
+        )
+        let idlePresentation = IndicatorPresentationState.resolve(
+            dictationState: .idle,
+            recorderState: .idle
+        )
+
+        XCTAssertTrue(IndicatorPresentationState.shouldShow(
+            visibility: .always,
+            presentation: idlePresentation
+        ))
+        XCTAssertTrue(IndicatorPresentationState.shouldShow(
+            visibility: .duringActivity,
+            presentation: recorderPresentation
+        ))
+        XCTAssertFalse(IndicatorPresentationState.shouldShow(
+            visibility: .duringActivity,
+            presentation: idlePresentation
+        ))
+        XCTAssertFalse(IndicatorPresentationState.shouldShow(
+            visibility: .never,
+            presentation: recorderPresentation
+        ))
+    }
+}
+
+final class MenuBarLogoMarkImageTests: XCTestCase {
+    func testBarLayoutFitsWithinMenuBarSlotWithVisibleGaps() {
+        let rects = MenuBarLogoMarkImage.barRects(in: CGRect(x: 0, y: 0, width: 18, height: 18))
+
+        XCTAssertEqual(rects.count, 5)
+        XCTAssertGreaterThanOrEqual(rects[0].minX, 0)
+        XCTAssertLessThanOrEqual(rects[4].maxX, 18)
+        XCTAssertGreaterThan(rects[2].height, rects[0].height)
+
+        for index in 1..<rects.count {
+            XCTAssertGreaterThanOrEqual(rects[index].minX - rects[index - 1].maxX, 1)
+        }
+    }
+
+    func testIdleImageIsTemplateAndRecordingImageIsOriginalRedArtwork() {
+        let idleImage = MenuBarLogoMarkImage.image(isRecordingActive: false)
+        let recordingImage = MenuBarLogoMarkImage.image(isRecordingActive: true)
+
+        XCTAssertEqual(idleImage.size, MenuBarLogoMarkImage.size)
+        XCTAssertEqual(recordingImage.size, MenuBarLogoMarkImage.size)
+        XCTAssertTrue(idleImage.isTemplate)
+        XCTAssertFalse(recordingImage.isTemplate)
     }
 }
 

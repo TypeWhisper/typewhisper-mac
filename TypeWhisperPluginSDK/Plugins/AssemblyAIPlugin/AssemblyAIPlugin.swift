@@ -37,13 +37,15 @@ private actor TranscriptCollector {
 // MARK: - Plugin Entry Point
 
 @objc(AssemblyAIPlugin)
-final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, @unchecked Sendable {
+final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.assemblyai"
     static let pluginName = "AssemblyAI"
+    static let speakerDiarizationEnabledKey = "speakerDiarizationEnabled"
 
     fileprivate var host: HostServices?
     fileprivate var _apiKey: String?
     fileprivate var _selectedModelId: String?
+    fileprivate var _speakerDiarizationEnabled = false
 
     private let logger = Logger(subsystem: "com.typewhisper.assemblyai", category: "Plugin")
 
@@ -56,6 +58,7 @@ final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
         _apiKey = host.loadSecret(key: "api-key")
         _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
             ?? transcriptionModels.first?.id
+        _speakerDiarizationEnabled = host.userDefault(forKey: Self.speakerDiarizationEnabledKey) as? Bool ?? false
     }
 
     func deactivate() {
@@ -90,6 +93,7 @@ final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
     var supportsStreaming: Bool { true }
     var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
     var dictionaryTermsBudget: DictionaryTermsBudget { Self.dictionaryTermsBudget(for: _selectedModelId) }
+    var isSpeakerDiarizationEnabled: Bool { _speakerDiarizationEnabled }
 
     var supportedLanguages: [String] {
         if _selectedModelId == "universal-2" {
@@ -107,6 +111,20 @@ final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
     // MARK: - Transcription (REST Fallback)
 
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        try await Self.legacyResult(from: transcribeStructured(
+            audio: audio,
+            language: language,
+            translate: translate,
+            prompt: prompt
+        ))
+    }
+
+    func transcribeStructured(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginStructuredTranscriptionResult {
         guard let apiKey = _apiKey, !apiKey.isEmpty else {
             throw PluginTranscriptionError.notConfigured
         }
@@ -119,7 +137,8 @@ final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
             language: language,
             modelId: modelId,
             apiKey: apiKey,
-            prompt: prompt
+            prompt: prompt,
+            speakerDiarizationEnabled: _speakerDiarizationEnabled
         )
     }
 
@@ -147,13 +166,14 @@ final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
             )
         } catch {
             logger.warning("WebSocket streaming failed, falling back to REST: \(error.localizedDescription)")
-            return try await transcribeREST(
+            return try await Self.legacyResult(from: transcribeREST(
                 audio: audio,
                 language: language,
                 modelId: modelId,
                 apiKey: apiKey,
-                prompt: prompt
-            )
+                prompt: prompt,
+                speakerDiarizationEnabled: _speakerDiarizationEnabled
+            ))
         }
     }
 
@@ -164,15 +184,17 @@ final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
         language: String?,
         modelId: String,
         apiKey: String,
-        prompt: String?
-    ) async throws -> PluginTranscriptionResult {
+        prompt: String?,
+        speakerDiarizationEnabled: Bool
+    ) async throws -> PluginStructuredTranscriptionResult {
         let uploadURL = try await uploadAudio(wavData: audio.wavData, apiKey: apiKey)
         let transcriptId = try await submitTranscription(
             audioURL: uploadURL,
             modelId: modelId,
             language: language,
             apiKey: apiKey,
-            prompt: prompt
+            prompt: prompt,
+            speakerDiarizationEnabled: speakerDiarizationEnabled
         )
         return try await pollTranscription(transcriptId: transcriptId, apiKey: apiKey)
     }
@@ -216,23 +238,20 @@ final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
         modelId: String,
         language: String?,
         apiKey: String,
-        prompt: String?
+        prompt: String?,
+        speakerDiarizationEnabled: Bool
     ) async throws -> String {
         guard let url = URL(string: "https://api.assemblyai.com/v2/transcript") else {
             throw PluginTranscriptionError.apiError("Invalid transcript URL")
         }
 
-        var body: [String: Any] = [
-            "audio_url": audioURL,
-            "speech_models": [modelId],
-        ]
-
-        if let lang = language, !lang.isEmpty {
-            body["language_code"] = lang
-        } else {
-            body["language_detection"] = true
-        }
-        Self.applyDictionaryTerms(prompt: prompt, modelId: modelId, to: &body)
+        let body = Self.makeSubmitTranscriptionBody(
+            audioURL: audioURL,
+            modelId: modelId,
+            language: language,
+            prompt: prompt,
+            speakerDiarizationEnabled: speakerDiarizationEnabled
+        )
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -271,7 +290,33 @@ final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
         return DictionaryTermsBudget(maxTerms: 100, maxCharsPerTerm: 50)
     }
 
-    private static func applyDictionaryTerms(prompt: String?, modelId: String, to body: inout [String: Any]) {
+    static func makeSubmitTranscriptionBody(
+        audioURL: String,
+        modelId: String,
+        language: String?,
+        prompt: String?,
+        speakerDiarizationEnabled: Bool
+    ) -> [String: Any] {
+        var body: [String: Any] = [
+            "audio_url": audioURL,
+            "speech_models": [modelId],
+        ]
+
+        if let lang = language, !lang.isEmpty {
+            body["language_code"] = lang
+        } else {
+            body["language_detection"] = true
+        }
+
+        if speakerDiarizationEnabled {
+            body["speaker_labels"] = true
+        }
+
+        applyDictionaryTerms(prompt: prompt, modelId: modelId, to: &body)
+        return body
+    }
+
+    static func applyDictionaryTerms(prompt: String?, modelId: String, to body: inout [String: Any]) {
         let terms = PluginDictionaryTerms.clippedTerms(
             from: PluginDictionaryTerms.terms(fromPrompt: prompt),
             budget: dictionaryTermsBudget(for: modelId)
@@ -286,7 +331,7 @@ final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
         }
     }
 
-    private func pollTranscription(transcriptId: String, apiKey: String) async throws -> PluginTranscriptionResult {
+    private func pollTranscription(transcriptId: String, apiKey: String) async throws -> PluginStructuredTranscriptionResult {
         guard let url = URL(string: "https://api.assemblyai.com/v2/transcript/\(transcriptId)") else {
             throw PluginTranscriptionError.apiError("Invalid poll URL")
         }
@@ -311,9 +356,7 @@ final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
 
             switch status {
             case "completed":
-                let text = json["text"] as? String ?? ""
-                let detectedLanguage = json["language_code"] as? String
-                return PluginTranscriptionResult(text: text, detectedLanguage: detectedLanguage)
+                return Self.parseCompletedTranscriptionResponse(json)
             case "error":
                 let errorMsg = json["error"] as? String ?? "Unknown transcription error"
                 throw PluginTranscriptionError.apiError(errorMsg)
@@ -323,6 +366,102 @@ final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
         }
 
         throw PluginTranscriptionError.apiError("Transcription timed out after 5 minutes")
+    }
+
+    static func parseCompletedTranscriptionResponse(_ json: [String: Any]) -> PluginStructuredTranscriptionResult {
+        let detectedLanguage = json["language_code"] as? String
+        let utterances = json["utterances"] as? [[String: Any]] ?? []
+
+        let segments = utterances.compactMap { utterance -> PluginStructuredTranscriptionSegment? in
+            let text = (utterance["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return nil }
+
+            let start = milliseconds(from: utterance["start"]) ?? 0
+            let end = milliseconds(from: utterance["end"]) ?? start
+            let speakerLabel = normalizedSpeakerLabel(from: utterance["speaker"])
+            let confidence = double(from: utterance["confidence"])
+
+            return PluginStructuredTranscriptionSegment(
+                text: text,
+                start: start,
+                end: end,
+                speakerLabel: speakerLabel,
+                speakerConfidence: confidence
+            )
+        }
+
+        guard !segments.isEmpty else {
+            return PluginStructuredTranscriptionResult(
+                text: json["text"] as? String ?? "",
+                detectedLanguage: detectedLanguage
+            )
+        }
+
+        let text = segments
+            .map { segment in
+                if let speakerLabel = segment.speakerLabel {
+                    return "\(speakerLabel): \(segment.text)"
+                }
+                return segment.text
+            }
+            .joined(separator: "\n")
+
+        return PluginStructuredTranscriptionResult(
+            text: text,
+            detectedLanguage: detectedLanguage,
+            segments: segments
+        )
+    }
+
+    private static func legacyResult(
+        from structuredResult: PluginStructuredTranscriptionResult
+    ) -> PluginTranscriptionResult {
+        PluginTranscriptionResult(
+            text: structuredResult.text,
+            detectedLanguage: structuredResult.detectedLanguage,
+            segments: structuredResult.segments.map {
+                PluginTranscriptionSegment(text: $0.text, start: $0.start, end: $0.end)
+            }
+        )
+    }
+
+    private static func normalizedSpeakerLabel(from rawValue: Any?) -> String? {
+        let raw: String?
+        if let value = rawValue as? String {
+            raw = value
+        } else if let value = rawValue as? Int {
+            raw = "\(value)"
+        } else {
+            raw = nil
+        }
+
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if trimmed.localizedCaseInsensitiveCompare("unknown") == .orderedSame {
+            return nil
+        }
+        if trimmed.localizedCaseInsensitiveContains("speaker") {
+            return trimmed
+        }
+        return "Speaker \(trimmed)"
+    }
+
+    private static func milliseconds(from value: Any?) -> Double? {
+        double(from: value).map { $0 / 1000.0 }
+    }
+
+    private static func double(from value: Any?) -> Double? {
+        if let value = value as? Double {
+            return value
+        }
+        if let value = value as? Int {
+            return Double(value)
+        }
+        if let value = value as? NSNumber {
+            return value.doubleValue
+        }
+        return nil
     }
 
     // MARK: - WebSocket Implementation (v3 Streaming)
@@ -519,6 +658,13 @@ final class AssemblyAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
             host.notifyCapabilitiesChanged()
         }
     }
+
+    func setSpeakerDiarizationEnabled(_ enabled: Bool) {
+        guard _speakerDiarizationEnabled != enabled else { return }
+        _speakerDiarizationEnabled = enabled
+        host?.setUserDefault(enabled, forKey: Self.speakerDiarizationEnabledKey)
+        host?.notifyCapabilitiesChanged()
+    }
 }
 
 // MARK: - Settings View
@@ -530,6 +676,7 @@ private struct AssemblyAISettingsView: View {
     @State private var validationResult: Bool?
     @State private var showApiKey = false
     @State private var selectedModel: String = ""
+    @State private var speakerDiarizationEnabled = false
     private let bundle = Bundle(for: AssemblyAIPlugin.self)
 
     var body: some View {
@@ -611,6 +758,11 @@ private struct AssemblyAISettingsView: View {
                         plugin.selectModel(selectedModel)
                     }
                 }
+
+                Toggle(String(localized: "Speaker diarization", bundle: bundle), isOn: $speakerDiarizationEnabled)
+                    .onChange(of: speakerDiarizationEnabled) {
+                        plugin.setSpeakerDiarizationEnabled(speakerDiarizationEnabled)
+                    }
             }
 
             Text("API keys are stored securely in the Keychain", bundle: bundle)
@@ -623,6 +775,7 @@ private struct AssemblyAISettingsView: View {
                 apiKeyInput = key
             }
             selectedModel = plugin.selectedModelId ?? plugin.transcriptionModels.first?.id ?? ""
+            speakerDiarizationEnabled = plugin.isSpeakerDiarizationEnabled
         }
     }
 

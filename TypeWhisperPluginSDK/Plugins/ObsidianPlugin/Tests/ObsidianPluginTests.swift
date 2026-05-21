@@ -5,6 +5,10 @@ import XCTest
 @testable import ObsidianPlugin
 
 final class ObsidianPluginTests: XCTestCase {
+    private static let workflowInstructionTitle = "Workflow Instruction"
+    private static let workflowInstructionHelp = "Create a Custom Workflow, paste this into Instruction, and set Action Target to \"Save to Obsidian\"."
+    private static let copyInstructionTitle = "Copy Instruction"
+
     func testExecuteFailsForInvalidVaultPath() async throws {
         let invalidVaultURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("obsidian-invalid-\(UUID().uuidString)", isDirectory: false)
@@ -117,10 +121,77 @@ final class ObsidianPluginTests: XCTestCase {
         XCTAssertTrue(content.contains("Second entry"))
     }
 
+    func testActionNameMatchesWorkflowInstructionTarget() {
+        let plugin = ObsidianPlugin()
+
+        XCTAssertEqual(plugin.actionName, "Save to Obsidian")
+        XCTAssertTrue(Self.workflowInstructionHelp.contains("\"\(plugin.actionName)\""))
+    }
+
+    func testSettingsCopyDescribesWorkflowActionTarget() throws {
+        let source = try String(contentsOf: Self.pluginRoot.appendingPathComponent("ObsidianPlugin.swift"), encoding: .utf8)
+        let catalog = try Self.loadStringCatalog()
+
+        XCTAssertTrue(source.contains(Self.workflowInstructionTitle))
+        XCTAssertTrue(source.contains("Create a Custom Workflow"))
+        XCTAssertTrue(source.contains("Action Target"))
+        XCTAssertTrue(source.contains("Save to Obsidian"))
+        XCTAssertTrue(source.contains(Self.copyInstructionTitle))
+        XCTAssertEqual(catalog.localizedValue(for: Self.workflowInstructionTitle), "Workflow-Anweisung")
+        XCTAssertEqual(
+            catalog.localizedValue(for: Self.workflowInstructionHelp),
+            "Erstelle einen eigenen Workflow, füge dies in Anweisung ein und setze das Action-Ziel auf \"Save to Obsidian\"."
+        )
+        XCTAssertEqual(catalog.localizedValue(for: Self.copyInstructionTitle), "Anweisung kopieren")
+    }
+
+    func testSettingsCopyDoesNotReferenceLegacyPromptActionFlow() throws {
+        let source = try String(contentsOf: Self.pluginRoot.appendingPathComponent("ObsidianPlugin.swift"), encoding: .utf8)
+        let catalog = try String(contentsOf: Self.pluginRoot.appendingPathComponent("Localizable.xcstrings"), encoding: .utf8)
+        let combinedCopy = source + "\n" + catalog
+
+        for staleTerm in ["PromptAction", "Recommended Prompt", "Copy Prompt", "Create a new PromptAction"] {
+            XCTAssertFalse(combinedCopy.contains(staleTerm), "\(staleTerm) should not appear in Obsidian settings copy")
+        }
+    }
+
     private static func makeTemporaryDirectory(prefix: String) throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("\(prefix)-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
+    }
+
+    private static var pluginRoot: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+    }
+
+    private static func loadStringCatalog() throws -> StringCatalog {
+        try JSONDecoder().decode(
+            StringCatalog.self,
+            from: Data(contentsOf: pluginRoot.appendingPathComponent("Localizable.xcstrings"))
+        )
+    }
+}
+
+private struct StringCatalog: Decodable {
+    struct Entry: Decodable {
+        let localizations: [String: Localization]?
+    }
+
+    struct Localization: Decodable {
+        let stringUnit: StringUnit?
+    }
+
+    struct StringUnit: Decodable {
+        let value: String
+    }
+
+    let strings: [String: Entry]
+
+    func localizedValue(for key: String, language: String = "de") -> String? {
+        strings[key]?.localizations?[language]?.stringUnit?.value
     }
 }

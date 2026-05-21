@@ -56,6 +56,22 @@ final class PluginHTTPClientTests: XCTestCase {
         XCTAssertEqual(store.sessions[1].requestedPaths, ["/retry"])
     }
 
+    func testHTTPClientResourceTimeoutAllowsLongRunningRequests() async throws {
+        let store = MockHTTPSessionStore()
+        PluginHTTPClient.configureForTesting { configuration in
+            store.makeSession(outcomes: [.success(Self.okResponse())], configuration: configuration)
+        }
+
+        var request = Self.request(path: "/long-running")
+        request.timeoutInterval = 600
+
+        _ = try await PluginHTTPClient.data(for: request)
+
+        XCTAssertEqual(store.configurations.first?.timeoutIntervalForRequest, 30)
+        XCTAssertEqual(store.configurations.first?.timeoutIntervalForResource, 600)
+        XCTAssertEqual(store.sessions.first?.requestedRequests.first?.timeoutInterval, 600)
+    }
+
     private static func request(path: String) -> URLRequest {
         var request = URLRequest(url: URL(string: "https://example.test\(path)")!)
         request.httpMethod = "POST"
@@ -74,11 +90,18 @@ final class PluginHTTPClientTests: XCTestCase {
 private final class MockHTTPSessionStore: @unchecked Sendable {
     private let lock = NSLock()
     private(set) var sessions: [MockHTTPSession] = []
+    private(set) var configurations: [URLSessionConfiguration] = []
 
-    func makeSession(outcomes: [Result<(Data, URLResponse), Error>]) -> MockHTTPSession {
+    func makeSession(
+        outcomes: [Result<(Data, URLResponse), Error>],
+        configuration: URLSessionConfiguration? = nil
+    ) -> MockHTTPSession {
         let session = MockHTTPSession(outcomes: outcomes)
         lock.withLock {
             sessions.append(session)
+            if let configuration {
+                configurations.append(configuration)
+            }
         }
         return session
     }
@@ -88,6 +111,7 @@ private final class MockHTTPSession: PluginHTTPClientSession, @unchecked Sendabl
     private let lock = NSLock()
     private var outcomes: [Result<(Data, URLResponse), Error>]
     private(set) var requestedPaths: [String] = []
+    private(set) var requestedRequests: [URLRequest] = []
     private(set) var didInvalidate = false
 
     init(outcomes: [Result<(Data, URLResponse), Error>]) {
@@ -96,6 +120,7 @@ private final class MockHTTPSession: PluginHTTPClientSession, @unchecked Sendabl
 
     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
         let outcome = lock.withLock {
+            requestedRequests.append(request)
             requestedPaths.append(request.url?.path ?? "")
             if outcomes.count > 1 {
                 return outcomes.removeFirst()

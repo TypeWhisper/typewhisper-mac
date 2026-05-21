@@ -494,12 +494,12 @@ private struct ObsidianSettingsView: View {
 
                 Divider()
 
-                // Recommended Prompt
+                // Recommended workflow instruction
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Recommended Prompt", bundle: bundle)
+                    Text("Workflow Instruction", bundle: bundle)
                         .font(.headline)
 
-                    Text("Create a new PromptAction with this system prompt and set \"Save to Obsidian\" as the action target:", bundle: bundle)
+                    Text("Create a Custom Workflow, paste this into Instruction, and set Action Target to \"Save to Obsidian\".", bundle: bundle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -513,7 +513,7 @@ private struct ObsidianSettingsView: View {
                         .background(Color(NSColor.controlBackgroundColor))
                         .cornerRadius(6)
 
-                    Button(String(localized: "Copy Prompt", bundle: bundle)) {
+                    Button(String(localized: "Copy Instruction", bundle: bundle)) {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(prompt, forType: .string)
                     }

@@ -31,6 +31,10 @@ final class ServiceContainer: ObservableObject {
     let widgetDataService: WidgetDataService
     let memoryService: MemoryService
     let appFormatterService: AppFormatterService
+    let dictationPunctuationProfileStore: DictationPunctuationProfileStore
+    let punctuationRulesLoader: PunctuationRulesLoader
+    let punctuationStrategyResolver: PunctuationStrategyResolver
+    let punctuationVerificationService: PunctuationVerificationService
     let audioRecorderService: AudioRecorderService
     let watchFolderService: WatchFolderService
     let accessibilityAnnouncementService: AccessibilityAnnouncementService
@@ -45,6 +49,7 @@ final class ServiceContainer: ObservableObject {
 
     // ViewModels
     let fileTranscriptionViewModel: FileTranscriptionViewModel
+    let dictationRecoveryViewModel: DictationRecoveryViewModel
     let settingsViewModel: SettingsViewModel
     let dictationViewModel: DictationViewModel
     let historyViewModel: HistoryViewModel
@@ -96,6 +101,10 @@ final class ServiceContainer: ObservableObject {
         widgetDataService = WidgetDataService(historyService: historyService)
         memoryService = MemoryService(promptProcessingService: promptProcessingService)
         appFormatterService = AppFormatterService()
+        dictationPunctuationProfileStore = DictationPunctuationProfileStore()
+        punctuationRulesLoader = PunctuationRulesLoader()
+        punctuationStrategyResolver = PunctuationStrategyResolver(profileStore: dictationPunctuationProfileStore)
+        punctuationVerificationService = PunctuationVerificationService(rulesLoader: punctuationRulesLoader)
         audioRecorderService = AudioRecorderService()
         promptProcessingService.memoryService = memoryService
         promptProcessingService.modelManagerService = modelManagerService
@@ -109,6 +118,12 @@ final class ServiceContainer: ObservableObject {
         // ViewModels (created before HTTP API so DictationViewModel is available)
         fileTranscriptionViewModel = FileTranscriptionViewModel(
             modelManager: modelManagerService,
+            audioFileService: audioFileService
+        )
+        dictationRecoveryViewModel = DictationRecoveryViewModel(
+            audioRecordingService: audioRecordingService,
+            modelManager: modelManagerService,
+            historyService: historyService,
             audioFileService: audioFileService
         )
         settingsViewModel = SettingsViewModel(modelManager: modelManagerService)
@@ -131,27 +146,36 @@ final class ServiceContainer: ObservableObject {
             promptActionService: promptActionService,
             promptProcessingService: promptProcessingService,
             appFormatterService: appFormatterService,
+            punctuationStrategyResolver: punctuationStrategyResolver,
+            speechPunctuationService: SpeechPunctuationService(rulesLoader: punctuationRulesLoader),
             speechFeedbackService: speechFeedbackService,
             accessibilityAnnouncementService: accessibilityAnnouncementService,
             errorLogService: errorLogService,
             mediaPlaybackService: mediaPlaybackService
         )
+        audioRecorderViewModel = AudioRecorderViewModel(
+            recorderService: audioRecorderService,
+            modelManager: modelManagerService,
+            dictionaryService: dictionaryService
+        )
 
 
         // HTTP API
-        let router = APIRouter()
+        let apiAuthenticator = LocalAPIAuthenticator()
+        let router = APIRouter(apiTokenProvider: apiAuthenticator.tokenForEnforcedRequests)
         let handlers = APIHandlers(
             modelManager: modelManagerService,
             audioFileService: audioFileService,
             translationService: translationService,
             historyService: historyService,
-            profileService: profileService,
+            workflowService: workflowService,
             dictionaryService: dictionaryService,
-            dictationViewModel: dictationViewModel
+            dictationViewModel: dictationViewModel,
+            audioRecorderViewModel: audioRecorderViewModel
         )
         handlers.register(on: router)
         httpServer = HTTPServer(router: router)
-        apiServerViewModel = APIServerViewModel(httpServer: httpServer)
+        apiServerViewModel = APIServerViewModel(httpServer: httpServer, apiAuthenticator: apiAuthenticator)
         historyViewModel = HistoryViewModel(
             historyService: historyService,
             textDiffService: textDiffService,
@@ -163,7 +187,11 @@ final class ServiceContainer: ObservableObject {
             settingsViewModel: settingsViewModel,
             textInsertionService: textInsertionService
         )
-        dictionaryViewModel = DictionaryViewModel(dictionaryService: dictionaryService)
+        dictionaryViewModel = DictionaryViewModel(
+            dictionaryService: dictionaryService,
+            licenseService: licenseService,
+            termPackRegistryService: termPackRegistryService
+        )
         snippetsViewModel = SnippetsViewModel(snippetService: snippetService)
         homeViewModel = HomeViewModel(historyService: historyService)
         promptActionsViewModel = PromptActionsViewModel(
@@ -171,7 +199,6 @@ final class ServiceContainer: ObservableObject {
             promptProcessingService: promptProcessingService,
             profileService: profileService
         )
-        audioRecorderViewModel = AudioRecorderViewModel(recorderService: audioRecorderService, modelManager: modelManagerService, dictionaryService: dictionaryService)
         watchFolderViewModel = WatchFolderViewModel(
             watchFolderService: watchFolderService,
             modelManager: modelManagerService
@@ -179,6 +206,7 @@ final class ServiceContainer: ObservableObject {
 
         // Set shared references
         FileTranscriptionViewModel._shared = fileTranscriptionViewModel
+        DictationRecoveryViewModel._shared = dictationRecoveryViewModel
         SettingsViewModel._shared = settingsViewModel
         DictationViewModel._shared = dictationViewModel
         APIServerViewModel._shared = apiServerViewModel
@@ -203,6 +231,8 @@ final class ServiceContainer: ObservableObject {
 
         modelManagerService.observePluginManager()
         promptProcessingService.observePluginManager()
+        fileTranscriptionViewModel.observePluginManager()
+        dictationRecoveryViewModel.observePluginManager()
         settingsViewModel.observePluginManager()
         watchFolderViewModel.observePluginManager()
     }
@@ -220,19 +250,7 @@ final class ServiceContainer: ObservableObject {
         }
 
         pluginManager.setRuleNamesProvider { [weak self] in
-            guard let self else { return [] }
-            var names: [String] = []
-            for workflow in self.workflowService.workflows {
-                if !names.contains(workflow.name) {
-                    names.append(workflow.name)
-                }
-            }
-            for profile in self.profileService.profiles {
-                if !names.contains(profile.name) {
-                    names.append(profile.name)
-                }
-            }
-            return names
+            self?.workflowService.availableRuleNames ?? []
         }
         pluginManager.setWorkflowProvider { [weak self] in
             self?.workflowService.workflows.map(\.pluginWorkflowInfo) ?? []
@@ -245,6 +263,8 @@ final class ServiceContainer: ObservableObject {
 
         // Validate LLM provider selection against loaded plugins
         promptProcessingService.validateSelectionAfterPluginLoad()
+
+        pluginRegistryService.checkForUpdatesInBackground()
 
         // Start memory service
         memoryService.startListening()
@@ -263,15 +283,5 @@ final class ServiceContainer: ObservableObject {
             }
         }
 
-        // Migrate stale cloudModelOverride in profiles
-        for profile in profileService.profiles {
-            guard let modelOverride = profile.cloudModelOverride,
-                  let engineOverride = profile.engineOverride,
-                  let plugin = PluginManager.shared.transcriptionEngine(for: engineOverride) else { continue }
-            let validIds = plugin.transcriptionModels.map(\.id)
-            if !validIds.contains(modelOverride) {
-                profile.cloudModelOverride = nil
-            }
-        }
     }
 }

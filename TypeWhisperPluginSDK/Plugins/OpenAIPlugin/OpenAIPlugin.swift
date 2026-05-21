@@ -1,9 +1,11 @@
 import AppKit
+import AVFoundation
 import CryptoKit
 import Foundation
 import Network
 import SwiftUI
 import TypeWhisperPluginSDK
+import os
 
 // MARK: - OAuth Helpers
 
@@ -16,6 +18,7 @@ private enum OpenAIReasoningEffort: String, Codable, CaseIterable, Hashable, Sen
     case low
     case medium
     case high
+    case xhigh
 
     var localizedKey: String {
         switch self {
@@ -25,6 +28,28 @@ private enum OpenAIReasoningEffort: String, Codable, CaseIterable, Hashable, Sen
             return "Medium"
         case .high:
             return "High"
+        case .xhigh:
+            return "X High"
+        }
+    }
+}
+
+enum OpenAIPluginError: LocalizedError {
+    case invalidURL(String)
+    case invalidResponse
+    case apiError(String)
+    case playbackUnavailable(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidURL(let url):
+            "Invalid URL: \(url)"
+        case .invalidResponse:
+            "Invalid API response."
+        case .apiError(let message):
+            "API error: \(message)"
+        case .playbackUnavailable(let message):
+            "Playback unavailable: \(message)"
         }
     }
 }
@@ -448,10 +473,803 @@ private func extractOAuthMetadata(from tokens: OpenAIOAuthTokenResponse) -> Open
     return OpenAIOAuthMetadata(accountID: accountID, planType: planType, expiresAt: expiresAt)
 }
 
+// MARK: - Responses API
+
+struct OpenAIResponsesClient: Sendable {
+    private let apiKey: String
+
+    init(apiKey: String) {
+        self.apiKey = apiKey
+    }
+
+    func process(
+        systemPrompt: String,
+        userText: String,
+        model: String,
+        reasoningEffort: String?
+    ) async throws -> String {
+        guard let url = URL(string: "https://api.openai.com/v1/responses") else {
+            throw OpenAIPluginError.invalidURL("https://api.openai.com/v1/responses")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 120
+        request.httpBody = try JSONSerialization.data(
+            withJSONObject: Self.requestBody(
+                model: model,
+                systemPrompt: systemPrompt,
+                userText: userText,
+                reasoningEffort: reasoningEffort
+            )
+        )
+
+        let (data, response) = try await PluginHTTPClient.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw PluginChatError.networkError("Invalid response")
+        }
+
+        switch httpResponse.statusCode {
+        case 200:
+            return try Self.parseResponse(data)
+        case 401:
+            throw PluginChatError.invalidApiKey
+        case 429:
+            throw PluginChatError.rateLimited
+        default:
+            throw PluginChatError.apiError(Self.errorMessage(from: data, statusCode: httpResponse.statusCode))
+        }
+    }
+
+    static func requestBody(
+        model: String,
+        systemPrompt: String,
+        userText: String,
+        reasoningEffort: String?
+    ) -> [String: Any] {
+        let instructions = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "You are a helpful assistant."
+            : systemPrompt
+
+        var body: [String: Any] = [
+            "model": model,
+            "instructions": instructions,
+            "input": [
+                [
+                    "role": "user",
+                    "content": [
+                        [
+                            "type": "input_text",
+                            "text": userText,
+                        ],
+                    ],
+                ],
+            ],
+            "store": false,
+        ]
+
+        if let reasoningEffort, !reasoningEffort.isEmpty {
+            body["reasoning"] = ["effort": reasoningEffort]
+        }
+
+        return body
+    }
+
+    static func parseResponse(_ data: Data) throws -> String {
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw PluginChatError.apiError("Failed to parse response")
+        }
+
+        if let outputText = json["output_text"] as? String {
+            let trimmed = outputText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                return trimmed
+            }
+        }
+
+        if let output = json["output"] as? [[String: Any]] {
+            let textParts = output.flatMap { item -> [String] in
+                guard let content = item["content"] as? [[String: Any]] else { return [] }
+                return content.compactMap { contentItem in
+                    let type = contentItem["type"] as? String
+                    guard type == nil || type == "output_text" || type == "text" else { return nil }
+                    return contentItem["text"] as? String
+                }
+            }
+
+            let text = textParts.joined().trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty {
+                return text
+            }
+        }
+
+        throw PluginChatError.apiError("Failed to parse response text")
+    }
+
+    private static func errorMessage(from data: Data, statusCode: Int) -> String {
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let error = json["error"] as? [String: Any],
+           let message = error["message"] as? String {
+            return message
+        }
+        if let body = String(data: data, encoding: .utf8), !body.isEmpty {
+            return "HTTP \(statusCode): \(body)"
+        }
+        return "HTTP \(statusCode)"
+    }
+}
+
+// MARK: - Realtime STT
+
+actor OpenAIRealtimeTranscriptCollector {
+    private var completedOrder: [String] = []
+    private var completedTexts: [String: String] = [:]
+    private var deltaTexts: [String: String] = [:]
+    private var serverError: String?
+    private var connectionFailure: String?
+    private var sessionReady = false
+
+    @discardableResult
+    func applyEvent(_ data: Data) throws -> String? {
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let type = json["type"] as? String else {
+            throw PluginTranscriptionError.apiError("Invalid OpenAI realtime event")
+        }
+
+        switch type {
+        case "conversation.item.input_audio_transcription.delta":
+            let itemID = json["item_id"] as? String ?? UUID().uuidString
+            let delta = json["delta"] as? String ?? ""
+            deltaTexts[itemID, default: ""].append(delta)
+            return currentText()
+        case "conversation.item.input_audio_transcription.completed":
+            let itemID = json["item_id"] as? String ?? UUID().uuidString
+            let transcript = (json["transcript"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !transcript.isEmpty {
+                if completedTexts[itemID] == nil {
+                    completedOrder.append(itemID)
+                }
+                completedTexts[itemID] = transcript
+                deltaTexts[itemID] = nil
+            }
+            return currentText()
+        case "session.updated", "transcription_session.updated":
+            sessionReady = true
+            return nil
+        case "conversation.item.input_audio_transcription.failed":
+            let message = Self.errorMessage(from: json) ?? "OpenAI realtime transcription failed"
+            serverError = message
+            throw PluginTranscriptionError.apiError(message)
+        case "error":
+            let message = Self.errorMessage(from: json) ?? "Unknown OpenAI realtime error"
+            serverError = message
+            throw PluginTranscriptionError.apiError(message)
+        default:
+            return nil
+        }
+    }
+
+    func currentText() -> String {
+        var parts = completedOrder.compactMap { completedTexts[$0] }
+        let interim = deltaTexts
+            .filter { completedTexts[$0.key] == nil }
+            .sorted { $0.key < $1.key }
+            .map(\.value)
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        parts.append(contentsOf: interim)
+        return parts.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func finalResult(fallbackLanguage: String?) -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: currentText(), detectedLanguage: fallbackLanguage)
+    }
+
+    func recordConnectionFailure(_ message: String) {
+        if serverError == nil {
+            connectionFailure = message
+        }
+    }
+
+    var hasCompletedTranscript: Bool {
+        !completedOrder.isEmpty
+    }
+
+    var isSessionReady: Bool {
+        sessionReady
+    }
+
+    var error: String? {
+        serverError ?? connectionFailure
+    }
+
+    private static func errorMessage(from json: [String: Any]) -> String? {
+        if let error = json["error"] as? [String: Any] {
+            return error["message"] as? String ?? error["type"] as? String
+        }
+        return json["message"] as? String
+    }
+}
+
+final class OpenAIRealtimeWebSocketOpenWaiter: @unchecked Sendable {
+    private struct State {
+        var opened = false
+        var failure: Error?
+        var continuations: [CheckedContinuation<Void, Error>] = []
+    }
+
+    private let state = OSAllocatedUnfairLock(initialState: State())
+
+    func waitForOpen() async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            let result = state.withLock { state -> Result<Void, Error>? in
+                if state.opened {
+                    return .success(())
+                }
+                if let failure = state.failure {
+                    return .failure(failure)
+                }
+                state.continuations.append(continuation)
+                return nil
+            }
+            if let result {
+                continuation.resume(with: result)
+            }
+        }
+    }
+
+    func markOpened() {
+        let continuations = state.withLock { state -> [CheckedContinuation<Void, Error>] in
+            guard !state.opened, state.failure == nil else { return [] }
+            state.opened = true
+            let continuations = state.continuations
+            state.continuations = []
+            return continuations
+        }
+        continuations.forEach { $0.resume() }
+    }
+
+    func markFailed(_ error: Error) {
+        let continuations = state.withLock { state -> [CheckedContinuation<Void, Error>] in
+            guard !state.opened, state.failure == nil else { return [] }
+            state.failure = error
+            let continuations = state.continuations
+            state.continuations = []
+            return continuations
+        }
+        continuations.forEach { $0.resume(throwing: error) }
+    }
+}
+
+private final class OpenAIRealtimeWebSocketDelegate: NSObject, URLSessionWebSocketDelegate, @unchecked Sendable {
+    private let openWaiter: OpenAIRealtimeWebSocketOpenWaiter
+
+    init(openWaiter: OpenAIRealtimeWebSocketOpenWaiter) {
+        self.openWaiter = openWaiter
+        super.init()
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        webSocketTask: URLSessionWebSocketTask,
+        didOpenWithProtocol protocol: String?
+    ) {
+        openWaiter.markOpened()
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if let error {
+            openWaiter.markFailed(error)
+        }
+    }
+}
+
+final class OpenAIRealtimeTranscriptionSession: LiveTranscriptionSession, @unchecked Sendable {
+    static let modelId = "gpt-realtime-whisper"
+    static let sourceSampleRate = 16_000
+    static let targetSampleRate = 24_000
+    static let socketOpenTimeoutNanoseconds: UInt64 = 10_000_000_000
+    static let sessionReadyTimeoutNanoseconds: UInt64 = 3_000_000_000
+
+    private struct State {
+        var finished = false
+        var cancelled = false
+    }
+
+    private let urlSession: URLSession?
+    private let webSocketTask: URLSessionWebSocketTask?
+    private let receiveTask: Task<Void, Never>?
+    private let collector: OpenAIRealtimeTranscriptCollector
+    private let language: String?
+    private let onProgress: @Sendable (String) -> Bool
+    private let state = OSAllocatedUnfairLock(initialState: State())
+
+    init(
+        urlSession: URLSession? = nil,
+        webSocketTask: URLSessionWebSocketTask?,
+        receiveTask: Task<Void, Never>?,
+        collector: OpenAIRealtimeTranscriptCollector,
+        language: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) {
+        self.urlSession = urlSession
+        self.webSocketTask = webSocketTask
+        self.receiveTask = receiveTask
+        self.collector = collector
+        self.language = language
+        self.onProgress = onProgress
+    }
+
+    static func connect(
+        apiKey: String,
+        language: String?,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> OpenAIRealtimeTranscriptionSession {
+        let request = try makeRequest(apiKey: apiKey)
+        let openWaiter = OpenAIRealtimeWebSocketOpenWaiter()
+        let delegate = OpenAIRealtimeWebSocketDelegate(openWaiter: openWaiter)
+        let urlSession = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        let webSocketTask = urlSession.webSocketTask(with: request)
+        let collector = OpenAIRealtimeTranscriptCollector()
+
+        webSocketTask.resume()
+        try await waitForSocketOpen(openWaiter)
+
+        let receiveTask = Task { [webSocketTask, collector, onProgress] in
+            do {
+                while !Task.isCancelled {
+                    let message = try await webSocketTask.receive()
+                    guard let data = Self.data(from: message) else { continue }
+                    if let text = try await collector.applyEvent(data), !text.isEmpty {
+                        _ = onProgress(text)
+                    }
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                await collector.recordConnectionFailure(realtimeErrorDescription(error))
+            }
+        }
+
+        do {
+            try await webSocketTask.send(.string(try jsonString(sessionUpdatePayload(language: language, prompt: prompt))))
+            try await waitForSessionReady(collector)
+        } catch {
+            receiveTask.cancel()
+            webSocketTask.cancel(with: .goingAway, reason: nil)
+            urlSession.finishTasksAndInvalidate()
+            if let collectorError = await collector.error {
+                throw PluginTranscriptionError.apiError(collectorError)
+            }
+            throw error
+        }
+
+        return OpenAIRealtimeTranscriptionSession(
+            urlSession: urlSession,
+            webSocketTask: webSocketTask,
+            receiveTask: receiveTask,
+            collector: collector,
+            language: language,
+            onProgress: onProgress
+        )
+    }
+
+    private static func waitForSessionReady(_ collector: OpenAIRealtimeTranscriptCollector) async throws {
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                while !Task.isCancelled {
+                    if await collector.isSessionReady {
+                        return
+                    }
+                    if let error = await collector.error {
+                        throw PluginTranscriptionError.apiError(error)
+                    }
+                    try await Task.sleep(for: .milliseconds(50))
+                }
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: sessionReadyTimeoutNanoseconds)
+                throw PluginTranscriptionError.networkError("Realtime API did not confirm the transcription session.")
+            }
+
+            defer { group.cancelAll() }
+            try await group.next()
+        }
+    }
+
+    static func makeRequest(apiKey: String) throws -> URLRequest {
+        var components = URLComponents()
+        components.scheme = "wss"
+        components.host = "api.openai.com"
+        components.path = "/v1/realtime"
+        components.queryItems = [URLQueryItem(name: "intent", value: "transcription")]
+
+        guard let url = components.url else {
+            throw OpenAIPluginError.invalidURL("wss://api.openai.com/v1/realtime")
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 30
+        return request
+    }
+
+    static func sessionUpdatePayload(language: String?, prompt: String?) -> [String: Any] {
+        var transcription: [String: Any] = ["model": modelId]
+        if let language, !language.isEmpty {
+            transcription["language"] = language
+        }
+        return [
+            "type": "session.update",
+            "session": [
+                "type": "transcription",
+                "audio": [
+                    "input": [
+                        "format": [
+                            "type": "audio/pcm",
+                            "rate": targetSampleRate,
+                        ],
+                        "transcription": transcription,
+                        "turn_detection": NSNull(),
+                    ],
+                ],
+            ],
+        ]
+    }
+
+    static func pcm16DataForRealtime(_ samples: [Float]) -> Data {
+        let resampled = resample16kTo24k(samples)
+        var data = Data(capacity: resampled.count * MemoryLayout<Int16>.size)
+        for sample in resampled {
+            let clamped = max(-1.0, min(1.0, sample))
+            var int16 = Int16(clamped * 32767.0).littleEndian
+            withUnsafeBytes(of: &int16) { data.append(contentsOf: $0) }
+        }
+        return data
+    }
+
+    func appendAudio(samples: [Float]) async throws {
+        guard !state.withLock({ $0.finished || $0.cancelled }) else { return }
+        guard let webSocketTask else { return }
+        if let error = await collector.error {
+            throw PluginTranscriptionError.apiError(error)
+        }
+        let data = Self.pcm16DataForRealtime(samples)
+        guard !data.isEmpty else { return }
+        do {
+            try await webSocketTask.send(.string(try Self.jsonString([
+                "type": "input_audio_buffer.append",
+                "audio": data.base64EncodedString(),
+            ])))
+        } catch {
+            if let collectorError = await collector.error {
+                throw PluginTranscriptionError.apiError(collectorError)
+            }
+            let message = Self.realtimeErrorDescription(error)
+            await collector.recordConnectionFailure(message)
+            throw PluginTranscriptionError.networkError(message)
+        }
+    }
+
+    func finish() async throws -> PluginTranscriptionResult {
+        let shouldFinish = state.withLock { state in
+            guard !state.finished else { return false }
+            state.finished = true
+            return !state.cancelled
+        }
+
+        if shouldFinish, let webSocketTask {
+            if !(await collector.hasCompletedTranscript) {
+                try? await webSocketTask.send(.string(#"{"type":"input_audio_buffer.commit"}"#))
+            }
+            try await waitForCompletedTranscript()
+            receiveTask?.cancel()
+            webSocketTask.cancel(with: .normalClosure, reason: nil)
+            urlSession?.finishTasksAndInvalidate()
+        }
+
+        if let error = await collector.error {
+            throw PluginTranscriptionError.apiError(error)
+        }
+
+        let result = await collector.finalResult(fallbackLanguage: language)
+        if result.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, webSocketTask != nil {
+            throw PluginTranscriptionError.apiError("Realtime API returned no transcript")
+        }
+        return result
+    }
+
+    func cancel() async {
+        let shouldCancel = state.withLock { state in
+            guard !state.cancelled else { return false }
+            state.cancelled = true
+            return true
+        }
+        guard shouldCancel else { return }
+        receiveTask?.cancel()
+        webSocketTask?.cancel(with: .goingAway, reason: nil)
+        urlSession?.finishTasksAndInvalidate()
+    }
+
+    private static func waitForSocketOpen(_ waiter: OpenAIRealtimeWebSocketOpenWaiter) async throws {
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await waiter.waitForOpen()
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: socketOpenTimeoutNanoseconds)
+                throw PluginTranscriptionError.networkError("Realtime WebSocket did not open.")
+            }
+
+            defer { group.cancelAll() }
+            try await group.next()
+        }
+    }
+
+    private func waitForCompletedTranscript() async throws {
+        for _ in 0..<100 {
+            if await collector.hasCompletedTranscript {
+                return
+            }
+            if let error = await collector.error {
+                throw PluginTranscriptionError.apiError(error)
+            }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+    }
+
+    private static func resample16kTo24k(_ samples: [Float]) -> [Float] {
+        guard !samples.isEmpty else { return [] }
+        let ratio = Double(targetSampleRate) / Double(sourceSampleRate)
+        let targetCount = max(1, Int((Double(samples.count) * ratio).rounded()))
+        guard samples.count > 1 else {
+            return Array(repeating: samples[0], count: targetCount)
+        }
+
+        return (0..<targetCount).map { targetIndex in
+            let sourcePosition = Double(targetIndex) * Double(sourceSampleRate) / Double(targetSampleRate)
+            let lowerIndex = min(Int(sourcePosition.rounded(.down)), samples.count - 1)
+            let upperIndex = min(lowerIndex + 1, samples.count - 1)
+            let fraction = Float(sourcePosition - Double(lowerIndex))
+            return samples[lowerIndex] + (samples[upperIndex] - samples[lowerIndex]) * fraction
+        }
+    }
+
+    private static func jsonString(_ object: [String: Any]) throws -> String {
+        let data = try JSONSerialization.data(withJSONObject: object)
+        guard let string = String(data: data, encoding: .utf8) else {
+            throw OpenAIPluginError.apiError("Failed to encode realtime event")
+        }
+        return string
+    }
+
+    private static func data(from message: URLSessionWebSocketTask.Message) -> Data? {
+        switch message {
+        case .string(let text):
+            return text.data(using: .utf8)
+        case .data(let data):
+            return data
+        @unknown default:
+            return nil
+        }
+    }
+
+    private static func realtimeErrorDescription(_ error: Error) -> String {
+        if let transcriptionError = error as? PluginTranscriptionError {
+            return transcriptionError.localizedDescription
+        }
+        return error.localizedDescription
+    }
+}
+
+// MARK: - TTS
+
+enum OpenAITTSConfiguration {
+    static let modelId = "gpt-4o-mini-tts"
+    static let defaultVoiceId = "marin"
+    static let sampleRate = 24_000
+
+    static let availableVoices: [PluginVoiceInfo] = [
+        PluginVoiceInfo(id: "alloy", displayName: "Alloy"),
+        PluginVoiceInfo(id: "ash", displayName: "Ash"),
+        PluginVoiceInfo(id: "ballad", displayName: "Ballad"),
+        PluginVoiceInfo(id: "coral", displayName: "Coral"),
+        PluginVoiceInfo(id: "echo", displayName: "Echo"),
+        PluginVoiceInfo(id: "fable", displayName: "Fable"),
+        PluginVoiceInfo(id: "nova", displayName: "Nova"),
+        PluginVoiceInfo(id: "onyx", displayName: "Onyx"),
+        PluginVoiceInfo(id: "sage", displayName: "Sage"),
+        PluginVoiceInfo(id: "shimmer", displayName: "Shimmer"),
+        PluginVoiceInfo(id: "verse", displayName: "Verse"),
+        PluginVoiceInfo(id: "marin", displayName: "Marin"),
+        PluginVoiceInfo(id: "cedar", displayName: "Cedar"),
+    ]
+
+    static func requestBody(text: String, voice: String?, instructions: String?) -> [String: Any] {
+        let selectedVoice = voice?.isEmpty == false ? (voice ?? defaultVoiceId) : defaultVoiceId
+        var body: [String: Any] = [
+            "model": modelId,
+            "input": text,
+            "voice": selectedVoice,
+            "response_format": "pcm",
+        ]
+
+        if let instructions = instructions?.trimmingCharacters(in: .whitespacesAndNewlines), !instructions.isEmpty {
+            body["instructions"] = instructions
+        }
+
+        return body
+    }
+}
+
+protocol OpenAITTSAudioPlayback: AnyObject, Sendable {
+    var onDrained: (@Sendable () -> Void)? { get set }
+    func start(sampleRate: Int) throws
+    func appendPCM16(_ data: Data) throws
+    func finishInput()
+    func stop()
+}
+
+final class OpenAITTSPlaybackSession: TTSPlaybackSession, @unchecked Sendable {
+    private struct State {
+        var isActive = true
+        var onFinish: (@Sendable () -> Void)?
+        var task: Task<Void, Never>?
+    }
+
+    private let audioPlayback: OpenAITTSAudioPlayback
+    private let state = OSAllocatedUnfairLock(initialState: State())
+
+    init(task: Task<Void, Never>?, audioPlayback: OpenAITTSAudioPlayback) {
+        self.audioPlayback = audioPlayback
+        state.withLock { $0.task = task }
+        audioPlayback.onDrained = { [weak self] in
+            self?.finish()
+        }
+    }
+
+    var isActive: Bool {
+        state.withLock { $0.isActive }
+    }
+
+    var onFinish: (@Sendable () -> Void)? {
+        get { state.withLock { $0.onFinish } }
+        set {
+            let shouldNotify = state.withLock { state in
+                state.onFinish = newValue
+                return !state.isActive
+            }
+            if shouldNotify {
+                newValue?()
+            }
+        }
+    }
+
+    func attachTask(_ task: Task<Void, Never>) {
+        state.withLock { $0.task = task }
+    }
+
+    func stop() {
+        let result = state.withLock { state -> ((@Sendable () -> Void)?, Task<Void, Never>?, Bool) in
+            guard state.isActive else { return (nil, nil, false) }
+            state.isActive = false
+            return (state.onFinish, state.task, true)
+        }
+        guard result.2 else { return }
+        result.1?.cancel()
+        audioPlayback.stop()
+        result.0?()
+    }
+
+    func finish() {
+        let callback = state.withLock { state -> (@Sendable () -> Void)? in
+            guard state.isActive else { return nil }
+            state.isActive = false
+            return state.onFinish
+        }
+        callback?()
+    }
+}
+
+private final class OpenAIAVAudioPlayback: OpenAITTSAudioPlayback, @unchecked Sendable {
+    private struct State {
+        var onDrained: (@Sendable () -> Void)?
+        var pendingBuffers = 0
+        var inputFinished = false
+        var stopped = false
+    }
+
+    private let engine = AVAudioEngine()
+    private let player = AVAudioPlayerNode()
+    private let state = OSAllocatedUnfairLock(initialState: State())
+    private var format: AVAudioFormat?
+
+    var onDrained: (@Sendable () -> Void)? {
+        get { state.withLock { $0.onDrained } }
+        set { state.withLock { $0.onDrained = newValue } }
+    }
+
+    func start(sampleRate: Int) throws {
+        guard let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: Double(sampleRate), channels: 1, interleaved: false) else {
+            throw OpenAIPluginError.playbackUnavailable("Could not create audio format")
+        }
+        self.format = format
+
+        engine.attach(player)
+        engine.connect(player, to: engine.mainMixerNode, format: format)
+        try engine.start()
+        player.play()
+    }
+
+    func appendPCM16(_ data: Data) throws {
+        guard !state.withLock({ $0.stopped }) else { return }
+        guard let format else {
+            throw OpenAIPluginError.playbackUnavailable("Audio playback was not started")
+        }
+
+        let frameCount = data.count / MemoryLayout<Int16>.size
+        guard frameCount > 0,
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frameCount)),
+              let channel = buffer.floatChannelData?[0] else {
+            return
+        }
+
+        buffer.frameLength = AVAudioFrameCount(frameCount)
+        data.withUnsafeBytes { rawBuffer in
+            let int16Buffer = rawBuffer.bindMemory(to: Int16.self)
+            for index in 0..<frameCount {
+                channel[index] = Float(Int16(littleEndian: int16Buffer[index])) / Float(Int16.max)
+            }
+        }
+
+        state.withLock { $0.pendingBuffers += 1 }
+        player.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+            self?.markBufferPlayed()
+        }
+        if !player.isPlaying {
+            player.play()
+        }
+    }
+
+    func finishInput() {
+        let callback = state.withLock { state -> (@Sendable () -> Void)? in
+            state.inputFinished = true
+            return state.pendingBuffers == 0 && !state.stopped ? state.onDrained : nil
+        }
+        callback?()
+    }
+
+    func stop() {
+        state.withLock { $0.stopped = true }
+        player.stop()
+        engine.stop()
+        engine.detach(player)
+    }
+
+    private func markBufferPlayed() {
+        let callback = state.withLock { state -> (@Sendable () -> Void)? in
+            state.pendingBuffers = max(0, state.pendingBuffers - 1)
+            guard state.inputFinished, state.pendingBuffers == 0, !state.stopped else { return nil }
+            return state.onDrained
+        }
+        callback?()
+    }
+}
+
 // MARK: - Plugin Entry Point
 
 @objc(OpenAIPlugin)
-final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, LLMProviderPlugin, @unchecked Sendable {
+final class OpenAIPlugin: NSObject,
+    TranscriptionEnginePlugin,
+    DictionaryTermsCapabilityProviding,
+    LiveTranscriptionCapablePlugin,
+    LLMProviderPlugin,
+    TTSProviderPlugin,
+    PluginAuthRoleStatusProviding,
+    @unchecked Sendable
+{
     static let pluginId = "com.typewhisper.openai"
     static let pluginName = "OpenAI"
 
@@ -460,6 +1278,8 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
     fileprivate var _selectedModelId: String?
     fileprivate var _selectedLLMModelId: String?
     fileprivate var _fetchedLLMModels: [OpenAIFetchedModel] = []
+    fileprivate var _selectedVoiceId: String?
+    fileprivate var _ttsInstructions: String = ""
     fileprivate var _authMode: OpenAIAuthMode = .apiKey
     fileprivate var _reasoningEffort: OpenAIReasoningEffort = .medium
     fileprivate var _llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue
@@ -478,6 +1298,13 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
 
     private let chatHelper = PluginOpenAIChatHelper(baseURL: "https://api.openai.com")
 
+    private static let openAIAPIKeyCredentialLabel = "OpenAI API key"
+    private static let chatGPTLoginCredentialLabel = "ChatGPT Login"
+    private static let apiKeyOrChatGPTCredentialLabel = "OpenAI API key or ChatGPT Login"
+    private static let transcriptionRequiresAPIKeyReason = "ChatGPT Login only enables prompt processing. OpenAI transcription requires an OpenAI API key."
+    private static let ttsRequiresAPIKeyReason = "ChatGPT Login only enables prompt processing. OpenAI text-to-speech requires an OpenAI API key."
+    private static let llmRequiresCredentialsReason = "OpenAI prompt processing requires an OpenAI API key or ChatGPT Login."
+
     private static let storageKeys = (
         apiKey: "api-key",
         oauthAccessToken: "oauth-access-token",
@@ -487,6 +1314,8 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
         reasoningEffort: "reasoningEffort",
         selectedModel: "selectedModel",
         selectedLLMModel: "selectedLLMModel",
+        selectedVoice: "selectedVoice",
+        ttsInstructions: "ttsInstructions",
         llmTemperatureMode: "llmTemperatureMode",
         llmTemperatureValue: "llmTemperatureValue",
         fetchedLLMModels: "fetchedLLMModels",
@@ -496,8 +1325,10 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
     )
 
     private static let chatGPTOAuthModels: [PluginModelInfo] = [
+        PluginModelInfo(id: "gpt-5.5", displayName: "GPT-5.5"),
         PluginModelInfo(id: "gpt-5.4", displayName: "GPT-5.4"),
         PluginModelInfo(id: "gpt-5.4-mini", displayName: "GPT-5.4 Mini"),
+        PluginModelInfo(id: "gpt-5.4-nano", displayName: "GPT-5.4 Nano"),
         PluginModelInfo(id: "gpt-5.3-codex", displayName: "GPT-5.3 Codex"),
         PluginModelInfo(id: "gpt-5.3-codex-spark", displayName: "GPT-5.3 Codex Spark"),
         PluginModelInfo(id: "gpt-5.2", displayName: "GPT-5.2"),
@@ -508,6 +1339,7 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
     ]
 
     private static let fallbackLLMModels: [PluginModelInfo] = [
+        PluginModelInfo(id: "gpt-5.5", displayName: "GPT-5.5"),
         PluginModelInfo(id: "gpt-4.1-nano", displayName: "GPT-4.1 Nano"),
         PluginModelInfo(id: "gpt-4.1-mini", displayName: "GPT-4.1 Mini"),
         PluginModelInfo(id: "gpt-4.1", displayName: "GPT-4.1"),
@@ -545,6 +1377,9 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
             ?? transcriptionModels.first?.id
         _selectedLLMModelId = host.userDefault(forKey: Self.storageKeys.selectedLLMModel) as? String
             ?? supportedModels.first?.id
+        _selectedVoiceId = host.userDefault(forKey: Self.storageKeys.selectedVoice) as? String
+            ?? OpenAITTSConfiguration.defaultVoiceId
+        _ttsInstructions = host.userDefault(forKey: Self.storageKeys.ttsInstructions) as? String ?? ""
         _llmTemperatureModeRaw = host.userDefault(forKey: Self.storageKeys.llmTemperatureMode) as? String
             ?? PluginLLMTemperatureMode.providerDefault.rawValue
         _llmTemperatureValue = host.userDefault(forKey: Self.storageKeys.llmTemperatureValue) as? Double
@@ -558,6 +1393,47 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
 
     func deactivate() {
         host = nil
+    }
+
+    // MARK: - PluginAuthRoleStatusProviding
+
+    func authStatus(for role: PluginAuthRole) -> PluginAuthRoleStatus {
+        switch role {
+        case .transcription:
+            guard normalizedAPIKey != nil else {
+                return .unavailable(
+                    reason: _authMode == .chatGPT
+                        ? Self.transcriptionRequiresAPIKeyReason
+                        : "OpenAI transcription requires an OpenAI API key.",
+                    requiredCredentialLabel: Self.openAIAPIKeyCredentialLabel
+                )
+            }
+            return .available
+
+        case .llm:
+            guard isAvailable else {
+                return .unavailable(
+                    reason: _authMode == .chatGPT
+                        ? "ChatGPT Login is not connected."
+                        : Self.llmRequiresCredentialsReason,
+                    requiredCredentialLabel: _authMode == .chatGPT
+                        ? Self.chatGPTLoginCredentialLabel
+                        : Self.apiKeyOrChatGPTCredentialLabel
+                )
+            }
+            return .available
+
+        case .tts:
+            guard normalizedAPIKey != nil else {
+                return .unavailable(
+                    reason: _authMode == .chatGPT
+                        ? Self.ttsRequiresAPIKeyReason
+                        : "OpenAI text-to-speech requires an OpenAI API key.",
+                    requiredCredentialLabel: Self.openAIAPIKeyCredentialLabel
+                )
+            }
+            return .available
+        }
     }
 
     // MARK: - TranscriptionEnginePlugin
@@ -575,6 +1451,7 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
             PluginModelInfo(id: "whisper-1", displayName: "Whisper 1"),
             PluginModelInfo(id: "gpt-4o-transcribe", displayName: "GPT-4o Transcribe"),
             PluginModelInfo(id: "gpt-4o-mini-transcribe", displayName: "GPT-4o Mini Transcribe"),
+            PluginModelInfo(id: OpenAIRealtimeTranscriptionSession.modelId, displayName: "GPT Realtime Whisper"),
         ]
     }
 
@@ -586,6 +1463,7 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
     }
 
     var supportsTranslation: Bool { true }
+    var supportsStreaming: Bool { true }
     var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
 
     var supportedLanguages: [String] {
@@ -612,6 +1490,13 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
             throw PluginTranscriptionError.noModelSelected
         }
 
+        if modelId == OpenAIRealtimeTranscriptionSession.modelId {
+            guard !translate else {
+                throw PluginTranscriptionError.apiError("GPT Realtime Whisper does not support Whisper Translate.")
+            }
+            return try await transcribeRealtime(audio: audio, language: language, prompt: prompt, apiKey: apiKey) { _ in true }
+        }
+
         let responseFormat = modelId.hasPrefix("gpt-4o") ? "json" : "verbose_json"
 
         return try await transcriptionHelper.transcribe(
@@ -622,6 +1507,47 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
             translate: translate && !modelId.hasPrefix("gpt-4o"),
             prompt: prompt,
             responseFormat: responseFormat
+        )
+    }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        guard let apiKey = _apiKey, !apiKey.isEmpty else {
+            throw PluginTranscriptionError.notConfigured
+        }
+        guard _selectedModelId == OpenAIRealtimeTranscriptionSession.modelId else {
+            return try await transcribe(audio: audio, language: language, translate: translate, prompt: prompt)
+        }
+        guard !translate else {
+            throw PluginTranscriptionError.apiError("GPT Realtime Whisper does not support Whisper Translate.")
+        }
+
+        return try await transcribeRealtime(audio: audio, language: language, prompt: prompt, apiKey: apiKey, onProgress: onProgress)
+    }
+
+    func createLiveTranscriptionSession(
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        guard let apiKey = _apiKey, !apiKey.isEmpty else {
+            throw PluginTranscriptionError.notConfigured
+        }
+        guard !translate else {
+            throw PluginTranscriptionError.apiError("GPT Realtime Whisper does not support Whisper Translate.")
+        }
+
+        return try await OpenAIRealtimeTranscriptionSession.connect(
+            apiKey: apiKey,
+            language: language,
+            prompt: prompt,
+            onProgress: onProgress
         )
     }
 
@@ -671,6 +1597,14 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
             guard let apiKey = _apiKey, !apiKey.isEmpty else {
                 throw PluginChatError.notConfigured
             }
+            if Self.usesResponsesAPI(for: modelId) {
+                return try await OpenAIResponsesClient(apiKey: apiKey).process(
+                    systemPrompt: systemPrompt,
+                    userText: userText,
+                    model: modelId,
+                    reasoningEffort: reasoningEffort
+                )
+            }
             return try await chatHelper.process(
                 apiKey: apiKey,
                 model: modelId,
@@ -715,6 +1649,73 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
         let clamped = min(max(value, 0.0), 2.0)
         _llmTemperatureValue = clamped
         host?.setUserDefault(clamped, forKey: Self.storageKeys.llmTemperatureValue)
+    }
+
+    // MARK: - TTSProviderPlugin
+
+    var availableVoices: [PluginVoiceInfo] {
+        OpenAITTSConfiguration.availableVoices
+    }
+
+    var selectedVoiceId: String? {
+        _selectedVoiceId ?? OpenAITTSConfiguration.defaultVoiceId
+    }
+
+    var settingsSummary: String? {
+        let voice = availableVoices.first { $0.id == selectedVoiceId }?.displayName
+            ?? selectedVoiceId
+            ?? "Marin"
+        return "Voice: \(voice); OpenAI"
+    }
+
+    func selectVoice(_ voiceId: String?) {
+        _selectedVoiceId = voiceId ?? OpenAITTSConfiguration.defaultVoiceId
+        host?.setUserDefault(_selectedVoiceId, forKey: Self.storageKeys.selectedVoice)
+        host?.notifyCapabilitiesChanged()
+    }
+
+    func speak(_ request: TTSSpeakRequest) async throws -> any TTSPlaybackSession {
+        guard let apiKey = normalizedAPIKey else {
+            throw PluginTranscriptionError.notConfigured
+        }
+
+        let text = request.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            throw OpenAIPluginError.apiError("TTS text is empty.")
+        }
+
+        let urlRequest = try Self.makeTTSRequest(
+            apiKey: apiKey,
+            text: text,
+            voice: selectedVoiceId,
+            instructions: _ttsInstructions
+        )
+        let playback = OpenAIAVAudioPlayback()
+        try playback.start(sampleRate: OpenAITTSConfiguration.sampleRate)
+
+        do {
+            let (data, response) = try await PluginHTTPClient.data(for: urlRequest)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw PluginTranscriptionError.networkError("Invalid response")
+            }
+
+            switch httpResponse.statusCode {
+            case 200:
+                let session = OpenAITTSPlaybackSession(task: nil, audioPlayback: playback)
+                try playback.appendPCM16(data)
+                playback.finishInput()
+                return session
+            case 401:
+                throw PluginTranscriptionError.invalidApiKey
+            case 429:
+                throw PluginTranscriptionError.rateLimited
+            default:
+                throw PluginTranscriptionError.apiError(Self.errorMessage(from: data, statusCode: httpResponse.statusCode))
+            }
+        } catch {
+            playback.stop()
+            throw error
+        }
     }
 
     // MARK: - Settings View
@@ -807,6 +1808,28 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
         host?.notifyCapabilitiesChanged()
     }
 
+    @discardableResult
+    func refreshFetchedLLMModels() async -> [OpenAIFetchedModel] {
+        guard _authMode == .apiKey else { return [] }
+        let models = await fetchLLMModels()
+        guard !models.isEmpty else { return [] }
+        setFetchedLLMModels(models)
+        return models
+    }
+
+    @discardableResult
+    func refreshAvailableLLMModels() async -> [PluginModelInfo] {
+        switch _authMode {
+        case .apiKey:
+            let models = await refreshFetchedLLMModels()
+            return models.map { PluginModelInfo(id: $0.id, displayName: $0.id) }
+        case .chatGPT:
+            normalizeSelectedLLMModel()
+            host?.notifyCapabilitiesChanged()
+            return Self.chatGPTOAuthModels
+        }
+    }
+
     fileprivate func fetchLLMModels() async -> [OpenAIFetchedModel] {
         guard let apiKey = _apiKey, !apiKey.isEmpty,
               let url = URL(string: "https://api.openai.com/v1/models") else { return [] }
@@ -831,6 +1854,79 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
         } catch {
             return []
         }
+    }
+
+    fileprivate var ttsInstructions: String { _ttsInstructions }
+
+    fileprivate func setTTSInstructions(_ instructions: String) {
+        _ttsInstructions = instructions
+        host?.setUserDefault(instructions, forKey: Self.storageKeys.ttsInstructions)
+    }
+
+    private var normalizedAPIKey: String? {
+        let trimmed = (_apiKey ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func transcribeRealtime(
+        audio: AudioData,
+        language: String?,
+        prompt: String?,
+        apiKey: String,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        let session = try await OpenAIRealtimeTranscriptionSession.connect(
+            apiKey: apiKey,
+            language: language,
+            prompt: prompt,
+            onProgress: onProgress
+        )
+
+        let chunkSize = 1_600
+        var offset = 0
+        while offset < audio.samples.count {
+            let end = min(offset + chunkSize, audio.samples.count)
+            try await session.appendAudio(samples: Array(audio.samples[offset..<end]))
+            offset = end
+        }
+        return try await session.finish()
+    }
+
+    private static func makeTTSRequest(
+        apiKey: String,
+        text: String,
+        voice: String?,
+        instructions: String?
+    ) throws -> URLRequest {
+        guard let url = URL(string: "https://api.openai.com/v1/audio/speech") else {
+            throw OpenAIPluginError.invalidURL("https://api.openai.com/v1/audio/speech")
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 120
+        request.httpBody = try JSONSerialization.data(
+            withJSONObject: OpenAITTSConfiguration.requestBody(
+                text: text,
+                voice: voice,
+                instructions: instructions
+            )
+        )
+        return request
+    }
+
+    private static func errorMessage(from data: Data, statusCode: Int) -> String {
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let error = json["error"] as? [String: Any],
+           let message = error["message"] as? String {
+            return message
+        }
+        if let body = String(data: data, encoding: .utf8), !body.isEmpty {
+            return "HTTP \(statusCode): \(body)"
+        }
+        return "HTTP \(statusCode)"
     }
 
     fileprivate func loginWithChatGPTInBrowser() async throws {
@@ -1164,6 +2260,10 @@ final class OpenAIPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
             || lowered.contains("codex")
     }
 
+    nonisolated static func usesResponsesAPI(for modelID: String) -> Bool {
+        modelID.lowercased().hasPrefix("gpt-5")
+    }
+
     nonisolated static func supportsCustomTemperature(for modelID: String, reasoningEffort: String?) -> Bool {
         chatCompletionTemperature(for: modelID, reasoningEffort: reasoningEffort) != nil
     }
@@ -1211,10 +2311,14 @@ private struct OpenAISettingsView: View {
     @State private var showApiKey = false
     @State private var selectedModel: String = ""
     @State private var selectedLLMModel: String = ""
+    @State private var selectedVoiceId: String = ""
+    @State private var ttsInstructions: String = ""
     @State private var selectedReasoningEffort: OpenAIReasoningEffort = .medium
     @State private var llmTemperatureMode: PluginLLMTemperatureMode = .providerDefault
     @State private var llmTemperatureValue: Double = 0.3
     @State private var fetchedLLMModels: [OpenAIFetchedModel] = []
+    @State private var isRefreshingLLMModels = false
+    @State private var llmRefreshMessage: String?
     @State private var oauthBusy = false
     @State private var oauthStatusMessage: String?
     @State private var oauthErrorMessage: String?
@@ -1234,6 +2338,7 @@ private struct OpenAISettingsView: View {
                 .onChange(of: authMode) {
                     plugin.setAuthMode(authMode)
                     selectedLLMModel = plugin.selectedLLMModelId ?? plugin.supportedModels.first?.id ?? ""
+                    llmRefreshMessage = nil
                     oauthErrorMessage = nil
                     oauthStatusMessage = nil
                 }
@@ -1267,7 +2372,16 @@ private struct OpenAISettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+
+                    if selectedModel == OpenAIRealtimeTranscriptionSession.modelId {
+                        Text("Realtime transcription streams 24 kHz PCM through OpenAI's Realtime API.", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
+
+                Divider()
+                ttsSection
             }
 
             if plugin.isAvailable {
@@ -1283,10 +2397,15 @@ private struct OpenAISettingsView: View {
             }
             selectedModel = plugin.selectedModelId ?? plugin.transcriptionModels.first?.id ?? ""
             selectedLLMModel = plugin.selectedLLMModelId ?? plugin.supportedModels.first?.id ?? ""
+            selectedVoiceId = plugin.selectedVoiceId ?? OpenAITTSConfiguration.defaultVoiceId
+            ttsInstructions = plugin.ttsInstructions
             selectedReasoningEffort = plugin.reasoningEffort
             llmTemperatureMode = plugin.llmTemperatureMode
             llmTemperatureValue = plugin.llmTemperatureValue
             fetchedLLMModels = plugin._fetchedLLMModels
+            if authMode == .apiKey, plugin.isConfigured {
+                refreshLLMModels(showStatus: false)
+            }
         }
     }
 
@@ -1359,7 +2478,7 @@ private struct OpenAISettingsView: View {
             Text("ChatGPT Login", bundle: bundle)
                 .font(.headline)
 
-            Text("Use your existing ChatGPT Plus/Pro or Codex login for prompt processing. Transcription still requires an API key.", bundle: bundle)
+            Text("Use your existing ChatGPT Plus/Pro or Codex login for prompt processing. Transcription and text-to-speech still require an API key.", bundle: bundle)
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -1427,6 +2546,29 @@ private struct OpenAISettingsView: View {
         }
     }
 
+    private var ttsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Text-to-Speech Voice", bundle: bundle)
+                .font(.headline)
+
+            Picker("Text-to-Speech Voice", selection: $selectedVoiceId) {
+                ForEach(plugin.availableVoices, id: \.id) { voice in
+                    Text(voice.displayName).tag(voice.id)
+                }
+            }
+            .labelsHidden()
+            .onChange(of: selectedVoiceId) {
+                plugin.selectVoice(selectedVoiceId)
+            }
+
+            TextField("Voice instructions", text: $ttsInstructions)
+                .textFieldStyle(.roundedBorder)
+                .onChange(of: ttsInstructions) {
+                    plugin.setTTSInstructions(ttsInstructions)
+                }
+        }
+    }
+
     private var llmSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -1435,15 +2577,18 @@ private struct OpenAISettingsView: View {
 
                 Spacer()
 
-                if authMode == .apiKey {
-                    Button {
-                        refreshLLMModels()
-                    } label: {
+                Button {
+                    refreshLLMModels(showStatus: true)
+                } label: {
+                    if isRefreshingLLMModels {
+                        Label(String(localized: "Refreshing", bundle: bundle), systemImage: "arrow.clockwise")
+                    } else {
                         Label(String(localized: "Refresh", bundle: bundle), systemImage: "arrow.clockwise")
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(isRefreshingLLMModels)
             }
 
             Picker("LLM Model", selection: $selectedLLMModel) {
@@ -1478,11 +2623,24 @@ private struct OpenAISettingsView: View {
             }
 
             if authMode == .chatGPT {
-                Text("ChatGPT login exposes only the supported ChatGPT/Codex models.", bundle: bundle)
+                Text("ChatGPT login uses the supported ChatGPT/Codex model list. Use API Key mode for the full OpenAI API catalog.", bundle: bundle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else if fetchedLLMModels.isEmpty {
                 Text("Using default models. Press Refresh to fetch all available models.", bundle: bundle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if isRefreshingLLMModels {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Refreshing OpenAI models...", bundle: bundle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else if let llmRefreshMessage, !llmRefreshMessage.isEmpty {
+                Text(llmRefreshMessage)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -1541,13 +2699,12 @@ private struct OpenAISettingsView: View {
         Task {
             let isValid = await plugin.validateApiKey(trimmedKey)
             if isValid {
-                let models = await plugin.fetchLLMModels()
+                let models = await plugin.refreshFetchedLLMModels()
                 await MainActor.run {
                     isValidating = false
                     validationResult = true
                     if !models.isEmpty {
                         fetchedLLMModels = models
-                        plugin.setFetchedLLMModels(models)
                         selectedLLMModel = plugin.selectedLLMModelId ?? models.first?.id ?? selectedLLMModel
                     }
                 }
@@ -1560,18 +2717,28 @@ private struct OpenAISettingsView: View {
         }
     }
 
-    private func refreshLLMModels() {
+    private func refreshLLMModels(showStatus: Bool) {
+        guard plugin.isAvailable, !isRefreshingLLMModels else { return }
+        isRefreshingLLMModels = true
+        if showStatus {
+            llmRefreshMessage = nil
+        }
         Task {
-            let models = await plugin.fetchLLMModels()
+            let models = await plugin.refreshAvailableLLMModels()
             await MainActor.run {
+                isRefreshingLLMModels = false
                 if !models.isEmpty {
-                    fetchedLLMModels = models
-                    plugin.setFetchedLLMModels(models)
-                    if !models.contains(where: { $0.id == selectedLLMModel }),
-                       let first = models.first {
-                        selectedLLMModel = first.id
-                        plugin.selectLLMModel(first.id)
+                    fetchedLLMModels = plugin._fetchedLLMModels
+                    selectedLLMModel = plugin.selectedLLMModelId ?? models.first?.id ?? selectedLLMModel
+                    if showStatus {
+                        if authMode == .apiKey {
+                            llmRefreshMessage = String(localized: "Fetched \(models.count) OpenAI API models.", bundle: bundle)
+                        } else {
+                            llmRefreshMessage = String(localized: "Updated ChatGPT/Codex model list.", bundle: bundle)
+                        }
                     }
+                } else if showStatus {
+                    llmRefreshMessage = String(localized: "Could not refresh models. Keeping the current list.", bundle: bundle)
                 }
             }
         }

@@ -1,8 +1,191 @@
 import AVFoundation
+import CryptoKit
 import Foundation
 import os.log
+import TypeWhisperPluginSDK
 
 private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "ErrorLogService")
+
+enum DiagnosticBundlePathKind: String, Encodable, Equatable {
+    case systemApplications
+    case userApplications
+    case development
+    case temporary
+    case other
+}
+
+enum DiagnosticPluginSourceKind: String, Encodable, Equatable {
+    case bundled
+    case managedExternal
+    case externalOther
+}
+
+struct DiagnosticExecutableInfo: Encodable, Equatable {
+    let sizeBytes: Int64?
+    let sha256: String?
+}
+
+struct DiagnosticPluginSourceInfo: Encodable, Equatable {
+    let sourceKind: DiagnosticPluginSourceKind
+    let pathHint: String
+    let bundleIdentifier: String?
+    let bundleShortVersion: String?
+    let bundleVersion: String?
+    let executableSizeBytes: Int64?
+    let executableSHA256: String?
+}
+
+struct DiagnosticPluginActivityInfo: Encodable, Equatable {
+    let message: String
+    let progress: Double?
+    let isError: Bool
+
+    init(_ activity: PluginSettingsActivity) {
+        self.message = activity.message
+        self.progress = activity.progress
+        self.isError = activity.isError
+    }
+}
+
+enum PluginDiagnosticsSupport {
+    static func appBundlePathKind(
+        for bundleURL: URL,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        isDevelopment: Bool = AppConstants.isDevelopment
+    ) -> DiagnosticBundlePathKind {
+        let path = bundleURL.standardizedFileURL.path
+        let homePath = homeDirectory.standardizedFileURL.path
+
+        if isDevelopment || path.contains("/DerivedData/") {
+            return .development
+        }
+        if path.hasPrefix(homePath + "/Applications/") {
+            return .userApplications
+        }
+        if path.hasPrefix("/Applications/") {
+            return .systemApplications
+        }
+        if path.hasPrefix("/tmp/") || path.hasPrefix("/private/tmp/") || path.hasPrefix("/private/var/folders/") {
+            return .temporary
+        }
+        return .other
+    }
+
+    static func pluginSourceKind(
+        sourceURL: URL,
+        builtInPluginsURL: URL?,
+        pluginsDirectory: URL
+    ) -> DiagnosticPluginSourceKind {
+        let sourcePath = sourceURL.resolvingSymlinksInPath().standardizedFileURL.path
+        if let builtInPath = builtInPluginsURL?.resolvingSymlinksInPath().standardizedFileURL.path,
+           sourcePath.hasPrefix(builtInPath + "/") || sourcePath == builtInPath {
+            return .bundled
+        }
+
+        let pluginsPath = pluginsDirectory.resolvingSymlinksInPath().standardizedFileURL.path
+        if sourcePath.hasPrefix(pluginsPath + "/") || sourcePath == pluginsPath {
+            return .managedExternal
+        }
+
+        return .externalOther
+    }
+
+    static func pathHint(
+        for url: URL,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> String {
+        let path = url.resolvingSymlinksInPath().standardizedFileURL.path
+        let homePath = homeDirectory.resolvingSymlinksInPath().standardizedFileURL.path
+        if path == homePath {
+            return "~"
+        }
+        if path.hasPrefix(homePath + "/") {
+            return "~" + String(path.dropFirst(homePath.count))
+        }
+        return path
+    }
+
+    static func sourceInfo(
+        bundle: Bundle?,
+        sourceURL: URL,
+        builtInPluginsURL: URL?,
+        pluginsDirectory: URL,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) async -> DiagnosticPluginSourceInfo {
+        let executableInfo = await executableInfo(bundle: bundle, sourceURL: sourceURL)
+        let infoDictionary = bundle?.infoDictionary ?? bundleInfoDictionary(sourceURL: sourceURL)
+        return DiagnosticPluginSourceInfo(
+            sourceKind: pluginSourceKind(
+                sourceURL: sourceURL,
+                builtInPluginsURL: builtInPluginsURL,
+                pluginsDirectory: pluginsDirectory
+            ),
+            pathHint: pathHint(for: sourceURL, homeDirectory: homeDirectory),
+            bundleIdentifier: bundle?.bundleIdentifier ?? infoDictionary["CFBundleIdentifier"] as? String,
+            bundleShortVersion: infoDictionary["CFBundleShortVersionString"] as? String,
+            bundleVersion: infoDictionary["CFBundleVersion"] as? String,
+            executableSizeBytes: executableInfo.sizeBytes,
+            executableSHA256: executableInfo.sha256
+        )
+    }
+
+    static func executableInfo(bundle: Bundle?, sourceURL: URL) async -> DiagnosticExecutableInfo {
+        guard let executableURL = executableURL(bundle: bundle, sourceURL: sourceURL) else {
+            return DiagnosticExecutableInfo(sizeBytes: nil, sha256: nil)
+        }
+
+        let size = (try? executableURL.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init)
+        return DiagnosticExecutableInfo(sizeBytes: size, sha256: await sha256HexDigest(for: executableURL))
+    }
+
+    private static func executableURL(bundle: Bundle?, sourceURL: URL) -> URL? {
+        if let executableURL = bundle?.executableURL {
+            return executableURL
+        }
+
+        let executableName = (bundle?.object(forInfoDictionaryKey: "CFBundleExecutable") as? String)
+            ?? bundleInfoDictionary(sourceURL: sourceURL)["CFBundleExecutable"] as? String
+        if let executableName {
+            return sourceURL
+                .appendingPathComponent("Contents", isDirectory: true)
+                .appendingPathComponent("MacOS", isDirectory: true)
+                .appendingPathComponent(executableName)
+        }
+
+        return nil
+    }
+
+    private static func bundleInfoDictionary(sourceURL: URL) -> [String: Any] {
+        let infoPlistURL = sourceURL
+            .appendingPathComponent("Contents", isDirectory: true)
+            .appendingPathComponent("Info.plist")
+        guard let data = try? Data(contentsOf: infoPlistURL),
+              let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil),
+              let dictionary = plist as? [String: Any] else {
+            return [:]
+        }
+        return dictionary
+    }
+
+    private static func sha256HexDigest(for url: URL) async -> String? {
+        await Task.detached(priority: .utility) {
+            guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+            defer { try? handle.close() }
+
+            var hasher = SHA256()
+            while true {
+                do {
+                    guard let chunk = try handle.read(upToCount: 1024 * 1024), !chunk.isEmpty else { break }
+                    hasher.update(data: chunk)
+                } catch {
+                    return nil
+                }
+            }
+
+            return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+        }.value
+    }
+}
 
 private struct DiagnosticsReport: Encodable {
     struct AppInfo: Encodable {
@@ -10,6 +193,9 @@ private struct DiagnosticsReport: Encodable {
         let build: String
         let bundleIdentifier: String
         let isDevelopment: Bool
+        let bundlePathKind: DiagnosticBundlePathKind
+        let launchTimestamp: Date
+        let uptimeSeconds: Double
     }
 
     struct SystemInfo: Encodable {
@@ -29,6 +215,8 @@ private struct DiagnosticsReport: Encodable {
         let selectedModelId: String?
         let isModelReady: Bool
         let supportsStreaming: Bool
+        let supportsLiveTranscriptionSession: Bool
+        let allowsTranscriptPreviewFallback: Bool
         let supportsTranslation: Bool
     }
 
@@ -55,6 +243,7 @@ private struct DiagnosticsReport: Encodable {
         let audioDuckingLevel: Double
         let mediaPauseEnabled: Bool
         let defaultOutput: AudioOutputInfo?
+        let inputDiagnostics: AudioInputDiagnosticsReport
     }
 
     struct PluginInfo: Encodable {
@@ -63,6 +252,32 @@ private struct DiagnosticsReport: Encodable {
         let version: String
         let enabled: Bool
         let bundled: Bool
+        let runtimeLoaded: Bool
+        let providerId: String?
+        let selectedModelId: String?
+        let isConfigured: Bool?
+        let supportsStreaming: Bool?
+        let supportsLiveTranscriptionSession: Bool?
+        let allowsTranscriptPreviewFallback: Bool?
+        let storedSelectedModelId: String?
+        let storedLoadedModelId: String?
+        let storedSelectedVersion: String?
+        let source: DiagnosticPluginSourceInfo
+        let currentSettingsActivity: DiagnosticPluginActivityInfo?
+        let registryVersion: String?
+        let registrySource: String?
+        let externalBundleNotice: String?
+    }
+
+    struct SkippedExternalBundleInfo: Encodable {
+        let id: String
+        let name: String
+        let version: String
+        let reason: String
+        let source: DiagnosticPluginSourceInfo
+        let registryVersion: String?
+        let registrySource: String?
+        let externalBundleNotice: String?
     }
 
     struct SettingsSnapshot: Encodable {
@@ -75,7 +290,19 @@ private struct DiagnosticsReport: Encodable {
         let historyRetentionDays: Int
         let saveAudioWithHistory: Bool
         let memoryEnabled: Bool
+        let memoryCaptureScope: String
         let appFormattingEnabled: Bool
+        let modelAutoUnloadSeconds: Int
+        let modelAutoUnloadPolicy: String
+        let indicatorStyle: String
+        let indicatorSupportsTranscriptPreview: Bool
+        let indicatorTranscriptPreviewEnabled: Bool
+        let indicatorTranscriptPreviewAvailable: Bool
+        let indicatorTranscriptPreviewFontSizeOffset: Int
+        let notchIndicatorVisibility: String
+        let notchIndicatorDisplay: String
+        let overlayPosition: String
+        let externalStreamingDisplayCount: Int?
         let soundFeedbackEnabled: Bool
         let spokenFeedbackEnabled: Bool
         let showMenuBarIcon: Bool
@@ -102,6 +329,7 @@ private struct DiagnosticsReport: Encodable {
         let message: String
     }
 
+    let schemaVersion: Int
     let exportedAt: Date
     let app: AppInfo
     let system: SystemInfo
@@ -110,7 +338,9 @@ private struct DiagnosticsReport: Encodable {
     let api: APIInfo
     let audio: AudioInfo
     let plugins: [PluginInfo]
+    let skippedExternalBundles: [SkippedExternalBundleInfo]
     let settings: SettingsSnapshot
+    let lastIndicatorFullscreenSuppression: IndicatorFullscreenSuppressionDiagnostics?
     let counts: Counts
     let errors: [ErrorEntrySnapshot]
 }
@@ -121,6 +351,7 @@ final class ErrorLogService: ObservableObject {
 
     private static let maxEntries = 200
     private let fileURL: URL
+    private let launchTimestamp = Date()
 
     init(appSupportDirectory: URL = AppConstants.appSupportDirectory) {
         let dir = appSupportDirectory
@@ -146,28 +377,111 @@ final class ErrorLogService: ObservableObject {
         saveEntries()
     }
 
-    func exportDiagnostics(to url: URL) throws {
-        let report = diagnosticsReport()
+    func exportDiagnostics(to url: URL) async throws {
+        let report = await diagnosticsReport()
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
         let data = try encoder.encode(report)
-        try data.write(to: url, options: .atomic)
+        try await Task.detached(priority: .utility) {
+            try data.write(to: url, options: .atomic)
+        }.value
     }
 
-    private func diagnosticsReport() -> DiagnosticsReport {
+    private func diagnosticsReport() async -> DiagnosticsReport {
         let container = ServiceContainer.shared
         let defaults = UserDefaults.standard
         let pluginManager = PluginManager.shared ?? container.pluginManager
         let outputSnapshot = CoreAudioOutputVolumeController().defaultOutputSnapshot()
+        let modelAutoUnloadSeconds = defaults.integer(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        let indicatorStyle = DictationViewModel.loadIndicatorStyle(defaults: defaults)
+        let indicatorPreviewEnabled = DictationViewModel.loadIndicatorTranscriptPreviewEnabled(defaults: defaults)
+        let indicatorPreviewOffset = DictationViewModel.loadIndicatorTranscriptPreviewFontSizeOffset(defaults: defaults)
+
+        var pluginDiagnostics: [DiagnosticsReport.PluginInfo] = []
+        for loadedPlugin in pluginManager.loadedPlugins {
+            let engine = loadedPlugin.instance as? TranscriptionEnginePlugin
+            let fallbackPolicy = engine as? TranscriptPreviewFallbackPolicyProviding
+            let allowsTranscriptPreviewFallback: Bool? = if engine != nil {
+                fallbackPolicy?.allowsTranscriptPreviewFallback ?? true
+            } else {
+                nil
+            }
+            let activity = (loadedPlugin.instance as? any PluginSettingsActivityReporting)?.currentSettingsActivity
+            let registryEntry = container.pluginRegistryService.registry.first { $0.id == loadedPlugin.manifest.id }
+            let externalNotice = pluginManager.externalBundleNotice(
+                for: loadedPlugin.manifest.id,
+                registryPlugin: registryEntry
+            )
+            let pluginSource = await PluginDiagnosticsSupport.sourceInfo(
+                bundle: loadedPlugin.bundle,
+                sourceURL: loadedPlugin.sourceURL,
+                builtInPluginsURL: Bundle.main.builtInPlugInsURL,
+                pluginsDirectory: pluginManager.pluginsDirectory
+            )
+
+            pluginDiagnostics.append(DiagnosticsReport.PluginInfo(
+                id: loadedPlugin.manifest.id,
+                name: loadedPlugin.manifest.name,
+                version: loadedPlugin.manifest.version,
+                enabled: loadedPlugin.isEnabled,
+                bundled: loadedPlugin.isBundled,
+                runtimeLoaded: loadedPlugin.isRuntimeLoaded,
+                providerId: engine?.providerId,
+                selectedModelId: engine?.selectedModelId,
+                isConfigured: engine?.isConfigured,
+                supportsStreaming: engine?.supportsStreaming,
+                supportsLiveTranscriptionSession: engine.map { $0 is LiveTranscriptionCapablePlugin },
+                allowsTranscriptPreviewFallback: allowsTranscriptPreviewFallback,
+                storedSelectedModelId: defaults.string(forKey: Self.pluginDefaultKey(pluginId: loadedPlugin.manifest.id, key: "selectedModel")),
+                storedLoadedModelId: defaults.string(forKey: Self.pluginDefaultKey(pluginId: loadedPlugin.manifest.id, key: "loadedModel")),
+                storedSelectedVersion: defaults.string(forKey: Self.pluginDefaultKey(pluginId: loadedPlugin.manifest.id, key: "selectedVersion")),
+                source: pluginSource,
+                currentSettingsActivity: activity.map(DiagnosticPluginActivityInfo.init),
+                registryVersion: registryEntry?.version,
+                registrySource: registryEntry?.source.rawValue,
+                externalBundleNotice: externalNotice?.diagnosticsValue
+            ))
+        }
+
+        var skippedExternalBundleDiagnostics: [DiagnosticsReport.SkippedExternalBundleInfo] = []
+        for bundle in pluginManager.incompatibleExternalBundles.values.sorted(by: { $0.pluginName < $1.pluginName }) {
+            let registryEntry = container.pluginRegistryService.registry.first(where: { $0.id == bundle.pluginId })
+            let pluginSource = await PluginDiagnosticsSupport.sourceInfo(
+                bundle: Bundle(url: bundle.bundleURL),
+                sourceURL: bundle.bundleURL,
+                builtInPluginsURL: Bundle.main.builtInPlugInsURL,
+                pluginsDirectory: pluginManager.pluginsDirectory
+            )
+            skippedExternalBundleDiagnostics.append(DiagnosticsReport.SkippedExternalBundleInfo(
+                id: bundle.pluginId,
+                name: bundle.pluginName,
+                version: bundle.version,
+                reason: bundle.reason.diagnosticsValue,
+                source: pluginSource,
+                registryVersion: registryEntry?.version,
+                registrySource: registryEntry?.source.rawValue,
+                externalBundleNotice: PluginManager.externalBundleNotice(
+                    loadedPlugin: pluginManager.loadedPlugins.first(where: { $0.manifest.id == bundle.pluginId }),
+                    registryPlugin: registryEntry,
+                    incompatibleExternalBundle: bundle
+                )?.diagnosticsValue
+            ))
+        }
 
         return DiagnosticsReport(
+            schemaVersion: 5,
             exportedAt: Date(),
             app: .init(
                 version: AppConstants.appVersion,
                 build: AppConstants.buildVersion,
                 bundleIdentifier: Bundle.main.bundleIdentifier ?? "com.typewhisper.mac",
-                isDevelopment: AppConstants.isDevelopment
+                isDevelopment: AppConstants.isDevelopment,
+                bundlePathKind: PluginDiagnosticsSupport.appBundlePathKind(
+                    for: Bundle.main.bundleURL
+                ),
+                launchTimestamp: launchTimestamp,
+                uptimeSeconds: Date().timeIntervalSince(launchTimestamp)
             ),
             system: .init(
                 macOSVersion: ProcessInfo.processInfo.operatingSystemVersionString,
@@ -184,6 +498,8 @@ final class ErrorLogService: ObservableObject {
                 selectedModelId: container.modelManagerService.selectedModelId,
                 isModelReady: container.modelManagerService.isModelReady,
                 supportsStreaming: container.modelManagerService.supportsStreaming,
+                supportsLiveTranscriptionSession: container.modelManagerService.supportsLiveTranscriptionSession(),
+                allowsTranscriptPreviewFallback: container.modelManagerService.allowsTranscriptPreviewFallback(),
                 supportsTranslation: container.modelManagerService.supportsTranslation
             ),
             api: .init(
@@ -207,17 +523,11 @@ final class ErrorLogService: ObservableObject {
                         volume: $0.volume,
                         transportType: $0.transportType
                     )
-                }
+                },
+                inputDiagnostics: container.audioDeviceService.diagnosticsReport()
             ),
-            plugins: pluginManager.loadedPlugins.map {
-                .init(
-                    id: $0.manifest.id,
-                    name: $0.manifest.name,
-                    version: $0.manifest.version,
-                    enabled: $0.isEnabled,
-                    bundled: $0.isBundled
-                )
-            },
+            plugins: pluginDiagnostics,
+            skippedExternalBundles: skippedExternalBundleDiagnostics,
             settings: .init(
                 bundledReleaseChannel: AppConstants.releaseChannel.rawValue,
                 selectedUpdateChannel: AppConstants.effectiveUpdateChannel.rawValue,
@@ -228,7 +538,19 @@ final class ErrorLogService: ObservableObject {
                 historyRetentionDays: defaults.integer(forKey: UserDefaultsKeys.historyRetentionDays),
                 saveAudioWithHistory: defaults.bool(forKey: UserDefaultsKeys.saveAudioWithHistory),
                 memoryEnabled: defaults.bool(forKey: UserDefaultsKeys.memoryEnabled),
+                memoryCaptureScope: MemoryCaptureScope.load(from: defaults).rawValue,
                 appFormattingEnabled: defaults.bool(forKey: UserDefaultsKeys.appFormattingEnabled),
+                modelAutoUnloadSeconds: modelAutoUnloadSeconds,
+                modelAutoUnloadPolicy: Self.modelAutoUnloadPolicy(seconds: modelAutoUnloadSeconds),
+                indicatorStyle: indicatorStyle.rawValue,
+                indicatorSupportsTranscriptPreview: indicatorStyle.supportsTranscriptPreview,
+                indicatorTranscriptPreviewEnabled: indicatorPreviewEnabled,
+                indicatorTranscriptPreviewAvailable: indicatorStyle.supportsTranscriptPreview && indicatorPreviewEnabled,
+                indicatorTranscriptPreviewFontSizeOffset: indicatorPreviewOffset,
+                notchIndicatorVisibility: defaults.string(forKey: UserDefaultsKeys.notchIndicatorVisibility) ?? NotchIndicatorVisibility.duringActivity.rawValue,
+                notchIndicatorDisplay: defaults.string(forKey: UserDefaultsKeys.notchIndicatorDisplay) ?? NotchIndicatorDisplay.activeScreen.rawValue,
+                overlayPosition: defaults.string(forKey: UserDefaultsKeys.overlayPosition) ?? OverlayPosition.top.rawValue,
+                externalStreamingDisplayCount: DictationViewModel._shared?.externalStreamingDisplayCount,
                 soundFeedbackEnabled: defaults.object(forKey: UserDefaultsKeys.soundFeedbackEnabled) as? Bool ?? true,
                 spokenFeedbackEnabled: defaults.bool(forKey: UserDefaultsKeys.spokenFeedbackEnabled),
                 showMenuBarIcon: defaults.object(forKey: UserDefaultsKeys.showMenuBarIcon) as? Bool ?? true,
@@ -237,6 +559,7 @@ final class ErrorLogService: ObservableObject {
                 setupWizardCompleted: defaults.bool(forKey: UserDefaultsKeys.setupWizardCompleted),
                 preferredAppLanguage: defaults.string(forKey: UserDefaultsKeys.preferredAppLanguage)
             ),
+            lastIndicatorFullscreenSuppression: IndicatorFullscreenSuppressionPolicy.lastSuppressionDiagnostics(),
             counts: .init(
                 historyRecords: container.historyService.records.count,
                 profiles: container.profileService.profiles.count,
@@ -251,6 +574,21 @@ final class ErrorLogService: ObservableObject {
                 .init(timestamp: $0.timestamp, category: $0.category, message: $0.message)
             }
         )
+    }
+
+    private static func pluginDefaultKey(pluginId: String, key: String) -> String {
+        "plugin.\(pluginId).\(key)"
+    }
+
+    private static func modelAutoUnloadPolicy(seconds: Int) -> String {
+        switch seconds {
+        case 0:
+            return "never"
+        case -1:
+            return "immediate"
+        default:
+            return "afterSeconds"
+        }
     }
 
     private func loadEntries() {

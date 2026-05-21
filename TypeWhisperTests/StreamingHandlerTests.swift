@@ -268,14 +268,25 @@ final class StreamingHandlerTests: XCTestCase {
     private actor MockLiveSession: LiveTranscriptionSession {
         private var appendedChunkSizes: [Int] = []
         private var onProgress: (@Sendable (String) -> Bool)?
+        private var progressUpdates: [String] = []
 
         func setOnProgress(_ onProgress: @escaping @Sendable (String) -> Bool) {
             self.onProgress = onProgress
         }
 
+        func setProgressUpdates(_ progressUpdates: [String]) {
+            self.progressUpdates = progressUpdates
+        }
+
         func appendAudio(samples: [Float]) async throws {
             appendedChunkSizes.append(samples.count)
-            _ = onProgress?("chunk-\(samples.count)")
+            let progressText: String
+            if progressUpdates.isEmpty {
+                progressText = "chunk-\(samples.count)"
+            } else {
+                progressText = progressUpdates.removeFirst()
+            }
+            _ = onProgress?(progressText)
         }
 
         func finish() async throws -> PluginTranscriptionResult {
@@ -560,6 +571,147 @@ final class StreamingHandlerTests: XCTestCase {
         XCTAssertEqual(plugin.recordedSampleCounts, [16_000])
     }
 
+    func testStreamingFallbackSkipsPreviewWhenRecentWindowEndsInSustainedSilence() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockStreamingFallbackPlugin()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.streaming-fallback",
+                    name: "Mock Streaming Fallback",
+                    version: "1.0.0",
+                    principalClass: "MockStreamingFallbackPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+
+        let updatesLock = OSAllocatedUnfairLock(initialState: [String]())
+        let handler = StreamingHandler(
+            modelManager: modelManager,
+            bufferProvider: {
+                XCTFail("full buffer provider should not be used for fallback previews")
+                return []
+            },
+            recentBufferProvider: { _ in
+                Array(repeating: Float(0.2), count: 16_000)
+                    + Array(repeating: Float(0.0001), count: 40_000)
+            },
+            bufferDeltaProvider: { _ in ([], 0) },
+            bufferedDurationProvider: { 3.5 }
+        )
+        handler.onPartialTextUpdate = { text in
+            updatesLock.withLock { $0.append(text) }
+        }
+
+        handler.start(
+            streamPrompt: "Fallback Terms",
+            engineOverrideId: plugin.providerId,
+            selectedProviderId: plugin.providerId,
+            languageSelection: .exact("de"),
+            task: .transcribe,
+            cloudModelOverride: nil,
+            allowLiveTranscription: true,
+            stateCheck: { true }
+        )
+
+        try await Task.sleep(for: .milliseconds(3400))
+        handler.stop()
+
+        XCTAssertEqual(plugin.transcribeCallCount, 0)
+        XCTAssertTrue(updatesLock.withLock { $0 }.isEmpty)
+    }
+
+    func testStabilizeTextAppendsDisjointPreviewWindows() {
+        let stable = StreamingHandler.stabilizeText(
+            confirmed: "First sentence.",
+            new: "Second sentence."
+        )
+
+        XCTAssertEqual(stable, "First sentence. Second sentence.")
+    }
+
+    func testStabilizeTextMergesOverlappingPreviewWindows() {
+        let stable = StreamingHandler.stabilizeText(
+            confirmed: "First sentence. Second sentence.",
+            new: "Second sentence. Third sentence."
+        )
+
+        XCTAssertEqual(stable, "First sentence. Second sentence. Third sentence.")
+    }
+
+    func testStabilizeTextMergesFuzzyOverlappingPreviewWindows() {
+        let stable = StreamingHandler.stabilizeText(
+            confirmed: "Jetzt funktioniert es perfekt.",
+            new: "funktioniert perfekt. Faellt dir noch was ein, was wir vorm testen sollten?"
+        )
+
+        XCTAssertEqual(
+            stable,
+            "Jetzt funktioniert es perfekt. Faellt dir noch was ein, was wir vorm testen sollten?"
+        )
+    }
+
+    func testStabilizeTextReplacesRestatedPreviewWindowInsteadOfAppending() {
+        let stable = StreamingHandler.stabilizeText(
+            confirmed: "Ich rede jetzt und rede jetzt ein bisschen laenger.",
+            new: "Ich rede jetzt. Ich drehe jetzt ein bisschen laenger."
+        )
+
+        XCTAssertEqual(
+            stable,
+            "Ich rede jetzt. Ich drehe jetzt ein bisschen laenger."
+        )
+    }
+
+    func testStabilizeTextMergesApproximateOverlappingPreviewWindow() {
+        let stable = StreamingHandler.stabilizeText(
+            confirmed: "Ich rede jetzt. Ich drehe jetzt ein bisschen laenger.",
+            new: "Dreh dir jetzt ein bisschen laenger. Dreh dir immer noch."
+        )
+
+        XCTAssertEqual(
+            stable,
+            "Ich rede jetzt. Ich drehe jetzt ein bisschen laenger. Dreh dir immer noch."
+        )
+    }
+
+    func testStabilizeTextDropsRepeatedEarlierPreviewPrefixAfterPause() {
+        let stable = StreamingHandler.stabilizeText(
+            confirmed: """
+            Super. Koennen wir jetzt noch einmal... einbauen, also ein bisschen zumindest dieses Abstand vom Ding, wenn man lange... man lange Pause macht. Man muss ja nicht dann letztendlich.
+            """,
+            new: """
+            dieses Abstand vom Ding, wenn man lange Pause macht. Das muss ja nicht ein letztlich haben muss., ist das. Aber wie das ist erstmal so. Ist das? Aber wir lassen es erstmal so.
+            """
+        )
+
+        XCTAssertEqual(
+            stable,
+            """
+            Super. Koennen wir jetzt noch einmal... einbauen, also ein bisschen zumindest dieses Abstand vom Ding, wenn man lange... man lange Pause macht. Man muss ja nicht dann letztendlich. Das muss ja nicht ein letztlich haben muss., ist das. Aber wie das ist erstmal so. Ist das? Aber wir lassen es erstmal so.
+            """
+        )
+    }
+
+    func testStabilizeTextReplacesProviderCorrectionInsteadOfAppendingSuffix() {
+        let stable = StreamingHandler.stabilizeText(
+            confirmed: "Ich bin an Koin.",
+            new: "Ich bin an Koeln."
+        )
+
+        XCTAssertEqual(stable, "Ich bin an Koeln.")
+    }
+
     func testPreviewFallbackOptOutSkipsIntermediateWorkAndAllowsFinalTranscription() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -699,6 +851,170 @@ final class StreamingHandlerTests: XCTestCase {
         let recorded = await plugin.session.recordedChunks()
         XCTAssertEqual(recorded, chunks.map(\.count))
         XCTAssertEqual(plugin.lastPrompt, "Live Terms")
+    }
+
+    func testLiveSessionProgressAllowsProviderCorrections() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockLivePlugin()
+        await plugin.session.setProgressUpdates([
+            "Ich bin an Koin.",
+            "Ich bin an Koeln.",
+        ])
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.live",
+                    name: "Mock Live",
+                    version: "1.0.0",
+                    principalClass: "MockLivePlugin",
+                    requiresAPIKey: false
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+
+        let chunks = [
+            Array(repeating: Float(0.2), count: 4000),
+            Array(repeating: Float(0.3), count: 4000),
+        ]
+        let indexLock = NSLock()
+        var index = 0
+        var nextOffset = 0
+
+        let handler = StreamingHandler(
+            modelManager: modelManager,
+            bufferProvider: { [] },
+            recentBufferProvider: { _ in [] },
+            bufferDeltaProvider: { _ in
+                indexLock.lock()
+                defer { indexLock.unlock() }
+                guard index < chunks.count else {
+                    return ([], nextOffset)
+                }
+                let chunk = chunks[index]
+                index += 1
+                nextOffset += chunk.count
+                return (chunk, nextOffset)
+            },
+            bufferedDurationProvider: { 0.5 }
+        )
+
+        let updatesLock = OSAllocatedUnfairLock(initialState: [String]())
+        handler.onPartialTextUpdate = { text in
+            updatesLock.withLock { $0.append(text) }
+        }
+
+        var activeChecks = 0
+        handler.start(
+            streamPrompt: "Live Terms",
+            engineOverrideId: plugin.providerId,
+            selectedProviderId: plugin.providerId,
+            languageSelection: .exact("de"),
+            task: .transcribe,
+            cloudModelOverride: nil,
+            allowLiveTranscription: true,
+            stateCheck: {
+                activeChecks += 1
+                return activeChecks <= 3
+            }
+        )
+
+        try await Task.sleep(for: .milliseconds(900))
+        handler.stop()
+
+        let updates = updatesLock.withLock { $0 }
+        XCTAssertEqual(updates.last, "Ich bin an Koeln.")
+        XCTAssertFalse(updates.contains("Ich bin an Koin.eln."))
+    }
+
+    func testLiveSessionSuppressesAdditiveProgressDuringSustainedSilence() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockLivePlugin()
+        await plugin.session.setProgressUpdates([
+            "Gesprochener Satz.",
+            "Gesprochener Satz. Halluzinierter Nachsatz.",
+        ])
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.live",
+                    name: "Mock Live",
+                    version: "1.0.0",
+                    principalClass: "MockLivePlugin",
+                    requiresAPIKey: false
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+
+        let chunks = [
+            Array(repeating: Float(0.2), count: 16_000),
+            Array(repeating: Float(0.0001), count: 40_000),
+        ]
+        let indexLock = NSLock()
+        var index = 0
+        var nextOffset = 0
+
+        let handler = StreamingHandler(
+            modelManager: modelManager,
+            bufferProvider: { [] },
+            recentBufferProvider: { _ in [] },
+            bufferDeltaProvider: { _ in
+                indexLock.lock()
+                defer { indexLock.unlock() }
+                guard index < chunks.count else {
+                    return ([], nextOffset)
+                }
+                let chunk = chunks[index]
+                index += 1
+                nextOffset += chunk.count
+                return (chunk, nextOffset)
+            },
+            bufferedDurationProvider: { 3.5 }
+        )
+
+        let updatesLock = OSAllocatedUnfairLock(initialState: [String]())
+        handler.onPartialTextUpdate = { text in
+            updatesLock.withLock { $0.append(text) }
+        }
+
+        var activeChecks = 0
+        handler.start(
+            streamPrompt: "Live Terms",
+            engineOverrideId: plugin.providerId,
+            selectedProviderId: plugin.providerId,
+            languageSelection: .exact("de"),
+            task: .transcribe,
+            cloudModelOverride: nil,
+            allowLiveTranscription: true,
+            stateCheck: {
+                activeChecks += 1
+                return activeChecks <= 3
+            }
+        )
+
+        try await Task.sleep(for: .milliseconds(900))
+        handler.stop()
+
+        XCTAssertEqual(updatesLock.withLock { $0 }, ["Gesprochener Satz."])
     }
 
     func testModelManagerUsesHintAwarePluginWhenMultipleHintsAreSelected() async throws {

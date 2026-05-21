@@ -1,9 +1,17 @@
 import SwiftUI
 
 struct HotkeyRecorderView: View {
+    enum Presentation {
+        case row
+        case iconButton(systemName: String)
+        case compactChip
+    }
+
     let label: String
     var title: String = String(localized: "Dictation shortcut")
     var subtitle: String? = nil
+    var presentation: Presentation = .row
+    var trailingAccessory: AnyView = AnyView(EmptyView())
     let onRecord: (UnifiedHotkey) -> Void
     let onClear: () -> Void
 
@@ -23,6 +31,17 @@ struct HotkeyRecorderView: View {
     @State private var doubleTapTimer: DispatchWorkItem?
 
     var body: some View {
+        switch presentation {
+        case .row:
+            rowBody
+        case .iconButton(let systemName):
+            iconButtonBody(systemName: systemName)
+        case .compactChip:
+            compactChipBody
+        }
+    }
+
+    private var rowBody: some View {
         HStack {
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
@@ -33,55 +52,115 @@ struct HotkeyRecorderView: View {
                 }
             }
             Spacer()
-            if isRecording {
-                Button {
-                    cancelRecording()
-                } label: {
-                    if let displayName = firstTapDisplayName {
-                        Text("\(displayName) - \(String(localized: "tap again for double-tap…"))")
-                            .foregroundStyle(.orange)
-                    } else {
-                        Text(pendingModifierString.isEmpty
-                            ? String(localized: "Press a key or mouse button…")
-                            : pendingModifierString)
-                            .foregroundStyle(.orange)
-                    }
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .accessibilityLabel(String(localized: "Recording shortcut - press a key or Escape to cancel"))
-            } else if label.isEmpty {
-                Button {
-                    startRecording()
-                } label: {
-                    Text(String(localized: "Record Shortcut"))
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .accessibilityLabel(String(localized: "Record shortcut for \(title)"))
-            } else {
-                HStack(spacing: 4) {
-                    Button {
-                        startRecording()
-                    } label: {
-                        Text(label)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(String(localized: "Current shortcut: \(label). Click to change."))
-                    Button {
-                        onClear()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(String(localized: "Clear shortcut"))
-                }
+            recorderControl
+
+            if !isRecording {
+                trailingAccessory
             }
         }
+    }
+
+    @ViewBuilder
+    private func iconButtonBody(systemName: String) -> some View {
+        if isRecording {
+            Button {
+                cancelRecording()
+            } label: {
+                Text(recordingLabel)
+                    .foregroundStyle(.orange)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .accessibilityLabel(String(localized: "Recording shortcut - press a key or Escape to cancel"))
+        } else {
+            Button {
+                startRecording()
+            } label: {
+                Image(systemName: systemName)
+                    .imageScale(.medium)
+            }
+            .buttonStyle(.borderless)
+            .controlSize(.small)
+            .help(title)
+            .accessibilityLabel(title)
+        }
+    }
+
+    @ViewBuilder
+    private var compactChipBody: some View {
+        if isRecording {
+            Button {
+                cancelRecording()
+            } label: {
+                Text(recordingLabel)
+                    .foregroundStyle(.orange)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .accessibilityLabel(String(localized: "Recording shortcut - press a key or Escape to cancel"))
+        } else if !label.isEmpty {
+            recordedShortcutControl
+        }
+    }
+
+    @ViewBuilder
+    private var recorderControl: some View {
+        if isRecording {
+            Button {
+                cancelRecording()
+            } label: {
+                Text(recordingLabel)
+                    .foregroundStyle(.orange)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .accessibilityLabel(String(localized: "Recording shortcut - press a key or Escape to cancel"))
+        } else if label.isEmpty {
+            Button {
+                startRecording()
+            } label: {
+                Text(String(localized: "Record Shortcut"))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .accessibilityLabel(String(localized: "Record shortcut for \(title)"))
+        } else {
+            recordedShortcutControl
+        }
+    }
+
+    private var recordedShortcutControl: some View {
+        HStack(spacing: 4) {
+            Button {
+                startRecording()
+            } label: {
+                Text(label)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(String(localized: "Current shortcut: \(label). Click to change."))
+            Button {
+                onClear()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(String(localized: "Clear shortcut"))
+        }
+        .fixedSize()
+    }
+
+    private var recordingLabel: String {
+        if let displayName = firstTapDisplayName {
+            return "\(displayName) - \(String(localized: "tap again for double-tap…"))"
+        }
+
+        return pendingModifierString.isEmpty
+            ? String(localized: "Press a key or mouse button…")
+            : pendingModifierString
     }
 
     private var pendingModifierString: String {

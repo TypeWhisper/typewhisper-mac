@@ -117,10 +117,12 @@ struct ErrorLogView: View {
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
-        do {
-            try errorLogService.exportDiagnostics(to: url)
-        } catch {
-            exportErrorMessage = error.localizedDescription
+        Task { @MainActor in
+            do {
+                try await errorLogService.exportDiagnostics(to: url)
+            } catch {
+                exportErrorMessage = error.localizedDescription
+            }
         }
     }
 }

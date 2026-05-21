@@ -11,6 +11,7 @@ struct ActivatedTermPackState: Codable {
     let installedVersion: String?
     let installedTerms: [String]
     let installedCorrections: [TermPackCorrection]
+    let requiresCommercialLicense: Bool?
 }
 
 // MARK: - Dictionary ViewModel
@@ -47,6 +48,8 @@ class DictionaryViewModel: ObservableObject {
     @Published var activatedPackStates: [String: ActivatedTermPackState] = [:]
 
     private let dictionaryService: DictionaryService
+    private let licenseService: LicenseService?
+    private let termPackRegistryService: TermPackRegistryService?
     private var cancellables = Set<AnyCancellable>()
     private var selectedEntry: DictionaryEntry?
 
@@ -67,12 +70,28 @@ class DictionaryViewModel: ObservableObject {
     var correctionsCount: Int { dictionaryService.correctionsCount }
     var enabledTermsCount: Int { dictionaryService.enabledTermsCount }
     var enabledCorrectionsCount: Int { dictionaryService.enabledCorrectionsCount }
+    var hasCommercialLicense: Bool { licenseService?.hasCommercialLicense ?? false }
+    var visibleBuiltInPacks: [TermPack] {
+        TermPack.allPacks.filter { !$0.requiresCommercialLicense || hasCommercialLicense }
+    }
+    var visibleCommunityPacks: [TermPack] {
+        (termPackRegistryService ?? TermPackRegistryService.shared)?
+            .communityPacks
+            .filter(canUsePack) ?? []
+    }
 
-    init(dictionaryService: DictionaryService) {
+    init(
+        dictionaryService: DictionaryService,
+        licenseService: LicenseService? = nil,
+        termPackRegistryService: TermPackRegistryService? = nil
+    ) {
         self.dictionaryService = dictionaryService
+        self.licenseService = licenseService
+        self.termPackRegistryService = termPackRegistryService
         self.entries = dictionaryService.entries
         migrateLegacyActivatedPacks()
         loadActivatedPackStates()
+        reconcileCommercialPackAccess()
         setupBindings()
     }
 
@@ -84,6 +103,31 @@ class DictionaryViewModel: ObservableObject {
                 self?.entries = entries
             }
             .store(in: &cancellables)
+
+        licenseService?.$licenseStatus
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.reconcileCommercialPackAccess()
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+
+        if let registryService = termPackRegistryService ?? TermPackRegistryService.shared {
+            registryService.$communityPacks
+                .dropFirst()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in
+                    guard let self else { return }
+                    if self.hasCommercialLicense {
+                        self.applyIndustryPreset(IndustryPreset.selected())
+                    } else {
+                        self.reconcileCommercialPackAccess()
+                    }
+                    self.objectWillChange.send()
+                }
+                .store(in: &cancellables)
+        }
     }
 
     // MARK: - Editor Actions
@@ -202,6 +246,11 @@ class DictionaryViewModel: ObservableObject {
     }
 
     func togglePack(_ pack: TermPack) {
+        guard canUsePack(pack) else {
+            error = String(localized: "This industry term pack requires an active commercial license.")
+            return
+        }
+
         if isPackActivated(pack) {
             deactivatePack(pack)
         } else {
@@ -210,6 +259,11 @@ class DictionaryViewModel: ObservableObject {
     }
 
     func activatePack(_ pack: TermPack) {
+        guard canUsePack(pack) else {
+            error = String(localized: "This industry term pack requires an active commercial license.")
+            return
+        }
+
         var nextStates = activatedPackStates
         nextStates[pack.id] = makeActivatedState(for: pack)
         reconcileActivatedPacks(from: activatedPackStates, to: nextStates)
@@ -235,12 +289,46 @@ class DictionaryViewModel: ObservableObject {
         return TermPackRegistryService.compareVersions(packVersion, installedVersion) == .orderedDescending
     }
 
+    func applyIndustryPreset(_ preset: IndustryPreset) {
+        UserDefaults.standard.set(preset.rawValue, forKey: UserDefaultsKeys.selectedIndustryPreset)
+
+        guard let packID = preset.termPackID,
+              hasCommercialLicense,
+              let pack = resolvePack(id: packID),
+              !isPackActivated(pack) else {
+            return
+        }
+
+        activatePack(pack)
+    }
+
+    func canUsePack(_ pack: TermPack) -> Bool {
+        !pack.requiresCommercialLicense || hasCommercialLicense
+    }
+
+    private func reconcileCommercialPackAccess() {
+        if hasCommercialLicense {
+            applyIndustryPreset(IndustryPreset.selected())
+            return
+        }
+
+        let industryPackIDs = Set(IndustryPreset.allCases.compactMap(\.termPackID))
+        let allowedStates = activatedPackStates.filter { packID, state in
+            state.requiresCommercialLicense != true && !industryPackIDs.contains(packID)
+        }
+
+        guard allowedStates.count != activatedPackStates.count else { return }
+        reconcileActivatedPacks(from: activatedPackStates, to: allowedStates)
+    }
+
     /// Resolves a pack by ID from built-in + community packs
     func resolvePack(id: String) -> TermPack? {
         if let builtIn = TermPack.allPacks.first(where: { $0.id == id }) {
             return builtIn
         }
-        return TermPackRegistryService.shared?.communityPacks.first(where: { $0.id == id })
+        return (termPackRegistryService ?? TermPackRegistryService.shared)?
+            .communityPacks
+            .first(where: { $0.id == id })
     }
 
     // MARK: - Reconciliation
@@ -252,7 +340,8 @@ class DictionaryViewModel: ObservableObject {
             source: pack.source.rawValue,
             installedVersion: pack.version,
             installedTerms: pack.terms,
-            installedCorrections: pack.corrections
+            installedCorrections: pack.corrections,
+            requiresCommercialLicense: pack.requiresCommercialLicense
         )
     }
 
@@ -281,7 +370,8 @@ class DictionaryViewModel: ObservableObject {
                 source: state.source,
                 installedVersion: state.installedVersion,
                 installedTerms: actuallyAddedTerms,
-                installedCorrections: actuallyAddedCorrections
+                installedCorrections: actuallyAddedCorrections,
+                requiresCommercialLicense: state.requiresCommercialLicense
             )
         }
 

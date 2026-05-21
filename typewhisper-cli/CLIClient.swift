@@ -31,6 +31,13 @@ enum CLIError: Error {
                   3. Enable "API Server"
                 """
         case .serverError(let code, let message):
+            if code == 401 {
+                return """
+                    Error: API authentication failed.
+
+                    Restart TypeWhisper so the CLI can refresh its local API token, or pass --api-token / TYPEWHISPER_API_TOKEN when using a custom port.
+                    """
+            }
             if code == 503 {
                 return "Error: No model loaded in TypeWhisper. Load a model first."
             }
@@ -49,12 +56,14 @@ struct CLIClient {
     typealias Transport = @Sendable (URLRequest) async throws -> (Data, URLResponse)
 
     let port: UInt16
+    let apiToken: String?
     private let transport: Transport
     private let stdinReader: @Sendable () -> Data
     private var baseURL: String { "http://127.0.0.1:\(port)" }
 
     init(
         port: UInt16,
+        apiToken: String? = nil,
         transport: @escaping Transport = { request in
             try await URLSession.shared.data(for: request)
         },
@@ -63,6 +72,7 @@ struct CLIClient {
         }
     ) {
         self.port = port
+        self.apiToken = apiToken
         self.transport = transport
         self.stdinReader = stdinReader
     }
@@ -208,6 +218,11 @@ struct CLIClient {
     }
 
     private func performRequest(_ request: URLRequest) async throws -> Data {
+        var request = request
+        if let apiToken, !apiToken.isEmpty {
+            request.setValue("Bearer \(apiToken)", forHTTPHeaderField: "Authorization")
+        }
+
         let data: Data
         let response: URLResponse
         do {

@@ -28,6 +28,7 @@ enum PluginCategory: String, CaseIterable {
     case tts
     case llm
     case postProcessor = "post-processor"
+    case fileAutomation = "file-automation"
     case action
     case memory
     case utility
@@ -38,6 +39,7 @@ enum PluginCategory: String, CaseIterable {
         case .tts: String(localized: "Text-to-Speech")
         case .llm: String(localized: "LLM Providers")
         case .postProcessor: String(localized: "Post-Processors")
+        case .fileAutomation: String(localized: "File Automations")
         case .action: String(localized: "Actions")
         case .memory: String(localized: "Memory")
         case .utility: String(localized: "Utilities")
@@ -50,6 +52,7 @@ enum PluginCategory: String, CaseIterable {
         case .tts: "speaker.wave.2.fill"
         case .llm: "brain"
         case .postProcessor: "arrow.triangle.2.circlepath"
+        case .fileAutomation: "folder.badge.gearshape"
         case .action: "bolt.fill"
         case .memory: "brain.head.profile"
         case .utility: "wrench"
@@ -62,9 +65,10 @@ enum PluginCategory: String, CaseIterable {
         case .tts: 1
         case .llm: 2
         case .postProcessor: 3
-        case .action: 4
-        case .memory: 5
-        case .utility: 6
+        case .fileAutomation: 4
+        case .action: 5
+        case .memory: 6
+        case .utility: 7
         }
     }
 }
@@ -144,6 +148,10 @@ struct RegistryPluginRelease: Decodable, Equatable {
                 architecture: architecture
             )
     }
+
+    func isTrusted(for source: PluginDistributionSource) -> Bool {
+        PluginRegistryService.isTrustedRegistryDownloadURL(downloadURL, source: source)
+    }
 }
 
 struct RegistryPluginEntry: Decodable {
@@ -222,6 +230,7 @@ struct RegistryPluginEntry: Decodable {
                     currentOSVersion: currentOSVersion,
                     architecture: architecture
                 )
+                && $0.isTrusted(for: source)
             }
             .max { first, second in
                 PluginRegistryService.compareVersions(first.version, second.version) == .orderedAscending
@@ -357,6 +366,7 @@ final class PluginRegistryService: ObservableObject {
     private let fetchData: (URLRequest) async throws -> (Data, URLResponse)
     private let cacheDirectory: URL
     private static let lastUpdateCheckKey = "pluginRegistryLastUpdateCheck"
+    private static let lastHostFingerprintCheckKey = "pluginRegistryLastHostFingerprintCheck"
 
     enum FetchState: Equatable {
         case idle
@@ -397,6 +407,23 @@ final class PluginRegistryService: ObservableObject {
         return .v1
     }
 
+    nonisolated static func isTrustedRegistryDownloadURL(
+        _ downloadURL: String,
+        source: PluginDistributionSource
+    ) -> Bool {
+        guard source == .community else { return true }
+        guard let components = URLComponents(string: downloadURL),
+              components.scheme == "https",
+              components.host?.lowercased() == "github.com"
+        else {
+            return false
+        }
+
+        return components.path.hasPrefix(
+            "/TypeWhisper/typewhisper-mac/releases/download/"
+        )
+    }
+
     init(
         registryBaseURL: URL = URL(string: "https://typewhisper.github.io/typewhisper-mac")!,
         cacheDirectory: URL = AppConstants.appSupportDirectory.appendingPathComponent("MarketplaceCache", isDirectory: true),
@@ -419,12 +446,13 @@ final class PluginRegistryService: ObservableObject {
 
     // MARK: - Fetch Registry
 
-    func fetchRegistry(force: Bool = false) async {
+    @discardableResult
+    func fetchRegistry(force: Bool = false) async -> Bool {
         if !force,
            let lastFetch = lastFetchDate,
            Date().timeIntervalSince(lastFetch) < cacheDuration,
            !registry.isEmpty {
-            return
+            return true
         }
 
         fetchState = .loading
@@ -439,37 +467,74 @@ final class PluginRegistryService: ObservableObject {
             request.cachePolicy = .reloadIgnoringLocalCacheData
             let (data, _) = try await fetchData(request)
 
-            try applyRegistryData(data, feed: feed)
+            try applyRegistryData(data, feed: feed, markFetchDate: true)
             try cacheRegistryData(data, feed: feed)
             logger.info("Fetched \(self.registry.count) plugin(s) from registry feed \(feed.rawValue, privacy: .public)")
+            return true
         } catch {
             do {
                 let cachedData = try Data(contentsOf: cacheURL(for: feed))
-                try applyRegistryData(cachedData, feed: feed)
+                try applyRegistryData(cachedData, feed: feed, markFetchDate: false)
                 logger.warning(
                     "Using cached plugin registry feed \(feed.rawValue, privacy: .public) after fetch failure: \(error.localizedDescription, privacy: .public)"
                 )
+                return false
             } catch {
                 fetchState = .error(error.localizedDescription)
                 logger.error("Failed to fetch registry: \(error.localizedDescription)")
+                return false
             }
         }
     }
 
     // MARK: - Background Update Check
 
-    /// Check for plugin updates on app launch (at most once per 24h).
+    /// Check for plugin updates on app launch (at most once per 24h), and force
+    /// one refresh after each host app update so bundled registry gates are not
+    /// hidden behind the previous build's throttle window.
     func checkForUpdatesInBackground() {
-        let lastCheck = userDefaults.double(forKey: Self.lastUpdateCheckKey)
-        let hoursSinceLastCheck = (Date().timeIntervalSince1970 - lastCheck) / 3600
-        guard hoursSinceLastCheck >= 24 || lastCheck == 0 else { return }
-
         Task {
-            lastFetchDate = nil
-            await fetchRegistry(force: true)
-            updateAvailableUpdatesCount()
-            userDefaults.set(Date().timeIntervalSince1970, forKey: Self.lastUpdateCheckKey)
+            await refreshRegistryForHostUpdateIfNeeded()
         }
+    }
+
+    @discardableResult
+    func refreshRegistryForHostUpdateIfNeeded(
+        currentFingerprint: String = AppConstants.currentReleaseFingerprint,
+        now: Date = Date()
+    ) async -> Bool {
+        let lastCheck = userDefaults.double(forKey: Self.lastUpdateCheckKey)
+        let hoursSinceLastCheck = (now.timeIntervalSince1970 - lastCheck) / 3600
+        let lastFingerprint = userDefaults.string(forKey: Self.lastHostFingerprintCheckKey)
+        let hostChanged = lastFingerprint != currentFingerprint
+
+        guard hostChanged || hoursSinceLastCheck >= 24 || lastCheck == 0 else {
+            return false
+        }
+
+        lastFetchDate = nil
+        let refreshSucceeded = await fetchRegistry(force: true)
+        guard refreshSucceeded else {
+            return false
+        }
+        userDefaults.set(now.timeIntervalSince1970, forKey: Self.lastUpdateCheckKey)
+        userDefaults.set(currentFingerprint, forKey: Self.lastHostFingerprintCheckKey)
+        return true
+    }
+
+    static func canRepairInstalledPlugin(
+        isBundled: Bool,
+        registryPlugin: RegistryPlugin?,
+        installInfo: PluginInstallInfo,
+        installState: InstallState?
+    ) -> Bool {
+        guard !isBundled, registryPlugin != nil, installState == nil else {
+            return false
+        }
+        if case .installed = installInfo {
+            return true
+        }
+        return false
     }
 
     func updateAvailableUpdatesCount() {
@@ -814,13 +879,15 @@ final class PluginRegistryService: ObservableObject {
         cacheDirectory.appendingPathComponent(feed.pathComponent)
     }
 
-    private func applyRegistryData(_ data: Data, feed: RegistryFeed) throws {
+    private func applyRegistryData(_ data: Data, feed: RegistryFeed, markFetchDate: Bool) throws {
         let response = try JSONDecoder().decode(PluginRegistryResponse.self, from: data)
         registry = response.resolvedPlugins(
             appVersion: resolvedAppVersion,
             sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion
         )
-        lastFetchDate = Date()
+        if markFetchDate {
+            lastFetchDate = Date()
+        }
         fetchState = .loaded
         updateAvailableUpdatesCount()
         logger.info("Resolved \(self.registry.count) compatible plugin(s) from \(feed.rawValue, privacy: .public)")

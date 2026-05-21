@@ -78,11 +78,11 @@ struct LicenseSettingsView: View {
 
             LazyVGrid(columns: planColumns, spacing: 12) {
                 planSelectionButton(
-                    title: localizedAppText("Private & OSS", de: "Privat & OSS"),
+                    title: localizedAppText("GPLv3 / OSS", de: "GPLv3 / OSS"),
                     price: localizedAppText("Free", de: "Kostenlos"),
                     description: localizedAppText(
-                        "For personal use and GPL-compatible open-source work.",
-                        de: "Für private Nutzung und GPL-kompatible Open-Source-Arbeit."
+                        "Install and run the GPL version as-is, including personal or internal use.",
+                        de: "Installiere und nutze die GPL-Version unverändert, auch privat oder intern."
                     ),
                     systemImage: "checkmark.circle",
                     selected: license.usageIntent == .personalOSS && license.licenseTier != .enterprise,
@@ -95,8 +95,8 @@ struct LicenseSettingsView: View {
                     title: localizedAppText("Individual", de: "Einzelnutzer"),
                     price: localizedAppText("from 5 EUR/mo", de: "ab 5 EUR/Monat"),
                     description: localizedAppText(
-                        "One person using TypeWhisper professionally on up to 2 devices.",
-                        de: "Eine Person nutzt TypeWhisper beruflich auf bis zu 2 Geräten."
+                        "Non-GPL terms, procurement, support, or proprietary distribution for one person.",
+                        de: "Nicht-GPL-Bedingungen, Beschaffung, Support oder proprietäre Weiterverteilung für eine Person."
                     ),
                     systemImage: "briefcase",
                     selected: license.usageIntent == .workSolo && license.licenseTier != .enterprise,
@@ -109,8 +109,8 @@ struct LicenseSettingsView: View {
                     title: "Team",
                     price: localizedAppText("from 19 EUR/mo", de: "ab 19 EUR/Monat"),
                     description: localizedAppText(
-                        "Small teams, up to 10 devices, and the clearest future path for sync and sharing.",
-                        de: "Kleine Teams, bis zu 10 Geräte und der klarste spätere Pfad für Sync und Sharing."
+                        "Procurement, support, managed seats, and up to 10 devices.",
+                        de: "Beschaffung, Support, verwaltete Plätze und bis zu 10 Geräte."
                     ),
                     systemImage: "person.3",
                     selected: license.usageIntent == .team && license.licenseTier != .enterprise,
@@ -395,8 +395,8 @@ struct LicenseSettingsView: View {
 
     private var supporterDescriptionText: String {
         localizedAppText(
-            "Supporter status is personal and optional. It can exist alongside Private & OSS, Individual, Team, or Enterprise, but it never replaces a commercial license.",
-            de: "Supporter-Status ist persönlich und optional. Er kann neben Privat & OSS, Einzelnutzer, Team oder Unternehmensplan bestehen, ersetzt aber nie eine kommerzielle Lizenz."
+            "Supporter status is personal and optional. It can exist alongside GPLv3 / OSS, Individual, Team, or Enterprise, but it never grants commercial license terms.",
+            de: "Supporter-Status ist persönlich und optional. Er kann neben GPLv3 / OSS, Einzelnutzer, Team oder Unternehmensplan bestehen, gewährt aber nie kommerzielle Lizenzbedingungen."
         )
     }
 
@@ -637,13 +637,13 @@ struct LicenseSettingsView: View {
             return ""
         case .workSolo:
             return localizedAppText(
-                "Professional solo usage needs a commercial license. Individual covers one person on up to 2 devices.",
-                de: "Berufliche Einzel-Nutzung braucht eine kommerzielle Lizenz. Der Einzelnutzer-Plan deckt eine Person auf bis zu 2 Geräten ab."
+                "Individual covers one person who needs non-GPL terms, procurement, support, or proprietary distribution on up to 2 devices.",
+                de: "Der Einzelnutzer-Plan deckt eine Person ab, die Nicht-GPL-Bedingungen, Beschaffung, Support oder proprietäre Weiterverteilung auf bis zu 2 Geräten braucht."
             )
         case .team:
             return localizedAppText(
-                "Team usage needs Team or Enterprise. Team covers up to 10 devices under one commercial plan.",
-                de: "Team-Nutzung braucht den Team- oder Unternehmensplan. Team deckt bis zu 10 Geräte unter einer kommerziellen Lizenz ab."
+                "Team covers procurement-friendly licensing, support, managed seats, and up to 10 devices.",
+                de: "Team deckt beschaffungsfreundliche Lizenzierung, Support, verwaltete Plätze und bis zu 10 Geräte ab."
             )
         case .enterprise:
             return localizedAppText(
@@ -680,8 +680,8 @@ struct LicenseSettingsView: View {
             switch tier {
             case .individual:
                 return localizedAppText(
-                    "This Mac is covered for professional single-seat usage on up to 2 devices.",
-                    de: "Dieser Mac ist für berufliche Einzel-Nutzung auf bis zu 2 Geräten abgedeckt."
+                    "This Mac is covered by Individual commercial license terms on up to 2 devices.",
+                    de: "Dieser Mac ist durch kommerzielle Einzelnutzer-Bedingungen auf bis zu 2 Geräten abgedeckt."
                 )
             case .team:
                 return localizedAppText(
@@ -706,8 +706,8 @@ struct LicenseSettingsView: View {
         switch tier {
         case .individual:
             return localizedAppText(
-                "Professional single-seat access for up to 2 devices with recurring billing.",
-                de: "Beruflicher Einzelzugang für bis zu 2 Geräte mit wiederkehrender Abrechnung."
+                "Individual commercial license terms for up to 2 devices with recurring billing.",
+                de: "Kommerzielle Einzelnutzer-Bedingungen für bis zu 2 Geräte mit wiederkehrender Abrechnung."
             )
         case .team:
             return localizedAppText(

@@ -10,10 +10,11 @@ public protocol TypeWhisperPlugin: AnyObject, Sendable {
     init()
     func activate(host: HostServices)
     func deactivate()
-    var settingsView: AnyView? { get }
+    @MainActor var settingsView: AnyView? { get }
 }
 
 public extension TypeWhisperPlugin {
+    @MainActor
     var settingsView: AnyView? { nil }
 }
 
@@ -37,6 +38,80 @@ public protocol PluginSettingsActivityReporting: TypeWhisperPlugin {
 
 public extension PluginSettingsActivityReporting {
     var currentSettingsActivity: PluginSettingsActivity? { nil }
+}
+
+// MARK: - Auth Role Status
+
+public enum PluginAuthRole: String, CaseIterable, Sendable {
+    case transcription
+    case llm
+    case tts
+}
+
+public struct PluginAuthRoleStatus: Sendable, Equatable {
+    public let isAvailable: Bool
+    public let unavailableReason: String?
+    public let requiredCredentialLabel: String?
+
+    public init(
+        isAvailable: Bool,
+        unavailableReason: String? = nil,
+        requiredCredentialLabel: String? = nil
+    ) {
+        self.isAvailable = isAvailable
+        self.unavailableReason = unavailableReason
+        self.requiredCredentialLabel = requiredCredentialLabel
+    }
+
+    public static let available = PluginAuthRoleStatus(isAvailable: true)
+
+    public static func unavailable(
+        reason: String,
+        requiredCredentialLabel: String? = nil
+    ) -> PluginAuthRoleStatus {
+        PluginAuthRoleStatus(
+            isAvailable: false,
+            unavailableReason: reason,
+            requiredCredentialLabel: requiredCredentialLabel
+        )
+    }
+
+    public static func legacyFallback(
+        isConfigured: Bool,
+        unavailableReason: String = "Plugin is not configured.",
+        requiredCredentialLabel: String? = nil
+    ) -> PluginAuthRoleStatus {
+        isConfigured
+            ? .available
+            : .unavailable(
+                reason: unavailableReason,
+                requiredCredentialLabel: requiredCredentialLabel
+            )
+    }
+}
+
+public protocol PluginAuthRoleStatusProviding: TypeWhisperPlugin {
+    func authStatus(for role: PluginAuthRole) -> PluginAuthRoleStatus
+}
+
+public enum PluginAuthRoleStatusResolver {
+    public static func status(
+        for plugin: any TypeWhisperPlugin,
+        role: PluginAuthRole,
+        legacyIsConfigured: Bool = true,
+        legacyUnavailableReason: String = "Plugin is not configured.",
+        legacyRequiredCredentialLabel: String? = nil
+    ) -> PluginAuthRoleStatus {
+        if let provider = plugin as? any PluginAuthRoleStatusProviding {
+            return provider.authStatus(for: role)
+        }
+
+        return .legacyFallback(
+            isConfigured: legacyIsConfigured,
+            unavailableReason: legacyUnavailableReason,
+            requiredCredentialLabel: legacyRequiredCredentialLabel
+        )
+    }
 }
 
 // MARK: - Settings Window Environment
@@ -88,6 +163,14 @@ public protocol LLMProviderPlugin: TypeWhisperPlugin {
     func process(systemPrompt: String, userText: String, model: String?) async throws -> String
 }
 
+/// Optional extension for plugins that manage downloaded model assets.
+/// Hosts can use this to show and remove model caches without knowing the
+/// plugin's storage layout.
+public protocol PluginDownloadedModelManaging: TypeWhisperPlugin {
+    var downloadedModels: [PluginModelInfo] { get }
+    func deleteDownloadedModel(_ modelId: String) async throws
+}
+
 /// Optional protocol for LLM plugins that can describe why they are currently unavailable.
 /// This lets the host distinguish local model setup from missing remote credentials.
 public protocol LLMProviderSetupStatusProviding {
@@ -133,6 +216,129 @@ public protocol PostProcessorPlugin: TypeWhisperPlugin {
     var processorName: String { get }
     var priority: Int { get }
     @MainActor func process(text: String, context: PostProcessingContext) async throws -> String
+}
+
+// MARK: - File Job Automation Plugin
+
+public enum FileJobKind: String, Codable, Sendable {
+    case watchFolder = "watch-folder"
+    case fileTranscription = "file-transcription"
+    case dictation
+}
+
+public struct FileJobTranscriptSegment: Codable, Equatable, Sendable {
+    public let text: String
+    public let start: TimeInterval
+    public let end: TimeInterval
+    public let speakerLabel: String?
+    public let speakerConfidence: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case text
+        case start
+        case end
+        case speakerLabel = "speaker"
+        case speakerConfidence = "speaker_confidence"
+    }
+
+    public init(
+        text: String,
+        start: TimeInterval,
+        end: TimeInterval,
+        speakerLabel: String? = nil,
+        speakerConfidence: Double? = nil
+    ) {
+        self.text = text
+        self.start = start
+        self.end = end
+        self.speakerLabel = speakerLabel
+        self.speakerConfidence = speakerConfidence
+    }
+}
+
+public struct FileJobContext: Codable, Equatable, Sendable {
+    public let jobKind: FileJobKind
+    public let sourceFilePath: String?
+    public let sourceFileName: String?
+    public let outputDirectoryPath: String?
+    public let outputFilePath: String?
+    public let outputFormat: String?
+    public let engineId: String?
+    public let engineName: String?
+    public let modelId: String?
+    public let transcriptText: String
+    public let detectedLanguage: String?
+    public let segments: [FileJobTranscriptSegment]
+
+    public init(
+        jobKind: FileJobKind,
+        sourceFilePath: String? = nil,
+        sourceFileName: String? = nil,
+        outputDirectoryPath: String? = nil,
+        outputFilePath: String? = nil,
+        outputFormat: String? = nil,
+        engineId: String? = nil,
+        engineName: String? = nil,
+        modelId: String? = nil,
+        transcriptText: String,
+        detectedLanguage: String? = nil,
+        segments: [FileJobTranscriptSegment] = []
+    ) {
+        self.jobKind = jobKind
+        self.sourceFilePath = sourceFilePath
+        if let sourceFileName {
+            self.sourceFileName = sourceFileName
+        } else if let sourceFilePath {
+            self.sourceFileName = URL(fileURLWithPath: sourceFilePath).lastPathComponent
+        } else {
+            self.sourceFileName = nil
+        }
+        self.outputDirectoryPath = outputDirectoryPath
+        self.outputFilePath = outputFilePath
+        self.outputFormat = outputFormat
+        self.engineId = engineId
+        self.engineName = engineName
+        self.modelId = modelId
+        self.transcriptText = transcriptText
+        self.detectedLanguage = detectedLanguage
+        self.segments = segments
+    }
+}
+
+public struct FileJobArtifact: Codable, Equatable, Sendable {
+    public let fileExtension: String
+    public let content: String
+
+    public init(fileExtension: String, content: String) {
+        self.fileExtension = fileExtension
+        self.content = content
+    }
+}
+
+public struct FileJobAutomationResult: Codable, Equatable, Sendable {
+    public let artifact: FileJobArtifact
+    public let appliedSteps: [String]
+    public let outputPathWasWritten: Bool
+
+    public init(
+        artifact: FileJobArtifact,
+        appliedSteps: [String] = [],
+        outputPathWasWritten: Bool = false
+    ) {
+        self.artifact = artifact
+        self.appliedSteps = appliedSteps
+        self.outputPathWasWritten = outputPathWasWritten
+    }
+}
+
+public protocol FileJobAutomationPlugin: TypeWhisperPlugin {
+    var automationName: String { get }
+    var priority: Int { get }
+    @MainActor func process(artifact: FileJobArtifact, context: FileJobContext) async throws -> FileJobAutomationResult
+}
+
+public extension FileJobAutomationPlugin {
+    var priority: Int { 400 }
 }
 
 // MARK: - Transcription Engine Plugin
@@ -222,6 +428,44 @@ public struct PluginTranscriptionResult: Sendable {
     public let segments: [PluginTranscriptionSegment]
 
     public init(text: String, detectedLanguage: String? = nil, segments: [PluginTranscriptionSegment] = []) {
+        self.text = text
+        self.detectedLanguage = detectedLanguage
+        self.segments = segments
+    }
+}
+
+public struct PluginStructuredTranscriptionSegment: Sendable {
+    public let text: String
+    public let start: Double
+    public let end: Double
+    public let speakerLabel: String?
+    public let speakerConfidence: Double?
+
+    public init(
+        text: String,
+        start: Double,
+        end: Double,
+        speakerLabel: String? = nil,
+        speakerConfidence: Double? = nil
+    ) {
+        self.text = text
+        self.start = start
+        self.end = end
+        self.speakerLabel = speakerLabel
+        self.speakerConfidence = speakerConfidence
+    }
+}
+
+public struct PluginStructuredTranscriptionResult: Sendable {
+    public let text: String
+    public let detectedLanguage: String?
+    public let segments: [PluginStructuredTranscriptionSegment]
+
+    public init(
+        text: String,
+        detectedLanguage: String? = nil,
+        segments: [PluginStructuredTranscriptionSegment] = []
+    ) {
         self.text = text
         self.detectedLanguage = detectedLanguage
         self.segments = segments
@@ -375,6 +619,24 @@ public protocol TranscriptionEnginePlugin: TypeWhisperPlugin {
     var supportedLanguages: [String] { get }
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?,
                     onProgress: @Sendable @escaping (String) -> Bool) async throws -> PluginTranscriptionResult
+}
+
+public protocol StructuredTranscriptionEnginePlugin: TranscriptionEnginePlugin {
+    func transcribeStructured(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginStructuredTranscriptionResult
+}
+
+public protocol StructuredLanguageHintTranscriptionEnginePlugin: StructuredTranscriptionEnginePlugin {
+    func transcribeStructured(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginStructuredTranscriptionResult
 }
 
 public protocol DictionaryTermsBudgetProviding: TranscriptionEnginePlugin {

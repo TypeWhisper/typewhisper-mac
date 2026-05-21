@@ -6,6 +6,370 @@ import os
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhisper-mac", category: "AudioRecorderService")
 
+struct SystemAudioSampleProcessingResult {
+    let pcmBuffer: AVAudioPCMBuffer
+    let frameCount: Int
+    let rms: Float
+    let level: Float
+    let transcriptionSamples: [Float]
+}
+
+enum SystemAudioSampleProcessingError: LocalizedError {
+    case invalidSampleBuffer
+    case missingAudioFormat
+    case unsupportedAudioFormat
+    case emptyAudioBufferList
+    case emptyAudioData
+    case bufferListExtractionFailed(OSStatus)
+    case cannotCreateOutputFormat
+    case cannotCreatePCMBuffer
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidSampleBuffer:
+            "Invalid system audio sample buffer."
+        case .missingAudioFormat:
+            "System audio sample buffer is missing its audio format."
+        case .unsupportedAudioFormat:
+            "Unsupported system audio sample format."
+        case .emptyAudioBufferList:
+            "System audio sample buffer did not contain audio buffers."
+        case .emptyAudioData:
+            "System audio sample buffer did not contain audio data."
+        case .bufferListExtractionFailed(let status):
+            "Could not read system audio buffer list: \(status)."
+        case .cannotCreateOutputFormat:
+            "Could not create system audio output format."
+        case .cannotCreatePCMBuffer:
+            "Could not create system audio PCM buffer."
+        }
+    }
+}
+
+struct SystemAudioSampleProcessor {
+    static func process(
+        _ sampleBuffer: CMSampleBuffer,
+        transcriptionSampleRate: Double = AudioRecorderService.transcriptionSampleRate
+    ) throws -> SystemAudioSampleProcessingResult {
+        guard sampleBuffer.isValid else {
+            throw SystemAudioSampleProcessingError.invalidSampleBuffer
+        }
+        guard let formatDescription = sampleBuffer.formatDescription,
+              let asbdPointer = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription) else {
+            throw SystemAudioSampleProcessingError.missingAudioFormat
+        }
+
+        var bufferListSizeNeeded = 0
+        var status = CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(
+            sampleBuffer,
+            bufferListSizeNeededOut: &bufferListSizeNeeded,
+            bufferListOut: nil,
+            bufferListSize: 0,
+            blockBufferAllocator: nil,
+            blockBufferMemoryAllocator: nil,
+            flags: kCMSampleBufferFlag_AudioBufferList_Assure16ByteAlignment,
+            blockBufferOut: nil
+        )
+        guard status == noErr, bufferListSizeNeeded > 0 else {
+            throw SystemAudioSampleProcessingError.bufferListExtractionFailed(status)
+        }
+
+        let rawPointer = UnsafeMutableRawPointer.allocate(
+            byteCount: bufferListSizeNeeded,
+            alignment: MemoryLayout<AudioBufferList>.alignment
+        )
+        defer { rawPointer.deallocate() }
+        rawPointer.initializeMemory(as: UInt8.self, repeating: 0, count: bufferListSizeNeeded)
+
+        var retainedBlockBuffer: CMBlockBuffer?
+        status = CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(
+            sampleBuffer,
+            bufferListSizeNeededOut: nil,
+            bufferListOut: rawPointer.assumingMemoryBound(to: AudioBufferList.self),
+            bufferListSize: bufferListSizeNeeded,
+            blockBufferAllocator: kCFAllocatorDefault,
+            blockBufferMemoryAllocator: kCFAllocatorDefault,
+            flags: kCMSampleBufferFlag_AudioBufferList_Assure16ByteAlignment,
+            blockBufferOut: &retainedBlockBuffer
+        )
+        guard status == noErr else {
+            throw SystemAudioSampleProcessingError.bufferListExtractionFailed(status)
+        }
+
+        let audioBufferList = UnsafeMutableAudioBufferListPointer(rawPointer.assumingMemoryBound(to: AudioBufferList.self))
+        return try process(
+            audioBufferList: audioBufferList,
+            asbd: asbdPointer.pointee,
+            transcriptionSampleRate: transcriptionSampleRate
+        )
+    }
+
+    static func process(
+        audioBufferList: UnsafeMutableAudioBufferListPointer,
+        asbd: AudioStreamBasicDescription,
+        transcriptionSampleRate: Double
+    ) throws -> SystemAudioSampleProcessingResult {
+        guard asbd.mFormatID == kAudioFormatLinearPCM,
+              asbd.mSampleRate > 0,
+              asbd.mChannelsPerFrame > 0,
+              asbd.mBitsPerChannel > 0 else {
+            throw SystemAudioSampleProcessingError.unsupportedAudioFormat
+        }
+        guard !audioBufferList.isEmpty else {
+            throw SystemAudioSampleProcessingError.emptyAudioBufferList
+        }
+
+        let bytesPerSample = Int(asbd.mBitsPerChannel / 8)
+        let isFloat = asbd.mFormatFlags & kAudioFormatFlagIsFloat != 0
+        let isSignedInteger = asbd.mFormatFlags & kAudioFormatFlagIsSignedInteger != 0
+        let isNonInterleaved = asbd.mFormatFlags & kAudioFormatFlagIsNonInterleaved != 0
+        guard (isFloat && bytesPerSample == MemoryLayout<Float>.size)
+            || (isSignedInteger && bytesPerSample == MemoryLayout<Int16>.size) else {
+            throw SystemAudioSampleProcessingError.unsupportedAudioFormat
+        }
+
+        let channelCount = Int(asbd.mChannelsPerFrame)
+        let frameCount = frameCount(
+            in: audioBufferList,
+            bytesPerSample: bytesPerSample,
+            channelCount: channelCount,
+            isNonInterleaved: isNonInterleaved
+        )
+        guard frameCount > 0 else {
+            throw SystemAudioSampleProcessingError.emptyAudioData
+        }
+
+        guard let outputFormat = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: asbd.mSampleRate,
+            channels: AVAudioChannelCount(channelCount),
+            interleaved: false
+        ) else {
+            throw SystemAudioSampleProcessingError.cannotCreateOutputFormat
+        }
+        guard let pcmBuffer = AVAudioPCMBuffer(
+            pcmFormat: outputFormat,
+            frameCapacity: AVAudioFrameCount(frameCount)
+        ) else {
+            throw SystemAudioSampleProcessingError.cannotCreatePCMBuffer
+        }
+        pcmBuffer.frameLength = AVAudioFrameCount(frameCount)
+
+        guard let outputChannels = pcmBuffer.floatChannelData else {
+            throw SystemAudioSampleProcessingError.cannotCreatePCMBuffer
+        }
+        clear(outputChannels: outputChannels, channelCount: channelCount, frameCount: frameCount)
+
+        if isNonInterleaved {
+            copyNonInterleaved(
+                audioBufferList,
+                outputChannels: outputChannels,
+                channelCount: channelCount,
+                frameCount: frameCount,
+                isFloat: isFloat
+            )
+        } else {
+            try copyInterleaved(
+                audioBufferList,
+                outputChannels: outputChannels,
+                channelCount: channelCount,
+                frameCount: frameCount,
+                isFloat: isFloat
+            )
+        }
+
+        let rms = rms(outputChannels: outputChannels, channelCount: channelCount, frameCount: frameCount)
+        return SystemAudioSampleProcessingResult(
+            pcmBuffer: pcmBuffer,
+            frameCount: frameCount,
+            rms: rms,
+            level: min(1, rms * 5),
+            transcriptionSamples: transcriptionSamples(
+                outputChannels: outputChannels,
+                channelCount: channelCount,
+                frameCount: frameCount,
+                sampleRate: asbd.mSampleRate,
+                targetSampleRate: transcriptionSampleRate
+            )
+        )
+    }
+
+    private static func frameCount(
+        in audioBufferList: UnsafeMutableAudioBufferListPointer,
+        bytesPerSample: Int,
+        channelCount: Int,
+        isNonInterleaved: Bool
+    ) -> Int {
+        if isNonInterleaved {
+            let counts = audioBufferList.compactMap { buffer -> Int? in
+                guard buffer.mData != nil else { return nil }
+                let channels = max(1, Int(buffer.mNumberChannels))
+                return Int(buffer.mDataByteSize) / max(1, bytesPerSample * channels)
+            }
+            return counts.min() ?? 0
+        }
+
+        let firstBuffer = audioBufferList[0]
+        guard firstBuffer.mData != nil else { return 0 }
+        let channels = max(1, Int(firstBuffer.mNumberChannels), channelCount)
+        return Int(firstBuffer.mDataByteSize) / max(1, bytesPerSample * channels)
+    }
+
+    private static func clear(
+        outputChannels: UnsafePointer<UnsafeMutablePointer<Float>>,
+        channelCount: Int,
+        frameCount: Int
+    ) {
+        for channel in 0..<channelCount {
+            outputChannels[channel].update(repeating: 0, count: frameCount)
+        }
+    }
+
+    private static func copyInterleaved(
+        _ audioBufferList: UnsafeMutableAudioBufferListPointer,
+        outputChannels: UnsafePointer<UnsafeMutablePointer<Float>>,
+        channelCount: Int,
+        frameCount: Int,
+        isFloat: Bool
+    ) throws {
+        let inputBuffer = audioBufferList[0]
+        guard let data = inputBuffer.mData else {
+            throw SystemAudioSampleProcessingError.emptyAudioData
+        }
+        let inputChannels = max(1, Int(inputBuffer.mNumberChannels), channelCount)
+
+        if isFloat {
+            let input = data.assumingMemoryBound(to: Float.self)
+            for frame in 0..<frameCount {
+                for channel in 0..<channelCount {
+                    outputChannels[channel][frame] = input[frame * inputChannels + channel]
+                }
+            }
+        } else {
+            let input = data.assumingMemoryBound(to: Int16.self)
+            for frame in 0..<frameCount {
+                for channel in 0..<channelCount {
+                    outputChannels[channel][frame] = Float(input[frame * inputChannels + channel]) / Float(Int16.max)
+                }
+            }
+        }
+    }
+
+    private static func copyNonInterleaved(
+        _ audioBufferList: UnsafeMutableAudioBufferListPointer,
+        outputChannels: UnsafePointer<UnsafeMutablePointer<Float>>,
+        channelCount: Int,
+        frameCount: Int,
+        isFloat: Bool
+    ) {
+        var outputChannelIndex = 0
+        for inputBuffer in audioBufferList {
+            guard outputChannelIndex < channelCount, let data = inputBuffer.mData else { continue }
+            let channelsInBuffer = max(1, Int(inputBuffer.mNumberChannels))
+            if isFloat {
+                let input = data.assumingMemoryBound(to: Float.self)
+                for localChannel in 0..<channelsInBuffer where outputChannelIndex + localChannel < channelCount {
+                    for frame in 0..<frameCount {
+                        outputChannels[outputChannelIndex + localChannel][frame] = input[frame * channelsInBuffer + localChannel]
+                    }
+                }
+            } else {
+                let input = data.assumingMemoryBound(to: Int16.self)
+                for localChannel in 0..<channelsInBuffer where outputChannelIndex + localChannel < channelCount {
+                    for frame in 0..<frameCount {
+                        outputChannels[outputChannelIndex + localChannel][frame] =
+                            Float(input[frame * channelsInBuffer + localChannel]) / Float(Int16.max)
+                    }
+                }
+            }
+            outputChannelIndex += channelsInBuffer
+        }
+    }
+
+    private static func rms(
+        outputChannels: UnsafePointer<UnsafeMutablePointer<Float>>,
+        channelCount: Int,
+        frameCount: Int
+    ) -> Float {
+        var sum: Float = 0
+        for channel in 0..<channelCount {
+            for frame in 0..<frameCount {
+                let sample = outputChannels[channel][frame]
+                sum += sample * sample
+            }
+        }
+        return sqrt(sum / Float(frameCount * channelCount))
+    }
+
+    private static func transcriptionSamples(
+        outputChannels: UnsafePointer<UnsafeMutablePointer<Float>>,
+        channelCount: Int,
+        frameCount: Int,
+        sampleRate: Double,
+        targetSampleRate: Double
+    ) -> [Float] {
+        guard frameCount > 0, channelCount > 0, sampleRate > 0, targetSampleRate > 0 else { return [] }
+        let decimationFactor = max(1, Int(sampleRate / targetSampleRate))
+        var samples: [Float] = []
+        samples.reserveCapacity(frameCount / decimationFactor)
+
+        for frame in stride(from: 0, to: frameCount, by: decimationFactor) {
+            var sample: Float = 0
+            for channel in 0..<channelCount {
+                sample += outputChannels[channel][frame]
+            }
+            samples.append(sample / Float(channelCount))
+        }
+
+        return samples
+    }
+}
+
+struct SystemAudioCaptureDiagnostics {
+    private(set) var buffersReceived = 0
+    private(set) var framesReceived = 0
+    private(set) var lastErrorDescription: String?
+    private(set) var lastNonSilentRMS: Float = 0
+    private(set) var lastRMS: Float = 0
+    private var sessionStartedAt: Date?
+    private var isActive = false
+
+    mutating func beginSession(startedAt: Date = Date()) {
+        buffersReceived = 0
+        framesReceived = 0
+        lastErrorDescription = nil
+        lastNonSilentRMS = 0
+        lastRMS = 0
+        sessionStartedAt = startedAt
+        isActive = true
+    }
+
+    mutating func endSession() {
+        isActive = false
+    }
+
+    mutating func recordProcessedBuffer(frameCount: Int, rms: Float, nonSilentThreshold: Float) {
+        buffersReceived += 1
+        framesReceived += frameCount
+        lastErrorDescription = nil
+        lastRMS = rms
+        if rms >= nonSilentThreshold {
+            lastNonSilentRMS = rms
+        }
+    }
+
+    mutating func recordError(_ error: Error) {
+        lastErrorDescription = error.localizedDescription
+    }
+
+    func noAudioWarningIfNeeded(now: Date, gracePeriod: TimeInterval) -> String? {
+        guard isActive, let sessionStartedAt else { return nil }
+        guard now.timeIntervalSince(sessionStartedAt) >= gracePeriod else { return nil }
+        guard lastNonSilentRMS <= 0 else { return nil }
+        return AudioRecorderService.noSystemAudioDetectedWarning
+    }
+}
+
 /// Records audio from microphone and/or system audio to file.
 /// Uses AVAudioEngine for mic and ScreenCaptureKit for system audio.
 final class AudioRecorderService: ObservableObject, @unchecked Sendable {
@@ -76,11 +440,11 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         var displayName: String {
             switch self {
             case .aggressive:
-                return String(localized: "Aggressiv")
+                return String(localized: "Aggressive")
             case .medium:
-                return String(localized: "Mittel")
+                return String(localized: "Medium")
             case .off:
-                return String(localized: "Aus")
+                return String(localized: "Off")
             }
         }
     }
@@ -89,6 +453,11 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     @Published private(set) var duration: TimeInterval = 0
     @Published private(set) var micLevel: Float = 0
     @Published private(set) var systemLevel: Float = 0
+    @Published private(set) var systemAudioWarningMessage: String?
+    var recordingsDirectoryOverride: URL?
+    var startRecordingOverride: ((_ micEnabled: Bool, _ systemAudioEnabled: Bool, _ format: OutputFormat, _ outputURL: URL) async throws -> URL)?
+    var stopRecordingOverride: ((_ outputURL: URL) async throws -> URL?)?
+    var currentBufferOverride: (() -> [Float])?
 
     private var audioEngine: AVAudioEngine?
     private let micFileLock = OSAllocatedUnfairLock<AVAudioFile?>(initialState: nil)
@@ -97,6 +466,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     private let sysFileLock = OSAllocatedUnfairLock<AVAudioFile?>(initialState: nil)
     private var durationTimer: Timer?
     private var startTime: Date?
+    private let systemAudioDiagnosticsLock = OSAllocatedUnfairLock(initialState: SystemAudioCaptureDiagnostics())
 
     private var micTempURL: URL?
     private var systemTempURL: URL?
@@ -109,12 +479,23 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
     // 16kHz mono buffer for streaming transcription
     private let transcriptionBufferLock = OSAllocatedUnfairLock<RecorderTranscriptionBuffer>(initialState: RecorderTranscriptionBuffer())
-    private static let transcriptionSampleRate: Double = 16000
+    static let transcriptionSampleRate: Double = 16000
+    static var noSystemAudioDetectedWarning: String {
+        localizedAppText(
+            "No system audio was detected. If the other app is playing audio, macOS may be blocking that source from ScreenCaptureKit.",
+            de: "Es wurde kein Systemaudio erkannt. Wenn die andere App Audio abspielt, blockiert macOS diese Quelle möglicherweise für ScreenCaptureKit."
+        )
+    }
+    private static let systemAudioDetectionGracePeriod: TimeInterval = 2
+    private static let systemAudioNonSilentThreshold: Float = 0.0001
 
     static let recordingsDirectoryName = "TypeWhisper Recordings"
 
     var recordingsDirectory: URL {
-        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        if let recordingsDirectoryOverride {
+            return recordingsDirectoryOverride
+        }
+        return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent(Self.recordingsDirectoryName)
     }
 
@@ -122,6 +503,9 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
     /// Thread-safe snapshot of the current 16kHz mono buffer for streaming transcription.
     func getCurrentBuffer() -> [Float] {
+        if let currentBufferOverride {
+            return currentBufferOverride()
+        }
         let micEnabled = self.micEnabled
         let systemAudioEnabled = self.systemAudioEnabled
         let micDuckingMode = self.micDuckingMode
@@ -143,6 +527,11 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
     /// Returns at most the last `maxDuration` seconds of 16kHz audio.
     func getRecentBuffer(maxDuration: TimeInterval) -> [Float] {
+        if let currentBufferOverride {
+            let samples = currentBufferOverride()
+            let maxSampleCount = Int(maxDuration * Self.transcriptionSampleRate)
+            return Array(samples.suffix(maxSampleCount))
+        }
         let micEnabled = self.micEnabled
         let systemAudioEnabled = self.systemAudioEnabled
         let micDuckingMode = self.micDuckingMode
@@ -166,6 +555,11 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
     /// Returns audio appended since `sampleOffset` and the updated absolute offset.
     func getBufferDelta(since sampleOffset: Int) -> (samples: [Float], nextOffset: Int) {
+        if let currentBufferOverride {
+            let samples = currentBufferOverride()
+            let startIndex = min(max(0, sampleOffset), samples.count)
+            return (Array(samples.dropFirst(startIndex)), samples.count)
+        }
         let micEnabled = self.micEnabled
         let systemAudioEnabled = self.systemAudioEnabled
         let micDuckingMode = self.micDuckingMode
@@ -188,6 +582,9 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
     /// Total duration of transcription buffer in seconds.
     var totalBufferDuration: TimeInterval {
+        if let currentBufferOverride {
+            return Double(currentBufferOverride().count) / Self.transcriptionSampleRate
+        }
         return transcriptionBufferLock.withLock { buffer in
             Double(buffer.mixedSampleCount) / Self.transcriptionSampleRate
         }
@@ -201,6 +598,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         self.micEnabled = micEnabled
         self.systemAudioEnabled = systemAudioEnabled
         self.outputFormat = format
+        resetSystemAudioMonitoring(systemAudioEnabled: systemAudioEnabled)
 
         // Clear transcription buffer
         transcriptionBufferLock.withLock { $0.reset() }
@@ -216,31 +614,40 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         let outputURL = dir.appendingPathComponent("Recording \(timestamp).\(format.fileExtension)")
         self.finalOutputURL = outputURL
 
-        // Setup temp files
-        let tempDir = FileManager.default.temporaryDirectory
-        let sessionId = UUID().uuidString
+        if let startRecordingOverride {
+            do {
+                self.finalOutputURL = try await startRecordingOverride(micEnabled, systemAudioEnabled, format, outputURL)
+            } catch {
+                await rollbackFailedStart()
+                throw error
+            }
+        } else {
+            // Setup temp files
+            let tempDir = FileManager.default.temporaryDirectory
+            let sessionId = UUID().uuidString
 
-        do {
-            // Start mic recording
-            if micEnabled {
-                guard AVAudioApplication.shared.recordPermission == .granted else {
-                    throw RecorderError.microphonePermissionDenied
+            do {
+                // Start mic recording
+                if micEnabled {
+                    guard AVAudioApplication.shared.recordPermission == .granted else {
+                        throw RecorderError.microphonePermissionDenied
+                    }
+
+                    let micURL = tempDir.appendingPathComponent("mic-\(sessionId).wav")
+                    self.micTempURL = micURL
+                    try startMicRecording(outputURL: micURL)
                 }
 
-                let micURL = tempDir.appendingPathComponent("mic-\(sessionId).wav")
-                self.micTempURL = micURL
-                try startMicRecording(outputURL: micURL)
+                // Start system audio recording
+                if systemAudioEnabled {
+                    let sysURL = tempDir.appendingPathComponent("sys-\(sessionId).wav")
+                    self.systemTempURL = sysURL
+                    try await startSystemAudioRecording(outputURL: sysURL)
+                }
+            } catch {
+                await rollbackFailedStart()
+                throw error
             }
-
-            // Start system audio recording
-            if systemAudioEnabled {
-                let sysURL = tempDir.appendingPathComponent("sys-\(sessionId).wav")
-                self.systemTempURL = sysURL
-                try await startSystemAudioRecording(outputURL: sysURL)
-            }
-        } catch {
-            await rollbackFailedStart()
-            throw error
         }
 
         // Start duration timer
@@ -259,13 +666,41 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             self.isRecording = true
         }
 
-        return outputURL
+        return finalOutputURL ?? outputURL
     }
 
     func stopRecording() async -> URL? {
         // Stop timer
         durationTimer?.invalidate()
         durationTimer = nil
+        endSystemAudioMonitoring()
+
+        if let stopRecordingOverride, let finalURL = finalOutputURL {
+            let completedURL: URL?
+            do {
+                completedURL = try await stopRecordingOverride(finalURL)
+            } catch {
+                logger.error("Failed to finalize recording with override: \(error.localizedDescription)")
+                cleanupTempFile(finalURL)
+                completedURL = nil
+            }
+
+            cleanupTempFile(micTempURL)
+            cleanupTempFile(systemTempURL)
+            micTempURL = nil
+            systemTempURL = nil
+            finalOutputURL = nil
+            startTime = nil
+
+            DispatchQueue.main.async {
+                self.isRecording = false
+                self.duration = 0
+                self.micLevel = 0
+                self.systemLevel = 0
+            }
+
+            return completedURL
+        }
 
         // Stop mic
         if micEnabled {
@@ -499,7 +934,6 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         sysFileLock.withLock { $0 = audioFile }
 
         let output = SystemAudioStreamOutput()
-        output.audioFile = audioFile
         output.fileLock = sysFileLock
         let levelSetter = SystemLevelSetter(service: self)
         output.levelCallback = { level in
@@ -507,6 +941,12 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         }
         output.transcriptionBufferCallback = { [weak self] samples in
             self?.appendSystemTranscriptionSamples(samples)
+        }
+        output.processingResultCallback = { [weak self] result in
+            self?.recordSystemAudioProcessingResult(result)
+        }
+        output.processingErrorCallback = { [weak self] error in
+            self?.recordSystemAudioProcessingError(error)
         }
 
         streamOutput = output
@@ -516,6 +956,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
         try await stream.startCapture()
         scStream = stream
+        scheduleSystemAudioDetectionCheck()
     }
 
     // MARK: - Audio Mixing
@@ -711,6 +1152,85 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         systemLevel = level
     }
 
+    // MARK: - System Audio Diagnostics
+
+    private func resetSystemAudioMonitoring(systemAudioEnabled: Bool) {
+        systemAudioDiagnosticsLock.withLock { diagnostics in
+            if systemAudioEnabled {
+                diagnostics.beginSession()
+            } else {
+                diagnostics.endSession()
+            }
+        }
+        setSystemAudioWarningMessage(nil)
+    }
+
+    private func endSystemAudioMonitoring() {
+        systemAudioDiagnosticsLock.withLock { diagnostics in
+            diagnostics.endSession()
+        }
+    }
+
+    private func scheduleSystemAudioDetectionCheck() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.systemAudioDetectionGracePeriod) { [weak self] in
+            self?.publishSystemAudioWarningIfNeeded()
+        }
+    }
+
+    private func recordSystemAudioProcessingResult(_ result: SystemAudioSampleProcessingResult) {
+        let shouldClearWarning = result.rms >= Self.systemAudioNonSilentThreshold
+        let warning = systemAudioDiagnosticsLock.withLock { diagnostics in
+            diagnostics.recordProcessedBuffer(
+                frameCount: result.frameCount,
+                rms: result.rms,
+                nonSilentThreshold: Self.systemAudioNonSilentThreshold
+            )
+            return diagnostics.noAudioWarningIfNeeded(
+                now: Date(),
+                gracePeriod: Self.systemAudioDetectionGracePeriod
+            )
+        }
+
+        if shouldClearWarning {
+            setSystemAudioWarningMessage(nil)
+        } else if let warning {
+            setSystemAudioWarningMessage(warning)
+        }
+    }
+
+    private func recordSystemAudioProcessingError(_ error: Error) {
+        let warning = systemAudioDiagnosticsLock.withLock { diagnostics in
+            diagnostics.recordError(error)
+            return diagnostics.noAudioWarningIfNeeded(
+                now: Date(),
+                gracePeriod: Self.systemAudioDetectionGracePeriod
+            )
+        }
+
+        if let warning {
+            setSystemAudioWarningMessage(warning)
+        }
+    }
+
+    private func publishSystemAudioWarningIfNeeded() {
+        let warning = systemAudioDiagnosticsLock.withLock { diagnostics in
+            diagnostics.noAudioWarningIfNeeded(
+                now: Date(),
+                gracePeriod: Self.systemAudioDetectionGracePeriod
+            )
+        }
+
+        if let warning {
+            setSystemAudioWarningMessage(warning)
+        }
+    }
+
+    private func setSystemAudioWarningMessage(_ message: String?) {
+        DispatchQueue.main.async { [weak self] in
+            self?.systemAudioWarningMessage = message
+        }
+    }
+
     // MARK: - Helpers
 
     private func copyOrConvert(from sourceURL: URL, to destinationURL: URL) throws {
@@ -900,6 +1420,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         durationTimer?.invalidate()
         durationTimer = nil
         startTime = nil
+        endSystemAudioMonitoring()
 
         if let stream = scStream {
             try? await stream.stopCapture()
@@ -948,118 +1469,40 @@ private final class SystemLevelSetter: @unchecked Sendable {
 // MARK: - SCStream Output Handler
 
 private final class SystemAudioStreamOutput: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sendable {
-    var audioFile: AVAudioFile?
     var fileLock: OSAllocatedUnfairLock<AVAudioFile?>?
     var levelCallback: ((Float) -> Void)?
     var transcriptionBufferCallback: (([Float]) -> Void)?
+    var processingResultCallback: ((SystemAudioSampleProcessingResult) -> Void)?
+    var processingErrorCallback: ((Error) -> Void)?
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .audio else { return }
-        guard sampleBuffer.isValid else { return }
+        do {
+            let result = try SystemAudioSampleProcessor.process(sampleBuffer)
+            processingResultCallback?(result)
+            levelCallback?(result.level)
 
-        guard let formatDesc = sampleBuffer.formatDescription,
-              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(formatDesc) else { return }
-
-        guard let blockBuffer = sampleBuffer.dataBuffer else { return }
-        let length = CMBlockBufferGetDataLength(blockBuffer)
-        guard length > 0 else { return }
-
-        var dataPointer: UnsafeMutablePointer<Int8>?
-        let status = CMBlockBufferGetDataPointer(blockBuffer, atOffset: 0, lengthAtOffsetOut: nil, totalLengthOut: nil, dataPointerOut: &dataPointer)
-        guard status == kCMBlockBufferNoErr, let dataPointer else { return }
-
-        // Calculate level from raw samples
-        let bytesPerSample = Int(asbd.pointee.mBitsPerChannel / 8)
-        let channelCount = Int(asbd.pointee.mChannelsPerFrame)
-        guard bytesPerSample > 0, channelCount > 0 else { return }
-        let sampleCount = length / (bytesPerSample * channelCount)
-        guard sampleCount > 0 else { return }
-
-        if asbd.pointee.mFormatFlags & kAudioFormatFlagIsFloat != 0 && bytesPerSample == 4 {
-            let floatPointer = UnsafeRawPointer(dataPointer).bindMemory(to: Float.self, capacity: sampleCount * channelCount)
-            var sum: Float = 0
-            for i in 0..<(sampleCount * channelCount) {
-                let sample = floatPointer[i]
-                sum += sample * sample
-            }
-            let rms = sqrt(sum / Float(sampleCount * channelCount))
-            let level = min(1.0, rms * 5)
-            levelCallback?(level)
-        } else if bytesPerSample == 2 {
-            let int16Pointer = UnsafeRawPointer(dataPointer).bindMemory(to: Int16.self, capacity: sampleCount * channelCount)
-            var sum: Float = 0
-            for i in 0..<(sampleCount * channelCount) {
-                let sample = Float(int16Pointer[i]) / Float(Int16.max)
-                sum += sample * sample
-            }
-            let rms = sqrt(sum / Float(sampleCount * channelCount))
-            let level = min(1.0, rms * 5)
-            levelCallback?(level)
-        }
-
-        // Convert CMSampleBuffer to AVAudioPCMBuffer and write
-        let isFloat = asbd.pointee.mFormatFlags & kAudioFormatFlagIsFloat != 0
-        let isNonInterleaved = asbd.pointee.mFormatFlags & kAudioFormatFlagIsNonInterleaved != 0
-        guard let format = AVAudioFormat(
-            commonFormat: isFloat && bytesPerSample == 4 ? .pcmFormatFloat32 : .pcmFormatInt16,
-            sampleRate: asbd.pointee.mSampleRate,
-            channels: AVAudioChannelCount(channelCount),
-            interleaved: !isNonInterleaved
-        ) else { return }
-
-        let frameCount = AVAudioFrameCount(sampleCount)
-        guard let pcmBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else { return }
-        pcmBuffer.frameLength = frameCount
-
-        // Copy data into buffer
-        if let bufferData = pcmBuffer.audioBufferList.pointee.mBuffers.mData {
-            memcpy(bufferData, dataPointer, length)
-        }
-
-        fileLock?.withLock { file in
-            guard let file else { return }
-            do {
-                try file.write(from: pcmBuffer)
-            } catch {
-                logger.error("Failed to write system audio: \(error.localizedDescription)")
-            }
-        }
-
-        // Downsample to 16kHz mono for transcription buffer
-        if let callback = transcriptionBufferCallback {
-            let sampleRate = asbd.pointee.mSampleRate
-            let decimationFactor = Int(sampleRate / 16000)
-            guard decimationFactor > 0 else { return }
-
-            if isFloat && bytesPerSample == 4 {
-                let floatPtr = UnsafeRawPointer(dataPointer).bindMemory(to: Float.self, capacity: sampleCount * channelCount)
-                var mono16k: [Float] = []
-                mono16k.reserveCapacity(sampleCount / decimationFactor)
-                for i in stride(from: 0, to: sampleCount, by: decimationFactor) {
-                    var sample: Float = 0
-                    for ch in 0..<channelCount {
-                        sample += floatPtr[i * channelCount + ch]
-                    }
-                    mono16k.append(sample / Float(channelCount))
+            fileLock?.withLock { file in
+                guard let file else { return }
+                do {
+                    try file.write(from: result.pcmBuffer)
+                } catch {
+                    processingErrorCallback?(error)
+                    logger.error("Failed to write system audio: \(error.localizedDescription)")
                 }
-                callback(mono16k)
-            } else if bytesPerSample == 2 {
-                let int16Ptr = UnsafeRawPointer(dataPointer).bindMemory(to: Int16.self, capacity: sampleCount * channelCount)
-                var mono16k: [Float] = []
-                mono16k.reserveCapacity(sampleCount / decimationFactor)
-                for i in stride(from: 0, to: sampleCount, by: decimationFactor) {
-                    var sample: Float = 0
-                    for ch in 0..<channelCount {
-                        sample += Float(int16Ptr[i * channelCount + ch]) / Float(Int16.max)
-                    }
-                    mono16k.append(sample / Float(channelCount))
-                }
-                callback(mono16k)
             }
+
+            if !result.transcriptionSamples.isEmpty {
+                transcriptionBufferCallback?(result.transcriptionSamples)
+            }
+        } catch {
+            processingErrorCallback?(error)
+            logger.error("Failed to process system audio: \(error.localizedDescription)")
         }
     }
 
     func stream(_ stream: SCStream, didStopWithError error: any Error) {
+        processingErrorCallback?(error)
         logger.error("SCStream stopped with error: \(error.localizedDescription)")
     }
 }

@@ -1,6 +1,7 @@
 import Foundation
 import os
 import Combine
+import TypeWhisperPluginSDK
 
 enum WatchFolderOutputFormat: String, CaseIterable {
     case markdown = "md"
@@ -42,6 +43,47 @@ enum WatchFolderOutputFormat: String, CaseIterable {
 struct WatchFolderExportArtifact {
     let fileExtension: String
     let content: String
+}
+
+@MainActor
+struct FileJobAutomationPipeline {
+    private let automationsProvider: @MainActor () -> [any FileJobAutomationPlugin]
+    private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "FileJobAutomation")
+
+    init(automationsProvider: @escaping @MainActor () -> [any FileJobAutomationPlugin] = {
+        PluginManager.shared.fileJobAutomations
+    }) {
+        self.automationsProvider = automationsProvider
+    }
+
+    func process(artifact: FileJobArtifact, context: FileJobContext) async -> FileJobAutomationResult {
+        var currentArtifact = artifact
+        var appliedSteps: [String] = []
+        var outputPathWasWritten = false
+
+        for automation in automationsProvider() {
+            let before = currentArtifact
+            do {
+                let result = try await automation.process(artifact: currentArtifact, context: context)
+                currentArtifact = result.artifact
+                outputPathWasWritten = outputPathWasWritten || result.outputPathWasWritten
+
+                if !result.appliedSteps.isEmpty {
+                    appliedSteps.append(contentsOf: result.appliedSteps)
+                } else if result.artifact != before || result.outputPathWasWritten {
+                    appliedSteps.append(automation.automationName)
+                }
+            } catch {
+                logger.error("File job automation '\(automation.automationName)' failed: \(error.localizedDescription)")
+            }
+        }
+
+        return FileJobAutomationResult(
+            artifact: currentArtifact,
+            appliedSteps: appliedSteps,
+            outputPathWasWritten: outputPathWasWritten
+        )
+    }
 }
 
 enum WatchFolderExportBuilder {
@@ -128,11 +170,17 @@ final class WatchFolderService: ObservableObject {
 
     private let audioFileService: AudioFileService
     private let modelManagerService: ModelManagerService
+    private let fileJobAutomationPipeline: FileJobAutomationPipeline
     private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "WatchFolder")
 
-    init(audioFileService: AudioFileService, modelManagerService: ModelManagerService) {
+    init(
+        audioFileService: AudioFileService,
+        modelManagerService: ModelManagerService,
+        fileJobAutomationPipeline: FileJobAutomationPipeline = FileJobAutomationPipeline()
+    ) {
         self.audioFileService = audioFileService
         self.modelManagerService = modelManagerService
+        self.fileJobAutomationPipeline = fileJobAutomationPipeline
         loadProcessedFileFingerprints()
         loadProcessedFiles()
     }
@@ -318,7 +366,36 @@ final class WatchFolderService: ObservableObject {
                 .appendingPathComponent(outputName)
                 .appendingPathExtension(artifact.fileExtension)
 
-            try artifact.content.write(to: outputURL, atomically: true, encoding: .utf8)
+            let fileJobContext = FileJobContext(
+                jobKind: .watchFolder,
+                sourceFilePath: url.path,
+                outputDirectoryPath: outputFolder.path,
+                outputFilePath: outputURL.path,
+                outputFormat: artifact.fileExtension,
+                engineId: overrides.engineId ?? modelManagerService.selectedProviderId,
+                engineName: engineName,
+                modelId: modelManagerService.resolvedModelId(
+                    engineOverrideId: overrides.engineId,
+                    cloudModelOverride: overrides.modelId
+                ),
+                transcriptText: result.text,
+                detectedLanguage: result.detectedLanguage,
+                segments: result.segments.map {
+                    FileJobTranscriptSegment(
+                        text: $0.text,
+                        start: $0.start,
+                        end: $0.end,
+                        speakerLabel: $0.speakerLabel,
+                        speakerConfidence: $0.speakerConfidence
+                    )
+                }
+            )
+            let automationResult = await fileJobAutomationPipeline.process(
+                artifact: FileJobArtifact(fileExtension: artifact.fileExtension, content: artifact.content),
+                context: fileJobContext
+            )
+
+            try automationResult.artifact.content.write(to: outputURL, atomically: true, encoding: .utf8)
 
             if deleteSource {
                 try? FileManager.default.removeItem(at: url)

@@ -56,6 +56,8 @@ public extension HostServices {
 /// session so fast plugin requests can keep DNS/TLS/HTTP connections warm.
 public enum PluginHTTPClient {
     private static let logger = Logger(subsystem: "com.typewhisper.sdk", category: "HTTP")
+    private static let defaultRequestTimeout: TimeInterval = 30
+    private static let longRunningResourceTimeout: TimeInterval = 600
     private static let lock = NSLock()
     nonisolated(unsafe) private static var sharedSession: (any PluginHTTPClientSession)?
     nonisolated(unsafe) private static var sessionFactory: (URLSessionConfiguration) -> any PluginHTTPClientSession = {
@@ -140,8 +142,8 @@ public enum PluginHTTPClient {
 
     private static func makeConfiguration() -> URLSessionConfiguration {
         let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 30
-        config.timeoutIntervalForResource = 90
+        config.timeoutIntervalForRequest = defaultRequestTimeout
+        config.timeoutIntervalForResource = longRunningResourceTimeout
         return config
     }
 
@@ -257,6 +259,7 @@ public enum PluginTranscriptionError: LocalizedError, Sendable {
 public struct PluginOpenAITranscriptionHelper: Sendable {
     public let baseURL: String
     public let responseFormat: String
+    private static let defaultRequestTimeout: TimeInterval = 30
     static let minimumUploadDuration: TimeInterval = 1.0
     static let uploadSampleRate = 16000
 
@@ -291,6 +294,50 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         prompt: String?,
         responseFormat: String? = nil
     ) async throws -> PluginTranscriptionResult {
+        try await performTranscribe(
+            audio: audio,
+            apiKey: apiKey,
+            modelName: modelName,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            responseFormat: responseFormat,
+            requestTimeout: Self.defaultRequestTimeout
+        )
+    }
+
+    public func transcribe(
+        audio: AudioData,
+        apiKey: String,
+        modelName: String,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        requestTimeout: TimeInterval,
+        responseFormat: String? = nil
+    ) async throws -> PluginTranscriptionResult {
+        try await performTranscribe(
+            audio: audio,
+            apiKey: apiKey,
+            modelName: modelName,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            responseFormat: responseFormat,
+            requestTimeout: requestTimeout
+        )
+    }
+
+    private func performTranscribe(
+        audio: AudioData,
+        apiKey: String,
+        modelName: String,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        responseFormat: String?,
+        requestTimeout: TimeInterval
+    ) async throws -> PluginTranscriptionResult {
         let endpoint: String
         if translate {
             endpoint = "\(baseURL)/v1/audio/translations"
@@ -307,7 +354,7 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 30
+        request.timeoutInterval = requestTimeout
 
         let uploadAudio = normalizedAudioForUpload(audio)
         var body = Data()
@@ -443,6 +490,24 @@ public struct PluginOpenAIChatHelper: Sendable {
     public init(baseURL: String, chatEndpoint: String = "/v1/chat/completions") {
         self.baseURL = baseURL
         self.chatEndpoint = chatEndpoint
+    }
+
+    // Keep the pre-ac10ea9 symbol available so already-installed plugin bundles
+    // continue to load after the helper grew token-parameter customization.
+    public func process(
+        apiKey: String,
+        model: String,
+        systemPrompt: String,
+        userText: String
+    ) async throws -> String {
+        try await process(
+            apiKey: apiKey,
+            model: model,
+            systemPrompt: systemPrompt,
+            userText: userText,
+            maxOutputTokens: 4096,
+            maxOutputTokenParameter: "max_tokens"
+        )
     }
 
     public func process(

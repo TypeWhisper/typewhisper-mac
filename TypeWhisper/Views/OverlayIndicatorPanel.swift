@@ -43,18 +43,26 @@ class OverlayIndicatorPanel: NSPanel {
 
     func startObserving() {
         let vm = DictationViewModel.shared
+        let recorder = AudioRecorderViewModel.shared
 
         vm.$state
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] state in
-                self?.updateVisibility(state: state, vm: vm)
+            .sink { [weak self] _ in
+                self?.updateVisibility(vm: vm, recorder: recorder)
+            }
+            .store(in: &cancellables)
+
+        recorder.$state
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateVisibility(vm: vm, recorder: recorder)
             }
             .store(in: &cancellables)
 
         vm.$notchIndicatorVisibility
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                self?.updateVisibility(state: vm.state, vm: vm)
+                self?.updateVisibility(vm: vm, recorder: recorder)
             }
             .store(in: &cancellables)
 
@@ -62,7 +70,7 @@ class OverlayIndicatorPanel: NSPanel {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.cachedScreen = nil
-                self?.updateVisibility(state: vm.state, vm: vm)
+                self?.updateVisibility(vm: vm, recorder: recorder)
             }
             .store(in: &cancellables)
 
@@ -75,23 +83,25 @@ class OverlayIndicatorPanel: NSPanel {
             .store(in: &cancellables)
     }
 
-    func updateVisibility(state: DictationViewModel.State, vm: DictationViewModel) {
+    func updateVisibility(
+        vm: DictationViewModel = DictationViewModel.shared,
+        recorder: AudioRecorderViewModel = AudioRecorderViewModel.shared
+    ) {
         guard vm.indicatorStyle == .overlay else {
             dismiss()
             return
         }
 
-        switch vm.notchIndicatorVisibility {
-        case .always:
+        let presentation = IndicatorPresentationState.resolve(
+            dictationState: vm.state,
+            recorderState: recorder.state
+        )
+        if IndicatorPresentationState.shouldShow(
+            visibility: vm.notchIndicatorVisibility,
+            presentation: presentation
+        ) {
             show()
-        case .duringActivity:
-            switch state {
-            case .recording, .processing, .inserting, .error:
-                show()
-            case .idle, .promptSelection, .promptProcessing:
-                dismiss()
-            }
-        case .never:
+        } else {
             dismiss()
         }
     }
@@ -103,6 +113,11 @@ class OverlayIndicatorPanel: NSPanel {
         } else {
             screen = resolveScreen()
             cachedScreen = screen
+        }
+
+        if IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(on: screen) {
+            suppressForForeignFullscreen()
+            return
         }
 
         let screenFrame = screen.visibleFrame
@@ -122,6 +137,11 @@ class OverlayIndicatorPanel: NSPanel {
             self,
             displayMode: DictationViewModel.shared.notchIndicatorDisplay
         )
+    }
+
+    private func suppressForForeignFullscreen() {
+        cachedScreen = nil
+        orderOut(nil)
     }
 
     private func resolveScreen() -> NSScreen {

@@ -11,6 +11,8 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
+from plugin_registry_metadata import remove_top_level_release_metadata
+
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_COMMUNITY_DIR = REPO_ROOT / "PluginRegistry" / "community-v1"
@@ -34,7 +36,6 @@ PLUGIN_REQUIRED_FIELDS = {
     "author",
     "description",
     "category",
-    "releases",
 }
 RELEASE_REQUIRED_FIELDS = {
     "version",
@@ -56,6 +57,8 @@ TOP_LEVEL_RELEASE_FIELDS = {
 PLUGIN_ID_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?$")
 SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
 OS_VERSION_RE = re.compile(r"^\d+\.\d+(?:\.\d+)?$")
+TYPEWHISPER_RELEASE_NETLOC = "github.com"
+TYPEWHISPER_RELEASE_PATH_PREFIX = "/TypeWhisper/typewhisper-mac/releases/download/"
 
 
 def load_json(path: Path) -> tuple[dict | None, list[str]]:
@@ -91,6 +94,33 @@ def validate_https_url(value: object, filename: str, field: str) -> list[str]:
     parsed = urlparse(value)
     if parsed.scheme != "https" or not parsed.netloc:
         return [f"{filename}: '{field}' must be an HTTPS URL"]
+    return []
+
+
+def is_typewhisper_release_asset_url(value: object) -> bool:
+    if not is_non_empty_string(value):
+        return False
+
+    parsed = urlparse(value)
+    return (
+        parsed.scheme == "https"
+        and parsed.netloc.lower() == TYPEWHISPER_RELEASE_NETLOC
+        and parsed.path.startswith(TYPEWHISPER_RELEASE_PATH_PREFIX)
+    )
+
+
+def validate_typewhisper_release_asset_url(
+    value: object, filename: str, field: str
+) -> list[str]:
+    errors = validate_https_url(value, filename, field)
+    if errors:
+        return errors
+
+    if not is_typewhisper_release_asset_url(value):
+        return [
+            f"{filename}: '{field}' must point to a TypeWhisper-owned GitHub "
+            "Release asset under TypeWhisper/typewhisper-mac"
+        ]
     return []
 
 
@@ -171,7 +201,11 @@ def validate_release(release: object, filename: str, index: int) -> list[str]:
     if size is not None and not is_positive_int(size):
         errors.append(f"{prefix}: 'size' must be a positive integer")
 
-    errors.extend(validate_https_url(release.get("downloadURL"), prefix, "downloadURL"))
+    errors.extend(
+        validate_typewhisper_release_asset_url(
+            release.get("downloadURL"), prefix, "downloadURL"
+        )
+    )
 
     min_os_version = release.get("minOSVersion")
     if min_os_version is not None and not (
@@ -249,8 +283,8 @@ def validate_plugin(plugin: dict, path: Path) -> list[str]:
 
     releases = plugin.get("releases")
     if releases is not None:
-        if not isinstance(releases, list) or not releases:
-            errors.append(f"{filename}: 'releases' must be a non-empty array")
+        if not isinstance(releases, list):
+            errors.append(f"{filename}: 'releases' must be an array when present")
         else:
             seen_versions = set()
             for index, release in enumerate(releases):
@@ -282,12 +316,42 @@ def version_key(value: object):
 
 def normalized_plugin(plugin: dict) -> dict:
     result = copy.deepcopy(plugin)
-    result["releases"] = sorted(
-        result["releases"],
+    releases = result.get("releases")
+    if isinstance(releases, list):
+        result["releases"] = sorted(
+            releases,
+            key=lambda release: version_key(release.get("version")),
+            reverse=True,
+        )
+    return result
+
+
+def normalized_releases(releases: object) -> list[dict]:
+    if not isinstance(releases, list):
+        return []
+    return sorted(
+        [copy.deepcopy(release) for release in releases],
         key=lambda release: version_key(release.get("version")),
         reverse=True,
     )
-    return result
+
+
+def merge_release_sets(source_releases: object, preserved_releases: object) -> list[dict]:
+    releases_by_version = {}
+    for release in normalized_releases(preserved_releases):
+        version = release.get("version")
+        if isinstance(version, str):
+            releases_by_version[version] = release
+    for release in normalized_releases(source_releases):
+        version = release.get("version")
+        if isinstance(version, str):
+            releases_by_version[version] = release
+
+    return sorted(
+        releases_by_version.values(),
+        key=lambda release: version_key(release.get("version")),
+        reverse=True,
+    )
 
 
 def load_community_entries(community_dir: Path) -> tuple[list[dict], list[str]]:
@@ -338,13 +402,42 @@ def assemble_registry(base_registry: dict, community_entries: list[dict]) -> tup
     errors = []
     official_entries = []
     official_ids = set()
+    preserved_community_entries = {}
 
     for plugin in base_registry.get("plugins", []):
         if not isinstance(plugin, dict):
             errors.append("base registry contains a non-object plugin entry")
             continue
         if plugin.get("source", "official") == "community":
+            plugin_id = plugin.get("id")
+            if not isinstance(plugin_id, str):
+                errors.append("base registry contains a community entry without a string id")
+                continue
+
+            plugin = copy.deepcopy(plugin)
+            remove_top_level_release_metadata(plugin)
+            releases = plugin.get("releases")
+            if releases is not None:
+                if not isinstance(releases, list):
+                    errors.append(
+                        f"base registry community plugin '{plugin_id}' has a non-array releases field"
+                    )
+                else:
+                    for index, release in enumerate(releases):
+                        errors.extend(
+                            validate_release(
+                                release,
+                                f"base registry community plugin '{plugin_id}'",
+                                index,
+                            )
+                        )
+
+            if plugin.get("releases"):
+                preserved_community_entries[plugin_id] = plugin
             continue
+
+        plugin = copy.deepcopy(plugin)
+        remove_top_level_release_metadata(plugin)
         plugin_id = plugin.get("id")
         if isinstance(plugin_id, str):
             official_ids.add(plugin_id)
@@ -358,11 +451,25 @@ def assemble_registry(base_registry: dict, community_entries: list[dict]) -> tup
     if errors:
         return base_registry, errors
 
+    assembled_community_entries = []
+    for entry in community_entries:
+        merged_entry = copy.deepcopy(entry)
+        preserved_entry = preserved_community_entries.get(entry["id"], {})
+        releases = merge_release_sets(
+            merged_entry.get("releases"),
+            preserved_entry.get("releases"),
+        )
+        if not releases:
+            continue
+
+        merged_entry["releases"] = releases
+        assembled_community_entries.append(merged_entry)
+
     return {
         "schemaVersion": base_registry.get("schemaVersion", 1),
         "plugins": official_entries
         + sorted(
-            community_entries,
+            assembled_community_entries,
             key=lambda plugin: (plugin.get("name", "").lower(), plugin["id"]),
         ),
     }, []
