@@ -361,6 +361,7 @@ final class PluginRegistryService: ObservableObject {
     private let fetchData: (URLRequest) async throws -> (Data, URLResponse)
     private let cacheDirectory: URL
     private static let lastUpdateCheckKey = "pluginRegistryLastUpdateCheck"
+    private static let lastHostFingerprintCheckKey = "pluginRegistryLastHostFingerprintCheck"
 
     enum FetchState: Equatable {
         case idle
@@ -462,18 +463,50 @@ final class PluginRegistryService: ObservableObject {
 
     // MARK: - Background Update Check
 
-    /// Check for plugin updates on app launch (at most once per 24h).
+    /// Check for plugin updates on app launch (at most once per 24h), and force
+    /// one refresh after each host app update so bundled registry gates are not
+    /// hidden behind the previous build's throttle window.
     func checkForUpdatesInBackground() {
-        let lastCheck = userDefaults.double(forKey: Self.lastUpdateCheckKey)
-        let hoursSinceLastCheck = (Date().timeIntervalSince1970 - lastCheck) / 3600
-        guard hoursSinceLastCheck >= 24 || lastCheck == 0 else { return }
-
         Task {
-            lastFetchDate = nil
-            await fetchRegistry(force: true)
-            updateAvailableUpdatesCount()
-            userDefaults.set(Date().timeIntervalSince1970, forKey: Self.lastUpdateCheckKey)
+            await refreshRegistryForHostUpdateIfNeeded()
         }
+    }
+
+    @discardableResult
+    func refreshRegistryForHostUpdateIfNeeded(
+        currentFingerprint: String = AppConstants.currentReleaseFingerprint,
+        now: Date = Date()
+    ) async -> Bool {
+        let lastCheck = userDefaults.double(forKey: Self.lastUpdateCheckKey)
+        let hoursSinceLastCheck = (now.timeIntervalSince1970 - lastCheck) / 3600
+        let lastFingerprint = userDefaults.string(forKey: Self.lastHostFingerprintCheckKey)
+        let hostChanged = lastFingerprint != currentFingerprint
+
+        guard hostChanged || hoursSinceLastCheck >= 24 || lastCheck == 0 else {
+            return false
+        }
+
+        lastFetchDate = nil
+        await fetchRegistry(force: true)
+        updateAvailableUpdatesCount()
+        userDefaults.set(now.timeIntervalSince1970, forKey: Self.lastUpdateCheckKey)
+        userDefaults.set(currentFingerprint, forKey: Self.lastHostFingerprintCheckKey)
+        return true
+    }
+
+    static func canRepairInstalledPlugin(
+        isBundled: Bool,
+        registryPlugin: RegistryPlugin?,
+        installInfo: PluginInstallInfo,
+        installState: InstallState?
+    ) -> Bool {
+        guard !isBundled, registryPlugin != nil, installState == nil else {
+            return false
+        }
+        if case .installed = installInfo {
+            return true
+        }
+        return false
     }
 
     func updateAvailableUpdatesCount() {

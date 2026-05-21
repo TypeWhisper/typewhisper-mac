@@ -665,4 +665,130 @@ final class PluginRegistryServiceTests: XCTestCase {
         XCTAssertEqual(service.fetchState, .loaded)
         XCTAssertEqual(service.registry.map(\.id), ["com.typewhisper.cached"])
     }
+
+    @MainActor
+    func testHostFingerprintChangeForcesRegistryRefreshInsideThrottleWindow() async throws {
+        let suiteName = "PluginRegistryServiceTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let cacheDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginRegistryFingerprint")
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+            TestSupport.remove(cacheDirectory)
+        }
+
+        var requestCount = 0
+        let service = PluginRegistryService(
+            registryBaseURL: URL(string: "https://example.com")!,
+            cacheDirectory: cacheDirectory,
+            cacheDuration: 0,
+            userDefaults: defaults,
+            infoDictionary: [
+                "CFBundleShortVersionString": "1.4.0",
+                "TypeWhisperReleaseChannel": AppConstants.ReleaseChannel.stable.rawValue,
+            ],
+            fetchData: { request in
+                requestCount += 1
+                let response = HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!
+                return (Self.registryPayload(pluginId: "com.typewhisper.fingerprint"), response)
+            }
+        )
+        let now = Date(timeIntervalSince1970: 2_000)
+
+        let initialFetch = await service.refreshRegistryForHostUpdateIfNeeded(currentFingerprint: "1.4.0+803@stable", now: now)
+        let throttledFetch = await service.refreshRegistryForHostUpdateIfNeeded(
+            currentFingerprint: "1.4.0+803@stable",
+            now: now.addingTimeInterval(60)
+        )
+        let fingerprintFetch = await service.refreshRegistryForHostUpdateIfNeeded(
+            currentFingerprint: "1.4.1+804@stable",
+            now: now.addingTimeInterval(120)
+        )
+
+        XCTAssertTrue(initialFetch)
+        XCTAssertFalse(throttledFetch)
+        XCTAssertTrue(fingerprintFetch)
+        XCTAssertEqual(requestCount, 2)
+    }
+
+    @MainActor
+    func testUnchangedHostFingerprintPreservesBackgroundUpdateThrottle() async throws {
+        let suiteName = "PluginRegistryServiceTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let cacheDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginRegistryFingerprintThrottle")
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+            TestSupport.remove(cacheDirectory)
+        }
+
+        var requestCount = 0
+        let service = PluginRegistryService(
+            registryBaseURL: URL(string: "https://example.com")!,
+            cacheDirectory: cacheDirectory,
+            cacheDuration: 0,
+            userDefaults: defaults,
+            infoDictionary: [
+                "CFBundleShortVersionString": "1.4.0",
+                "TypeWhisperReleaseChannel": AppConstants.ReleaseChannel.stable.rawValue,
+            ],
+            fetchData: { request in
+                requestCount += 1
+                let response = HTTPURLResponse(
+                    url: try XCTUnwrap(request.url),
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!
+                return (Self.registryPayload(pluginId: "com.typewhisper.throttle"), response)
+            }
+        )
+        let now = Date(timeIntervalSince1970: 3_000)
+
+        let initialFetch = await service.refreshRegistryForHostUpdateIfNeeded(currentFingerprint: "1.4.0+803@stable", now: now)
+        let throttledFetch = await service.refreshRegistryForHostUpdateIfNeeded(
+            currentFingerprint: "1.4.0+803@stable",
+            now: now.addingTimeInterval(23 * 3600)
+        )
+        let expiredFetch = await service.refreshRegistryForHostUpdateIfNeeded(
+            currentFingerprint: "1.4.0+803@stable",
+            now: now.addingTimeInterval(25 * 3600)
+        )
+
+        XCTAssertTrue(initialFetch)
+        XCTAssertFalse(throttledFetch)
+        XCTAssertTrue(expiredFetch)
+        XCTAssertEqual(requestCount, 2)
+    }
+
+    private static func registryPayload(pluginId: String) -> Data {
+        Data(
+            """
+            {
+              "schemaVersion": 1,
+              "plugins": [
+                {
+                  "id": "\(pluginId)",
+                  "name": "Cached Plugin",
+                  "author": "TypeWhisper",
+                  "description": "Cacheable entry",
+                  "category": "utility",
+                  "releases": [
+                    {
+                      "version": "1.0.0",
+                      "minHostVersion": "1.4.0",
+                      "sdkCompatibilityVersion": "v1",
+                      "size": 10,
+                      "downloadURL": "https://example.com/cached.zip"
+                    }
+                  ]
+                }
+              ]
+            }
+            """.utf8
+        )
+    }
 }

@@ -169,6 +169,18 @@ struct IncompatibleExternalBundle: Equatable, Sendable {
     let reason: Reason
 }
 
+extension IncompatibleExternalBundle.Reason {
+    var diagnosticsValue: String {
+        switch self {
+        case .sdkCompatibility(let expected, let actual):
+            if let actual {
+                return "sdkCompatibility:expected=\(expected),actual=\(actual)"
+            }
+            return "sdkCompatibility:expected=\(expected),actual=missing"
+        }
+    }
+}
+
 enum ExternalBundleNotice: Equatable {
     case legacyBundlePresent(version: String)
     case incompatibleWithCurrentRuntime(version: String)
@@ -180,6 +192,19 @@ enum ExternalBundleNotice: Equatable {
             return true
         }
         return false
+    }
+
+    var diagnosticsValue: String {
+        switch self {
+        case .legacyBundlePresent(let version):
+            return "legacyBundlePresent:version=\(version)"
+        case .incompatibleWithCurrentRuntime(let version):
+            return "incompatibleWithCurrentRuntime:version=\(version)"
+        case .bundledFallbackActive(let version):
+            return "bundledFallbackActive:version=\(version)"
+        case .boundaryUpgradeRequired(let installedVersion, let availableVersion):
+            return "boundaryUpgradeRequired:installed=\(installedVersion),available=\(availableVersion)"
+        }
     }
 }
 

@@ -410,6 +410,11 @@ struct PluginSettingsView: View {
                                 startInstall(registryPlugin)
                             }
                         },
+                        onRepair: {
+                            if let registryPlugin = registryService.registry.first(where: { $0.id == plugin.id }) {
+                                startInstall(registryPlugin)
+                            }
+                        },
                         onUninstall: {
                             pluginToUninstall = plugin
                             showUninstallAlert = true
@@ -1010,6 +1015,7 @@ private struct InstalledPluginRow: View {
     let hosting: PluginHosting
     let registryPlugin: RegistryPlugin?
     let onUpdate: () -> Void
+    let onRepair: () -> Void
     let onUninstall: () -> Void
     @State private var pluginActivity: PluginSettingsActivity?
     @State private var modelsExpanded = false
@@ -1079,18 +1085,7 @@ private struct InstalledPluginRow: View {
                             .lineLimit(1)
                     }
 
-                    if let state = installState {
-                        PluginInstallStateView(state: state, name: plugin.manifest.name)
-                    } else if case .updateAvailable = installInfo {
-                        Button {
-                            onUpdate()
-                        } label: {
-                            Label(String(localized: "Update"), systemImage: "arrow.down.circle")
-                        }
-                        .controlSize(.small)
-                    } else if let pluginActivity {
-                        PluginSettingsActivityView(activity: pluginActivity)
-                    }
+                    pluginActions
                 }
 
                 Spacer(minLength: 12)
@@ -1197,6 +1192,41 @@ private struct InstalledPluginRow: View {
         }
         return modelManager.downloadedModels
             .sorted { $0.displayName.localizedCompare($1.displayName) == .orderedAscending }
+    }
+
+    @ViewBuilder
+    private var pluginActions: some View {
+        if let state = installState {
+            PluginInstallStateView(state: state, name: plugin.manifest.name)
+        } else if case .updateAvailable = installInfo {
+            Button {
+                onUpdate()
+            } label: {
+                Label(String(localized: "Update"), systemImage: "arrow.down.circle")
+            }
+            .controlSize(.small)
+        } else {
+            if let pluginActivity {
+                PluginSettingsActivityView(activity: pluginActivity)
+            }
+            if canRepairInstallation {
+                Button {
+                    onRepair()
+                } label: {
+                    Label(String(localized: "Repair Installation"), systemImage: "arrow.clockwise.circle")
+                }
+                .controlSize(.small)
+            }
+        }
+    }
+
+    private var canRepairInstallation: Bool {
+        PluginRegistryService.canRepairInstalledPlugin(
+            isBundled: plugin.isBundled,
+            registryPlugin: registryPlugin,
+            installInfo: installInfo,
+            installState: installState
+        )
     }
 
     private func downloadedModelCountTitle(_ count: Int) -> String {
