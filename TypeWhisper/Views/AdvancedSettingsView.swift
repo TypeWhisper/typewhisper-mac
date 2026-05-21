@@ -443,11 +443,13 @@ struct AdvancedSettingsView: View {
 
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
-            do {
-                try errorLogService.exportDiagnostics(to: url)
-            } catch {
-                diagnosticsExportErrorMessage = error.localizedDescription
-                showDiagnosticsExportError = true
+            Task { @MainActor in
+                do {
+                    try await errorLogService.exportDiagnostics(to: url)
+                } catch {
+                    diagnosticsExportErrorMessage = error.localizedDescription
+                    showDiagnosticsExportError = true
+                }
             }
         }
     }

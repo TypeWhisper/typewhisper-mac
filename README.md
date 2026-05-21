@@ -6,7 +6,7 @@
 
 Speech-to-text and AI text processing for macOS. Transcribe audio using on-device AI models or cloud APIs (Groq, OpenAI, xAI/Grok), then transform the result with reusable workflows. Your voice data stays on your Mac with local models - or use cloud APIs for faster processing.
 
-TypeWhisper `1.4` is the current release-candidate line for macOS. It includes system-wide dictation, file transcription, unified workflows, history, dictionary, snippets, and bundled integrations. Advanced surfaces like the HTTP API, CLI, widgets, watch folders, and the plugin SDK remain supported for power users and automation.
+TypeWhisper `1.4` is the current stable release for macOS. It includes system-wide dictation, file transcription, unified workflows, history, dictionary, snippets, bundled integrations, the community plugin registry, and local automation APIs. Advanced surfaces like the HTTP API, CLI, widgets, watch folders, and the plugin SDK remain supported for power users and automation.
 
 See the [release readiness guide](docs/release-readiness.md), [support matrix](docs/support-matrix.md), and [release checklist](docs/release-checklist.md) for the current release definition and ship gates.
 
@@ -16,43 +16,55 @@ See the [release readiness guide](docs/release-readiness.md), [support matrix](d
 
 ## Screenshots
 
+<!-- readme-screenshots:start -->
+
 <p align="center">
   <a href=".github/screenshots/home.png"><img src=".github/screenshots/home.png" width="270" alt="Home Dashboard"></a>
-  <a href=".github/screenshots/recording.png"><img src=".github/screenshots/recording.png" width="270" alt="Recording & Hotkeys"></a>
+  <a href=".github/screenshots/recording.png"><img src=".github/screenshots/recording.png" width="270" alt="Recording &amp; Hotkeys"></a>
   <a href=".github/screenshots/workflows.png"><img src=".github/screenshots/workflows.png" width="270" alt="Workflows"></a>
 </p>
 
 <p align="center">
-  <a href=".github/screenshots/history.png"><img src=".github/screenshots/history.png" width="270" alt="Transcription History"></a>
-  <a href=".github/screenshots/dictionary.png"><img src=".github/screenshots/dictionary.png" width="270" alt="Dictionary"></a>
-</p>
-
-<p align="center">
-  <a href=".github/screenshots/general.png"><img src=".github/screenshots/general.png" width="270" alt="General Settings"></a>
-  <a href=".github/screenshots/plugins.png"><img src=".github/screenshots/plugins.png" width="270" alt="Integrations"></a>
+  <a href=".github/screenshots/plugins.png"><img src=".github/screenshots/plugins.png" width="270" alt="Installed Integrations"></a>
+  <a href=".github/screenshots/integrations-available.png"><img src=".github/screenshots/integrations-available.png" width="270" alt="Available Integrations"></a>
   <a href=".github/screenshots/file-transcription.png"><img src=".github/screenshots/file-transcription.png" width="270" alt="File Transcription"></a>
 </p>
 
 <p align="center">
+  <a href=".github/screenshots/history.png"><img src=".github/screenshots/history.png" width="270" alt="History"></a>
+  <a href=".github/screenshots/dictionary.png"><img src=".github/screenshots/dictionary.png" width="270" alt="Dictionary"></a>
+  <a href=".github/screenshots/dictionary-term-packs.png"><img src=".github/screenshots/dictionary-term-packs.png" width="270" alt="Dictionary Term Packs"></a>
+</p>
+
+<p align="center">
   <a href=".github/screenshots/snippets.png"><img src=".github/screenshots/snippets.png" width="270" alt="Snippets"></a>
+  <a href=".github/screenshots/general.png"><img src=".github/screenshots/general.png" width="270" alt="General Settings"></a>
   <a href=".github/screenshots/advanced.png"><img src=".github/screenshots/advanced.png" width="270" alt="Advanced Settings"></a>
 </p>
 
-## What's New in 1.3
+<p align="center">
+  <a href=".github/screenshots/recorder.png"><img src=".github/screenshots/recorder.png" width="270" alt="Recorder API"></a>
+  <a href=".github/screenshots/menu-bar.png"><img src=".github/screenshots/menu-bar.png" width="270" alt="Menu Bar"></a>
+  <a href=".github/screenshots/about.png"><img src=".github/screenshots/about.png" width="270" alt="About"></a>
+</p>
 
-- **Unified Workflows** - Prompt actions and matching rules now live in one dedicated workflow surface with a native editor and guided creation flow
-- **Always fallback trigger** - Create a global workflow that runs when no more specific app or website workflow matches
-- **Manual workflow palette** - Keep workflows out of automatic dictation matching and run them from one global Workflow Palette shortcut
-- **Safer prompt boundaries** - Workflow prompts treat dictated text as source content to transform, not instructions to execute
-- **Focus-safe local processing** - On-device workflows keep focus in the original target app instead of foregrounding TypeWhisper unexpectedly
-- **Snippets and dictionary polish** - Snippets are first-class settings, dictionary term packs are easier to review, and corrections stay engine-aware
-- **Integration refresh** - Bundled transcription, LLM, and action plugins are easier to inspect and activate
+<!-- readme-screenshots:end -->
+
+## What's New in 1.4
+
+- **Redesigned Integrations** - Installed, Discover, and Manual tabs now group built-in, marketplace, community, and manually installed plugins with clearer source, hosting, and capability metadata
+- **Community plugin registry** - `1.4` builds can discover community plugins through the new registry feed while older `1.3.x` builds stay on the official marketplace feed
+- **Model download controls** - Local model plugins now have clearer downloaded model management, host-version gates, Hugging Face token support, and license acceptance flows where required
+- **New bundled providers** - xAI/Grok, Smallest AI Pulse, Supertonic TTS, refreshed OpenAI voices, Qwen3 ASR, Granite, Voxtral, and Gemma 4 expand the bundled plugin set
+- **Local automation APIs** - Recorder and dictionary HTTP endpoints, watch-folder file jobs, per-request STT engine/model overrides, and CLI/API improvements give power users more automation surface
+- **Workflow and hotkey polish** - Workflow drag reordering, multiple global hotkeys per action, prompt-boundary hardening, direct text hotkeys, and safer Apple Intelligence handling improve day-to-day dictation flows
+- **Dictation reliability pass** - Live transcript, recording indicators, fullscreen/fixed-display handling, USB and multichannel audio capture, route-change recovery, and hotkey startup latency all received focused fixes
 
 ## Features
 
 ### Transcription
 
-- **Ten engines** - WhisperKit (99+ languages, streaming, translation), Parakeet TDT v3 (25 European languages, extremely fast), Apple SpeechAnalyzer (macOS 26+, no model download needed), Granite Speech (MLX-based), Qwen3 ASR (MLX-based), Voxtral (local Voxtral Mini 4B, MLX-based), Groq Whisper, OpenAI Whisper, xAI/Grok STT, and OpenAI Compatible (any OpenAI-compatible API)
+- **Eleven engines** - WhisperKit (99+ languages, streaming, translation), Parakeet TDT v3 (25 European languages, extremely fast), Apple SpeechAnalyzer (macOS 26+, no model download needed), Granite Speech (MLX-based), Qwen3 ASR (MLX-based), Voxtral (local Voxtral Mini 4B, MLX-based), Groq Whisper, OpenAI Whisper, Smallest Pulse, xAI/Grok STT, and OpenAI Compatible (any OpenAI-compatible API)
 - **On-device or cloud** - All processing happens locally on your Mac, or use Groq/OpenAI/xAI APIs for faster processing
 - **Streaming preview** - See partial transcription in real-time while speaking (WhisperKit)
 - **Short-clip handling** - Better retention of brief utterances and fewer false no-speech discards
@@ -85,7 +97,7 @@ See the [release readiness guide](docs/release-readiness.md), [support matrix](d
 
 ### Integration & Extensibility
 
-- **Plugin system** - Extend TypeWhisper with custom LLM providers, transcription engines, TTS providers, post-processors, and action plugins. Granite, Groq, OpenAI / ChatGPT, OpenAI Compatible, xAI/Grok, Gemini, Linear, Qwen3, Supertonic, Voxtral, and Webhook ship as bundled plugins, alongside the local engine plugins. Linear plugin enables voice-to-issue creation. See [TypeWhisperPluginSDK/Plugins/README.md](TypeWhisperPluginSDK/Plugins/README.md)
+- **Plugin system** - Extend TypeWhisper with custom LLM providers, transcription engines, TTS providers, post-processors, and action plugins. Gemini, Granite, Groq, Linear, OpenAI / ChatGPT, OpenAI Compatible, Qwen3, Smallest Pulse, Supertonic, Voxtral, Webhook, and xAI/Grok ship as bundled plugins, alongside the local engine plugins. Linear plugin enables voice-to-issue creation. See [TypeWhisperPluginSDK/Plugins/README.md](TypeWhisperPluginSDK/Plugins/README.md)
 - **Local model download controls** - Bundled Qwen3, Granite, Voxtral, and Supertonic plugins support an optional HuggingFace token for higher rate limits and clearer download errors. Supertonic requires explicit OpenRAIL-M model-license acceptance before model assets download.
 - **HTTP API** - Local REST API for integration with external tools and scripts
 - **CLI tool** - Shell-friendly transcription via the command line

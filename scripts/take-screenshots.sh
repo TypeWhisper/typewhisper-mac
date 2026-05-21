@@ -3,7 +3,7 @@ set -euo pipefail
 
 # =============================================================================
 # TypeWhisper Screenshot Automation
-# Takes screenshots of the 1.3 Settings tabs + indicator window
+# Takes screenshots of the Settings tabs + indicator window
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -334,3 +334,4 @@ echo ""
 
 # Don't kill the app - user might want to manually adjust and re-run
 echo "App is still running. Kill manually when done: pkill -x $PROCESS_NAME"
+echo "Refresh the README gallery with: scripts/update-readme-screenshots.sh"

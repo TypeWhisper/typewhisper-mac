@@ -366,6 +366,7 @@ final class PluginRegistryService: ObservableObject {
     private let fetchData: (URLRequest) async throws -> (Data, URLResponse)
     private let cacheDirectory: URL
     private static let lastUpdateCheckKey = "pluginRegistryLastUpdateCheck"
+    private static let lastHostFingerprintCheckKey = "pluginRegistryLastHostFingerprintCheck"
 
     enum FetchState: Equatable {
         case idle
@@ -445,12 +446,13 @@ final class PluginRegistryService: ObservableObject {
 
     // MARK: - Fetch Registry
 
-    func fetchRegistry(force: Bool = false) async {
+    @discardableResult
+    func fetchRegistry(force: Bool = false) async -> Bool {
         if !force,
            let lastFetch = lastFetchDate,
            Date().timeIntervalSince(lastFetch) < cacheDuration,
            !registry.isEmpty {
-            return
+            return true
         }
 
         fetchState = .loading
@@ -465,37 +467,74 @@ final class PluginRegistryService: ObservableObject {
             request.cachePolicy = .reloadIgnoringLocalCacheData
             let (data, _) = try await fetchData(request)
 
-            try applyRegistryData(data, feed: feed)
+            try applyRegistryData(data, feed: feed, markFetchDate: true)
             try cacheRegistryData(data, feed: feed)
             logger.info("Fetched \(self.registry.count) plugin(s) from registry feed \(feed.rawValue, privacy: .public)")
+            return true
         } catch {
             do {
                 let cachedData = try Data(contentsOf: cacheURL(for: feed))
-                try applyRegistryData(cachedData, feed: feed)
+                try applyRegistryData(cachedData, feed: feed, markFetchDate: false)
                 logger.warning(
                     "Using cached plugin registry feed \(feed.rawValue, privacy: .public) after fetch failure: \(error.localizedDescription, privacy: .public)"
                 )
+                return false
             } catch {
                 fetchState = .error(error.localizedDescription)
                 logger.error("Failed to fetch registry: \(error.localizedDescription)")
+                return false
             }
         }
     }
 
     // MARK: - Background Update Check
 
-    /// Check for plugin updates on app launch (at most once per 24h).
+    /// Check for plugin updates on app launch (at most once per 24h), and force
+    /// one refresh after each host app update so bundled registry gates are not
+    /// hidden behind the previous build's throttle window.
     func checkForUpdatesInBackground() {
-        let lastCheck = userDefaults.double(forKey: Self.lastUpdateCheckKey)
-        let hoursSinceLastCheck = (Date().timeIntervalSince1970 - lastCheck) / 3600
-        guard hoursSinceLastCheck >= 24 || lastCheck == 0 else { return }
-
         Task {
-            lastFetchDate = nil
-            await fetchRegistry(force: true)
-            updateAvailableUpdatesCount()
-            userDefaults.set(Date().timeIntervalSince1970, forKey: Self.lastUpdateCheckKey)
+            await refreshRegistryForHostUpdateIfNeeded()
         }
+    }
+
+    @discardableResult
+    func refreshRegistryForHostUpdateIfNeeded(
+        currentFingerprint: String = AppConstants.currentReleaseFingerprint,
+        now: Date = Date()
+    ) async -> Bool {
+        let lastCheck = userDefaults.double(forKey: Self.lastUpdateCheckKey)
+        let hoursSinceLastCheck = (now.timeIntervalSince1970 - lastCheck) / 3600
+        let lastFingerprint = userDefaults.string(forKey: Self.lastHostFingerprintCheckKey)
+        let hostChanged = lastFingerprint != currentFingerprint
+
+        guard hostChanged || hoursSinceLastCheck >= 24 || lastCheck == 0 else {
+            return false
+        }
+
+        lastFetchDate = nil
+        let refreshSucceeded = await fetchRegistry(force: true)
+        guard refreshSucceeded else {
+            return false
+        }
+        userDefaults.set(now.timeIntervalSince1970, forKey: Self.lastUpdateCheckKey)
+        userDefaults.set(currentFingerprint, forKey: Self.lastHostFingerprintCheckKey)
+        return true
+    }
+
+    static func canRepairInstalledPlugin(
+        isBundled: Bool,
+        registryPlugin: RegistryPlugin?,
+        installInfo: PluginInstallInfo,
+        installState: InstallState?
+    ) -> Bool {
+        guard !isBundled, registryPlugin != nil, installState == nil else {
+            return false
+        }
+        if case .installed = installInfo {
+            return true
+        }
+        return false
     }
 
     func updateAvailableUpdatesCount() {
@@ -840,13 +879,15 @@ final class PluginRegistryService: ObservableObject {
         cacheDirectory.appendingPathComponent(feed.pathComponent)
     }
 
-    private func applyRegistryData(_ data: Data, feed: RegistryFeed) throws {
+    private func applyRegistryData(_ data: Data, feed: RegistryFeed, markFetchDate: Bool) throws {
         let response = try JSONDecoder().decode(PluginRegistryResponse.self, from: data)
         registry = response.resolvedPlugins(
             appVersion: resolvedAppVersion,
             sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion
         )
-        lastFetchDate = Date()
+        if markFetchDate {
+            lastFetchDate = Date()
+        }
         fetchState = .loaded
         updateAvailableUpdatesCount()
         logger.info("Resolved \(self.registry.count) compatible plugin(s) from \(feed.rawValue, privacy: .public)")
