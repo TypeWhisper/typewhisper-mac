@@ -11,16 +11,5 @@
   "category": "transcription",
   "hosting": "cloud",
   "requiresAPIKey": true,
-  "iconSystemName": "waveform.badge.mic",
-  "releases": [
-    {
-      "version": "1.0.0",
-      "minHostVersion": "1.4.0",
-      "sdkCompatibilityVersion": "v1",
-      "minOSVersion": "14.0",
-      "supportedArchitectures": ["arm64"],
-      "size": 160384,
-      "downloadURL": "https://github.com/moshoujingli/typewhisper-seed-asr-plugin/releases/download/v1.0.0/SeedASRPlugin.zip"
-    }
-  ]
+  "iconSystemName": "waveform.badge.mic"
 }
