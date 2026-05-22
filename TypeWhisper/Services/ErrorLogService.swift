@@ -47,6 +47,34 @@ struct DiagnosticPluginActivityInfo: Encodable, Equatable {
     }
 }
 
+struct DiagnosticWorkflowSnapshot: Encodable, Equatable {
+    let totalCount: Int
+    let enabledCount: Int
+    let defaultLLMProviderId: String?
+    let defaultLLMCloudModel: String?
+    let enabledWorkflows: [DiagnosticWorkflowInfo]
+}
+
+struct DiagnosticWorkflowInfo: Encodable, Equatable {
+    let name: String
+    let template: String
+    let triggerKind: String
+    let triggerAppBundleIdentifierCount: Int
+    let triggerWebsitePatternCount: Int
+    let triggerHotkeyCount: Int
+    let hotkeyBehavior: String?
+    let outputFormat: String?
+    let outputAutoEnter: Bool
+    let targetActionPluginId: String?
+    let llmProviderId: String?
+    let llmCloudModel: String?
+    let transcriptionEngineId: String?
+    let transcriptionModelId: String?
+    let hasCustomInstruction: Bool
+    let hasFineTuning: Bool
+    let usesAppleTranslate: Bool
+}
+
 enum PluginDiagnosticsSupport {
     static func appBundlePathKind(
         for bundleURL: URL,
@@ -339,6 +367,7 @@ private struct DiagnosticsReport: Encodable {
     let audio: AudioInfo
     let plugins: [PluginInfo]
     let skippedExternalBundles: [SkippedExternalBundleInfo]
+    let workflows: DiagnosticWorkflowSnapshot
     let settings: SettingsSnapshot
     let lastIndicatorFullscreenSuppression: IndicatorFullscreenSuppressionDiagnostics?
     let counts: Counts
@@ -470,7 +499,7 @@ final class ErrorLogService: ObservableObject {
         }
 
         return DiagnosticsReport(
-            schemaVersion: 5,
+            schemaVersion: 6,
             exportedAt: Date(),
             app: .init(
                 version: AppConstants.appVersion,
@@ -528,6 +557,7 @@ final class ErrorLogService: ObservableObject {
             ),
             plugins: pluginDiagnostics,
             skippedExternalBundles: skippedExternalBundleDiagnostics,
+            workflows: Self.workflowDiagnosticsSnapshot(from: container.workflowService),
             settings: .init(
                 bundledReleaseChannel: AppConstants.releaseChannel.rawValue,
                 selectedUpdateChannel: AppConstants.effectiveUpdateChannel.rawValue,
@@ -576,8 +606,55 @@ final class ErrorLogService: ObservableObject {
         )
     }
 
+    static func workflowDiagnosticsSnapshot(from workflowService: WorkflowService) -> DiagnosticWorkflowSnapshot {
+        let workflows = workflowService.workflows
+        let enabledWorkflows = workflows.filter(\.isEnabled)
+        return DiagnosticWorkflowSnapshot(
+            totalCount: workflows.count,
+            enabledCount: enabledWorkflows.count,
+            defaultLLMProviderId: trimmedOrNil(workflowService.defaultProviderId),
+            defaultLLMCloudModel: trimmedOrNil(workflowService.defaultCloudModel),
+            enabledWorkflows: enabledWorkflows.map { workflow in
+                let behavior = workflow.behavior
+                let output = workflow.output
+                let trigger = workflow.trigger
+
+                return DiagnosticWorkflowInfo(
+                    name: workflow.name,
+                    template: workflow.template.rawValue,
+                    triggerKind: trigger?.kind.rawValue ?? workflow.triggerKindRaw,
+                    triggerAppBundleIdentifierCount: trigger?.appBundleIdentifiers.count ?? 0,
+                    triggerWebsitePatternCount: trigger?.websitePatterns.count ?? 0,
+                    triggerHotkeyCount: trigger?.hotkeys.count ?? 0,
+                    hotkeyBehavior: trigger?.hotkeyBehavior.rawValue,
+                    outputFormat: trimmedOrNil(output.format),
+                    outputAutoEnter: output.autoEnter,
+                    targetActionPluginId: trimmedOrNil(output.targetActionPluginId),
+                    llmProviderId: workflowService.llmProviderId(for: workflow),
+                    llmCloudModel: workflowService.llmCloudModel(for: workflow),
+                    transcriptionEngineId: trimmedOrNil(behavior.transcriptionEngineId),
+                    transcriptionModelId: trimmedOrNil(behavior.transcriptionModelId),
+                    hasCustomInstruction: hasCustomWorkflowInstruction(behavior.settings),
+                    hasFineTuning: trimmedOrNil(behavior.fineTuning) != nil,
+                    usesAppleTranslate: workflow.usesAppleTranslate
+                )
+            }
+        )
+    }
+
     private static func pluginDefaultKey(pluginId: String, key: String) -> String {
         "plugin.\(pluginId).\(key)"
+    }
+
+    private static func hasCustomWorkflowInstruction(_ settings: [String: String]) -> Bool {
+        ["instruction", "goal", "prompt"].contains { key in
+            trimmedOrNil(settings[key]) != nil
+        }
+    }
+
+    private static func trimmedOrNil(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
     }
 
     private static func modelAutoUnloadPolicy(seconds: Int) -> String {
