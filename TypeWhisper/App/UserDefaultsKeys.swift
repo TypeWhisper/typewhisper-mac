@@ -108,6 +108,8 @@ enum UserDefaultsKeys {
     static let recorderSystemAudioEnabled = "recorderSystemAudioEnabled"
     static let recorderOutputFormat = "recorderOutputFormat"
     static let recorderTranscriptionEnabled = "recorderTranscriptionEnabled"
+    static let recorderTranscriptionEngine = "recorderTranscriptionEngine"
+    static let recorderTranscriptionModel = "recorderTranscriptionModel"
     static let recorderMicDuckingMode = "recorderMicDuckingMode"
     static let recorderTrackMode = "recorderTrackMode"
 

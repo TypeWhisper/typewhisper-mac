@@ -79,6 +79,7 @@
 			3A4B5C6D7E8F901234567890 /* AudioEngineRecoverySupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A4B5C6D7E8F901234567891 /* AudioEngineRecoverySupportTests.swift */; };
 			533A00000000000000000002 /* DictationRecoveryAudioStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 533A00000000000000000001 /* DictationRecoveryAudioStoreTests.swift */; };
 			533A00000000000000000004 /* DictationRecoveryAudioStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 533A00000000000000000003 /* DictationRecoveryAudioStore.swift */; };
+			604D00000000000000000002 /* AudioRecorderViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 604D00000000000000000001 /* AudioRecorderViewModelTests.swift */; };
 			533B00000000000000000002 /* FileTranscriptionViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 533B00000000000000000001 /* FileTranscriptionViewModelTests.swift */; };
 			533C00000000000000000002 /* DictationRecoveryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 533C00000000000000000001 /* DictationRecoveryViewModel.swift */; };
 			533C00000000000000000004 /* DictationRecoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 533C00000000000000000003 /* DictationRecoveryView.swift */; };
@@ -485,6 +486,7 @@
 			3A4B5C6D7E8F901234567891 /* AudioEngineRecoverySupportTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AudioEngineRecoverySupportTests.swift; sourceTree = "<group>"; };
 			533A00000000000000000001 /* DictationRecoveryAudioStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictationRecoveryAudioStoreTests.swift; sourceTree = "<group>"; };
 			533A00000000000000000003 /* DictationRecoveryAudioStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationRecoveryAudioStore.swift; sourceTree = "<group>"; };
+			604D00000000000000000001 /* AudioRecorderViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AudioRecorderViewModelTests.swift; sourceTree = "<group>"; };
 			533B00000000000000000001 /* FileTranscriptionViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FileTranscriptionViewModelTests.swift; sourceTree = "<group>"; };
 			3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HistoryServiceTests.swift; sourceTree = "<group>"; };
 		B91F00000000000000000001 /* SelectionPalettePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionPalettePanel.swift; sourceTree = "<group>"; };
@@ -2008,6 +2010,7 @@
 				2F4D6A8B0C1E3F5A7B9D2C4F /* DictationViewModelIndicatorSettingsTests.swift */,
 					6A7B8C9D0E1F223344556679 /* FloatingPanelSpacePolicyTests.swift */,
 					E5A1B2C3D4F5061728394A5E /* NotchIndicatorLayoutTests.swift */,
+					604D00000000000000000001 /* AudioRecorderViewModelTests.swift */,
 					533A00000000000000000001 /* DictationRecoveryAudioStoreTests.swift */,
 					533B00000000000000000001 /* FileTranscriptionViewModelTests.swift */,
 					AA8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift */,
@@ -3358,6 +3361,7 @@
 					7B8C9D0E1F22334455667790 /* FloatingPanelSpacePolicyTests.swift in Sources */,
 					E5A1B2C3D4F5061728394A5D /* NotchIndicatorLayoutTests.swift in Sources */,
 					3A4B5C6D7E8F901234567890 /* AudioEngineRecoverySupportTests.swift in Sources */,
+					604D00000000000000000002 /* AudioRecorderViewModelTests.swift in Sources */,
 					533A00000000000000000002 /* DictationRecoveryAudioStoreTests.swift in Sources */,
 					533B00000000000000000002 /* FileTranscriptionViewModelTests.swift in Sources */,
 					BB8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift in Sources */,

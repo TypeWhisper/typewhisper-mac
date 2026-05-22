@@ -234,6 +234,7 @@ final class ServiceContainer: ObservableObject {
         fileTranscriptionViewModel.observePluginManager()
         dictationRecoveryViewModel.observePluginManager()
         settingsViewModel.observePluginManager()
+        audioRecorderViewModel.observePluginManager()
         watchFolderViewModel.observePluginManager()
     }
 
@@ -259,6 +260,7 @@ final class ServiceContainer: ObservableObject {
 
         // Re-restore provider selection now that plugins are loaded
         modelManagerService.restoreProviderSelection()
+        audioRecorderViewModel.reconcileSelectionWithAvailablePlugins()
         watchFolderViewModel.reconcileSelectionWithAvailablePlugins()
 
         // Validate LLM provider selection against loaded plugins

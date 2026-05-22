@@ -5,7 +5,6 @@ struct AudioRecorderView: View {
     @ObservedObject var viewModel: AudioRecorderViewModel
     @ObservedObject private var pluginManager = PluginManager.shared
     @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
-    @State private var selectedProvider: String?
 
     private var isEditingLocked: Bool {
         viewModel.state != .idle
@@ -167,18 +166,13 @@ struct AudioRecorderView: View {
                 if viewModel.transcriptionEnabled {
                     // Engine picker
                     let engines = pluginManager.transcriptionEngines
-                    Picker(String(localized: "Engine"), selection: $selectedProvider) {
-                        Text(String(localized: "None")).tag(nil as String?)
+                    Picker(String(localized: "Engine"), selection: $viewModel.selectedEngine) {
+                        Text(String(localized: "Default Engine")).tag(nil as String?)
                         Divider()
                         ForEach(engines, id: \.providerId) { engine in
                             enginePickerLabel(for: engine)
                                 .tag(engine.providerId as String?)
-                                .disabled(!modelManager.canUseForTranscription(engine))
-                        }
-                    }
-                    .onChange(of: selectedProvider) { _, newValue in
-                        if let newValue {
-                            modelManager.selectProvider(newValue)
+                                .disabled(!viewModel.canUseForTranscription(engine))
                         }
                     }
                     .disabled(isEditingLocked)
@@ -190,15 +184,13 @@ struct AudioRecorderView: View {
                     }
 
                     // Model picker
-                    if let providerId = selectedProvider,
-                       let engine = pluginManager.transcriptionEngine(for: providerId),
-                       modelManager.canUseForTranscription(engine) {
+                    if let engine = viewModel.resolvedEngine,
+                       viewModel.canUseForTranscription(engine) {
                         let models = engine.transcriptionModels
                         if models.count > 1 {
-                            Picker(String(localized: "Model"), selection: Binding(
-                                get: { engine.selectedModelId },
-                                set: { if let id = $0 { modelManager.selectModel(providerId, modelId: id) } }
-                            )) {
+                            Picker(String(localized: "Model"), selection: $viewModel.selectedModel) {
+                                Text(String(localized: "watchFolder.model.default")).tag(nil as String?)
+                                Divider()
                                 ForEach(models, id: \.id) { model in
                                     Text(model.displayName).tag(model.id as String?)
                                 }
@@ -206,7 +198,7 @@ struct AudioRecorderView: View {
                             .disabled(isEditingLocked)
                         }
 
-                        if !modelManager.supportsLiveTranscriptionSession(engineOverrideId: providerId) {
+                        if !modelManager.supportsLiveTranscriptionSession(engineOverrideId: engine.providerId) {
                             Label(
                                 localizedAppText(
                                     "This engine uses a lightweight live preview that updates every few seconds. Final transcription still runs on the full recording after you stop.",
@@ -220,12 +212,11 @@ struct AudioRecorderView: View {
                     }
 
                     let languageOptions: [(code: String, name: String)] = {
-                        guard let providerId = selectedProvider,
-                              let engine = pluginManager.transcriptionEngine(for: providerId),
-                              !engine.supportedLanguages.isEmpty else {
+                        let supportedLanguages = viewModel.selectedEngineSupportedLanguages
+                        guard !supportedLanguages.isEmpty else {
                             return SettingsViewModel.shared.availableLanguages
                         }
-                        return localizedAppLanguageOptions(for: engine.supportedLanguages)
+                        return localizedAppLanguageOptions(for: supportedLanguages)
                             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
                             .map { (code: $0.code, name: $0.name) }
                     }()
@@ -266,7 +257,7 @@ struct AudioRecorderView: View {
             }
             .onAppear {
                 modelManager.restoreProviderSelection()
-                selectedProvider = modelManager.selectedProviderId
+                viewModel.reconcileSelectionWithAvailablePlugins()
             }
 
             // Recordings list
