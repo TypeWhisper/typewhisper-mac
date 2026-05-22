@@ -161,6 +161,17 @@ enum SeedAudio {
 // MARK: - Gzip via Compression framework
 
 private func gzipCompress(_ data: Data) -> Data? {
+    // compression_encode_buffer + raw.baseAddress are not reliable for zero-length input,
+    // and finish() builds the terminal audio frame with Data(). Emit a canonical gzip
+    // stream wrapping an empty deflate block so buildAudioRequest never fails on empty input.
+    if data.isEmpty {
+        return Data([
+            0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff,
+            0x03, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
+        ])
+    }
     let bufferSize = max(64, data.count * 2 + 64)
     let dst = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
     defer { dst.deallocate() }
