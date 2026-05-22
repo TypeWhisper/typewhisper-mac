@@ -20,7 +20,7 @@
       "supportedArchitectures": [
         "arm64"
       ],
-      "detailsURL": "https://www.typewhisper.com/de/addons/qwen3-asr/"
+      "detailsURL": "https://www.typewhisper.com/addons/qwen3-asr/"
     },
     {
       "id": "com.typewhisper.linear",
@@ -39,7 +39,7 @@
       "requiresAPIKey": true,
       "downloadCount": 366,
       "minOSVersion": "14.0",
-      "detailsURL": "https://www.typewhisper.com/de/addons/linear/"
+      "detailsURL": "https://www.typewhisper.com/addons/linear/"
     },
     {
       "id": "com.typewhisper.webhook",
@@ -57,7 +57,7 @@
       "iconSystemName": "arrow.up.forward.app",
       "downloadCount": 663,
       "minOSVersion": "14.0",
-      "detailsURL": "https://www.typewhisper.com/de/addons/webhook/"
+      "detailsURL": "https://www.typewhisper.com/addons/webhook/"
     },
     {
       "id": "com.typewhisper.groq",
@@ -76,7 +76,7 @@
       "requiresAPIKey": true,
       "downloadCount": 5136,
       "minOSVersion": "14.0",
-      "detailsURL": "https://www.typewhisper.com/de/addons/groq/"
+      "detailsURL": "https://www.typewhisper.com/addons/groq/"
     },
     {
       "id": "com.typewhisper.openai",
@@ -95,7 +95,7 @@
       "requiresAPIKey": false,
       "downloadCount": 1334,
       "minOSVersion": "14.0",
-      "detailsURL": "https://www.typewhisper.com/de/addons/openai/"
+      "detailsURL": "https://www.typewhisper.com/addons/openai/"
     },
     {
       "id": "com.typewhisper.gemini",
@@ -114,7 +114,7 @@
       "requiresAPIKey": true,
       "downloadCount": 970,
       "minOSVersion": "14.0",
-      "detailsURL": "https://www.typewhisper.com/de/addons/gemini/"
+      "detailsURL": "https://www.typewhisper.com/addons/gemini/"
     },
     {
       "id": "com.typewhisper.whisperkit",
@@ -135,7 +135,7 @@
       "supportedArchitectures": [
         "arm64"
       ],
-      "detailsURL": "https://www.typewhisper.com/de/addons/whisperkit/"
+      "detailsURL": "https://www.typewhisper.com/addons/whisperkit/"
     },
     {
       "id": "com.typewhisper.parakeet",
@@ -156,7 +156,7 @@
       "supportedArchitectures": [
         "arm64"
       ],
-      "detailsURL": "https://www.typewhisper.com/de/addons/parakeet/"
+      "detailsURL": "https://www.typewhisper.com/addons/parakeet/"
     },
     {
       "id": "com.typewhisper.openai-compatible",
@@ -174,7 +174,7 @@
       "iconSystemName": "server.rack",
       "downloadCount": 1334,
       "minOSVersion": "14.0",
-      "detailsURL": "https://www.typewhisper.com/de/addons/openai-compatible/"
+      "detailsURL": "https://www.typewhisper.com/addons/openai-compatible/"
     },
     {
       "id": "com.typewhisper.speechanalyzer",
@@ -192,7 +192,7 @@
       "iconSystemName": "apple.logo",
       "downloadCount": 5752,
       "minOSVersion": "26.0",
-      "detailsURL": "https://www.typewhisper.com/de/addons/apple-speech/"
+      "detailsURL": "https://www.typewhisper.com/addons/apple-speech/"
     },
     {
       "id": "com.typewhisper.obsidian",
@@ -210,7 +210,7 @@
       "iconSystemName": "doc.text",
       "downloadCount": 862,
       "minOSVersion": "14.0",
-      "detailsURL": "https://www.typewhisper.com/de/addons/obsidian/"
+      "detailsURL": "https://www.typewhisper.com/addons/obsidian/"
     },
     {
       "id": "com.typewhisper.script",
@@ -228,7 +228,7 @@
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-script-v1.1.0/ScriptPlugin.zip",
       "iconSystemName": "terminal",
       "downloadCount": 395,
-      "detailsURL": "https://www.typewhisper.com/de/addons/script-runner/"
+      "detailsURL": "https://www.typewhisper.com/addons/script-runner/"
     },
     {
       "id": "com.typewhisper.granite",
@@ -249,7 +249,7 @@
       "supportedArchitectures": [
         "arm64"
       ],
-      "detailsURL": "https://www.typewhisper.com/de/addons/granite/"
+      "detailsURL": "https://www.typewhisper.com/addons/granite/"
     },
     {
       "id": "com.typewhisper.voxtral",
@@ -270,7 +270,7 @@
       "supportedArchitectures": [
         "arm64"
       ],
-      "detailsURL": "https://www.typewhisper.com/de/addons/voxtral/"
+      "detailsURL": "https://www.typewhisper.com/addons/voxtral/"
     },
     {
       "id": "com.typewhisper.fireworks",
@@ -289,7 +289,7 @@
       "size": 181196,
       "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-fireworks-v1.0.1/FireworksPlugin.zip",
       "minOSVersion": "14.0",
-      "detailsURL": "https://www.typewhisper.com/de/addons/fireworks/"
+      "detailsURL": "https://www.typewhisper.com/addons/fireworks/"
     },
     {
       "id": "com.typewhisper.openrouter",
@@ -308,7 +308,7 @@
       "iconSystemName": "globe",
       "requiresAPIKey": true,
       "downloadCount": 396,
-      "detailsURL": "https://www.typewhisper.com/de/addons/openrouter/"
+      "detailsURL": "https://www.typewhisper.com/addons/openrouter/"
     },
     {
       "id": "com.typewhisper.cerebras",
@@ -327,7 +327,7 @@
       "iconSystemName": "bolt.fill",
       "requiresAPIKey": true,
       "downloadCount": 158,
-      "detailsURL": "https://www.typewhisper.com/de/addons/cerebras/"
+      "detailsURL": "https://www.typewhisper.com/addons/cerebras/"
     },
     {
       "id": "com.typewhisper.claude",
@@ -347,7 +347,7 @@
       "iconSystemName": "brain.head.profile",
       "requiresAPIKey": true,
       "downloadCount": 489,
-      "detailsURL": "https://www.typewhisper.com/de/addons/claude/"
+      "detailsURL": "https://www.typewhisper.com/addons/claude/"
     },
     {
       "id": "com.typewhisper.gemma4",
@@ -365,7 +365,7 @@
       "minOSVersion": "14.0",
       "iconSystemName": "cpu",
       "downloadCount": 2046,
-      "detailsURL": "https://www.typewhisper.com/de/addons/gemma4/"
+      "detailsURL": "https://www.typewhisper.com/addons/gemma4/"
     }
   ]
 }

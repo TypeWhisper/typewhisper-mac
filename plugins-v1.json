@@ -12,7 +12,7 @@
       "category": "transcription",
       "downloadCount": 7151,
       "iconSystemName": "apple.logo",
-      "detailsURL": "https://www.typewhisper.com/de/addons/apple-speech/",
+      "detailsURL": "https://www.typewhisper.com/addons/apple-speech/",
       "releases": [
         {
           "version": "1.0.14",
@@ -54,7 +54,7 @@
       "category": "transcription",
       "downloadCount": 8616,
       "iconSystemName": "waveform",
-      "detailsURL": "https://www.typewhisper.com/de/addons/whisperkit/",
+      "detailsURL": "https://www.typewhisper.com/addons/whisperkit/",
       "releases": [
         {
           "version": "1.0.24",
@@ -141,7 +141,7 @@
       "category": "transcription",
       "downloadCount": 22360,
       "iconSystemName": "bird",
-      "detailsURL": "https://www.typewhisper.com/de/addons/parakeet/",
+      "detailsURL": "https://www.typewhisper.com/addons/parakeet/",
       "releases": [
         {
           "version": "1.2.15",
@@ -265,7 +265,7 @@
       "downloadCount": 6517,
       "iconSystemName": "bolt.fill",
       "requiresAPIKey": true,
-      "detailsURL": "https://www.typewhisper.com/de/addons/groq/",
+      "detailsURL": "https://www.typewhisper.com/addons/groq/",
       "releases": [
         {
           "version": "1.0.20",
@@ -308,7 +308,7 @@
       "downloadCount": 1740,
       "iconSystemName": "brain",
       "requiresAPIKey": false,
-      "detailsURL": "https://www.typewhisper.com/de/addons/openai/",
+      "detailsURL": "https://www.typewhisper.com/addons/openai/",
       "releases": [
         {
           "version": "1.2.0",
@@ -360,7 +360,7 @@
       "category": "transcription",
       "downloadCount": 1792,
       "iconSystemName": "server.rack",
-      "detailsURL": "https://www.typewhisper.com/de/addons/openai-compatible/",
+      "detailsURL": "https://www.typewhisper.com/addons/openai-compatible/",
       "releases": [
         {
           "version": "1.0.16",
@@ -411,7 +411,7 @@
       "category": "transcription",
       "downloadCount": 2675,
       "iconSystemName": "cpu",
-      "detailsURL": "https://www.typewhisper.com/de/addons/qwen3-asr/",
+      "detailsURL": "https://www.typewhisper.com/addons/qwen3-asr/",
       "releases": [
         {
           "version": "1.1.1",
@@ -499,7 +499,7 @@
       "downloadCount": 671,
       "iconSystemName": "brain.head.profile",
       "requiresAPIKey": true,
-      "detailsURL": "https://www.typewhisper.com/de/addons/claude/",
+      "detailsURL": "https://www.typewhisper.com/addons/claude/",
       "releases": [
         {
           "version": "1.0.3",
@@ -533,7 +533,7 @@
       "downloadCount": 183,
       "iconSystemName": "bolt.fill",
       "requiresAPIKey": true,
-      "detailsURL": "https://www.typewhisper.com/de/addons/cerebras/",
+      "detailsURL": "https://www.typewhisper.com/addons/cerebras/",
       "releases": [
         {
           "version": "1.0.4",
@@ -567,7 +567,7 @@
       "downloadCount": 99,
       "iconSystemName": "waveform.badge.mic",
       "requiresAPIKey": true,
-      "detailsURL": "https://www.typewhisper.com/de/addons/assemblyai/",
+      "detailsURL": "https://www.typewhisper.com/addons/assemblyai/",
       "releases": [
         {
           "version": "1.0.10",
@@ -610,7 +610,7 @@
       "downloadCount": 94,
       "iconSystemName": "waveform.badge.mic",
       "requiresAPIKey": true,
-      "detailsURL": "https://www.typewhisper.com/de/addons/cohere/",
+      "detailsURL": "https://www.typewhisper.com/addons/cohere/",
       "releases": [
         {
           "version": "1.0.4",
@@ -641,7 +641,7 @@
       "category": "transcription",
       "downloadCount": 180,
       "iconSystemName": "shield.lefthalf.filled",
-      "detailsURL": "https://www.typewhisper.com/de/addons/cloudflare-asr/",
+      "detailsURL": "https://www.typewhisper.com/addons/cloudflare-asr/",
       "releases": [
         {
           "version": "1.0.4",
@@ -675,7 +675,7 @@
       "downloadCount": 254,
       "iconSystemName": "waveform.badge.mic",
       "requiresAPIKey": true,
-      "detailsURL": "https://www.typewhisper.com/de/addons/elevenlabs/",
+      "detailsURL": "https://www.typewhisper.com/addons/elevenlabs/",
       "releases": [
         {
           "version": "1.0.5",
@@ -709,7 +709,7 @@
       "downloadCount": 112,
       "iconSystemName": "waveform.badge.mic",
       "requiresAPIKey": true,
-      "detailsURL": "https://www.typewhisper.com/de/addons/deepgram/",
+      "detailsURL": "https://www.typewhisper.com/addons/deepgram/",
       "releases": [
         {
           "version": "1.0.9",
@@ -752,7 +752,7 @@
       "downloadCount": 1142,
       "iconSystemName": "sparkles",
       "requiresAPIKey": true,
-      "detailsURL": "https://www.typewhisper.com/de/addons/gemini/",
+      "detailsURL": "https://www.typewhisper.com/addons/gemini/",
       "releases": [
         {
           "version": "1.0.16",
@@ -794,7 +794,7 @@
       "category": "memory",
       "downloadCount": 0,
       "iconSystemName": "doc.text",
-      "detailsURL": "https://www.typewhisper.com/de/addons/file-memory/",
+      "detailsURL": "https://www.typewhisper.com/addons/file-memory/",
       "releases": [
         {
           "version": "1.0.3",
@@ -826,7 +826,7 @@
       "downloadCount": 79,
       "iconSystemName": "flame.fill",
       "requiresAPIKey": true,
-      "detailsURL": "https://www.typewhisper.com/de/addons/fireworks/",
+      "detailsURL": "https://www.typewhisper.com/addons/fireworks/",
       "releases": [
         {
           "version": "1.0.5",
@@ -860,7 +860,7 @@
       "downloadCount": 58,
       "iconSystemName": "waveform.badge.mic",
       "requiresAPIKey": true,
-      "detailsURL": "https://www.typewhisper.com/de/addons/gladia/",
+      "detailsURL": "https://www.typewhisper.com/addons/gladia/",
       "releases": [
         {
           "version": "1.0.5",
@@ -894,7 +894,7 @@
       "downloadCount": 271,
       "iconSystemName": "globe.badge.chevron.backward",
       "requiresAPIKey": true,
-      "detailsURL": "https://www.typewhisper.com/de/addons/google-cloud-stt/",
+      "detailsURL": "https://www.typewhisper.com/addons/google-cloud-stt/",
       "releases": [
         {
           "version": "1.0.4",
@@ -927,7 +927,7 @@
       "category": "utility",
       "downloadCount": 2564,
       "iconSystemName": "text.bubble",
-      "detailsURL": "https://www.typewhisper.com/de/addons/live-transcript/",
+      "detailsURL": "https://www.typewhisper.com/addons/live-transcript/",
       "releases": [
         {
           "version": "1.0.12",
@@ -1015,7 +1015,7 @@
       "downloadCount": 395,
       "iconSystemName": "list.bullet.rectangle",
       "requiresAPIKey": true,
-      "detailsURL": "https://www.typewhisper.com/de/addons/linear/",
+      "detailsURL": "https://www.typewhisper.com/addons/linear/",
       "releases": [
         {
           "version": "1.0.14",
@@ -1057,7 +1057,7 @@
       "category": "action",
       "downloadCount": 1216,
       "iconSystemName": "doc.text",
-      "detailsURL": "https://www.typewhisper.com/de/addons/obsidian/",
+      "detailsURL": "https://www.typewhisper.com/addons/obsidian/",
       "releases": [
         {
           "version": "1.0.5",
@@ -1100,7 +1100,7 @@
       "downloadCount": 498,
       "iconSystemName": "globe",
       "requiresAPIKey": true,
-      "detailsURL": "https://www.typewhisper.com/de/addons/openrouter/",
+      "detailsURL": "https://www.typewhisper.com/addons/openrouter/",
       "releases": [
         {
           "version": "1.0.4",
@@ -1133,7 +1133,7 @@
       "category": "memory",
       "downloadCount": 1740,
       "iconSystemName": "brain",
-      "detailsURL": "https://www.typewhisper.com/de/addons/openai-vector-memory/",
+      "detailsURL": "https://www.typewhisper.com/addons/openai-vector-memory/",
       "releases": [
         {
           "version": "1.0.3",
@@ -1165,7 +1165,7 @@
       "category": "llm",
       "downloadCount": 3107,
       "iconSystemName": "cpu",
-      "detailsURL": "https://www.typewhisper.com/de/addons/gemma4/",
+      "detailsURL": "https://www.typewhisper.com/addons/gemma4/",
       "releases": [
         {
           "version": "1.0.7",
@@ -1249,7 +1249,7 @@
       "category": "post-processor",
       "downloadCount": 526,
       "iconSystemName": "terminal",
-      "detailsURL": "https://www.typewhisper.com/de/addons/script-runner/",
+      "detailsURL": "https://www.typewhisper.com/addons/script-runner/",
       "releases": [
         {
           "version": "1.1.4",
@@ -1283,7 +1283,7 @@
       "downloadCount": 96,
       "iconSystemName": "waveform.badge.mic",
       "requiresAPIKey": true,
-      "detailsURL": "https://www.typewhisper.com/de/addons/soniox/",
+      "detailsURL": "https://www.typewhisper.com/addons/soniox/",
       "releases": [
         {
           "version": "1.0.4",
@@ -1317,7 +1317,7 @@
       "downloadCount": 77,
       "iconSystemName": "waveform.badge.mic",
       "requiresAPIKey": true,
-      "detailsURL": "https://www.typewhisper.com/de/addons/speechmatics/",
+      "detailsURL": "https://www.typewhisper.com/addons/speechmatics/",
       "releases": [
         {
           "version": "1.0.4",
@@ -1350,7 +1350,7 @@
       "category": "post-processor",
       "downloadCount": 767,
       "iconSystemName": "arrow.up.forward.app",
-      "detailsURL": "https://www.typewhisper.com/de/addons/webhook/",
+      "detailsURL": "https://www.typewhisper.com/addons/webhook/",
       "releases": [
         {
           "version": "1.0.13",
@@ -1414,7 +1414,7 @@
       "category": "transcription",
       "downloadCount": 672,
       "iconSystemName": "cpu",
-      "detailsURL": "https://www.typewhisper.com/de/addons/granite/",
+      "detailsURL": "https://www.typewhisper.com/addons/granite/",
       "releases": [
         {
           "version": "1.0.8",
@@ -1477,7 +1477,7 @@
       "category": "transcription",
       "downloadCount": 1159,
       "iconSystemName": "cpu",
-      "detailsURL": "https://www.typewhisper.com/de/addons/voxtral/",
+      "detailsURL": "https://www.typewhisper.com/addons/voxtral/",
       "releases": [
         {
           "version": "1.0.12",
@@ -1539,7 +1539,7 @@
       "downloadCount": 758,
       "iconSystemName": "text.badge.minus",
       "requiresAPIKey": false,
-      "detailsURL": "https://www.typewhisper.com/de/addons/filler-words/",
+      "detailsURL": "https://www.typewhisper.com/addons/filler-words/",
       "releases": [
         {
           "version": "1.0.0",
@@ -1565,7 +1565,7 @@
       "iconSystemName": "waveform.circle.fill",
       "requiresAPIKey": false,
       "hosting": "local",
-      "detailsURL": "https://www.typewhisper.com/de/addons/supertonic/",
+      "detailsURL": "https://www.typewhisper.com/addons/supertonic/",
       "releases": [
         {
           "version": "1.0.1",
@@ -1606,7 +1606,7 @@
       "iconSystemName": "sparkles",
       "requiresAPIKey": true,
       "hosting": "cloud",
-      "detailsURL": "https://www.typewhisper.com/de/addons/xai-grok/",
+      "detailsURL": "https://www.typewhisper.com/addons/xai-grok/",
       "releases": [
         {
           "version": "1.0.0",
@@ -1632,7 +1632,7 @@
       "iconSystemName": "waveform.badge.mic",
       "requiresAPIKey": true,
       "hosting": "cloud",
-      "detailsURL": "https://www.typewhisper.com/de/addons/smallest-pulse/",
+      "detailsURL": "https://www.typewhisper.com/addons/smallest-pulse/",
       "releases": [
         {
           "version": "1.0.0",
