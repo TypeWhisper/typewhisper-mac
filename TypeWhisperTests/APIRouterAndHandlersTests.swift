@@ -618,9 +618,18 @@ final class APIRouterAndHandlersTests: XCTestCase {
     @MainActor
     private final class MockAudioDuckingService: AudioDuckingService {
         let onRestore: () -> Void
+        let onDuck: (Float) -> Void
 
-        init(onRestore: @escaping () -> Void = {}) {
+        init(
+            onRestore: @escaping () -> Void = {},
+            onDuck: @escaping (Float) -> Void = { _ in }
+        ) {
             self.onRestore = onRestore
+            self.onDuck = onDuck
+        }
+
+        override func duckAudio(to factor: Float) {
+            onDuck(factor)
         }
 
         override func restoreAudio() {
@@ -2768,15 +2777,122 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    func testApiStartRecording_ducksAudioAfterStartSoundWhenInputIsReady() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let originalAudioDuckingEnabled = UserDefaults.standard.object(forKey: UserDefaultsKeys.audioDuckingEnabled)
+        let originalAudioDuckingLevel = UserDefaults.standard.object(forKey: UserDefaultsKeys.audioDuckingLevel)
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        var events: [String] = []
+        let soundService = MockSoundService { event, enabled in
+            guard event == .recordingStarted, enabled else { return }
+            events.append("start_sound")
+        }
+        let audioDuckingService = MockAudioDuckingService(onDuck: { factor in
+            events.append("duck_audio_\(factor)")
+        })
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+            Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
+            Self.restoreUserDefault(originalAudioDuckingEnabled, forKey: UserDefaultsKeys.audioDuckingEnabled)
+            Self.restoreUserDefault(originalAudioDuckingLevel, forKey: UserDefaultsKeys.audioDuckingLevel)
+        }
+
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            audioDuckingService: audioDuckingService,
+            soundService: soundService
+        )
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.soundFeedbackEnabled = true
+        context.dictationViewModel.audioDuckingEnabled = true
+        context.dictationViewModel.audioDuckingLevel = 0.2
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {
+            events.append("start_audio")
+        }
+
+        _ = context.dictationViewModel.apiStartRecording()
+
+        XCTAssertEqual(events, ["start_audio"])
+        XCTAssertFalse(context.dictationViewModel.isRecordingInputReady)
+
+        context.audioRecordingService.testingNotifyFirstRecordingAudioBuffer()
+
+        XCTAssertEqual(events, ["start_audio", "start_sound", "duck_audio_0.2"])
+        XCTAssertTrue(context.dictationViewModel.isRecordingInputReady)
+    }
+
+    @MainActor
+    func testApiStartRecording_ducksAudioAfterInputReadyWhenStartSoundIsDisabled() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let originalAudioDuckingEnabled = UserDefaults.standard.object(forKey: UserDefaultsKeys.audioDuckingEnabled)
+        let originalAudioDuckingLevel = UserDefaults.standard.object(forKey: UserDefaultsKeys.audioDuckingLevel)
+        let originalSoundFeedbackEnabled = UserDefaults.standard.object(forKey: UserDefaultsKeys.soundFeedbackEnabled)
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        var events: [String] = []
+        let soundService = MockSoundService { event, enabled in
+            guard event == .recordingStarted, enabled else { return }
+            events.append("start_sound")
+        }
+        let audioDuckingService = MockAudioDuckingService(onDuck: { factor in
+            events.append("duck_audio_\(factor)")
+        })
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+            Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
+            Self.restoreUserDefault(originalAudioDuckingEnabled, forKey: UserDefaultsKeys.audioDuckingEnabled)
+            Self.restoreUserDefault(originalAudioDuckingLevel, forKey: UserDefaultsKeys.audioDuckingLevel)
+            Self.restoreUserDefault(originalSoundFeedbackEnabled, forKey: UserDefaultsKeys.soundFeedbackEnabled)
+        }
+
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            audioDuckingService: audioDuckingService,
+            soundService: soundService
+        )
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.soundFeedbackEnabled = false
+        context.dictationViewModel.audioDuckingEnabled = true
+        context.dictationViewModel.audioDuckingLevel = 0.25
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {
+            events.append("start_audio")
+        }
+
+        _ = context.dictationViewModel.apiStartRecording()
+
+        XCTAssertEqual(events, ["start_audio"])
+        XCTAssertFalse(context.dictationViewModel.isRecordingInputReady)
+
+        context.audioRecordingService.testingNotifyFirstRecordingAudioBuffer()
+
+        XCTAssertEqual(events, ["start_audio", "duck_audio_0.25"])
+        XCTAssertTrue(context.dictationViewModel.isRecordingInputReady)
+    }
+
+    @MainActor
     func testApiStartRecording_skipsStartSoundForBluetoothInput() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let originalAudioDuckingEnabled = UserDefaults.standard.object(forKey: UserDefaultsKeys.audioDuckingEnabled)
+        let originalAudioDuckingLevel = UserDefaults.standard.object(forKey: UserDefaultsKeys.audioDuckingLevel)
         var events: [String] = []
         let bluetoothDeviceID = AudioDeviceID(409)
         let soundService = MockSoundService { event, enabled in
             guard event == .recordingStarted, enabled else { return }
             events.append("start_sound")
         }
+        let audioDuckingService = MockAudioDuckingService(onDuck: { factor in
+            events.append("duck_audio_\(factor)")
+        })
         let transportResolver = FakeAudioDeviceTransportResolver(
             transports: [bluetoothDeviceID: kAudioDeviceTransportTypeBluetooth]
         ) { deviceID in
@@ -2800,10 +2916,13 @@ final class APIRouterAndHandlersTests: XCTestCase {
             dictationContext = nil
             TestSupport.remove(appSupportDirectory)
             Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
+            Self.restoreUserDefault(originalAudioDuckingEnabled, forKey: UserDefaultsKeys.audioDuckingEnabled)
+            Self.restoreUserDefault(originalAudioDuckingLevel, forKey: UserDefaultsKeys.audioDuckingLevel)
         }
 
         dictationContext = Self.makeDictationContext(
             appSupportDirectory: appSupportDirectory,
+            audioDuckingService: audioDuckingService,
             soundService: soundService,
             audioDeviceTransportResolver: transportResolver,
             audioDeviceBluetoothInputRouteStabilizer: deviceRouteStabilizer,
@@ -2812,6 +2931,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
         )
         let context = try XCTUnwrap(dictationContext)
         context.dictationViewModel.soundFeedbackEnabled = true
+        context.dictationViewModel.audioDuckingEnabled = true
+        context.dictationViewModel.audioDuckingLevel = 0.3
         context.audioDeviceService.inputDevices = [
             AudioInputDevice(deviceID: bluetoothDeviceID, name: "AirPods Max", uid: "bt-input")
         ]
@@ -2836,7 +2957,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         context.audioRecordingService.testingNotifyFirstRecordingAudioBuffer()
 
-        XCTAssertEqual(events, ["start_audio"])
+        XCTAssertEqual(events, ["start_audio", "duck_audio_0.3"])
         XCTAssertTrue(context.dictationViewModel.isRecordingInputReady)
         XCTAssertTrue(context.audioRecordingService.hasExplicitDeviceSelection)
     }
@@ -3816,6 +3937,14 @@ final class APIRouterAndHandlersTests: XCTestCase {
             UserDefaults.standard.set(value, forKey: UserDefaultsKeys.selectedInputDeviceUID)
         } else {
             UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        }
+    }
+
+    private static func restoreUserDefault(_ value: Any?, forKey key: String) {
+        if let value {
+            UserDefaults.standard.set(value, forKey: key)
+        } else {
+            UserDefaults.standard.removeObject(forKey: key)
         }
     }
 

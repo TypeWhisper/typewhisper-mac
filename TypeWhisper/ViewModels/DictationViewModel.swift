@@ -241,6 +241,7 @@ final class DictationViewModel: ObservableObject {
     private var firstRecordingAudioBufferSeen = false
     private var pendingRecordingStartedPayload: RecordingStartedPayload?
     private var shouldPlayRecordingStartSoundWhenReady = false
+    private var pendingRecordingAudioDuckingLevel: Float?
     private var dictationSessions: [UUID: DictationSessionSnapshot] = [:]
     private var dictationSessionOrder: [UUID] = []
     private let maxTrackedDictationSessions = 100
@@ -621,8 +622,15 @@ final class DictationViewModel: ObservableObject {
         if shouldPlayRecordingStartSoundWhenReady {
             soundService.play(.recordingStarted, enabled: soundFeedbackEnabled)
         }
+        applyPendingRecordingAudioDuckingIfNeeded()
         accessibilityAnnouncementService.announceRecordingStarted()
         EventBus.shared.emit(.recordingStarted(payload))
+    }
+
+    private func applyPendingRecordingAudioDuckingIfNeeded() {
+        guard let level = pendingRecordingAudioDuckingLevel else { return }
+        pendingRecordingAudioDuckingLevel = nil
+        audioDuckingService.duckAudio(to: level)
     }
 
     private func clearRecordingStartCueState(resetReadiness: Bool = true) {
@@ -633,6 +641,7 @@ final class DictationViewModel: ObservableObject {
         firstRecordingAudioBufferSeen = false
         pendingRecordingStartedPayload = nil
         shouldPlayRecordingStartSoundWhenReady = false
+        pendingRecordingAudioDuckingLevel = nil
     }
 
     private func clearDeferredRecordingContext() {
@@ -862,9 +871,7 @@ final class DictationViewModel: ObservableObject {
                 logger.info("Skipping recording start sound for Bluetooth input device")
             }
             if mediaPauseEnabled { mediaPlaybackService.pauseIfPlaying() }
-            if audioDuckingEnabled {
-                audioDuckingService.duckAudio(to: Float(audioDuckingLevel))
-            }
+            pendingRecordingAudioDuckingLevel = audioDuckingEnabled ? Float(audioDuckingLevel) : nil
             state = .recording
             // Reset hotkey timer so hybrid threshold counts from recording start,
             // not from key press. Slow device init (e.g. iPhone Continuity ~2-3s)
