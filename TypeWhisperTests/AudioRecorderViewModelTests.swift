@@ -53,6 +53,28 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine), "groq")
     }
 
+    func testDefaultEngineModelOverrideClearsWhenGlobalProviderChanges() throws {
+        try preserveStandardDefaults()
+        let defaults = try makeDefaults()
+        setupPluginManager()
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+
+        let viewModel = makeViewModel(defaults: defaults, modelManager: modelManager)
+        viewModel.selectedModel = "whisper-small"
+        XCTAssertEqual(viewModel.effectiveProviderId, "groq")
+        XCTAssertEqual(viewModel.effectiveModelId, "whisper-small")
+
+        modelManager.selectProvider("assemblyai")
+        viewModel.reconcileSelectionWithAvailablePlugins()
+
+        XCTAssertNil(viewModel.selectedEngine)
+        XCTAssertNil(viewModel.selectedModel)
+        XCTAssertNil(defaults.string(forKey: UserDefaultsKeys.recorderTranscriptionModel))
+        XCTAssertEqual(viewModel.effectiveProviderId, "assemblyai")
+        XCTAssertEqual(viewModel.effectiveModelId, "universal-2")
+    }
+
     func testRecorderSelectionClearsMissingSavedEngineAndModel() throws {
         try preserveStandardDefaults()
         let defaults = try makeDefaults()
@@ -71,10 +93,13 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.effectiveProviderId, "groq")
     }
 
-    private func makeViewModel(defaults: UserDefaults) -> AudioRecorderViewModel {
+    private func makeViewModel(
+        defaults: UserDefaults,
+        modelManager: ModelManagerService = ModelManagerService()
+    ) -> AudioRecorderViewModel {
         AudioRecorderViewModel(
             recorderService: AudioRecorderService(),
-            modelManager: ModelManagerService(),
+            modelManager: modelManager,
             dictionaryService: DictionaryService(appSupportDirectory: makeTemporaryDirectory()),
             defaults: defaults
         )
