@@ -5,14 +5,18 @@ import TypeWhisperPluginSDK
 
 enum SeedASRError: Error, LocalizedError {
     case encodeFailed(String)
+    case decodeFailed(String)
     case serverError(code: UInt32?, message: String)
     case noAudio
+    case timedOut
 
     var errorDescription: String? {
         switch self {
         case .encodeFailed(let what): return "Encode failed: \(what)"
+        case .decodeFailed(let what): return "Decode failed: \(what)"
         case .serverError(let code, let msg): return "Volc ASR \(code.map { "code \($0): " } ?? "")\(msg)"
         case .noAudio: return "No audio captured"
+        case .timedOut: return "Volc ASR timed out waiting for final result"
         }
     }
 }
@@ -92,7 +96,7 @@ final class SeedASRPlugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptio
         guard let resourceId = _resourceId, !resourceId.isEmpty else { throw PluginTranscriptionError.notConfigured }
         guard !audio.samples.isEmpty else { throw SeedASRError.noAudio }
 
-        let session = SeedASRLiveSession(apiKey: apiKey, resourceId: resourceId, boostingTableId: _boostingTableId, onProgress: onProgress)
+        let session = SeedASRLiveSession(apiKey: apiKey, resourceId: resourceId, boostingTableId: _boostingTableId, requestedLanguage: language, onProgress: onProgress)
         try await session.start()
         try await session.appendAudio(samples: audio.samples)
         return try await session.finish()
@@ -109,7 +113,7 @@ final class SeedASRPlugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptio
         guard let apiKey = _apiKey, !apiKey.isEmpty else { throw PluginTranscriptionError.notConfigured }
         guard let resourceId = _resourceId, !resourceId.isEmpty else { throw PluginTranscriptionError.notConfigured }
 
-        let session = SeedASRLiveSession(apiKey: apiKey, resourceId: resourceId, boostingTableId: _boostingTableId, onProgress: onProgress)
+        let session = SeedASRLiveSession(apiKey: apiKey, resourceId: resourceId, boostingTableId: _boostingTableId, requestedLanguage: language, onProgress: onProgress)
         try await session.start()
         return session
     }
@@ -148,7 +152,7 @@ final class SeedASRPlugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptio
         guard let resourceId = _resourceId, !resourceId.isEmpty else { return false }
         // 1 second of silence as a minimal connection ping.
         let silence = [Float](repeating: 0, count: kSampleRate)
-        let session = SeedASRLiveSession(apiKey: apiKey, resourceId: resourceId, boostingTableId: nil, onProgress: { _ in true })
+        let session = SeedASRLiveSession(apiKey: apiKey, resourceId: resourceId, boostingTableId: nil, requestedLanguage: nil, onProgress: { _ in true })
         do {
             try await session.start()
             try await session.appendAudio(samples: silence)
@@ -167,6 +171,7 @@ private actor SeedASRLiveSession: LiveTranscriptionSession {
     private let apiKey: String
     private let resourceId: String
     private let boostingTableId: String?
+    private let requestedLanguage: String?
     private let onProgress: @Sendable (String) -> Bool
     private let endpoint: URL
 
@@ -183,10 +188,11 @@ private actor SeedASRLiveSession: LiveTranscriptionSession {
 
     private static let chunkBytes = 6400  // 200ms at 16kHz × 2 bytes per sample
 
-    init(apiKey: String, resourceId: String, boostingTableId: String?, onProgress: @escaping @Sendable (String) -> Bool) {
+    init(apiKey: String, resourceId: String, boostingTableId: String?, requestedLanguage: String?, onProgress: @escaping @Sendable (String) -> Bool) {
         self.apiKey = apiKey
         self.resourceId = resourceId
         self.boostingTableId = boostingTableId?.isEmpty == false ? boostingTableId : nil
+        self.requestedLanguage = requestedLanguage
         self.onProgress = onProgress
         self.endpoint = URL(string: kDefaultEndpoint)!
     }
@@ -243,6 +249,10 @@ private actor SeedASRLiveSession: LiveTranscriptionSession {
                         await self?.markError(SeedASRError.serverError(code: parsed.errorCode, message: msg))
                         return
                     }
+                    if parsed.decompressionFailed {
+                        await self?.markError(SeedASRError.decodeFailed("gzip decompression failed"))
+                        return
+                    }
                     if let payload = parsed.payload {
                         let text = Self.extractText(from: payload)
                         if !text.isEmpty {
@@ -286,7 +296,7 @@ private actor SeedASRLiveSession: LiveTranscriptionSession {
 
     func finish() async throws -> PluginTranscriptionResult {
         if didFinish {
-            return PluginTranscriptionResult(text: finalText, detectedLanguage: "zh")
+            return PluginTranscriptionResult(text: finalText, detectedLanguage: requestedLanguage)
         }
         didFinish = true
 
@@ -296,24 +306,42 @@ private actor SeedASRLiveSession: LiveTranscriptionSession {
         if let err = lastError { throw err }
 
         // Drain pending audio, then send the empty last frame.
-        try? await flushIfReady(forceAll: true)
+        do {
+            try await flushIfReady(forceAll: true)
+        } catch {
+            receiveTask?.cancel()
+            task.cancel(with: .normalClosure, reason: nil)
+            throw error
+        }
         let lastFrame = try SeedWSProtocol.buildAudioRequest(audio: Data(), sequence: sequence, isLast: true)
         sequence += 1
         try await task.send(.data(lastFrame))
 
-        // Wait for server final result.
+        // Wait for server final result. Respect cancellation and surface deadline.
         let deadline = Date().addingTimeInterval(60)
-        while !serverFinished, lastError == nil, Date() < deadline {
-            try? await Task.sleep(nanoseconds: 50_000_000)
+        var timedOut = false
+        do {
+            while !serverFinished, lastError == nil {
+                if Date() >= deadline {
+                    timedOut = true
+                    break
+                }
+                try await Task.sleep(nanoseconds: 50_000_000)
+            }
+        } catch {
+            receiveTask?.cancel()
+            task.cancel(with: .goingAway, reason: nil)
+            throw error
         }
 
         receiveTask?.cancel()
         task.cancel(with: .normalClosure, reason: nil)
 
         if let err = lastError { throw err }
+        if timedOut, !serverFinished { throw SeedASRError.timedOut }
         return PluginTranscriptionResult(
             text: finalText.trimmingCharacters(in: .whitespacesAndNewlines),
-            detectedLanguage: "zh"
+            detectedLanguage: requestedLanguage
         )
     }
 

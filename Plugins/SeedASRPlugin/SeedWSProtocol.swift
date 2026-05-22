@@ -67,11 +67,12 @@ enum SeedWSProtocol {
         let isLast: Bool
         let payload: [String: Any]?
         let errorCode: UInt32?
+        let decompressionFailed: Bool
     }
 
     static func parseResponse(_ data: Data) -> ParsedResponse {
         guard data.count >= 4 else {
-            return ParsedResponse(messageType: nil, isLast: false, payload: nil, errorCode: nil)
+            return ParsedResponse(messageType: nil, isLast: false, payload: nil, errorCode: nil, decompressionFailed: false)
         }
         let b1 = data[1]
         let b2 = data[2]
@@ -92,33 +93,34 @@ enum SeedWSProtocol {
         var errorCode: UInt32?
         if messageType == .serverErrorResponse {
             guard data.count >= cursor + 4 else {
-                return ParsedResponse(messageType: messageType, isLast: isLast, payload: nil, errorCode: nil)
+                return ParsedResponse(messageType: messageType, isLast: isLast, payload: nil, errorCode: nil, decompressionFailed: false)
             }
             errorCode = readUInt32BE(data, at: cursor)
             cursor += 4
         }
 
         guard data.count >= cursor + 4 else {
-            return ParsedResponse(messageType: messageType, isLast: isLast, payload: nil, errorCode: errorCode)
+            return ParsedResponse(messageType: messageType, isLast: isLast, payload: nil, errorCode: errorCode, decompressionFailed: false)
         }
         let payloadLen = Int(readUInt32BE(data, at: cursor))
         cursor += 4
 
         guard data.count >= cursor + payloadLen else {
-            return ParsedResponse(messageType: messageType, isLast: isLast, payload: nil, errorCode: errorCode)
+            return ParsedResponse(messageType: messageType, isLast: isLast, payload: nil, errorCode: errorCode, decompressionFailed: false)
         }
         var payloadData = data.subdata(in: cursor..<(cursor + payloadLen))
         if compression == Self.gzipCompression, !payloadData.isEmpty {
-            if let decompressed = gzipDecompress(payloadData) {
-                payloadData = decompressed
+            guard let decompressed = gzipDecompress(payloadData) else {
+                return ParsedResponse(messageType: messageType, isLast: isLast, payload: nil, errorCode: errorCode, decompressionFailed: true)
             }
+            payloadData = decompressed
         }
 
         var json: [String: Any]?
         if !payloadData.isEmpty {
             json = (try? JSONSerialization.jsonObject(with: payloadData)) as? [String: Any]
         }
-        return ParsedResponse(messageType: messageType, isLast: isLast, payload: json, errorCode: errorCode)
+        return ParsedResponse(messageType: messageType, isLast: isLast, payload: json, errorCode: errorCode, decompressionFailed: false)
     }
 
     // MARK: - Big-endian helpers
