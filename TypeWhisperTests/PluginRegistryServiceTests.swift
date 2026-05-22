@@ -50,7 +50,7 @@ final class PluginRegistryServiceTests: XCTestCase {
                   "category": "transcription",
                   "downloadCount": 100,
                   "detailsURL": "https://typewhisper.com/addons/multi",
-                  "homepageURL": "https://example.com/multi",
+                  "homepageURL": "http://example.com/multi",
                   "iconURL": "https://www.typewhisper.com/brand-logos/example/logo.svg",
                   "iconDarkURL": "https://www.typewhisper.com/brand-logos/example/logo-dark.svg",
                   "releases": [
@@ -86,7 +86,7 @@ final class PluginRegistryServiceTests: XCTestCase {
         XCTAssertEqual(plugins.first?.downloadURL, "https://example.com/compatible.zip")
         XCTAssertEqual(plugins.first?.downloadCount, 100)
         XCTAssertEqual(plugins.first?.detailsURL, "https://typewhisper.com/addons/multi")
-        XCTAssertEqual(plugins.first?.homepageURL, "https://example.com/multi")
+        XCTAssertEqual(plugins.first?.homepageURL, "http://example.com/multi")
         XCTAssertEqual(plugins.first?.iconURL, "https://www.typewhisper.com/brand-logos/example/logo.svg")
         XCTAssertEqual(plugins.first?.iconDarkURL, "https://www.typewhisper.com/brand-logos/example/logo-dark.svg")
     }
@@ -105,7 +105,7 @@ final class PluginRegistryServiceTests: XCTestCase {
                   "category": "utility",
                   "detailsURL": "not a url",
                   "homepageURL": 42,
-                  "iconURL": "file:///tmp/icon.svg",
+                  "iconURL": "http://example.com/icon.svg",
                   "iconDarkURL": ["https://example.com/icon-dark.svg"],
                   "releases": [
                     {

@@ -51,12 +51,18 @@ final class PluginManifestValidationTests: XCTestCase {
             let data = try Data(contentsOf: manifestURL)
             let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
 
-            for urlString in [manifest.detailsURL, manifest.homepageURL, manifest.iconURL, manifest.iconDarkURL].compactMap({ $0 }) {
+            for urlString in [manifest.detailsURL, manifest.homepageURL].compactMap({ $0 }) {
                 let components = URLComponents(string: urlString)
                 XCTAssertTrue(
                     components?.scheme == "https" || components?.scheme == "http",
                     "\(manifestURL.lastPathComponent): \(urlString)"
                 )
+                XCTAssertNotNil(components?.host, "\(manifestURL.lastPathComponent): \(urlString)")
+            }
+
+            for urlString in [manifest.iconURL, manifest.iconDarkURL].compactMap({ $0 }) {
+                let components = URLComponents(string: urlString)
+                XCTAssertEqual(components?.scheme, "https", "\(manifestURL.lastPathComponent): \(urlString)")
                 XCTAssertNotNil(components?.host, "\(manifestURL.lastPathComponent): \(urlString)")
             }
         }

@@ -291,10 +291,15 @@ def validate_plugin(plugin: dict, path: Path) -> list[str]:
     if download_count is not None and not is_non_negative_int(download_count):
         errors.append(f"{filename}: 'downloadCount' must be a non-negative integer")
 
-    for field in ["detailsURL", "homepageURL", "iconURL", "iconDarkURL"]:
+    for field in ["detailsURL", "homepageURL"]:
         value = plugin.get(field)
         if value is not None:
             errors.extend(validate_http_url(value, filename, field))
+
+    for field in ["iconURL", "iconDarkURL"]:
+        value = plugin.get(field)
+        if value is not None:
+            errors.extend(validate_https_url(value, filename, field))
 
     releases = plugin.get("releases")
     if releases is not None:

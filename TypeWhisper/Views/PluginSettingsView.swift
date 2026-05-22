@@ -1269,6 +1269,14 @@ private func validatedExternalURL(_ urlString: String?) -> URL? {
     return url
 }
 
+private func validatedHTTPSURL(_ urlString: String?) -> URL? {
+    guard let url = validatedExternalURL(urlString),
+          url.scheme?.lowercased() == "https" else {
+        return nil
+    }
+    return url
+}
+
 private extension Array where Element: Hashable {
     func deduplicated() -> [Element] {
         var seen: Set<Element> = []
@@ -1425,9 +1433,9 @@ private struct IntegrationIcon: View {
             }
 
             loadedImage = nil
-            let imageData = await Task.detached(priority: .utility) {
-                try? Data(contentsOf: resolvedImageURL)
-            }.value
+            var request = URLRequest(url: resolvedImageURL)
+            request.timeoutInterval = 15
+            let imageData = try? await URLSession.shared.data(for: request).0
 
             guard !Task.isCancelled else { return }
             loadedImage = imageData.flatMap(NSImage.init(data:))
@@ -1736,14 +1744,14 @@ private struct InstalledPluginRow: View {
     }
 
     private var iconURL: URL? {
-        validatedExternalURL(registryPlugin?.iconURL)
-            ?? validatedExternalURL(plugin.manifest.iconURL)
+        validatedHTTPSURL(registryPlugin?.iconURL)
+            ?? validatedHTTPSURL(plugin.manifest.iconURL)
             ?? plugin.iconResourceURL
     }
 
     private var iconDarkURL: URL? {
-        validatedExternalURL(registryPlugin?.iconDarkURL)
-            ?? validatedExternalURL(plugin.manifest.iconDarkURL)
+        validatedHTTPSURL(registryPlugin?.iconDarkURL)
+            ?? validatedHTTPSURL(plugin.manifest.iconDarkURL)
     }
 
     private var hasOverflowActions: Bool {
@@ -1867,8 +1875,8 @@ private struct AvailablePluginRow: View {
             IntegrationIcon(
                 systemName: plugin.iconSystemName ?? "puzzlepiece.extension",
                 tint: source.tint,
-                imageURL: validatedExternalURL(plugin.iconURL),
-                darkImageURL: validatedExternalURL(plugin.iconDarkURL)
+                imageURL: validatedHTTPSURL(plugin.iconURL),
+                darkImageURL: validatedHTTPSURL(plugin.iconDarkURL)
             )
 
             VStack(alignment: .leading, spacing: 5) {

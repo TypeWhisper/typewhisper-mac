@@ -275,8 +275,8 @@ struct RegistryPluginEntry: Decodable {
         downloadCount = try container.decodeIfPresent(Int.self, forKey: .downloadCount)
         detailsURL = Self.validHTTPURLString(from: try? container.decodeIfPresent(String.self, forKey: .detailsURL))
         homepageURL = Self.validHTTPURLString(from: try? container.decodeIfPresent(String.self, forKey: .homepageURL))
-        iconURL = Self.validHTTPURLString(from: try? container.decodeIfPresent(String.self, forKey: .iconURL))
-        iconDarkURL = Self.validHTTPURLString(from: try? container.decodeIfPresent(String.self, forKey: .iconDarkURL))
+        iconURL = Self.validHTTPSURLString(from: try? container.decodeIfPresent(String.self, forKey: .iconURL))
+        iconDarkURL = Self.validHTTPSURLString(from: try? container.decodeIfPresent(String.self, forKey: .iconDarkURL))
 
         let decodedReleases = try container.decodeIfPresent([RegistryPluginRelease].self, forKey: .releases) ?? []
         releases = decodedReleases
@@ -288,6 +288,17 @@ struct RegistryPluginEntry: Decodable {
               let components = URLComponents(string: value),
               let scheme = components.scheme?.lowercased(),
               (scheme == "https" || scheme == "http"),
+              components.host != nil else {
+            return nil
+        }
+        return value
+    }
+
+    private static func validHTTPSURLString(from value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty,
+              let components = URLComponents(string: value),
+              components.scheme?.lowercased() == "https",
               components.host != nil else {
             return nil
         }

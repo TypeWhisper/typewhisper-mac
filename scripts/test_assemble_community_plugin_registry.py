@@ -100,6 +100,29 @@ class CommunityPluginRegistryAssemblyTests(unittest.TestCase):
             errors,
         )
 
+    def test_icon_link_metadata_requires_https(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "com.example.plugin.json"
+            path.write_text(
+                json.dumps(
+                    community_entry(
+                        detailsURL="http://typewhisper.com/addons/example",
+                        homepageURL="http://example.com",
+                        iconURL="http://www.typewhisper.com/brand-logos/example/logo.svg",
+                        iconDarkURL="https://www.typewhisper.com/brand-logos/example/logo-dark.svg",
+                    )
+                )
+                + "\n"
+            )
+
+            entries, errors = load_community_entries(Path(tmp))
+
+        self.assertEqual(entries, [])
+        self.assertTrue(
+            any("'iconURL' must be an HTTPS URL" in error for error in errors),
+            errors,
+        )
+
     def test_external_release_url_is_rejected(self) -> None:
         external_url = (
             "https://github.com/contributor/example/releases/download/"
