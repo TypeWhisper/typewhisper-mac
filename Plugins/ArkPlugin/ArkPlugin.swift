@@ -85,6 +85,9 @@ final class ArkPlugin: NSObject, LLMProviderPlugin, LLMTemperatureControllablePr
         guard let baseURL = _baseURL, !baseURL.isEmpty else {
             throw PluginChatError.notConfigured
         }
+        guard let parsedBase = URL(string: baseURL), parsedBase.scheme?.lowercased() == "https" else {
+            throw PluginChatError.apiError("Insecure base URL; HTTPS required")
+        }
         let modelId = model ?? _selectedLLMModelId ?? ""
         guard !modelId.isEmpty else {
             throw PluginChatError.noModelSelected
@@ -230,6 +233,7 @@ final class ArkPlugin: NSObject, LLMProviderPlugin, LLMTemperatureControllablePr
 
     fileprivate func fetchModelList() async -> [FetchedModel] {
         guard let baseURL = _baseURL, !baseURL.isEmpty,
+              let parsedBase = URL(string: baseURL), parsedBase.scheme?.lowercased() == "https",
               let url = URL(string: "\(baseURL)\(Self.apiPathPrefix)/models") else {
             return []
         }

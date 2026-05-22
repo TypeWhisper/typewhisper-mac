@@ -44,7 +44,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "点击「Test Connection」加载模型列表"
+            "value" : "点击「测试连接」加载模型列表"
           }
         }
       }
