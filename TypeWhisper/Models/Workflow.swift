@@ -613,15 +613,16 @@ extension Workflow {
             let customInstruction = behavior.settings["instruction"]
                 ?? behavior.settings["goal"]
                 ?? behavior.settings["prompt"]
-                ?? behavior.fineTuning
+                ?? ""
             let trimmedInstruction = customInstruction.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmedInstruction.isEmpty else {
+            let trimmedFineTuning = behavior.fineTuning.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedInstruction.isEmpty || !trimmedFineTuning.isEmpty else {
                 return nil
             }
             return """
             Apply the following workflow instruction to the dictated text and return only the final result:
             \(trimmedInstruction)
-            \(inputBoundaryInstruction)\(languageHint)\(settingsInstruction)\(outputInstruction)
+            \(inputBoundaryInstruction)\(languageHint)\(settingsInstruction)\(fineTuningInstruction)\(outputInstruction)
             """
         }
     }
