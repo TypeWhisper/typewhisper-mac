@@ -115,7 +115,9 @@ class MinimalIndicatorPanel: NSPanel {
             cachedScreen = screen
         }
 
-        if IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(on: screen) {
+        let overlayPosition = DictationViewModel.shared.overlayPosition
+        let placement: IndicatorPlacement = overlayPosition == .top ? .notchStrip : .nonNotchArea
+        if IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(on: screen, placement: placement) {
             suppressForForeignFullscreen()
             return
         }
@@ -124,7 +126,7 @@ class MinimalIndicatorPanel: NSPanel {
         let x = screenFrame.midX - Self.panelWidth / 2
 
         let y: CGFloat
-        switch DictationViewModel.shared.overlayPosition {
+        switch overlayPosition {
         case .bottom:
             y = screenFrame.origin.y + 20
         case .top:

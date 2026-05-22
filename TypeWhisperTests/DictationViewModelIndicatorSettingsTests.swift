@@ -313,6 +313,36 @@ final class IndicatorFullscreenSuppressionPolicyTests: XCTestCase {
             )
         )
     }
+
+    func testDoesNotSuppressNonNotchPlacementEvenOverForeignFullscreenWindow() {
+        let fullscreenWindow = CGRect(x: 0, y: 0, width: 3024, height: 1964)
+
+        XCTAssertFalse(
+            IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                screenFrame: notchedScreenFrame,
+                safeAreaTopInset: 74,
+                windowFrame: fullscreenWindow,
+                frontmostBundleIdentifier: "com.apple.ScreenSharing",
+                appBundleIdentifier: "com.typewhisper.mac.dev",
+                placement: .nonNotchArea
+            )
+        )
+    }
+
+    func testNotchStripPlacementStillSuppressesAsBefore() {
+        let fullscreenWindow = CGRect(x: 0, y: 0, width: 3024, height: 1964)
+
+        XCTAssertTrue(
+            IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                screenFrame: notchedScreenFrame,
+                safeAreaTopInset: 74,
+                windowFrame: fullscreenWindow,
+                frontmostBundleIdentifier: "com.apple.ScreenSharing",
+                appBundleIdentifier: "com.typewhisper.mac.dev",
+                placement: .notchStrip
+            )
+        )
+    }
 }
 
 final class DockIconVisibilityTests: XCTestCase {

@@ -367,6 +367,21 @@ enum IndicatorWindowFrameLookup {
     }
 }
 
+/// Where an indicator panel renders relative to the display's notch safe area.
+///
+/// The fullscreen-suppression policy exists to avoid drawing the indicator
+/// underneath a foreign fullscreen window that has expanded into the notch
+/// strip on notched MacBooks (see #373, #543). Indicators that render away
+/// from the notch strip (e.g. a bottom-aligned overlay) cannot collide with
+/// that area, so suppression should not apply to them (see #602).
+enum IndicatorPlacement {
+    /// Indicator renders inside or adjacent to the notch safe-area strip.
+    case notchStrip
+    /// Indicator renders entirely outside the notch safe-area strip
+    /// (for example, a bottom-aligned overlay).
+    case nonNotchArea
+}
+
 enum IndicatorFullscreenSuppressionPolicy {
     private static let minimumHorizontalCoverage: CGFloat = 0.5
     private static let minimumVerticalCoverage: CGFloat = 0.5
@@ -381,6 +396,7 @@ enum IndicatorFullscreenSuppressionPolicy {
     @MainActor
     static func shouldSuppressIndicator(
         on screen: NSScreen,
+        placement: IndicatorPlacement = .notchStrip,
         frontmostApplicationProvider: () -> NSRunningApplication? = {
             ActivationSourceTracker.shared.lastExternalApplication ?? NSWorkspace.shared.frontmostApplication
         },
@@ -389,6 +405,10 @@ enum IndicatorFullscreenSuppressionPolicy {
         windowFrameProvider: (pid_t) -> CGRect? = IndicatorWindowFrameLookup.frontmostWindowFrame(for:),
         appBundleIdentifier: String? = Bundle.main.bundleIdentifier
     ) -> Bool {
+        guard placement == .notchStrip else {
+            return false
+        }
+
         guard let application = frontmostApplicationProvider() else {
             return false
         }
@@ -407,7 +427,8 @@ enum IndicatorFullscreenSuppressionPolicy {
             windowFrame: windowFrame,
             focusedWindowIsFullscreen: focusedWindowIsFullscreen,
             frontmostBundleIdentifier: application.bundleIdentifier,
-            appBundleIdentifier: appBundleIdentifier
+            appBundleIdentifier: appBundleIdentifier,
+            placement: placement
         )
 
         if shouldSuppress {
@@ -429,8 +450,13 @@ enum IndicatorFullscreenSuppressionPolicy {
         windowFrame: CGRect?,
         focusedWindowIsFullscreen: Bool? = nil,
         frontmostBundleIdentifier: String?,
-        appBundleIdentifier: String?
+        appBundleIdentifier: String?,
+        placement: IndicatorPlacement = .notchStrip
     ) -> Bool {
+        guard placement == .notchStrip else {
+            return false
+        }
+
         guard safeAreaTopInset > 0,
               let candidateWindowFrame = windowFrame,
               !screenFrame.isEmpty,

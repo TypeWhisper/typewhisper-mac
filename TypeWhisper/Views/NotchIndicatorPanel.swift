@@ -147,7 +147,7 @@ class NotchIndicatorPanel: NSPanel {
             cachedScreen = screen
         }
 
-        if IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(on: screen) {
+        if IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(on: screen, placement: .notchStrip) {
             suppressForForeignFullscreen()
             return
         }
