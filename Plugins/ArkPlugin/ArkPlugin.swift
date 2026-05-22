@@ -51,6 +51,7 @@ final class ArkPlugin: NSObject, LLMProviderPlugin, LLMTemperatureControllablePr
 
     var isAvailable: Bool {
         guard let baseURL = _baseURL, !baseURL.isEmpty else { return false }
+        guard let parsedBase = URL(string: baseURL), parsedBase.scheme?.lowercased() == "https" else { return false }
         guard let key = _apiKey, !key.isEmpty else { return false }
         return true
     }
@@ -507,11 +508,7 @@ private struct ArkSettingsView: View {
                 if connected {
                     fetchedModels = models
                     plugin.setFetchedModels(models)
-                    let chat = ArkPlugin.filterChatModels(models)
-                    if selectedLLMModel.isEmpty, let first = chat.first {
-                        selectedLLMModel = first.id
-                        plugin.selectLLMModel(first.id)
-                    }
+                    reconcileSelectedModel(models)
                 } else {
                     connectionError = "Failed to fetch model list. Check URL and API key."
                 }
@@ -526,8 +523,19 @@ private struct ArkSettingsView: View {
                 if !models.isEmpty {
                     fetchedModels = models
                     plugin.setFetchedModels(models)
+                    reconcileSelectedModel(models)
                 }
             }
         }
+    }
+
+    private func reconcileSelectedModel(_ models: [FetchedModel]) {
+        let chat = ArkPlugin.filterChatModels(models)
+        if chat.contains(where: { $0.id == selectedLLMModel }) {
+            return
+        }
+        let nextSelection = chat.first?.id ?? ""
+        selectedLLMModel = nextSelection
+        plugin.selectLLMModel(nextSelection)
     }
 }
