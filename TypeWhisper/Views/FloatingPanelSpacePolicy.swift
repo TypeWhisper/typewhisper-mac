@@ -8,14 +8,14 @@ enum FloatingPanelSpacePolicy {
 
     private static let activeSpaceIndicatorCollectionBehavior: NSWindow.CollectionBehavior = [
         .moveToActiveSpace,
-        .fullScreenNone,
+        .fullScreenAuxiliary,
         .stationary,
         .ignoresCycle
     ]
 
     private static let fixedDisplayIndicatorCollectionBehavior: NSWindow.CollectionBehavior = [
         .canJoinAllSpaces,
-        .fullScreenNone,
+        .fullScreenAuxiliary,
         .stationary,
         .ignoresCycle
     ]

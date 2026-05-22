@@ -18,16 +18,16 @@ final class FloatingPanelSpacePolicyTests: XCTestCase {
 
         XCTAssertTrue(primaryBehavior.contains(.canJoinAllSpaces))
         XCTAssertFalse(primaryBehavior.contains(.moveToActiveSpace))
-        XCTAssertFalse(primaryBehavior.contains(.fullScreenAuxiliary))
-        XCTAssertTrue(primaryBehavior.contains(.fullScreenNone))
+        XCTAssertTrue(primaryBehavior.contains(.fullScreenAuxiliary))
+        XCTAssertFalse(primaryBehavior.contains(.fullScreenNone))
         XCTAssertEqual(primaryBehavior, builtInBehavior)
     }
 
-    func testActiveScreenIndicatorPolicyDoesNotJoinForeignFullscreenSpaces() {
-        XCTAssertFalse(
+    func testActiveScreenIndicatorPolicyRemainsVisibleOverFullscreenApps() {
+        XCTAssertTrue(
             FloatingPanelSpacePolicy.indicatorCollectionBehavior(for: .activeScreen).contains(.fullScreenAuxiliary)
         )
-        XCTAssertTrue(
+        XCTAssertFalse(
             FloatingPanelSpacePolicy.indicatorCollectionBehavior(for: .activeScreen).contains(.fullScreenNone)
         )
     }
