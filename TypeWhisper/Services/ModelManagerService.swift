@@ -104,10 +104,23 @@ final class ModelManagerService: ObservableObject {
 
     var activeModelName: String? {
         guard let providerId = selectedProviderId,
-              let plugin = PluginManager.shared.transcriptionEngine(for: providerId),
-              let selectedId = plugin.selectedModelId,
-              let model = plugin.transcriptionModels.first(where: { $0.id == selectedId }) else { return nil }
-        return model.displayName
+              let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else { return nil }
+        return Self.activeModelName(for: plugin)
+    }
+
+    static func activeModelName(for plugin: any TranscriptionEnginePlugin) -> String? {
+        if let selectedId = plugin.selectedModelId {
+            if let model = plugin.modelCatalog.first(where: { $0.id == selectedId }) {
+                return model.displayName
+            }
+            return plugin.providerDisplayName
+        }
+
+        if plugin.isConfigured {
+            return plugin.providerDisplayName
+        }
+
+        return nil
     }
 
     func selectProvider(_ providerId: String) {

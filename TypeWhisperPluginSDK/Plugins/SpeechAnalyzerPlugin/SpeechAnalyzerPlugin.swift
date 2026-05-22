@@ -55,10 +55,18 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Tran
     }
 
     var transcriptionModels: [PluginModelInfo] {
-        guard let loadedModelId else { return [] }
+        guard let selectedModelId else { return [] }
         return cachedModels
-            .filter { $0.id == loadedModelId }
-            .map { PluginModelInfo(id: $0.id, displayName: $0.displayName, sizeDescription: "System-managed", languageCount: 1) }
+            .filter { $0.id == selectedModelId }
+            .map {
+                PluginModelInfo(
+                    id: $0.id,
+                    displayName: $0.displayName,
+                    sizeDescription: "System-managed",
+                    languageCount: 1,
+                    loaded: $0.id == loadedModelId
+                )
+            }
     }
 
     var availableModels: [PluginModelInfo] {
@@ -73,7 +81,13 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Tran
         }
     }
 
-    var selectedModelId: String? { loadedModelId }
+    var selectedModelId: String? {
+        Self.selectedModelId(loadedModelId: loadedModelId, host: host)
+    }
+
+    static func selectedModelId(loadedModelId: String?, host: HostServices?) -> String? {
+        loadedModelId ?? (host?.userDefault(forKey: "loadedModel") as? String)
+    }
 
     func selectModel(_ modelId: String) {
         // Selecting a different model requires unloading and reloading

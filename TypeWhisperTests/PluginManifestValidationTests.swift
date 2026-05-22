@@ -897,6 +897,184 @@ final class PluginDictionaryGuardTests: XCTestCase {
     }
 }
 
+final class ModelManagerActiveModelNameTests: XCTestCase {
+    @MainActor
+    func testActiveModelNameUsesCatalogDisplayNameForPersistedSelection() {
+        let plugin = CatalogBackedTranscriptionPlugin(
+            providerDisplayName: "Apple Speech",
+            isConfigured: false,
+            transcriptionModels: [],
+            availableModels: [
+                PluginModelInfo(id: "speechanalyzer-de_DE", displayName: "German (Germany)")
+            ],
+            selectedModelId: "speechanalyzer-de_DE"
+        )
+
+        XCTAssertEqual(ModelManagerService.activeModelName(for: plugin), "German (Germany)")
+    }
+
+    @MainActor
+    func testActiveModelNameFallsBackToProviderNameForConfiguredModelessEngine() {
+        let plugin = CatalogBackedTranscriptionPlugin(
+            providerDisplayName: "Modeless Engine",
+            isConfigured: true,
+            transcriptionModels: [],
+            availableModels: [],
+            selectedModelId: nil
+        )
+
+        XCTAssertEqual(ModelManagerService.activeModelName(for: plugin), "Modeless Engine")
+    }
+
+    @MainActor
+    func testActiveModelNameFallsBackToProviderNameForSelectedModelWithoutCatalog() {
+        let plugin = CatalogBackedTranscriptionPlugin(
+            providerDisplayName: "Apple Speech",
+            isConfigured: false,
+            transcriptionModels: [],
+            availableModels: [],
+            selectedModelId: "speechanalyzer-de_DE"
+        )
+
+        XCTAssertEqual(ModelManagerService.activeModelName(for: plugin), "Apple Speech")
+    }
+
+    @MainActor
+    func testActiveModelNameIsNilForUnconfiguredEngineWithoutSelection() {
+        let plugin = CatalogBackedTranscriptionPlugin(
+            providerDisplayName: "Unconfigured Engine",
+            isConfigured: false,
+            transcriptionModels: [],
+            availableModels: [],
+            selectedModelId: nil
+        )
+
+        XCTAssertNil(ModelManagerService.activeModelName(for: plugin))
+    }
+}
+
+@available(macOS 26, *)
+final class SpeechAnalyzerSelectionPersistenceTests: XCTestCase {
+    func testSelectedModelIdUsesPersistedLoadedModelWhenRuntimeModelIsUnloaded() {
+        let host = TestHostServices(userDefaults: ["loadedModel": "speechanalyzer-de_DE"])
+
+        XCTAssertEqual(
+            SpeechAnalyzerPlugin.selectedModelId(loadedModelId: nil, host: host),
+            "speechanalyzer-de_DE"
+        )
+    }
+
+    func testSelectedModelIdPrefersRuntimeModelOverPersistedLoadedModel() {
+        let host = TestHostServices(userDefaults: ["loadedModel": "speechanalyzer-de_DE"])
+
+        XCTAssertEqual(
+            SpeechAnalyzerPlugin.selectedModelId(loadedModelId: "speechanalyzer-en_US", host: host),
+            "speechanalyzer-en_US"
+        )
+    }
+}
+
+private final class CatalogBackedTranscriptionPlugin: NSObject, TranscriptionModelCatalogProviding, @unchecked Sendable {
+    static let pluginId = "test.catalog-backed-transcription-plugin"
+    static let pluginName = "Catalog Backed Transcription Plugin"
+
+    let providerId: String
+    let providerDisplayName: String
+    let isConfigured: Bool
+    let transcriptionModels: [PluginModelInfo]
+    let availableModels: [PluginModelInfo]
+    let selectedModelId: String?
+    let supportsTranslation = false
+    let supportsStreaming = false
+    let supportedLanguages: [String] = []
+
+    required override init() {
+        self.providerId = Self.pluginId
+        self.providerDisplayName = Self.pluginName
+        self.isConfigured = false
+        self.transcriptionModels = []
+        self.availableModels = []
+        self.selectedModelId = nil
+        super.init()
+    }
+
+    init(
+        providerId: String = "catalogBacked",
+        providerDisplayName: String,
+        isConfigured: Bool,
+        transcriptionModels: [PluginModelInfo],
+        availableModels: [PluginModelInfo],
+        selectedModelId: String?
+    ) {
+        self.providerId = providerId
+        self.providerDisplayName = providerDisplayName
+        self.isConfigured = isConfigured
+        self.transcriptionModels = transcriptionModels
+        self.availableModels = availableModels
+        self.selectedModelId = selectedModelId
+        super.init()
+    }
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+    func selectModel(_ modelId: String) {}
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        throw PluginTranscriptionError.notConfigured
+    }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        throw PluginTranscriptionError.notConfigured
+    }
+}
+
+private final class TestHostServices: HostServices, @unchecked Sendable {
+    private var userDefaults: [String: Any]
+
+    let pluginDataDirectory: URL
+    let eventBus: EventBusProtocol = TestEventBus()
+    let activeAppBundleId: String? = nil
+    let activeAppName: String? = nil
+    let availableRuleNames: [String] = []
+    let availableWorkflows: [PluginWorkflowInfo] = []
+
+    init(userDefaults: [String: Any] = [:]) {
+        self.userDefaults = userDefaults
+        self.pluginDataDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TypeWhisperTests-\(UUID().uuidString)", isDirectory: true)
+    }
+
+    func storeSecret(key: String, value: String) throws {}
+    func loadSecret(key: String) -> String? { nil }
+    func userDefault(forKey key: String) -> Any? { userDefaults[key] }
+
+    func setUserDefault(_ value: Any?, forKey key: String) {
+        userDefaults[key] = value
+    }
+
+    func notifyCapabilitiesChanged() {}
+    func setStreamingDisplayActive(_ active: Bool) {}
+}
+
+private final class TestEventBus: EventBusProtocol, @unchecked Sendable {
+    func subscribe(handler: @escaping @Sendable (TypeWhisperEvent) async -> Void) -> UUID {
+        UUID()
+    }
+
+    func unsubscribe(id: UUID) {}
+}
+
 final class WhisperKitSettingsStateTests: XCTestCase {
     func testApplyingNotLoadedStateClearsStaleLoadingAndStopsPolling() {
         let initial = WhisperKitSettingsPollState(
