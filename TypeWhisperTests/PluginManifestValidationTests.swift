@@ -53,8 +53,9 @@ final class PluginManifestValidationTests: XCTestCase {
 
             for urlString in [manifest.detailsURL, manifest.homepageURL].compactMap({ $0 }) {
                 let components = URLComponents(string: urlString)
+                let scheme = components?.scheme?.lowercased()
                 XCTAssertTrue(
-                    components?.scheme == "https" || components?.scheme == "http",
+                    scheme == "https" || scheme == "http",
                     "\(manifestURL.lastPathComponent): \(urlString)"
                 )
                 XCTAssertNotNil(components?.host, "\(manifestURL.lastPathComponent): \(urlString)")
@@ -62,7 +63,7 @@ final class PluginManifestValidationTests: XCTestCase {
 
             for urlString in [manifest.iconURL, manifest.iconDarkURL].compactMap({ $0 }) {
                 let components = URLComponents(string: urlString)
-                XCTAssertEqual(components?.scheme, "https", "\(manifestURL.lastPathComponent): \(urlString)")
+                XCTAssertEqual(components?.scheme?.lowercased(), "https", "\(manifestURL.lastPathComponent): \(urlString)")
                 XCTAssertNotNil(components?.host, "\(manifestURL.lastPathComponent): \(urlString)")
             }
         }
