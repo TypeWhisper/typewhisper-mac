@@ -1708,15 +1708,38 @@ final class PluginRegistryDestinationTests: XCTestCase {
         XCTAssertEqual(destination, pluginsDirectory.appendingPathComponent("ParakeetPlugin.bundle"))
     }
 
-    func testRepairEligibilityRequiresRegistryBackedExternalInstalledPlugin() {
+    func testRepairEligibilityRequiresActionableExternalBundleNotice() {
         let registryPlugin = makeRegistryPlugin(id: "com.typewhisper.qwen3")
+        let boundaryNotice = ExternalBundleNotice.boundaryUpgradeRequired(
+            installedVersion: "1.1.0",
+            availableVersion: "1.1.1"
+        )
 
         XCTAssertTrue(
             PluginRegistryService.canRepairInstalledPlugin(
                 isBundled: false,
                 registryPlugin: registryPlugin,
                 installInfo: .installed(version: "1.1.1"),
-                installState: nil
+                installState: nil,
+                externalNotice: boundaryNotice
+            )
+        )
+        XCTAssertFalse(
+            PluginRegistryService.canRepairInstalledPlugin(
+                isBundled: false,
+                registryPlugin: registryPlugin,
+                installInfo: .installed(version: "1.1.1"),
+                installState: nil,
+                externalNotice: nil
+            )
+        )
+        XCTAssertFalse(
+            PluginRegistryService.canRepairInstalledPlugin(
+                isBundled: false,
+                registryPlugin: registryPlugin,
+                installInfo: .installed(version: "1.1.1"),
+                installState: nil,
+                externalNotice: .legacyBundlePresent(version: "1.1.0")
             )
         )
         XCTAssertFalse(
@@ -1724,7 +1747,8 @@ final class PluginRegistryDestinationTests: XCTestCase {
                 isBundled: true,
                 registryPlugin: registryPlugin,
                 installInfo: .installed(version: "1.1.1"),
-                installState: nil
+                installState: nil,
+                externalNotice: boundaryNotice
             )
         )
         XCTAssertFalse(
@@ -1732,7 +1756,8 @@ final class PluginRegistryDestinationTests: XCTestCase {
                 isBundled: false,
                 registryPlugin: nil,
                 installInfo: .installed(version: "1.1.1"),
-                installState: nil
+                installState: nil,
+                externalNotice: boundaryNotice
             )
         )
         XCTAssertFalse(
@@ -1740,7 +1765,8 @@ final class PluginRegistryDestinationTests: XCTestCase {
                 isBundled: false,
                 registryPlugin: registryPlugin,
                 installInfo: .updateAvailable(installed: "1.1.0", available: "1.1.1"),
-                installState: nil
+                installState: nil,
+                externalNotice: boundaryNotice
             )
         )
         XCTAssertFalse(
@@ -1748,7 +1774,8 @@ final class PluginRegistryDestinationTests: XCTestCase {
                 isBundled: false,
                 registryPlugin: registryPlugin,
                 installInfo: .installed(version: "1.1.1"),
-                installState: .extracting
+                installState: .extracting,
+                externalNotice: boundaryNotice
             )
         )
     }

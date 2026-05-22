@@ -1727,7 +1727,8 @@ private struct InstalledPluginRow: View {
             isBundled: plugin.isBundled,
             registryPlugin: registryPlugin,
             installInfo: installInfo,
-            installState: installState
+            installState: installState,
+            externalNotice: externalNotice
         )
     }
 

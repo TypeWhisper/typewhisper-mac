@@ -619,9 +619,13 @@ final class PluginRegistryService: ObservableObject {
         isBundled: Bool,
         registryPlugin: RegistryPlugin?,
         installInfo: PluginInstallInfo,
-        installState: InstallState?
+        installState: InstallState?,
+        externalNotice: ExternalBundleNotice?
     ) -> Bool {
-        guard !isBundled, registryPlugin != nil, installState == nil else {
+        guard !isBundled,
+              registryPlugin != nil,
+              installState == nil,
+              externalNotice?.requiresConfirmation == true else {
             return false
         }
         if case .installed = installInfo {
