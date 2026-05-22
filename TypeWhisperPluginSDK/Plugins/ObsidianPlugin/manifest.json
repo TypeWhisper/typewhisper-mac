@@ -8,9 +8,11 @@
     "author": "TypeWhisper",
     "description": "Save transcriptions to your Obsidian vault as Markdown notes. Supports daily notes, frontmatter, and auto-export.",
     "descriptions": {
-        "de": "Transkriptionen als Markdown-Notizen in deinem Obsidian-Vault speichern. Unterstuetzt Tagesnotizen, Frontmatter und Auto-Export."
+        "de": "Transkriptionen als Markdown-Notizen in deinem Obsidian-Vault speichern. Unterstützt Tagesnotizen, Frontmatter und Auto-Export."
     },
     "category": "action",
     "iconSystemName": "doc.text",
-    "principalClass": "ObsidianPlugin"
+    "iconURL": "https://www.typewhisper.com/brand-logos/obsidian/logo.svg",
+    "principalClass": "ObsidianPlugin",
+    "detailsURL": "https://www.typewhisper.com/addons/obsidian/"
 }

@@ -102,6 +102,7 @@ enum UserDefaultsKeys {
 
     // MARK: - Plugin Registry
     static let pluginRegistryLastFetch = "pluginRegistryLastFetch"
+    static let selectedIntegrationTab = "selectedIntegrationTab"
 
     // MARK: - Recorder
     static let recorderMicEnabled = "recorderMicEnabled"

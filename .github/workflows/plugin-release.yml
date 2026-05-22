@@ -405,7 +405,7 @@ jobs:
               elif distribution_source == "community":
                   plugin.pop("categories", None)
 
-              for field in ["iconSystemName", "requiresAPIKey", "hosting"]:
+              for field in ["iconSystemName", "requiresAPIKey", "hosting", "detailsURL", "homepageURL", "iconURL", "iconDarkURL"]:
                   if field in metadata and metadata[field] is not None:
                       plugin[field] = metadata[field]
                   else:

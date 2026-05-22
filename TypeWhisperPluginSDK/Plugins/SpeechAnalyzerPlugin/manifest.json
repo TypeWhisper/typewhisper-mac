@@ -8,9 +8,10 @@
     "author": "TypeWhisper",
     "description": "On-device speech recognition using Apple's Speech framework. Requires macOS 26+, streaming support.",
     "descriptions": {
-        "de": "Geraetebasierte Spracherkennung mit Apples Speech-Framework. Erfordert macOS 26+, Streaming-Unterstuetzung."
+        "de": "Gerätebasierte Spracherkennung mit Apples Speech-Framework. Erfordert macOS 26+, Streaming-Unterstützung."
     },
     "category": "transcription",
     "iconSystemName": "apple.logo",
-    "principalClass": "SpeechAnalyzerPlugin"
+    "principalClass": "SpeechAnalyzerPlugin",
+    "detailsURL": "https://www.typewhisper.com/addons/apple-speech/"
 }

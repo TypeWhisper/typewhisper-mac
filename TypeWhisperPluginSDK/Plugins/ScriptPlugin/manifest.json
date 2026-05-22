@@ -8,9 +8,10 @@
     "author": "TypeWhisper",
     "description": "Post-process transcribed text through custom shell scripts. Pass text via stdin, get results via stdout.",
     "descriptions": {
-        "de": "Transkribierten Text durch eigene Shell-Skripte nachbearbeiten. Text wird per stdin uebergeben, Ergebnis per stdout zurueckgegeben."
+        "de": "Transkribierten Text durch eigene Shell-Skripte nachbearbeiten. Text wird per stdin übergeben, Ergebnis per stdout zurückgegeben."
     },
     "category": "post-processor",
     "iconSystemName": "terminal",
-    "principalClass": "ScriptPlugin"
+    "principalClass": "ScriptPlugin",
+    "detailsURL": "https://www.typewhisper.com/addons/script-runner/"
 }

@@ -11,9 +11,10 @@
     "author": "TypeWhisper",
     "description": "Local Qwen3-ASR speech-to-text powered by MLX on Apple Silicon. 30 languages plus Chinese dialect coverage, no API key required.",
     "descriptions": {
-        "de": "Lokale Qwen3-ASR-Spracherkennung mit MLX auf Apple Silicon. 30 Sprachen plus chinesische Dialektabdeckung, kein API-Key noetig."
+        "de": "Lokale Qwen3-ASR-Spracherkennung mit MLX auf Apple Silicon. 30 Sprachen plus chinesische Dialektabdeckung, kein API-Key nötig."
     },
     "category": "transcription",
     "iconSystemName": "cpu",
-    "principalClass": "Qwen3Plugin"
+    "principalClass": "Qwen3Plugin",
+    "detailsURL": "https://www.typewhisper.com/addons/qwen3-asr/"
 }

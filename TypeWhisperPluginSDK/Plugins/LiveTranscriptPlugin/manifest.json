@@ -8,9 +8,10 @@
     "author": "TypeWhisper",
     "description": "Show a floating live transcript window during recording.",
     "descriptions": {
-        "de": "Zeigt ein schwebendes Live-Transkript-Fenster waehrend der Aufnahme."
+        "de": "Zeigt ein schwebendes Live-Transkript-Fenster während der Aufnahme."
     },
     "category": "utility",
     "iconSystemName": "text.bubble",
-    "principalClass": "LiveTranscriptPlugin"
+    "principalClass": "LiveTranscriptPlugin",
+    "detailsURL": "https://www.typewhisper.com/addons/live-transcript/"
 }

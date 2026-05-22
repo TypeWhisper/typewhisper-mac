@@ -11,9 +11,10 @@
     "author": "TypeWhisper",
     "description": "Local speech-to-text powered by NVIDIA Parakeet TDT. Fast and accurate, 25 languages.",
     "descriptions": {
-        "de": "Lokale Spracherkennung mit NVIDIA Parakeet TDT. Schnell und praezise, 25 Sprachen."
+        "de": "Lokale Spracherkennung mit NVIDIA Parakeet TDT. Schnell und präzise, 25 Sprachen."
     },
     "category": "transcription",
     "iconSystemName": "bird",
-    "principalClass": "ParakeetPlugin"
+    "principalClass": "ParakeetPlugin",
+    "detailsURL": "https://www.typewhisper.com/addons/parakeet/"
 }

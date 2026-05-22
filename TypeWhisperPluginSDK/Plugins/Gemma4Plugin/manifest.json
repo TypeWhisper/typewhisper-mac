@@ -15,5 +15,6 @@
     },
     "category": "llm",
     "iconSystemName": "cpu",
-    "principalClass": "Gemma4Plugin"
+    "principalClass": "Gemma4Plugin",
+    "detailsURL": "https://www.typewhisper.com/addons/gemma4/"
 }

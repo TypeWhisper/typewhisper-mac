@@ -8,10 +8,11 @@
     "author": "TypeWhisper",
     "description": "Cloud transcription via Soniox API with real-time WebSocket streaming and translation support. Requires API key.",
     "descriptions": {
-        "de": "Cloud-Transkription ueber die Soniox-API mit Echtzeit-WebSocket-Streaming und Uebersetzungsunterstuetzung. Erfordert API-Key."
+        "de": "Cloud-Transkription über die Soniox-API mit Echtzeit-WebSocket-Streaming und Übersetzungsunterstützung. Erfordert API-Key."
     },
     "category": "transcription",
     "iconSystemName": "waveform.badge.mic",
     "principalClass": "SonioxPlugin",
-    "requiresAPIKey": true
+    "requiresAPIKey": true,
+    "detailsURL": "https://www.typewhisper.com/addons/soniox/"
 }

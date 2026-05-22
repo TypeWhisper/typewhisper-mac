@@ -54,6 +54,52 @@ class CommunityPluginRegistryAssemblyTests(unittest.TestCase):
         self.assertEqual(len(entries), 1)
         self.assertNotIn("releases", entries[0])
 
+    def test_optional_link_metadata_is_preserved(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "com.example.plugin.json"
+            path.write_text(
+                json.dumps(
+                    community_entry(
+                        detailsURL="https://typewhisper.com/addons/example",
+                        homepageURL="https://example.com",
+                        iconURL="https://www.typewhisper.com/brand-logos/example/logo.svg",
+                        iconDarkURL="https://www.typewhisper.com/brand-logos/example/logo-dark.svg",
+                    )
+                )
+                + "\n"
+            )
+
+            entries, errors = load_community_entries(Path(tmp))
+
+        self.assertEqual(errors, [])
+        self.assertEqual(entries[0]["detailsURL"], "https://typewhisper.com/addons/example")
+        self.assertEqual(entries[0]["homepageURL"], "https://example.com")
+        self.assertEqual(entries[0]["iconURL"], "https://www.typewhisper.com/brand-logos/example/logo.svg")
+        self.assertEqual(entries[0]["iconDarkURL"], "https://www.typewhisper.com/brand-logos/example/logo-dark.svg")
+
+    def test_invalid_optional_link_metadata_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "com.example.plugin.json"
+            path.write_text(
+                json.dumps(
+                    community_entry(
+                        detailsURL="/addons/example",
+                        homepageURL="mailto:plugins@example.com",
+                        iconURL="/brand-logos/example/logo.svg",
+                        iconDarkURL="ftp://example.com/icon.svg",
+                    )
+                )
+                + "\n"
+            )
+
+            entries, errors = load_community_entries(Path(tmp))
+
+        self.assertEqual(entries, [])
+        self.assertTrue(
+            any("absolute HTTP(S) URL" in error for error in errors),
+            errors,
+        )
+
     def test_external_release_url_is_rejected(self) -> None:
         external_url = (
             "https://github.com/contributor/example/releases/download/"

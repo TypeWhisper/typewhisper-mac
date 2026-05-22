@@ -9,5 +9,6 @@
   "principalClass": "FillerWordsPlugin",
   "requiresAPIKey": false,
   "iconSystemName": "text.badge.minus",
-  "category": "post-processor"
+  "category": "post-processor",
+  "detailsURL": "https://www.typewhisper.com/addons/filler-words/"
 }

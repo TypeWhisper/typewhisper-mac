@@ -100,6 +100,10 @@ struct RegistryPlugin: Codable, Identifiable {
     let hosting: PluginHosting?
     let descriptions: [String: String]?
     let downloadCount: Int?
+    let detailsURL: String?
+    let homepageURL: String?
+    let iconURL: String?
+    let iconDarkURL: String?
 
     var localizedDescription: String {
         if let descriptions,
@@ -119,6 +123,56 @@ struct RegistryPlugin: Codable, Identifiable {
 
     var resolvedHosting: PluginHosting {
         hosting ?? PluginHosting.fallback(requiresAPIKey: requiresAPIKey)
+    }
+
+    init(
+        id: String,
+        source: PluginDistributionSource,
+        name: String,
+        version: String,
+        minHostVersion: String,
+        sdkCompatibilityVersion: String?,
+        minOSVersion: String?,
+        supportedArchitectures: [String]?,
+        author: String,
+        description: String,
+        category: String,
+        categories: [String],
+        size: Int64,
+        downloadURL: String,
+        iconSystemName: String?,
+        requiresAPIKey: Bool?,
+        hosting: PluginHosting?,
+        descriptions: [String: String]?,
+        downloadCount: Int?,
+        detailsURL: String? = nil,
+        homepageURL: String? = nil,
+        iconURL: String? = nil,
+        iconDarkURL: String? = nil
+    ) {
+        self.id = id
+        self.source = source
+        self.name = name
+        self.version = version
+        self.minHostVersion = minHostVersion
+        self.sdkCompatibilityVersion = sdkCompatibilityVersion
+        self.minOSVersion = minOSVersion
+        self.supportedArchitectures = supportedArchitectures
+        self.author = author
+        self.description = description
+        self.category = category
+        self.categories = categories
+        self.size = size
+        self.downloadURL = downloadURL
+        self.iconSystemName = iconSystemName
+        self.requiresAPIKey = requiresAPIKey
+        self.hosting = hosting
+        self.descriptions = descriptions
+        self.downloadCount = downloadCount
+        self.detailsURL = detailsURL
+        self.homepageURL = homepageURL
+        self.iconURL = iconURL
+        self.iconDarkURL = iconDarkURL
     }
 }
 
@@ -167,6 +221,10 @@ struct RegistryPluginEntry: Decodable {
     let hosting: PluginHosting?
     let descriptions: [String: String]?
     let downloadCount: Int?
+    let detailsURL: String?
+    let homepageURL: String?
+    let iconURL: String?
+    let iconDarkURL: String?
     let releases: [RegistryPluginRelease]
 
     private enum CodingKeys: String, CodingKey {
@@ -182,6 +240,10 @@ struct RegistryPluginEntry: Decodable {
         case hosting
         case descriptions
         case downloadCount
+        case detailsURL
+        case homepageURL
+        case iconURL
+        case iconDarkURL
         case releases
         case version
         case minHostVersion
@@ -211,9 +273,25 @@ struct RegistryPluginEntry: Decodable {
         hosting = try container.decodeIfPresent(PluginHosting.self, forKey: .hosting)
         descriptions = try container.decodeIfPresent([String: String].self, forKey: .descriptions)
         downloadCount = try container.decodeIfPresent(Int.self, forKey: .downloadCount)
+        detailsURL = Self.validHTTPURLString(from: try? container.decodeIfPresent(String.self, forKey: .detailsURL))
+        homepageURL = Self.validHTTPURLString(from: try? container.decodeIfPresent(String.self, forKey: .homepageURL))
+        iconURL = Self.validHTTPURLString(from: try? container.decodeIfPresent(String.self, forKey: .iconURL))
+        iconDarkURL = Self.validHTTPURLString(from: try? container.decodeIfPresent(String.self, forKey: .iconDarkURL))
 
         let decodedReleases = try container.decodeIfPresent([RegistryPluginRelease].self, forKey: .releases) ?? []
         releases = decodedReleases
+    }
+
+    private static func validHTTPURLString(from value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty,
+              let components = URLComponents(string: value),
+              let scheme = components.scheme?.lowercased(),
+              (scheme == "https" || scheme == "http"),
+              components.host != nil else {
+            return nil
+        }
+        return value
     }
 
     func resolvedPlugin(
@@ -257,7 +335,11 @@ struct RegistryPluginEntry: Decodable {
             requiresAPIKey: requiresAPIKey,
             hosting: hosting,
             descriptions: descriptions,
-            downloadCount: compatibleRelease.downloadCount ?? downloadCount
+            downloadCount: compatibleRelease.downloadCount ?? downloadCount,
+            detailsURL: detailsURL,
+            homepageURL: homepageURL,
+            iconURL: iconURL,
+            iconDarkURL: iconDarkURL
         )
     }
 }
@@ -574,20 +656,21 @@ final class PluginRegistryService: ObservableObject {
 
     // MARK: - Download & Install
 
-    func downloadAndInstall(_ plugin: RegistryPlugin) async {
+    @discardableResult
+    func downloadAndInstall(_ plugin: RegistryPlugin) async -> Bool {
         guard plugin.isCompatibleWithCurrentEnvironment else {
             installStates[plugin.id] = .error("Plugin is not compatible with this Mac")
-            return
+            return false
         }
 
         guard let url = URL(string: plugin.downloadURL) else {
             installStates[plugin.id] = .error("Invalid download URL")
-            return
+            return false
         }
 
         guard activeInstallPluginIDs.insert(plugin.id).inserted else {
             logger.warning("Skipping duplicate install request for \(plugin.id)")
-            return
+            return false
         }
         defer { activeInstallPluginIDs.remove(plugin.id) }
 
@@ -624,17 +707,17 @@ final class PluginRegistryService: ObservableObject {
 
             guard process.terminationStatus == 0 else {
                 installStates[plugin.id] = .error("Failed to extract ZIP")
-                return
+                return false
             }
 
             // Find .bundle in extracted directory
             let extracted = try FileManager.default.contentsOfDirectory(at: extractDir, includingPropertiesForKeys: nil)
             guard let bundleURL = extracted.first(where: { $0.pathExtension == "bundle" }) else {
                 installStates[plugin.id] = .error("No .bundle found in ZIP")
-                return
+                return false
             }
 
-            try installBundle(
+            _ = try installBundle(
                 at: bundleURL,
                 expectedPluginId: plugin.id,
                 copyBundle: false
@@ -644,9 +727,11 @@ final class PluginRegistryService: ObservableObject {
             lastFetchDate = nil // invalidate cache so installInfo refreshes
             updateAvailableUpdatesCount()
             logger.info("Installed plugin \(plugin.id) v\(plugin.version)")
+            return true
         } catch {
             installStates[plugin.id] = .error(error.localizedDescription)
             logger.error("Failed to install \(plugin.id): \(error.localizedDescription)")
+            return false
         }
     }
 
@@ -674,11 +759,12 @@ final class PluginRegistryService: ObservableObject {
 
     // MARK: - Install from File
 
-    func installFromFile(_ url: URL) async throws {
+    @discardableResult
+    func installFromFile(_ url: URL) async throws -> PluginManifest {
         let fm = FileManager.default
 
         if url.pathExtension == "bundle" {
-            try installBundle(at: url, expectedPluginId: nil, copyBundle: true)
+            return try installBundle(at: url, expectedPluginId: nil, copyBundle: true)
         } else if url.pathExtension == "zip" {
             let tempDir = fm.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -702,11 +788,14 @@ final class PluginRegistryService: ObservableObject {
                               userInfo: [NSLocalizedDescriptionKey: "No .bundle found in ZIP"])
             }
 
-            try installBundle(at: bundleURL, expectedPluginId: nil, copyBundle: false)
+            return try installBundle(at: bundleURL, expectedPluginId: nil, copyBundle: false)
         }
+
+        throw NSError(domain: "PluginRegistry", code: 5,
+                      userInfo: [NSLocalizedDescriptionKey: "Unsupported plugin package"])
     }
 
-    private func installBundle(at bundleURL: URL, expectedPluginId: String?, copyBundle: Bool) throws {
+    private func installBundle(at bundleURL: URL, expectedPluginId: String?, copyBundle: Bool) throws -> PluginManifest {
         let fm = FileManager.default
         let manifest = try readManifest(at: bundleURL)
         let existingLoadedBundleURL = PluginManager.shared.bundleURL(for: manifest.id)
@@ -783,6 +872,8 @@ final class PluginRegistryService: ObservableObject {
             }
             throw error
         }
+
+        return manifest
     }
 
     static func validateDownloadedArchiveResponse(_ response: URLResponse) throws {

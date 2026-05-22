@@ -8,12 +8,14 @@
     "author": "TypeWhisper",
     "description": "Cloud transcription via the Smallest AI Pulse STT API. Requires a Smallest API key.",
     "descriptions": {
-        "de": "Cloud-Transkription ueber die Smallest AI Pulse STT API. Erfordert einen Smallest API-Key."
+        "de": "Cloud-Transkription über die Smallest AI Pulse STT API. Erfordert einen Smallest API-Key."
     },
     "category": "transcription",
     "hosting": "cloud",
     "iconResourceName": "smallest.svg",
     "iconSystemName": "waveform.badge.mic",
+    "iconURL": "https://www.typewhisper.com/brand-logos/smallest/logo.svg",
     "principalClass": "SmallestAIPlugin",
-    "requiresAPIKey": true
+    "requiresAPIKey": true,
+    "detailsURL": "https://www.typewhisper.com/addons/smallest-pulse/"
 }

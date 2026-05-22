@@ -9,5 +9,7 @@
     "description": "OpenAI-compatible transcription through a Cloudflare tunnel with service token authentication. Credentials stored in macOS Keychain.",
     "category": "transcription",
     "iconSystemName": "shield.lefthalf.filled",
-    "principalClass": "CloudflareASRPlugin"
+    "iconURL": "https://www.typewhisper.com/brand-logos/cloudflare/logo.svg",
+    "principalClass": "CloudflareASRPlugin",
+    "detailsURL": "https://www.typewhisper.com/addons/cloudflare-asr/"
 }

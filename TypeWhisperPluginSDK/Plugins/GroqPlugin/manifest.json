@@ -8,11 +8,13 @@
     "author": "TypeWhisper",
     "description": "Cloud transcription and LLM via Groq API. Fast inference, requires API key.",
     "descriptions": {
-        "de": "Cloud-Transkription und LLM ueber die Groq-API. Schnelle Inferenz, erfordert API-Key."
+        "de": "Cloud-Transkription und LLM über die Groq-API. Schnelle Inferenz, erfordert API-Key."
     },
     "category": "transcription",
     "categories": ["transcription", "llm"],
     "iconSystemName": "bolt.fill",
+    "iconURL": "https://www.typewhisper.com/brand-logos/groq/logo.svg",
     "principalClass": "GroqPlugin",
-    "requiresAPIKey": true
+    "requiresAPIKey": true,
+    "detailsURL": "https://www.typewhisper.com/addons/groq/"
 }

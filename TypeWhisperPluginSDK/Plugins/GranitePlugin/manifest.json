@@ -11,9 +11,10 @@
     "author": "TypeWhisper",
     "description": "Local speech-to-text and translation by IBM, powered by MLX on Apple Silicon. 6 languages with bidirectional translation.",
     "descriptions": {
-        "de": "Lokale Spracherkennung und Uebersetzung von IBM mit MLX auf Apple Silicon. 6 Sprachen mit bidirektionaler Uebersetzung."
+        "de": "Lokale Spracherkennung und Übersetzung von IBM mit MLX auf Apple Silicon. 6 Sprachen mit bidirektionaler Übersetzung."
     },
     "category": "transcription",
     "iconSystemName": "cpu",
-    "principalClass": "GranitePlugin"
+    "principalClass": "GranitePlugin",
+    "detailsURL": "https://www.typewhisper.com/addons/granite/"
 }

@@ -12,6 +12,8 @@
     },
     "category": "action",
     "iconSystemName": "list.bullet.rectangle",
+    "iconURL": "https://www.typewhisper.com/brand-logos/linear/logo.svg",
     "principalClass": "LinearPlugin",
-    "requiresAPIKey": true
+    "requiresAPIKey": true,
+    "detailsURL": "https://www.typewhisper.com/addons/linear/"
 }

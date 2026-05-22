@@ -49,6 +49,10 @@ final class PluginRegistryServiceTests: XCTestCase {
                   "description": "Multi-release entry",
                   "category": "transcription",
                   "downloadCount": 100,
+                  "detailsURL": "https://typewhisper.com/addons/multi",
+                  "homepageURL": "https://example.com/multi",
+                  "iconURL": "https://www.typewhisper.com/brand-logos/example/logo.svg",
+                  "iconDarkURL": "https://www.typewhisper.com/brand-logos/example/logo-dark.svg",
                   "releases": [
                     {
                       "version": "1.1.0",
@@ -81,6 +85,54 @@ final class PluginRegistryServiceTests: XCTestCase {
         XCTAssertEqual(plugins.first?.version, "1.0.5")
         XCTAssertEqual(plugins.first?.downloadURL, "https://example.com/compatible.zip")
         XCTAssertEqual(plugins.first?.downloadCount, 100)
+        XCTAssertEqual(plugins.first?.detailsURL, "https://typewhisper.com/addons/multi")
+        XCTAssertEqual(plugins.first?.homepageURL, "https://example.com/multi")
+        XCTAssertEqual(plugins.first?.iconURL, "https://www.typewhisper.com/brand-logos/example/logo.svg")
+        XCTAssertEqual(plugins.first?.iconDarkURL, "https://www.typewhisper.com/brand-logos/example/logo-dark.svg")
+    }
+
+    func testRegistryPluginIgnoresInvalidOptionalLinkMetadata() throws {
+        let data = Data(
+            """
+            {
+              "schemaVersion": 1,
+              "plugins": [
+                {
+                  "id": "com.typewhisper.links",
+                  "name": "Links Plugin",
+                  "author": "TypeWhisper",
+                  "description": "Invalid link metadata should not block the registry.",
+                  "category": "utility",
+                  "detailsURL": "not a url",
+                  "homepageURL": 42,
+                  "iconURL": "file:///tmp/icon.svg",
+                  "iconDarkURL": ["https://example.com/icon-dark.svg"],
+                  "releases": [
+                    {
+                      "version": "1.0.0",
+                      "minHostVersion": "1.0.0",
+                      "sdkCompatibilityVersion": "v1",
+                      "size": 10,
+                      "downloadURL": "https://example.com/links.zip"
+                    }
+                  ]
+                }
+              ]
+            }
+            """.utf8
+        )
+
+        let response = try JSONDecoder().decode(PluginRegistryResponse.self, from: data)
+        let plugins = response.resolvedPlugins(
+            appVersion: "1.2.4",
+            sdkCompatibilityVersion: sdkCompatibilityVersion
+        )
+
+        XCTAssertEqual(plugins.count, 1)
+        XCTAssertNil(plugins.first?.detailsURL)
+        XCTAssertNil(plugins.first?.homepageURL)
+        XCTAssertNil(plugins.first?.iconURL)
+        XCTAssertNil(plugins.first?.iconDarkURL)
     }
 
     func testTopLevelReleaseMetadataDoesNotAffectMultiReleaseMatching() throws {
@@ -370,6 +422,50 @@ final class PluginRegistryServiceTests: XCTestCase {
         XCTAssertEqual(remote.resolvedHosting, .cloud)
         XCTAssertNil(local.hosting)
         XCTAssertEqual(local.resolvedHosting, .local)
+    }
+
+    @MainActor
+    func testDownloadAndInstallReportsFailureForIncompatiblePlugin() async throws {
+        let cacheDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: cacheDirectory) }
+
+        let service = PluginRegistryService(
+            registryBaseURL: URL(string: "https://example.com")!,
+            cacheDirectory: cacheDirectory,
+            fetchData: { _ in
+                throw URLError(.badServerResponse)
+            }
+        )
+        let plugin = RegistryPlugin(
+            id: "com.typewhisper.incompatible",
+            source: .official,
+            name: "Incompatible Plugin",
+            version: "1.0.0",
+            minHostVersion: "1.0.0",
+            sdkCompatibilityVersion: sdkCompatibilityVersion,
+            minOSVersion: "99.0",
+            supportedArchitectures: nil,
+            author: "TypeWhisper",
+            description: "Requires a future macOS version.",
+            category: "utility",
+            categories: ["utility"],
+            size: 10,
+            downloadURL: "https://example.com/plugin.zip",
+            iconSystemName: nil,
+            requiresAPIKey: nil,
+            hosting: nil,
+            descriptions: nil,
+            downloadCount: nil
+        )
+
+        let installed = await service.downloadAndInstall(plugin)
+
+        XCTAssertFalse(installed)
+        XCTAssertEqual(
+            service.installStates[plugin.id],
+            .error("Plugin is not compatible with this Mac")
+        )
     }
 
     func testMalformedPluginEntryIsSkippedInsteadOfFailingEntireRegistry() throws {

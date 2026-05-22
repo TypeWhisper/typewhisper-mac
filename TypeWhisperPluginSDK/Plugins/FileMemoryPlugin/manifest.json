@@ -8,9 +8,10 @@
     "author": "TypeWhisper",
     "description": "Store memories as local JSON files with text-based search. Fully offline, no API key required.",
     "descriptions": {
-        "de": "Speichert Erinnerungen als lokale JSON-Dateien mit textbasierter Suche. Komplett offline, kein API-Key noetig."
+        "de": "Speichert Erinnerungen als lokale JSON-Dateien mit textbasierter Suche. Komplett offline, kein API-Key nötig."
     },
     "category": "memory",
     "iconSystemName": "doc.text",
-    "principalClass": "FileMemoryPlugin"
+    "principalClass": "FileMemoryPlugin",
+    "detailsURL": "https://www.typewhisper.com/addons/file-memory/"
 }

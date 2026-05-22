@@ -8,10 +8,11 @@
     "author": "TypeWhisper",
     "description": "Cloud transcription via ElevenLabs Scribe API with real-time WebSocket streaming.",
     "descriptions": {
-        "de": "Cloud-Transkription ueber die ElevenLabs-Scribe-API mit Echtzeit-WebSocket-Streaming."
+        "de": "Cloud-Transkription über die ElevenLabs-Scribe-API mit Echtzeit-WebSocket-Streaming."
     },
     "category": "transcription",
     "iconSystemName": "waveform.badge.mic",
     "principalClass": "ElevenLabsPlugin",
-    "requiresAPIKey": true
+    "requiresAPIKey": true,
+    "detailsURL": "https://www.typewhisper.com/addons/elevenlabs/"
 }

@@ -8,10 +8,11 @@
     "author": "TypeWhisper",
     "description": "Cloud transcription via Speechmatics API with real-time WebSocket streaming. Requires API key.",
     "descriptions": {
-        "de": "Cloud-Transkription ueber die Speechmatics-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key."
+        "de": "Cloud-Transkription über die Speechmatics-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key."
     },
     "category": "transcription",
     "iconSystemName": "waveform.badge.mic",
     "principalClass": "SpeechmaticsPlugin",
-    "requiresAPIKey": true
+    "requiresAPIKey": true,
+    "detailsURL": "https://www.typewhisper.com/addons/speechmatics/"
 }

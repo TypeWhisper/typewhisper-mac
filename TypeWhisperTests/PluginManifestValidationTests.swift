@@ -36,6 +36,32 @@ final class PluginManifestValidationTests: XCTestCase {
         }
     }
 
+    func testOptionalPluginManifestLinksUseAbsoluteHTTPURLs() throws {
+        let manifestURLs = try FileManager.default.contentsOfDirectory(
+            at: TestSupport.repoRoot.appendingPathComponent("TypeWhisperPluginSDK/Plugins"),
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        )
+        .map { $0.appendingPathComponent("manifest.json") }
+        .filter { FileManager.default.fileExists(atPath: $0.path) }
+
+        XCTAssertFalse(manifestURLs.isEmpty)
+
+        for manifestURL in manifestURLs {
+            let data = try Data(contentsOf: manifestURL)
+            let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
+
+            for urlString in [manifest.detailsURL, manifest.homepageURL, manifest.iconURL, manifest.iconDarkURL].compactMap({ $0 }) {
+                let components = URLComponents(string: urlString)
+                XCTAssertTrue(
+                    components?.scheme == "https" || components?.scheme == "http",
+                    "\(manifestURL.lastPathComponent): \(urlString)"
+                )
+                XCTAssertNotNil(components?.host, "\(manifestURL.lastPathComponent): \(urlString)")
+            }
+        }
+    }
+
     func testAppleSiliconOnlyPluginsDeclareArm64Compatibility() throws {
         let manifestPaths = [
             "TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/manifest.json",

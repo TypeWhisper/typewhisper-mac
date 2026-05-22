@@ -11,9 +11,10 @@
     "author": "TypeWhisper",
     "description": "Local speech-to-text powered by Voxtral MLX on Apple Silicon. Fast and accurate.",
     "descriptions": {
-        "de": "Lokale Spracherkennung mit Voxtral MLX auf Apple Silicon. Schnell und praezise."
+        "de": "Lokale Spracherkennung mit Voxtral MLX auf Apple Silicon. Schnell und präzise."
     },
     "category": "transcription",
     "iconSystemName": "cpu",
-    "principalClass": "VoxtralPlugin"
+    "principalClass": "VoxtralPlugin",
+    "detailsURL": "https://www.typewhisper.com/addons/voxtral/"
 }

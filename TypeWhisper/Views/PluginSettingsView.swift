@@ -84,16 +84,36 @@ private final class PluginSettingsWindowDelegate: NSObject, NSWindowDelegate {
 private enum IntegrationTab: String, CaseIterable {
     case installed
     case discover
-    case manual
 
     var title: String {
         switch self {
         case .installed:
-            return String(localized: "Installed")
+            return localizedAppText("My Plugins", de: "Meine Plugins")
         case .discover:
-            return String(localized: "Discover")
-        case .manual:
-            return String(localized: "Manual")
+            return localizedAppText("Discover", de: "Entdecken")
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .installed:
+            return "checkmark.circle"
+        case .discover:
+            return "sparkles"
+        }
+    }
+}
+
+private enum DiscoverSort: String, CaseIterable {
+    case popularity
+    case name
+
+    var title: String {
+        switch self {
+        case .popularity:
+            return localizedAppText("Popularity", de: "Beliebtheit")
+        case .name:
+            return String(localized: "Name")
         }
     }
 }
@@ -147,7 +167,7 @@ private enum IntegrationPluginSource: Equatable {
 struct PluginSettingsView: View {
     @ObservedObject private var pluginManager = PluginManager.shared
     @ObservedObject private var registryService = PluginRegistryService.shared
-    @State private var selectedTab: IntegrationTab = .installed
+    @AppStorage(UserDefaultsKeys.selectedIntegrationTab) private var selectedTab: IntegrationTab = .discover
     @State private var showUninstallAlert = false
     @State private var pluginToUninstall: LoadedPlugin?
     @State private var pendingBoundaryUpgradePlugin: RegistryPlugin?
@@ -156,6 +176,7 @@ struct PluginSettingsView: View {
     @State private var includeCommunityPlugins = true
     @State private var selectedCapabilityFilters: Set<PluginCategory> = []
     @State private var searchText = ""
+    @State private var discoverSort: DiscoverSort = .popularity
 
     var body: some View {
         VStack(spacing: 0) {
@@ -165,27 +186,13 @@ struct PluginSettingsView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    HStack(alignment: .center) {
-                        Picker("", selection: $selectedTab) {
-                            ForEach(IntegrationTab.allCases, id: \.self) { tab in
-                                Text(tab.title).tag(tab)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .frame(width: 360)
-
-                        Spacer()
-
-                        HostingSummaryInline(localCount: localPluginCount, cloudCount: cloudPluginCount)
-                    }
+                    integrationTabHeader
 
                     switch selectedTab {
                     case .installed:
                         installedTab
                     case .discover:
                         availableTab
-                    case .manual:
-                        manualTab
                     }
                 }
                 .padding(16)
@@ -223,8 +230,10 @@ struct PluginSettingsView: View {
                 pendingBoundaryUpgradePlugin = nil
                 pendingBoundaryUpgradeNotice = nil
                 Task {
-                    await registryService.downloadAndInstall(plugin)
-                    PluginManager.shared.setPluginEnabled(plugin.id, enabled: true)
+                    let installed = await registryService.downloadAndInstall(plugin)
+                    if installed {
+                        completeSuccessfulInstall(pluginId: plugin.id, registryPlugin: plugin)
+                    }
                 }
             }
             Button(String(localized: "Cancel"), role: .cancel) {
@@ -269,15 +278,17 @@ struct PluginSettingsView: View {
             Button {
                 pluginManager.openPluginsFolder()
             } label: {
-                Image(systemName: "folder")
+                Label(String(localized: "Open Plugins Folder"), systemImage: "folder")
             }
+            .controlSize(.small)
             .help(String(localized: "Open Plugins Folder"))
 
             Button {
                 installFromFile()
             } label: {
-                Image(systemName: "plus")
+                Label(localizedAppText("Install Plugin", de: "Plugin installieren"), systemImage: "plus")
             }
+            .controlSize(.small)
             .help(String(localized: "Install from File..."))
         }
         .padding(.horizontal)
@@ -291,15 +302,132 @@ struct PluginSettingsView: View {
         let updates = registryService.availableUpdatesCount
         let available = availablePlugins.count
         if updates > 0 {
-            return String(localized: "\(installed) installed • \(updates) updates • \(available) available")
+            return localizedAppText(
+                "\(installed) installed · \(updates) updates · \(available) available",
+                de: "\(installed) installiert · \(updates) Updates · \(available) verfügbar"
+            )
         }
-        return String(localized: "\(installed) installed • \(available) available")
+        return localizedAppText(
+            "\(installed) installed · \(available) available",
+            de: "\(installed) installiert · \(available) verfügbar"
+        )
     }
 
     private func normalizeDiscoverState() {
         if selectedTab != .discover {
             searchText = ""
             selectedCapabilityFilters.removeAll()
+        }
+    }
+
+    private var integrationTabHeader: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 12) {
+                integrationTabBar
+                    .frame(width: 580)
+
+                HostingSummaryInline(localCount: localPluginCount, cloudCount: cloudPluginCount)
+
+                Spacer(minLength: 0)
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                integrationTabBar
+                    .frame(maxWidth: .infinity)
+
+                HostingSummaryInline(localCount: localPluginCount, cloudCount: cloudPluginCount)
+            }
+        }
+        .padding(.bottom, 4)
+    }
+
+    private var integrationTabBar: some View {
+        HStack(spacing: 12) {
+            ForEach(IntegrationTab.allCases, id: \.self) { tab in
+                integrationTabCard(tab)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    private func integrationTabCard(_ tab: IntegrationTab) -> some View {
+        let isSelected = selectedTab == tab
+        let isDiscover = tab == .discover
+        let inactiveTint = isDiscover ? Color.blue.opacity(1.0) : Color.primary.opacity(0.84)
+        let inactiveTitle = isDiscover ? Color.primary.opacity(1.0) : Color.primary.opacity(0.92)
+        let inactiveSubtitle = isDiscover ? Color.primary.opacity(0.72) : Color.primary.opacity(0.62)
+        let inactiveBorder = isDiscover ? Color.blue.opacity(0.50) : Color.white.opacity(0.18)
+        let inactiveBadgeFill = isDiscover ? Color.blue.opacity(0.22) : Color.white.opacity(0.10)
+        let inactiveBadgeForeground = isDiscover ? Color.blue.opacity(1.0) : Color.primary.opacity(0.82)
+
+        return Button {
+            withAnimation(.easeInOut(duration: 0.16)) {
+                selectedTab = tab
+            }
+        } label: {
+            HStack(alignment: .center, spacing: 10) {
+                Image(systemName: tab.systemImage)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(isSelected ? .white : inactiveTint)
+                    .frame(width: 22, height: 22)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(tab.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(isSelected ? .white : inactiveTitle)
+                        .lineLimit(1)
+
+                    Text(integrationTabSubtitle(for: tab))
+                        .font(.caption2)
+                        .foregroundStyle(isSelected ? .white.opacity(0.82) : inactiveSubtitle)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                Text("\(integrationTabCount(for: tab))")
+                    .font(.caption.weight(.bold))
+                    .monospacedDigit()
+                    .foregroundStyle(isSelected ? Color.accentColor : inactiveBadgeForeground)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background {
+                        Capsule(style: .continuous)
+                            .fill(isSelected ? Color.white.opacity(0.95) : inactiveBadgeFill)
+                    }
+            }
+            .padding(.horizontal, 14)
+            .frame(maxWidth: .infinity, minHeight: 54, maxHeight: 56, alignment: .leading)
+            .background {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(isSelected ? Color.accentColor.opacity(0.88) : Color.black.opacity(0.16))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(isSelected ? Color.white.opacity(0.32) : inactiveBorder, lineWidth: isSelected ? 1.25 : 1.1)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(tab.title)
+        .accessibilityValue(integrationTabSubtitle(for: tab))
+    }
+
+    private func integrationTabCount(for tab: IntegrationTab) -> Int {
+        switch tab {
+        case .installed:
+            return pluginManager.loadedPlugins.count
+        case .discover:
+            return availablePlugins.count
+        }
+    }
+
+    private func integrationTabSubtitle(for tab: IntegrationTab) -> String {
+        let count = integrationTabCount(for: tab)
+        switch tab {
+        case .installed:
+            return localizedAppText("\(count) installed", de: "\(count) installiert")
+        case .discover:
+            return localizedAppText("\(count) available", de: "\(count) verfügbar")
         }
     }
 
@@ -364,6 +492,10 @@ struct PluginSettingsView: View {
         plugin.source == .community ? .community : .official
     }
 
+    private func resolvedPluginDetailURLString(for plugin: RegistryPlugin) -> String? {
+        pluginDetailURLString(pluginId: plugin.id, registryDetailsURL: plugin.detailsURL)
+    }
+
     private var localPluginCount: Int {
         pluginManager.loadedPlugins.count { plugin in
             let registryPlugin = registryService.registry.first(where: { $0.id == plugin.id })
@@ -384,14 +516,17 @@ struct PluginSettingsView: View {
     }
 
     private var installedTab: some View {
-        LazyVStack(spacing: 0) {
+        LazyVStack(spacing: 12) {
             if filteredInstalledPlugins.isEmpty {
                 IntegrationEmptyState(
                     title: String(localized: "No installed plugins yet."),
                     systemImage: "puzzlepiece.extension"
                 )
+                .background {
+                    integrationGroupedSurface(cornerRadius: 16)
+                }
             } else {
-                ForEach(Array(filteredInstalledPlugins.enumerated()), id: \.element.id) { index, plugin in
+                ForEach(filteredInstalledPlugins, id: \.id) { plugin in
                     let registryPlugin = registryService.registry.first(where: { $0.id == plugin.id })
                     InstalledPluginRow(
                         plugin: plugin,
@@ -420,29 +555,24 @@ struct PluginSettingsView: View {
                             showUninstallAlert = true
                         }
                     )
-
-                    if index < filteredInstalledPlugins.count - 1 {
-                        Divider()
-                            .padding(.leading, 62)
+                    .background {
+                        integrationGroupedSurface(cornerRadius: 14)
                     }
                 }
-            }
-
-            if !filteredInstalledPlugins.isEmpty {
-                Divider()
-                    .padding(.leading, 62)
             }
 
             if !pluginManager.incompatibleExternalBundles.isEmpty {
                 ForEach(pluginManager.incompatibleExternalBundles.values.sorted { $0.pluginName < $1.pluginName }, id: \.pluginId) { bundle in
                     IncompatibleBundleRow(bundle: bundle)
-                    Divider()
-                        .padding(.leading, 62)
+                        .background {
+                            integrationGroupedSurface(cornerRadius: 14)
+                        }
                 }
             }
-        }
-        .background {
-            integrationGroupedSurface(cornerRadius: 16)
+
+            if !availablePlugins.isEmpty {
+                installedDiscoverBanner
+            }
         }
         .task {
             await registryService.fetchRegistry()
@@ -452,16 +582,10 @@ struct PluginSettingsView: View {
     // MARK: - Available Tab
 
     private var availablePlugins: [RegistryPlugin] {
-        let available = registryService.registry.filter { registryPlugin in
+        registryService.registry.filter { registryPlugin in
             let info = registryService.installInfo(for: registryPlugin.id)
             if case .notInstalled = info { return true }
             return false
-        }
-        return available.sorted {
-            let d0 = $0.downloadCount ?? 0
-            let d1 = $1.downloadCount ?? 0
-            if d0 != d1 { return d0 > d1 }
-            return $0.name.localizedCompare($1.name) == .orderedAscending
         }
     }
 
@@ -498,10 +622,22 @@ struct PluginSettingsView: View {
                             || category.rawValue.localizedCaseInsensitiveContains(trimmedQuery)
                     }
             }
+            .sorted { lhs, rhs in
+                switch discoverSort {
+                case .popularity:
+                    let lhsDownloads = lhs.downloadCount ?? 0
+                    let rhsDownloads = rhs.downloadCount ?? 0
+                    if lhsDownloads != rhsDownloads { return lhsDownloads > rhsDownloads }
+                    return lhs.name.localizedCompare(rhs.name) == .orderedAscending
+                case .name:
+                    return lhs.name.localizedCompare(rhs.name) == .orderedAscending
+                }
+            }
     }
 
     private var availableTab: some View {
         VStack(alignment: .leading, spacing: 16) {
+            discoverHero
             discoverFilterBar
 
             switch registryService.fetchState {
@@ -530,7 +666,7 @@ struct PluginSettingsView: View {
                         integrationGroupedSurface(cornerRadius: 16)
                     }
                 } else {
-                    discoverSections
+                    discoverPluginList
                 }
             }
         }
@@ -548,6 +684,7 @@ struct PluginSettingsView: View {
                 discoverSearchField
 
                 discoverCapabilityMenu
+                discoverSortMenu
                 discoverCommunityToggle
             }
 
@@ -556,10 +693,181 @@ struct PluginSettingsView: View {
 
                 HStack(spacing: 12) {
                     discoverCapabilityMenu
+                    discoverSortMenu
                     discoverCommunityToggle
                 }
             }
         }
+    }
+
+    private var discoverHero: some View {
+        Button {
+            openExternalURL(localizedTypeWhisperAddonsURLString())
+        } label: {
+            discoverHeroContent
+        }
+        .buttonStyle(.plain)
+        .help(localizedAppText("Open TypeWhisper add-ons website", de: "TypeWhisper-Add-ons-Webseite öffnen"))
+        .accessibilityLabel(localizedAppText("Open TypeWhisper add-ons website", de: "TypeWhisper-Add-ons-Webseite öffnen"))
+    }
+
+    private var discoverHeroContent: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                discoverHeroImage(width: 44, height: 32)
+
+                discoverHeroCompactCopy
+
+                Spacer(minLength: 12)
+
+                discoverHeroCompactLink
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                discoverHeroCompactCopy
+                discoverHeroCompactLink
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(nsColor: .controlBackgroundColor),
+                            Color.blue.opacity(0.06),
+                            Color.purple.opacity(0.08)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(Color.blue.opacity(0.16), lineWidth: 1)
+                )
+        }
+    }
+
+    private var discoverHeroCompactCopy: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(localizedAppText("Browse plugin catalog", de: "Plugin-Katalog durchsuchen"))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+
+            Text(localizedAppText(
+                "Browse add-ons on the TypeWhisper website and install them directly here.",
+                de: "Durchsuche Add-ons auf der TypeWhisper-Webseite und installiere sie direkt hier."
+            ))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(2)
+        }
+    }
+
+    private var discoverHeroCompactLink: some View {
+        Label(localizedAppText("Open online catalog", de: "Online-Katalog öffnen"), systemImage: "arrow.up.right.square")
+            .labelStyle(.titleAndIcon)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+    }
+
+    private var installedDiscoverBanner: some View {
+        Button {
+            selectedTab = .discover
+        } label: {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 18) {
+                    installedDiscoverBannerCopy
+
+                    Spacer(minLength: 12)
+
+                    discoverHeroImage(width: 120, height: 82)
+                }
+
+                installedDiscoverBannerCopy
+            }
+            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(nsColor: .controlBackgroundColor),
+                                Color.blue.opacity(0.10),
+                                Color.purple.opacity(0.12)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(Color.blue.opacity(0.22), lineWidth: 1)
+                    )
+            }
+        }
+        .buttonStyle(.plain)
+        .help(localizedAppText("Discover plugins", de: "Plugins entdecken"))
+        .accessibilityLabel(localizedAppText("Discover plugins", de: "Plugins entdecken"))
+    }
+
+    private var installedDiscoverBannerCopy: some View {
+        discoverHeroCopy(
+            title: localizedAppText("Discover new plugins", de: "Neue Plugins entdecken"),
+            subtitle: localizedAppText(
+                "Browse available add-ons and install the next integration directly here.",
+                de: "Durchsuche verfügbare Add-ons und installiere die nächste Integration direkt hier."
+            ),
+            actionTitle: localizedAppText("Discover plugins", de: "Plugins entdecken"),
+            actionSystemImage: "arrow.right",
+            titleFont: .headline.weight(.semibold),
+            subtitleFont: .caption,
+            actionFont: .caption.weight(.semibold)
+        )
+    }
+
+    private func discoverHeroCopy(
+        title: String,
+        subtitle: String,
+        actionTitle: String,
+        actionSystemImage: String,
+        titleFont: Font = .title2.weight(.semibold),
+        subtitleFont: Font = .callout,
+        actionFont: Font = .callout.weight(.semibold)
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(titleFont)
+                .foregroundStyle(.primary)
+
+            Text(subtitle)
+                .font(subtitleFont)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Label(actionTitle, systemImage: actionSystemImage)
+                .labelStyle(.titleAndIcon)
+                .font(actionFont)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.accentColor)
+                }
+                .foregroundStyle(.white)
+        }
+    }
+
+    private func discoverHeroImage(width: CGFloat, height: CGFloat) -> some View {
+        Image("IntegrationsHeroPuzzle")
+            .resizable()
+            .scaledToFit()
+            .frame(width: width, height: height)
+            .accessibilityHidden(true)
     }
 
     private var discoverCapabilityMenu: some View {
@@ -567,7 +875,7 @@ struct PluginSettingsView: View {
             Button {
                 selectedCapabilityFilters.removeAll()
             } label: {
-                Label(String(localized: "All functions"), systemImage: selectedCapabilityFilters.isEmpty ? "checkmark" : "line.3.horizontal.decrease.circle")
+                Label(localizedAppText("All functions", de: "Alle Funktionen"), systemImage: selectedCapabilityFilters.isEmpty ? "checkmark" : "line.3.horizontal.decrease.circle")
             }
 
             if !discoverCapabilityOptions.isEmpty {
@@ -593,6 +901,24 @@ struct PluginSettingsView: View {
         .fixedSize()
     }
 
+    private var discoverSortMenu: some View {
+        Menu {
+            ForEach(DiscoverSort.allCases, id: \.self) { sort in
+                Button {
+                    discoverSort = sort
+                } label: {
+                    Label(sort.title, systemImage: discoverSort == sort ? "checkmark" : "arrow.up.arrow.down")
+                }
+            }
+        } label: {
+            Label(discoverSort.title, systemImage: "arrow.up.arrow.down")
+                .font(.caption.weight(.medium))
+        }
+        .menuStyle(.borderlessButton)
+        .controlSize(.small)
+        .fixedSize()
+    }
+
     private var discoverCommunityToggle: some View {
         Toggle(isOn: $includeCommunityPlugins) {
             Label(String(localized: "Community"), systemImage: "person.2")
@@ -605,7 +931,7 @@ struct PluginSettingsView: View {
 
     private var capabilityFilterTitle: String {
         if selectedCapabilityFilters.isEmpty {
-            return String(localized: "All functions")
+            return localizedAppText("All functions", de: "Alle Funktionen")
         }
 
         let selected = PluginCategory.allCases.filter { selectedCapabilityFilters.contains($0) }
@@ -613,7 +939,7 @@ struct PluginSettingsView: View {
             return category.badgeTitle
         }
 
-        return String(localized: "\(selected.count) functions")
+        return localizedAppText("\(selected.count) functions", de: "\(selected.count) Funktionen")
     }
 
     private func toggleCapabilityFilter(_ category: PluginCategory) {
@@ -633,7 +959,13 @@ struct PluginSettingsView: View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-            TextField(String(localized: "Search plugins"), text: $searchText)
+            TextField(
+                localizedAppText(
+                    "Search plugins, providers, or features",
+                    de: "Plugins, Anbieter oder Funktionen suchen"
+                ),
+                text: $searchText
+            )
                 .textFieldStyle(.plain)
             if !searchText.isEmpty {
                 Button {
@@ -646,101 +978,34 @@ struct PluginSettingsView: View {
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.vertical, 12)
         .background {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color(nsColor: .controlBackgroundColor))
         }
     }
 
-    private var discoverSections: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            ForEach(discoverPluginSections) { section in
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 8) {
-                        Image(systemName: section.systemImage)
-                            .foregroundStyle(section.tint)
-                        Text(section.title)
-                            .font(.headline)
-                        Text("\(section.plugins.count)")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
+    private var discoverPluginList: some View {
+        LazyVStack(spacing: 12) {
+            ForEach(filteredAvailablePlugins, id: \.id) { plugin in
+                let detailsURLString = resolvedPluginDetailURLString(for: plugin)
+                AvailablePluginRow(
+                    plugin: plugin,
+                    categories: displayCategories(categories(from: plugin.categories)),
+                    source: integrationSource(for: plugin),
+                    installState: registryService.installStates[plugin.id],
+                    detailsURLString: detailsURLString,
+                    onInstall: {
+                        startInstall(plugin)
+                    },
+                    onOpenDetails: {
+                        openExternalURL(detailsURLString)
                     }
-                    .padding(.horizontal, 4)
-
-                    LazyVStack(spacing: 0) {
-                        ForEach(Array(section.plugins.enumerated()), id: \.element.id) { index, plugin in
-                            AvailablePluginRow(
-                                plugin: plugin,
-                                categories: displayCategories(categories(from: plugin.categories)),
-                                source: integrationSource(for: plugin),
-                                installState: registryService.installStates[plugin.id],
-                                onInstall: {
-                                    startInstall(plugin)
-                                }
-                            )
-
-                            if index < section.plugins.count - 1 {
-                                Divider()
-                                    .padding(.leading, 62)
-                            }
-                        }
-                    }
-                    .background {
-                        integrationGroupedSurface(cornerRadius: 16)
-                    }
-                }
-            }
-        }
-    }
-
-    private var discoverPluginSections: [DiscoverPluginSection] {
-        let community = filteredAvailablePlugins.filter { $0.source == .community }
-        let official = filteredAvailablePlugins.filter { $0.source == .official }
-
-        return [
-            DiscoverPluginSection(
-                title: String(localized: "Marketplace"),
-                systemImage: "sparkles",
-                tint: .indigo,
-                plugins: official
-            ),
-            DiscoverPluginSection(
-                title: String(localized: "Community Plugins"),
-                systemImage: "person.2",
-                tint: .purple,
-                plugins: community
-            )
-        ].filter { !$0.plugins.isEmpty }
-    }
-
-    private var manualTab: some View {
-        LazyVStack(spacing: 0) {
-            ManualInstallRow(
-                onInstallFromFile: installFromFile,
-                onOpenPluginsFolder: pluginManager.openPluginsFolder
-            )
-
-            if pluginManager.incompatibleExternalBundles.isEmpty {
-                Divider()
-                    .padding(.leading, 62)
-                IntegrationEmptyState(
-                    title: String(localized: "No external compatibility issues."),
-                    systemImage: "checkmark.circle"
                 )
-            } else {
-                Divider()
-                    .padding(.leading, 62)
-                ForEach(pluginManager.incompatibleExternalBundles.values.sorted { $0.pluginName < $1.pluginName }, id: \.pluginId) { bundle in
-                    IncompatibleBundleRow(bundle: bundle)
-                    Divider()
-                        .padding(.leading, 62)
+                .background {
+                    integrationGroupedSurface(cornerRadius: 14)
                 }
             }
-        }
-        .background {
-            integrationGroupedSurface(cornerRadius: 16)
         }
     }
 
@@ -757,7 +1022,8 @@ struct PluginSettingsView: View {
 
         Task {
             do {
-                try await registryService.installFromFile(url)
+                let manifest = try await registryService.installFromFile(url)
+                completeSuccessfulInstall(pluginId: manifest.id, registryPlugin: nil)
             } catch {
                 installFromFileError = error.localizedDescription
             }
@@ -773,9 +1039,67 @@ struct PluginSettingsView: View {
         }
 
         Task {
-            await registryService.downloadAndInstall(plugin)
-            PluginManager.shared.setPluginEnabled(plugin.id, enabled: true)
+            let installed = await registryService.downloadAndInstall(plugin)
+            if installed {
+                completeSuccessfulInstall(pluginId: plugin.id, registryPlugin: plugin)
+            }
         }
+    }
+
+    @MainActor
+    private func completeSuccessfulInstall(pluginId: String, registryPlugin: RegistryPlugin?) {
+        selectedTab = .installed
+
+        let resolvedRegistryPlugin = registryPlugin ?? registryService.registry.first { $0.id == pluginId }
+        enableInstalledPluginIfNeeded(pluginId)
+
+        guard let installedPlugin = pluginManager.loadedPlugins.first(where: { $0.id == pluginId }),
+              shouldOpenSettingsAfterInstall(installedPlugin, registryPlugin: resolvedRegistryPlugin) else {
+            return
+        }
+
+        PluginSettingsWindowManager.shared.present(installedPlugin)
+    }
+
+    @MainActor
+    private func enableInstalledPluginIfNeeded(_ pluginId: String) {
+        guard let installedPlugin = pluginManager.loadedPlugins.first(where: { $0.id == pluginId }),
+              !installedPlugin.isEnabled || !installedPlugin.isRuntimeLoaded else {
+            return
+        }
+
+        PluginManager.shared.setPluginEnabled(pluginId, enabled: true)
+    }
+
+    @MainActor
+    private func shouldOpenSettingsAfterInstall(_ plugin: LoadedPlugin, registryPlugin: RegistryPlugin?) -> Bool {
+        guard plugin.supportsSettingsWindow else { return false }
+
+        if registryPlugin?.requiresAPIKey == true || plugin.manifest.requiresAPIKey == true {
+            return true
+        }
+
+        if let engine = plugin.instance as? any TranscriptionEnginePlugin,
+           !engine.isConfigured {
+            return true
+        }
+
+        if let provider = plugin.instance as? any LLMProviderPlugin,
+           !provider.isAvailable {
+            return true
+        }
+
+        if let provider = plugin.instance as? any TTSProviderPlugin,
+           !provider.isConfigured {
+            return true
+        }
+
+        return false
+    }
+
+    private func openExternalURL(_ urlString: String?) {
+        guard let url = validatedExternalURL(urlString) else { return }
+        NSWorkspace.shared.open(url)
     }
 
     private func boundaryUpgradeMessage(for plugin: RegistryPlugin, notice: ExternalBundleNotice?) -> String {
@@ -794,13 +1118,108 @@ struct PluginSettingsView: View {
 
 // MARK: - Shared Components
 
-private struct DiscoverPluginSection: Identifiable {
-    let title: String
-    let systemImage: String
-    let tint: Color
-    let plugins: [RegistryPlugin]
+private let typeWhisperAddonSlugsByPluginID: [String: String] = [
+    "com.typewhisper.assemblyai": "assemblyai",
+    "com.typewhisper.cerebras": "cerebras",
+    "com.typewhisper.claude": "claude",
+    "com.typewhisper.cloudflare-asr": "cloudflare-asr",
+    "com.typewhisper.cohere": "cohere",
+    "com.typewhisper.deepgram": "deepgram",
+    "com.typewhisper.elevenlabs": "elevenlabs",
+    "com.typewhisper.memory.file": "file-memory",
+    "com.typewhisper.filler-words": "filler-words",
+    "com.typewhisper.fireworks": "fireworks",
+    "com.typewhisper.gemini": "gemini",
+    "com.typewhisper.gemma4": "gemma4",
+    "com.typewhisper.gladia": "gladia",
+    "com.typewhisper.google-cloud-stt": "google-cloud-stt",
+    "com.typewhisper.granite": "granite",
+    "com.typewhisper.groq": "groq",
+    "com.typewhisper.linear": "linear",
+    "com.typewhisper.livetranscript": "live-transcript",
+    "com.typewhisper.obsidian": "obsidian",
+    "com.typewhisper.openai-compatible": "openai-compatible",
+    "com.typewhisper.openai": "openai",
+    "com.typewhisper.memory.openai-vector": "openai-vector-memory",
+    "com.typewhisper.openrouter": "openrouter",
+    "com.typewhisper.parakeet": "parakeet",
+    "com.typewhisper.qwen3": "qwen3-asr",
+    "com.typewhisper.script": "script-runner",
+    "com.typewhisper.smallest-pulse": "smallest-pulse",
+    "com.typewhisper.soniox": "soniox",
+    "com.typewhisper.speechanalyzer": "apple-speech",
+    "com.typewhisper.speechmatics": "speechmatics",
+    "com.typewhisper.tts.supertonic": "supertonic",
+    "com.typewhisper.voxtral": "voxtral",
+    "com.typewhisper.webhook": "webhook",
+    "com.typewhisper.whisperkit": "whisperkit",
+    "com.typewhisper.xai": "xai-grok"
+]
 
-    var id: String { title }
+private let supportedTypeWhisperWebsiteLocalePathComponents: Set<String> = ["de", "en"]
+
+private func localizedTypeWhisperAddonsURLString() -> String {
+    "https://www.typewhisper.com/\(typeWhisperWebsiteLocalePathComponent())/addons/"
+}
+
+private func localizedTypeWhisperAddonURLString(slug: String) -> String {
+    "https://www.typewhisper.com/\(typeWhisperWebsiteLocalePathComponent())/addons/\(slug)/"
+}
+
+private func typeWhisperWebsiteLocalePathComponent() -> String {
+    let languageCode = preferredAppLanguageCode()
+        .split(separator: "-")
+        .first
+        .map(String.init) ?? "en"
+    return supportedTypeWhisperWebsiteLocalePathComponents.contains(languageCode) ? languageCode : "en"
+}
+
+private func localizedTypeWhisperAddonURLString(from urlString: String?) -> String? {
+    guard let url = validatedExternalURL(urlString),
+          let host = url.host()?.lowercased(),
+          host == "typewhisper.com" || host == "www.typewhisper.com" else {
+        return nil
+    }
+
+    let components = url.pathComponents.filter { $0 != "/" }
+    if components.count >= 2, components[0] == "addons" {
+        return localizedTypeWhisperAddonURLString(slug: components[1])
+    }
+    if components.count >= 3,
+       supportedTypeWhisperWebsiteLocalePathComponents.contains(components[0]),
+       components[1] == "addons" {
+        return localizedTypeWhisperAddonURLString(slug: components[2])
+    }
+
+    return nil
+}
+
+private func pluginDetailURLString(
+    pluginId: String,
+    registryDetailsURL: String?,
+    manifestDetailsURL: String? = nil
+) -> String? {
+    if let slug = typeWhisperAddonSlugsByPluginID[pluginId] {
+        return localizedTypeWhisperAddonURLString(slug: slug)
+    }
+
+    if let localizedRegistryDetailsURL = localizedTypeWhisperAddonURLString(from: registryDetailsURL) {
+        return localizedRegistryDetailsURL
+    }
+
+    if validatedExternalURL(registryDetailsURL) != nil {
+        return registryDetailsURL
+    }
+
+    if let localizedManifestDetailsURL = localizedTypeWhisperAddonURLString(from: manifestDetailsURL) {
+        return localizedManifestDetailsURL
+    }
+
+    if validatedExternalURL(manifestDetailsURL) != nil {
+        return manifestDetailsURL
+    }
+
+    return nil
 }
 
 private struct HostingSummaryInline: View {
@@ -809,12 +1228,22 @@ private struct HostingSummaryInline: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Label("\(localCount) \(String(localized: "Local"))", systemImage: "desktopcomputer")
+            Label(localizedAppText("\(localCount) Local", de: "\(localCount) lokal"), systemImage: "desktopcomputer")
                 .foregroundStyle(.green)
             Label("\(cloudCount) Cloud", systemImage: "cloud")
                 .foregroundStyle(.cyan)
         }
         .font(.caption.weight(.medium))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background {
+            Capsule(style: .continuous)
+                .fill(Color.black.opacity(0.10))
+        }
+        .overlay {
+            Capsule(style: .continuous)
+                .stroke(Color.white.opacity(0.10), lineWidth: 1)
+        }
     }
 }
 
@@ -825,6 +1254,19 @@ private func integrationGroupedSurface(cornerRadius: CGFloat) -> some View {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .stroke(Color.black.opacity(0.05), lineWidth: 1)
         )
+}
+
+private func validatedExternalURL(_ urlString: String?) -> URL? {
+    guard let value = urlString?.trimmingCharacters(in: .whitespacesAndNewlines),
+          !value.isEmpty,
+          let components = URLComponents(string: value),
+          let scheme = components.scheme?.lowercased(),
+          (scheme == "https" || scheme == "http"),
+          components.host != nil,
+          let url = components.url else {
+        return nil
+    }
+    return url
 }
 
 private extension Array where Element: Hashable {
@@ -941,8 +1383,18 @@ private struct PluginBadgeLine: View {
 private struct IntegrationIcon: View {
     let systemName: String
     let tint: Color
-    var resourceURL: URL?
+    var imageURL: URL?
+    var darkImageURL: URL?
+    @Environment(\.colorScheme) private var colorScheme
     @State private var loadedImage: NSImage?
+
+    private var resolvedImageURL: URL? {
+        if colorScheme == .dark {
+            darkImageURL ?? imageURL
+        } else {
+            imageURL
+        }
+    }
 
     var body: some View {
         Group {
@@ -950,23 +1402,31 @@ private struct IntegrationIcon: View {
                 Image(nsImage: image)
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 24, height: 24)
+                    .frame(width: 26, height: 26)
             } else {
                 Image(systemName: systemName)
-                    .font(.system(size: 18, weight: .medium))
+                    .font(.system(size: 20, weight: .semibold))
                     .foregroundStyle(tint)
             }
         }
-        .frame(width: 30, height: 30)
-        .task(id: resourceURL) {
-            guard let resourceURL else {
+        .frame(width: 44, height: 44)
+        .background {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(tint.opacity(0.12))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(tint.opacity(0.14), lineWidth: 1)
+        }
+        .task(id: resolvedImageURL) {
+            guard let resolvedImageURL else {
                 loadedImage = nil
                 return
             }
 
             loadedImage = nil
             let imageData = await Task.detached(priority: .utility) {
-                try? Data(contentsOf: resourceURL)
+                try? Data(contentsOf: resolvedImageURL)
             }.value
 
             guard !Task.isCancelled else { return }
@@ -1033,7 +1493,8 @@ private struct InstalledPluginRow: View {
                 IntegrationIcon(
                     systemName: registryPlugin?.iconSystemName ?? plugin.manifest.iconSystemName ?? "puzzlepiece.extension",
                     tint: source.tint,
-                    resourceURL: plugin.iconResourceURL
+                    imageURL: iconURL,
+                    darkImageURL: iconDarkURL
                 )
 
                 VStack(alignment: .leading, spacing: 5) {
@@ -1091,6 +1552,17 @@ private struct InstalledPluginRow: View {
                 Spacer(minLength: 12)
 
                 HStack(spacing: 8) {
+                    if plugin.supportsSettingsWindow {
+                        Button {
+                            PluginSettingsWindowManager.shared.present(plugin)
+                        } label: {
+                            Label(String(localized: "Settings"), systemImage: "gearshape")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .accessibilityLabel(String(localized: "Settings for \(plugin.manifest.name)"))
+                    }
+
                     Toggle("", isOn: Binding(
                         get: { plugin.isEnabled },
                         set: { enabled in
@@ -1100,26 +1572,56 @@ private struct InstalledPluginRow: View {
                     .labelsHidden()
                     .accessibilityLabel(String(localized: "Enable \(plugin.manifest.name)"))
 
-                    if plugin.supportsSettingsWindow {
-                        Button {
-                            PluginSettingsWindowManager.shared.present(plugin)
-                        } label: {
-                            Image(systemName: "gear")
-                        }
-                        .buttonStyle(.borderless)
-                        .accessibilityLabel(String(localized: "Settings for \(plugin.manifest.name)"))
-                    }
+                    if hasOverflowActions {
+                        Menu {
+                            if let detailsURL {
+                                Button {
+                                    NSWorkspace.shared.open(detailsURL)
+                                } label: {
+                                    Label(localizedAppText("Details", de: "Details"), systemImage: "arrow.up.right.square")
+                                }
+                            }
 
-                    if !plugin.isBundled {
-                        Button {
-                            onUninstall()
+                            if let homepageURL {
+                                Button {
+                                    NSWorkspace.shared.open(homepageURL)
+                                } label: {
+                                    Label(localizedAppText("Homepage", de: "Homepage"), systemImage: "globe")
+                                }
+                            }
+
+                            if detailsURL != nil || homepageURL != nil {
+                                Divider()
+                            }
+
+                            if canRepairInstallation {
+                                Button {
+                                    onRepair()
+                                } label: {
+                                    Label(localizedAppText("Repair Installation", de: "Installation reparieren"), systemImage: "arrow.down.app")
+                                }
+                            }
+
+                            if !plugin.isBundled {
+                                if canRepairInstallation {
+                                    Divider()
+                                }
+
+                                Button(role: .destructive) {
+                                    onUninstall()
+                                } label: {
+                                    Label(String(localized: "Uninstall"), systemImage: "trash")
+                                }
+                            }
                         } label: {
-                            Image(systemName: "trash")
-                                .foregroundStyle(.red)
+                            Image(systemName: "ellipsis")
+                                .font(.system(size: 13, weight: .semibold))
+                                .frame(width: 26, height: 24)
                         }
-                        .buttonStyle(.borderless)
-                        .help(String(localized: "Uninstall"))
-                        .accessibilityLabel(String(localized: "Uninstall \(plugin.manifest.name)"))
+                        .menuStyle(.borderlessButton)
+                        .fixedSize()
+                        .help(localizedAppText("More Actions", de: "Weitere Aktionen"))
+                        .accessibilityLabel(localizedAppText("More Actions for \(plugin.manifest.name)", de: "Weitere Aktionen für \(plugin.manifest.name)"))
                     }
                 }
             }
@@ -1209,14 +1711,6 @@ private struct InstalledPluginRow: View {
             if let pluginActivity {
                 PluginSettingsActivityView(activity: pluginActivity)
             }
-            if canRepairInstallation {
-                Button {
-                    onRepair()
-                } label: {
-                    Label(String(localized: "Repair Installation"), systemImage: "arrow.clockwise.circle")
-                }
-                .controlSize(.small)
-            }
         }
     }
 
@@ -1227,6 +1721,33 @@ private struct InstalledPluginRow: View {
             installInfo: installInfo,
             installState: installState
         )
+    }
+
+    private var detailsURL: URL? {
+        validatedExternalURL(pluginDetailURLString(
+            pluginId: plugin.id,
+            registryDetailsURL: registryPlugin?.detailsURL,
+            manifestDetailsURL: plugin.manifest.detailsURL
+        ))
+    }
+
+    private var homepageURL: URL? {
+        validatedExternalURL(registryPlugin?.homepageURL ?? plugin.manifest.homepageURL)
+    }
+
+    private var iconURL: URL? {
+        validatedExternalURL(registryPlugin?.iconURL)
+            ?? validatedExternalURL(plugin.manifest.iconURL)
+            ?? plugin.iconResourceURL
+    }
+
+    private var iconDarkURL: URL? {
+        validatedExternalURL(registryPlugin?.iconDarkURL)
+            ?? validatedExternalURL(plugin.manifest.iconDarkURL)
+    }
+
+    private var hasOverflowActions: Bool {
+        detailsURL != nil || homepageURL != nil || canRepairInstallation || !plugin.isBundled
     }
 
     private func downloadedModelCountTitle(_ count: Int) -> String {
@@ -1337,11 +1858,18 @@ private struct AvailablePluginRow: View {
     let categories: [PluginCategory]
     let source: IntegrationPluginSource
     let installState: PluginRegistryService.InstallState?
+    let detailsURLString: String?
     let onInstall: () -> Void
+    let onOpenDetails: () -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            IntegrationIcon(systemName: plugin.iconSystemName ?? "puzzlepiece.extension", tint: source.tint)
+            IntegrationIcon(
+                systemName: plugin.iconSystemName ?? "puzzlepiece.extension",
+                tint: source.tint,
+                imageURL: validatedExternalURL(plugin.iconURL),
+                darkImageURL: validatedExternalURL(plugin.iconDarkURL)
+            )
 
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 6) {
@@ -1392,50 +1920,25 @@ private struct AvailablePluginRow: View {
                     } label: {
                         Label(String(localized: "Install"), systemImage: "arrow.down.circle")
                     }
+                    .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .accessibilityLabel(String(localized: "Install \(plugin.name)"))
                 }
+
+                if validatedExternalURL(detailsURLString) != nil {
+                    Button {
+                        onOpenDetails()
+                    } label: {
+                        Label(localizedAppText("Details", de: "Details"), systemImage: "arrow.up.right.square")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .accessibilityLabel(localizedAppText("Open details for \(plugin.name)", de: "Details für \(plugin.name) öffnen"))
+                }
             }
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-    }
-}
-
-private struct ManualInstallRow: View {
-    let onInstallFromFile: () -> Void
-    let onOpenPluginsFolder: () -> Void
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            IntegrationIcon(systemName: "folder.badge.plus", tint: .orange)
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text(String(localized: "Manual Plugin Install"))
-                    .font(.headline)
-                Text(String(localized: "Install a local .bundle or .zip plugin package, or manage the plugins folder directly."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer(minLength: 12)
-
-            HStack(spacing: 8) {
-                Button {
-                    onInstallFromFile()
-                } label: {
-                    Label(String(localized: "Install from File..."), systemImage: "plus")
-                }
-                Button {
-                    onOpenPluginsFolder()
-                } label: {
-                    Label(String(localized: "Open Plugins Folder"), systemImage: "folder")
-                }
-            }
-            .controlSize(.small)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.vertical, 12)
     }
 }
 

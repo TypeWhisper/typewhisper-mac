@@ -14,6 +14,9 @@
     "categories": ["transcription", "llm", "tts"],
     "hosting": "cloud",
     "iconSystemName": "brain",
+    "iconURL": "https://www.typewhisper.com/brand-logos/openai/logo-light.svg",
+    "iconDarkURL": "https://www.typewhisper.com/brand-logos/openai/logo-dark.svg",
     "principalClass": "OpenAIPlugin",
-    "requiresAPIKey": false
+    "requiresAPIKey": false,
+    "detailsURL": "https://www.typewhisper.com/addons/openai/"
 }

@@ -20,5 +20,6 @@
     "hosting": "local",
     "iconSystemName": "waveform.circle.fill",
     "principalClass": "SupertonicPlugin",
-    "requiresAPIKey": false
+    "requiresAPIKey": false,
+    "detailsURL": "https://www.typewhisper.com/addons/supertonic/"
 }

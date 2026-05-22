@@ -8,7 +8,7 @@
     "author": "TypeWhisper",
     "description": "Run shell scripts for watch-folder file jobs. Scripts can replace the final exported artifact.",
     "descriptions": {
-        "de": "Shell-Skripte fuer Watch-Folder-Dateijobs ausfuehren. Skripte koennen das finale Export-Artefakt ersetzen."
+        "de": "Shell-Skripte für Watch-Folder-Dateijobs ausführen. Skripte können das finale Export-Artefakt ersetzen."
     },
     "category": "file-automation",
     "iconSystemName": "folder.badge.gearshape",

@@ -25,6 +25,10 @@ public struct PluginManifest: Codable, Equatable, Sendable {
     public let iconResourceName: String?
     public let category: String?
     public let categories: [String]?
+    public let detailsURL: String?
+    public let homepageURL: String?
+    public let iconURL: String?
+    public let iconDarkURL: String?
 
     public init(
         id: String,
@@ -41,7 +45,11 @@ public struct PluginManifest: Codable, Equatable, Sendable {
         iconSystemName: String? = nil,
         iconResourceName: String? = nil,
         category: String? = nil,
-        categories: [String]? = nil
+        categories: [String]? = nil,
+        detailsURL: String? = nil,
+        homepageURL: String? = nil,
+        iconURL: String? = nil,
+        iconDarkURL: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -58,6 +66,10 @@ public struct PluginManifest: Codable, Equatable, Sendable {
         self.iconResourceName = iconResourceName
         self.category = category
         self.categories = categories
+        self.detailsURL = detailsURL
+        self.homepageURL = homepageURL
+        self.iconURL = iconURL
+        self.iconDarkURL = iconDarkURL
     }
 }
 

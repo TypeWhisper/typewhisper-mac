@@ -11,9 +11,10 @@
     "author": "TypeWhisper",
     "description": "Local speech-to-text powered by WhisperKit. 8 model sizes, 99 languages, streaming support.",
     "descriptions": {
-        "de": "Lokale Spracherkennung mit WhisperKit. 8 Modellgroessen, 99 Sprachen, Streaming-Unterstuetzung."
+        "de": "Lokale Spracherkennung mit WhisperKit. 8 Modellgrößen, 99 Sprachen, Streaming-Unterstützung."
     },
     "category": "transcription",
     "iconSystemName": "waveform",
-    "principalClass": "WhisperKitPlugin"
+    "principalClass": "WhisperKitPlugin",
+    "detailsURL": "https://www.typewhisper.com/addons/whisperkit/"
 }

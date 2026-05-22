@@ -12,5 +12,6 @@
     },
     "category": "post-processor",
     "iconSystemName": "arrow.up.forward.app",
-    "principalClass": "WebhookPlugin"
+    "principalClass": "WebhookPlugin",
+    "detailsURL": "https://www.typewhisper.com/addons/webhook/"
 }
