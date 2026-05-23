@@ -1,76 +1,118 @@
 {
-  "sourceLanguage" : "en",
-  "strings" : {
-    "Active: %@" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Aktiv: %@"
+  "sourceLanguage": "en",
+  "strings": {
+    "Active: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktiv: %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有効: %@"
           }
         }
       }
     },
-    "Downloading language model..." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sprachmodell wird heruntergeladen ..."
+    "Downloading language model...": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprachmodell wird heruntergeladen ..."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "言語モデルをダウンロード中..."
           }
         }
       }
     },
-    "Loading available languages..." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verfügbare Sprachen werden geladen ..."
+    "Loading available languages...": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verfügbare Sprachen werden geladen ..."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "利用可能な言語を読み込み中..."
           }
         }
       }
     },
-    "On-device speech recognition via Apple's Speech framework with streaming support. Select a language model below - only one can be active at a time." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gerätebasierte Spracherkennung über Apples Speech-Framework mit Streaming-Unterstützung. Wähle unten ein Sprachmodell - es kann jeweils nur eines aktiv sein."
+    "On-device speech recognition via Apple's Speech framework with streaming support. Select a language model below - only one can be active at a time.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gerätebasierte Spracherkennung über Apples Speech-Framework mit Streaming-Unterstützung. Wähle unten ein Sprachmodell - es kann jeweils nur eines aktiv sein."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Appleの音声フレームワークによるデバイス上の音声認識（ストリーミング対応）。以下から言語モデルを選択してください - 一度にアクティブにできるのは1つのみです。"
           }
         }
       }
     },
-    "Search languages..." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sprachen suchen ..."
+    "Search languages...": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprachen suchen ..."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "言語を検索..."
           }
         }
       }
     },
-    "Select" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Auswählen"
+    "Select": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auswählen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択"
           }
         }
       }
     },
-    "Unload" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deaktivieren"
+    "Unload": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deaktivieren"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アンロード"
           }
         }
       }
     }
   },
-  "version" : "1.0"
+  "version": "1.0"
 }
