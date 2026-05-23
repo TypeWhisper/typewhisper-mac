@@ -2976,6 +2976,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         context.dictationViewModel.audioDuckingLevel = 1.5
         context.audioRecordingService.hasMicrophonePermissionOverride = true
         context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
 
         _ = context.dictationViewModel.apiStartRecording()
 
