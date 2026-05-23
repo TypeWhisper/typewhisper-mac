@@ -892,7 +892,11 @@ final class DictationViewModel: ObservableObject {
                 logger.info("Skipping recording start sound for Bluetooth input device")
             }
             if mediaPauseEnabled { mediaPlaybackService.pauseIfPlaying() }
-            pendingRecordingAudioDuckingLevel = audioDuckingEnabled ? Float(audioDuckingLevel) : nil
+            if audioDuckingEnabled {
+                pendingRecordingAudioDuckingLevel = max(0, min(1, Float(audioDuckingLevel)))
+            } else {
+                pendingRecordingAudioDuckingLevel = nil
+            }
             state = .recording
             // Reset hotkey timer so hybrid threshold counts from recording start,
             // not from key press. Slow device init (e.g. iPhone Continuity ~2-3s)
