@@ -2853,8 +2853,10 @@ final class APIRouterAndHandlersTests: XCTestCase {
                 event == .recordingStarted && enabled ? 0.05 : nil
             }
         )
+        let duckingApplied = expectation(description: "ducking applied after start sound duration")
         let audioDuckingService = MockAudioDuckingService(onDuck: { factor in
             events.append("duck_audio_\(factor)")
+            duckingApplied.fulfill()
         })
         var dictationContext: DictationContext?
         defer {
@@ -2885,7 +2887,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         XCTAssertEqual(events, ["start_audio", "start_sound"])
 
-        try await Task.sleep(nanoseconds: 80_000_000)
+        await fulfillment(of: [duckingApplied], timeout: 1.0)
 
         XCTAssertEqual(events, ["start_audio", "start_sound", "duck_audio_0.2"])
     }

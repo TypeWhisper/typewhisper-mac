@@ -164,6 +164,28 @@ final class SoundServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testPlaybackDurationFallsBackToSoundResolverWhenFileDurationUnavailable() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let storedDefaults = captureSoundDefaults()
+        defer {
+            restoreSoundDefaults(storedDefaults)
+            AppConstants.testAppSupportDirectoryOverride = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        AppConstants.testAppSupportDirectoryOverride = appSupportDirectory
+        let soundsDirectory = SoundChoice.customSoundsDirectory
+        try FileManager.default.createDirectory(at: soundsDirectory, withIntermediateDirectories: true)
+        let filename = "invalid.wav"
+        try Data("not a playable audio file".utf8).write(to: soundsDirectory.appendingPathComponent(filename))
+        let service = PreviewSoundResolverSpy()
+        service.updateChoice(for: .recordingStarted, choice: .custom(filename))
+
+        XCTAssertNil(service.playbackDuration(for: .recordingStarted, enabled: true))
+        XCTAssertEqual(service.resolvedChoices, [.custom(filename)])
+    }
+
+    @MainActor
     func testPreviewStillUsesPreviewSoundResolver() {
         let service = PreviewSoundResolverSpy()
 

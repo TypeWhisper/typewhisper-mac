@@ -175,8 +175,9 @@ class SoundService {
     func playbackDuration(for event: SoundEvent, enabled: Bool) -> TimeInterval? {
         guard enabled else { return nil }
         let choice = choices[event] ?? event.defaultChoice
-        if let playbackURL = filePlaybackURL(for: choice) {
-            return Self.audioFileDuration(for: playbackURL)
+        if let playbackURL = filePlaybackURL(for: choice),
+           let duration = Self.audioFileDuration(for: playbackURL) {
+            return duration
         }
         return sound(for: choice)?.duration
     }
