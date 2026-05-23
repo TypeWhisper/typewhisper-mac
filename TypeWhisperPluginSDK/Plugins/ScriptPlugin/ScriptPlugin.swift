@@ -130,6 +130,15 @@ final class ScriptService: ObservableObject, @unchecked Sendable {
         saveConfig()
     }
 
+    func saveScript(_ script: ScriptConfig) {
+        if let index = scripts.firstIndex(where: { $0.id == script.id }) {
+            scripts[index] = script
+        } else {
+            scripts.append(script)
+        }
+        saveConfig()
+    }
+
     func addExampleScript() {
         addScript(ScriptConfig(
             name: "UPPERCASE Example",
@@ -330,7 +339,7 @@ struct ScriptSettingsView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 Button {
-                    service.addScript(ScriptConfig())
+                    editingScript = ScriptConfig()
                 } label: {
                     Label(String(localized: "Add Script", bundle: bundle), systemImage: "plus")
                 }
@@ -388,12 +397,13 @@ struct ScriptSettingsView: View {
                 script: script,
                 availableProfiles: service.host.availableRuleNames,
                 onSave: { updated in
-                    service.updateScript(updated)
+                    service.saveScript(updated)
                     editingScript = nil
                 },
                 onCancel: { editingScript = nil }
             )
         }
+        .frame(minHeight: 400)
     }
 }
 
