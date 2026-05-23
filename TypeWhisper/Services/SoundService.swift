@@ -159,16 +159,26 @@ class SoundService {
         loadChoices()
     }
 
-    func play(_ event: SoundEvent, enabled: Bool) {
-        guard enabled else { return }
+    @discardableResult
+    func play(_ event: SoundEvent, enabled: Bool) -> Bool {
+        guard enabled else { return false }
         let choice = choices[event] ?? event.defaultChoice
         if let playbackURL = filePlaybackURL(for: choice),
            oneShotPlayer.play(url: playbackURL) {
-            return
+            return true
         }
-        guard let sound = sound(for: choice) else { return }
+        guard let sound = sound(for: choice) else { return false }
         sound.stop()
-        sound.play()
+        return sound.play()
+    }
+
+    func playbackDuration(for event: SoundEvent, enabled: Bool) -> TimeInterval? {
+        guard enabled else { return nil }
+        let choice = choices[event] ?? event.defaultChoice
+        if let playbackURL = filePlaybackURL(for: choice) {
+            return Self.audioFileDuration(for: playbackURL)
+        }
+        return sound(for: choice)?.duration
     }
 
     func choice(for event: SoundEvent) -> SoundChoice {
@@ -255,6 +265,11 @@ class SoundService {
         case .none:
             return nil
         }
+    }
+
+    private static func audioFileDuration(for url: URL) -> TimeInterval? {
+        guard let player = try? AVAudioPlayer(contentsOf: url) else { return nil }
+        return player.duration
     }
 
     private func preloadSounds() {
