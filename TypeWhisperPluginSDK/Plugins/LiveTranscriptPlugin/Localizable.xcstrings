@@ -76,7 +76,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Record Shortcut"
+            "value": "ショートカットを記録"
           }
         }
       }
@@ -124,7 +124,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Toggle Shortcut"
+            "value": "トグルショートカット"
           }
         }
       }

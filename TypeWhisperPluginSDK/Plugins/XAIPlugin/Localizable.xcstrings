@@ -92,7 +92,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Low Latency"
+            "value": "低レイテンシー"
           }
         }
       }
@@ -156,7 +156,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Text Normalization"
+            "value": "テキスト正規化"
           }
         }
       }

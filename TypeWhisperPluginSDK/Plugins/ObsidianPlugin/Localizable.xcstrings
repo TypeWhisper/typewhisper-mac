@@ -92,7 +92,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Copy Instruction"
+            "value": "指示をコピー"
           }
         }
       }
@@ -140,7 +140,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Detected Vaults"
+            "value": "検出されたVault"
           }
         }
       }
@@ -156,7 +156,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "File Organization"
+            "value": "ファイル整理"
           }
         }
       }
@@ -236,7 +236,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Workflow Instruction"
+            "value": "ワークフロー指示"
           }
         }
       }

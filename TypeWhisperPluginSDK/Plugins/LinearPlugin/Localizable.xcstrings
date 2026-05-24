@@ -44,7 +44,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Copy Instruction"
+            "value": "指示をコピー"
           }
         }
       }
@@ -204,7 +204,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Workflow Instruction"
+            "value": "ワークフロー指示"
           }
         }
       }

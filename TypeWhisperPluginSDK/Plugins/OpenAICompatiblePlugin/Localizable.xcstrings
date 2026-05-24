@@ -60,7 +60,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Connection Failed"
+            "value": "接続失敗"
           }
         }
       }
@@ -252,7 +252,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Test Connection"
+            "value": "接続テスト"
           }
         }
       }

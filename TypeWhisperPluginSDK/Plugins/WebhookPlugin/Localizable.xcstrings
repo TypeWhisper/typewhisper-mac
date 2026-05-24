@@ -44,7 +44,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Add Webhook"
+            "value": "Webhookを追加"
           }
         }
       }
@@ -76,7 +76,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Delivery Log"
+            "value": "配信ログ"
           }
         }
       }
@@ -108,7 +108,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Edit Webhook"
+            "value": "Webhookを編集"
           }
         }
       }
@@ -188,7 +188,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "No Webhooks"
+            "value": "Webhookなし"
           }
         }
       }
@@ -268,7 +268,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Webhook Notifications"
+            "value": "Webhook通知"
           }
         }
       }
