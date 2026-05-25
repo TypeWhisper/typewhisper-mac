@@ -14,16 +14,13 @@ enum AudioInputDeviceCompatibilityIssue: Sendable, Equatable {
     case engineStartFailed
 
     var badgeText: String {
-        localizedAppText("Not compatible", de: "Nicht kompatibel")
+        String(localized: "Not compatible")
     }
 
     var detailText: String {
         switch self {
         case .cannotSetDevice, .invalidInputFormat, .engineStartFailed:
-            return localizedAppText(
-                "This microphone can't be used by TypeWhisper for preview or recording.",
-                de: "Dieses Mikrofon kann von TypeWhisper nicht für Test oder Aufnahme verwendet werden."
-            )
+            return String(localized: "This microphone can't be used by TypeWhisper for preview or recording.")
         }
     }
 }
@@ -66,17 +63,11 @@ enum SelectedInputDeviceError: LocalizedError, Sendable, Equatable {
     var errorDescription: String? {
         switch self {
         case .unavailable:
-            return localizedAppText(
-                "Selected input device is no longer available.",
-                de: "Das ausgewählte Eingabegerät ist nicht mehr verfügbar."
-            )
+            return String(localized: "Selected input device is no longer available.")
         case .incompatible(let issue):
             return issue.detailText
         case .routingConflict:
-            return localizedAppText(
-                "The selected microphone conflicts with your current audio routing. Disconnect Bluetooth or choose a different input.",
-                de: "Das ausgewählte Mikrofon kollidiert mit deiner aktuellen Audio-Route. Trenne Bluetooth oder wähle ein anderes Eingabegerät."
-            )
+            return String(localized: "The selected microphone conflicts with your current audio routing. Disconnect Bluetooth or choose a different input.")
         }
     }
 

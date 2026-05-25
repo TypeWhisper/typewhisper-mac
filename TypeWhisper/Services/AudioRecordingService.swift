@@ -68,10 +68,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             case .selectedInputDeviceIncompatible(let issue):
                 SelectedInputDeviceError.incompatible(issue).errorDescription
             case .audioRoutingConflict:
-                localizedAppText(
-                    "The selected microphone conflicts with your current audio routing. Disconnect Bluetooth or choose a different input.",
-                    de: "Das ausgewählte Mikrofon kollidiert mit deiner aktuellen Audio-Route. Trenne Bluetooth oder wähle ein anderes Eingabegerät."
-                )
+                String(localized: "The selected microphone conflicts with your current audio routing. Disconnect Bluetooth or choose a different input.")
             case .engineStartFailed(let detail):
                 "Failed to start audio engine: \(detail)"
             case .noAudioData:

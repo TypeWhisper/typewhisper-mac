@@ -84,12 +84,9 @@ struct HomeSettingsView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(localizedAppText("Need commercial license terms?", de: "Brauchst du kommerzielle Lizenzbedingungen?"))
+                    Text(String(localized: "Need commercial license terms?"))
                         .font(.headline)
-                    Text(localizedAppText(
-                        "Pricing, lifetime options, procurement, and support are clearer on the website.",
-                        de: "Preise, Lifetime-Optionen, Beschaffung und Support sind auf der Website klarer erklärt."
-                    ))
+                    Text(String(localized: "Pricing, lifetime options, procurement, and support are clearer on the website."))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 }
@@ -109,11 +106,11 @@ struct HomeSettingsView: View {
                 Button {
                     NSWorkspace.shared.open(AppConstants.Website.pricingURL)
                 } label: {
-                    Label(localizedAppText("See licensing on the website", de: "Lizenzierung auf der Website ansehen"), systemImage: "globe")
+                    Label(String(localized: "See licensing on the website"), systemImage: "globe")
                 }
                 .buttonStyle(.borderedProminent)
 
-                Button(localizedAppText("Not now", de: "Später")) {
+                Button(String(localized: "Not now")) {
                     workUsagePromptDismissed = true
                 }
                 .buttonStyle(.bordered)

@@ -83,7 +83,7 @@ struct FileTranscriptionView: View {
                     }
                 }
 
-                Section(localizedAppText("Watch Folder Transcription", de: "Ordner-Transkription")) {
+                Section(String(localized: "Watch Folder Transcription")) {
                     Picker(String(localized: "watchFolder.engine"), selection: $watchFolder.selectedEngine) {
                         Text(String(localized: "watchFolder.engine.default")).tag(nil as String?)
                         Divider()

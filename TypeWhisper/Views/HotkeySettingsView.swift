@@ -25,17 +25,14 @@ struct HotkeySettingsView: View {
                 )
             }
 
-            Section(localizedAppText("Workflow Palette", de: "Workflow-Palette")) {
+            Section(String(localized: "Workflow Palette")) {
                 MultiHotkeySlotRecorder(
                     slot: .promptPalette,
-                    title: localizedAppText("Palette shortcut", de: "Palette-Shortcut"),
+                    title: String(localized: "Palette shortcut"),
                     subtitle: nil
                 )
 
-                Text(localizedAppText(
-                    "Select or copy text in any app, press the shortcut, and choose a manual workflow to process the text.",
-                    de: "Markiere oder kopiere Text in einer App, drücke den Shortcut und wähle einen manuellen Workflow für die Verarbeitung."
-                ))
+                Text(String(localized: "Select or copy text in any app, press the shortcut, and choose a manual workflow to process the text."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -124,7 +121,7 @@ private struct MultiHotkeySlotRecorder: View {
     private var addShortcutButton: some View {
         HotkeyRecorderView(
             label: "",
-            title: localizedAppText("Add Shortcut", de: "Shortcut hinzufügen"),
+            title: String(localized: "Add Shortcut"),
             presentation: .iconButton(systemName: "plus.circle"),
             onRecord: { hotkey in record(hotkey) },
             onClear: {}

@@ -200,10 +200,7 @@ struct AudioRecorderView: View {
 
                         if !modelManager.supportsLiveTranscriptionSession(engineOverrideId: engine.providerId) {
                             Label(
-                                localizedAppText(
-                                    "This engine uses a lightweight live preview that updates every few seconds. Final transcription still runs on the full recording after you stop.",
-                                    de: "Diese Engine nutzt eine leichte Live-Vorschau, die nur alle paar Sekunden aktualisiert wird. Die finale Transkription laeuft nach dem Stoppen weiterhin auf der gesamten Aufnahme."
-                                ),
+                                String(localized: "This engine uses a lightweight live preview that updates every few seconds. Final transcription still runs on the full recording after you stop."),
                                 systemImage: "info.circle"
                             )
                             .font(.caption)

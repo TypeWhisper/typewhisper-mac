@@ -24,50 +24,38 @@ struct PostUpdateLicensePromptView: View {
                         .padding(8)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(localizedAppText("Close", de: "Schließen"))
+                .accessibilityLabel(String(localized: "Close"))
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text(localizedAppText("Need commercial license terms?", de: "Brauchst du kommerzielle Lizenzbedingungen?"))
+                Text(String(localized: "Need commercial license terms?"))
                     .font(.title2.weight(.semibold))
 
-                Text(localizedAppText(
-                    "You can keep using the GPL version as-is. Choose a commercial license if you need non-GPL terms, procurement, support, or proprietary redistribution.",
-                    de: "Du kannst die GPL-Version unverändert weiter nutzen. Wähle eine kommerzielle Lizenz, wenn du Nicht-GPL-Bedingungen, Beschaffung, Support oder proprietäre Weiterverteilung brauchst."
-                ))
+                Text(String(localized: "You can keep using the GPL version as-is. Choose a commercial license if you need non-GPL terms, procurement, support, or proprietary redistribution."))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             }
 
             VStack(spacing: 12) {
                 actionCard(
-                    title: localizedAppText("GPLv3 / OSS", de: "GPLv3 / OSS"),
-                    description: localizedAppText(
-                        "Keep using the GPL version as-is.",
-                        de: "Nutze die GPL-Version unverändert weiter."
-                    ),
+                    title: String(localized: "GPLv3 / OSS"),
+                    description: String(localized: "Keep using the GPL version as-is."),
                     systemImage: "person",
                     emphasized: false,
                     action: onPersonalOSS
                 )
 
                 actionCard(
-                    title: localizedAppText("Show commercial options", de: "Kommerzielle Optionen anzeigen"),
-                    description: localizedAppText(
-                        "Open licensing for non-GPL terms, procurement, support, or proprietary redistribution.",
-                        de: "Öffne Lizenzen für Nicht-GPL-Bedingungen, Beschaffung, Support oder proprietäre Weiterverteilung."
-                    ),
+                    title: String(localized: "Show commercial options"),
+                    description: String(localized: "Open licensing for non-GPL terms, procurement, support, or proprietary redistribution."),
                     systemImage: "briefcase.fill",
                     emphasized: true,
                     action: onWorkUsage
                 )
 
                 actionCard(
-                    title: localizedAppText("I already have a key", de: "Ich habe schon einen Schlüssel"),
-                    description: localizedAppText(
-                        "Jump straight to the activation field in License settings.",
-                        de: "Springe direkt zum Aktivierungsfeld in den Lizenz-Einstellungen."
-                    ),
+                    title: String(localized: "I already have a key"),
+                    description: String(localized: "Jump straight to the activation field in License settings."),
                     systemImage: "key.fill",
                     emphasized: false,
                     action: onExistingKey
@@ -75,12 +63,12 @@ struct PostUpdateLicensePromptView: View {
             }
 
             HStack {
-                Button(localizedAppText("Become a supporter", de: "Supporter werden"), action: onBecomeSupporter)
+                Button(String(localized: "Become a supporter"), action: onBecomeSupporter)
                     .buttonStyle(.link)
 
                 Spacer()
 
-                Button(localizedAppText("Not now", de: "Später"), action: onNotNow)
+                Button(String(localized: "Not now"), action: onNotNow)
                     .buttonStyle(.bordered)
             }
         }

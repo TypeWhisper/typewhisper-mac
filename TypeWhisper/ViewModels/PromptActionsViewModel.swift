@@ -239,16 +239,11 @@ class PromptActionsViewModel: ObservableObject {
         let status = assignmentStatus(for: action)
         if status.isAssigned {
             let ruleCount = status.ruleCount
-            return localizedAppText(
-                "Used in \(ruleCount) rule\(ruleCount == 1 ? "" : "s")",
-                de: "In \(ruleCount) Regel\(ruleCount == 1 ? "" : "n") verwendet"
+            return String(localized: "Used in \(ruleCount) rule\(ruleCount == 1 ? "" : "s")") verwendet"
             )
         }
 
-        return localizedAppText(
-            "Not used in any rules",
-            de: "Nicht in Regeln verwendet"
-        )
+        return String(localized: "Not used in any rules")
     }
 
     func rulesUsing(_ action: PromptAction) -> [Profile] {

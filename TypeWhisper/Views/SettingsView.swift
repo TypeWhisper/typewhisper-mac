@@ -45,7 +45,7 @@ struct SettingsView: View {
             dictationRecovery.hasRecoveryContent
                 ? SettingsDestination(
                     tab: .dictationRecovery,
-                    title: localizedAppText("Recovery", de: "Wiederherstellung"),
+                    title: String(localized: "Recovery"),
                     systemImage: "waveform",
                     badge: nil
                 )
@@ -56,7 +56,7 @@ struct SettingsView: View {
             SettingsDestination(tab: .snippets, title: String(localized: "Snippets"), systemImage: "text.badge.plus", badge: nil),
             SettingsDestination(
                 tab: .workflows,
-                title: localizedAppText("Workflows", de: "Workflows"),
+                title: String(localized: "Workflows"),
                 systemImage: "point.3.connected.trianglepath.dotted",
                 badge: nil
             ),
@@ -224,7 +224,7 @@ private struct SettingsModernShell: View {
             .searchable(
                 text: $sidebarSearchText,
                 placement: .sidebar,
-                prompt: Text(localizedAppText("Search Settings", de: "Einstellungen durchsuchen"))
+                prompt: Text(String(localized: "Search Settings"))
             )
             .navigationSplitViewColumnWidth(min: 240, ideal: 270, max: 320)
         } detail: {
@@ -337,8 +337,8 @@ private struct SettingsSidebarShell<DetailContent: View>: View {
                 Button(action: toggleSidebar) {
                     Image(systemName: "sidebar.leading")
                 }
-                .help(localizedAppText("Toggle Sidebar", de: "Seitenleiste ein-/ausblenden"))
-                .accessibilityLabel(localizedAppText("Toggle Sidebar", de: "Seitenleiste ein-/ausblenden"))
+                .help(String(localized: "Toggle Sidebar"))
+                .accessibilityLabel(String(localized: "Toggle Sidebar"))
             }
         }
     }

@@ -51,7 +51,7 @@ struct PromptActionsSettingsView: View {
     private var promptsHeader: some View {
         HStack(alignment: .top, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(localizedAppText("Prompts", de: "Prompts"))
+                Text(String(localized: "Prompts"))
                     .font(.headline)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(String(localized: "Build reusable AI actions for Rules or the Prompt Palette."))
@@ -66,7 +66,7 @@ struct PromptActionsSettingsView: View {
             Button {
                 viewModel.startCreating()
             } label: {
-                Label(localizedAppText("New Prompt", de: "Neuer Prompt"), systemImage: "plus")
+                Label(String(localized: "New Prompt"), systemImage: "plus")
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
@@ -88,12 +88,9 @@ struct PromptActionsSettingsView: View {
         return VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(localizedAppText("Default LLM Provider", de: "Standard-LLM-Provider"))
+                    Text(String(localized: "Default LLM Provider"))
                         .font(.headline)
-                    Text(localizedAppText(
-                        "Used by prompts unless a prompt overrides provider or model in Advanced.",
-                        de: "Wird von Prompts genutzt, solange ein Prompt Provider oder Modell nicht unter Erweitert überschreibt."
-                    ))
+                    Text(String(localized: "Used by prompts unless a prompt overrides provider or model in Advanced."))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 }
@@ -130,7 +127,7 @@ struct PromptActionsSettingsView: View {
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .center, spacing: 12) {
-                        Text(localizedAppText("Provider", de: "Provider"))
+                        Text(String(localized: "Provider"))
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
                             .frame(width: 62, alignment: .leading)
@@ -154,7 +151,7 @@ struct PromptActionsSettingsView: View {
 
                     if let fixedModelName {
                         HStack(spacing: 6) {
-                            Text(localizedAppText("Model", de: "Modell"))
+                            Text(String(localized: "Model"))
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
 
@@ -164,7 +161,7 @@ struct PromptActionsSettingsView: View {
                         }
                     } else if shouldShowModelPicker {
                         HStack(alignment: .center, spacing: 12) {
-                            Text(localizedAppText("Model", de: "Modell"))
+                            Text(String(localized: "Model"))
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
                                 .frame(width: 62, alignment: .leading)
@@ -229,22 +226,16 @@ struct PromptActionsSettingsView: View {
 
     private var emptyState: some View {
         ContentUnavailableView {
-            Label(localizedAppText("No Prompts Yet", de: "Noch keine Prompts"), systemImage: "sparkles")
+            Label(String(localized: "No Prompts Yet"), systemImage: "sparkles")
         } description: {
             VStack(alignment: .leading, spacing: 8) {
-                Text(localizedAppText(
-                    "Build reusable prompt actions with the same wizard style as Rules.",
-                    de: "Baue wiederverwendbare Prompt-Aktionen im gleichen Wizard-Stil wie bei den Regeln."
-                ))
-                Text(localizedAppText(
-                    "Examples: translate English/German, draft a reply, extract JSON, or turn notes into meeting notes.",
-                    de: "Beispiele: Englisch/Deutsch übersetzen, eine Antwort formulieren, JSON extrahieren oder Notizen in Meeting Notes umwandeln."
-                ))
+                Text(String(localized: "Build reusable prompt actions with the same wizard style as Rules."))
+                Text(String(localized: "Examples: translate English/German, draft a reply, extract JSON, or turn notes into meeting notes."))
                 Text(String(localized: "Prompts become automatic during dictation only when a rule assigns them. Otherwise they stay available from the Prompt Palette."))
             }
         }
         actions: {
-            Button(localizedAppText("Create First Prompt", de: "Ersten Prompt erstellen")) {
+            Button(String(localized: "Create First Prompt")) {
                 viewModel.startCreating()
             }
             .buttonStyle(.borderedProminent)
@@ -303,7 +294,7 @@ private func promptProviderStatusInfo(
     if providerId == PromptProcessingService.appleIntelligenceId {
         if processingService.isAppleIntelligenceAvailable {
             return .init(
-                title: localizedAppText("Ready", de: "Bereit"),
+                title: String(localized: "Ready"),
                 detail: nil,
                 icon: "checkmark.circle.fill",
                 tint: .green,
@@ -312,11 +303,8 @@ private func promptProviderStatusInfo(
         }
 
         return .init(
-            title: localizedAppText("Unavailable", de: "Nicht verfügbar"),
-            detail: localizedAppText(
-                "Apple Intelligence must be enabled in System Settings.",
-                de: "Apple Intelligence muss in den Systemeinstellungen aktiviert sein."
-            ),
+            title: String(localized: "Unavailable"),
+            detail: String(localized: "Apple Intelligence must be enabled in System Settings."),
             icon: "exclamationmark.triangle.fill",
             tint: .orange,
             isActionable: false
@@ -330,8 +318,8 @@ private func promptProviderStatusInfo(
     if processingService.isProviderReady(providerId) {
         return .init(
             title: usesLocalSetup
-                ? localizedAppText("Ready", de: "Bereit")
-                : localizedAppText("Configured", de: "Konfiguriert"),
+                ? String(localized: "Ready")
+                : String(localized: "Configured"),
             detail: nil,
             icon: "checkmark.circle.fill",
             tint: .green,
@@ -341,7 +329,7 @@ private func promptProviderStatusInfo(
 
     if usesLocalSetup, let unavailableReason = setupStatus?.unavailableReason {
         return .init(
-            title: localizedAppText("Needs Setup", de: "Setup nötig"),
+            title: String(localized: "Needs Setup"),
             detail: unavailableReason,
             icon: "exclamationmark.triangle.fill",
             tint: .orange,
@@ -350,11 +338,8 @@ private func promptProviderStatusInfo(
     }
 
     return .init(
-        title: localizedAppText("API Key Needed", de: "API-Key nötig"),
-        detail: localizedAppText(
-            "Configure the provider in Integrations.",
-            de: "Konfiguriere den Provider unter Integrationen."
-        ),
+        title: String(localized: "API Key Needed"),
+        detail: String(localized: "Configure the provider in Integrations."),
         icon: "exclamationmark.triangle.fill",
         tint: .orange,
         isActionable: true
@@ -470,7 +455,7 @@ private struct PromptActionRow: View {
                             )
                         }
                         .buttonStyle(.plain)
-                        .help(localizedAppText("Show matching rules", de: "Passende Regeln anzeigen"))
+                        .help(String(localized: "Show matching rules"))
                     } else {
                         PromptRuleAssignmentChip(
                             title: viewModel.assignmentSummary(for: action),
@@ -510,7 +495,7 @@ private struct PromptActionRow: View {
                 }
                 .buttonStyle(.borderless)
                 .opacity(isHovering ? 1 : 0.7)
-                .help(localizedAppText("Edit prompt", de: "Prompt bearbeiten"))
+                .help(String(localized: "Edit prompt"))
             }
         }
         .padding(.horizontal, 16)
@@ -544,13 +529,10 @@ private struct PromptActionRow: View {
 
     private var providerSummary: String {
         if let providerType = action.providerType {
-            return localizedAppText(
-                "Provider: \(processingService.displayName(for: providerType))",
-                de: "Provider: \(processingService.displayName(for: providerType))"
-            )
+            return String(localized: "Provider: \(processingService.displayName(for: providerType))")
         }
 
-        return localizedAppText("Default provider", de: "Standard-Provider")
+        return String(localized: "Default provider")
     }
 
     private var targetSummary: String? {
@@ -559,10 +541,7 @@ private struct PromptActionRow: View {
             return nil
         }
 
-        return localizedAppText(
-            "Target: \(plugin.actionName)",
-            de: "Ziel: \(plugin.actionName)"
-        )
+        return String(localized: "Target: \(plugin.actionName)")
     }
 
     private var rowHighlightColor: Color {
@@ -719,22 +698,19 @@ private struct PromptWizardSheet: View {
             VStack(alignment: .leading, spacing: 10) {
                 promptWizardInfoChip(
                     viewModel.isCreatingNew
-                        ? localizedAppText("Prompt Wizard", de: "Prompt-Wizard")
-                        : localizedAppText("Adjust Prompt", de: "Prompt anpassen"),
+                        ? String(localized: "Prompt Wizard")
+                        : String(localized: "Adjust Prompt"),
                     tint: .accentColor
                 )
 
                 Text(
                     viewModel.isCreatingNew
-                        ? localizedAppText("New Prompt", de: "Neuer Prompt")
-                        : localizedAppText("Edit Prompt", de: "Prompt bearbeiten")
+                        ? String(localized: "New Prompt")
+                        : String(localized: "Edit Prompt")
                 )
                 .font(.title2.weight(.semibold))
 
-                Text(localizedAppText(
-                    "From goal to final system prompt in three clear steps.",
-                    de: "Vom Ziel zum finalen System-Prompt in drei klaren Schritten."
-                ))
+                Text(String(localized: "From goal to final system prompt in three clear steps."))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             }
@@ -743,10 +719,7 @@ private struct PromptWizardSheet: View {
 
             VStack(alignment: .trailing, spacing: 10) {
                 promptWizardInfoChip(
-                    localizedAppText(
-                        "Step \(currentStepNumber) of \(totalSteps)",
-                        de: "Schritt \(currentStepNumber) von \(totalSteps)"
-                    ),
+                    String(localized: "Step \(currentStepNumber) of \(totalSteps)"),
                     tint: .accentColor
                 )
             }
@@ -757,10 +730,7 @@ private struct PromptWizardSheet: View {
     private var footer: some View {
         HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(localizedAppText(
-                    "Step \(currentStepNumber) of \(totalSteps)",
-                    de: "Schritt \(currentStepNumber) von \(totalSteps)"
-                ))
+                Text(String(localized: "Step \(currentStepNumber) of \(totalSteps)"))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
 
@@ -771,7 +741,7 @@ private struct PromptWizardSheet: View {
 
             Spacer()
 
-            Button(localizedAppText("Cancel", de: "Abbrechen")) {
+            Button(String(localized: "Cancel")) {
                 viewModel.cancelEditing()
                 dismiss()
             }
@@ -779,14 +749,14 @@ private struct PromptWizardSheet: View {
             .keyboardShortcut(.cancelAction)
 
             if viewModel.wizardStep != .goal {
-                Button(localizedAppText("Back", de: "Zurück")) {
+                Button(String(localized: "Back")) {
                     viewModel.goToPreviousWizardStep()
                 }
                 .buttonStyle(.bordered)
             }
 
             if viewModel.wizardStep == .review {
-                Button(localizedAppText("Save Prompt", de: "Prompt speichern")) {
+                Button(String(localized: "Save Prompt")) {
                     viewModel.saveEditing()
                     dismiss()
                 }
@@ -798,7 +768,7 @@ private struct PromptWizardSheet: View {
                 .keyboardShortcut(.defaultAction)
                 .disabled(!viewModel.canAdvanceFromCurrentWizardStep)
             } else {
-                Button(localizedAppText("Next", de: "Weiter")) {
+                Button(String(localized: "Next")) {
                     viewModel.goToNextWizardStep()
                 }
                 .buttonStyle(.borderedProminent)
@@ -821,20 +791,11 @@ private struct PromptWizardSheet: View {
     private var stepGuidance: String {
         switch viewModel.wizardStep {
         case .goal:
-            return localizedAppText(
-                "Pick the job first. Presets can be used as starters and refined in the next step.",
-                de: "Wähle zuerst die Aufgabe. Presets dienen als Starter und werden im nächsten Schritt verfeinert."
-            )
+            return String(localized: "Pick the job first. Presets can be used as starters and refined in the next step.")
         case .response:
-            return localizedAppText(
-                "Define the response behavior first. Advanced includes provider, model, and temperature.",
-                de: "Lege zuerst das Antwortverhalten fest. Erweitert enthält Provider, Modell und Temperatur."
-            )
+            return String(localized: "Define the response behavior first. Advanced includes provider, model, and temperature.")
         case .review:
-            return localizedAppText(
-                "Review the name and preview first. Advanced includes the system prompt and target.",
-                de: "Prüfe zuerst Name und Vorschau. Erweitert enthält System-Prompt und Ziel."
-            )
+            return String(localized: "Review the name and preview first. Advanced includes the system prompt and target.")
         }
     }
 
@@ -939,12 +900,9 @@ private struct PromptWizardGoalStep: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(localizedAppText("What should this prompt do?", de: "Was soll dieser Prompt tun?"))
+                Text(String(localized: "What should this prompt do?"))
                     .font(.title3.weight(.semibold))
-                Text(localizedAppText(
-                    "Pick the job first. Details and presets appear only for the active goal.",
-                    de: "Wähle zuerst die Aufgabe. Details und Presets erscheinen nur für das aktive Ziel."
-                ))
+                Text(String(localized: "Pick the job first. Details and presets appear only for the active goal."))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             }
@@ -1013,7 +971,7 @@ private struct PromptWizardGoalDetailPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(localizedAppText("Selected Goal", de: "Ausgewähltes Ziel"))
+                Text(String(localized: "Selected Goal"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.accentColor)
 
@@ -1029,7 +987,7 @@ private struct PromptWizardGoalDetailPanel: View {
 
             if !starters.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(localizedAppText("Starter Presets", de: "Starter-Presets"))
+                    Text(String(localized: "Starter Presets"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(Color.accentColor)
 
@@ -1056,10 +1014,7 @@ private struct PromptWizardGoalDetailPanel: View {
                 }
             }
 
-            Text(localizedAppText(
-                "You can shape tone, format, language behavior, and model settings in the next step.",
-                de: "Ton, Format, Sprachverhalten und Modell-Einstellungen formst du im nächsten Schritt."
-            ))
+            Text(String(localized: "You can shape tone, format, language behavior, and model settings in the next step."))
             .font(.caption)
             .foregroundStyle(.secondary)
         }
@@ -1081,15 +1036,12 @@ private struct PromptWizardResponseStep: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(localizedAppText("How should it respond?", de: "Wie soll es antworten?"))
+                Text(String(localized: "How should it respond?"))
                     .font(.title3.weight(.semibold))
                 HStack(spacing: 8) {
                     promptWizardInfoChip(viewModel.wizardDraft.goal.title, tint: .accentColor)
 
-                    Text(localizedAppText(
-                        "Configure behavior first, then fine-tune the model settings for this prompt.",
-                        de: "Konfiguriere zuerst das Verhalten und verfeinere danach die Modell-Einstellungen für diesen Prompt."
-                    ))
+                    Text(String(localized: "Configure behavior first, then fine-tune the model settings for this prompt."))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 }
@@ -1118,7 +1070,7 @@ private struct PromptWizardResponseStep: View {
             } label: {
                 HStack(alignment: .center, spacing: 12) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(localizedAppText("Advanced", de: "Erweitert"))
+                        Text(String(localized: "Advanced"))
                             .font(.headline)
                             .foregroundStyle(.primary)
 
@@ -1143,11 +1095,8 @@ private struct PromptWizardResponseStep: View {
                         .padding(.top, 12)
 
                     promptWizardEditorSubsection(
-                        title: localizedAppText("Provider", de: "Provider"),
-                        description: localizedAppText(
-                            "Override the default provider only when this prompt needs a different model stack.",
-                            de: "Überschreibe den Standard-Provider nur, wenn dieser Prompt einen anderen Modell-Stack braucht."
-                        )
+                        title: String(localized: "Provider"),
+                        description: String(localized: "Override the default provider only when this prompt needs a different model stack.")
                     ) {
                         providerSettingsContent
                     }
@@ -1155,11 +1104,8 @@ private struct PromptWizardResponseStep: View {
                     Divider()
 
                     promptWizardEditorSubsection(
-                        title: localizedAppText("Temperature", de: "Temperatur"),
-                        description: localizedAppText(
-                            "Keep this on the provider default unless this prompt needs a different creativity level.",
-                            de: "Lass dies beim Provider-Standard, außer dieser Prompt braucht ein anderes Kreativitätsniveau."
-                        )
+                        title: String(localized: "Temperature"),
+                        description: String(localized: "Keep this on the provider default unless this prompt needs a different creativity level.")
                     ) {
                         temperatureSettingsContent
                     }
@@ -1178,18 +1124,15 @@ private struct PromptWizardResponseStep: View {
         case .translate:
             VStack(alignment: .leading, spacing: 14) {
                 promptWizardEditorSubsection(
-                    title: localizedAppText("Mode", de: "Modus"),
-                    description: localizedAppText(
-                        "Choose whether this prompt always translates into one language or toggles between a fixed pair.",
-                        de: "Lege fest, ob dieser Prompt immer in eine Sprache übersetzt oder zwischen einem festen Paar wechselt."
-                    )
+                    title: String(localized: "Mode"),
+                    description: String(localized: "Choose whether this prompt always translates into one language or toggles between a fixed pair.")
                 ) {
                     Picker(
-                        localizedAppText("Mode", de: "Modus"),
+                        String(localized: "Mode"),
                         selection: translationModeChoiceBinding
                     ) {
-                        Text(localizedAppText("One Target", de: "Eine Zielsprache")).tag(PromptWizardTranslationChoice.direct)
-                        Text(localizedAppText("Two-Way Pair", de: "Zwei-Wege-Paar")).tag(PromptWizardTranslationChoice.alternating)
+                        Text(String(localized: "One Target")).tag(PromptWizardTranslationChoice.direct)
+                        Text(String(localized: "Two-Way Pair")).tag(PromptWizardTranslationChoice.alternating)
                     }
                     .pickerStyle(.segmented)
                     .controlSize(.large)
@@ -1198,27 +1141,24 @@ private struct PromptWizardResponseStep: View {
                 Divider()
 
                 promptWizardEditorSubsection(
-                    title: localizedAppText("Languages", de: "Sprachen"),
-                    description: localizedAppText(
-                        "Set the target language or the two fixed languages for the pair.",
-                        de: "Lege die Zielsprache oder die beiden festen Sprachen für das Paar fest."
-                    )
+                    title: String(localized: "Languages"),
+                    description: String(localized: "Set the target language or the two fixed languages for the pair.")
                 ) {
                     switch viewModel.wizardDraft.translationMode {
                     case .alternatingPair:
                         HStack(spacing: 14) {
                             promptWizardLanguagePicker(
-                                title: localizedAppText("Primary Language", de: "Primärsprache"),
+                                title: String(localized: "Primary Language"),
                                 selection: alternatingPrimaryLanguageBinding
                             )
                             promptWizardLanguagePicker(
-                                title: localizedAppText("Secondary Language", de: "Sekundärsprache"),
+                                title: String(localized: "Secondary Language"),
                                 selection: alternatingSecondaryLanguageBinding
                             )
                         }
                     case .direct, .none:
                         promptWizardLanguagePicker(
-                            title: localizedAppText("Target Language", de: "Zielsprache"),
+                            title: String(localized: "Target Language"),
                             selection: directTargetLanguageBinding
                         )
                     }
@@ -1227,10 +1167,10 @@ private struct PromptWizardResponseStep: View {
                 Divider()
 
                 promptWizardEditorSubsection(
-                    title: localizedAppText("Output Rules", de: "Ausgaberegeln")
+                    title: String(localized: "Output Rules")
                 ) {
                     Toggle(
-                        localizedAppText("Preserve formatting when possible", de: "Formatierung wenn möglich beibehalten"),
+                        String(localized: "Preserve formatting when possible"),
                         isOn: Binding(
                             get: { viewModel.wizardDraft.preserveFormatting },
                             set: { newValue in
@@ -1244,76 +1184,76 @@ private struct PromptWizardResponseStep: View {
             }
         case .rewrite:
             VStack(alignment: .leading, spacing: 14) {
-                promptWizardEditorSubsection(title: localizedAppText("Tone", de: "Ton")) {
+                promptWizardEditorSubsection(title: String(localized: "Tone")) {
                     promptWizardTonePicker(tone: toneBinding)
                 }
 
                 Divider()
 
-                promptWizardEditorSubsection(title: localizedAppText("Language", de: "Sprache")) {
+                promptWizardEditorSubsection(title: String(localized: "Language")) {
                     promptWizardLanguageModeSection(mode: languageChoiceBinding, targetLanguage: targetLanguageBinding)
                 }
 
                 Divider()
 
-                promptWizardEditorSubsection(title: localizedAppText("Output", de: "Ausgabe")) {
-                    Picker(localizedAppText("Output", de: "Ausgabe"), selection: rewriteFormatBinding) {
-                        Text(localizedAppText("Paragraph", de: "Absatz")).tag(PromptWizardRewriteFormat.paragraph)
-                        Text(localizedAppText("List", de: "Liste")).tag(PromptWizardRewriteFormat.list)
+                promptWizardEditorSubsection(title: String(localized: "Output")) {
+                    Picker(String(localized: "Output"), selection: rewriteFormatBinding) {
+                        Text(String(localized: "Paragraph")).tag(PromptWizardRewriteFormat.paragraph)
+                        Text(String(localized: "List")).tag(PromptWizardRewriteFormat.list)
                     }
                     .pickerStyle(.segmented)
                 }
             }
         case .replyEmail:
             VStack(alignment: .leading, spacing: 14) {
-                promptWizardEditorSubsection(title: localizedAppText("Mode", de: "Modus")) {
-                    Picker(localizedAppText("Mode", de: "Modus"), selection: replyModeBinding) {
-                        Text(localizedAppText("Reply", de: "Antwort")).tag(PromptWizardReplyMode.reply)
-                        Text(localizedAppText("Email", de: "E-Mail")).tag(PromptWizardReplyMode.email)
+                promptWizardEditorSubsection(title: String(localized: "Mode")) {
+                    Picker(String(localized: "Mode"), selection: replyModeBinding) {
+                        Text(String(localized: "Reply")).tag(PromptWizardReplyMode.reply)
+                        Text(String(localized: "Email")).tag(PromptWizardReplyMode.email)
                     }
                     .pickerStyle(.segmented)
                 }
 
                 Divider()
 
-                promptWizardEditorSubsection(title: localizedAppText("Tone", de: "Ton")) {
+                promptWizardEditorSubsection(title: String(localized: "Tone")) {
                     promptWizardTonePicker(tone: toneBinding)
                 }
 
                 Divider()
 
-                promptWizardEditorSubsection(title: localizedAppText("Length", de: "Länge")) {
-                    Picker(localizedAppText("Length", de: "Länge"), selection: responseLengthBinding) {
-                        Text(localizedAppText("Short", de: "Kurz")).tag(PromptWizardResponseLength.short)
-                        Text(localizedAppText("Balanced", de: "Ausgewogen")).tag(PromptWizardResponseLength.medium)
-                        Text(localizedAppText("Detailed", de: "Detailliert")).tag(PromptWizardResponseLength.detailed)
+                promptWizardEditorSubsection(title: String(localized: "Length")) {
+                    Picker(String(localized: "Length"), selection: responseLengthBinding) {
+                        Text(String(localized: "Short")).tag(PromptWizardResponseLength.short)
+                        Text(String(localized: "Balanced")).tag(PromptWizardResponseLength.medium)
+                        Text(String(localized: "Detailed")).tag(PromptWizardResponseLength.detailed)
                     }
                     .pickerStyle(.segmented)
                 }
 
                 Divider()
 
-                promptWizardEditorSubsection(title: localizedAppText("Language", de: "Sprache")) {
+                promptWizardEditorSubsection(title: String(localized: "Language")) {
                     promptWizardLanguageModeSection(mode: languageChoiceBinding, targetLanguage: targetLanguageBinding)
                 }
             }
         case .extract:
-            promptWizardEditorSubsection(title: localizedAppText("Output Format", de: "Ausgabeformat")) {
-                Picker(localizedAppText("Format", de: "Format"), selection: extractFormatBinding) {
-                    Text(localizedAppText("Checklist", de: "Checkliste")).tag(PromptWizardExtractFormat.checklist)
+            promptWizardEditorSubsection(title: String(localized: "Output Format")) {
+                Picker(String(localized: "Format"), selection: extractFormatBinding) {
+                    Text(String(localized: "Checklist")).tag(PromptWizardExtractFormat.checklist)
                     Text("JSON").tag(PromptWizardExtractFormat.json)
-                    Text(localizedAppText("Table", de: "Tabelle")).tag(PromptWizardExtractFormat.table)
-                    Text(localizedAppText("Key Points", de: "Kernpunkte")).tag(PromptWizardExtractFormat.keyPoints)
+                    Text(String(localized: "Table")).tag(PromptWizardExtractFormat.table)
+                    Text(String(localized: "Key Points")).tag(PromptWizardExtractFormat.keyPoints)
                 }
                 .pickerStyle(.segmented)
             }
         case .structure:
             VStack(alignment: .leading, spacing: 14) {
-                promptWizardEditorSubsection(title: localizedAppText("Output Format", de: "Ausgabeformat")) {
-                    Picker(localizedAppText("Format", de: "Format"), selection: structureFormatBinding) {
-                        Text(localizedAppText("Bullet List", de: "Bullet-Liste")).tag(PromptWizardStructureFormat.bulletList)
-                        Text(localizedAppText("Meeting Notes", de: "Meeting Notes")).tag(PromptWizardStructureFormat.meetingNotes)
-                        Text(localizedAppText("Table", de: "Tabelle")).tag(PromptWizardStructureFormat.table)
+                promptWizardEditorSubsection(title: String(localized: "Output Format")) {
+                    Picker(String(localized: "Format"), selection: structureFormatBinding) {
+                        Text(String(localized: "Bullet List")).tag(PromptWizardStructureFormat.bulletList)
+                        Text(String(localized: "Meeting Notes")).tag(PromptWizardStructureFormat.meetingNotes)
+                        Text(String(localized: "Table")).tag(PromptWizardStructureFormat.table)
                         Text("JSON").tag(PromptWizardStructureFormat.json)
                     }
                     .pickerStyle(.segmented)
@@ -1321,9 +1261,9 @@ private struct PromptWizardResponseStep: View {
 
                 Divider()
 
-                promptWizardEditorSubsection(title: localizedAppText("Output Rules", de: "Ausgaberegeln")) {
+                promptWizardEditorSubsection(title: String(localized: "Output Rules")) {
                     Toggle(
-                        localizedAppText("Add helpful headings when useful", de: "Hilfreiche Überschriften ergänzen"),
+                        String(localized: "Add helpful headings when useful"),
                         isOn: Binding(
                             get: { viewModel.wizardDraft.includeHeadings },
                             set: { newValue in
@@ -1337,7 +1277,7 @@ private struct PromptWizardResponseStep: View {
             }
         case .custom:
             VStack(alignment: .leading, spacing: 14) {
-                promptWizardEditorSubsection(title: localizedAppText("Goal", de: "Ziel")) {
+                promptWizardEditorSubsection(title: String(localized: "Goal")) {
                     TextEditor(text: Binding(
                         get: { viewModel.wizardDraft.customGoal },
                         set: { newValue in
@@ -1358,21 +1298,21 @@ private struct PromptWizardResponseStep: View {
 
                 Divider()
 
-                promptWizardEditorSubsection(title: localizedAppText("Tone", de: "Ton")) {
+                promptWizardEditorSubsection(title: String(localized: "Tone")) {
                     promptWizardTonePicker(tone: toneBinding)
                 }
 
                 Divider()
 
-                promptWizardEditorSubsection(title: localizedAppText("Language", de: "Sprache")) {
+                promptWizardEditorSubsection(title: String(localized: "Language")) {
                     promptWizardLanguageModeSection(mode: languageChoiceBinding, targetLanguage: targetLanguageBinding)
                 }
 
                 Divider()
 
-                promptWizardEditorSubsection(title: localizedAppText("Output Hint", de: "Ausgabehinweis")) {
+                promptWizardEditorSubsection(title: String(localized: "Output Hint")) {
                     TextField(
-                        localizedAppText("e.g. Return a short bullet list", de: "z. B. Gib eine kurze Bullet-Liste zurück"),
+                        String(localized: "e.g. Return a short bullet list"),
                         text: Binding(
                             get: { viewModel.wizardDraft.customOutputHint },
                             set: { newValue in
@@ -1392,7 +1332,7 @@ private struct PromptWizardResponseStep: View {
         let providers = processingService.availableProviders
 
         return VStack(alignment: .leading, spacing: 12) {
-            Text(localizedAppText("Provider", de: "Provider"))
+            Text(String(localized: "Provider"))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
 
@@ -1401,15 +1341,12 @@ private struct PromptWizardResponseStep: View {
                     Image(systemName: "puzzlepiece.extension")
                         .font(.system(size: 20))
                         .foregroundStyle(.secondary)
-                    Text(localizedAppText(
-                        "Install an LLM provider plugin such as Groq or OpenAI to use prompt actions.",
-                        de: "Installiere ein LLM-Provider-Plugin wie Groq oder OpenAI, um Prompt-Aktionen zu nutzen."
-                    ))
+                    Text(String(localized: "Install an LLM provider plugin such as Groq or OpenAI to use prompt actions."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
 
-                    Button(localizedAppText("Go to Integrations", de: "Zu Integrationen")) {
+                    Button(String(localized: "Go to Integrations")) {
                         viewModel.navigateToIntegrations = true
                     }
                     .buttonStyle(.link)
@@ -1418,34 +1355,28 @@ private struct PromptWizardResponseStep: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
             } else {
-                Picker(localizedAppText("Provider", de: "Provider"), selection: providerBinding) {
-                    Text(localizedAppText("Default", de: "Standard")).tag(nil as String?)
+                Picker(String(localized: "Provider"), selection: providerBinding) {
+                    Text(String(localized: "Default")).tag(nil as String?)
                     ForEach(providers, id: \.id) { provider in
                         Text(provider.displayName).tag(provider.id as String?)
                     }
                 }
 
-                Text(localizedAppText(
-                    "When left on Default, this prompt uses the provider selected above in Prompts settings.",
-                    de: "Bei Standard nutzt dieser Prompt den oben in den Prompt-Einstellungen gewählten Provider."
-                ))
+                Text(String(localized: "When left on Default, this prompt uses the provider selected above in Prompts settings."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
                 if let selectedId = viewModel.editProviderId {
                     let models = processingService.modelsForProvider(selectedId)
                     if !models.isEmpty {
-                        Picker(localizedAppText("Model", de: "Modell"), selection: cloudModelBinding) {
+                        Picker(String(localized: "Model"), selection: cloudModelBinding) {
                             ForEach(models, id: \.id) { model in
                                 Text(model.displayName).tag(model.id)
                             }
                         }
                     }
                 } else {
-                    Text(localizedAppText(
-                        "Uses the global default provider: \(processingService.displayName(for: processingService.selectedProviderId)).",
-                        de: "Verwendet den globalen Standard-Provider: \(processingService.displayName(for: processingService.selectedProviderId))."
-                    ))
+                    Text(String(localized: "Uses the global default provider: \(processingService.displayName(for: processingService.selectedProviderId))."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 }
@@ -1459,20 +1390,20 @@ private struct PromptWizardResponseStep: View {
         let supportedRange = viewModel.supportedTemperatureRange(for: effectiveProviderId)
 
         return VStack(alignment: .leading, spacing: 12) {
-            Text(localizedAppText("Temperature", de: "Temperatur"))
+            Text(String(localized: "Temperature"))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
 
-            Picker(localizedAppText("Who decides?", de: "Wer entscheidet?"), selection: temperatureModeBinding) {
-                Text(localizedAppText("Use my provider setting", de: "Meine Provider-Einstellung")).tag(PluginLLMTemperatureMode.inheritProviderSetting)
-                Text(localizedAppText("Use provider default", de: "Provider-Standard")).tag(PluginLLMTemperatureMode.providerDefault)
-                Text(localizedAppText("Set for this prompt", de: "Für diesen Prompt setzen")).tag(PluginLLMTemperatureMode.custom)
+            Picker(String(localized: "Who decides?"), selection: temperatureModeBinding) {
+                Text(String(localized: "Use my provider setting")).tag(PluginLLMTemperatureMode.inheritProviderSetting)
+                Text(String(localized: "Use provider default")).tag(PluginLLMTemperatureMode.providerDefault)
+                Text(String(localized: "Set for this prompt")).tag(PluginLLMTemperatureMode.custom)
             }
             .disabled(isAppleIntelligence)
 
             if viewModel.editTemperatureMode == .custom {
                 HStack {
-                    Text(localizedAppText("Temperature", de: "Temperatur"))
+                    Text(String(localized: "Temperature"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -1510,7 +1441,7 @@ private struct PromptWizardResponseStep: View {
         if let providerId = viewModel.editProviderId {
             items.append(processingService.displayName(for: providerId))
         } else {
-            items.append(localizedAppText("Default provider", de: "Standard-Provider"))
+            items.append(String(localized: "Default provider"))
         }
 
         if !viewModel.editCloudModel.isEmpty {
@@ -1523,14 +1454,11 @@ private struct PromptWizardResponseStep: View {
 
         switch viewModel.editTemperatureMode {
         case .inheritProviderSetting:
-            items.append(localizedAppText("Provider temperature", de: "Provider-Temperatur"))
+            items.append(String(localized: "Provider temperature"))
         case .providerDefault:
-            items.append(localizedAppText("Provider default temp", de: "Provider-Standardtemp"))
+            items.append(String(localized: "Provider default temp"))
         case .custom:
-            items.append(localizedAppText(
-                "Temp \(formattedTemperature)",
-                de: "Temp \(formattedTemperature)"
-            ))
+            items.append(String(localized: "Temp \(formattedTemperature)"))
         }
 
         return items.joined(separator: " • ")
@@ -1539,34 +1467,34 @@ private struct PromptWizardResponseStep: View {
     private var behaviorSectionTitle: String {
         switch viewModel.wizardDraft.goal {
         case .translate:
-            return localizedAppText("Translation Behavior", de: "Übersetzungsverhalten")
+            return String(localized: "Translation Behavior")
         case .rewrite:
-            return localizedAppText("Rewrite Behavior", de: "Umformulierungsverhalten")
+            return String(localized: "Rewrite Behavior")
         case .replyEmail:
-            return localizedAppText("Reply Behavior", de: "Antwortverhalten")
+            return String(localized: "Reply Behavior")
         case .extract:
-            return localizedAppText("Extraction Output", de: "Extraktionsausgabe")
+            return String(localized: "Extraction Output")
         case .structure:
-            return localizedAppText("Formatting Output", de: "Formatierungsausgabe")
+            return String(localized: "Formatting Output")
         case .custom:
-            return localizedAppText("Custom Behavior", de: "Benutzerdefiniertes Verhalten")
+            return String(localized: "Custom Behavior")
         }
     }
 
     private var behaviorSectionDescription: String {
         switch viewModel.wizardDraft.goal {
         case .translate:
-            return localizedAppText("Choose one target language or a two-way language pair.", de: "Wähle eine Zielsprache oder ein Zwei-Wege-Sprachpaar.")
+            return String(localized: "Choose one target language or a two-way language pair.")
         case .rewrite:
-            return localizedAppText("Pick tone, language behavior, and output form.", de: "Wähle Ton, Sprachverhalten und Ausgabeform.")
+            return String(localized: "Pick tone, language behavior, and output form.")
         case .replyEmail:
-            return localizedAppText("Decide whether this drafts a reply or a full email.", de: "Lege fest, ob eine Antwort oder eine vollständige E-Mail erstellt wird.")
+            return String(localized: "Decide whether this drafts a reply or a full email.")
         case .extract:
-            return localizedAppText("Define the structure for the extracted information.", de: "Definiere die Struktur für die extrahierten Informationen.")
+            return String(localized: "Define the structure for the extracted information.")
         case .structure:
-            return localizedAppText("Choose how the input should be reformatted.", de: "Wähle, wie der Input umformatiert werden soll.")
+            return String(localized: "Choose how the input should be reformatted.")
         case .custom:
-            return localizedAppText("Describe the job briefly, then add optional tone and output hints.", de: "Beschreibe die Aufgabe kurz und ergänze optionale Ton- und Ausgabehinweise.")
+            return String(localized: "Describe the job briefly, then add optional tone and output hints.")
         }
     }
 
@@ -1805,34 +1733,19 @@ private struct PromptWizardResponseStep: View {
 
     private func temperatureHelperText(isAppleIntelligence: Bool, effectiveProviderId: String) -> String {
         if isAppleIntelligence {
-            return localizedAppText(
-                "Temperature is not available for Apple Intelligence.",
-                de: "Temperatur ist für Apple Intelligence nicht verfügbar."
-            )
+            return String(localized: "Temperature is not available for Apple Intelligence.")
         }
 
         switch viewModel.editTemperatureMode {
         case .inheritProviderSetting:
-            return localizedAppText(
-                "Uses the temperature saved in this provider's settings.",
-                de: "Verwendet die in den Provider-Einstellungen gespeicherte Temperatur."
-            )
+            return String(localized: "Uses the temperature saved in this provider's settings.")
         case .providerDefault:
-            return localizedAppText(
-                "Ignores your saved provider setting and lets the provider use its own default behavior.",
-                de: "Ignoriert deine gespeicherte Provider-Einstellung und nutzt das Standardverhalten des Providers."
-            )
+            return String(localized: "Ignores your saved provider setting and lets the provider use its own default behavior.")
         case .custom:
             if effectiveProviderId == "Gemma 4 (MLX)" {
-                return localizedAppText(
-                    "Uses this value only for this prompt. Gemma 4 supports values from 0.0 to 1.0.",
-                    de: "Verwendet diesen Wert nur für diesen Prompt. Gemma 4 unterstützt Werte von 0.0 bis 1.0."
-                )
+                return String(localized: "Uses this value only for this prompt. Gemma 4 supports values from 0.0 to 1.0.")
             }
-            return localizedAppText(
-                "Uses this value only for this prompt and overrides the provider setting.",
-                de: "Verwendet diesen Wert nur für diesen Prompt und überschreibt die Provider-Einstellung."
-            )
+            return String(localized: "Uses this value only for this prompt and overrides the provider setting.")
         }
     }
 }
@@ -1847,24 +1760,21 @@ private struct PromptWizardReviewStep: View {
 
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(localizedAppText("Review & Advanced", de: "Review & Erweitert"))
+                Text(String(localized: "Review & Advanced"))
                     .font(.title3.weight(.semibold))
-                Text(localizedAppText(
-                    "Finalize the visible prompt details first. The raw system prompt and action target live in Advanced.",
-                    de: "Finalisiere zuerst die sichtbaren Prompt-Details. Roh-System-Prompt und Action-Ziel liegen unter Erweitert."
-                ))
+                Text(String(localized: "Finalize the visible prompt details first. The raw system prompt and action target live in Advanced."))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             }
 
             promptWizardCompactSection(
-                title: localizedAppText("Prompt Details", de: "Prompt-Details"),
-                description: localizedAppText("Set the final name, enabled state, icon, and list preview.", de: "Lege finalen Namen, Aktiv-Status, Icon und Listen-Vorschau fest.")
+                title: String(localized: "Prompt Details"),
+                description: String(localized: "Set the final name, enabled state, icon, and list preview.")
             ) {
                 VStack(alignment: .leading, spacing: 14) {
                     HStack(alignment: .center, spacing: 14) {
                         TextField(
-                            localizedAppText("Prompt Name", de: "Prompt-Name"),
+                            String(localized: "Prompt Name"),
                             text: Binding(
                                 get: { viewModel.currentPromptName },
                                 set: { viewModel.updateWizardName($0) }
@@ -1873,11 +1783,11 @@ private struct PromptWizardReviewStep: View {
                         .textFieldStyle(.roundedBorder)
 
                         HStack(spacing: 10) {
-                            Text(localizedAppText("Active", de: "Aktiv"))
+                            Text(String(localized: "Active"))
                                 .font(.subheadline.weight(.medium))
 
                             Toggle(
-                                localizedAppText("Active", de: "Aktiv"),
+                                String(localized: "Active"),
                                 isOn: Binding(
                                     get: { viewModel.editIsEnabled },
                                     set: { viewModel.setWizardEnabled($0) }
@@ -1918,12 +1828,12 @@ private struct PromptWizardReviewStep: View {
                         Spacer(minLength: 12)
 
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(localizedAppText("Icon", de: "Icon"))
+                            Text(String(localized: "Icon"))
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
 
                             Picker(
-                                localizedAppText("Icon", de: "Icon"),
+                                String(localized: "Icon"),
                                 selection: Binding(
                                     get: { viewModel.editIcon },
                                     set: { viewModel.setWizardIcon($0) }
@@ -1952,14 +1862,11 @@ private struct PromptWizardReviewStep: View {
                 } label: {
                     HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(localizedAppText("Advanced", de: "Erweitert"))
+                            Text(String(localized: "Advanced"))
                                 .font(.headline)
                                 .foregroundStyle(.primary)
 
-                            Text(localizedAppText(
-                                "System prompt editing and optional action target.",
-                                de: "Bearbeitung des System-Prompts und optionales Action-Ziel."
-                            ))
+                            Text(String(localized: "System prompt editing and optional action target."))
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                         }
@@ -1984,29 +1891,26 @@ private struct PromptWizardReviewStep: View {
                             .padding(.top, 12)
 
                         promptWizardEditorSubsection(
-                            title: localizedAppText("System Prompt", de: "System-Prompt"),
-                            description: localizedAppText("This is the final raw prompt that will be saved and executed.", de: "Das ist der finale Roh-Prompt, der gespeichert und ausgeführt wird.")
+                            title: String(localized: "System Prompt"),
+                            description: String(localized: "This is the final raw prompt that will be saved and executed.")
                         ) {
                             VStack(alignment: .leading, spacing: 12) {
                                 if viewModel.manualPromptOverride {
                                     HStack(spacing: 10) {
-                                        Label(localizedAppText("Manual override active", de: "Manueller Override aktiv"), systemImage: "pencil.and.outline")
+                                        Label(String(localized: "Manual override active"), systemImage: "pencil.and.outline")
                                             .font(.caption.weight(.semibold))
                                             .foregroundStyle(.orange)
 
                                         Spacer()
 
-                                        Button(localizedAppText("Regenerate from selections", de: "Aus Auswahl neu erzeugen")) {
+                                        Button(String(localized: "Regenerate from selections")) {
                                             viewModel.regeneratePromptFromWizardSelections()
                                         }
                                         .buttonStyle(.bordered)
                                         .controlSize(.small)
                                     }
                                 } else {
-                                    Label(localizedAppText(
-                                        "Changes in the wizard still regenerate this prompt automatically.",
-                                        de: "Änderungen im Wizard erzeugen diesen Prompt weiterhin automatisch neu."
-                                    ), systemImage: "wand.and.stars")
+                                    Label(String(localized: "Changes in the wizard still regenerate this prompt automatically."), systemImage: "wand.and.stars")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                 }
@@ -2030,31 +1934,25 @@ private struct PromptWizardReviewStep: View {
                             Divider()
 
                             promptWizardEditorSubsection(
-                                title: localizedAppText("Action Target", de: "Action-Ziel"),
-                                description: localizedAppText(
-                                    "Optional action target instead of direct text insertion.",
-                                    de: "Optionales Action-Ziel statt direktem Texteinsatz."
-                                )
+                                title: String(localized: "Action Target"),
+                                description: String(localized: "Optional action target instead of direct text insertion.")
                             ) {
                                 VStack(alignment: .leading, spacing: 10) {
                                     Picker(
-                                        localizedAppText("Target", de: "Ziel"),
+                                        String(localized: "Target"),
                                         selection: Binding(
                                             get: { viewModel.editTargetActionPluginId },
                                             set: { viewModel.setWizardTargetActionPluginId($0) }
                                         )
                                     ) {
-                                        Text(localizedAppText("Insert Text", de: "Text einfügen")).tag(nil as String?)
+                                        Text(String(localized: "Insert Text")).tag(nil as String?)
                                         ForEach(actionPlugins, id: \.actionId) { plugin in
                                             Label(plugin.actionName, systemImage: plugin.actionIcon)
                                                 .tag(plugin.actionId as String?)
                                         }
                                     }
 
-                                    Text(localizedAppText(
-                                        "Leave this on Insert Text unless the result should trigger a plugin action.",
-                                        de: "Lass dies auf Text einfügen, wenn das Ergebnis keine Plugin-Aktion auslösen soll."
-                                    ))
+                                    Text(String(localized: "Leave this on Insert Text unless the result should trigger a plugin action."))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                 }
@@ -2073,15 +1971,15 @@ private struct PromptWizardReviewStep: View {
     private var reviewAdvancedSummary: String {
         var parts: [String] = [
             viewModel.manualPromptOverride
-                ? localizedAppText("Manual prompt", de: "Manueller Prompt")
-                : localizedAppText("Auto prompt", de: "Auto-Prompt")
+                ? String(localized: "Manual prompt")
+                : String(localized: "Auto prompt")
         ]
 
         if let targetActionPluginId = viewModel.editTargetActionPluginId,
            let plugin = PluginManager.shared.actionPlugin(for: targetActionPluginId) {
             parts.append(plugin.actionName)
         } else {
-            parts.append(localizedAppText("Insert Text", de: "Text einfügen"))
+            parts.append(String(localized: "Insert Text"))
         }
 
         return parts.joined(separator: " • ")
@@ -2129,17 +2027,17 @@ private func promptWizardLanguagePicker(title: String, selection: Binding<String
 
 private func promptWizardTonePicker(tone: Binding<PromptWizardTone>) -> some View {
     VStack(alignment: .leading, spacing: 6) {
-        Text(localizedAppText("Tone", de: "Ton"))
+        Text(String(localized: "Tone"))
             .font(.caption.weight(.semibold))
             .foregroundStyle(.secondary)
 
-        Picker(localizedAppText("Tone", de: "Ton"), selection: tone) {
-            Text(localizedAppText("Neutral", de: "Neutral")).tag(PromptWizardTone.neutral)
-            Text(localizedAppText("Formal", de: "Formal")).tag(PromptWizardTone.formal)
-            Text(localizedAppText("Friendly", de: "Freundlich")).tag(PromptWizardTone.friendly)
-            Text(localizedAppText("Concise", de: "Knapp")).tag(PromptWizardTone.concise)
-            Text(localizedAppText("Clear", de: "Klar")).tag(PromptWizardTone.clear)
-            Text(localizedAppText("Professional", de: "Professionell")).tag(PromptWizardTone.professional)
+        Picker(String(localized: "Tone"), selection: tone) {
+            Text(String(localized: "Neutral")).tag(PromptWizardTone.neutral)
+            Text(String(localized: "Formal")).tag(PromptWizardTone.formal)
+            Text(String(localized: "Friendly")).tag(PromptWizardTone.friendly)
+            Text(String(localized: "Concise")).tag(PromptWizardTone.concise)
+            Text(String(localized: "Clear")).tag(PromptWizardTone.clear)
+            Text(String(localized: "Professional")).tag(PromptWizardTone.professional)
         }
     }
 }
@@ -2149,15 +2047,15 @@ private func promptWizardLanguageModeSection(
     targetLanguage: Binding<String>
 ) -> some View {
     VStack(alignment: .leading, spacing: 14) {
-        Picker(localizedAppText("Language", de: "Sprache"), selection: mode) {
-            Text(localizedAppText("Same as Input", de: "Wie Input")).tag(PromptWizardLanguageChoice.sameAsInput)
-            Text(localizedAppText("Target Language", de: "Zielsprache")).tag(PromptWizardLanguageChoice.targetLanguage)
+        Picker(String(localized: "Language"), selection: mode) {
+            Text(String(localized: "Same as Input")).tag(PromptWizardLanguageChoice.sameAsInput)
+            Text(String(localized: "Target Language")).tag(PromptWizardLanguageChoice.targetLanguage)
         }
         .pickerStyle(.segmented)
 
         if mode.wrappedValue == .targetLanguage {
             promptWizardLanguagePicker(
-                title: localizedAppText("Target Language", de: "Zielsprache"),
+                title: String(localized: "Target Language"),
                 selection: targetLanguage
             )
         }
@@ -2252,37 +2150,37 @@ private func promptWizardGroupedListSurface(cornerRadius: CGFloat) -> some View 
 private func promptWizardIconDisplayName(for icon: String) -> String {
     switch icon {
     case "sparkles":
-        return localizedAppText("Sparkles", de: "Funkeln")
+        return String(localized: "Sparkles")
     case "globe":
-        return localizedAppText("Translate", de: "Übersetzen")
+        return String(localized: "Translate")
     case "wand.and.stars":
-        return localizedAppText("Magic", de: "Magie")
+        return String(localized: "Magic")
     case "arrowshape.turn.up.left":
-        return localizedAppText("Reply", de: "Antwort")
+        return String(localized: "Reply")
     case "envelope":
-        return localizedAppText("Email", de: "E-Mail")
+        return String(localized: "Email")
     case "envelope.badge":
-        return localizedAppText("Email Action", de: "E-Mail-Aktion")
+        return String(localized: "Email Action")
     case "list.bullet":
-        return localizedAppText("List", de: "Liste")
+        return String(localized: "List")
     case "checklist":
-        return localizedAppText("Checklist", de: "Checkliste")
+        return String(localized: "Checklist")
     case "tablecells":
-        return localizedAppText("Table", de: "Tabelle")
+        return String(localized: "Table")
     case "curlybraces":
-        return localizedAppText("JSON", de: "JSON")
+        return String(localized: "JSON")
     case "doc.text.magnifyingglass":
-        return localizedAppText("Extract", de: "Extrahieren")
+        return String(localized: "Extract")
     case "textformat.abc":
-        return localizedAppText("Rewrite", de: "Umschreiben")
+        return String(localized: "Rewrite")
     case "text.quote":
-        return localizedAppText("Quote", de: "Zitat")
+        return String(localized: "Quote")
     case "pencil":
-        return localizedAppText("Draft", de: "Entwurf")
+        return String(localized: "Draft")
     case "lightbulb":
-        return localizedAppText("Idea", de: "Idee")
+        return String(localized: "Idea")
     case "character.textbox":
-        return localizedAppText("Text Box", de: "Textfeld")
+        return String(localized: "Text Box")
     default:
         return icon
     }

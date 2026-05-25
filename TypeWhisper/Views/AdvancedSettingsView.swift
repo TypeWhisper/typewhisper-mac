@@ -24,20 +24,17 @@ struct AdvancedSettingsView: View {
     var body: some View {
         Form {
             // MARK: - Support Diagnostics
-            Section(localizedAppText("Support Diagnostics", de: "Support-Diagnose")) {
+            Section(String(localized: "Support Diagnostics")) {
                 Button {
                     exportDiagnostics()
                 } label: {
                     Label(
-                        localizedAppText("Export Diagnostics", de: "Diagnose exportieren"),
+                        String(localized: "Export Diagnostics"),
                         systemImage: "square.and.arrow.up"
                     )
                 }
 
-                Text(localizedAppText(
-                    "Creates a JSON support report with app, system, permission, plugin, settings and audio device diagnostics.",
-                    de: "Erstellt einen JSON-Supportbericht mit App-, System-, Berechtigungs-, Plugin-, Einstellungs- und Audiogeräte-Diagnose."
-                ))
+                Text(String(localized: "Creates a JSON support report with app, system, permission, plugin, settings and audio device diagnostics."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             }
@@ -372,7 +369,7 @@ struct AdvancedSettingsView: View {
         .onReceive(pluginManager.$loadedPlugins) { _ in
             syncSpeechFeedbackAvailability()
         }
-        .alert(localizedAppText("Export Failed", de: "Export fehlgeschlagen"), isPresented: $showDiagnosticsExportError) {
+        .alert(String(localized: "Export Failed"), isPresented: $showDiagnosticsExportError) {
             Button("OK", role: .cancel) {}
         } message: {
             Text(diagnosticsExportErrorMessage)
@@ -436,7 +433,7 @@ struct AdvancedSettingsView: View {
 
     private func exportDiagnostics() {
         let panel = NSSavePanel()
-        panel.title = localizedAppText("Export Diagnostics", de: "Diagnose exportieren")
+        panel.title = String(localized: "Export Diagnostics")
         panel.allowedContentTypes = [.json]
         panel.canCreateDirectories = true
         panel.nameFieldStringValue = diagnosticsFilename()
