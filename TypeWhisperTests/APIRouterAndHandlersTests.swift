@@ -5566,6 +5566,127 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testSuppressingEventTapMaskOnlyIncludesMouseEventsWhenRequested() {
+        let keyboardOnlyMask = HotkeyService.suppressingEventTapMaskForTesting(includeMouse: false)
+
+        XCTAssertNotEqual(keyboardOnlyMask & eventMask(for: .keyDown), 0)
+        XCTAssertNotEqual(keyboardOnlyMask & eventMask(for: .keyUp), 0)
+        XCTAssertNotEqual(keyboardOnlyMask & eventMask(for: .flagsChanged), 0)
+        XCTAssertEqual(keyboardOnlyMask & eventMask(for: .otherMouseDown), 0)
+        XCTAssertEqual(keyboardOnlyMask & eventMask(for: .otherMouseUp), 0)
+
+        let mouseAwareMask = HotkeyService.suppressingEventTapMaskForTesting(includeMouse: true)
+
+        XCTAssertNotEqual(mouseAwareMask & eventMask(for: .keyDown), 0)
+        XCTAssertNotEqual(mouseAwareMask & eventMask(for: .keyUp), 0)
+        XCTAssertNotEqual(mouseAwareMask & eventMask(for: .flagsChanged), 0)
+        XCTAssertNotEqual(mouseAwareMask & eventMask(for: .otherMouseDown), 0)
+        XCTAssertNotEqual(mouseAwareMask & eventMask(for: .otherMouseUp), 0)
+    }
+
+    @MainActor
+    func testMiddleMousePassesThroughWhenNoMouseHotkeyIsBound() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.setHotkeyForTesting(spaceHotkey(), for: .toggle)
+
+        var startCount = 0
+        service.onDictationStart = { _ in
+            startCount += 1
+        }
+
+        let middleMouseDown = try makeOtherMouseEvent(buttonNumber: 2, isDown: true)
+
+        XCTAssertFalse(service.needsMouseEventMonitoringForTesting())
+        XCTAssertFalse(service.needsSuppressingMouseEventTapForTesting())
+        XCTAssertFalse(service.processEventForTesting(middleMouseDown, source: .eventTap))
+        XCTAssertEqual(startCount, 0)
+    }
+
+    @MainActor
+    func testMiddleMousePassesThroughWhenDifferentMouseHotkeyIsBound() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.setHotkeyForTesting(UnifiedHotkey(mouseButton: 3), for: .toggle)
+
+        var startCount = 0
+        service.onDictationStart = { _ in
+            startCount += 1
+        }
+
+        let middleMouseDown = try makeOtherMouseEvent(buttonNumber: 2, isDown: true)
+
+        XCTAssertTrue(service.needsMouseEventMonitoringForTesting())
+        XCTAssertTrue(service.needsSuppressingMouseEventTapForTesting())
+        XCTAssertFalse(service.processEventForTesting(middleMouseDown, source: .eventTap))
+        XCTAssertEqual(startCount, 0)
+    }
+
+    @MainActor
+    func testMatchingMiddleMouseHotkeyDispatchesWithoutSuppressingClick() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.setHotkeyForTesting(UnifiedHotkey(mouseButton: 2), for: .toggle)
+
+        var startCount = 0
+        service.onDictationStart = { _ in
+            startCount += 1
+        }
+
+        let middleMouseDown = try makeOtherMouseEvent(buttonNumber: 2, isDown: true)
+        let middleMouseUp = try makeOtherMouseEvent(buttonNumber: 2, isDown: false)
+
+        XCTAssertTrue(service.needsMouseEventMonitoringForTesting())
+        XCTAssertFalse(service.needsSuppressingMouseEventTapForTesting())
+        XCTAssertFalse(service.processEventForTesting(middleMouseDown, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+        XCTAssertFalse(service.processEventForTesting(middleMouseUp, source: .monitor))
+    }
+
+    @MainActor
+    func testMiddleMouseHotkeyPassesThroughEvenWhenSideMouseHotkeyUsesSuppressingTap() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.setHotkeysForTesting([
+            UnifiedHotkey(mouseButton: 2),
+            UnifiedHotkey(mouseButton: 3)
+        ], for: .toggle)
+
+        var startCount = 0
+        service.onDictationStart = { _ in
+            startCount += 1
+        }
+
+        let middleMouseDown = try makeOtherMouseEvent(buttonNumber: 2, isDown: true)
+
+        XCTAssertTrue(service.needsMouseEventMonitoringForTesting())
+        XCTAssertTrue(service.needsSuppressingMouseEventTapForTesting())
+        XCTAssertFalse(service.processEventForTesting(middleMouseDown, source: .eventTap))
+        XCTAssertEqual(startCount, 1)
+    }
+
+    @MainActor
+    func testMatchingSideMouseHotkeyDispatchesAndSuppressesClick() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.setHotkeyForTesting(UnifiedHotkey(mouseButton: 3), for: .toggle)
+
+        var startCount = 0
+        service.onDictationStart = { _ in
+            startCount += 1
+        }
+
+        let sideMouseDown = try makeOtherMouseEvent(buttonNumber: 3, isDown: true)
+        let sideMouseUp = try makeOtherMouseEvent(buttonNumber: 3, isDown: false)
+
+        XCTAssertTrue(service.needsMouseEventMonitoringForTesting())
+        XCTAssertTrue(service.needsSuppressingMouseEventTapForTesting())
+        XCTAssertTrue(service.processEventForTesting(sideMouseDown, source: .eventTap))
+        XCTAssertEqual(startCount, 1)
+        XCTAssertTrue(service.processEventForTesting(sideMouseUp, source: .eventTap))
+    }
+
+    @MainActor
     func testPushToTalkStartCallbackIncludesRequestTimestamp() throws {
         let service = HotkeyService()
         service.suspendMonitoring()
@@ -6703,6 +6824,24 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         )
         event.flags = flags
         return try XCTUnwrap(NSEvent(cgEvent: event))
+    }
+
+    private func makeOtherMouseEvent(buttonNumber: UInt32, isDown: Bool) throws -> NSEvent {
+        let eventType: CGEventType = isDown ? .otherMouseDown : .otherMouseUp
+        let button = try XCTUnwrap(CGMouseButton(rawValue: buttonNumber))
+        let event = try XCTUnwrap(
+            CGEvent(
+                mouseEventSource: nil,
+                mouseType: eventType,
+                mouseCursorPosition: .zero,
+                mouseButton: button
+            )
+        )
+        return try XCTUnwrap(NSEvent(cgEvent: event))
+    }
+
+    private func eventMask(for type: CGEventType) -> CGEventMask {
+        CGEventMask(1) << type.rawValue
     }
 
     private func makeFlagsChangedEvent(

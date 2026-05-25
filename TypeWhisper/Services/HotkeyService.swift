@@ -479,27 +479,50 @@ final class HotkeyService: ObservableObject {
 
     private func setupMonitor() {
         tearDownMonitor()
+        let includeMouse = needsMouseEventMonitoring
 
         guard accessibilityTrustedProvider() else {
             logger.info("Accessibility permission not granted, installing local hotkey monitor only")
-            installLocalEventMonitor()
+            installLocalEventMonitor(includeMouse: includeMouse)
             return
         }
 
         // Try CGEventTap first - it can suppress hotkey events from reaching other apps
-        if setupEventTap() {
+        if setupEventTap(includeMouse: needsSuppressingMouseEventTap) {
             logger.info("Using tail-appended CGEventTap for hotkey monitoring with NSEvent compatibility fallback")
-            installEventMonitors(includeMouse: false)
+            installEventMonitors(includeMouse: includeMouse)
             return
         }
 
         // Fallback: NSEvent monitors (no event suppression)
         logger.info("CGEventTap unavailable, falling back to NSEvent monitors (hotkey events will pass through)")
-        installEventMonitors(includeMouse: true)
+        installEventMonitors(includeMouse: includeMouse)
     }
 
-    private func installLocalEventMonitor() {
-        let mask: NSEvent.EventTypeMask = [.flagsChanged, .keyDown, .keyUp]
+    private var needsMouseEventMonitoring: Bool {
+        slots.values.contains { states in
+            states.contains { $0.hotkey?.mouseButton != nil }
+        } || workflowSlots.values.contains { states in
+            states.contains { $0.hotkey.mouseButton != nil }
+        }
+    }
+
+    private var needsSuppressingMouseEventTap: Bool {
+        slots.values.contains { states in
+            states.contains { state in
+                guard let button = state.hotkey?.mouseButton else { return false }
+                return Self.shouldSuppressMouseButtonHotkey(button)
+            }
+        } || workflowSlots.values.contains { states in
+            states.contains { state in
+                guard let button = state.hotkey.mouseButton else { return false }
+                return Self.shouldSuppressMouseButtonHotkey(button)
+            }
+        }
+    }
+
+    private func installLocalEventMonitor(includeMouse: Bool) {
+        let mask = eventMonitorMask(includeMouse: includeMouse)
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
             _ = self?.handleEvent(event, source: .monitor)
             return event
@@ -507,11 +530,7 @@ final class HotkeyService: ObservableObject {
     }
 
     private func installEventMonitors(includeMouse: Bool) {
-        var mask: NSEvent.EventTypeMask = [.flagsChanged, .keyDown, .keyUp]
-        if includeMouse {
-            mask.insert(.otherMouseDown)
-            mask.insert(.otherMouseUp)
-        }
+        let mask = eventMonitorMask(includeMouse: includeMouse)
 
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
             _ = self?.handleEvent(event, source: .monitor)
@@ -521,6 +540,15 @@ final class HotkeyService: ObservableObject {
             _ = self?.handleEvent(event, source: .monitor)
             return event
         }
+    }
+
+    private func eventMonitorMask(includeMouse: Bool) -> NSEvent.EventTypeMask {
+        var mask: NSEvent.EventTypeMask = [.flagsChanged, .keyDown, .keyUp]
+        if includeMouse {
+            mask.insert(.otherMouseDown)
+            mask.insert(.otherMouseUp)
+        }
+        return mask
     }
 
     private func tearDownMonitor() {
@@ -556,13 +584,7 @@ final class HotkeyService: ObservableObject {
 
     /// Creates a CGEventTap to intercept and suppress hotkey events before they reach other apps.
     /// Requires Accessibility permission. Returns true if the tap was successfully created.
-    private func setupEventTap() -> Bool {
-        let eventMask: CGEventMask = (1 << CGEventType.keyDown.rawValue)
-            | (1 << CGEventType.keyUp.rawValue)
-            | (1 << CGEventType.flagsChanged.rawValue)
-            | (1 << CGEventType.otherMouseDown.rawValue)
-            | (1 << CGEventType.otherMouseUp.rawValue)
-
+    private func setupEventTap(includeMouse: Bool) -> Bool {
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
 
         // @convention(c) callback - must not capture context. Uses userInfo to access HotkeyService.
@@ -590,7 +612,7 @@ final class HotkeyService: ObservableObject {
             tap: .cgSessionEventTap,
             place: .tailAppendEventTap,
             options: .defaultTap,
-            eventsOfInterest: eventMask,
+            eventsOfInterest: Self.suppressingEventTapMask(includeMouse: includeMouse),
             callback: callback,
             userInfo: selfPtr
         ) else {
@@ -603,6 +625,24 @@ final class HotkeyService: ObservableObject {
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
         return true
+    }
+
+    private nonisolated static func suppressingEventTapMask(includeMouse: Bool) -> CGEventMask {
+        var mask: CGEventMask =
+            (CGEventMask(1) << CGEventType.keyDown.rawValue)
+            | (CGEventMask(1) << CGEventType.keyUp.rawValue)
+            | (CGEventMask(1) << CGEventType.flagsChanged.rawValue)
+
+        if includeMouse {
+            mask |= (CGEventMask(1) << CGEventType.otherMouseDown.rawValue)
+            mask |= (CGEventMask(1) << CGEventType.otherMouseUp.rawValue)
+        }
+
+        return mask
+    }
+
+    private nonisolated static func shouldSuppressMouseButtonHotkey(_ button: UInt16) -> Bool {
+        button != 2
     }
 
     private func reenableEventTapAfterSystemDisable() {
@@ -943,6 +983,18 @@ final class HotkeyService: ObservableObject {
     func processEventForTesting(_ event: NSEvent, source: HotkeyEventSource) -> Bool {
         handleEvent(event, source: source)
     }
+
+    func needsMouseEventMonitoringForTesting() -> Bool {
+        needsMouseEventMonitoring
+    }
+
+    func needsSuppressingMouseEventTapForTesting() -> Bool {
+        needsSuppressingMouseEventTap
+    }
+
+    static func suppressingEventTapMaskForTesting(includeMouse: Bool = false) -> CGEventMask {
+        suppressingEventTapMask(includeMouse: includeMouse)
+    }
 #endif
 
     private enum KeyEventResult {
@@ -967,37 +1019,38 @@ final class HotkeyService: ObservableObject {
             guard let button = hotkey.mouseButton, event.buttonNumber == Int(button) else {
                 return (false, false, false)
             }
+            let shouldSuppress = Self.shouldSuppressMouseButtonHotkey(button)
 
             let isDown = event.type == .otherMouseDown
             let wasDown = state.mouseButtonWasDown
 
             if isDown && !wasDown {
                 state.mouseButtonWasDown = true
-                guard hotkey.isDoubleTap else { return (true, false, true) }
+                guard hotkey.isDoubleTap else { return (true, false, shouldSuppress) }
                 if state.tapCount == 1,
                    let lastUp = state.lastTapUpTime,
                    Date().timeIntervalSince(lastUp) < Self.doubleTapThreshold {
                     state.tapCount = 2
                     state.lastTapUpTime = nil
-                    return (true, false, true)
+                    return (true, false, shouldSuppress)
                 } else {
                     state.tapCount = 0
                     state.lastTapUpTime = nil
-                    return (false, false, true)
+                    return (false, false, shouldSuppress)
                 }
             } else if !isDown && wasDown {
                 state.mouseButtonWasDown = false
-                guard hotkey.isDoubleTap else { return (false, true, true) }
+                guard hotkey.isDoubleTap else { return (false, true, shouldSuppress) }
                 if state.tapCount == 2 {
                     state.tapCount = 0
-                    return (false, true, true)
+                    return (false, true, shouldSuppress)
                 } else {
                     state.tapCount = 1
                     state.lastTapUpTime = Date()
-                    return (false, false, true)
+                    return (false, false, shouldSuppress)
                 }
             }
-            return (false, false, false)
+            return (false, false, shouldSuppress)
         }
 
         // Fn hotkeys can run in two modes:
