@@ -23,4 +23,49 @@ final class IndicatorTranscriptPreviewSizingTests: XCTestCase {
         XCTAssertEqual(DictationViewModel.indicatorTranscriptPreviewFontSize(for: .notch, offset: offset), 16)
         XCTAssertEqual(DictationViewModel.indicatorTranscriptPreviewFontSize(for: .overlay, offset: offset), 17)
     }
+
+    func testOverlayTranscriptPreviewExpandsForRecordingPartialText() {
+        let state = OverlayTranscriptPreviewState(
+            isRecording: true,
+            previewEnabled: true,
+            isRecorder: false,
+            externalStreamingDisplayCount: 0,
+            partialText: "Hello",
+            textExpanded: false
+        )
+
+        XCTAssertTrue(state.hasTranscriptSection)
+        XCTAssertTrue(state.shouldExpandForCurrentText)
+    }
+
+    func testOverlayTranscriptPreviewCollapsesWhenDisabled() {
+        let state = OverlayTranscriptPreviewState(
+            isRecording: true,
+            previewEnabled: false,
+            isRecorder: false,
+            externalStreamingDisplayCount: 0,
+            partialText: "Hello",
+            textExpanded: false
+        )
+
+        XCTAssertFalse(state.showTranscriptPreview)
+        XCTAssertFalse(state.hasTranscriptSection)
+        XCTAssertFalse(state.shouldExpandForCurrentText)
+    }
+
+    func testOverlayTranscriptPreviewSuppressesWhenExternalStreamingDisplayIsActive() {
+        let state = OverlayTranscriptPreviewState(
+            isRecording: true,
+            previewEnabled: true,
+            isRecorder: false,
+            externalStreamingDisplayCount: 1,
+            partialText: "Hello",
+            textExpanded: false
+        )
+
+        XCTAssertTrue(state.suppressStreamingText)
+        XCTAssertFalse(state.showTranscriptPreview)
+        XCTAssertFalse(state.hasTranscriptSection)
+        XCTAssertFalse(state.shouldExpandForCurrentText)
+    }
 }

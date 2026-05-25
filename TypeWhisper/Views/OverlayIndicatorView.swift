@@ -1,5 +1,34 @@
 import SwiftUI
 
+struct OverlayTranscriptPreviewState: Equatable {
+    let isRecording: Bool
+    let previewEnabled: Bool
+    let isRecorder: Bool
+    let externalStreamingDisplayCount: Int
+    let partialText: String
+    let textExpanded: Bool
+
+    var suppressStreamingText: Bool {
+        !isRecorder && externalStreamingDisplayCount > 0
+    }
+
+    var showTranscriptPreview: Bool {
+        previewEnabled && !suppressStreamingText
+    }
+
+    var hasTranscriptSection: Bool {
+        isRecording && showTranscriptPreview
+    }
+
+    var transcriptBodyVisible: Bool {
+        hasTranscriptSection && textExpanded
+    }
+
+    var shouldExpandForCurrentText: Bool {
+        hasTranscriptSection && !partialText.isEmpty && !textExpanded
+    }
+}
+
 /// Pill-shaped overlay indicator that appears centered on the screen.
 /// Supports top and bottom positioning.
 struct OverlayIndicatorView: View {
@@ -16,10 +45,6 @@ struct OverlayIndicatorView: View {
         IndicatorPresentationData.make(dictation: viewModel, recorder: recorder)
     }
 
-    private var suppressStreamingText: Bool {
-        !presentation.isRecorder && presentation.externalStreamingDisplayCount > 0
-    }
-
     private var hasActionFeedback: Bool {
         presentation.state == .inserting && presentation.actionFeedbackMessage != nil
     }
@@ -28,17 +53,32 @@ struct OverlayIndicatorView: View {
         presentation.state == .recording && presentation.recordingCancelWarningMessage != nil
     }
 
-    private var showTranscriptPreview: Bool {
-        viewModel.indicatorTranscriptPreviewEnabled && !suppressStreamingText
+    private var transcriptPreviewState: OverlayTranscriptPreviewState {
+        OverlayTranscriptPreviewState(
+            isRecording: presentation.state == .recording,
+            previewEnabled: viewModel.indicatorTranscriptPreviewEnabled,
+            isRecorder: presentation.isRecorder,
+            externalStreamingDisplayCount: presentation.externalStreamingDisplayCount,
+            partialText: presentation.partialText,
+            textExpanded: textExpanded
+        )
     }
 
-    private var isExpanded: Bool {
-        textExpanded || hasActionFeedback || hasRecordingCancelWarning
+    private var showTranscriptPreview: Bool {
+        transcriptPreviewState.showTranscriptPreview
+    }
+
+    private var hasTranscriptSection: Bool {
+        transcriptPreviewState.hasTranscriptSection
+    }
+
+    private var transcriptBodyVisible: Bool {
+        transcriptPreviewState.transcriptBodyVisible
     }
 
     private var currentWidth: CGFloat {
         if hasRecordingCancelWarning { return max(closedWidth, 340) }
-        if textExpanded { return max(closedWidth, 400) }
+        if transcriptBodyVisible { return max(closedWidth, 400) }
         if hasActionFeedback { return max(closedWidth, 340) }
         return closedWidth
     }
@@ -81,29 +121,33 @@ struct OverlayIndicatorView: View {
         .animation(.easeInOut(duration: 0.3), value: textExpanded)
         .animation(.easeInOut(duration: 0.2), value: presentation.state)
         .animation(.easeOut(duration: 0.08), value: presentation.audioLevel)
+        .onChange(of: presentation.partialText) {
+            expandTranscriptPreviewIfNeeded()
+        }
         .onChange(of: presentation.state) {
             if presentation.state == .recording {
                 withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
                     dotPulse = true
                 }
+                expandTranscriptPreviewIfNeeded()
             } else {
                 dotPulse = false
                 textExpanded = false
             }
         }
-        .onChange(of: suppressStreamingText) {
+        .onChange(of: transcriptPreviewState.suppressStreamingText) {
             if !showTranscriptPreview {
                 withAnimation(.easeInOut(duration: 0.3)) {
                     textExpanded = false
                 }
+            } else {
+                expandTranscriptPreviewIfNeeded()
             }
         }
         .onChange(of: viewModel.indicatorTranscriptPreviewEnabled) {
-            if showTranscriptPreview, presentation.state == .recording, !presentation.partialText.isEmpty {
-                withAnimation(.easeOut(duration: 0.25)) {
-                    textExpanded = true
-                }
-            } else if !showTranscriptPreview {
+            if showTranscriptPreview {
+                expandTranscriptPreviewIfNeeded()
+            } else {
                 withAnimation(.easeInOut(duration: 0.3)) {
                     textExpanded = false
                 }
@@ -112,6 +156,13 @@ struct OverlayIndicatorView: View {
         .animation(.easeInOut(duration: 1.0), value: dotPulse)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
+    }
+
+    private func expandTranscriptPreviewIfNeeded() {
+        guard transcriptPreviewState.shouldExpandForCurrentText else { return }
+        withAnimation(.easeOut(duration: 0.25)) {
+            textExpanded = true
+        }
     }
 
     private var accessibilityLabel: String {
@@ -154,7 +205,7 @@ struct OverlayIndicatorView: View {
             )
         } else if isTop {
             // Top position: text expands downward, action feedback below text
-            if presentation.state == .recording, showTranscriptPreview {
+            if hasTranscriptSection {
                 IndicatorExpandableText(
                     text: presentation.partialText,
                     fontSize: transcriptFontSize,
@@ -162,13 +213,6 @@ struct OverlayIndicatorView: View {
                     expanded: textExpanded,
                     contentPadding: contentPadding
                 )
-                .onChange(of: presentation.partialText) {
-                    if showTranscriptPreview, !presentation.partialText.isEmpty, !textExpanded {
-                        withAnimation(.easeOut(duration: 0.25)) {
-                            textExpanded = true
-                        }
-                    }
-                }
             }
 
             if hasActionFeedback {
@@ -194,7 +238,7 @@ struct OverlayIndicatorView: View {
                 Divider().background(Color.white.opacity(0.1))
             }
 
-            if presentation.state == .recording, showTranscriptPreview {
+            if hasTranscriptSection {
                 IndicatorExpandableText(
                     text: presentation.partialText,
                     fontSize: transcriptFontSize,
@@ -202,13 +246,6 @@ struct OverlayIndicatorView: View {
                     expanded: textExpanded,
                     contentPadding: contentPadding
                 )
-                .onChange(of: presentation.partialText) {
-                    if showTranscriptPreview, !presentation.partialText.isEmpty, !textExpanded {
-                        withAnimation(.easeOut(duration: 0.25)) {
-                            textExpanded = true
-                        }
-                    }
-                }
             }
         }
     }

@@ -65,6 +65,7 @@
 		C2300000000000000000000F /* SpeechAnalyzerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000160 /* SpeechAnalyzerPlugin.swift */; };
 		C23000000000000000000010 /* DeepgramPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000200 /* DeepgramPlugin.swift */; };
 		2F4D6A8B0C1E3F5A7B9D2C4E /* DictationViewModelIndicatorSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F4D6A8B0C1E3F5A7B9D2C4F /* DictationViewModelIndicatorSettingsTests.swift */; };
+		2F4D6A8B0C1E3F5A7B9D2C50 /* IndicatorTranscriptPreviewSizingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F4D6A8B0C1E3F5A7B9D2C51 /* IndicatorTranscriptPreviewSizingTests.swift */; };
 		91B4D7E2C5A809F1632E4B7C /* PluginRegistryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B4D7E2C5A809F1632E4B7D /* PluginRegistryServiceTests.swift */; };
 		545000000000000000000002 /* SetupWizardRecommendationAvailabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 545000000000000000000001 /* SetupWizardRecommendationAvailabilityTests.swift */; };
 		91B4D7E2C5A809F1632E4B7E /* StreamingHandlerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B4D7E2C5A809F1632E4B7F /* StreamingHandlerTests.swift */; };
@@ -768,6 +769,7 @@
 		E6D200DCDD6580F443C5CE0A /* APIRouterAndHandlersTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = APIRouterAndHandlersTests.swift; sourceTree = "<group>"; };
 		E6F8E5940EF4832A7B8D735D /* TypeWhisperTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TypeWhisperTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2F4D6A8B0C1E3F5A7B9D2C4F /* DictationViewModelIndicatorSettingsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictationViewModelIndicatorSettingsTests.swift; sourceTree = "<group>"; };
+		2F4D6A8B0C1E3F5A7B9D2C51 /* IndicatorTranscriptPreviewSizingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = IndicatorTranscriptPreviewSizingTests.swift; sourceTree = "<group>"; };
 		6A7B8C9D0E1F223344556679 /* FloatingPanelSpacePolicyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FloatingPanelSpacePolicyTests.swift; sourceTree = "<group>"; };
 		2A7B3C4D5E6F708192A3B4C5 /* PromptWizardComposerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptWizardComposerTests.swift; sourceTree = "<group>"; };
 		2A7B3C4D5E6F708192A3B4C6 /* PromptWizardInferenceServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptWizardInferenceServiceTests.swift; sourceTree = "<group>"; };
@@ -2008,6 +2010,7 @@
 				CE5852D6767C5FA955B84C56 /* PunctuationStrategyResolverTests.swift */,
 				FD34FDF9D999D85DA1C35375 /* CLISupportTests.swift */,
 				2F4D6A8B0C1E3F5A7B9D2C4F /* DictationViewModelIndicatorSettingsTests.swift */,
+				2F4D6A8B0C1E3F5A7B9D2C51 /* IndicatorTranscriptPreviewSizingTests.swift */,
 					6A7B8C9D0E1F223344556679 /* FloatingPanelSpacePolicyTests.swift */,
 					E5A1B2C3D4F5061728394A5E /* NotchIndicatorLayoutTests.swift */,
 					604D00000000000000000001 /* AudioRecorderViewModelTests.swift */,
@@ -3358,6 +3361,7 @@
 				7DADCC6E1AEA99CA48F83F50 /* CLISupportTests.swift in Sources */,
 				A40500000000000000000101 /* CLIClient.swift in Sources */,
 				2F4D6A8B0C1E3F5A7B9D2C4E /* DictationViewModelIndicatorSettingsTests.swift in Sources */,
+				2F4D6A8B0C1E3F5A7B9D2C50 /* IndicatorTranscriptPreviewSizingTests.swift in Sources */,
 					7B8C9D0E1F22334455667790 /* FloatingPanelSpacePolicyTests.swift in Sources */,
 					E5A1B2C3D4F5061728394A5D /* NotchIndicatorLayoutTests.swift in Sources */,
 					3A4B5C6D7E8F901234567890 /* AudioEngineRecoverySupportTests.swift in Sources */,
