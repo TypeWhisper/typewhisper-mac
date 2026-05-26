@@ -2,21 +2,92 @@ import Foundation
 import SwiftUI
 import TypeWhisperPluginSDK
 
+// MARK: - Profile Model
+
+struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
+    static let defaultId = "openai-compatible"
+    static let defaultName = "OpenAI Compatible"
+
+    var id: String
+    var name: String
+    var baseURL: String
+    var selectedModelId: String
+    var selectedLLMModelId: String
+    var llmTemperatureModeRaw: String
+    var llmTemperatureValue: Double
+    var fetchedModels: [FetchedModel]
+
+    init(
+        id: String,
+        name: String,
+        baseURL: String = "",
+        selectedModelId: String = "",
+        selectedLLMModelId: String = "",
+        llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue,
+        llmTemperatureValue: Double = 0.3,
+        fetchedModels: [FetchedModel] = []
+    ) {
+        self.id = id
+        self.name = name
+        self.baseURL = baseURL
+        self.selectedModelId = selectedModelId
+        self.selectedLLMModelId = selectedLLMModelId
+        self.llmTemperatureModeRaw = llmTemperatureModeRaw
+        self.llmTemperatureValue = llmTemperatureValue
+        self.fetchedModels = fetchedModels
+    }
+
+    var isDefault: Bool { id == Self.defaultId }
+
+    var displayName: String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? Self.defaultName : trimmed
+    }
+
+    static func defaultProfile(
+        baseURL: String = "",
+        selectedModelId: String = "",
+        selectedLLMModelId: String = "",
+        llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue,
+        llmTemperatureValue: Double = 0.3,
+        fetchedModels: [FetchedModel] = []
+    ) -> OpenAICompatibleProfile {
+        OpenAICompatibleProfile(
+            id: defaultId,
+            name: defaultName,
+            baseURL: baseURL,
+            selectedModelId: selectedModelId,
+            selectedLLMModelId: selectedLLMModelId,
+            llmTemperatureModeRaw: llmTemperatureModeRaw,
+            llmTemperatureValue: llmTemperatureValue,
+            fetchedModels: fetchedModels
+        )
+    }
+}
+
 // MARK: - Plugin Entry Point
 
 @objc(OpenAICompatiblePlugin)
-final class OpenAICompatiblePlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, LLMProviderPlugin, @unchecked Sendable {
+final class OpenAICompatiblePlugin: NSObject,
+    TranscriptionEnginePlugin,
+    DictionaryTermsCapabilityProviding,
+    LLMProviderPlugin,
+    LLMProviderIdentityProviding,
+    LLMTemperatureControllableProvider,
+    LLMModelSelectable,
+    AdditionalTranscriptionEnginesProviding,
+    AdditionalLLMProvidersProviding,
+    @unchecked Sendable
+{
     static let pluginId = "com.typewhisper.openai-compatible"
     static let pluginName = "OpenAI Compatible"
 
     fileprivate var host: HostServices?
-    fileprivate var _apiKey: String?
-    fileprivate var _baseURL: String?
-    fileprivate var _selectedModelId: String?
-    fileprivate var _selectedLLMModelId: String?
-    fileprivate var _llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue
-    fileprivate var _llmTemperatureValue: Double = 0.3
-    fileprivate var _fetchedModels: [FetchedModel] = []
+    fileprivate private(set) var profiles: [OpenAICompatibleProfile] = [
+        .defaultProfile()
+    ]
+    private static let profilesKey = "profiles"
+    private static let legacyProviderName = "OpenAI Compatible"
     private static let transcriptionRequestTimeout: TimeInterval = 600
 
     required override init() {
@@ -25,59 +96,47 @@ final class OpenAICompatiblePlugin: NSObject, TranscriptionEnginePlugin, Diction
 
     func activate(host: HostServices) {
         self.host = host
-        _apiKey = host.loadSecret(key: "api-key")
-        _baseURL = host.userDefault(forKey: "baseURL") as? String
-        _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
-        _selectedLLMModelId = host.userDefault(forKey: "selectedLLMModel") as? String
-        _llmTemperatureModeRaw = host.userDefault(forKey: "llmTemperatureMode") as? String
-            ?? PluginLLMTemperatureMode.providerDefault.rawValue
-        _llmTemperatureValue = host.userDefault(forKey: "llmTemperatureValue") as? Double
-            ?? 0.3
-
-        if let data = host.userDefault(forKey: "fetchedModels") as? Data {
-            _fetchedModels = (try? JSONDecoder().decode([FetchedModel].self, from: data)) ?? []
-        }
+        profiles = loadProfiles(from: host)
+        persistProfiles(notify: false)
     }
 
     func deactivate() {
         host = nil
     }
 
-    // MARK: - Helper Creation
+    // MARK: - Role Expansion
 
-    private func makeTranscriptionHelper() -> PluginOpenAITranscriptionHelper? {
-        guard let baseURL = _baseURL, !baseURL.isEmpty else { return nil }
-        return PluginOpenAITranscriptionHelper(baseURL: baseURL, responseFormat: "json")
+    var additionalTranscriptionEngines: [any TranscriptionEnginePlugin] {
+        profiles
+            .filter { !$0.isDefault }
+            .map { OpenAICompatibleProfileRole(plugin: self, profileId: $0.id) }
     }
 
-    private func makeChatHelper() -> PluginOpenAIChatHelper? {
-        guard let baseURL = _baseURL, !baseURL.isEmpty else { return nil }
-        return PluginOpenAIChatHelper(baseURL: baseURL)
+    var additionalLLMProviders: [any LLMProviderPlugin] {
+        profiles
+            .filter { !$0.isDefault }
+            .map { OpenAICompatibleProfileRole(plugin: self, profileId: $0.id) }
     }
 
-    // MARK: - TranscriptionEnginePlugin
+    // MARK: - Default TranscriptionEnginePlugin
 
-    var providerId: String { "openai-compatible" }
-    var providerDisplayName: String { "Custom Server (Whisper)" }
+    var providerId: String { OpenAICompatibleProfile.defaultId }
+    var providerDisplayName: String { displayName(for: providerId) }
 
     var isConfigured: Bool {
-        guard let baseURL = _baseURL else { return false }
-        return !baseURL.isEmpty
+        isConfigured(for: providerId)
     }
 
     var transcriptionModels: [PluginModelInfo] {
-        let models = _fetchedModels.map { PluginModelInfo(id: $0.id, displayName: $0.id) }
-        if models.isEmpty, let selectedId = _selectedModelId, !selectedId.isEmpty {
-            return [PluginModelInfo(id: selectedId, displayName: selectedId)]
-        }
-        return models
+        transcriptionModels(for: providerId)
     }
 
-    var selectedModelId: String? { _selectedModelId }
+    var selectedModelId: String? {
+        selectedModelId(for: providerId)
+    }
 
     func selectModel(_ modelId: String) {
-        _selectedModelId = modelId
-        host?.setUserDefault(modelId, forKey: "selectedModel")
+        selectModel(modelId, for: providerId)
     }
 
     var supportsTranslation: Bool { true }
@@ -100,36 +159,27 @@ final class OpenAICompatiblePlugin: NSObject, TranscriptionEnginePlugin, Diction
     }
 
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
-        guard let helper = makeTranscriptionHelper() else {
-            throw PluginTranscriptionError.notConfigured
-        }
-        guard let modelId = _selectedModelId, !modelId.isEmpty else {
-            throw PluginTranscriptionError.noModelSelected
-        }
-
-        return try await helper.transcribe(
+        try await transcribe(
             audio: audio,
-            apiKey: _apiKey ?? "",
-            modelName: modelId,
             language: language,
             translate: translate,
             prompt: prompt,
-            requestTimeout: Self.transcriptionRequestTimeout
+            profileId: providerId
         )
     }
 
-    // MARK: - LLMProviderPlugin
+    // MARK: - Default LLMProviderPlugin
 
-    var providerName: String { "OpenAI Compatible" }
-
+    var providerName: String { providerDisplayName }
+    var providerLegacyAliases: [String] { [Self.legacyProviderName] }
     var isAvailable: Bool { isConfigured }
 
     var supportedModels: [PluginModelInfo] {
-        let models = _fetchedModels.map { PluginModelInfo(id: $0.id, displayName: $0.id) }
-        if models.isEmpty, let selectedId = _selectedLLMModelId, !selectedId.isEmpty {
-            return [PluginModelInfo(id: selectedId, displayName: selectedId)]
-        }
-        return models
+        supportedModels(for: providerId)
+    }
+
+    var preferredModelId: String? {
+        selectedLLMModelId(for: providerId)
     }
 
     func process(systemPrompt: String, userText: String, model: String?) async throws -> String {
@@ -147,45 +197,33 @@ final class OpenAICompatiblePlugin: NSObject, TranscriptionEnginePlugin, Diction
         model: String?,
         temperatureDirective: PluginLLMTemperatureDirective
     ) async throws -> String {
-        guard let helper = makeChatHelper() else {
-            throw PluginChatError.notConfigured
-        }
-        let modelId = model ?? _selectedLLMModelId ?? ""
-        guard !modelId.isEmpty else {
-            throw PluginChatError.noModelSelected
-        }
-        return try await helper.process(
-            apiKey: _apiKey ?? "",
-            model: modelId,
+        try await process(
             systemPrompt: systemPrompt,
             userText: userText,
-            temperature: providerTemperatureDirective.resolvedTemperature(applying: temperatureDirective)
+            model: model,
+            temperatureDirective: temperatureDirective,
+            profileId: providerId
         )
     }
 
     func selectLLMModel(_ modelId: String) {
-        _selectedLLMModelId = modelId
-        host?.setUserDefault(modelId, forKey: "selectedLLMModel")
+        selectLLMModel(modelId, for: providerId)
     }
 
-    var selectedLLMModelId: String? { _selectedLLMModelId }
+    var selectedLLMModelId: String? { selectedLLMModelId(for: providerId) }
     var llmTemperatureMode: PluginLLMTemperatureMode {
-        PluginLLMTemperatureMode(rawValue: _llmTemperatureModeRaw) ?? .providerDefault
+        llmTemperatureMode(for: providerId)
     }
-    var llmTemperatureValue: Double { _llmTemperatureValue }
-    fileprivate var providerTemperatureDirective: PluginLLMTemperatureDirective {
-        PluginLLMTemperatureDirective(mode: llmTemperatureMode, value: _llmTemperatureValue)
+    var llmTemperatureValue: Double {
+        profile(for: providerId)?.llmTemperatureValue ?? 0.3
     }
 
     func setLLMTemperatureMode(_ mode: PluginLLMTemperatureMode) {
-        _llmTemperatureModeRaw = mode.rawValue
-        host?.setUserDefault(mode.rawValue, forKey: "llmTemperatureMode")
+        setLLMTemperatureMode(mode, for: providerId)
     }
 
     func setLLMTemperatureValue(_ value: Double) {
-        let clamped = min(max(value, 0.0), 2.0)
-        _llmTemperatureValue = clamped
-        host?.setUserDefault(clamped, forKey: "llmTemperatureValue")
+        setLLMTemperatureValue(value, for: providerId)
     }
 
     // MARK: - Settings View
@@ -194,59 +232,231 @@ final class OpenAICompatiblePlugin: NSObject, TranscriptionEnginePlugin, Diction
         AnyView(OpenAICompatibleSettingsView(plugin: self))
     }
 
-    // MARK: - Internal Methods
+    // MARK: - Profile Management
+
+    var profileSnapshots: [OpenAICompatibleProfile] {
+        profiles
+    }
+
+    func profileSnapshot(for profileId: String) -> OpenAICompatibleProfile? {
+        profile(for: profileId)
+    }
+
+    @discardableResult
+    func addProfile(named requestedName: String? = nil) -> OpenAICompatibleProfile {
+        let profile = OpenAICompatibleProfile(
+            id: "openai-compatible:\(UUID().uuidString.lowercased())",
+            name: uniqueProfileName(requestedName ?? "Custom Server")
+        )
+        profiles.append(profile)
+        persistProfiles()
+        return profile
+    }
+
+    func renameProfile(_ profileId: String, to name: String) {
+        updateProfile(profileId) { profile in
+            profile.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    func deleteProfile(_ profileId: String) {
+        guard profileId != OpenAICompatibleProfile.defaultId,
+              let index = profiles.firstIndex(where: { $0.id == profileId }) else { return }
+
+        profiles.remove(at: index)
+        removeApiKey(for: profileId)
+        persistProfiles()
+    }
 
     func setBaseURL(_ url: String) {
-        var normalized = url.trimmingCharacters(in: .whitespacesAndNewlines)
-        while normalized.hasSuffix("/") {
-            normalized = String(normalized.dropLast())
-        }
-        if normalized.hasSuffix("/v1") {
-            normalized = String(normalized.dropLast(3))
-        }
-        _baseURL = normalized
-        host?.setUserDefault(normalized, forKey: "baseURL")
-        host?.notifyCapabilitiesChanged()
+        setBaseURL(url, for: OpenAICompatibleProfile.defaultId)
     }
 
-    fileprivate func setApiKey(_ key: String) {
-        _apiKey = key
-        if let host {
-            do {
-                try host.storeSecret(key: "api-key", value: key)
-            } catch {
-                print("[OpenAICompatiblePlugin] Failed to store API key: \(error)")
-            }
-            host.notifyCapabilitiesChanged()
+    func setBaseURL(_ url: String, for profileId: String) {
+        updateProfile(profileId) { profile in
+            profile.baseURL = Self.normalizedBaseURL(url)
         }
     }
 
-    fileprivate func removeApiKey() {
-        _apiKey = nil
-        if let host {
-            do {
-                try host.storeSecret(key: "api-key", value: "")
-            } catch {
-                print("[OpenAICompatiblePlugin] Failed to delete API key: \(error)")
-            }
-            host.notifyCapabilitiesChanged()
+    func setApiKey(_ key: String) {
+        setApiKey(key, for: OpenAICompatibleProfile.defaultId)
+    }
+
+    func setApiKey(_ key: String, for profileId: String) {
+        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let host else { return }
+
+        do {
+            try host.storeSecret(key: secretKey(for: profileId), value: trimmed)
+        } catch {
+            print("[OpenAICompatiblePlugin] Failed to store API key: \(error)")
+        }
+        host.notifyCapabilitiesChanged()
+    }
+
+    func removeApiKey() {
+        removeApiKey(for: OpenAICompatibleProfile.defaultId)
+    }
+
+    func removeApiKey(for profileId: String) {
+        guard let host else { return }
+
+        do {
+            try host.storeSecret(key: secretKey(for: profileId), value: "")
+        } catch {
+            print("[OpenAICompatiblePlugin] Failed to delete API key: \(error)")
+        }
+        host.notifyCapabilitiesChanged()
+    }
+
+    func hasApiKey(for profileId: String) -> Bool {
+        let key = apiKey(for: profileId)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return key?.isEmpty == false
+    }
+
+    func setFetchedModels(_ models: [FetchedModel]) {
+        setFetchedModels(models, for: OpenAICompatibleProfile.defaultId)
+    }
+
+    func setFetchedModels(_ models: [FetchedModel], for profileId: String) {
+        updateProfile(profileId) { profile in
+            profile.fetchedModels = models
         }
     }
 
-    fileprivate func setFetchedModels(_ models: [FetchedModel]) {
-        _fetchedModels = models
-        if let data = try? JSONEncoder().encode(models) {
-            host?.setUserDefault(data, forKey: "fetchedModels")
+    func selectModel(_ modelId: String, for profileId: String) {
+        updateProfile(profileId) { profile in
+            profile.selectedModelId = modelId
         }
-        host?.notifyCapabilitiesChanged()
+    }
+
+    func selectLLMModel(_ modelId: String, for profileId: String) {
+        updateProfile(profileId) { profile in
+            profile.selectedLLMModelId = modelId
+        }
+    }
+
+    func setLLMTemperatureMode(_ mode: PluginLLMTemperatureMode, for profileId: String) {
+        updateProfile(profileId) { profile in
+            profile.llmTemperatureModeRaw = mode.rawValue
+        }
+    }
+
+    func setLLMTemperatureValue(_ value: Double, for profileId: String) {
+        let clamped = min(max(value, 0.0), 2.0)
+        updateProfile(profileId) { profile in
+            profile.llmTemperatureValue = clamped
+        }
+    }
+
+    // MARK: - Profile Runtime
+
+    func displayName(for profileId: String) -> String {
+        profile(for: profileId)?.displayName ?? profileId
+    }
+
+    func isConfigured(for profileId: String) -> Bool {
+        guard let profile = profile(for: profileId) else { return false }
+        return !profile.baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    func transcriptionModels(for profileId: String) -> [PluginModelInfo] {
+        guard let profile = profile(for: profileId) else { return [] }
+        let models = profile.fetchedModels.map { PluginModelInfo(id: $0.id, displayName: $0.id) }
+        if models.isEmpty, !profile.selectedModelId.isEmpty {
+            return [PluginModelInfo(id: profile.selectedModelId, displayName: profile.selectedModelId)]
+        }
+        return models
+    }
+
+    func selectedModelId(for profileId: String) -> String? {
+        let selected = profile(for: profileId)?.selectedModelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        return selected?.isEmpty == false ? selected : nil
+    }
+
+    func supportedModels(for profileId: String) -> [PluginModelInfo] {
+        guard let profile = profile(for: profileId) else { return [] }
+        let models = profile.fetchedModels.map { PluginModelInfo(id: $0.id, displayName: $0.id) }
+        if models.isEmpty, !profile.selectedLLMModelId.isEmpty {
+            return [PluginModelInfo(id: profile.selectedLLMModelId, displayName: profile.selectedLLMModelId)]
+        }
+        return models
+    }
+
+    func selectedLLMModelId(for profileId: String) -> String? {
+        let selected = profile(for: profileId)?.selectedLLMModelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        return selected?.isEmpty == false ? selected : nil
+    }
+
+    func llmTemperatureMode(for profileId: String) -> PluginLLMTemperatureMode {
+        guard let raw = profile(for: profileId)?.llmTemperatureModeRaw else {
+            return .providerDefault
+        }
+        return PluginLLMTemperatureMode(rawValue: raw) ?? .providerDefault
+    }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        profileId: String
+    ) async throws -> PluginTranscriptionResult {
+        guard let profile = profile(for: profileId),
+              let helper = makeTranscriptionHelper(for: profile) else {
+            throw PluginTranscriptionError.notConfigured
+        }
+        let modelId = profile.selectedModelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !modelId.isEmpty else {
+            throw PluginTranscriptionError.noModelSelected
+        }
+
+        return try await helper.transcribe(
+            audio: audio,
+            apiKey: apiKey(for: profileId) ?? "",
+            modelName: modelId,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            requestTimeout: Self.transcriptionRequestTimeout
+        )
+    }
+
+    func process(
+        systemPrompt: String,
+        userText: String,
+        model: String?,
+        temperatureDirective: PluginLLMTemperatureDirective,
+        profileId: String
+    ) async throws -> String {
+        guard let profile = profile(for: profileId),
+              let helper = makeChatHelper(for: profile) else {
+            throw PluginChatError.notConfigured
+        }
+        let modelId = model ?? selectedLLMModelId(for: profileId) ?? ""
+        guard !modelId.isEmpty else {
+            throw PluginChatError.noModelSelected
+        }
+        return try await helper.process(
+            apiKey: apiKey(for: profileId) ?? "",
+            model: modelId,
+            systemPrompt: systemPrompt,
+            userText: userText,
+            temperature: providerTemperatureDirective(for: profileId).resolvedTemperature(applying: temperatureDirective)
+        )
     }
 
     func fetchModels() async -> [FetchedModel] {
-        guard let baseURL = _baseURL, !baseURL.isEmpty,
-              let url = URL(string: "\(baseURL)/v1/models") else { return [] }
+        await fetchModels(for: OpenAICompatibleProfile.defaultId)
+    }
+
+    func fetchModels(for profileId: String) async -> [FetchedModel] {
+        guard let profile = profile(for: profileId),
+              !profile.baseURL.isEmpty,
+              let url = URL(string: "\(profile.baseURL)/v1/models") else { return [] }
 
         var request = URLRequest(url: url)
-        if let apiKey = _apiKey, !apiKey.isEmpty {
+        if let apiKey = apiKey(for: profileId), !apiKey.isEmpty {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
         request.timeoutInterval = 10
@@ -268,11 +478,16 @@ final class OpenAICompatiblePlugin: NSObject, TranscriptionEnginePlugin, Diction
     }
 
     func validateConnection() async -> Bool {
-        guard let baseURL = _baseURL, !baseURL.isEmpty,
-              let url = URL(string: "\(baseURL)/v1/models") else { return false }
+        await validateConnection(for: OpenAICompatibleProfile.defaultId)
+    }
+
+    func validateConnection(for profileId: String) async -> Bool {
+        guard let profile = profile(for: profileId),
+              !profile.baseURL.isEmpty,
+              let url = URL(string: "\(profile.baseURL)/v1/models") else { return false }
 
         var request = URLRequest(url: url)
-        if let apiKey = _apiKey, !apiKey.isEmpty {
+        if let apiKey = apiKey(for: profileId), !apiKey.isEmpty {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
         request.timeoutInterval = 10
@@ -285,17 +500,284 @@ final class OpenAICompatiblePlugin: NSObject, TranscriptionEnginePlugin, Diction
             return false
         }
     }
+
+    // MARK: - Internal Helpers
+
+    fileprivate func profile(for profileId: String) -> OpenAICompatibleProfile? {
+        let canonicalId = canonicalProfileId(for: profileId)
+        return profiles.first { $0.id == canonicalId }
+    }
+
+    func apiKey(for profileId: String) -> String? {
+        host?.loadSecret(key: secretKey(for: profileId))
+    }
+
+    private func canonicalProfileId(for identifier: String) -> String {
+        let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.caseInsensitiveCompare(Self.legacyProviderName) == .orderedSame {
+            return OpenAICompatibleProfile.defaultId
+        }
+        if let match = profiles.first(where: {
+            $0.id.caseInsensitiveCompare(trimmed) == .orderedSame
+                || $0.displayName.caseInsensitiveCompare(trimmed) == .orderedSame
+        }) {
+            return match.id
+        }
+        return trimmed
+    }
+
+    private func providerTemperatureDirective(for profileId: String) -> PluginLLMTemperatureDirective {
+        PluginLLMTemperatureDirective(
+            mode: llmTemperatureMode(for: profileId),
+            value: profile(for: profileId)?.llmTemperatureValue ?? 0.3
+        )
+    }
+
+    private func makeTranscriptionHelper(for profile: OpenAICompatibleProfile) -> PluginOpenAITranscriptionHelper? {
+        guard !profile.baseURL.isEmpty else { return nil }
+        return PluginOpenAITranscriptionHelper(baseURL: profile.baseURL, responseFormat: "json")
+    }
+
+    private func makeChatHelper(for profile: OpenAICompatibleProfile) -> PluginOpenAIChatHelper? {
+        guard !profile.baseURL.isEmpty else { return nil }
+        return PluginOpenAIChatHelper(baseURL: profile.baseURL)
+    }
+
+    private func updateProfile(
+        _ profileId: String,
+        _ mutate: (inout OpenAICompatibleProfile) -> Void
+    ) {
+        let canonicalId = canonicalProfileId(for: profileId)
+        guard let index = profiles.firstIndex(where: { $0.id == canonicalId }) else { return }
+
+        mutate(&profiles[index])
+        persistProfiles()
+    }
+
+    private func loadProfiles(from host: HostServices) -> [OpenAICompatibleProfile] {
+        if let data = host.userDefault(forKey: Self.profilesKey) as? Data,
+           let decoded = try? JSONDecoder().decode([OpenAICompatibleProfile].self, from: data),
+           !decoded.isEmpty {
+            return normalizedProfiles(decoded, host: host)
+        }
+
+        let fetchedModels: [FetchedModel]
+        if let data = host.userDefault(forKey: "fetchedModels") as? Data {
+            fetchedModels = (try? JSONDecoder().decode([FetchedModel].self, from: data)) ?? []
+        } else {
+            fetchedModels = []
+        }
+
+        return [
+            .defaultProfile(
+                baseURL: Self.normalizedBaseURL(host.userDefault(forKey: "baseURL") as? String ?? ""),
+                selectedModelId: host.userDefault(forKey: "selectedModel") as? String ?? "",
+                selectedLLMModelId: host.userDefault(forKey: "selectedLLMModel") as? String ?? "",
+                llmTemperatureModeRaw: host.userDefault(forKey: "llmTemperatureMode") as? String
+                    ?? PluginLLMTemperatureMode.providerDefault.rawValue,
+                llmTemperatureValue: host.userDefault(forKey: "llmTemperatureValue") as? Double ?? 0.3,
+                fetchedModels: fetchedModels
+            )
+        ]
+    }
+
+    private func normalizedProfiles(
+        _ loadedProfiles: [OpenAICompatibleProfile],
+        host: HostServices
+    ) -> [OpenAICompatibleProfile] {
+        var seenIds = Set<String>()
+        var result: [OpenAICompatibleProfile] = []
+
+        for var profile in loadedProfiles {
+            let trimmedId = profile.id.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedId.isEmpty, !seenIds.contains(trimmedId) else { continue }
+
+            profile.id = trimmedId
+            if profile.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                profile.name = profile.isDefault ? OpenAICompatibleProfile.defaultName : "Custom Server"
+            }
+            profile.baseURL = Self.normalizedBaseURL(profile.baseURL)
+            seenIds.insert(profile.id)
+            result.append(profile)
+        }
+
+        if !seenIds.contains(OpenAICompatibleProfile.defaultId) {
+            result.insert(
+                .defaultProfile(
+                    baseURL: Self.normalizedBaseURL(host.userDefault(forKey: "baseURL") as? String ?? ""),
+                    selectedModelId: host.userDefault(forKey: "selectedModel") as? String ?? "",
+                    selectedLLMModelId: host.userDefault(forKey: "selectedLLMModel") as? String ?? ""
+                ),
+                at: 0
+            )
+        }
+
+        result.sort { lhs, rhs in
+            if lhs.isDefault != rhs.isDefault { return lhs.isDefault }
+            return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+        }
+        return result
+    }
+
+    private func persistProfiles(notify: Bool = true) {
+        guard let host else { return }
+
+        if let data = try? JSONEncoder().encode(profiles) {
+            host.setUserDefault(data, forKey: Self.profilesKey)
+        }
+        syncLegacyDefaultProfile(to: host)
+
+        if notify {
+            host.notifyCapabilitiesChanged()
+        }
+    }
+
+    private func syncLegacyDefaultProfile(to host: HostServices) {
+        guard let defaultProfile = profiles.first(where: \.isDefault) else { return }
+
+        host.setUserDefault(defaultProfile.baseURL, forKey: "baseURL")
+        host.setUserDefault(defaultProfile.selectedModelId, forKey: "selectedModel")
+        host.setUserDefault(defaultProfile.selectedLLMModelId, forKey: "selectedLLMModel")
+        host.setUserDefault(defaultProfile.llmTemperatureModeRaw, forKey: "llmTemperatureMode")
+        host.setUserDefault(defaultProfile.llmTemperatureValue, forKey: "llmTemperatureValue")
+        if let data = try? JSONEncoder().encode(defaultProfile.fetchedModels) {
+            host.setUserDefault(data, forKey: "fetchedModels")
+        }
+    }
+
+    private func uniqueProfileName(_ baseName: String) -> String {
+        let trimmed = baseName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fallback = trimmed.isEmpty ? "Custom Server" : trimmed
+        let existingNames = Set(profiles.map { $0.displayName.lowercased() })
+        if !existingNames.contains(fallback.lowercased()) {
+            return fallback
+        }
+
+        var index = 2
+        while true {
+            let candidate = "\(fallback) \(index)"
+            if !existingNames.contains(candidate.lowercased()) {
+                return candidate
+            }
+            index += 1
+        }
+    }
+
+    private func secretKey(for profileId: String) -> String {
+        canonicalProfileId(for: profileId) == OpenAICompatibleProfile.defaultId
+            ? "api-key"
+            : "api-key.\(canonicalProfileId(for: profileId))"
+    }
+
+    private static func normalizedBaseURL(_ url: String) -> String {
+        var normalized = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        while normalized.hasSuffix("/") {
+            normalized = String(normalized.dropLast())
+        }
+        if normalized.hasSuffix("/v1") {
+            normalized = String(normalized.dropLast(3))
+        }
+        return normalized
+    }
+}
+
+// MARK: - Additional Profile Role
+
+private final class OpenAICompatibleProfileRole: NSObject,
+    TranscriptionEnginePlugin,
+    DictionaryTermsCapabilityProviding,
+    LLMProviderPlugin,
+    LLMProviderIdentityProviding,
+    LLMTemperatureControllableProvider,
+    LLMModelSelectable,
+    @unchecked Sendable
+{
+    static let pluginId = OpenAICompatiblePlugin.pluginId
+    static let pluginName = OpenAICompatiblePlugin.pluginName
+
+    private let plugin: OpenAICompatiblePlugin
+    private let profileId: String
+
+    required override init() {
+        fatalError("Use init(plugin:profileId:)")
+    }
+
+    init(plugin: OpenAICompatiblePlugin, profileId: String) {
+        self.plugin = plugin
+        self.profileId = profileId
+        super.init()
+    }
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+    var settingsView: AnyView? { nil }
+
+    var providerId: String { profileId }
+    var providerDisplayName: String { plugin.displayName(for: profileId) }
+    var providerName: String { providerDisplayName }
+    var isConfigured: Bool { plugin.isConfigured(for: profileId) }
+    var isAvailable: Bool { isConfigured }
+    var transcriptionModels: [PluginModelInfo] { plugin.transcriptionModels(for: profileId) }
+    var selectedModelId: String? { plugin.selectedModelId(for: profileId) }
+    var supportsTranslation: Bool { true }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
+    var supportedLanguages: [String] { plugin.supportedLanguages }
+    var supportedModels: [PluginModelInfo] { plugin.supportedModels(for: profileId) }
+    var preferredModelId: String? { plugin.selectedLLMModelId(for: profileId) }
+
+    func selectModel(_ modelId: String) {
+        plugin.selectModel(modelId, for: profileId)
+    }
+
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        try await plugin.transcribe(
+            audio: audio,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            profileId: profileId
+        )
+    }
+
+    func process(systemPrompt: String, userText: String, model: String?) async throws -> String {
+        try await process(
+            systemPrompt: systemPrompt,
+            userText: userText,
+            model: model,
+            temperatureDirective: .inheritProviderSetting
+        )
+    }
+
+    func process(
+        systemPrompt: String,
+        userText: String,
+        model: String?,
+        temperatureDirective: PluginLLMTemperatureDirective
+    ) async throws -> String {
+        try await plugin.process(
+            systemPrompt: systemPrompt,
+            userText: userText,
+            model: model,
+            temperatureDirective: temperatureDirective,
+            profileId: profileId
+        )
+    }
 }
 
 // MARK: - Fetched Model
 
-struct FetchedModel: Codable, Sendable {
+struct FetchedModel: Codable, Equatable, Sendable {
     let id: String
     let owned_by: String?
 
     enum CodingKeys: String, CodingKey {
         case id
         case owned_by
+    }
+
+    init(id: String, owned_by: String? = nil) {
+        self.id = id
+        self.owned_by = owned_by
     }
 
     init(from decoder: Decoder) throws {
@@ -309,6 +791,10 @@ struct FetchedModel: Codable, Sendable {
 
 private struct OpenAICompatibleSettingsView: View {
     let plugin: OpenAICompatiblePlugin
+
+    @State private var profiles: [OpenAICompatibleProfile] = []
+    @State private var selectedProfileId = OpenAICompatibleProfile.defaultId
+    @State private var nameInput = ""
     @State private var baseURLInput = ""
     @State private var apiKeyInput = ""
     @State private var showApiKey = false
@@ -320,14 +806,134 @@ private struct OpenAICompatibleSettingsView: View {
     @State private var manualLLMModel = ""
     @State private var llmTemperatureMode: PluginLLMTemperatureMode = .providerDefault
     @State private var llmTemperatureValue: Double = 0.3
-    @State private var fetchedModels: [FetchedModel] = []
+
     private let bundle = pluginModuleBundle
 
-    private var hasModels: Bool { !fetchedModels.isEmpty }
+    private var selectedProfile: OpenAICompatibleProfile? {
+        profiles.first { $0.id == selectedProfileId }
+    }
+
+    private var hasModels: Bool {
+        selectedProfile?.fetchedModels.isEmpty == false
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Server URL Section
+        HStack(alignment: .top, spacing: 0) {
+            profileSidebar
+                .frame(width: 210)
+
+            Divider()
+
+            profileDetail
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .frame(minWidth: 680, minHeight: 520, alignment: .topLeading)
+        .onAppear {
+            reloadProfiles(selecting: selectedProfileId)
+        }
+        .onChange(of: selectedProfileId) {
+            syncFieldsFromSelectedProfile()
+        }
+    }
+
+    private var profileSidebar: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Profiles", bundle: bundle)
+                    .font(.headline)
+                Spacer()
+                Button {
+                    let profile = plugin.addProfile()
+                    reloadProfiles(selecting: profile.id)
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .buttonStyle(.borderless)
+                .help(Text("Add Profile", bundle: bundle))
+            }
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 6) {
+                    ForEach(profiles) { profile in
+                        Button {
+                            selectedProfileId = profile.id
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: profile.isDefault ? "server.rack" : "server.rack.fill")
+                                    .frame(width: 18)
+                                Text(profile.displayName)
+                                    .lineLimit(1)
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                selectedProfileId == profile.id
+                                    ? Color.accentColor.opacity(0.16)
+                                    : Color.clear,
+                                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            Button(role: .destructive) {
+                let nextSelection = profiles.first(where: { $0.id != selectedProfileId })?.id
+                    ?? OpenAICompatibleProfile.defaultId
+                plugin.deleteProfile(selectedProfileId)
+                reloadProfiles(selecting: nextSelection)
+            } label: {
+                Label(String(localized: "Delete", bundle: bundle), systemImage: "trash")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(selectedProfile?.isDefault != false)
+        }
+        .padding()
+    }
+
+    private var profileDetail: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                if selectedProfile == nil {
+                    Text("Select a profile", bundle: bundle)
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    profileIdentitySection
+                    serverSection
+                    modelSection
+                    temperatureSection
+
+                    Text("API keys are stored securely in the Keychain", bundle: bundle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+    }
+
+    private var profileIdentitySection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Profile Name", bundle: bundle)
+                .font(.headline)
+
+            TextField(String(localized: "Profile name", bundle: bundle), text: $nameInput)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit(saveProfileName)
+                .onChange(of: nameInput) {
+                    saveProfileName()
+                }
+        }
+    }
+
+    private var serverSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Server URL", bundle: bundle)
                     .font(.headline)
@@ -340,7 +946,6 @@ private struct OpenAICompatibleSettingsView: View {
                 .font(.system(.body, design: .monospaced))
             }
 
-            // API Key Section
             VStack(alignment: .leading, spacing: 8) {
                 Text("API Key", bundle: bundle)
                     .font(.headline)
@@ -368,7 +973,6 @@ private struct OpenAICompatibleSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            // Connect Button
             HStack(spacing: 8) {
                 Button {
                     testConnection()
@@ -379,10 +983,10 @@ private struct OpenAICompatibleSettingsView: View {
                 .controlSize(.small)
                 .disabled(baseURLInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isTesting)
 
-                if plugin.isConfigured && plugin._apiKey != nil {
+                if let selectedProfile, plugin.hasApiKey(for: selectedProfile.id) {
                     Button(String(localized: "Remove", bundle: bundle)) {
                         apiKeyInput = ""
-                        plugin.removeApiKey()
+                        plugin.removeApiKey(for: selectedProfile.id)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
@@ -402,224 +1006,259 @@ private struct OpenAICompatibleSettingsView: View {
                         .foregroundStyle(result ? .green : .red)
                 }
             }
+        }
+    }
 
-            if plugin.isConfigured {
-                Divider()
+    private var modelSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Divider()
 
-                // Model Selection
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("Models", bundle: bundle)
-                            .font(.headline)
+            HStack {
+                Text("Models", bundle: bundle)
+                    .font(.headline)
 
-                        Spacer()
+                Spacer()
 
-                        Button {
-                            refreshModels()
-                        } label: {
-                            Label(String(localized: "Refresh", bundle: bundle), systemImage: "arrow.clockwise")
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                    }
+                Button {
+                    refreshModels()
+                } label: {
+                    Label(String(localized: "Refresh", bundle: bundle), systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(baseURLInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
 
-                    if hasModels {
-                        // Transcription Model Picker
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Transcription Model", bundle: bundle)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+            if hasModels, let selectedProfile {
+                modelPickerSection(profile: selectedProfile)
+            } else {
+                manualModelSection
+            }
+        }
+    }
 
-                            Picker("Transcription Model", selection: $selectedTranscriptionModel) {
-                                Text(String(localized: "None", bundle: bundle)).tag("")
-                                ForEach(fetchedModels, id: \.id) { model in
-                                    Text(model.id).tag(model.id)
-                                }
-                            }
-                            .labelsHidden()
-                            .onChange(of: selectedTranscriptionModel) {
-                                plugin.selectModel(selectedTranscriptionModel)
-                            }
-                        }
+    private func modelPickerSection(profile: OpenAICompatibleProfile) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Transcription Model", bundle: bundle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
 
-                        // LLM Model Picker
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("LLM Model", bundle: bundle)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-
-                            Picker("LLM Model", selection: $selectedLLMModel) {
-                                Text(String(localized: "None", bundle: bundle)).tag("")
-                                ForEach(fetchedModels, id: \.id) { model in
-                                    Text(model.id).tag(model.id)
-                                }
-                            }
-                            .labelsHidden()
-                            .onChange(of: selectedLLMModel) {
-                                plugin.selectLLMModel(selectedLLMModel)
-                            }
-                        }
-                    } else {
-                        // Manual model entry fallback
-                        Text("No models found. Enter model name manually.", bundle: bundle)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Transcription Model", bundle: bundle)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-
-                            HStack(spacing: 8) {
-                                TextField(String(localized: "Model name", bundle: bundle), text: $manualTranscriptionModel)
-                                    .textFieldStyle(.roundedBorder)
-                                    .font(.system(.body, design: .monospaced))
-                                    .onSubmit {
-                                        let trimmed = manualTranscriptionModel.trimmingCharacters(in: .whitespacesAndNewlines)
-                                        if !trimmed.isEmpty {
-                                            plugin.selectModel(trimmed)
-                                        }
-                                    }
-
-                                Button(String(localized: "Save", bundle: bundle)) {
-                                    let trimmed = manualTranscriptionModel.trimmingCharacters(in: .whitespacesAndNewlines)
-                                    if !trimmed.isEmpty {
-                                        plugin.selectModel(trimmed)
-                                    }
-                                }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
-                                .disabled(manualTranscriptionModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            }
-                        }
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("LLM Model", bundle: bundle)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-
-                            HStack(spacing: 8) {
-                                TextField(String(localized: "Model name", bundle: bundle), text: $manualLLMModel)
-                                    .textFieldStyle(.roundedBorder)
-                                    .font(.system(.body, design: .monospaced))
-                                    .onSubmit {
-                                        let trimmed = manualLLMModel.trimmingCharacters(in: .whitespacesAndNewlines)
-                                        if !trimmed.isEmpty {
-                                            plugin.selectLLMModel(trimmed)
-                                        }
-                                    }
-
-                                Button(String(localized: "Save", bundle: bundle)) {
-                                    let trimmed = manualLLMModel.trimmingCharacters(in: .whitespacesAndNewlines)
-                                    if !trimmed.isEmpty {
-                                        plugin.selectLLMModel(trimmed)
-                                    }
-                                }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
-                                .disabled(manualLLMModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            }
-                        }
+                Picker("Transcription Model", selection: $selectedTranscriptionModel) {
+                    Text(String(localized: "None", bundle: bundle)).tag("")
+                    ForEach(profile.fetchedModels, id: \.id) { model in
+                        Text(model.id).tag(model.id)
                     }
                 }
-
-                Divider()
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Temperature", bundle: bundle)
-                        .font(.headline)
-
-                    Picker("Temperature Mode", selection: $llmTemperatureMode) {
-                        Text("Provider Default", bundle: bundle).tag(PluginLLMTemperatureMode.providerDefault)
-                        Text("Custom", bundle: bundle).tag(PluginLLMTemperatureMode.custom)
-                    }
-                    .onChange(of: llmTemperatureMode) {
-                        plugin.setLLMTemperatureMode(llmTemperatureMode)
-                    }
-
-                    if llmTemperatureMode == .custom {
-                        HStack {
-                            Text("Temperature", bundle: bundle)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Text(llmTemperatureValue, format: .number.precision(.fractionLength(2)))
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-                        }
-
-                        Slider(value: $llmTemperatureValue, in: 0...2, step: 0.1)
-                            .onChange(of: llmTemperatureValue) {
-                                plugin.setLLMTemperatureValue(llmTemperatureValue)
-                            }
-                    }
+                .labelsHidden()
+                .onChange(of: selectedTranscriptionModel) {
+                    plugin.selectModel(selectedTranscriptionModel, for: profile.id)
+                    reloadProfiles(selecting: profile.id, preserveInputs: true)
                 }
             }
 
-            Text("API keys are stored securely in the Keychain", bundle: bundle)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("LLM Model", bundle: bundle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                Picker("LLM Model", selection: $selectedLLMModel) {
+                    Text(String(localized: "None", bundle: bundle)).tag("")
+                    ForEach(profile.fetchedModels, id: \.id) { model in
+                        Text(model.id).tag(model.id)
+                    }
+                }
+                .labelsHidden()
+                .onChange(of: selectedLLMModel) {
+                    plugin.selectLLMModel(selectedLLMModel, for: profile.id)
+                    reloadProfiles(selecting: profile.id, preserveInputs: true)
+                }
+            }
+        }
+    }
+
+    private var manualModelSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("No models found. Enter model name manually.", bundle: bundle)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-        }
-        .padding()
-        .onAppear {
-            baseURLInput = plugin._baseURL ?? ""
-            if let key = plugin._apiKey, !key.isEmpty {
-                apiKeyInput = key
+
+            manualModelField(
+                title: String(localized: "Transcription Model", bundle: bundle),
+                text: $manualTranscriptionModel
+            ) {
+                guard let selectedProfile else { return }
+                let trimmed = manualTranscriptionModel.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return }
+                plugin.selectModel(trimmed, for: selectedProfile.id)
+                selectedTranscriptionModel = trimmed
+                reloadProfiles(selecting: selectedProfile.id, preserveInputs: true)
             }
-            fetchedModels = plugin._fetchedModels
-            selectedTranscriptionModel = plugin.selectedModelId ?? ""
-            selectedLLMModel = plugin.selectedLLMModelId ?? ""
-            llmTemperatureMode = plugin.llmTemperatureMode
-            llmTemperatureValue = plugin.llmTemperatureValue
-            manualTranscriptionModel = plugin.selectedModelId ?? ""
-            manualLLMModel = plugin.selectedLLMModelId ?? ""
+
+            manualModelField(
+                title: String(localized: "LLM Model", bundle: bundle),
+                text: $manualLLMModel
+            ) {
+                guard let selectedProfile else { return }
+                let trimmed = manualLLMModel.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return }
+                plugin.selectLLMModel(trimmed, for: selectedProfile.id)
+                selectedLLMModel = trimmed
+                reloadProfiles(selecting: selectedProfile.id, preserveInputs: true)
+            }
+        }
+    }
+
+    private func manualModelField(
+        title: String,
+        text: Binding<String>,
+        save: @escaping () -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                TextField(String(localized: "Model name", bundle: bundle), text: text)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(.body, design: .monospaced))
+                    .onSubmit(save)
+
+                Button(String(localized: "Save", bundle: bundle), action: save)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+    }
+
+    private var temperatureSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Divider()
+
+            Text("Temperature", bundle: bundle)
+                .font(.headline)
+
+            Picker("Temperature Mode", selection: $llmTemperatureMode) {
+                Text("Provider Default", bundle: bundle).tag(PluginLLMTemperatureMode.providerDefault)
+                Text("Custom", bundle: bundle).tag(PluginLLMTemperatureMode.custom)
+            }
+            .onChange(of: llmTemperatureMode) {
+                guard let selectedProfile else { return }
+                plugin.setLLMTemperatureMode(llmTemperatureMode, for: selectedProfile.id)
+                reloadProfiles(selecting: selectedProfile.id, preserveInputs: true)
+            }
+
+            if llmTemperatureMode == .custom {
+                HStack {
+                    Text("Temperature", bundle: bundle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(llmTemperatureValue, format: .number.precision(.fractionLength(2)))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+
+                Slider(value: $llmTemperatureValue, in: 0...2, step: 0.1)
+                    .onChange(of: llmTemperatureValue) {
+                        guard let selectedProfile else { return }
+                        plugin.setLLMTemperatureValue(llmTemperatureValue, for: selectedProfile.id)
+                        reloadProfiles(selecting: selectedProfile.id, preserveInputs: true)
+                    }
+            }
+        }
+    }
+
+    private func reloadProfiles(selecting profileId: String? = nil, preserveInputs: Bool = false) {
+        profiles = plugin.profileSnapshots
+        if let profileId,
+           profiles.contains(where: { $0.id == profileId }) {
+            selectedProfileId = profileId
+        } else if !profiles.contains(where: { $0.id == selectedProfileId }) {
+            selectedProfileId = profiles.first?.id ?? OpenAICompatibleProfile.defaultId
+        }
+
+        if !preserveInputs {
+            syncFieldsFromSelectedProfile()
+        }
+    }
+
+    private func syncFieldsFromSelectedProfile() {
+        guard let profile = plugin.profileSnapshot(for: selectedProfileId) else { return }
+
+        nameInput = profile.displayName
+        baseURLInput = profile.baseURL
+        apiKeyInput = plugin.apiKey(for: profile.id) ?? ""
+        selectedTranscriptionModel = profile.selectedModelId
+        selectedLLMModel = profile.selectedLLMModelId
+        manualTranscriptionModel = profile.selectedModelId
+        manualLLMModel = profile.selectedLLMModelId
+        llmTemperatureMode = PluginLLMTemperatureMode(rawValue: profile.llmTemperatureModeRaw) ?? .providerDefault
+        llmTemperatureValue = profile.llmTemperatureValue
+        connectionResult = nil
+    }
+
+    private func saveProfileName() {
+        guard let selectedProfile else { return }
+        let trimmed = nameInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != selectedProfile.displayName else { return }
+
+        plugin.renameProfile(selectedProfile.id, to: trimmed)
+        reloadProfiles(selecting: selectedProfile.id, preserveInputs: true)
+    }
+
+    private func saveServerFields(for profileId: String) {
+        plugin.setBaseURL(baseURLInput, for: profileId)
+        let trimmedKey = apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedKey.isEmpty {
+            plugin.setApiKey(trimmedKey, for: profileId)
         }
     }
 
     private func testConnection() {
-        let trimmedURL = baseURLInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedURL.isEmpty else { return }
-
-        plugin.setBaseURL(trimmedURL)
-        let trimmedKey = apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedKey.isEmpty {
-            plugin.setApiKey(trimmedKey)
-        }
+        guard let selectedProfile else { return }
+        let profileId = selectedProfile.id
+        saveServerFields(for: profileId)
 
         isTesting = true
         connectionResult = nil
         Task {
-            let models = await plugin.fetchModels()
+            let models = await plugin.fetchModels(for: profileId)
             var isConnected = !models.isEmpty
             if !isConnected {
-                isConnected = await plugin.validateConnection()
+                isConnected = await plugin.validateConnection(for: profileId)
             }
             await MainActor.run {
                 isTesting = false
                 connectionResult = isConnected
                 if isConnected {
-                    fetchedModels = models
-                    plugin.setFetchedModels(models)
-                    // Auto-select first model if nothing selected
+                    plugin.setFetchedModels(models, for: profileId)
                     if selectedTranscriptionModel.isEmpty, let first = models.first {
                         selectedTranscriptionModel = first.id
-                        plugin.selectModel(first.id)
+                        plugin.selectModel(first.id, for: profileId)
                     }
                     if selectedLLMModel.isEmpty, let first = models.first {
                         selectedLLMModel = first.id
-                        plugin.selectLLMModel(first.id)
+                        plugin.selectLLMModel(first.id, for: profileId)
                     }
+                    reloadProfiles(selecting: profileId, preserveInputs: true)
                 }
             }
         }
     }
 
     private func refreshModels() {
+        guard let selectedProfile else { return }
+        let profileId = selectedProfile.id
+        saveServerFields(for: profileId)
+
         Task {
-            let models = await plugin.fetchModels()
+            let models = await plugin.fetchModels(for: profileId)
             await MainActor.run {
-                fetchedModels = models
-                plugin.setFetchedModels(models)
+                plugin.setFetchedModels(models, for: profileId)
+                reloadProfiles(selecting: profileId)
             }
         }
     }

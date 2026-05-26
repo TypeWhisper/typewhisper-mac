@@ -163,6 +163,38 @@ public protocol LLMProviderPlugin: TypeWhisperPlugin {
     func process(systemPrompt: String, userText: String, model: String?) async throws -> String
 }
 
+/// Optional identity extension for LLM providers that need a stable storage ID
+/// separate from their display name.
+public protocol LLMProviderIdentityProviding: LLMProviderPlugin {
+    var providerId: String { get }
+    var providerDisplayName: String { get }
+    var providerLegacyAliases: [String] { get }
+}
+
+public extension LLMProviderIdentityProviding {
+    var providerLegacyAliases: [String] { [] }
+}
+
+public extension LLMProviderPlugin {
+    var llmProviderId: String {
+        (self as? any LLMProviderIdentityProviding)?.providerId ?? providerName
+    }
+
+    var llmProviderDisplayName: String {
+        (self as? any LLMProviderIdentityProviding)?.providerDisplayName ?? providerName
+    }
+
+    var llmProviderLegacyAliases: [String] {
+        (self as? any LLMProviderIdentityProviding)?.providerLegacyAliases ?? []
+    }
+}
+
+/// Optional extension for plugins that expose multiple independently selectable
+/// LLM providers from one bundle.
+public protocol AdditionalLLMProvidersProviding: TypeWhisperPlugin {
+    var additionalLLMProviders: [any LLMProviderPlugin] { get }
+}
+
 /// Optional extension for plugins that manage downloaded model assets.
 /// Hosts can use this to show and remove model caches without knowing the
 /// plugin's storage layout.
@@ -619,6 +651,12 @@ public protocol TranscriptionEnginePlugin: TypeWhisperPlugin {
     var supportedLanguages: [String] { get }
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?,
                     onProgress: @Sendable @escaping (String) -> Bool) async throws -> PluginTranscriptionResult
+}
+
+/// Optional extension for plugins that expose multiple independently selectable
+/// transcription engines from one bundle.
+public protocol AdditionalTranscriptionEnginesProviding: TypeWhisperPlugin {
+    var additionalTranscriptionEngines: [any TranscriptionEnginePlugin] { get }
 }
 
 public protocol StructuredTranscriptionEnginePlugin: TranscriptionEnginePlugin {

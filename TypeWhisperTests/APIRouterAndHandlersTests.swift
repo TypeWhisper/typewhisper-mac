@@ -57,7 +57,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @objc(APIRouterMockLLMProviderPlugin)
-    private final class MockLLMProviderPlugin: NSObject, LLMProviderPlugin, LLMProviderSetupStatusProviding, LLMTemperatureControllableProvider, PluginSettingsActivityReporting, @unchecked Sendable {
+    private final class MockLLMProviderPlugin: NSObject, LLMProviderPlugin, LLMProviderIdentityProviding, LLMProviderSetupStatusProviding, LLMTemperatureControllableProvider, PluginSettingsActivityReporting, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.llm" }
         static var pluginName: String { "Mock LLM" }
 
@@ -66,6 +66,9 @@ final class APIRouterAndHandlersTests: XCTestCase {
         var responseText = "processed"
         var available = true
         var configuredProviderName = "Gemini"
+        var configuredProviderId: String?
+        var configuredProviderDisplayName: String?
+        var configuredProviderLegacyAliases: [String] = []
         var requiresExternalCredentials = true
         var unavailableReason: String?
         var restoreMakesAvailable = false
@@ -106,6 +109,9 @@ final class APIRouterAndHandlersTests: XCTestCase {
         func deactivate() {}
 
         var providerName: String { configuredProviderName }
+        var providerId: String { configuredProviderId ?? configuredProviderName }
+        var providerDisplayName: String { configuredProviderDisplayName ?? configuredProviderName }
+        var providerLegacyAliases: [String] { configuredProviderLegacyAliases }
         var isAvailable: Bool { available }
         var supportedModels: [PluginModelInfo] { models }
         var currentSettingsActivity: PluginSettingsActivity? { nil }
@@ -195,6 +201,71 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         func process(systemPrompt: String, userText: String, model: String?) async throws -> String {
             "processed"
+        }
+    }
+
+    @objc(APIRouterExpandedRolePlugin)
+    private final class ExpandedRolePlugin: NSObject, TypeWhisperPlugin, AdditionalLLMProvidersProviding, AdditionalTranscriptionEnginesProviding, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.expanded-role" }
+        static var pluginName: String { "Expanded Role Mock" }
+
+        var additionalLLMProviders: [any LLMProviderPlugin]
+        var additionalTranscriptionEngines: [any TranscriptionEnginePlugin]
+
+        required override init() {
+            self.additionalLLMProviders = []
+            self.additionalTranscriptionEngines = []
+            super.init()
+        }
+
+        init(
+            additionalLLMProviders: [any LLMProviderPlugin],
+            additionalTranscriptionEngines: [any TranscriptionEnginePlugin]
+        ) {
+            self.additionalLLMProviders = additionalLLMProviders
+            self.additionalTranscriptionEngines = additionalTranscriptionEngines
+            super.init()
+        }
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+    }
+
+    @objc(APIRouterNamedTranscriptionPlugin)
+    private final class NamedTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.named-transcription" }
+        static var pluginName: String { "Named Mock Transcription" }
+
+        var providerIdValue = "expanded-engine"
+        var providerDisplayNameValue = "Expanded Engine"
+        var modelId = "expanded-model"
+
+        required override init() {}
+
+        init(providerId: String, providerDisplayName: String, modelId: String) {
+            self.providerIdValue = providerId
+            self.providerDisplayNameValue = providerDisplayName
+            self.modelId = modelId
+            super.init()
+        }
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+
+        var providerId: String { providerIdValue }
+        var providerDisplayName: String { providerDisplayNameValue }
+        var isConfigured: Bool { true }
+        var transcriptionModels: [PluginModelInfo] {
+            [PluginModelInfo(id: modelId, displayName: modelId)]
+        }
+        var selectedModelId: String? { modelId }
+        func selectModel(_ modelId: String) {
+            self.modelId = modelId
+        }
+        var supportsTranslation: Bool { false }
+
+        func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+            PluginTranscriptionResult(text: "expanded transcription", detectedLanguage: language)
         }
     }
 
@@ -4125,6 +4196,113 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    func testPromptProcessingUsesStableProviderIdsAndLegacyAliases() async throws {
+        let providerKey = "llmProviderType"
+        let modelKey = "llmCloudModel"
+        let originalProvider = UserDefaults.standard.object(forKey: providerKey)
+        let originalModel = UserDefaults.standard.object(forKey: modelKey)
+        defer {
+            Self.restoreUserDefault(originalProvider, forKey: providerKey)
+            Self.restoreUserDefault(originalModel, forKey: modelKey)
+        }
+
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockLLMProviderPlugin()
+        plugin.configuredProviderName = "Alter"
+        plugin.configuredProviderId = "openai-compatible:alter"
+        plugin.configuredProviderDisplayName = "Alter"
+        plugin.configuredProviderLegacyAliases = ["OpenAI Compatible"]
+        plugin.models = [PluginModelInfo(id: "alter-chat", displayName: "Alter Chat")]
+
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.llm.identity",
+                    name: "Mock LLM Identity",
+                    version: "1.0.0",
+                    principalClass: "APIRouterMockLLMProviderPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        UserDefaults.standard.set("OpenAI Compatible", forKey: providerKey)
+        let service = PromptProcessingService()
+        service.validateSelectionAfterPluginLoad()
+
+        XCTAssertEqual(service.selectedProviderId, "openai-compatible:alter")
+        XCTAssertTrue(service.availableProviders.contains {
+            $0.id == "openai-compatible:alter" && $0.displayName == "Alter"
+        })
+
+        _ = try await service.process(
+            prompt: "Fix grammar.",
+            text: "hello world",
+            providerOverride: "OpenAI Compatible"
+        )
+
+        XCTAssertEqual(plugin.lastRequestedModel, "alter-chat")
+    }
+
+    @MainActor
+    func testPluginManagerExpandsAdditionalProviderRoles() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let llmProvider = MockLLMProviderPlugin()
+        llmProvider.configuredProviderName = "Inception"
+        llmProvider.configuredProviderId = "openai-compatible:inception"
+        llmProvider.configuredProviderDisplayName = "Inception"
+        let engine = NamedTranscriptionPlugin(
+            providerId: "openai-compatible:inception",
+            providerDisplayName: "Inception",
+            modelId: "inception-whisper"
+        )
+        let expandedPlugin = ExpandedRolePlugin(
+            additionalLLMProviders: [llmProvider],
+            additionalTranscriptionEngines: [engine]
+        )
+
+        let loaded = LoadedPlugin(
+            manifest: PluginManifest(
+                id: "com.typewhisper.mock.expanded-role",
+                name: "Expanded Role Mock",
+                version: "1.0.0",
+                principalClass: "APIRouterExpandedRolePlugin"
+            ),
+            instance: expandedPlugin,
+            bundle: Bundle.main,
+            sourceURL: appSupportDirectory,
+            isEnabled: true
+        )
+        PluginManager.shared.loadedPlugins = [loaded]
+
+        XCTAssertEqual(
+            PluginManager.shared.llmProvider(for: "openai-compatible:inception")?.llmProviderDisplayName,
+            "Inception"
+        )
+        XCTAssertEqual(
+            PluginManager.shared.transcriptionEngine(for: "openai-compatible:inception")?.providerDisplayName,
+            "Inception"
+        )
+        XCTAssertEqual(
+            PluginManager.shared.loadedTranscriptionPlugin(for: "openai-compatible:inception")?.manifest.id,
+            loaded.manifest.id
+        )
+    }
+
+    @MainActor
     func testWorkflowPromptProcessingSkipsMemoryAndUsesWorkflowBehavior() async throws {
         let providerKey = "llmProviderType"
         let modelKey = "llmCloudModel"
@@ -5148,6 +5326,15 @@ final class APIRouterAndHandlersTests: XCTestCase {
         )
         let legacyPlugin = MockTranscriptionPlugin()
         let catalogPlugin = CatalogTranscriptionPlugin()
+        let expandedEngine = NamedTranscriptionPlugin(
+            providerId: "openai-compatible:inception",
+            providerDisplayName: "Inception",
+            modelId: "inception-whisper"
+        )
+        let expandedPlugin = ExpandedRolePlugin(
+            additionalLLMProviders: [],
+            additionalTranscriptionEngines: [expandedEngine]
+        )
         PluginManager.shared.loadedPlugins = [
             LoadedPlugin(
                 manifest: PluginManifest(
@@ -5174,6 +5361,19 @@ final class APIRouterAndHandlersTests: XCTestCase {
                 bundle: Bundle.main,
                 sourceURL: appSupportDirectory,
                 isEnabled: true
+            ),
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.expanded-role",
+                    name: "Expanded Role Mock",
+                    version: "1.0.0",
+                    sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+                    principalClass: "APIRouterExpandedRolePlugin"
+                ),
+                instance: expandedPlugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
             )
         ]
 
@@ -5189,9 +5389,13 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let catalogIds = models
             .filter { ($0["engine"] as? String) == catalogPlugin.providerId }
             .compactMap { $0["id"] as? String }
+        let expandedIds = models
+            .filter { ($0["engine"] as? String) == expandedEngine.providerId }
+            .compactMap { $0["id"] as? String }
 
         XCTAssertEqual(legacyIds, ["tiny"])
         XCTAssertEqual(catalogIds.sorted(), ["large", "tiny"])
+        XCTAssertEqual(expandedIds, ["inception-whisper"])
     }
 
     @MainActor

@@ -78,7 +78,7 @@ class PromptProcessingService: ObservableObject {
         }
 
         for plugin in PluginManager.shared.llmProviders {
-            result.append((id: plugin.providerName, displayName: plugin.providerName))
+            result.append((id: plugin.llmProviderId, displayName: plugin.llmProviderDisplayName))
         }
 
         return result
@@ -108,15 +108,14 @@ class PromptProcessingService: ObservableObject {
         if providerId == Self.appleIntelligenceId {
             return "Apple Intelligence"
         }
-        // Use the plugin's canonical providerName for display
-        return PluginManager.shared.llmProvider(for: providerId)?.providerName ?? providerId
+        return PluginManager.shared.llmProvider(for: providerId)?.llmProviderDisplayName ?? providerId
     }
 
-    /// Normalize a provider ID to match the plugin's canonical providerName.
-    /// Handles migration from old enum rawValues ("groq") to plugin names ("Groq").
+    /// Normalize a provider ID to match the plugin's stable runtime ID.
+    /// Handles migration from old enum rawValues ("groq") to plugin IDs.
     func normalizeProviderId(_ id: String) -> String {
         if id == Self.appleIntelligenceId { return id }
-        return PluginManager.shared.llmProvider(for: id)?.providerName ?? id
+        return PluginManager.shared.llmProvider(for: id)?.llmProviderId ?? id
     }
 
     init() {
