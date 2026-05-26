@@ -1,206 +1,326 @@
 {
-  "sourceLanguage" : "en",
-  "strings" : {
-    "Download & Load" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Laden & Aktivieren"
+  "sourceLanguage": "en",
+  "strings": {
+    "Download & Load": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laden & Aktivieren"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ダウンロードして読み込み"
           }
         }
       }
     },
-    "Cancel" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Abbrechen"
+    "Cancel": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abbrechen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キャンセル"
           }
         }
       }
     },
-    "Delete cached model" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zwischengespeichertes Modell löschen"
+    "Delete cached model": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zwischengespeichertes Modell löschen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キャッシュされたモデルを削除"
           }
         }
       }
     },
-    "Download timed out while fetching Gemma 4 from Hugging Face. Please retry. Adding an optional HuggingFace token in this plugin can also increase download rate limits." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Der Download von Gemma 4 von Hugging Face hat zu lange gedauert. Bitte erneut versuchen. Ein optionaler HuggingFace-Token in diesem Plugin kann die Download-Rate-Limits erhoehen."
+    "Download timed out while fetching Gemma 4 from Hugging Face. Please retry. Adding an optional HuggingFace token in this plugin can also increase download rate limits.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Download von Gemma 4 von Hugging Face hat zu lange gedauert. Bitte erneut versuchen. Ein optionaler HuggingFace-Token in diesem Plugin kann die Download-Rate-Limits erhoehen."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging FaceからGemma 4をダウンロード中にタイムアウトしました。再試行してください。このプラグインにオプションのHuggingFaceトークンを追加すると、ダウンロードレート制限を緩和できます。"
           }
         }
       }
     },
-    "The downloaded Gemma model cache appears incomplete or incompatible. Delete the cached model and download it again." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Der heruntergeladene Gemma-Modellcache scheint unvollständig oder inkompatibel zu sein. Lösche das zwischengespeicherte Modell und lade es erneut herunter."
+    "The downloaded Gemma model cache appears incomplete or incompatible. Delete the cached model and download it again.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der heruntergeladene Gemma-Modellcache scheint unvollständig oder inkompatibel zu sein. Lösche das zwischengespeicherte Modell und lade es erneut herunter."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ダウンロードされたGemmaモデルキャッシュが不完全または互換性がないようです。キャッシュされたモデルを削除して再ダウンロードしてください。"
           }
         }
       }
     },
-    "HuggingFace Token" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "HuggingFace Token"
+    "HuggingFace Token": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HuggingFace Token"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HuggingFaceトークン"
           }
         }
       }
     },
-    "Load a Gemma 4 model in Integrations before using it for prompts." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Lade zuerst ein Gemma-4-Modell in den Integrationen, bevor du es fuer Prompts verwendest."
+    "Load a Gemma 4 model in Integrations before using it for prompts.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lade zuerst ein Gemma-4-Modell in den Integrationen, bevor du es fuer Prompts verwendest."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プロンプトに使用する前に、拡張機能でGemma 4モデルを読み込んでください。"
           }
         }
       }
     },
-    "Local LLM powered by Google Gemma 4 on Apple Silicon. No API key required." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Lokales LLM mit Google Gemma 4 auf Apple Silicon. Kein API-Schlüssel erforderlich."
+    "Local LLM powered by Google Gemma 4 on Apple Silicon. No API key required.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lokales LLM mit Google Gemma 4 auf Apple Silicon. Kein API-Schlüssel erforderlich."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Silicon上のGoogle Gemma 4によるローカルLLM。APIキー不要。"
           }
         }
       }
     },
-    "Model" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Modell"
+    "Model": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modell"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデル"
           }
         }
       }
     },
-    "Invalid HuggingFace Token" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ungültiger HuggingFace-Token"
+    "Invalid HuggingFace Token": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ungültiger HuggingFace-Token"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無効なHuggingFaceトークン"
           }
         }
       }
     },
-    "Experimental" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Experimentell"
+    "Experimental": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Experimentell"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "実験的"
           }
         }
       }
     },
-    "Experimental. You can try it at your own risk." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Experimentell. Du kannst es auf eigene Gefahr ausprobieren."
+    "Experimental. You can try it at your own risk.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Experimentell. Du kannst es auf eigene Gefahr ausprobieren."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "実験的。自己責任でお試しください。"
           }
         }
       }
     },
-    "Valid HuggingFace Token" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gültiger HuggingFace-Token"
+    "Valid HuggingFace Token": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gültiger HuggingFace-Token"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有効なHuggingFaceトークン"
           }
         }
       }
     },
-    "Validating token..." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Token wird geprüft..."
+    "Validating token...": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token wird geprüft..."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "トークンを検証中..."
           }
         }
       }
     },
-    "Optional. Increases download rate limits. Free at huggingface.co/settings/tokens" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Optional. Erhoeht Download-Rate-Limits. Kostenlos unter huggingface.co/settings/tokens"
+    "Optional. Increases download rate limits. Free at huggingface.co/settings/tokens": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Optional. Erhoeht Download-Rate-Limits. Kostenlos unter huggingface.co/settings/tokens"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "オプション。ダウンロードレート制限を緩和します。huggingface.co/settings/tokensで無料取得。"
           }
         }
       }
     },
-    "Remove" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Entfernen"
+    "Remove": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entfernen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "削除"
           }
         }
       }
     },
-    "Save" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Speichern"
+    "Save": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speichern"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
           }
         }
       }
     },
-    "Gemma 4 E2B/E4B 4-bit models are recommended. Larger variants are experimental and may fail depending on hardware." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gemma 4 E2B/E4B 4-bit Modelle sind empfohlen. Groessere Varianten sind experimentell und koennen je nach Hardware fehlschlagen."
+    "Gemma 4 E2B/E4B 4-bit models are recommended. Larger variants are experimental and may fail depending on hardware.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gemma 4 E2B/E4B 4-bit Modelle sind empfohlen. Groessere Varianten sind experimentell und koennen je nach Hardware fehlschlagen."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gemma 4 E2B/E4B 4ビットモデルが推奨されます。より大きなバリアントは実験的であり、ハードウェアによっては失敗する場合があります。"
           }
         }
       }
     },
-    "Try anyway" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Trotzdem versuchen"
+    "Try anyway": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trotzdem versuchen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "それでも試す"
           }
         }
       }
     },
-    "Unload" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deaktivieren"
+    "Unload": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deaktivieren"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アンロード"
           }
         }
       }
     }
   },
-  "version" : "1.0"
+  "version": "1.0"
 }

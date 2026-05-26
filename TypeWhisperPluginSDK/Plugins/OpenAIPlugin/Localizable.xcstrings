@@ -1,296 +1,470 @@
 {
-  "sourceLanguage" : "en",
-  "strings" : {
-    "API Key" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "API-Schlüssel"
+  "sourceLanguage": "en",
+  "strings": {
+    "API Key": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API-Schlüssel"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "APIキー"
           }
         }
       }
     },
-    "API keys are stored securely in the Keychain" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "API-Schlüssel werden sicher im Schlüsselbund gespeichert"
+    "API keys are stored securely in the Keychain": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API-Schlüssel werden sicher im Schlüsselbund gespeichert"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "APIキーはキーチェーンに安全に保存されます"
           }
         }
       }
     },
-    "ChatGPT Login" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ChatGPT-Login"
+    "ChatGPT Login": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ChatGPT-Login"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ChatGPTログイン"
           }
         }
       }
     },
-    "ChatGPT login connected" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ChatGPT-Login verbunden"
+    "ChatGPT login connected": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ChatGPT-Login verbunden"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ChatGPTログイン接続済み"
           }
         }
       }
     },
-    "ChatGPT login connected." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ChatGPT-Login verbunden."
+    "ChatGPT login connected.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ChatGPT-Login verbunden."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ChatGPTログイン接続済み。"
           }
         }
       }
     },
-    "ChatGPT login exposes only the supported ChatGPT/Codex models." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Der ChatGPT-Login zeigt nur die unterstuetzten ChatGPT-/Codex-Modelle an."
+    "ChatGPT login exposes only the supported ChatGPT/Codex models.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der ChatGPT-Login zeigt nur die unterstuetzten ChatGPT-/Codex-Modelle an."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ChatGPTログインではサポートされているChatGPT/Codexモデルのみが表示されます。"
           }
         }
       }
     },
-    "Complete the OpenAI login in your browser. TypeWhisper will finish the connection automatically." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Schliessen Sie den OpenAI-Login im Browser ab. TypeWhisper verbindet den Account danach automatisch."
+    "Complete the OpenAI login in your browser. TypeWhisper will finish the connection automatically.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schliessen Sie den OpenAI-Login im Browser ab. TypeWhisper verbindet den Account danach automatisch."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ブラウザでOpenAIログインを完了してください。TypeWhisperが自動的に接続を完了します。"
           }
         }
       }
     },
-    "Connected plan: %@" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verbundener Plan: %@"
+    "Connected plan: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbundener Plan: %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "接続プラン: %@"
           }
         }
       }
     },
-    "Connection Method" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verbindungsmethode"
+    "Connection Method": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbindungsmethode"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection Method"
           }
         }
       }
     },
-    "GPT-4o models do not support Whisper Translate (translation to English)." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "GPT-4o-Modelle unterstützen Whisper Translate (Übersetzung ins Englische) nicht."
+    "GPT-4o models do not support Whisper Translate (translation to English).": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GPT-4o-Modelle unterstützen Whisper Translate (Übersetzung ins Englische) nicht."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GPT-4oモデルはWhisper翻訳（英語への翻訳）をサポートしていません。"
           }
         }
       }
     },
-    "Imported your existing Codex login." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bestehender Codex-Login importiert."
+    "Imported your existing Codex login.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bestehender Codex-Login importiert."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "既存のCodexログインをインポートしました。"
           }
         }
       }
     },
-    "Import Codex Login" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Codex-Login importieren"
+    "Import Codex Login": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codex-Login importieren"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codexログインをインポート"
           }
         }
       }
     },
-    "Invalid API Key" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ungültiger API-Schlüssel"
+    "Invalid API Key": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ungültiger API-Schlüssel"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無効なAPIキー"
           }
         }
       }
     },
-    "LLM Model" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "LLM-Modell"
+    "LLM Model": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LLM-Modell"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LLMモデル"
           }
         }
       }
     },
-    "Controls how much thinking time the model spends before answering." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Steuert, wie viel Denkzeit sich das Modell vor der Antwort nimmt."
+    "Controls how much thinking time the model spends before answering.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steuert, wie viel Denkzeit sich das Modell vor der Antwort nimmt."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデルが回答前に費やす思考時間を制御します。"
           }
         }
       }
     },
-    "High" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hoch"
+    "High": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hoch"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高"
           }
         }
       }
     },
-    "Low" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Niedrig"
+    "Low": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Niedrig"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "低"
           }
         }
       }
     },
-    "Medium" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mittel"
+    "Medium": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mittel"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中"
           }
         }
       }
     },
-    "Refresh" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Aktualisieren"
+    "Refresh": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktualisieren"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更新"
           }
         }
       }
     },
-    "Remove" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Entfernen"
+    "Remove": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entfernen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "削除"
           }
         }
       }
     },
-    "Reasoning Effort" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Denkaufwand"
+    "Reasoning Effort": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Denkaufwand"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reasoning Effort"
           }
         }
       }
     },
-    "Save" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sichern"
+    "Save": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sichern"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
           }
         }
       }
     },
-    "Sign In In Browser" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Im Browser anmelden"
+    "Sign In In Browser": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im Browser anmelden"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ブラウザでサインイン"
           }
         }
       }
     },
-    "Transcription Model" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Transkriptionsmodell"
+    "Transcription Model": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkriptionsmodell"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字起こしモデル"
           }
         }
       }
     },
-    "Use your existing ChatGPT Plus/Pro or Codex login for prompt processing. Transcription still requires an API key." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nutzen Sie Ihren bestehenden ChatGPT-Plus-/Pro- oder Codex-Login fuer Prompt-Verarbeitung. Fuer Transkription ist weiterhin ein API-Schluessel noetig."
+    "Use your existing ChatGPT Plus/Pro or Codex login for prompt processing. Transcription still requires an API key.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nutzen Sie Ihren bestehenden ChatGPT-Plus-/Pro- oder Codex-Login fuer Prompt-Verarbeitung. Fuer Transkription ist weiterhin ein API-Schluessel noetig."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "既存のChatGPT Plus/ProまたはCodexログインをプロンプト処理に使用します。文字起こしには引き続きAPIキーが必要です。"
           }
         }
       }
     },
-    "Using default models. Press Refresh to fetch all available models." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Standardmodelle werden verwendet. Klicken Sie auf Aktualisieren, um alle verfuegbaren Modelle abzurufen."
+    "Using default models. Press Refresh to fetch all available models.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standardmodelle werden verwendet. Klicken Sie auf Aktualisieren, um alle verfuegbaren Modelle abzurufen."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "デフォルトモデルを使用中。更新を押してすべての利用可能なモデルを取得してください。"
           }
         }
       }
     },
-    "Valid API Key" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gültiger API-Schlüssel"
+    "Valid API Key": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gültiger API-Schlüssel"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有効なAPIキー"
           }
         }
       }
     },
-    "Validating..." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wird überprüft ..."
+    "Validating...": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird überprüft ..."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "検証中..."
           }
         }
       }
     },
-    "Waiting for OpenAI login..." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Warte auf OpenAI-Login ..."
+    "Waiting for OpenAI login...": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Warte auf OpenAI-Login ..."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenAIログインを待機中..."
           }
         }
       }
     }
   },
-  "version" : "1.0"
+  "version": "1.0"
 }

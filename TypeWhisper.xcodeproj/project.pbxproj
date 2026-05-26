@@ -2924,6 +2924,7 @@
 			knownRegions = (
 				en,
 				de,
+				ja,
 				Base,
 			);
 			mainGroup = CC00000000000000000001;

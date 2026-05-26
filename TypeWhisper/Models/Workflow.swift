@@ -22,91 +22,64 @@ enum WorkflowTemplate: String, CaseIterable, Codable, Sendable {
         case .dictation:
             WorkflowTemplateDefinition(
                 template: self,
-                name: localizedAppText("Dictation Only", de: "Nur Diktat"),
-                description: localizedAppText(
-                    "Transcribe and insert without LLM processing.",
-                    de: "Transkribiert und fuegt ohne LLM-Verarbeitung ein."
-                ),
+                name: String(localized: "Dictation Only"),
+                description: String(localized: "Transcribe and insert without LLM processing."),
                 systemImage: "mic"
             )
         case .cleanedText:
             WorkflowTemplateDefinition(
                 template: self,
-                name: localizedAppText("Cleaned Text", de: "Bereinigter Text"),
-                description: localizedAppText(
-                    "Clean up dictated text for readability and punctuation.",
-                    de: "Bereinigt diktierten Text fuer bessere Lesbarkeit und Zeichensetzung."
-                ),
+                name: String(localized: "Cleaned Text"),
+                description: String(localized: "Clean up dictated text for readability and punctuation."),
                 systemImage: "text.badge.checkmark"
             )
         case .translation:
             WorkflowTemplateDefinition(
                 template: self,
-                name: localizedAppText("Translation", de: "Uebersetzung"),
-                description: localizedAppText(
-                    "Translate dictated text into the target language.",
-                    de: "Uebersetzt diktierten Text in die Zielsprache."
-                ),
+                name: String(localized: "Translation"),
+                description: String(localized: "Translate dictated text into the target language."),
                 systemImage: "globe"
             )
         case .emailReply:
             WorkflowTemplateDefinition(
                 template: self,
-                name: localizedAppText("Email Reply", de: "E-Mail-Antwort"),
-                description: localizedAppText(
-                    "Turn dictated notes into a reply email.",
-                    de: "Formt diktierte Notizen in eine Antwort-E-Mail um."
-                ),
+                name: String(localized: "Email Reply"),
+                description: String(localized: "Turn dictated notes into a reply email."),
                 systemImage: "envelope"
             )
         case .meetingNotes:
             WorkflowTemplateDefinition(
                 template: self,
-                name: localizedAppText("Meeting Notes", de: "Meeting Notes"),
-                description: localizedAppText(
-                    "Structure dictated notes into a meeting summary.",
-                    de: "Strukturiert diktierte Notizen zu einer Meeting-Zusammenfassung."
-                ),
+                name: String(localized: "Meeting Notes"),
+                description: String(localized: "Structure dictated notes into a meeting summary."),
                 systemImage: "doc.text.magnifyingglass"
             )
         case .checklist:
             WorkflowTemplateDefinition(
                 template: self,
-                name: localizedAppText("Checklist", de: "Checkliste"),
-                description: localizedAppText(
-                    "Extract action items into a checklist.",
-                    de: "Extrahiert Aufgaben in eine Checkliste."
-                ),
+                name: String(localized: "Checklist"),
+                description: String(localized: "Extract action items into a checklist."),
                 systemImage: "checklist"
             )
         case .json:
             WorkflowTemplateDefinition(
                 template: self,
                 name: "JSON",
-                description: localizedAppText(
-                    "Extract structured data as JSON.",
-                    de: "Extrahiert strukturierte Daten als JSON."
-                ),
+                description: String(localized: "Extract structured data as JSON."),
                 systemImage: "curlybraces"
             )
         case .summary:
             WorkflowTemplateDefinition(
                 template: self,
-                name: localizedAppText("Summary", de: "Zusammenfassung"),
-                description: localizedAppText(
-                    "Condense dictated text into a concise summary.",
-                    de: "Verdichtet diktierten Text zu einer kompakten Zusammenfassung."
-                ),
+                name: String(localized: "Summary"),
+                description: String(localized: "Condense dictated text into a concise summary."),
                 systemImage: "text.alignleft"
             )
         case .custom:
             WorkflowTemplateDefinition(
                 template: self,
-                name: localizedAppText("Custom Workflow", de: "Eigener Workflow"),
-                description: localizedAppText(
-                    "Start with a flexible workflow draft.",
-                    de: "Startet mit einem flexiblen Workflow-Entwurf."
-                ),
+                name: String(localized: "Custom Workflow"),
+                description: String(localized: "Start with a flexible workflow draft."),
                 systemImage: "slider.horizontal.3"
             )
         }
@@ -129,9 +102,9 @@ enum WorkflowTranslationProcessor: String, CaseIterable, Codable, Sendable {
     var label: String {
         switch self {
         case .appleTranslate:
-            localizedAppText("Apple Translate (On-Device)", de: "Apple Translate (On-Device)")
+            String(localized: "Apple Translate (On-Device)")
         case .llmPrompt:
-            localizedAppText("LLM Prompt", de: "LLM-Prompt")
+            String(localized: "LLM Prompt")
         }
     }
 }
@@ -151,33 +124,27 @@ enum WorkflowHotkeyBehavior: String, CaseIterable, Codable, Hashable, Sendable {
     var editorLabel: String {
         switch self {
         case .startDictation:
-            localizedAppText("Start Dictation", de: "Diktat starten")
+            String(localized: "Start Dictation")
         case .processSelectedText:
-            localizedAppText("Process Selected Text", de: "Markierten Text verarbeiten")
+            String(localized: "Process Selected Text")
         }
     }
 
     var editorDescription: String {
         switch self {
         case .startDictation:
-            localizedAppText(
-                "Pressing the shortcut starts recording and applies this workflow to the dictation.",
-                de: "Der Shortcut startet eine Aufnahme und wendet diesen Workflow auf das Diktat an."
-            )
+            String(localized: "Pressing the shortcut starts recording and applies this workflow to the dictation.")
         case .processSelectedText:
-            localizedAppText(
-                "Pressing the shortcut transforms the current selection or clipboard without recording.",
-                de: "Der Shortcut verarbeitet die aktuelle Auswahl oder Zwischenablage ohne Aufnahme."
-            )
+            String(localized: "Pressing the shortcut transforms the current selection or clipboard without recording.")
         }
     }
 
     var shortcutSubtitle: String {
         switch self {
         case .startDictation:
-            localizedAppText("Starts dictation", de: "Startet Diktat")
+            String(localized: "Starts dictation")
         case .processSelectedText:
-            localizedAppText("Processes selected text", de: "Verarbeitet markierten Text")
+            String(localized: "Processes selected text")
         }
     }
 }
@@ -479,15 +446,15 @@ extension WorkflowTriggerKind {
     var paletteLabel: String {
         switch self {
         case .app:
-            localizedAppText("App", de: "App")
+            String(localized: "App")
         case .website:
-            localizedAppText("Website", de: "Website")
+            String(localized: "Website")
         case .hotkey:
-            localizedAppText("Hotkey", de: "Hotkey")
+            String(localized: "Hotkey")
         case .global:
-            localizedAppText("Always", de: "Immer")
+            String(localized: "Always")
         case .manual:
-            localizedAppText("Manual", de: "Manuell")
+            String(localized: "Manual")
         }
     }
 }

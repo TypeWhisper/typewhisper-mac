@@ -39,8 +39,8 @@ final class PromptPaletteController: PromptPaletteControlling {
                 panelHeight: 344,
                 previewText: nil,
                 previewLineLimit: 3,
-                searchPrompt: localizedAppText("Search workflows...", de: "Workflows suchen..."),
-                emptyStateTitle: localizedAppText("No matching workflows", de: "Keine passenden Workflows")
+                searchPrompt: String(localized: "Search workflows..."),
+                emptyStateTitle: String(localized: "No matching workflows")
             ),
             items: items
         ) { item in

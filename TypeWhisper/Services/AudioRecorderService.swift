@@ -481,10 +481,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     private let transcriptionBufferLock = OSAllocatedUnfairLock<RecorderTranscriptionBuffer>(initialState: RecorderTranscriptionBuffer())
     static let transcriptionSampleRate: Double = 16000
     static var noSystemAudioDetectedWarning: String {
-        localizedAppText(
-            "No system audio was detected. If the other app is playing audio, macOS may be blocking that source from ScreenCaptureKit.",
-            de: "Es wurde kein Systemaudio erkannt. Wenn die andere App Audio abspielt, blockiert macOS diese Quelle möglicherweise für ScreenCaptureKit."
-        )
+        String(localized: "No system audio was detected. If the other app is playing audio, macOS may be blocking that source from ScreenCaptureKit.")
     }
     private static let systemAudioDetectionGracePeriod: TimeInterval = 2
     private static let systemAudioNonSilentThreshold: Float = 0.0001

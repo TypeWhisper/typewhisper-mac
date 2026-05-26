@@ -88,9 +88,9 @@ private enum IntegrationTab: String, CaseIterable {
     var title: String {
         switch self {
         case .installed:
-            return localizedAppText("My Plugins", de: "Meine Plugins")
+            return String(localized: "My Plugins")
         case .discover:
-            return localizedAppText("Discover", de: "Entdecken")
+            return String(localized: "Discover")
         }
     }
 
@@ -111,7 +111,7 @@ private enum DiscoverSort: String, CaseIterable {
     var title: String {
         switch self {
         case .popularity:
-            return localizedAppText("Popularity", de: "Beliebtheit")
+            return String(localized: "Popularity")
         case .name:
             return String(localized: "Name")
         }
@@ -286,7 +286,7 @@ struct PluginSettingsView: View {
             Button {
                 installFromFile()
             } label: {
-                Label(localizedAppText("Install Plugin", de: "Plugin installieren"), systemImage: "plus")
+                Label(String(localized: "Install Plugin"), systemImage: "plus")
             }
             .controlSize(.small)
             .help(String(localized: "Install from File..."))
@@ -302,15 +302,9 @@ struct PluginSettingsView: View {
         let updates = registryService.availableUpdatesCount
         let available = availablePlugins.count
         if updates > 0 {
-            return localizedAppText(
-                "\(installed) installed · \(updates) updates · \(available) available",
-                de: "\(installed) installiert · \(updates) Updates · \(available) verfügbar"
-            )
+            return String(localized: "\(installed) installed · \(updates) updates · \(available) available")
         }
-        return localizedAppText(
-            "\(installed) installed · \(available) available",
-            de: "\(installed) installiert · \(available) verfügbar"
-        )
+        return String(localized: "\(installed) installed · \(available) available")
     }
 
     private func normalizeDiscoverState() {
@@ -425,9 +419,9 @@ struct PluginSettingsView: View {
         let count = integrationTabCount(for: tab)
         switch tab {
         case .installed:
-            return localizedAppText("\(count) installed", de: "\(count) installiert")
+            return String(localized: "\(count) installed")
         case .discover:
-            return localizedAppText("\(count) available", de: "\(count) verfügbar")
+            return String(localized: "\(count) available")
         }
     }
 
@@ -707,8 +701,8 @@ struct PluginSettingsView: View {
             discoverHeroContent
         }
         .buttonStyle(.plain)
-        .help(localizedAppText("Open TypeWhisper add-ons website", de: "TypeWhisper-Add-ons-Webseite öffnen"))
-        .accessibilityLabel(localizedAppText("Open TypeWhisper add-ons website", de: "TypeWhisper-Add-ons-Webseite öffnen"))
+        .help(String(localized: "Open TypeWhisper add-ons website"))
+        .accessibilityLabel(String(localized: "Open TypeWhisper add-ons website"))
     }
 
     private var discoverHeroContent: some View {
@@ -753,14 +747,11 @@ struct PluginSettingsView: View {
 
     private var discoverHeroCompactCopy: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(localizedAppText("Browse plugin catalog", de: "Plugin-Katalog durchsuchen"))
+            Text(String(localized: "Browse plugin catalog"))
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.primary)
 
-            Text(localizedAppText(
-                "Browse add-ons on the TypeWhisper website and install them directly here.",
-                de: "Durchsuche Add-ons auf der TypeWhisper-Webseite und installiere sie direkt hier."
-            ))
+            Text(String(localized: "Browse add-ons on the TypeWhisper website and install them directly here."))
             .font(.caption)
             .foregroundStyle(.secondary)
             .lineLimit(2)
@@ -768,7 +759,7 @@ struct PluginSettingsView: View {
     }
 
     private var discoverHeroCompactLink: some View {
-        Label(localizedAppText("Open online catalog", de: "Online-Katalog öffnen"), systemImage: "arrow.up.right.square")
+        Label(String(localized: "Open online catalog"), systemImage: "arrow.up.right.square")
             .labelStyle(.titleAndIcon)
             .font(.caption.weight(.semibold))
             .foregroundStyle(.secondary)
@@ -811,18 +802,15 @@ struct PluginSettingsView: View {
             }
         }
         .buttonStyle(.plain)
-        .help(localizedAppText("Discover plugins", de: "Plugins entdecken"))
-        .accessibilityLabel(localizedAppText("Discover plugins", de: "Plugins entdecken"))
+        .help(String(localized: "Discover plugins"))
+        .accessibilityLabel(String(localized: "Discover plugins"))
     }
 
     private var installedDiscoverBannerCopy: some View {
         discoverHeroCopy(
-            title: localizedAppText("Discover new plugins", de: "Neue Plugins entdecken"),
-            subtitle: localizedAppText(
-                "Browse available add-ons and install the next integration directly here.",
-                de: "Durchsuche verfügbare Add-ons und installiere die nächste Integration direkt hier."
-            ),
-            actionTitle: localizedAppText("Discover plugins", de: "Plugins entdecken"),
+            title: String(localized: "Discover new plugins"),
+            subtitle: String(localized: "Browse available add-ons and install the next integration directly here."),
+            actionTitle: String(localized: "Discover plugins"),
             actionSystemImage: "arrow.right",
             titleFont: .headline.weight(.semibold),
             subtitleFont: .caption,
@@ -875,7 +863,7 @@ struct PluginSettingsView: View {
             Button {
                 selectedCapabilityFilters.removeAll()
             } label: {
-                Label(localizedAppText("All functions", de: "Alle Funktionen"), systemImage: selectedCapabilityFilters.isEmpty ? "checkmark" : "line.3.horizontal.decrease.circle")
+                Label(String(localized: "All functions"), systemImage: selectedCapabilityFilters.isEmpty ? "checkmark" : "line.3.horizontal.decrease.circle")
             }
 
             if !discoverCapabilityOptions.isEmpty {
@@ -931,7 +919,7 @@ struct PluginSettingsView: View {
 
     private var capabilityFilterTitle: String {
         if selectedCapabilityFilters.isEmpty {
-            return localizedAppText("All functions", de: "Alle Funktionen")
+            return String(localized: "All functions")
         }
 
         let selected = PluginCategory.allCases.filter { selectedCapabilityFilters.contains($0) }
@@ -939,7 +927,7 @@ struct PluginSettingsView: View {
             return category.badgeTitle
         }
 
-        return localizedAppText("\(selected.count) functions", de: "\(selected.count) Funktionen")
+        return String(localized: "\(selected.count) functions")
     }
 
     private func toggleCapabilityFilter(_ category: PluginCategory) {
@@ -960,10 +948,7 @@ struct PluginSettingsView: View {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
             TextField(
-                localizedAppText(
-                    "Search plugins, providers, or features",
-                    de: "Plugins, Anbieter oder Funktionen suchen"
-                ),
+                String(localized: "Search plugins, providers, or features"),
                 text: $searchText
             )
                 .textFieldStyle(.plain)
@@ -1228,7 +1213,7 @@ private struct HostingSummaryInline: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Label(localizedAppText("\(localCount) Local", de: "\(localCount) lokal"), systemImage: "desktopcomputer")
+            Label(String(localized: "\(localCount) Local"), systemImage: "desktopcomputer")
                 .foregroundStyle(.green)
             Label("\(cloudCount) Cloud", systemImage: "cloud")
                 .foregroundStyle(.cyan)
@@ -1586,7 +1571,7 @@ private struct InstalledPluginRow: View {
                                 Button {
                                     NSWorkspace.shared.open(detailsURL)
                                 } label: {
-                                    Label(localizedAppText("Details", de: "Details"), systemImage: "arrow.up.right.square")
+                                    Label(String(localized: "Details"), systemImage: "arrow.up.right.square")
                                 }
                             }
 
@@ -1594,7 +1579,7 @@ private struct InstalledPluginRow: View {
                                 Button {
                                     NSWorkspace.shared.open(homepageURL)
                                 } label: {
-                                    Label(localizedAppText("Homepage", de: "Homepage"), systemImage: "globe")
+                                    Label(String(localized: "Homepage"), systemImage: "globe")
                                 }
                             }
 
@@ -1606,7 +1591,7 @@ private struct InstalledPluginRow: View {
                                 Button {
                                     onRepair()
                                 } label: {
-                                    Label(localizedAppText("Repair Installation", de: "Installation reparieren"), systemImage: "arrow.down.app")
+                                    Label(String(localized: "Repair Installation"), systemImage: "arrow.down.app")
                                 }
                             }
 
@@ -1628,8 +1613,8 @@ private struct InstalledPluginRow: View {
                         }
                         .menuStyle(.borderlessButton)
                         .fixedSize()
-                        .help(localizedAppText("More Actions", de: "Weitere Aktionen"))
-                        .accessibilityLabel(localizedAppText("More Actions for \(plugin.manifest.name)", de: "Weitere Aktionen für \(plugin.manifest.name)"))
+                        .help(String(localized: "More Actions"))
+                        .accessibilityLabel(String(localized: "More Actions for \(plugin.manifest.name)"))
                     }
                 }
             }
@@ -1938,11 +1923,11 @@ private struct AvailablePluginRow: View {
                     Button {
                         onOpenDetails()
                     } label: {
-                        Label(localizedAppText("Details", de: "Details"), systemImage: "arrow.up.right.square")
+                        Label(String(localized: "Details"), systemImage: "arrow.up.right.square")
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                    .accessibilityLabel(localizedAppText("Open details for \(plugin.name)", de: "Details für \(plugin.name) öffnen"))
+                    .accessibilityLabel(String(localized: "Open details for \(plugin.name)"))
                 }
             }
         }

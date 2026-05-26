@@ -67,23 +67,17 @@ struct LicenseSettingsView: View {
 
     private var planSelectionSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(localizedAppText("Choose the plan that fits.", de: "Wähle den passenden Plan."))
+            Text(String(localized: "Choose the plan that fits."))
                 .font(.headline)
 
-            Text(localizedAppText(
-                "Everything stays on this page. Pick the plan that matches how you use TypeWhisper.",
-                de: "Alles bleibt auf dieser Seite. Wähle den Plan, der zu deiner Nutzung von TypeWhisper passt."
-            ))
+            Text(String(localized: "Everything stays on this page. Pick the plan that matches how you use TypeWhisper."))
             .foregroundStyle(.secondary)
 
             LazyVGrid(columns: planColumns, spacing: 12) {
                 planSelectionButton(
-                    title: localizedAppText("GPLv3 / OSS", de: "GPLv3 / OSS"),
-                    price: localizedAppText("Free", de: "Kostenlos"),
-                    description: localizedAppText(
-                        "Install and run the GPL version as-is, including personal or internal use.",
-                        de: "Installiere und nutze die GPL-Version unverändert, auch privat oder intern."
-                    ),
+                    title: String(localized: "GPLv3 / OSS"),
+                    price: String(localized: "Free"),
+                    description: String(localized: "Install and run the GPL version as-is, including personal or internal use."),
                     systemImage: "checkmark.circle",
                     selected: license.usageIntent == .personalOSS && license.licenseTier != .enterprise,
                     accent: .green
@@ -92,12 +86,9 @@ struct LicenseSettingsView: View {
                 }
 
                 planSelectionButton(
-                    title: localizedAppText("Individual", de: "Einzelnutzer"),
-                    price: localizedAppText("from 5 EUR/mo", de: "ab 5 EUR/Monat"),
-                    description: localizedAppText(
-                        "Non-GPL terms, procurement, support, or proprietary distribution for one person.",
-                        de: "Nicht-GPL-Bedingungen, Beschaffung, Support oder proprietäre Weiterverteilung für eine Person."
-                    ),
+                    title: String(localized: "Individual"),
+                    price: String(localized: "from 5 EUR/mo"),
+                    description: String(localized: "Non-GPL terms, procurement, support, or proprietary distribution for one person."),
                     systemImage: "briefcase",
                     selected: license.usageIntent == .workSolo && license.licenseTier != .enterprise,
                     accent: .accentColor
@@ -107,11 +98,8 @@ struct LicenseSettingsView: View {
 
                 planSelectionButton(
                     title: "Team",
-                    price: localizedAppText("from 19 EUR/mo", de: "ab 19 EUR/Monat"),
-                    description: localizedAppText(
-                        "Procurement, support, managed seats, and up to 10 devices.",
-                        de: "Beschaffung, Support, verwaltete Plätze und bis zu 10 Geräte."
-                    ),
+                    price: String(localized: "from 19 EUR/mo"),
+                    description: String(localized: "Procurement, support, managed seats, and up to 10 devices."),
                     systemImage: "person.3",
                     selected: license.usageIntent == .team && license.licenseTier != .enterprise,
                     accent: .accentColor
@@ -120,12 +108,9 @@ struct LicenseSettingsView: View {
                 }
 
                 planSelectionButton(
-                    title: localizedAppText("Enterprise", de: "Unternehmensplan"),
-                    price: localizedAppText("from 99 EUR/mo", de: "ab 99 EUR/Monat"),
-                    description: localizedAppText(
-                        "Company-wide rollout, procurement, and compliance-heavy setups.",
-                        de: "Firmenweiter Rollout, Beschaffung und Setups mit hohen Compliance-Anforderungen."
-                    ),
+                    title: String(localized: "Enterprise"),
+                    price: String(localized: "from 99 EUR/mo"),
+                    description: String(localized: "Company-wide rollout, procurement, and compliance-heavy setups."),
                     systemImage: "building.2",
                     selected: license.usageIntent == .enterprise || license.licenseTier == .enterprise,
                     accent: .orange
@@ -139,13 +124,10 @@ struct LicenseSettingsView: View {
     private var sharedActivationSection: some View {
         PanelCard {
             VStack(alignment: .leading, spacing: 12) {
-                Text(localizedAppText("Already have a key?", de: "Bereits einen Schlüssel?"))
+                Text(String(localized: "Already have a key?"))
                     .font(.headline)
 
-                Text(localizedAppText(
-                    "Enter any TypeWhisper key here. The app automatically detects whether it is Supporter, Individual, Team, or Enterprise.",
-                    de: "Gib hier einen beliebigen TypeWhisper-Schlüssel ein. Die App erkennt automatisch, ob es ein Supporter-, Einzelnutzer-, Team- oder Unternehmensschlüssel ist."
-                ))
+                Text(String(localized: "Enter any TypeWhisper key here. The app automatically detects whether it is Supporter, Individual, Team, or Enterprise."))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -166,15 +148,12 @@ struct LicenseSettingsView: View {
                 Button {
                     openURL(URL(string: AppConstants.Polar.customerPortalURL))
                 } label: {
-                    Label(localizedAppText("Manage Purchases", de: "Käufe verwalten"), systemImage: "arrow.up.right.square")
+                    Label(String(localized: "Manage Purchases"), systemImage: "arrow.up.right.square")
                 }
                 .buttonStyle(.link)
                 .modifier(PointingHandCursorModifier())
 
-                Text(localizedAppText(
-                    "Use this if you already bought a commercial or supporter license and want to manage it in Polar.",
-                    de: "Nutze das, wenn du bereits eine kommerzielle oder Supporter-Lizenz gekauft hast und sie in Polar verwalten möchtest."
-                ))
+                Text(String(localized: "Use this if you already bought a commercial or supporter license and want to manage it in Polar."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             }
@@ -194,14 +173,14 @@ struct LicenseSettingsView: View {
         VStack(alignment: .leading, spacing: 20) {
             PanelCard {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text(localizedAppText("Pricing in short", de: "Preise im Überblick"))
+                    Text(String(localized: "Pricing in short"))
                         .font(.headline)
 
                     if let selectedCommercialTier {
                         HStack(alignment: .top, spacing: 12) {
                             purchaseOptionCard(
-                                eyebrow: localizedAppText("Flexible", de: "Flexibel"),
-                                title: localizedAppText("Monthly subscription", de: "Monatsabo"),
+                                eyebrow: String(localized: "Flexible"),
+                                title: String(localized: "Monthly subscription"),
                                 pricing: commercialPurchaseOptionCopy(for: selectedCommercialTier, cadence: .monthly),
                                 description: monthlyPurchaseDescription(for: selectedCommercialTier),
                                 systemImage: "calendar",
@@ -211,23 +190,20 @@ struct LicenseSettingsView: View {
                             }
 
                             purchaseOptionCard(
-                                eyebrow: localizedAppText("One-time purchase", de: "Einmalkauf"),
-                                title: localizedAppText("Lifetime", de: "Dauerlizenz"),
+                                eyebrow: String(localized: "One-time purchase"),
+                                title: String(localized: "Lifetime"),
                                 pricing: commercialPurchaseOptionCopy(for: selectedCommercialTier, cadence: .lifetime),
                                 description: lifetimePurchaseDescription(for: selectedCommercialTier),
                                 systemImage: "infinity",
                                 accent: Color(red: 0.96, green: 0.69, blue: 0.22),
-                                badge: localizedAppText("Best Value", de: "Bestes Angebot"),
+                                badge: String(localized: "Best Value"),
                                 emphasized: true
                             ) {
                                 openURL(selectedCommercialLifetimeURL)
                             }
                         }
 
-                        Text(localizedAppText(
-                            "Monthly is recurring. Lifetime is a one-time purchase for the same tier.",
-                            de: "Das Monatsabo ist wiederkehrend. Die Dauerlizenz ist ein einmaliger Kauf für dasselbe Paket."
-                        ))
+                        Text(String(localized: "Monthly is recurring. Lifetime is a one-time purchase for the same tier."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -255,7 +231,7 @@ struct LicenseSettingsView: View {
             PanelCard {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Label(localizedAppText("Licensed", de: "Lizenziert"), systemImage: "checkmark.seal.fill")
+                        Label(String(localized: "Licensed"), systemImage: "checkmark.seal.fill")
                             .foregroundStyle(.green)
                             .font(.headline)
 
@@ -273,30 +249,24 @@ struct LicenseSettingsView: View {
 
             PanelCard {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(localizedAppText("Manage this Mac and your subscription", de: "Diesen Mac und dein Abo verwalten"))
+                    Text(String(localized: "Manage this Mac and your subscription"))
                         .font(.headline)
 
                     pricingWebsiteLink
 
-                    actionButton(title: localizedAppText("Manage Subscription", de: "Abo verwalten"), systemImage: "arrow.up.right.square") {
+                    actionButton(title: String(localized: "Manage Subscription"), systemImage: "arrow.up.right.square") {
                         openURL(URL(string: AppConstants.Polar.customerPortalURL))
                     }
 
-                    Text(localizedAppText(
-                        "Opens the Polar.sh customer portal where you can manage your subscription, update payment methods, or cancel.",
-                        de: "Öffnet das Polar.sh-Kundenportal, in dem du dein Abo verwalten, Zahlungsmethoden aktualisieren oder kündigen kannst."
-                    ))
+                    Text(String(localized: "Opens the Polar.sh customer portal where you can manage your subscription, update payment methods, or cancel."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    actionButton(title: localizedAppText("Deactivate License on This Mac", de: "Lizenz auf diesem Mac deaktivieren"), systemImage: "trash", role: .destructive) {
+                    actionButton(title: String(localized: "Deactivate License on This Mac"), systemImage: "trash", role: .destructive) {
                         Task { await license.deactivateLicense() }
                     }
 
-                    Text(localizedAppText(
-                        "Removes the license from this device. You can reactivate it on another Mac.",
-                        de: "Entfernt die Lizenz von diesem Gerät. Du kannst sie auf einem anderen Mac erneut aktivieren."
-                    ))
+                    Text(String(localized: "Removes the license from this device. You can reactivate it on another Mac."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -315,10 +285,7 @@ struct LicenseSettingsView: View {
             openURL(AppConstants.Website.pricingURL)
         } label: {
             Label(
-                localizedAppText(
-                    "View full pricing and FAQs on the website",
-                    de: "Vollständige Preise und FAQ auf der Website"
-                ),
+                String(localized: "View full pricing and FAQs on the website"),
                 systemImage: "globe"
             )
         }
@@ -331,7 +298,7 @@ struct LicenseSettingsView: View {
     private var supporterSection: some View {
         PanelCard {
             VStack(alignment: .leading, spacing: 12) {
-                Text(localizedAppText("Supporter", de: "Supporter"))
+                Text(String(localized: "Supporter"))
                     .font(.headline)
 
                 Text(supporterDescriptionText)
@@ -347,12 +314,12 @@ struct LicenseSettingsView: View {
                     supporterDiscordSection(tier: tier)
 
                     HStack(spacing: 10) {
-                        actionButton(title: localizedAppText("Manage Purchase", de: "Kauf verwalten"), systemImage: "arrow.up.right.square") {
+                        actionButton(title: String(localized: "Manage Purchase"), systemImage: "arrow.up.right.square") {
                             openURL(URL(string: AppConstants.Polar.customerPortalURL))
                         }
 
                         actionButton(
-                            title: localizedAppText("Deactivate Supporter License", de: "Supporter-Lizenz deaktivieren"),
+                            title: String(localized: "Deactivate Supporter License"),
                             systemImage: "trash",
                             role: .destructive
                         ) {
@@ -366,16 +333,13 @@ struct LicenseSettingsView: View {
                             .font(.caption)
                     }
                 } else {
-                    Text(localizedAppText(
-                        "If you already bought a supporter key, enter it above. GitHub Sponsors can still be claimed on the web.",
-                        de: "Wenn du bereits einen Supporter-Schlüssel gekauft hast, gib ihn oben ein. GitHub Sponsors kannst du weiter im Web bestätigen."
-                    ))
+                    Text(String(localized: "If you already bought a supporter key, enter it above. GitHub Sponsors can still be claimed on the web."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                     actionButton(
-                        title: localizedAppText("Claim GitHub Sponsors status on the web", de: "GitHub-Sponsors-Status im Web bestätigen"),
+                        title: String(localized: "Claim GitHub Sponsors status on the web"),
                         systemImage: "link"
                     ) {
                         openURL(supporterDiscord.githubSponsorsURL)
@@ -394,10 +358,7 @@ struct LicenseSettingsView: View {
     // MARK: - Shared Key Activation
 
     private var supporterDescriptionText: String {
-        localizedAppText(
-            "Supporter status is personal and optional. It can exist alongside GPLv3 / OSS, Individual, Team, or Enterprise, but it never grants commercial license terms.",
-            de: "Supporter-Status ist persönlich und optional. Er kann neben GPLv3 / OSS, Einzelnutzer, Team oder Unternehmensplan bestehen, gewährt aber nie kommerzielle Lizenzbedingungen."
-        )
+        String(localized: "Supporter status is personal and optional. It can exist alongside GPLv3 / OSS, Individual, Team, or Enterprise, but it never grants commercial license terms.")
     }
 
     @ViewBuilder
@@ -408,11 +369,11 @@ struct LicenseSettingsView: View {
         action: @escaping () async -> Void
     ) -> some View {
         HStack {
-            TextField(localizedAppText("TYPEWHISPER-xxxx-xxxx", de: "TYPEWHISPER-xxxx-xxxx"), text: input)
+            TextField(String(localized: "TYPEWHISPER-xxxx-xxxx"), text: input)
                 .textFieldStyle(.roundedBorder)
                 .focused($focusedField, equals: .licenseKey)
 
-            Button(localizedAppText("Activate", de: "Aktivieren")) {
+            Button(String(localized: "Activate")) {
                 Task { await action() }
             }
             .disabled(input.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isActivating)
@@ -437,79 +398,68 @@ struct LicenseSettingsView: View {
         VStack(alignment: .leading, spacing: 10) {
             switch supporterDiscord.claimStatus.state {
             case .unavailable, .unlinked:
-                Label(localizedAppText("Discord not connected", de: "Discord nicht verbunden"), systemImage: "person.crop.circle.badge.xmark")
+                Label(String(localized: "Discord not connected"), systemImage: "person.crop.circle.badge.xmark")
                     .foregroundStyle(.secondary)
 
-                Text(localizedAppText(
-                    "Connect Discord to claim your \(supporterTierDisplayName(tier)) supporter status in the community server.",
-                    de: "Verbinde Discord, um deinen \(supporterTierDisplayName(tier))-Supporter-Status im Community-Server zu bestätigen."
-                ))
+                Text(String(localized: "Connect Discord to claim your \(supporterTierDisplayName(tier)) supporter status in the community server."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                actionButton(title: localizedAppText("Connect Discord", de: "Discord verbinden"), systemImage: "person.crop.circle.badge.plus") {
+                actionButton(title: String(localized: "Connect Discord"), systemImage: "person.crop.circle.badge.plus") {
                     Task { await openClaimURL(await supporterDiscord.createClaimSession()) }
                 }
             case .pending:
-                Label(localizedAppText("Claim in progress", de: "Bestätigung läuft"), systemImage: "clock.badge")
+                Label(String(localized: "Claim in progress"), systemImage: "clock.badge")
                     .foregroundStyle(.orange)
 
-                Text(localizedAppText(
-                    "Finish the Discord authorization flow in your browser, then refresh the status here.",
-                    de: "Schließe den Discord-Autorisierungsablauf im Browser ab und aktualisiere den Status dann hier."
-                ))
+                Text(String(localized: "Finish the Discord authorization flow in your browser, then refresh the status here."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                actionButton(title: localizedAppText("Reconnect Discord", de: "Discord erneut verbinden"), systemImage: "arrow.clockwise.circle") {
+                actionButton(title: String(localized: "Reconnect Discord"), systemImage: "arrow.clockwise.circle") {
                     Task { await openClaimURL(await supporterDiscord.reconnect()) }
                 }
 
-                actionButton(title: localizedAppText("Refresh Discord Status", de: "Discord-Status aktualisieren"), systemImage: "arrow.clockwise") {
+                actionButton(title: String(localized: "Refresh Discord Status"), systemImage: "arrow.clockwise") {
                     Task { await supporterDiscord.refreshClaimStatus() }
                 }
             case .linked:
-                Label(localizedAppText("Discord connected", de: "Discord verbunden"), systemImage: "checkmark.seal.fill")
+                Label(String(localized: "Discord connected"), systemImage: "checkmark.seal.fill")
                     .foregroundStyle(.green)
 
                 if let username = supporterDiscord.claimStatus.discordUsername {
-                    Text(localizedAppText("Linked account: \(username)", de: "Verknüpftes Konto: \(username)"))
+                    Text(String(localized: "Linked account: \(username)"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
                 if !supporterDiscord.claimStatus.linkedRoles.isEmpty {
-                    Text(localizedAppText(
-                        "Active roles: \(supporterDiscord.claimStatus.linkedRoles.joined(separator: ", "))",
-                        de: "Aktive Rollen: \(supporterDiscord.claimStatus.linkedRoles.joined(separator: ", "))"
+                    Text(String(localized: "Active roles: \(supporterDiscord.claimStatus.linkedRoles.joined(separator: ", "))"))"
                     ))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
-                actionButton(title: localizedAppText("Refresh Discord Status", de: "Discord-Status aktualisieren"), systemImage: "arrow.clockwise") {
+                actionButton(title: String(localized: "Refresh Discord Status"), systemImage: "arrow.clockwise") {
                     Task { await supporterDiscord.refreshClaimStatus() }
                 }
 
-                actionButton(title: localizedAppText("Reconnect Discord", de: "Discord erneut verbinden"), systemImage: "link.badge.plus") {
+                actionButton(title: String(localized: "Reconnect Discord"), systemImage: "link.badge.plus") {
                     Task { await openClaimURL(await supporterDiscord.reconnect()) }
                 }
             case .failed:
-                Label(localizedAppText("Discord claim failed", de: "Discord-Bestätigung fehlgeschlagen"), systemImage: "exclamationmark.triangle.fill")
+                Label(String(localized: "Discord claim failed"), systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
 
-                Text(supporterDiscord.claimStatus.errorMessage ?? localizedAppText(
-                    "The Discord claim service returned an unknown error.",
-                    de: "Der Discord-Bestätigungsdienst hat einen unbekannten Fehler zurückgegeben."
-                ))
+                Text(supporterDiscord.claimStatus.errorMessage ?? String(localized: "The Discord claim service returned an unknown error."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                actionButton(title: localizedAppText("Retry Discord Claim", de: "Discord-Bestätigung erneut versuchen"), systemImage: "arrow.clockwise.circle") {
+                actionButton(title: String(localized: "Retry Discord Claim"), systemImage: "arrow.clockwise.circle") {
                     Task { await openClaimURL(await supporterDiscord.reconnect()) }
                 }
 
-                actionButton(title: localizedAppText("Refresh Discord Status", de: "Discord-Status aktualisieren"), systemImage: "arrow.clockwise") {
+                actionButton(title: String(localized: "Refresh Discord Status"), systemImage: "arrow.clockwise") {
                     Task { await supporterDiscord.refreshClaimStatus() }
                 }
             }
@@ -623,11 +573,11 @@ struct LicenseSettingsView: View {
     private var commercialStatusTitle: String {
         switch license.licenseStatus {
         case .active:
-            return localizedAppText("Licensed", de: "Lizenziert")
+            return String(localized: "Licensed")
         case .expired:
-            return localizedAppText("License expired or revoked", de: "Lizenz abgelaufen oder widerrufen")
+            return String(localized: "License expired or revoked")
         case .unlicensed:
-            return localizedAppText("No active commercial license", de: "Keine aktive kommerzielle Lizenz")
+            return String(localized: "No active commercial license")
         }
     }
 
@@ -636,20 +586,11 @@ struct LicenseSettingsView: View {
         case .personalOSS:
             return ""
         case .workSolo:
-            return localizedAppText(
-                "Individual covers one person who needs non-GPL terms, procurement, support, or proprietary distribution on up to 2 devices.",
-                de: "Der Einzelnutzer-Plan deckt eine Person ab, die Nicht-GPL-Bedingungen, Beschaffung, Support oder proprietäre Weiterverteilung auf bis zu 2 Geräten braucht."
-            )
+            return String(localized: "Individual covers one person who needs non-GPL terms, procurement, support, or proprietary distribution on up to 2 devices.")
         case .team:
-            return localizedAppText(
-                "Team covers procurement-friendly licensing, support, managed seats, and up to 10 devices.",
-                de: "Team deckt beschaffungsfreundliche Lizenzierung, Support, verwaltete Plätze und bis zu 10 Geräte ab."
-            )
+            return String(localized: "Team covers procurement-friendly licensing, support, managed seats, and up to 10 devices.")
         case .enterprise:
-            return localizedAppText(
-                "Enterprise covers company-wide rollout, procurement, and unlimited devices.",
-                de: "Der Unternehmensplan deckt firmenweiten Rollout, Beschaffung und unbegrenzt viele Geräte ab."
-            )
+            return String(localized: "Enterprise covers company-wide rollout, procurement, and unlimited devices.")
         }
     }
 
@@ -679,66 +620,36 @@ struct LicenseSettingsView: View {
         if let tier = license.licenseTier {
             switch tier {
             case .individual:
-                return localizedAppText(
-                    "This Mac is covered by Individual commercial license terms on up to 2 devices.",
-                    de: "Dieser Mac ist durch kommerzielle Einzelnutzer-Bedingungen auf bis zu 2 Geräten abgedeckt."
-                )
+                return String(localized: "This Mac is covered by Individual commercial license terms on up to 2 devices.")
             case .team:
-                return localizedAppText(
-                    "This Mac is covered by a team license for up to 10 devices.",
-                    de: "Dieser Mac ist durch eine Team-Lizenz für bis zu 10 Geräte abgedeckt."
-                )
+                return String(localized: "This Mac is covered by a team license for up to 10 devices.")
             case .enterprise:
-                return localizedAppText(
-                    "This Mac is covered by an enterprise license for company-wide rollout and unlimited devices.",
-                    de: "Dieser Mac ist durch eine Unternehmenslizenz für firmenweiten Rollout und unbegrenzt viele Geräte abgedeckt."
-                )
+                return String(localized: "This Mac is covered by an enterprise license for company-wide rollout and unlimited devices.")
             }
         }
 
-        return localizedAppText(
-            "This Mac has an active commercial license.",
-            de: "Dieser Mac hat eine aktive kommerzielle Lizenz."
-        )
+        return String(localized: "This Mac has an active commercial license.")
     }
 
     private func monthlyPurchaseDescription(for tier: LicenseTier) -> String {
         switch tier {
         case .individual:
-            return localizedAppText(
-                "Individual commercial license terms for up to 2 devices with recurring billing.",
-                de: "Kommerzielle Einzelnutzer-Bedingungen für bis zu 2 Geräte mit wiederkehrender Abrechnung."
-            )
+            return String(localized: "Individual commercial license terms for up to 2 devices with recurring billing.")
         case .team:
-            return localizedAppText(
-                "Keeps a team of up to 10 devices covered with a recurring plan.",
-                de: "Deckt ein Team mit bis zu 10 Geräten über einen wiederkehrenden Plan ab."
-            )
+            return String(localized: "Keeps a team of up to 10 devices covered with a recurring plan.")
         case .enterprise:
-            return localizedAppText(
-                "Recurring company-wide plan for rollout, procurement, and unlimited devices.",
-                de: "Wiederkehrender firmenweiter Plan für Rollout, Beschaffung und unbegrenzt viele Geräte."
-            )
+            return String(localized: "Recurring company-wide plan for rollout, procurement, and unlimited devices.")
         }
     }
 
     private func lifetimePurchaseDescription(for tier: LicenseTier) -> String {
         switch tier {
         case .individual:
-            return localizedAppText(
-                "One payment for the same 2-device Individual tier, with no monthly renewal.",
-                de: "Eine Zahlung für dasselbe Einzelnutzer-Paket mit 2 Geräten, ohne monatliche Verlängerung."
-            )
+            return String(localized: "One payment for the same 2-device Individual tier, with no monthly renewal.")
         case .team:
-            return localizedAppText(
-                "One payment for the same Team tier with up to 10 devices and no renewal cycle.",
-                de: "Eine Zahlung für dasselbe Team-Paket mit bis zu 10 Geräten und ohne Verlängerungszyklus."
-            )
+            return String(localized: "One payment for the same Team tier with up to 10 devices and no renewal cycle.")
         case .enterprise:
-            return localizedAppText(
-                "One payment for the same Enterprise rollout tier with unlimited devices.",
-                de: "Eine Zahlung für dasselbe Unternehmens-Paket mit unbegrenzt vielen Geräten."
-            )
+            return String(localized: "One payment for the same Enterprise rollout tier with unlimited devices.")
         }
     }
 
@@ -802,22 +713,16 @@ struct LicenseSettingsView: View {
         switch entitlement {
         case .commercial(let tier, let isLifetime):
             let lifetimeSuffix = isLifetime
-                ? localizedAppText(" (Lifetime)", de: " (Dauerlizenz)")
+                ? String(localized: " (Lifetime)")
                 : ""
-            return localizedAppText(
-                "Detected commercial key: \(businessTierDisplayName(tier))\(lifetimeSuffix).",
-                de: "Kommerzieller Schlüssel erkannt: \(businessTierDisplayName(tier))\(lifetimeSuffix)."
-            )
+            return String(localized: "Detected commercial key: \(businessTierDisplayName(tier))\(lifetimeSuffix).")
         case .supporter(let tier):
-            return localizedAppText(
-                "Detected supporter key: \(supporterTierDisplayName(tier)).",
-                de: "Supporter-Schlüssel erkannt: \(supporterTierDisplayName(tier))."
-            )
+            return String(localized: "Detected supporter key: \(supporterTierDisplayName(tier)).")
         }
     }
 
     private func activeTierLabel(for tier: LicenseTier) -> String {
-        let lifetimeSuffix = license.licenseIsLifetime ? localizedAppText(", Lifetime", de: ", Dauerlizenz") : ""
+        let lifetimeSuffix = license.licenseIsLifetime ? String(localized: ", Lifetime") : ""
         return "(\(businessTierDisplayName(tier))\(lifetimeSuffix))"
     }
 
@@ -885,17 +790,17 @@ struct LicenseSettingsView: View {
 
     private func businessTierDisplayName(_ tier: LicenseTier) -> String {
         switch tier {
-        case .individual: return localizedAppText("Individual", de: "Einzelnutzer")
-        case .team: return localizedAppText("Team", de: "Team")
-        case .enterprise: return localizedAppText("Enterprise", de: "Unternehmensplan")
+        case .individual: return String(localized: "Individual")
+        case .team: return String(localized: "Team")
+        case .enterprise: return String(localized: "Enterprise")
         }
     }
 
     private func supporterTierDisplayName(_ tier: SupporterTier) -> String {
         switch tier {
-        case .bronze: return localizedAppText("Bronze", de: "Bronze")
-        case .silver: return localizedAppText("Silver", de: "Silber")
-        case .gold: return localizedAppText("Gold", de: "Gold")
+        case .bronze: return String(localized: "Bronze")
+        case .silver: return String(localized: "Silver")
+        case .gold: return String(localized: "Gold")
         }
     }
 
@@ -932,38 +837,38 @@ func commercialPurchaseOptionCopy(for tier: LicenseTier, cadence: CommercialPurc
     case (.individual, .monthly):
         CommercialPurchaseOptionCopy(
             price: "5 EUR",
-            billingLabel: localizedAppText("per month", de: "pro Monat"),
-            detail: localizedAppText("Lower upfront cost", de: "Geringerer Einstiegspreis")
+            billingLabel: String(localized: "per month"),
+            detail: String(localized: "Lower upfront cost")
         )
     case (.individual, .lifetime):
         CommercialPurchaseOptionCopy(
             price: "99 EUR",
-            billingLabel: localizedAppText("one-time", de: "einmalig"),
-            detail: localizedAppText("Pay once, keep this tier", de: "Einmal zahlen, dieses Tier behalten")
+            billingLabel: String(localized: "one-time"),
+            detail: String(localized: "Pay once, keep this tier")
         )
     case (.team, .monthly):
         CommercialPurchaseOptionCopy(
             price: "19 EUR",
-            billingLabel: localizedAppText("per month", de: "pro Monat"),
-            detail: localizedAppText("Recurring billing", de: "Wiederkehrende Abrechnung")
+            billingLabel: String(localized: "per month"),
+            detail: String(localized: "Recurring billing")
         )
     case (.team, .lifetime):
         CommercialPurchaseOptionCopy(
             price: "299 EUR",
-            billingLabel: localizedAppText("one-time", de: "einmalig"),
-            detail: localizedAppText("Pay once, keep this tier", de: "Einmal zahlen, dieses Tier behalten")
+            billingLabel: String(localized: "one-time"),
+            detail: String(localized: "Pay once, keep this tier")
         )
     case (.enterprise, .monthly):
         CommercialPurchaseOptionCopy(
             price: "99 EUR",
-            billingLabel: localizedAppText("per month", de: "pro Monat"),
-            detail: localizedAppText("Recurring billing", de: "Wiederkehrende Abrechnung")
+            billingLabel: String(localized: "per month"),
+            detail: String(localized: "Recurring billing")
         )
     case (.enterprise, .lifetime):
         CommercialPurchaseOptionCopy(
             price: "999 EUR",
-            billingLabel: localizedAppText("one-time", de: "einmalig"),
-            detail: localizedAppText("Pay once, keep this tier", de: "Einmal zahlen, dieses Tier behalten")
+            billingLabel: String(localized: "one-time"),
+            detail: String(localized: "Pay once, keep this tier")
         )
     }
 }

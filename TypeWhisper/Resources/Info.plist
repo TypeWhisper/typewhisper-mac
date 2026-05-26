@@ -33,6 +33,7 @@
 	<array>
 		<string>en</string>
 		<string>de</string>
+		<string>ja</string>
 	</array>
 	<key>LSUIElement</key>
 	<true/>

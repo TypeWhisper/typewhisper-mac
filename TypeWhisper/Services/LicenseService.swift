@@ -507,10 +507,7 @@ final class LicenseService: ObservableObject {
             let validation = try await polarValidate(key: key, activationId: response.id)
             guard validation.status == "granted" else {
                 throw LicenseError.activationFailed(
-                    localizedAppText(
-                        "This entitlement is not active.",
-                        de: "Dieses Entitlement ist nicht aktiv."
-                    )
+                    String(localized: "This entitlement is not active.")
                 )
             }
 
@@ -520,10 +517,7 @@ final class LicenseService: ObservableObject {
             if let supporterTier = Self.inferSupporterTier(benefitID: benefitID, benefitDescription: benefitDescription) {
                 guard expectedEntitlement != .commercial else {
                     throw LicenseError.activationFailed(
-                        localizedAppText(
-                            "This key belongs to a supporter tier, not a commercial license.",
-                            de: "Dieser Schlüssel gehört zu einem Supporter-Tier, nicht zu einer kommerziellen Lizenz."
-                        )
+                        String(localized: "This key belongs to a supporter tier, not a commercial license.")
                     )
                 }
 
@@ -538,10 +532,7 @@ final class LicenseService: ObservableObject {
             if let licenseTier = Self.inferLicenseTier(benefitID: benefitID, benefitDescription: benefitDescription) {
                 guard expectedEntitlement != .supporter else {
                     throw LicenseError.activationFailed(
-                        localizedAppText(
-                            "This key belongs to a commercial license, not a supporter tier.",
-                            de: "Dieser Schlüssel gehört zu einer kommerziellen Lizenz, nicht zu einem Supporter-Tier."
-                        )
+                        String(localized: "This key belongs to a commercial license, not a supporter tier.")
                     )
                 }
 
@@ -562,10 +553,7 @@ final class LicenseService: ObservableObject {
             )
 
             throw LicenseError.activationFailed(
-                localizedAppText(
-                    "This key could not be matched to a known TypeWhisper entitlement.",
-                    de: "Dieser Schlüssel konnte keinem bekannten TypeWhisper-Entitlement zugeordnet werden."
-                )
+                String(localized: "This key could not be matched to a known TypeWhisper entitlement.")
             )
         } catch {
             try? await polarDeactivate(key: key, activationId: response.id)

@@ -18,15 +18,15 @@ enum WorkflowMatchKind: String, Sendable {
     var label: String {
         switch self {
         case .appAndWebsite:
-            localizedAppText("App + Website", de: "App + Website")
+            String(localized: "App + Website")
         case .website:
-            localizedAppText("Website", de: "Website")
+            String(localized: "Website")
         case .app:
-            localizedAppText("App", de: "App")
+            String(localized: "App")
         case .globalFallback:
-            localizedAppText("Always", de: "Immer")
+            String(localized: "Always")
         case .manualOverride:
-            localizedAppText("Manually triggered", de: "Manuell ausgeloest")
+            String(localized: "Manually triggered")
         }
     }
 }

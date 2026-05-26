@@ -101,10 +101,7 @@ struct SetupWizardView: View {
     }
 
     private func announceCurrentStep() {
-        accessibilityAnnouncementService.announce(localizedAppText(
-            "\(currentWizardStep.title). Step \(currentStep + 1) of \(SetupWizardStep.allCases.count). \(currentWizardStep.subtitle)",
-            de: "\(currentWizardStep.title). Schritt \(currentStep + 1) von \(SetupWizardStep.allCases.count). \(currentWizardStep.subtitle)"
-        ))
+        accessibilityAnnouncementService.announce(String(localized: "\(currentWizardStep.title). Step \(currentStep + 1) of \(SetupWizardStep.allCases.count). \(currentWizardStep.subtitle)"))
     }
 
     private func restartWizardFromBeginning() {
@@ -119,7 +116,7 @@ struct SetupWizardView: View {
 
     private var header: some View {
         VStack(spacing: 16) {
-            Text(localizedAppText("TypeWhisper Setup", de: "TypeWhisper Setup"))
+            Text(String(localized: "TypeWhisper Setup"))
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(.primary)
 
@@ -167,10 +164,7 @@ struct SetupWizardView: View {
         }
         .frame(width: 82)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(localizedAppText(
-            "Step \(step.rawValue + 1) of \(SetupWizardStep.allCases.count), \(step.progressTitle)",
-            de: "Schritt \(step.rawValue + 1) von \(SetupWizardStep.allCases.count), \(step.progressTitle)"
-        ))
+        .accessibilityLabel(String(localized: "Step \(step.rawValue + 1) of \(SetupWizardStep.allCases.count), \(step.progressTitle)"))
         .accessibilityValue(progressAccessibilityStatus(for: step))
     }
 
@@ -183,12 +177,12 @@ struct SetupWizardView: View {
 
     private func progressAccessibilityStatus(for step: SetupWizardStep) -> String {
         if step.rawValue < currentStep {
-            return localizedAppText("Completed", de: "Abgeschlossen")
+            return String(localized: "Completed")
         }
         if step == currentWizardStep {
-            return localizedAppText("Current", de: "Aktuell")
+            return String(localized: "Current")
         }
-        return localizedAppText("Upcoming", de: "Ausstehend")
+        return String(localized: "Upcoming")
     }
 
     private var stepContent: some View {
@@ -231,7 +225,7 @@ struct SetupWizardView: View {
     private var footer: some View {
         HStack(spacing: 12) {
             if currentStep > 0 {
-                Button(localizedAppText("Back", de: "Zurück")) {
+                Button(String(localized: "Back")) {
                     withAnimation(.easeInOut(duration: 0.18)) {
                         currentStep -= 1
                     }
@@ -242,7 +236,7 @@ struct SetupWizardView: View {
 
             Spacer()
 
-            Button(localizedAppText("Skip Setup", de: "Setup überspringen")) {
+            Button(String(localized: "Skip Setup")) {
                 completeSetupAndOpenHome()
             }
             .buttonStyle(.bordered)
@@ -263,12 +257,12 @@ struct SetupWizardView: View {
 
     private var primaryActionTitle: String {
         if currentWizardStep == .permissions, dictation.needsMicPermission {
-            return localizedAppText("Grant Microphone Access", de: "Mikrofonzugriff erlauben")
+            return String(localized: "Grant Microphone Access")
         }
 
         return currentWizardStep == .finish
-            ? localizedAppText("Complete Setup", de: "Setup abschließen")
-            : localizedAppText("Continue", de: "Weiter")
+            ? String(localized: "Complete Setup")
+            : String(localized: "Continue")
     }
 
     private var primaryKeyboardShortcut: KeyboardShortcut {
@@ -279,10 +273,10 @@ struct SetupWizardView: View {
 
     private var primaryActionAccessibilityHint: String {
         if currentWizardStep == .finish {
-            return localizedAppText("Press Command Return to complete setup.", de: "Drücke Befehlstaste Return, um das Setup abzuschließen.")
+            return String(localized: "Press Command Return to complete setup.")
         }
 
-        return localizedAppText("Press Return to continue.", de: "Drücke Return, um fortzufahren.")
+        return String(localized: "Press Return to continue.")
     }
 
     private func handlePrimaryAction() {
@@ -327,18 +321,18 @@ struct SetupWizardView: View {
             VStack(alignment: .leading, spacing: 14) {
                 setupFeatureRow(
                     icon: "mic.fill",
-                    title: localizedAppText("Speak naturally", de: "Natürlich sprechen"),
-                    description: localizedAppText("Press a hotkey and talk in any app.", de: "Drücke einen Hotkey und sprich in jeder App.")
+                    title: String(localized: "Speak naturally"),
+                    description: String(localized: "Press a hotkey and talk in any app.")
                 )
                 setupFeatureRow(
                     icon: "text.cursor",
-                    title: localizedAppText("Type instantly", de: "Sofort schreiben"),
-                    description: localizedAppText("Your words appear as text right away.", de: "Deine Worte erscheinen direkt als Text.")
+                    title: String(localized: "Type instantly"),
+                    description: String(localized: "Your words appear as text right away.")
                 )
                 setupFeatureRow(
                     icon: "wand.and.stars",
-                    title: localizedAppText("Enhance with AI", de: "Mit KI verbessern"),
-                    description: localizedAppText("Rewrite, translate, summarize, and more.", de: "Umschreiben, übersetzen, zusammenfassen und mehr.")
+                    title: String(localized: "Enhance with AI"),
+                    description: String(localized: "Rewrite, translate, summarize, and more.")
                 )
             }
             .frame(maxWidth: 390, alignment: .leading)
@@ -370,8 +364,8 @@ struct SetupWizardView: View {
     private var permissionsStep: some View {
         VStack(spacing: 12) {
             permissionCard(
-                title: localizedAppText("Microphone Access", de: "Mikrofonzugriff"),
-                description: localizedAppText("Required to capture your voice.", de: "Erforderlich, um deine Stimme aufzunehmen."),
+                title: String(localized: "Microphone Access"),
+                description: String(localized: "Required to capture your voice."),
                 systemImage: "mic.fill",
                 isGranted: !dictation.needsMicPermission,
                 isRequired: true,
@@ -379,8 +373,8 @@ struct SetupWizardView: View {
             )
 
             permissionCard(
-                title: localizedAppText("Accessibility Access", de: "Bedienungshilfen-Zugriff"),
-                description: localizedAppText("Required to type into other apps.", de: "Erforderlich, um in andere Apps zu schreiben."),
+                title: String(localized: "Accessibility Access"),
+                description: String(localized: "Required to type into other apps."),
                 systemImage: "figure.stand",
                 isGranted: !dictation.needsAccessibilityPermission,
                 isRequired: false,
@@ -388,7 +382,7 @@ struct SetupWizardView: View {
             )
 
             Label(
-                localizedAppText("You can change permissions anytime in System Settings.", de: "Du kannst diese Berechtigungen jederzeit in den Systemeinstellungen ändern."),
+                String(localized: "You can change permissions anytime in System Settings."),
                 systemImage: "lock"
             )
             .font(.caption)
@@ -426,19 +420,19 @@ struct SetupWizardView: View {
 
                 if isGranted {
                     statusPill(
-                        localizedAppText("Granted", de: "Erlaubt"),
+                        String(localized: "Granted"),
                         systemImage: "checkmark.circle.fill",
                         color: .green
                     )
                 } else {
                     VStack(alignment: .trailing, spacing: 8) {
                         statusPill(
-                            localizedAppText("Needs Access", de: "Zugriff nötig"),
+                            String(localized: "Needs Access"),
                             systemImage: isRequired ? "exclamationmark.circle.fill" : "circle",
                             color: isRequired ? .orange : .secondary
                         )
 
-                        Button(localizedAppText("Grant Access", de: "Zugriff erlauben")) {
+                        Button(String(localized: "Grant Access")) {
                             action()
                         }
                         .buttonStyle(.bordered)
@@ -450,8 +444,8 @@ struct SetupWizardView: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isGranted ? [] : .isButton)
         .accessibilityLabel(permissionAccessibilityLabel(title: title, description: description, isGranted: isGranted))
-        .accessibilityHint(isGranted ? "" : localizedAppText("Use the grant access button to continue setup.", de: "Nutze die Schaltfläche Zugriff erlauben, um fortzufahren."))
-        .accessibilityAction(named: Text(localizedAppText("Grant Access", de: "Zugriff erlauben"))) {
+        .accessibilityHint(isGranted ? "" : String(localized: "Use the grant access button to continue setup."))
+        .accessibilityAction(named: Text(String(localized: "Grant Access"))) {
             guard !isGranted else { return }
             action()
         }
@@ -459,8 +453,8 @@ struct SetupWizardView: View {
 
     private func permissionAccessibilityLabel(title: String, description: String, isGranted: Bool) -> String {
         let status = isGranted
-            ? localizedAppText("Granted", de: "Erlaubt")
-            : localizedAppText("Needs access", de: "Zugriff nötig")
+            ? String(localized: "Granted")
+            : String(localized: "Needs access")
         return "\(title). \(description) \(status)."
     }
 
@@ -473,14 +467,14 @@ struct SetupWizardView: View {
             VStack(spacing: 8) {
                 compactHotkeyModeCard(
                     mode: .pushToTalk,
-                    title: localizedAppText("Push-to-Talk", de: "Push-to-Talk"),
-                    description: localizedAppText("Hold to record, release to stop.", de: "Zum Aufnehmen halten, zum Stoppen loslassen.")
+                    title: String(localized: "Push-to-Talk"),
+                    description: String(localized: "Hold to record, release to stop.")
                 )
 
                 compactHotkeyModeCard(
                     mode: .toggle,
-                    title: localizedAppText("Toggle", de: "Toggle"),
-                    description: localizedAppText("Press to start, press again to stop.", de: "Zum Starten drücken, zum Stoppen erneut drücken.")
+                    title: String(localized: "Toggle"),
+                    description: String(localized: "Press to start, press again to stop.")
                 )
             }
 
@@ -503,10 +497,10 @@ struct SetupWizardView: View {
 
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 8) {
-                            Text(localizedAppText("Hybrid", de: "Hybrid"))
+                            Text(String(localized: "Hybrid"))
                                 .font(.headline)
 
-                            Text(localizedAppText("Recommended", de: "Empfohlen"))
+                            Text(String(localized: "Recommended"))
                                 .font(.caption2.weight(.semibold))
                                 .padding(.horizontal, 7)
                                 .padding(.vertical, 3)
@@ -515,7 +509,7 @@ struct SetupWizardView: View {
                                 .clipShape(Capsule())
                         }
 
-                        Text(localizedAppText("Short press to toggle, hold to push-to-talk.", de: "Kurz drücken zum Umschalten, halten für Push-to-Talk."))
+                        Text(String(localized: "Short press to toggle, hold to push-to-talk."))
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     }
@@ -535,13 +529,13 @@ struct SetupWizardView: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(hotkeyModeAccessibilityLabel(
-            title: localizedAppText("Hybrid", de: "Hybrid"),
-            description: localizedAppText("Short press to toggle, hold to push-to-talk.", de: "Kurz drücken zum Umschalten, halten für Push-to-Talk."),
+            title: String(localized: "Hybrid"),
+            description: String(localized: "Short press to toggle, hold to push-to-talk."),
             label: displayedHotkeyLabel(for: .hybrid)
         ))
-        .accessibilityValue(selectedHotkeyMode == .hybrid ? localizedAppText("Selected", de: "Ausgewählt") : "")
-        .accessibilityHint(localizedAppText("Recommended. Press Return to continue with this shortcut.", de: "Empfohlen. Drücke Return, um mit diesem Shortcut fortzufahren."))
-        .accessibilityAction(named: Text(localizedAppText("Select", de: "Auswählen"))) {
+        .accessibilityValue(selectedHotkeyMode == .hybrid ? String(localized: "Selected") : "")
+        .accessibilityHint(String(localized: "Recommended. Press Return to continue with this shortcut."))
+        .accessibilityAction(named: Text(String(localized: "Select"))) {
             selectedHotkeyMode = .hybrid
         }
     }
@@ -582,15 +576,15 @@ struct SetupWizardView: View {
             description: description,
             label: displayedHotkeyLabel(for: mode)
         ))
-        .accessibilityValue(selectedHotkeyMode == mode ? localizedAppText("Selected", de: "Ausgewählt") : "")
-        .accessibilityHint(localizedAppText("Selects this hotkey mode.", de: "Wählt diesen Hotkey-Modus aus."))
-        .accessibilityAction(named: Text(localizedAppText("Select", de: "Auswählen"))) {
+        .accessibilityValue(selectedHotkeyMode == mode ? String(localized: "Selected") : "")
+        .accessibilityHint(String(localized: "Selects this hotkey mode."))
+        .accessibilityAction(named: Text(String(localized: "Select"))) {
             selectedHotkeyMode = mode
         }
     }
 
     private func hotkeyModeAccessibilityLabel(title: String, description: String, label: String) -> String {
-        "\(title). \(description) \(localizedAppText("Shortcut", de: "Shortcut")): \(label)."
+        "\(title). \(description) \(String(localized: "Shortcut")): \(label)."
     }
 
     private func shouldShowRecorder(for mode: HotkeySlotType) -> Bool {
@@ -606,7 +600,7 @@ struct SetupWizardView: View {
 
             HotkeyRecorderView(
                 label: hotkeyLabel(for: mode),
-                title: localizedAppText("Shortcut", de: "Shortcut"),
+                title: String(localized: "Shortcut"),
                 onRecord: { hotkey in
                     if let conflict = dictation.isHotkeyAssigned(hotkey, excluding: mode) {
                         dictation.clearHotkey(for: conflict)
@@ -626,7 +620,7 @@ struct SetupWizardView: View {
     private var hotkeyMessage: (text: String, systemImage: String, color: Color)? {
         if hasAnyTriggerHotkey {
             return (
-                localizedAppText("Your existing shortcut will stay unchanged.", de: "Dein bestehender Shortcut bleibt unverändert."),
+                String(localized: "Your existing shortcut will stay unchanged."),
                 "checkmark.circle.fill",
                 .green
             )
@@ -634,7 +628,7 @@ struct SetupWizardView: View {
 
         if selectedHotkeyMode == .hybrid, recommendedHotkeyResolution.shouldApply {
             return (
-                localizedAppText("Fn will be set automatically when you continue.", de: "Fn wird beim Fortfahren automatisch gesetzt."),
+                String(localized: "Fn will be set automatically when you continue."),
                 "keyboard",
                 .secondary
             )
@@ -643,17 +637,14 @@ struct SetupWizardView: View {
         if selectedHotkeyMode == .hybrid,
            case .conflictingSlot(let slot) = recommendedHotkeyResolution.blockedReason {
             return (
-                localizedAppText(
-                    "Fn is already used by \(hotkeyModeTitle(for: slot)). Record another shortcut to continue.",
-                    de: "Fn wird bereits von \(hotkeyModeTitle(for: slot)) verwendet. Nimm einen anderen Shortcut auf, um fortzufahren."
-                ),
+                String(localized: "Fn is already used by \(hotkeyModeTitle(for: slot)). Record another shortcut to continue."),
                 "exclamationmark.triangle.fill",
                 .orange
             )
         }
 
         return (
-            localizedAppText("Record a shortcut to use this mode.", de: "Nimm einen Shortcut auf, um diesen Modus zu verwenden."),
+            String(localized: "Record a shortcut to use this mode."),
             "keyboard",
             .secondary
         )
@@ -668,7 +659,7 @@ struct SetupWizardView: View {
             recommendationCard(
                 manifestId: SetupWizardParakeetRecommendation.manifestId,
                 title: "Parakeet",
-                badge: localizedAppText("Recommended", de: "Empfohlen"),
+                badge: String(localized: "Recommended"),
                 description: SetupWizardParakeetRecommendation.description,
                 systemImage: "desktopcomputer",
                 isProminent: true
@@ -684,10 +675,7 @@ struct SetupWizardView: View {
 
     private var cloudProvidersHint: some View {
         Label(
-            localizedAppText(
-                "Cloud providers can be added later in Settings.",
-                de: "Cloud-Provider kannst du später in den Einstellungen hinzufügen."
-            ),
+            String(localized: "Cloud providers can be added later in Settings."),
             systemImage: "cloud"
         )
         .font(.caption.weight(.medium))
@@ -714,24 +702,24 @@ struct SetupWizardView: View {
 
     private var localReadinessText: String {
         if isActivatingParakeet {
-            return localizedAppText("Activating Parakeet for local dictation", de: "Parakeet wird für lokales Diktieren aktiviert")
+            return String(localized: "Activating Parakeet for local dictation")
         }
         if hasEngineReadyForSetupTest {
             if selectedTranscriptionEngineForSetup?.providerId == SetupWizardAppleSpeechFallback.providerId {
-                return localizedAppText("Apple Speech is ready for local dictation", de: "Apple Speech ist für lokales Diktieren bereit")
+                return String(localized: "Apple Speech is ready for local dictation")
             }
             if selectedTranscriptionEngineForSetup?.providerId == SetupWizardParakeetRecommendation.providerId {
-                return localizedAppText("Parakeet is ready for local dictation", de: "Parakeet ist für lokales Diktieren bereit")
+                return String(localized: "Parakeet is ready for local dictation")
             }
-            return localizedAppText("Ready to use locally", de: "Lokal einsatzbereit")
+            return String(localized: "Ready to use locally")
         }
         if isPreparingAppleSpeechFallback {
-            return localizedAppText("Preparing Apple Speech for the first test", de: "Apple Speech wird für den ersten Test vorbereitet")
+            return String(localized: "Preparing Apple Speech for the first test")
         }
         if canUseAppleSpeechFallback {
-            return localizedAppText("Apple Speech can be used locally", de: "Apple Speech kann lokal genutzt werden")
+            return String(localized: "Apple Speech can be used locally")
         }
-        return localizedAppText("Choose a local engine now or continue and finish later", de: "Wähle jetzt eine lokale Engine oder fahre fort und schließe später ab")
+        return String(localized: "Choose a local engine now or continue and finish later")
     }
 
     @ViewBuilder
@@ -827,15 +815,15 @@ struct SetupWizardView: View {
             switch availability {
             case .ready:
                 if manifestId == SetupWizardParakeetRecommendation.manifestId, isSelected {
-                    statusPill(localizedAppText("Selected", de: "Ausgewählt"), systemImage: "checkmark.circle.fill", color: .blue)
+                    statusPill(String(localized: "Selected"), systemImage: "checkmark.circle.fill", color: .blue)
                 } else if manifestId == SetupWizardParakeetRecommendation.manifestId {
-                    statusPill(localizedAppText("Select", de: "Auswählen"), systemImage: "circle", color: .blue)
+                    statusPill(String(localized: "Select"), systemImage: "circle", color: .blue)
                 } else {
-                    statusPill(localizedAppText("Ready", de: "Bereit"), systemImage: "checkmark.circle.fill", color: .green)
+                    statusPill(String(localized: "Ready"), systemImage: "checkmark.circle.fill", color: .green)
                 }
             case .setupRequired:
                 if manifestId == SetupWizardParakeetRecommendation.manifestId {
-                    statusPill(localizedAppText("Activate", de: "Aktivieren"), systemImage: "play.circle.fill", color: .blue)
+                    statusPill(String(localized: "Activate"), systemImage: "play.circle.fill", color: .blue)
                 } else {
                     RecommendationSettingsButton(manifestId: manifestId)
                 }
@@ -848,10 +836,10 @@ struct SetupWizardView: View {
                     ProgressView()
                         .controlSize(.small)
                 case .error:
-                    statusPill(localizedAppText("Retry later", de: "Später erneut"), systemImage: "exclamationmark.triangle.fill", color: .orange)
+                    statusPill(String(localized: "Retry later"), systemImage: "exclamationmark.triangle.fill", color: .orange)
                 }
             case .installAvailable:
-                statusPill(localizedAppText("Install", de: "Installieren"), systemImage: "arrow.down.circle.fill", color: .blue)
+                statusPill(String(localized: "Install"), systemImage: "arrow.down.circle.fill", color: .blue)
             case .loading:
                 ProgressView()
                     .controlSize(.small)
@@ -889,11 +877,11 @@ struct SetupWizardView: View {
 
         switch availability {
         case .installAvailable:
-            return localizedAppText("Installs and selects Parakeet.", de: "Installiert und wählt Parakeet aus.")
+            return String(localized: "Installs and selects Parakeet.")
         case .setupRequired:
-            return localizedAppText("Activates Parakeet.", de: "Aktiviert Parakeet.")
+            return String(localized: "Activates Parakeet.")
         default:
-            return localizedAppText("Selects Parakeet.", de: "Wählt Parakeet aus.")
+            return String(localized: "Selects Parakeet.")
         }
     }
 
@@ -962,10 +950,7 @@ struct SetupWizardView: View {
             return fallback
         }
 
-        return localizedAppText(
-            "Best local quality, but requires Apple Silicon. Intel Macs can use Apple Speech for setup.",
-            de: "Beste lokale Qualität, braucht aber Apple Silicon. Intel-Macs können Apple Speech für das Setup nutzen."
-        )
+        return String(localized: "Best local quality, but requires Apple Silicon. Intel Macs can use Apple Speech for setup.")
     }
 
     @ViewBuilder
@@ -982,7 +967,7 @@ struct SetupWizardView: View {
                     HStack(spacing: 7) {
                         Text("Apple Speech")
                             .font(.headline)
-                        Text(localizedAppText("Built-in", de: "Integriert"))
+                        Text(String(localized: "Built-in"))
                             .font(.caption2.weight(.semibold))
                             .padding(.horizontal, 7)
                             .padding(.vertical, 3)
@@ -1010,7 +995,7 @@ struct SetupWizardView: View {
                     Task { await activateAppleSpeechForSetup() }
                 }
                 .accessibilityAddTraits(.isButton)
-                .accessibilityHint(localizedAppText("Selects Apple Speech as the local dictation engine.", de: "Wählt Apple Speech als lokale Diktier-Engine aus."))
+                .accessibilityHint(String(localized: "Selects Apple Speech as the local dictation engine."))
         } else {
             card
         }
@@ -1018,16 +1003,10 @@ struct SetupWizardView: View {
 
     private var appleSpeechDescription: String {
         if isPreparingAppleSpeechFallback {
-            return localizedAppText(
-                "Preparing the built-in speech engine for the first dictation test.",
-                de: "Die integrierte Spracherkennung wird für den ersten Diktat-Test vorbereitet."
-            )
+            return String(localized: "Preparing the built-in speech engine for the first dictation test.")
         }
 
-        return localizedAppText(
-            "Lightweight built-in option with no large local model. Parakeet gives better quality for daily dictation.",
-            de: "Leichte integrierte Option ohne großes lokales Modell. Parakeet liefert bessere Qualität fürs tägliche Diktieren."
-        )
+        return String(localized: "Lightweight built-in option with no large local model. Parakeet gives better quality for daily dictation.")
     }
 
     @ViewBuilder
@@ -1035,22 +1014,22 @@ struct SetupWizardView: View {
         if #available(macOS 26, *) {
             if appleSpeechEngine?.isConfigured == true {
                 if modelManager.selectedProviderId == SetupWizardAppleSpeechFallback.providerId {
-                    statusPill(localizedAppText("Selected", de: "Ausgewählt"), systemImage: "checkmark.circle.fill", color: .blue)
+                    statusPill(String(localized: "Selected"), systemImage: "checkmark.circle.fill", color: .blue)
                 } else {
-                    statusPill(localizedAppText("Select", de: "Auswählen"), systemImage: "circle", color: .blue)
+                    statusPill(String(localized: "Select"), systemImage: "circle", color: .blue)
                 }
             } else if isPreparingAppleSpeechFallback {
                 ProgressView()
                     .controlSize(.small)
             } else if modelManager.selectedProviderId == SetupWizardAppleSpeechFallback.providerId {
-                statusPill(localizedAppText("Active", de: "Aktiv"), systemImage: "checkmark.circle.fill", color: .blue)
+                statusPill(String(localized: "Active"), systemImage: "checkmark.circle.fill", color: .blue)
             } else if let appleSpeechEngine, modelManager.canUseForTranscription(appleSpeechEngine) {
-                statusPill(localizedAppText("Select", de: "Auswählen"), systemImage: "circle", color: .blue)
+                statusPill(String(localized: "Select"), systemImage: "circle", color: .blue)
             } else {
-                statusPill(localizedAppText("Unavailable", de: "Nicht verfügbar"), systemImage: "circle", color: .secondary)
+                statusPill(String(localized: "Unavailable"), systemImage: "circle", color: .secondary)
             }
         } else {
-            statusPill(localizedAppText("macOS 26", de: "macOS 26"), systemImage: "circle", color: .secondary)
+            statusPill(String(localized: "macOS 26"), systemImage: "circle", color: .secondary)
         }
     }
 
@@ -1067,7 +1046,7 @@ struct SetupWizardView: View {
                     HStack(spacing: 7) {
                         Text("Apple Intelligence")
                             .font(.headline)
-                        Text(localizedAppText("Built-in", de: "Integriert"))
+                        Text(String(localized: "Built-in"))
                             .font(.caption2.weight(.semibold))
                             .padding(.horizontal, 7)
                             .padding(.vertical, 3)
@@ -1076,7 +1055,7 @@ struct SetupWizardView: View {
                             .clipShape(Capsule())
                     }
 
-                    Text(localizedAppText("On-device AI processing. No API key needed.", de: "KI-Verarbeitung auf dem Gerät. Kein API-Key nötig."))
+                    Text(String(localized: "On-device AI processing. No API key needed."))
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
@@ -1085,12 +1064,12 @@ struct SetupWizardView: View {
 
                 if #available(macOS 26, *) {
                     if promptProcessingService.isAppleIntelligenceAvailable {
-                        statusPill(localizedAppText("Ready", de: "Bereit"), systemImage: "checkmark.circle.fill", color: .green)
+                        statusPill(String(localized: "Ready"), systemImage: "checkmark.circle.fill", color: .green)
                     } else {
-                        statusPill(localizedAppText("Optional", de: "Optional"), systemImage: "circle", color: .secondary)
+                        statusPill(String(localized: "Optional"), systemImage: "circle", color: .secondary)
                     }
                 } else {
-                    statusPill(localizedAppText("macOS 26", de: "macOS 26"), systemImage: "circle", color: .secondary)
+                    statusPill(String(localized: "macOS 26"), systemImage: "circle", color: .secondary)
                 }
             }
         }
@@ -1115,8 +1094,8 @@ struct SetupWizardView: View {
                 .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.07)))
                 .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.white.opacity(0.16), lineWidth: 1))
                 .focused($isTrialFieldFocused)
-                .accessibilityLabel(localizedAppText("Try dictation text field", de: "Diktat-Testfeld"))
-                .accessibilityHint(localizedAppText("Press your hotkey and dictate. Inserted text appears here.", de: "Drücke deinen Hotkey und diktiere. Eingefügter Text erscheint hier."))
+                .accessibilityLabel(String(localized: "Try dictation text field"))
+                .accessibilityHint(String(localized: "Press your hotkey and dictate. Inserted text appears here."))
 
             if trialSuccess {
                 setupCard(isSelected: false) {
@@ -1126,9 +1105,9 @@ struct SetupWizardView: View {
                             .foregroundStyle(.green)
 
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(localizedAppText("You're all set!", de: "Alles bereit!"))
+                            Text(String(localized: "You're all set!"))
                                 .font(.headline)
-                            Text(localizedAppText("TypeWhisper is ready to help you work faster.", de: "TypeWhisper ist bereit, damit du schneller arbeiten kannst."))
+                            Text(String(localized: "TypeWhisper is ready to help you work faster."))
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
                         }
@@ -1180,27 +1159,21 @@ struct SetupWizardView: View {
 
     private var readinessTitle: String {
         hasEngineReadyForSetupTest && hasAnyTriggerHotkey
-            ? localizedAppText("Try it out", de: "Probier es aus")
-            : localizedAppText("Setup can be finished later", de: "Setup kann später abgeschlossen werden")
+            ? String(localized: "Try it out")
+            : String(localized: "Setup can be finished later")
     }
 
     private var readinessDescription: String {
         if isPreparingAppleSpeechFallback {
-            return localizedAppText(
-                "Apple Speech is being prepared for this test.",
-                de: "Apple Speech wird gerade für diesen Test vorbereitet."
-            )
+            return String(localized: "Apple Speech is being prepared for this test.")
         }
         if !hasEngineReadyForSetupTest {
-            return localizedAppText(
-                "Apple Speech or another engine still needs to be enabled before dictation can run.",
-                de: "Apple Speech oder eine andere Engine muss noch aktiviert werden, bevor Diktieren funktioniert."
-            )
+            return String(localized: "Apple Speech or another engine still needs to be enabled before dictation can run.")
         }
         if !hasAnyTriggerHotkey {
-            return localizedAppText("A hotkey still needs to be set before dictation can start.", de: "Ein Hotkey muss noch gesetzt werden, bevor Diktieren starten kann.")
+            return String(localized: "A hotkey still needs to be set before dictation can start.")
         }
-        return localizedAppText("Press your hotkey and say something.", de: "Drücke deinen Hotkey und sag etwas.")
+        return String(localized: "Press your hotkey and say something.")
     }
 
     // MARK: - Shared Helpers
@@ -1419,7 +1392,7 @@ struct SetupWizardView: View {
             let label = hotkeyLabel(for: slot)
             if !label.isEmpty { return label }
         }
-        return localizedAppText("No hotkey", de: "Kein Hotkey")
+        return String(localized: "No hotkey")
     }
 
     private func displayedHotkeyLabel(for mode: HotkeySlotType) -> String {
@@ -1428,7 +1401,7 @@ struct SetupWizardView: View {
         if mode == .hybrid, recommendedHotkeyResolution.shouldApply {
             return HotkeyService.displayName(for: SetupWizardDefaultHotkey.recommendedHybridHotkey)
         }
-        return localizedAppText("Not set", de: "Nicht gesetzt")
+        return String(localized: "Not set")
     }
 
     private func hotkeyLabel(for mode: HotkeySlotType) -> String {
@@ -1445,10 +1418,10 @@ struct SetupWizardView: View {
 
     private func hotkeyModeTitle(for mode: HotkeySlotType) -> String {
         switch mode {
-        case .hybrid: return localizedAppText("Hybrid", de: "Hybrid")
-        case .pushToTalk: return localizedAppText("Push-to-Talk", de: "Push-to-Talk")
-        case .toggle: return localizedAppText("Toggle", de: "Toggle")
-        case .promptPalette: return localizedAppText("Workflow Palette", de: "Workflow-Palette")
+        case .hybrid: return String(localized: "Hybrid")
+        case .pushToTalk: return String(localized: "Push-to-Talk")
+        case .toggle: return String(localized: "Toggle")
+        case .promptPalette: return String(localized: "Workflow Palette")
         case .recentTranscriptions: return String(localized: "Recent Transcriptions")
         case .copyLastTranscription: return String(localized: "Copy Last Transcription")
         case .recorderToggle: return String(localized: "settings.tab.recorder")
@@ -1505,45 +1478,45 @@ private enum SetupWizardStep: Int, CaseIterable, Identifiable {
     var progressTitle: String {
         switch self {
         case .welcome:
-            localizedAppText("Welcome", de: "Willkommen")
+            String(localized: "Welcome")
         case .permissions:
-            localizedAppText("Permissions", de: "Rechte")
+            String(localized: "Permissions")
         case .hotkey:
-            localizedAppText("Hotkey", de: "Hotkey")
+            String(localized: "Hotkey")
         case .engineAI:
-            localizedAppText("AI & Engine", de: "KI & Engine")
+            String(localized: "AI & Engine")
         case .finish:
-            localizedAppText("Finish", de: "Fertig")
+            String(localized: "Finish")
         }
     }
 
     var title: String {
         switch self {
         case .welcome:
-            localizedAppText("Welcome to TypeWhisper", de: "Willkommen bei TypeWhisper")
+            String(localized: "Welcome to TypeWhisper")
         case .permissions:
-            localizedAppText("Permissions", de: "Berechtigungen")
+            String(localized: "Permissions")
         case .hotkey:
-            localizedAppText("Choose Your Hotkey", de: "Wähle deinen Hotkey")
+            String(localized: "Choose Your Hotkey")
         case .engineAI:
-            localizedAppText("AI & Engine", de: "KI & Engine")
+            String(localized: "AI & Engine")
         case .finish:
-            localizedAppText("Try It Out", de: "Probier es aus")
+            String(localized: "Try It Out")
         }
     }
 
     var subtitle: String {
         switch self {
         case .welcome:
-            localizedAppText("Set up voice typing in a few simple steps.", de: "Richte Voice Typing in wenigen Schritten ein.")
+            String(localized: "Set up voice typing in a few simple steps.")
         case .permissions:
-            localizedAppText("TypeWhisper needs access to work on your Mac.", de: "TypeWhisper braucht Zugriff, um auf deinem Mac zu funktionieren.")
+            String(localized: "TypeWhisper needs access to work on your Mac.")
         case .hotkey:
-            localizedAppText("Start and stop dictation without leaving your app.", de: "Starte und stoppe Diktat, ohne deine App zu verlassen.")
+            String(localized: "Start and stop dictation without leaving your app.")
         case .engineAI:
-            localizedAppText("Local defaults are ready first; cloud providers can wait.", de: "Lokale Defaults zuerst; Cloud-Provider können warten.")
+            String(localized: "Local defaults are ready first; cloud providers can wait.")
         case .finish:
-            localizedAppText("Press your hotkey and say something.", de: "Drücke deinen Hotkey und sag etwas.")
+            String(localized: "Press your hotkey and say something.")
         }
     }
 }
@@ -1583,10 +1556,7 @@ enum SetupWizardParakeetRecommendation {
     static let manifestId = "com.typewhisper.parakeet"
 
     static var description: String {
-        localizedAppText(
-            "Best local quality for daily dictation. Runs offline with no API key.",
-            de: "Beste lokale Qualität für tägliches Diktieren. Läuft offline ohne API-Key."
-        )
+        String(localized: "Best local quality for daily dictation. Runs offline with no API key.")
     }
 
     static func preferredModelId(from models: [PluginModelInfo]) -> String? {
@@ -1687,24 +1657,18 @@ enum SetupWizardRecommendationUnavailableReason: Equatable {
     var title: String {
         switch self {
         case .appleSiliconOnly:
-            localizedAppText("Apple Silicon only", de: "Nur Apple Silicon")
+            String(localized: "Apple Silicon only")
         case .marketplaceUnavailable:
-            localizedAppText("Unavailable", de: "Nicht verfügbar")
+            String(localized: "Unavailable")
         }
     }
 
     var message: String {
         switch self {
         case .appleSiliconOnly:
-            localizedAppText(
-                "Use Groq or OpenAI with a cloud Whisper model on Intel.",
-                de: "Nutze auf Intel Groq oder OpenAI mit einem Cloud-Whisper-Modell."
-            )
+            String(localized: "Use Groq or OpenAI with a cloud Whisper model on Intel.")
         case .marketplaceUnavailable:
-            localizedAppText(
-                "No compatible download is available for this Mac.",
-                de: "Für diesen Mac ist kein kompatibler Download verfügbar."
-            )
+            String(localized: "No compatible download is available for this Mac.")
         }
     }
 }
@@ -1772,7 +1736,7 @@ private struct RecommendationSettingsButton: View {
                 }
             }
         } label: {
-            Label(localizedAppText("Setup", de: "Setup"), systemImage: "gear")
+            Label(String(localized: "Setup"), systemImage: "gear")
                 .font(.caption)
         }
         .buttonStyle(.bordered)

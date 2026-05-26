@@ -1,216 +1,342 @@
 {
-  "sourceLanguage" : "en",
-  "strings" : {
-    "Add metadata (date, app, language, tags) to each note." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Metadaten (Datum, App, Sprache, Tags) zu jeder Notiz hinzufügen."
+  "sourceLanguage": "en",
+  "strings": {
+    "Add metadata (date, app, language, tags) to each note.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Metadaten (Datum, App, Sprache, Tags) zu jeder Notiz hinzufügen."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "各ノートにメタデータ（日付、アプリ、言語、タグ）を追加します。"
           }
         }
       }
     },
-    "Append all transcriptions to a single daily file instead of creating individual notes." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Alle Transkriptionen an eine einzelne Tagesdatei anhängen, statt einzelne Notizen zu erstellen."
+    "Append all transcriptions to a single daily file instead of creating individual notes.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Transkriptionen an eine einzelne Tagesdatei anhängen, statt einzelne Notizen zu erstellen."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "個別のノートを作成する代わりに、すべての文字起こしを1つのデイリーファイルに追記します。"
           }
         }
       }
     },
-    "Auto-Export" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Auto-Export"
+    "Auto-Export": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto-Export"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動エクスポート"
           }
         }
       }
     },
-    "Automatically save every transcription to Obsidian." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Jede Transkription automatisch in Obsidian speichern."
+    "Automatically save every transcription to Obsidian.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jede Transkription automatisch in Obsidian speichern."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すべての文字起こしを自動的にObsidianに保存します。"
           }
         }
       }
     },
-    "Browse..." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Durchsuchen ..."
+    "Browse...": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Durchsuchen ..."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "参照..."
           }
         }
       }
     },
-    "Copy Instruction" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Anweisung kopieren"
+    "Copy Instruction": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anweisung kopieren"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "指示をコピー"
           }
         }
       }
     },
-    "Create a Custom Workflow, paste this into Instruction, and set Action Target to \"Save to Obsidian\"." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Erstelle einen eigenen Workflow, füge dies in Anweisung ein und setze das Action-Ziel auf \"Save to Obsidian\"."
+    "Create a Custom Workflow, paste this into Instruction, and set Action Target to \"Save to Obsidian\".": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erstelle einen eigenen Workflow, füge dies in Anweisung ein und setze das Action-Ziel auf \"Save to Obsidian\"."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "カスタムワークフローを作成し、これをインストラクションに貼り付けて、アクションターゲットを「Obsidianに保存」に設定してください。"
           }
         }
       }
     },
-    "Daily Note Mode" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tagesnotiz-Modus"
+    "Daily Note Mode": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tagesnotiz-Modus"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "デイリーノートモード"
           }
         }
       }
     },
-    "Detected Vaults" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Erkannte Vaults"
+    "Detected Vaults": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erkannte Vaults"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "検出されたVault"
           }
         }
       }
     },
-    "File Organization" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dateiorganisation"
+    "File Organization": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dateiorganisation"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ファイル整理"
           }
         }
       }
     },
-    "Filename:" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dateiname:"
+    "Filename:": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dateiname:"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ファイル名:"
           }
         }
       }
     },
-    "No vault selected" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kein Vault ausgewählt"
+    "No vault selected": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Vault ausgewählt"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vaultが選択されていません"
           }
         }
       }
     },
-    "Placeholders: {{DATE}}, {{TIME}}, {{APP}}, {{LANG}}" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Platzhalter: {{DATE}}, {{TIME}}, {{APP}}, {{LANG}}"
+    "Placeholders: {{DATE}}, {{TIME}}, {{APP}}, {{LANG}}": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Platzhalter: {{DATE}}, {{TIME}}, {{APP}}, {{LANG}}"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プレースホルダー: {{DATE}}, {{TIME}}, {{APP}}, {{LANG}}"
           }
         }
       }
     },
-    "Preview: %@.md" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Vorschau: %@.md"
+    "Preview: %@.md": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vorschau: %@.md"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プレビュー: %@.md"
           }
         }
       }
     },
-    "Workflow Instruction" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Workflow-Anweisung"
+    "Workflow Instruction": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workflow-Anweisung"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ワークフロー指示"
           }
         }
       }
     },
-    "Select vault..." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Vault auswählen ..."
+    "Select vault...": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault auswählen ..."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vaultを選択..."
           }
         }
       }
     },
-    "Select your Obsidian vault folder" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wähle deinen Obsidian-Vault-Ordner"
+    "Select your Obsidian vault folder": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wähle deinen Obsidian-Vault-Ordner"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ObsidianのVaultフォルダーを選択"
           }
         }
       }
     },
-    "Subfolder:" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unterordner:"
+    "Subfolder:": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unterordner:"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サブフォルダー:"
           }
         }
       }
     },
-    "Tags:" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tags:"
+    "Tags:": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tags:"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "タグ:"
           }
         }
       }
     },
-    "Vault" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Vault"
+    "Vault": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault"
           }
         }
       }
     },
-    "YAML Frontmatter" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "YAML-Frontmatter"
+    "YAML Frontmatter": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YAML-Frontmatter"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YAMLフロントマター"
           }
         }
       }
     }
   },
-  "version" : "1.0"
+  "version": "1.0"
 }

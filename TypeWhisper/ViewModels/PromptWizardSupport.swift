@@ -134,51 +134,51 @@ extension PromptWizardGoal {
     var title: String {
         switch self {
         case .translate:
-            return localizedAppText("Translate", de: "Übersetzen")
+            return String(localized: "Translate")
         case .rewrite:
-            return localizedAppText("Rewrite", de: "Umschreiben")
+            return String(localized: "Rewrite")
         case .replyEmail:
-            return localizedAppText("Reply / Email", de: "Antwort / E-Mail")
+            return String(localized: "Reply / Email")
         case .extract:
-            return localizedAppText("Extract", de: "Extrahieren")
+            return String(localized: "Extract")
         case .structure:
-            return localizedAppText("Structure / Format", de: "Struktur / Format")
+            return String(localized: "Structure / Format")
         case .custom:
-            return localizedAppText("Custom", de: "Benutzerdefiniert")
+            return String(localized: "Custom")
         }
     }
 
     var description: String {
         switch self {
         case .translate:
-            return localizedAppText("Translate text into one language or toggle between a pair.", de: "Text in eine Sprache übersetzen oder zwischen einem Sprachpaar wechseln.")
+            return String(localized: "Translate text into one language or toggle between a pair.")
         case .rewrite:
-            return localizedAppText("Improve wording, tone, and readability without changing the meaning.", de: "Formulierung, Ton und Lesbarkeit verbessern, ohne die Bedeutung zu ändern.")
+            return String(localized: "Improve wording, tone, and readability without changing the meaning.")
         case .replyEmail:
-            return localizedAppText("Draft a reply or a full email from the input.", de: "Aus dem Input eine Antwort oder vollständige E-Mail erstellen.")
+            return String(localized: "Draft a reply or a full email from the input.")
         case .extract:
-            return localizedAppText("Pull out action items, JSON, tables, or key facts.", de: "Action Items, JSON, Tabellen oder Kerndaten herausziehen.")
+            return String(localized: "Pull out action items, JSON, tables, or key facts.")
         case .structure:
-            return localizedAppText("Reformat text into lists, meeting notes, tables, or JSON.", de: "Text in Listen, Meeting Notes, Tabellen oder JSON umformatieren.")
+            return String(localized: "Reformat text into lists, meeting notes, tables, or JSON.")
         case .custom:
-            return localizedAppText("Describe your own task and let the wizard scaffold the prompt.", de: "Beschreibe deine eigene Aufgabe und lass den Wizard den Prompt vorbereiten.")
+            return String(localized: "Describe your own task and let the wizard scaffold the prompt.")
         }
     }
 
     var example: String {
         switch self {
         case .translate:
-            return localizedAppText("Example: EN <-> DE translation with formatting preserved.", de: "Beispiel: EN <-> DE Übersetzung mit erhaltener Formatierung.")
+            return String(localized: "Example: EN <-> DE translation with formatting preserved.")
         case .rewrite:
-            return localizedAppText("Example: make rough notes sound concise and clear.", de: "Beispiel: rohe Notizen knapp und klar formulieren.")
+            return String(localized: "Example: make rough notes sound concise and clear.")
         case .replyEmail:
-            return localizedAppText("Example: write a friendly short reply to an incoming message.", de: "Beispiel: eine kurze freundliche Antwort auf eine Nachricht formulieren.")
+            return String(localized: "Example: write a friendly short reply to an incoming message.")
         case .extract:
-            return localizedAppText("Example: extract JSON payloads or action items from meeting notes.", de: "Beispiel: JSON-Daten oder Action Items aus Meeting Notes extrahieren.")
+            return String(localized: "Example: extract JSON payloads or action items from meeting notes.")
         case .structure:
-            return localizedAppText("Example: turn raw notes into meeting notes or a table.", de: "Beispiel: rohe Notizen in Meeting Notes oder eine Tabelle umwandeln.")
+            return String(localized: "Example: turn raw notes into meeting notes or a table.")
         case .custom:
-            return localizedAppText("Example: summarize bugs for Slack in a strict bullet format.", de: "Beispiel: Bugs für Slack in einem strikten Bullet-Format zusammenfassen.")
+            return String(localized: "Example: summarize bugs for Slack in a strict bullet format.")
         }
     }
 }
@@ -198,17 +198,17 @@ extension PromptWizardGoal {
     var promptWizardGoalSummary: String {
         switch self {
         case .translate:
-            return localizedAppText("Translate text into one target language or switch between a language pair.", de: "Übersetze Text in eine Zielsprache oder wechsle zwischen einem Sprachpaar.")
+            return String(localized: "Translate text into one target language or switch between a language pair.")
         case .rewrite:
-            return localizedAppText("Improve wording and tone while keeping the original meaning intact.", de: "Verbessere Formulierung und Ton, ohne die ursprüngliche Bedeutung zu verändern.")
+            return String(localized: "Improve wording and tone while keeping the original meaning intact.")
         case .replyEmail:
-            return localizedAppText("Draft a reply or complete email from the incoming text.", de: "Erstelle aus dem eingehenden Text eine Antwort oder vollständige E-Mail.")
+            return String(localized: "Draft a reply or complete email from the incoming text.")
         case .extract:
-            return localizedAppText("Pull structured output like JSON, tables, action items, or key facts from the input.", de: "Ziehe strukturierte Ausgaben wie JSON, Tabellen, Action Items oder Kernfakten aus dem Input.")
+            return String(localized: "Pull structured output like JSON, tables, action items, or key facts from the input.")
         case .structure:
-            return localizedAppText("Reformat loose input into a reliable structure such as lists, meeting notes, tables, or JSON.", de: "Forme losen Input in eine verlässliche Struktur wie Listen, Meeting Notes, Tabellen oder JSON um.")
+            return String(localized: "Reformat loose input into a reliable structure such as lists, meeting notes, tables, or JSON.")
         case .custom:
-            return localizedAppText("Describe your own task and let the wizard scaffold the prompt for you.", de: "Beschreibe deine eigene Aufgabe und lass den Wizard den Prompt für dich vorbereiten.")
+            return String(localized: "Describe your own task and let the wizard scaffold the prompt for you.")
         }
     }
 }
@@ -217,11 +217,11 @@ extension PromptWizardStep {
     var title: String {
         switch self {
         case .goal:
-            return localizedAppText("What should it do?", de: "Was soll es tun?")
+            return String(localized: "What should it do?")
         case .response:
-            return localizedAppText("How should it respond?", de: "Wie soll es antworten?")
+            return String(localized: "How should it respond?")
         case .review:
-            return localizedAppText("Review & Advanced", de: "Review & Erweitert")
+            return String(localized: "Review & Advanced")
         }
     }
 }
@@ -621,66 +621,60 @@ enum PromptWizardNameSuggester {
         case .translate:
             switch draft.translationMode {
             case .direct(let targetLanguage):
-                return localizedAppText(
-                    "Translate to \(displayName(for: targetLanguage))",
-                    de: "Nach \(displayName(for: targetLanguage)) übersetzen"
-                )
+                return String(localized: "Translate to \(displayName(for: targetLanguage))")
             case .alternatingPair(let primaryLanguage, let secondaryLanguage):
-                return localizedAppText(
-                    "Translate \(displayName(for: primaryLanguage)) / \(displayName(for: secondaryLanguage))",
-                    de: "\(displayName(for: primaryLanguage)) / \(displayName(for: secondaryLanguage)) übersetzen"
-                )
+                return String(localized: "Translate \(displayName(for: primaryLanguage)) / \(displayName(for: secondaryLanguage))")
             case nil:
-                return localizedAppText("Translate", de: "Übersetzen")
+                return String(localized: "Translate")
             }
         case .rewrite:
             switch draft.tone {
             case .formal:
-                return localizedAppText("Formal Rewrite", de: "Formal umschreiben")
+                return String(localized: "Formal Rewrite")
             case .friendly:
-                return localizedAppText("Friendly Rewrite", de: "Freundlich umschreiben")
+                return String(localized: "Friendly Rewrite")
             case .concise:
-                return localizedAppText("Concise Rewrite", de: "Knapp umschreiben")
+                return String(localized: "Concise Rewrite")
             case .clear:
-                return localizedAppText("Clear Rewrite", de: "Klar umschreiben")
+                return String(localized: "Clear Rewrite")
             case .professional:
-                return localizedAppText("Professional Rewrite", de: "Professionell umschreiben")
+                return String(localized: "Professional Rewrite")
             case .neutral:
-                return localizedAppText("Rewrite", de: "Umschreiben")
+                return String(localized: "Rewrite")
             }
         case .replyEmail:
             switch draft.replyMode {
             case .reply:
-                return localizedAppText("Reply", de: "Antwort")
+                return String(localized: "Reply")
             case .email:
-                return localizedAppText("Email Draft", de: "E-Mail-Entwurf")
+                return String(localized: "Email Draft")
             }
         case .extract:
             switch draft.extractFormat {
             case .checklist:
-                return localizedAppText("Action Items", de: "Action Items")
+                return String(localized: "Action Items")
             case .json:
-                return localizedAppText("Extract JSON", de: "JSON extrahieren")
+                return String(localized: "Extract JSON")
             case .table:
-                return localizedAppText("Extract Table", de: "Tabelle extrahieren")
+                return String(localized: "Extract Table")
             case .keyPoints:
-                return localizedAppText("Key Points", de: "Kernpunkte")
+                return String(localized: "Key Points")
             }
         case .structure:
             switch draft.structureFormat {
             case .bulletList:
-                return localizedAppText("Format as List", de: "Als Liste formatieren")
+                return String(localized: "Format as List")
             case .meetingNotes:
-                return localizedAppText("Meeting Notes", de: "Meeting Notes")
+                return String(localized: "Meeting Notes")
             case .table:
-                return localizedAppText("Create Table", de: "Tabelle erstellen")
+                return String(localized: "Create Table")
             case .json:
-                return localizedAppText("Structure JSON", de: "JSON strukturieren")
+                return String(localized: "Structure JSON")
             }
         case .custom:
             let trimmedGoal = draft.customGoal.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmedGoal.isEmpty {
-                return localizedAppText("Custom Prompt", de: "Benutzerdefinierter Prompt")
+                return String(localized: "Custom Prompt")
             }
             let compact = trimmedGoal.replacingOccurrences(of: "\n", with: " ")
             if compact.count <= 36 {

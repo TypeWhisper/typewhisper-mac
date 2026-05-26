@@ -1524,50 +1524,26 @@ final class DictationViewModel: ObservableObject {
         switch match.kind {
         case .appAndWebsite:
             if let domain = match.matchedDomain {
-                base = localizedAppText(
-                    "This workflow applies because \(appDescriptor) was detected together with \(domain).",
-                    de: "Dieser Workflow greift, weil \(appDescriptor) zusammen mit \(domain) erkannt wurde."
-                )
+                base = String(localized: "This workflow applies because \(appDescriptor) was detected together with \(domain).")
             } else {
-                base = localizedAppText(
-                    "This workflow applies because the app and website were detected together.",
-                    de: "Dieser Workflow greift, weil App und Website zusammen erkannt wurden."
-                )
+                base = String(localized: "This workflow applies because the app and website were detected together.")
             }
         case .website:
             if let domain = match.matchedDomain {
-                base = localizedAppText(
-                    "This workflow applies because \(domain) was detected.",
-                    de: "Dieser Workflow greift, weil \(domain) erkannt wurde."
-                )
+                base = String(localized: "This workflow applies because \(domain) was detected.")
             } else {
-                base = localizedAppText(
-                    "This workflow applies because the current website was detected.",
-                    de: "Dieser Workflow greift, weil die aktuelle Website erkannt wurde."
-                )
+                base = String(localized: "This workflow applies because the current website was detected.")
             }
         case .app:
-            base = localizedAppText(
-                "This workflow applies because \(appDescriptor) was detected.",
-                de: "Dieser Workflow greift, weil \(appDescriptor) erkannt wurde."
-            )
+            base = String(localized: "This workflow applies because \(appDescriptor) was detected.")
         case .globalFallback:
-            base = localizedAppText(
-                "This workflow applies because no more specific workflow matched.",
-                de: "Dieser Workflow greift, weil kein spezifischerer Workflow gepasst hat."
-            )
+            base = String(localized: "This workflow applies because no more specific workflow matched.")
         case .manualOverride:
-            base = localizedAppText(
-                "This workflow was manually triggered via its keyboard shortcut.",
-                de: "Dieser Workflow wurde manuell ueber seine Tastenkombination ausgeloest."
-            )
+            base = String(localized: "This workflow was manually triggered via its keyboard shortcut.")
         }
 
         guard match.wonBySortOrder else { return base }
-        return base + localizedAppText(
-            " Among multiple matching workflows, the one higher in the list wins here.",
-            de: " Unter mehreren passenden Workflows gewinnt hier der weiter oben stehende Eintrag."
-        )
+        return base + String(localized: " Among multiple matching workflows, the one higher in the list wins here.")
     }
 
     // MARK: - Shared Helpers

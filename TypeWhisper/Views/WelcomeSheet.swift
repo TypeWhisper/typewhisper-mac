@@ -13,41 +13,29 @@ struct WelcomeSheet: View {
             Text(String(localized: "Welcome to TypeWhisper!"))
                 .font(.title2.bold())
 
-            Text(localizedAppText(
-                "Choose the scenario closest to you. You can change it later in Settings > License.",
-                de: "Wähle den Fall, der dir am nächsten kommt. Du kannst ihn später unter Einstellungen > Lizenz ändern."
-            ))
+            Text(String(localized: "Choose the scenario closest to you. You can change it later in Settings > License."))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
 
             VStack(spacing: 12) {
                 welcomeChoiceButton(
                     intent: .personalOSS,
-                    title: localizedAppText("GPLv3 / OSS", de: "GPLv3 / OSS"),
-                    description: localizedAppText(
-                        "Install and run the GPL version as-is, including personal or internal use.",
-                        de: "Installiere und nutze die GPL-Version unverändert, auch privat oder intern."
-                    ),
+                    title: String(localized: "GPLv3 / OSS"),
+                    description: String(localized: "Install and run the GPL version as-is, including personal or internal use."),
                     systemImage: "person"
                 )
 
                 welcomeChoiceButton(
                     intent: .workSolo,
-                    title: localizedAppText("Commercial license", de: "Kommerzielle Lizenz"),
-                    description: localizedAppText(
-                        "Non-GPL terms, procurement, support, or proprietary distribution for one person.",
-                        de: "Nicht-GPL-Bedingungen, Beschaffung, Support oder proprietäre Weiterverteilung für eine Person."
-                    ),
+                    title: String(localized: "Commercial license"),
+                    description: String(localized: "Non-GPL terms, procurement, support, or proprietary distribution for one person."),
                     systemImage: "briefcase"
                 )
 
                 welcomeChoiceButton(
                     intent: .team,
-                    title: localizedAppText("With a team", de: "Mit Team"),
-                    description: localizedAppText(
-                        "Procurement, support, managed seats, and multi-device rollout.",
-                        de: "Beschaffung, Support, verwaltete Plätze und Rollout auf mehreren Geräten."
-                    ),
+                    title: String(localized: "With a team"),
+                    description: String(localized: "Procurement, support, managed seats, and multi-device rollout."),
                     systemImage: "person.3"
                 )
             }
