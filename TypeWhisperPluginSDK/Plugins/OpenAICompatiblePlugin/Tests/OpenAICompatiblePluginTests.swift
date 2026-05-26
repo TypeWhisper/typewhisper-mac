@@ -232,6 +232,12 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         let host = try PluginTestHostServices()
         let plugin = OpenAICompatiblePlugin()
         plugin.activate(host: host)
+        plugin.setBaseURL("https://default-llm.test")
+        plugin.setApiKey("default-llm-token")
+        plugin.selectLLMModel("default-chat")
+        plugin.setLLMTemperatureMode(.custom)
+        plugin.setLLMTemperatureValue(0.2)
+
         let inception = plugin.addProfile(named: "Inception")
         plugin.setBaseURL("https://inception.test", for: inception.id)
         plugin.setApiKey("inception-token", for: inception.id)
@@ -243,28 +249,48 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         PluginHTTPClientTestHarness.configure { _ in
             store.makeSession(outcomes: [
                 .success(
-                    Data(#"{"choices":[{"message":{"content":"processed"}}]}"#.utf8),
+                    Data(#"{"choices":[{"message":{"content":"default processed"}}]}"#.utf8),
+                    Self.httpResponse(url: "https://default-llm.test/v1/chat/completions", statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"choices":[{"message":{"content":"inception processed"}}]}"#.utf8),
                     Self.httpResponse(url: "https://inception.test/v1/chat/completions", statusCode: 200)
                 )
             ])
         }
 
+        let defaultResult = try await plugin.process(
+            systemPrompt: "Fix",
+            userText: "hello",
+            model: nil,
+            temperatureDirective: .inheritProviderSetting
+        )
         let provider = try XCTUnwrap(plugin.additionalLLMProviders.first as? any LLMTemperatureControllableProvider)
-        let result = try await provider.process(
+        let inceptionResult = try await provider.process(
             systemPrompt: "Fix",
             userText: "hello",
             model: nil,
             temperatureDirective: .inheritProviderSetting
         )
 
-        XCTAssertEqual(result, "processed")
-        let request = try XCTUnwrap(store.sessions[0].requestedRequests.first)
-        XCTAssertEqual(request.url?.host, "inception.test")
-        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer inception-token")
-        let body = try XCTUnwrap(request.httpBody)
-        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
-        XCTAssertEqual(json["model"] as? String, "inception-chat")
-        XCTAssertEqual(json["temperature"] as? Double, 0.9)
+        XCTAssertEqual(defaultResult, "default processed")
+        XCTAssertEqual(inceptionResult, "inception processed")
+        let requests = store.sessions[0].requestedRequests
+        XCTAssertEqual(requests.map { $0.url?.host }, ["default-llm.test", "inception.test"])
+        XCTAssertEqual(
+            requests.map { $0.value(forHTTPHeaderField: "Authorization") },
+            ["Bearer default-llm-token", "Bearer inception-token"]
+        )
+
+        let defaultBody = try XCTUnwrap(requests[0].httpBody)
+        let defaultJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: defaultBody) as? [String: Any])
+        XCTAssertEqual(defaultJSON["model"] as? String, "default-chat")
+        XCTAssertEqual(defaultJSON["temperature"] as? Double, 0.2)
+
+        let inceptionBody = try XCTUnwrap(requests[1].httpBody)
+        let inceptionJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: inceptionBody) as? [String: Any])
+        XCTAssertEqual(inceptionJSON["model"] as? String, "inception-chat")
+        XCTAssertEqual(inceptionJSON["temperature"] as? Double, 0.9)
     }
 
     func testProcessFailsWithoutSelectedModel() async throws {

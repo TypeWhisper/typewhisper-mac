@@ -346,9 +346,14 @@ final class PluginManager: ObservableObject {
         let lookup = providerName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !lookup.isEmpty else { return nil }
 
+        if let idMatch = llmProviders.first(where: {
+            $0.llmProviderId.caseInsensitiveCompare(lookup) == .orderedSame
+        }) {
+            return idMatch
+        }
+
         return llmProviders.first { provider in
-            provider.llmProviderId.caseInsensitiveCompare(lookup) == .orderedSame
-                || provider.llmProviderDisplayName.caseInsensitiveCompare(lookup) == .orderedSame
+            provider.llmProviderDisplayName.caseInsensitiveCompare(lookup) == .orderedSame
                 || provider.providerName.caseInsensitiveCompare(lookup) == .orderedSame
                 || provider.llmProviderLegacyAliases.contains {
                     $0.caseInsensitiveCompare(lookup) == .orderedSame
@@ -694,15 +699,8 @@ final class PluginManager: ObservableObject {
             }
         } else {
             // If the deactivated plugin was selected as default engine, fall back to first available
-            if let engine = loadedPlugins[index].instance as? TranscriptionEnginePlugin {
-                let selectedProvider = UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine)
-                if selectedProvider == engine.providerId {
-                    let fallback = transcriptionEngines.first(where: { $0.providerId != engine.providerId && $0.isConfigured })
-                    if let fallback {
-                        ServiceContainer.shared.modelManagerService.selectProvider(fallback.providerId)
-                    }
-                }
-            }
+            let disabledProviderIds = transcriptionProviderIds(exposedBy: loadedPlugins[index].instance)
+            selectFallbackTranscriptionProviderIfNeeded(disabling: disabledProviderIds)
 
             let plugin = loadedPlugins[index]
             if plugin.isRuntimeLoaded {
@@ -721,6 +719,34 @@ final class PluginManager: ObservableObject {
                 loadedPlugins[index].isEnabled = false
             }
         }
+    }
+
+    func transcriptionProviderIds(exposedBy pluginInstance: TypeWhisperPlugin) -> Set<String> {
+        var providerIds = Set<String>()
+        if let engine = pluginInstance as? TranscriptionEnginePlugin {
+            providerIds.insert(engine.providerId)
+        }
+        if let expanded = pluginInstance as? AdditionalTranscriptionEnginesProviding {
+            for engine in expanded.additionalTranscriptionEngines {
+                providerIds.insert(engine.providerId)
+            }
+        }
+        return providerIds
+    }
+
+    func selectFallbackTranscriptionProviderIfNeeded(disabling disabledProviderIds: Set<String>) {
+        guard let fallbackProviderId = fallbackTranscriptionProviderId(disabling: disabledProviderIds) else { return }
+        ServiceContainer.shared.modelManagerService.selectProvider(fallbackProviderId)
+    }
+
+    func fallbackTranscriptionProviderId(disabling disabledProviderIds: Set<String>) -> String? {
+        guard !disabledProviderIds.isEmpty,
+              let selectedProvider = UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine),
+              disabledProviderIds.contains(selectedProvider) else { return nil }
+
+        return transcriptionEngines.first {
+            !disabledProviderIds.contains($0.providerId) && $0.isConfigured
+        }?.providerId
     }
 
     func openPluginsFolder() {

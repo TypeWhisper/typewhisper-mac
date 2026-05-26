@@ -4303,6 +4303,119 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    func testPluginManagerPrioritizesLLMProviderIdOverAliases() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let aliasProvider = MockLLMProviderPlugin()
+        aliasProvider.configuredProviderName = "Alias Provider"
+        aliasProvider.configuredProviderId = "alias-provider"
+        aliasProvider.configuredProviderDisplayName = "Alias Provider"
+        aliasProvider.configuredProviderLegacyAliases = ["openai-compatible:inception"]
+
+        let exactProvider = MockLLMProviderPlugin()
+        exactProvider.configuredProviderName = "Exact Provider"
+        exactProvider.configuredProviderId = "openai-compatible:inception"
+        exactProvider.configuredProviderDisplayName = "Inception"
+
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.alias-llm",
+                    name: "Alias LLM",
+                    version: "1.0.0",
+                    principalClass: "APIRouterMockLLMProviderPlugin"
+                ),
+                instance: aliasProvider,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            ),
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.exact-llm",
+                    name: "Exact LLM",
+                    version: "1.0.0",
+                    principalClass: "APIRouterMockLLMProviderPlugin"
+                ),
+                instance: exactProvider,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let resolved = try XCTUnwrap(PluginManager.shared.llmProvider(for: "openai-compatible:inception") as? MockLLMProviderPlugin)
+        XCTAssertTrue(resolved === exactProvider)
+    }
+
+    @MainActor
+    func testExpandedPluginFallbackIncludesAdditionalTranscriptionEngine() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let selectedEngineKey = UserDefaultsKeys.selectedEngine
+        let originalSelection = UserDefaults.standard.object(forKey: selectedEngineKey)
+        defer {
+            if let originalSelection {
+                UserDefaults.standard.set(originalSelection, forKey: selectedEngineKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: selectedEngineKey)
+            }
+        }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let fallbackEngine = MockTranscriptionPlugin()
+        let expandedEngine = NamedTranscriptionPlugin(
+            providerId: "openai-compatible:inception",
+            providerDisplayName: "Inception",
+            modelId: "inception-whisper"
+        )
+        let expandedPlugin = ExpandedRolePlugin(
+            additionalLLMProviders: [],
+            additionalTranscriptionEngines: [expandedEngine]
+        )
+
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.transcription",
+                    name: "Mock Transcription",
+                    version: "1.0.0",
+                    principalClass: "APIRouterMockTranscriptionPlugin"
+                ),
+                instance: fallbackEngine,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            ),
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.expanded-role",
+                    name: "Expanded Role Mock",
+                    version: "1.0.0",
+                    principalClass: "APIRouterExpandedRolePlugin"
+                ),
+                instance: expandedPlugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+        UserDefaults.standard.set(expandedEngine.providerId, forKey: selectedEngineKey)
+
+        let disabledProviderIds = PluginManager.shared.transcriptionProviderIds(exposedBy: expandedPlugin)
+        let fallbackProviderId = PluginManager.shared.fallbackTranscriptionProviderId(disabling: disabledProviderIds)
+
+        XCTAssertEqual(fallbackProviderId, fallbackEngine.providerId)
+    }
+
+    @MainActor
     func testWorkflowPromptProcessingSkipsMemoryAndUsesWorkflowBehavior() async throws {
         let providerKey = "llmProviderType"
         let modelKey = "llmCloudModel"
