@@ -551,6 +551,31 @@ public struct PluginOpenAIChatHelper: Sendable {
         )
     }
 
+    // Keep the pre-requestTimeout symbols available so already-installed plugin
+    // bundles continue to load after the helper grew the timeout parameter.
+    public func process(
+        apiKey: String,
+        model: String,
+        systemPrompt: String,
+        userText: String,
+        maxOutputTokens: Int? = 4096,
+        maxOutputTokenParameter: String = "max_tokens",
+        reasoningEffort: String? = nil,
+        temperature: Double?
+    ) async throws -> String {
+        try await process(
+            apiKey: apiKey,
+            model: model,
+            systemPrompt: systemPrompt,
+            userText: userText,
+            maxOutputTokens: maxOutputTokens,
+            maxOutputTokenParameter: maxOutputTokenParameter,
+            reasoningEffort: reasoningEffort,
+            temperature: temperature,
+            requestTimeout: 30
+        )
+    }
+
     public func process(
         apiKey: String,
         model: String,
@@ -560,7 +585,7 @@ public struct PluginOpenAIChatHelper: Sendable {
         maxOutputTokenParameter: String = "max_tokens",
         reasoningEffort: String? = nil,
         temperature: Double?,
-        requestTimeout: TimeInterval = 30
+        requestTimeout: TimeInterval
     ) async throws -> String {
         let endpoint = "\(baseURL)\(chatEndpoint)"
         guard let url = URL(string: endpoint) else {
@@ -644,8 +669,30 @@ public struct PluginOpenAIChatHelper: Sendable {
         userText: String,
         maxOutputTokens: Int? = 4096,
         maxOutputTokenParameter: String = "max_tokens",
+        temperature: Double?
+    ) async throws -> String {
+        try await process(
+            apiKey: apiKey,
+            model: model,
+            systemPrompt: systemPrompt,
+            userText: userText,
+            maxOutputTokens: maxOutputTokens,
+            maxOutputTokenParameter: maxOutputTokenParameter,
+            reasoningEffort: nil,
+            temperature: temperature,
+            requestTimeout: 30
+        )
+    }
+
+    public func process(
+        apiKey: String,
+        model: String,
+        systemPrompt: String,
+        userText: String,
+        maxOutputTokens: Int? = 4096,
+        maxOutputTokenParameter: String = "max_tokens",
         temperature: Double?,
-        requestTimeout: TimeInterval = 30
+        requestTimeout: TimeInterval
     ) async throws -> String {
         try await process(
             apiKey: apiKey,

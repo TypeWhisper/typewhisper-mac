@@ -16,9 +16,11 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
     var llmTemperatureModeRaw: String
     var llmTemperatureValue: Double
     var fetchedModels: [FetchedModel]
-    var chatRequestTimeoutSeconds: Double?
+    var chatRequestTimeoutSeconds: TimeInterval?
 
     static let defaultChatRequestTimeout: TimeInterval = 30
+    static let minChatRequestTimeout: TimeInterval = 5
+    static let maxChatRequestTimeout: TimeInterval = 3600
 
     init(
         id: String,
@@ -29,7 +31,7 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue,
         llmTemperatureValue: Double = 0.3,
         fetchedModels: [FetchedModel] = [],
-        chatRequestTimeoutSeconds: Double? = nil
+        chatRequestTimeoutSeconds: TimeInterval? = nil
     ) {
         self.id = id
         self.name = name
@@ -45,7 +47,10 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
     var isDefault: Bool { id == Self.defaultId }
 
     var resolvedChatRequestTimeout: TimeInterval {
-        chatRequestTimeoutSeconds ?? Self.defaultChatRequestTimeout
+        guard let seconds = chatRequestTimeoutSeconds, seconds.isFinite else {
+            return Self.defaultChatRequestTimeout
+        }
+        return min(max(seconds, Self.minChatRequestTimeout), Self.maxChatRequestTimeout)
     }
 
     var displayName: String {
@@ -60,7 +65,7 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue,
         llmTemperatureValue: Double = 0.3,
         fetchedModels: [FetchedModel] = [],
-        chatRequestTimeoutSeconds: Double? = nil
+        chatRequestTimeoutSeconds: TimeInterval? = nil
     ) -> OpenAICompatibleProfile {
         OpenAICompatibleProfile(
             id: defaultId,
@@ -361,7 +366,10 @@ final class OpenAICompatiblePlugin: NSObject,
     }
 
     func setChatRequestTimeout(_ seconds: Double, for profileId: String) {
-        let clamped = min(max(seconds.rounded(), 5), 3600)
+        let clamped = min(
+            max(seconds.rounded(), OpenAICompatibleProfile.minChatRequestTimeout),
+            OpenAICompatibleProfile.maxChatRequestTimeout
+        )
         updateProfile(profileId) { profile in
             profile.chatRequestTimeoutSeconds = clamped
         }
@@ -1204,6 +1212,7 @@ private struct OpenAICompatibleSettingsView: View {
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 100)
                     .onSubmit(saveChatTimeout)
+                    .accessibilityLabel(Text("LLM Request Timeout", bundle: bundle))
 
                 Button(String(localized: "Save", bundle: bundle), action: saveChatTimeout)
                     .buttonStyle(.bordered)
