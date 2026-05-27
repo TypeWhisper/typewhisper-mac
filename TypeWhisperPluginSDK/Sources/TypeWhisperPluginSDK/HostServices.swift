@@ -68,6 +68,26 @@ public enum PluginHTTPClient {
         try await data(for: request, allowsRetry: true)
     }
 
+    public static func data(
+        for request: URLRequest,
+        resourceTimeout: TimeInterval?
+    ) async throws -> (Data, URLResponse) {
+        guard let resourceTimeout, resourceTimeout > longRunningResourceTimeout else {
+            return try await data(for: request, allowsRetry: true)
+        }
+
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = resourceTimeout
+        config.timeoutIntervalForResource = resourceTimeout
+        let session = sessionFactory(config)
+        defer { session.finishTasksAndInvalidate() }
+
+        let method = request.httpMethod ?? "GET"
+        let url = request.url?.absoluteString ?? "unknown"
+        logger.info("\(method) \(url) (dedicated session, resourceTimeout=\(resourceTimeout))")
+        return try await session.data(for: request)
+    }
+
     public static func resetSharedSession(reason: String? = nil) {
         let session = lock.withLock {
             let existing = sharedSession
@@ -539,7 +559,8 @@ public struct PluginOpenAIChatHelper: Sendable {
         maxOutputTokens: Int? = 4096,
         maxOutputTokenParameter: String = "max_tokens",
         reasoningEffort: String? = nil,
-        temperature: Double?
+        temperature: Double?,
+        requestTimeout: TimeInterval = 30
     ) async throws -> String {
         let endpoint = "\(baseURL)\(chatEndpoint)"
         guard let url = URL(string: endpoint) else {
@@ -560,10 +581,10 @@ public struct PluginOpenAIChatHelper: Sendable {
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 30
+        request.timeoutInterval = requestTimeout
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
-        let (data, response) = try await PluginHTTPClient.data(for: request)
+        let (data, response) = try await PluginHTTPClient.data(for: request, resourceTimeout: requestTimeout)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw PluginChatError.networkError("Invalid response")
@@ -623,7 +644,8 @@ public struct PluginOpenAIChatHelper: Sendable {
         userText: String,
         maxOutputTokens: Int? = 4096,
         maxOutputTokenParameter: String = "max_tokens",
-        temperature: Double?
+        temperature: Double?,
+        requestTimeout: TimeInterval = 30
     ) async throws -> String {
         try await process(
             apiKey: apiKey,
@@ -633,7 +655,8 @@ public struct PluginOpenAIChatHelper: Sendable {
             maxOutputTokens: maxOutputTokens,
             maxOutputTokenParameter: maxOutputTokenParameter,
             reasoningEffort: nil,
-            temperature: temperature
+            temperature: temperature,
+            requestTimeout: requestTimeout
         )
     }
 

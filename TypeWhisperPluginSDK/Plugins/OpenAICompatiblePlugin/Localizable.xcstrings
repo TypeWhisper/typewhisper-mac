@@ -61,6 +61,16 @@
         }
       }
     },
+    "LLM Request Timeout" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeitlimit für LLM-Anfrage"
+          }
+        }
+      }
+    },
     "Model name" : {
       "localizations" : {
         "de" : {
@@ -137,6 +147,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sichern"
+          }
+        }
+      }
+    },
+    "Seconds" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sekunden"
+          }
+        }
+      }
+    },
+    "Seconds to wait for the LLM response. Increase for local servers (LM Studio, Ollama) that take a long time on large prompts. Higher values wait longer before failing. Default 30." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sekunden, die auf die LLM-Antwort gewartet wird. Erhöhen Sie den Wert für lokale Server (LM Studio, Ollama), die bei großen Prompts lange brauchen. Höhere Werte warten länger, bevor die Anfrage fehlschlägt. Standard 30."
           }
         }
       }
