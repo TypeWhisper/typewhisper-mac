@@ -230,6 +230,7 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(behavior.cloudModel, "llama-3.3")
         XCTAssertNil(behavior.transcriptionEngineId)
         XCTAssertNil(behavior.transcriptionModelId)
+        XCTAssertNil(behavior.microphoneBoostOverride)
     }
 
     func testWorkflowServicePersistsCombinedTriggerArrays() throws {
@@ -353,17 +354,52 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(behavior.transcriptionModelId, "large-v3-turbo")
     }
 
+    func testWorkflowDraftPreservesDictationMicrophoneBoostOverrideWhenSaving() throws {
+        let workflow = Workflow(
+            name: "Boosted Dictation",
+            template: .dictation,
+            trigger: .hotkeys([
+                UnifiedHotkey(keyCode: 17, modifierFlags: 0, isFn: false)
+            ]),
+            behavior: WorkflowBehavior(microphoneBoostOverride: true)
+        )
+
+        let draft = WorkflowDraft(workflow)
+        let behavior = draft.resolvedBehavior()
+
+        XCTAssertEqual(draft.microphoneBoostOverride, true)
+        XCTAssertEqual(behavior.microphoneBoostOverride, true)
+    }
+
     func testWorkflowDraftDropsTranscriptionOverridesForNonDictationTemplates() throws {
         var draft = WorkflowDraft(template: .dictation)
         draft.transcriptionEngineId = "whisperkit"
         draft.transcriptionModelId = "large-v3"
+        draft.microphoneBoostOverride = true
 
         draft.selectTemplate(.summary)
 
         XCTAssertNil(draft.transcriptionEngineId)
         XCTAssertNil(draft.transcriptionModelId)
+        XCTAssertEqual(draft.microphoneBoostOverride, true)
         XCTAssertNil(draft.resolvedBehavior().transcriptionEngineId)
         XCTAssertNil(draft.resolvedBehavior().transcriptionModelId)
+        XCTAssertEqual(draft.resolvedBehavior().microphoneBoostOverride, true)
+    }
+
+    func testWorkflowDraftPreservesMicrophoneBoostOverrideForNonDictationWorkflow() throws {
+        let workflow = Workflow(
+            name: "Boosted Summary",
+            template: .summary,
+            trigger: .manual(),
+            behavior: WorkflowBehavior(microphoneBoostOverride: false)
+        )
+
+        let draft = WorkflowDraft(workflow)
+        let behavior = draft.resolvedBehavior()
+
+        XCTAssertEqual(draft.microphoneBoostOverride, false)
+        XCTAssertEqual(behavior.microphoneBoostOverride, false)
     }
 
     func testWorkflowDraftDropsTranscriptionModelWithoutEngineOverride() throws {

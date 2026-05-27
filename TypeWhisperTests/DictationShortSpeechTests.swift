@@ -178,6 +178,54 @@ final class DictationShortSpeechTests: XCTestCase {
     }
 }
 
+final class MicrophoneBoostProcessorTests: XCTestCase {
+    func testDisabledBoostLeavesSamplesUnchanged() {
+        let samples: [Float] = [0.01, -0.02, 0.03]
+
+        let result = MicrophoneBoostProcessor.process(samples, enabled: false)
+
+        XCTAssertEqual(result.samples, samples)
+        XCTAssertEqual(result.gain, 1)
+    }
+
+    func testQuietSpeechIsBoostedTowardTargetRMS() {
+        let samples = [Float](repeating: 0.01, count: 100)
+
+        let result = MicrophoneBoostProcessor.process(samples, enabled: true)
+
+        XCTAssertEqual(result.gain, 10, accuracy: 0.0001)
+        XCTAssertEqual(result.outputRMS, MicrophoneBoostProcessor.targetRMS, accuracy: 0.0001)
+        XCTAssertTrue(result.samples.allSatisfy { abs($0 - 0.1) < 0.0001 })
+    }
+
+    func testBoostIsCappedAtMaximumGain() {
+        let samples = [Float](repeating: 0.001, count: 100)
+
+        let result = MicrophoneBoostProcessor.process(samples, enabled: true)
+
+        XCTAssertEqual(result.gain, MicrophoneBoostProcessor.maximumGain, accuracy: 0.0001)
+        XCTAssertEqual(result.outputRMS, 0.02, accuracy: 0.0001)
+    }
+
+    func testNearSilenceIsNotBoosted() {
+        let samples = [Float](repeating: 0.00005, count: 100)
+
+        let result = MicrophoneBoostProcessor.process(samples, enabled: true)
+
+        XCTAssertEqual(result.samples, samples)
+        XCTAssertEqual(result.gain, 1)
+    }
+
+    func testBoostClampsSamplesToValidRange() {
+        let samples = [Float(0.96)] + [Float](repeating: 0, count: 99)
+
+        let result = MicrophoneBoostProcessor.process(samples, enabled: true)
+
+        XCTAssertEqual(try XCTUnwrap(result.samples.first), 1, accuracy: 0.0001)
+        XCTAssertTrue(result.samples.allSatisfy { $0 >= -1 && $0 <= 1 })
+    }
+}
+
 final class DictationInsertionTextFormatterTests: XCTestCase {
     func testAddsTrailingSpaceToNonEmptyTextWithoutTrailingWhitespace() {
         XCTAssertEqual(DictationInsertionTextFormatter.textForInsertion("Hello"), "Hello ")

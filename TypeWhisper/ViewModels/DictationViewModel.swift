@@ -130,6 +130,12 @@ final class DictationViewModel: ObservableObject {
     @Published var transcribeShortQuietClipsAggressively: Bool {
         didSet { Self.persistTranscribeShortQuietClipsAggressively(transcribeShortQuietClipsAggressively) }
     }
+    @Published var microphoneBoostEnabled: Bool {
+        didSet {
+            Self.persistMicrophoneBoostEnabled(microphoneBoostEnabled)
+            applyEffectiveMicrophoneBoostToAudioService()
+        }
+    }
     @Published var spokenFeedbackEnabled: Bool {
         didSet { speechFeedbackService.spokenFeedbackEnabled = spokenFeedbackEnabled }
     }
@@ -356,6 +362,7 @@ final class DictationViewModel: ObservableObject {
         self.preserveClipboard = UserDefaults.standard.bool(forKey: UserDefaultsKeys.preserveClipboard)
         self.mediaPauseEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.mediaPauseEnabled)
         self.transcribeShortQuietClipsAggressively = Self.loadTranscribeShortQuietClipsAggressively()
+        self.microphoneBoostEnabled = Self.loadMicrophoneBoostEnabled()
         self.spokenFeedbackEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.spokenFeedbackEnabled)
         self.indicatorStyle = Self.loadIndicatorStyle()
         self.notchIndicatorVisibility = UserDefaults.standard.string(forKey: UserDefaultsKeys.notchIndicatorVisibility)
@@ -368,6 +375,7 @@ final class DictationViewModel: ObservableObject {
             .flatMap { NotchIndicatorDisplay(rawValue: $0) } ?? .activeScreen
         self.overlayPosition = UserDefaults.standard.string(forKey: UserDefaultsKeys.overlayPosition)
             .flatMap { OverlayPosition(rawValue: $0) } ?? .bottom
+        audioRecordingService.microphoneBoostEnabled = microphoneBoostEnabled
 
         setupBindings()
 
@@ -466,6 +474,14 @@ final class DictationViewModel: ObservableObject {
 
     nonisolated static func persistTranscribeShortQuietClipsAggressively(_ enabled: Bool, defaults: UserDefaults = .standard) {
         defaults.set(enabled, forKey: UserDefaultsKeys.transcribeShortQuietClipsAggressively)
+    }
+
+    nonisolated static func loadMicrophoneBoostEnabled(defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: UserDefaultsKeys.microphoneBoostEnabled) as? Bool ?? false
+    }
+
+    nonisolated static func persistMicrophoneBoostEnabled(_ enabled: Bool, defaults: UserDefaults = .standard) {
+        defaults.set(enabled, forKey: UserDefaultsKeys.microphoneBoostEnabled)
     }
 
     nonisolated static func indicatorTranscriptPreviewFontSize(for style: IndicatorStyle, offset: Int) -> CGFloat {
@@ -869,6 +885,8 @@ final class DictationViewModel: ObservableObject {
         }
 
         do {
+            let initialForcedWorkflow = forcedWorkflow(for: forcedWorkflowId)
+            audioRecordingService.microphoneBoostEnabled = microphoneBoostEnabled(for: initialForcedWorkflow)
             audioRecordingService.selectedDeviceID = audioDeviceService.selectedDeviceID
             audioRecordingService.hasExplicitDeviceSelection = audioDeviceService.selectedDeviceUID != nil
             let selectedInputUsesBluetooth = audioDeviceService.selectedDeviceUsesBluetoothTransport
@@ -915,14 +933,14 @@ final class DictationViewModel: ObservableObject {
             capturedSelectedText = nil
             activeAppIcon = nil
 
-            if let forcedWorkflowId,
-               let forcedWorkflow = workflowService.workflows.first(where: { $0.id == forcedWorkflowId && $0.isEnabled }) {
+            if let forcedWorkflow = initialForcedWorkflow {
                 applyWorkflowMatch(workflowService.forcedWorkflowMatch(for: forcedWorkflow), activeApp: activeApp)
             } else if let workflowMatch = workflowService.matchWorkflow(bundleIdentifier: activeApp.bundleId, url: nil) {
                 applyWorkflowMatch(workflowMatch, activeApp: activeApp)
             } else {
                 clearActiveRuleState()
             }
+            applyEffectiveMicrophoneBoostToAudioService()
             updateRecordingStartCuePayload(activeApp: activeApp)
             let contextMs = (CFAbsoluteTimeGetCurrent() - contextStartTimestamp) * 1000
 
@@ -1049,6 +1067,10 @@ final class DictationViewModel: ObservableObject {
 
     private var effectiveCloudModelOverride: String? {
         DictationTranscriptionOverrideResolver.modelId(for: matchedWorkflow)
+    }
+
+    private var effectiveMicrophoneBoostEnabled: Bool {
+        microphoneBoostEnabled(for: matchedWorkflow)
     }
 
     private var effectiveRuleName: String? {
@@ -1462,6 +1484,20 @@ final class DictationViewModel: ObservableObject {
         activeRuleName = match?.workflow.name
         activeRuleReasonLabel = match?.kind.label
         activeRuleExplanation = match.map { workflowExplanation(for: $0, activeApp: activeApp) }
+        applyEffectiveMicrophoneBoostToAudioService()
+    }
+
+    private func forcedWorkflow(for id: UUID?) -> Workflow? {
+        guard let id else { return nil }
+        return workflowService.workflows.first { $0.id == id && $0.isEnabled }
+    }
+
+    private func microphoneBoostEnabled(for workflow: Workflow?) -> Bool {
+        return workflow?.behavior.microphoneBoostOverride ?? microphoneBoostEnabled
+    }
+
+    private func applyEffectiveMicrophoneBoostToAudioService() {
+        audioRecordingService.microphoneBoostEnabled = effectiveMicrophoneBoostEnabled
     }
 
     /// Starts the live streaming handler with the currently effective workflow/global params

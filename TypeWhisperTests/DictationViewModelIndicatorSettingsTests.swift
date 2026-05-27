@@ -100,6 +100,30 @@ final class DictationViewModelIndicatorSettingsTests: XCTestCase {
         )
         XCTAssertTrue(DictationViewModel.loadTranscribeShortQuietClipsAggressively(defaults: defaults))
     }
+
+    func testMicrophoneBoostDefaultsToDisabled() {
+        XCTAssertFalse(DictationViewModel.loadMicrophoneBoostEnabled(defaults: defaults))
+    }
+
+    func testMicrophoneBoostPersistsWhenEnabled() {
+        DictationViewModel.persistMicrophoneBoostEnabled(true, defaults: defaults)
+
+        XCTAssertEqual(
+            defaults.object(forKey: UserDefaultsKeys.microphoneBoostEnabled) as? Bool,
+            true
+        )
+        XCTAssertTrue(DictationViewModel.loadMicrophoneBoostEnabled(defaults: defaults))
+    }
+
+    func testMicrophoneBoostPersistsWhenDisabled() {
+        DictationViewModel.persistMicrophoneBoostEnabled(false, defaults: defaults)
+
+        XCTAssertEqual(
+            defaults.object(forKey: UserDefaultsKeys.microphoneBoostEnabled) as? Bool,
+            false
+        )
+        XCTAssertFalse(DictationViewModel.loadMicrophoneBoostEnabled(defaults: defaults))
+    }
 }
 
 final class IndicatorScreenResolverTests: XCTestCase {

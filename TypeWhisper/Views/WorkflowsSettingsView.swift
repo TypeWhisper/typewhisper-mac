@@ -827,6 +827,8 @@ private struct WorkflowEditorPage: View {
                     )
                 }
 
+                workflowMicrophoneBoostSection
+
                 if draft.usesLLMProcessing {
                     WorkflowTextEditorField(
                         title: localizedAppText("Fine-Tuning", de: "Feinabstimmung"),
@@ -1046,6 +1048,36 @@ private struct WorkflowEditorPage: View {
                     }
                 }
             }
+        }
+    }
+
+    private var workflowMicrophoneBoostSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(localizedAppText("Whisper Mode (AGC)", de: "Whisper-Modus (AGC)"))
+                .font(.subheadline.weight(.semibold))
+
+            Picker(
+                localizedAppText("Whisper Mode", de: "Whisper-Modus"),
+                selection: workflowMicrophoneBoostBinding
+            ) {
+                ForEach(WorkflowMicrophoneBoostOverride.allCases) { option in
+                    Text(option.title).tag(option)
+                }
+            }
+
+            Text(
+                draft.microphoneBoostOverride == nil
+                    ? localizedAppText(
+                        "This workflow follows the global Whisper Mode setting.",
+                        de: "Dieser Workflow folgt der globalen Whisper-Modus-Einstellung."
+                    )
+                    : localizedAppText(
+                        "This workflow overrides Whisper Mode while it records.",
+                        de: "Dieser Workflow überschreibt den Whisper-Modus während der Aufnahme."
+                    )
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
     }
 
@@ -1707,6 +1739,15 @@ private struct WorkflowEditorPage: View {
             }
         )
     }
+
+    private var workflowMicrophoneBoostBinding: Binding<WorkflowMicrophoneBoostOverride> {
+        Binding(
+            get: { WorkflowMicrophoneBoostOverride(value: draft.microphoneBoostOverride) },
+            set: { option in
+                draft.microphoneBoostOverride = option.value
+            }
+        )
+    }
 }
 
 private struct WorkflowTemplateCard: View {
@@ -2031,6 +2072,47 @@ enum WorkflowTriggerMode: String, CaseIterable, Hashable {
     case global
 }
 
+enum WorkflowMicrophoneBoostOverride: String, CaseIterable, Hashable, Identifiable {
+    case inherit
+    case on
+    case off
+
+    var id: String { rawValue }
+
+    var value: Bool? {
+        switch self {
+        case .inherit:
+            nil
+        case .on:
+            true
+        case .off:
+            false
+        }
+    }
+
+    init(value: Bool?) {
+        switch value {
+        case .some(true):
+            self = .on
+        case .some(false):
+            self = .off
+        case .none:
+            self = .inherit
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .inherit:
+            localizedAppText("Use Global Whisper Mode", de: "Globalen Whisper-Modus verwenden")
+        case .on:
+            localizedAppText("Whisper Mode On", de: "Whisper-Modus ein")
+        case .off:
+            localizedAppText("Whisper Mode Off", de: "Whisper-Modus aus")
+        }
+    }
+}
+
 struct WorkflowDraft {
     var name: String
     var isEnabled: Bool
@@ -2052,6 +2134,7 @@ struct WorkflowDraft {
     var autoEnter: Bool
     var transcriptionEngineId: String?
     var transcriptionModelId: String?
+    var microphoneBoostOverride: Bool?
 
     private var preservedBehaviorSettings: [String: String]
     var providerId: String?
@@ -2083,6 +2166,7 @@ struct WorkflowDraft {
         self.autoEnter = false
         self.transcriptionEngineId = nil
         self.transcriptionModelId = nil
+        self.microphoneBoostOverride = nil
         self.preservedBehaviorSettings = [:]
         self.providerId = nil
         self.cloudModel = nil
@@ -2113,6 +2197,7 @@ struct WorkflowDraft {
         self.autoEnter = output.autoEnter
         self.transcriptionEngineId = workflow.template == .dictation ? behavior.transcriptionEngineId : nil
         self.transcriptionModelId = workflow.template == .dictation ? behavior.transcriptionModelId : nil
+        self.microphoneBoostOverride = behavior.microphoneBoostOverride
         self.hotkeyBehavior = .startDictation
         self.preservedBehaviorSettings = behavior.settings
         self.providerId = behavior.providerId
@@ -2446,6 +2531,7 @@ struct WorkflowDraft {
             cloudModel: usesLLMProcessing && trimmedCloudModel?.isEmpty == false ? trimmedCloudModel : nil,
             transcriptionEngineId: trimmedTranscriptionEngineId,
             transcriptionModelId: trimmedTranscriptionEngineId != nil ? Self.trimmedOptional(transcriptionModelId) : nil,
+            microphoneBoostOverride: microphoneBoostOverride,
             temperatureModeRaw: temperatureModeRaw,
             temperatureValue: temperatureValue
         )

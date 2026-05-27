@@ -7,6 +7,48 @@ import os
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhisper-mac", category: "AudioRecordingService")
 
+struct MicrophoneBoostProcessingResult {
+    let samples: [Float]
+    let inputRMS: Float
+    let outputRMS: Float
+    let gain: Float
+}
+
+enum MicrophoneBoostProcessor {
+    static let targetRMS: Float = 0.1
+    static let maximumGain: Float = 20
+    static let minimumGain: Float = 1
+    static let minimumInputRMS: Float = 0.0001
+
+    static func process(_ samples: [Float], enabled: Bool) -> MicrophoneBoostProcessingResult {
+        guard !samples.isEmpty else {
+            return MicrophoneBoostProcessingResult(samples: [], inputRMS: 0, outputRMS: 0, gain: 1)
+        }
+
+        let inputRMS = rms(samples)
+        guard enabled, inputRMS > minimumInputRMS else {
+            return MicrophoneBoostProcessingResult(samples: samples, inputRMS: inputRMS, outputRMS: inputRMS, gain: 1)
+        }
+
+        let gain = min(max(targetRMS / inputRMS, minimumGain), maximumGain)
+        guard gain > 1 else {
+            return MicrophoneBoostProcessingResult(samples: samples, inputRMS: inputRMS, outputRMS: inputRMS, gain: 1)
+        }
+
+        let boosted = samples.map { max(-1, min(1, $0 * gain)) }
+        return MicrophoneBoostProcessingResult(
+            samples: boosted,
+            inputRMS: inputRMS,
+            outputRMS: rms(boosted),
+            gain: gain
+        )
+    }
+
+    private static func rms(_ samples: [Float]) -> Float {
+        sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(samples.count))
+    }
+}
+
 /// Captures microphone audio via AVAudioEngine and converts to 16kHz mono Float32 samples.
 final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private let recoveryNotificationQueue: OperationQueue = {
@@ -109,6 +151,10 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         get { configLock.withLock { _selectedInputDeviceUsesBluetoothTransport } }
         set { configLock.withLock { _selectedInputDeviceUsesBluetoothTransport = newValue } }
     }
+    var microphoneBoostEnabled: Bool {
+        get { microphoneBoostEnabledLock.withLock { $0 } }
+        set { microphoneBoostEnabledLock.withLock { $0 = newValue } }
+    }
     private var _selectedDeviceID: AudioDeviceID?
     private var _hasExplicitDeviceSelection = false
     private var _selectedInputDeviceUsesBluetoothTransport = false
@@ -136,6 +182,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private var sampleBuffer: [Float] = []
     private var _peakRawAudioLevel: Float = 0
     private let bufferLock = NSLock()
+    private let microphoneBoostEnabledLock = OSAllocatedUnfairLock(initialState: false)
     private let configLock = NSLock()
     private let stopStateLock = NSLock()
     private let engineLock = NSLock()
@@ -1002,14 +1049,16 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private func processConvertedSamples(_ samples: [Float]) {
-        let rms = sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(samples.count))
+        let boostResult = MicrophoneBoostProcessor.process(samples, enabled: microphoneBoostEnabled)
+        let processedSamples = boostResult.samples
+        let rms = boostResult.outputRMS
         let normalizedLevel = AudioLevelMeter.normalizedLevel(rms: rms)
         var requestToFirstBufferMs: Double?
         var didReceiveFirstBuffer = false
 
         bufferLock.lock()
-        sampleBuffer.append(contentsOf: samples)
-        if rms > _peakRawAudioLevel { _peakRawAudioLevel = rms }
+        sampleBuffer.append(contentsOf: processedSamples)
+        if boostResult.inputRMS > _peakRawAudioLevel { _peakRawAudioLevel = boostResult.inputRMS }
         if !hasLoggedFirstConvertedSample {
             hasLoggedFirstConvertedSample = true
             didReceiveFirstBuffer = true
@@ -1019,11 +1068,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             )
         }
         bufferLock.unlock()
-        recoveryAudioStore.append(samples)
+        recoveryAudioStore.append(processedSamples)
 
         if let requestToFirstBufferMs {
             logger.info(
-                "First recording audio buffer appended: requestToFirstBufferMs=\(Self.formatMilliseconds(requestToFirstBufferMs), privacy: .public), sampleCount=\(samples.count, privacy: .public)"
+                "First recording audio buffer appended: requestToFirstBufferMs=\(Self.formatMilliseconds(requestToFirstBufferMs), privacy: .public), sampleCount=\(processedSamples.count, privacy: .public)"
             )
         }
 

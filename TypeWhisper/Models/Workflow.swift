@@ -291,6 +291,7 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
     var cloudModel: String?
     var transcriptionEngineId: String?
     var transcriptionModelId: String?
+    var microphoneBoostOverride: Bool?
     var temperatureModeRaw: String?
     var temperatureValue: Double?
 
@@ -301,6 +302,7 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
         cloudModel: String? = nil,
         transcriptionEngineId: String? = nil,
         transcriptionModelId: String? = nil,
+        microphoneBoostOverride: Bool? = nil,
         temperatureModeRaw: String? = nil,
         temperatureValue: Double? = nil
     ) {
@@ -310,6 +312,7 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
         self.cloudModel = cloudModel
         self.transcriptionEngineId = transcriptionEngineId
         self.transcriptionModelId = transcriptionModelId
+        self.microphoneBoostOverride = microphoneBoostOverride
         self.temperatureModeRaw = temperatureModeRaw
         self.temperatureValue = temperatureValue
     }
