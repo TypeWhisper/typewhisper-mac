@@ -2213,6 +2213,130 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    func testSyntheticPasteReturnsUnverifiedWhenFocusedTextStateIsUnavailable() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+
+        var pasteCount = 0
+        service.pasteSimulatorOverride = {
+            pasteCount += 1
+        }
+
+        let result = try await service.insertText("Hello")
+
+        XCTAssertEqual(result, .pasted(verification: .unverified(.focusedTextStateUnavailable)))
+        XCTAssertEqual(pasteCount, 1)
+        XCTAssertEqual(pasteboard.string(forType: .string), "Hello")
+    }
+
+    @MainActor
+    func testPreserveClipboardKeepsGeneratedTextUntilFallbackRestoreWhenPasteIsUnverified() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.defaultPasteFallbackRestoreDelay = .milliseconds(80)
+
+        let pasteStarted = expectation(description: "synthetic paste started")
+        service.pasteSimulatorOverride = {
+            pasteStarted.fulfill()
+        }
+
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+
+        let insertionTask = Task {
+            try await service.insertText("Hello", preserveClipboard: true)
+        }
+
+        await fulfillment(of: [pasteStarted], timeout: 1.0)
+        XCTAssertEqual(pasteboard.string(forType: .string), "Hello")
+
+        try await Task.sleep(for: .milliseconds(20))
+        XCTAssertEqual(pasteboard.string(forType: .string), "Hello")
+
+        let result = try await insertionTask.value
+        XCTAssertEqual(result, .pasted(verification: .unverified(.focusedTextStateUnavailable)))
+        XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
+    func testTerminalBundleForcesSyntheticPasteInsteadOfDirectAccessibilityInsertion() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("iTerm2", "com.googlecode.iterm2", nil) }
+
+        var pasteCount = 0
+        service.pasteSimulatorOverride = {
+            pasteCount += 1
+        }
+        service.focusedTextStateOverride = { _ in
+            if pasteCount == 0 {
+                return (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+            }
+            return (value: "Hello", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
+        }
+
+        var didAttemptDirectAXInsertion = false
+        service.insertTextAtOverride = { _, _ in
+            didAttemptDirectAXInsertion = true
+            return true
+        }
+
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+
+        let result = try await service.insertText("Hello", preserveClipboard: true)
+
+        XCTAssertFalse(didAttemptDirectAXInsertion)
+        XCTAssertEqual(pasteCount, 1)
+        XCTAssertEqual(result, .pasted(verification: .verified))
+        XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
+    func testSilentAXNoopFallsBackToSyntheticPasteInsteadOfReportingDirectSuccess() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { element }
+        service.pasteVerificationAttempts = 0
+        service.defaultPasteFallbackRestoreDelay = .milliseconds(1)
+        service.focusedTextStateOverride = { _ in
+            (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+        }
+
+        var didAttemptDirectAXInsertion = false
+        service.insertTextAtOverride = { _, _ in
+            didAttemptDirectAXInsertion = true
+            return true
+        }
+
+        var pasteCount = 0
+        service.pasteSimulatorOverride = {
+            pasteCount += 1
+        }
+
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+
+        let result = try await service.insertText("Hello", preserveClipboard: true)
+
+        XCTAssertTrue(didAttemptDirectAXInsertion)
+        XCTAssertEqual(pasteCount, 1)
+        XCTAssertEqual(result, .pasted(verification: .unverified(.focusedTextUnchanged)))
+        XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
     func testAutoEnterSkipsReturnWithoutFocusedTextField() async throws {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard.withUniqueName()
@@ -2304,6 +2428,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
         service.focusedTextElementOverride = { element }
+        service.defaultPasteFallbackRestoreDelay = .milliseconds(1)
+        service.pasteVerificationAttempts = 0
         service.focusedTextStateOverride = { _ in
             (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
         }
@@ -2420,6 +2546,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
         service.focusedTextElementOverride = { element }
+        service.defaultPasteFallbackRestoreDelay = .milliseconds(1)
+        service.pasteVerificationAttempts = 0
         service.focusedTextStateOverride = { _ in
             (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
         }

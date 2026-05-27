@@ -1291,12 +1291,17 @@ final class DictationViewModel: ObservableObject {
                     )
                 } else {
                     let insertionText = DictationInsertionTextFormatter.textForInsertion(text)
-                    _ = try await textInsertionService.insertText(
+                    let insertionResult = try await textInsertionService.insertText(
                         insertionText,
                         preserveClipboard: preserveClipboard,
                         autoEnter: self.effectiveAutoEnterEnabled,
                         outputFormat: self.effectiveOutputFormat
                     )
+                    if case .pasted(.unverified(let reason)) = insertionResult {
+                        logger.warning(
+                            "Text insertion paste could not be verified; continuing with clipboard paste fallback. reason=\(reason.rawValue, privacy: .public), app=\(activeApp.bundleId ?? "nil", privacy: .public)"
+                        )
+                    }
                     EventBus.shared.emit(.textInserted(TextInsertedPayload(
                         text: insertionText,
                         appName: activeApp.name,
