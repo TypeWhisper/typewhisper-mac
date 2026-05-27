@@ -76,8 +76,9 @@
   - HTTP API: send `engine`/`model` in the `/v1/transcribe` request and verify the returned metadata
   - CLI: `typewhisper transcribe --engine <id> --model <id>` against a running local server
 - Multilingual language hints
-  - Open the language picker, search, select multiple languages, verify the selected count
-  - Run a dictation and confirm the hints reach the engine
+  - Open the language picker, search, select multiple languages, verify the selected order and count
+  - Reorder the selected languages and confirm hint-aware engines receive the ordered list
+  - Confirm engines without language-hint support use the first selected language
 - Verify CLI and HTTP API locally
 - Upgrade from `1.2.2` with 1.4 Workflows available and no Legacy settings page
 

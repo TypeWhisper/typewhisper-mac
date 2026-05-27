@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import TypeWhisperPluginSDK
 
 enum LanguageSelectionNilBehavior: Sendable {
     case inheritGlobal
@@ -132,6 +133,42 @@ enum LanguageSelection: Equatable, Sendable {
         }
     }
 
+    func withSelectedCodeMoved(
+        _ code: String,
+        by offset: Int,
+        nilBehavior: LanguageSelectionNilBehavior
+    ) -> LanguageSelection {
+        var codes = selectedCodes
+        guard let currentIndex = codes.firstIndex(of: code) else { return self }
+        let targetIndex = currentIndex + offset
+        guard codes.indices.contains(targetIndex) else { return self }
+
+        codes.swapAt(currentIndex, targetIndex)
+        return withSelectedCodes(codes, nilBehavior: nilBehavior)
+    }
+
+    func withSelectedCodeMoved(
+        _ code: String,
+        droppedOn targetCode: String,
+        nilBehavior: LanguageSelectionNilBehavior
+    ) -> LanguageSelection {
+        guard code != targetCode else { return self }
+        var codes = selectedCodes
+        guard let fromIndex = codes.firstIndex(of: code),
+              let toIndex = codes.firstIndex(of: targetCode) else {
+            return self
+        }
+
+        let movedCode = codes.remove(at: fromIndex)
+        let insertionIndex = toIndex
+        guard insertionIndex >= codes.startIndex, insertionIndex <= codes.endIndex else {
+            return self
+        }
+
+        codes.insert(movedCode, at: insertionIndex)
+        return withSelectedCodes(codes, nilBehavior: nilBehavior)
+    }
+
     func normalizedForSupportedLanguages(_ supportedLanguages: [String]) -> LanguageSelection {
         let supportedSet = Set(supportedLanguages)
         guard !supportedSet.isEmpty else {
@@ -219,6 +256,11 @@ final class SettingsViewModel: ObservableObject {
 
     var selectedLanguage: String? {
         languageSelection.requestedLanguage
+    }
+
+    var activeTranscriptionEngine: TranscriptionEnginePlugin? {
+        guard let providerId = modelManager.selectedProviderId else { return nil }
+        return PluginManager.shared.transcriptionEngine(for: providerId)
     }
 
     func observePluginManager() {

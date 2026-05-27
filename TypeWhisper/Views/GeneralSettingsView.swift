@@ -85,7 +85,8 @@ struct GeneralSettingsView: View {
             Section(String(localized: "Spoken Language")) {
                 LanguageSelectionEditor(
                     selection: $settings.languageSelection,
-                    availableLanguages: settings.availableLanguages
+                    availableLanguages: settings.availableLanguages,
+                    hintBehavior: LanguageSelectionHintBehavior(engine: settings.activeTranscriptionEngine)
                 )
 
                 Text(String(localized: "The language being spoken. Setting this explicitly improves accuracy."))

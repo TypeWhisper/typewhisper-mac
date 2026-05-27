@@ -178,7 +178,7 @@ func printUsage() {
 
         Transcribe options:
           --language <code>    Source language (e.g. en, de)
-          --language-hint <code>  Repeatable language hint for auto-detection
+          --language-hint <code>  Repeatable ordered language hint; non-hint engines use the first
           --task <task>        transcribe (default) or translate
           --translate-to <code>  Target language for translation
           --engine <id>        Override the engine for this request (e.g. groq, qwen3)

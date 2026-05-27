@@ -1,4 +1,5 @@
 import SwiftUI
+import TypeWhisperPluginSDK
 
 struct ProfilesSettingsView: View {
     @ObservedObject private var viewModel = ProfilesViewModel.shared
@@ -939,7 +940,8 @@ private struct RuleBehaviorStep: View {
                             ),
                             availableLanguages: viewModel.settingsViewModel.availableLanguages,
                             nilBehavior: .inheritGlobal,
-                            inheritTitle: localizedAppText("Global Setting", de: "Globale Einstellung")
+                            inheritTitle: localizedAppText("Global Setting", de: "Globale Einstellung"),
+                            hintBehavior: LanguageSelectionHintBehavior(engine: profileLanguageEngine)
                         )
                     }
 
@@ -1093,6 +1095,14 @@ private struct RuleBehaviorStep: View {
                 }
             }
         }
+    }
+
+    private var profileLanguageEngine: TranscriptionEnginePlugin? {
+        if let override = viewModel.editorEngineOverride,
+           let engine = PluginManager.shared.transcriptionEngine(for: override) {
+            return engine
+        }
+        return viewModel.settingsViewModel.activeTranscriptionEngine
     }
 }
 

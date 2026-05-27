@@ -25,6 +25,14 @@ enum TranscriptionEngineError: LocalizedError {
     }
 }
 
+extension TranscriptionEnginePlugin {
+    var acceptsLanguageHints: Bool {
+        self is LanguageHintTranscriptionEnginePlugin
+            || self is StructuredLanguageHintTranscriptionEnginePlugin
+            || self is LiveLanguageHintTranscriptionCapablePlugin
+    }
+}
+
 @MainActor
 final class ModelManagerService: ObservableObject {
     struct LiveTranscriptionSessionHandle: Sendable {
@@ -593,27 +601,18 @@ final class ModelManagerService: ObservableObject {
         for languageSelection: LanguageSelection,
         plugin: TranscriptionEnginePlugin
     ) -> PluginLanguageSelection {
-        if case .hints(let requestedCodes) = languageSelection,
-           requestedCodes.count > 1,
-           !pluginSupportsLanguageHints(plugin) {
-            return PluginLanguageSelection()
-        }
-
         let normalizedSelection = languageSelection.normalizedForSupportedLanguages(plugin.supportedLanguages)
         switch normalizedSelection {
         case .exact(let code):
             return PluginLanguageSelection(requestedLanguage: code)
         case .hints(let codes):
-            return PluginLanguageSelection(languageHints: codes)
+            if plugin.acceptsLanguageHints {
+                return PluginLanguageSelection(languageHints: codes)
+            }
+            return PluginLanguageSelection(requestedLanguage: codes.first)
         case .inheritGlobal, .auto:
             return PluginLanguageSelection()
         }
-    }
-
-    private func pluginSupportsLanguageHints(_ plugin: TranscriptionEnginePlugin) -> Bool {
-        plugin is LanguageHintTranscriptionEnginePlugin
-            || plugin is StructuredLanguageHintTranscriptionEnginePlugin
-            || plugin is LiveLanguageHintTranscriptionCapablePlugin
     }
 
     private func transcribeWithResolvedLanguageSelection(

@@ -1,4 +1,19 @@
 import SwiftUI
+import TypeWhisperPluginSDK
+
+enum LanguageSelectionHintBehavior: Equatable {
+    case unknown
+    case acceptsHints
+    case firstSelectedFallback
+
+    init(engine: TranscriptionEnginePlugin?) {
+        guard let engine else {
+            self = .unknown
+            return
+        }
+        self = engine.acceptsLanguageHints ? .acceptsHints : .firstSelectedFallback
+    }
+}
 
 struct LanguageSelectionEditor: View {
     private enum SelectionMode: Hashable {
@@ -13,10 +28,12 @@ struct LanguageSelectionEditor: View {
     var inheritTitle: String? = nil
     var autoTitle: String = "Auto-detect all languages"
     var restrictedTitle: String = "Restrict detection to selected languages"
+    var hintBehavior: LanguageSelectionHintBehavior = .unknown
 
     @State private var isPickerPresented = false
     @State private var searchQuery = ""
     @State private var pendingRestrictedSelection = false
+    @State private var dropTargetedCode: String?
 
     private var mode: SelectionMode {
         if pendingRestrictedSelection {
@@ -66,6 +83,19 @@ struct LanguageSelectionEditor: View {
         selection.selectedCodes
     }
 
+    private var restrictedHelpText: String? {
+        guard selectedCodes.count > 1 else { return nil }
+
+        switch hintBehavior {
+        case .acceptsHints:
+            return "This engine uses the ordered list as language hints."
+        case .firstSelectedFallback:
+            return "This engine does not support multiple language hints. It will use #1 as the spoken language."
+        case .unknown:
+            return "Engines that support language hints use this ordered list. Other engines use #1 as the spoken language."
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let inheritTitle {
@@ -103,14 +133,12 @@ struct LanguageSelectionEditor: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    FlowLayout(spacing: 2) {
-                        ForEach(selectedCodes, id: \.self) { code in
-                            LanguageChip(
-                                code: code,
-                                title: localizedAppLanguageName(for: code),
-                                removeAction: { removeCode(code) }
-                            )
-                        }
+                    selectedLanguageChips
+
+                    if let restrictedHelpText {
+                        Text(restrictedHelpText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -164,6 +192,28 @@ struct LanguageSelectionEditor: View {
         .buttonStyle(.plain)
     }
 
+    private var selectedLanguageChips: some View {
+        FlowLayout(spacing: 4) {
+            ForEach(Array(selectedCodes.enumerated()), id: \.element) { index, code in
+                LanguageChip(
+                    priority: index + 1,
+                    code: code,
+                    title: localizedAppLanguageName(for: code),
+                    isDropTargeted: dropTargetedCode == code,
+                    canMoveEarlier: index > 0,
+                    canMoveLater: index < selectedCodes.count - 1,
+                    moveEarlierAction: { moveCode(code, by: -1) },
+                    moveLaterAction: { moveCode(code, by: 1) },
+                    removeAction: { removeCode(code) },
+                    dropAction: { droppedCode in moveDroppedCode(droppedCode, onto: code) },
+                    dropTargetAction: { isTargeted in
+                        dropTargetedCode = isTargeted ? code : (dropTargetedCode == code ? nil : dropTargetedCode)
+                    }
+                )
+            }
+        }
+    }
+
     private func setMode(_ newMode: SelectionMode) {
         switch newMode {
         case .inheritGlobal:
@@ -197,14 +247,25 @@ struct LanguageSelectionEditor: View {
         applySelection(for: selectedCodes.filter { $0 != code })
     }
 
+    private func moveCode(_ code: String, by offset: Int) {
+        selection = selection.withSelectedCodeMoved(code, by: offset, nilBehavior: nilBehavior)
+    }
+
+    private func moveDroppedCode(_ code: String, onto targetCode: String) -> Bool {
+        let moved = selection.withSelectedCodeMoved(code, droppedOn: targetCode, nilBehavior: nilBehavior)
+        guard moved != selection else { return false }
+        selection = moved
+        return true
+    }
+
     private func applySelection(for codes: [String]) {
         guard !codes.isEmpty else {
             pendingRestrictedSelection = true
-            selection = .auto
+            selection = nilBehavior == .inheritGlobal ? .inheritGlobal : .auto
             return
         }
         pendingRestrictedSelection = false
-        selection = selection.withSelectedCodes(codes, nilBehavior: .auto)
+        selection = selection.withSelectedCodes(codes, nilBehavior: nilBehavior)
     }
 
     private func languageRow(_ language: (code: String, name: String)) -> some View {
@@ -236,21 +297,58 @@ struct LanguageSelectionEditor: View {
 }
 
 struct LanguageChip: View {
+    let priority: Int
     let code: String
     let title: String
+    let isDropTargeted: Bool
+    let canMoveEarlier: Bool
+    let canMoveLater: Bool
+    let moveEarlierAction: () -> Void
+    let moveLaterAction: () -> Void
     let removeAction: () -> Void
+    let dropAction: (String) -> Bool
+    let dropTargetAction: (Bool) -> Void
 
     var body: some View {
         HStack(spacing: 6) {
+            Text("\(priority)")
+                .font(.caption2.weight(.bold))
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .frame(width: 18, height: 18)
+                .background {
+                    Circle()
+                        .fill(Color.primary.opacity(0.06))
+                }
             LanguageCodeBadge(code: code)
             Text(title)
                 .font(.subheadline.weight(.medium))
                 .lineLimit(1)
+            Button(action: moveEarlierAction) {
+                Image(systemName: "chevron.left")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .disabled(!canMoveEarlier)
+            .help("Move earlier")
+            .accessibilityLabel("Move \(title) earlier")
+
+            Button(action: moveLaterAction) {
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .disabled(!canMoveLater)
+            .help("Move later")
+            .accessibilityLabel("Move \(title) later")
+
             Button(action: removeAction) {
                 Image(systemName: "xmark.circle.fill")
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
+            .help("Remove")
+            .accessibilityLabel("Remove \(title)")
         }
         .padding(.leading, 7)
         .padding(.trailing, 9)
@@ -261,7 +359,14 @@ struct LanguageChip: View {
         }
         .overlay {
             RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                .strokeBorder(isDropTargeted ? Color.accentColor.opacity(0.7) : Color.primary.opacity(0.08), lineWidth: 1)
+        }
+        .draggable(code)
+        .dropDestination(for: String.self) { droppedCodes, _ in
+            guard let droppedCode = droppedCodes.first else { return false }
+            return dropAction(droppedCode)
+        } isTargeted: { targeted in
+            dropTargetAction(targeted)
         }
     }
 }

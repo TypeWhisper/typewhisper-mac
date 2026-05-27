@@ -271,7 +271,7 @@ curl -X POST http://localhost:8978/v1/transcribe \
 
 Optional parameters:
 - `language` - ISO 639-1 code (e.g., `en`, `de`). Omit for full auto-detection.
-- `language_hint` - Repeatable language hint for restricted auto-detection. Do not combine with `language`.
+- `language_hint` - Repeatable, ordered language hint for restricted auto-detection. Hint-aware engines receive the full list; other engines use the first hint as the requested language. Do not combine with `language`.
 - `task` - `transcribe` (default) or `translate` (translates to English, WhisperKit only).
 - `target_language` - ISO 639-1 code for translation target language (e.g., `es`, `fr`). Uses Apple Translate.
 
@@ -455,7 +455,7 @@ typewhisper transcribe file.wav # Transcribe an audio file
 | `--port <N>` | Server port (default: auto-detect) |
 | `--json` | Output as JSON |
 | `--language <code>` | Source language (e.g. `en`, `de`) |
-| `--language-hint <code>` | Repeatable language hint for restricted auto-detection |
+| `--language-hint <code>` | Repeatable, ordered language hint for restricted auto-detection; engines without hint support use the first hint |
 | `--task <task>` | `transcribe` (default) or `translate` |
 | `--translate-to <code>` | Target language for translation |
 

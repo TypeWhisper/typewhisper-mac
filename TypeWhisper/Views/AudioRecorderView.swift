@@ -223,7 +223,8 @@ struct AudioRecorderView: View {
 
                     LanguageSelectionEditor(
                         selection: $viewModel.languageSelection,
-                        availableLanguages: languageOptions
+                        availableLanguages: languageOptions,
+                        hintBehavior: LanguageSelectionHintBehavior(engine: viewModel.resolvedEngine)
                     )
                     .disabled(isEditingLocked)
 

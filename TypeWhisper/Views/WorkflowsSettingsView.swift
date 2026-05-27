@@ -1089,9 +1089,18 @@ private struct WorkflowEditorPage: View {
                 selection: $draft.inputLanguageSelection,
                 availableLanguages: settingsViewModel.availableLanguages,
                 nilBehavior: .inheritGlobal,
-                inheritTitle: localizedAppText("Global Setting", de: "Globale Einstellung")
+                inheritTitle: localizedAppText("Global Setting", de: "Globale Einstellung"),
+                hintBehavior: LanguageSelectionHintBehavior(engine: workflowLanguageEngine)
             )
         }
+    }
+
+    private var workflowLanguageEngine: TranscriptionEnginePlugin? {
+        if let engineId = draft.transcriptionEngineId,
+           let engine = pluginManager.transcriptionEngine(for: engineId) {
+            return engine
+        }
+        return settingsViewModel.activeTranscriptionEngine
     }
 
     @ViewBuilder

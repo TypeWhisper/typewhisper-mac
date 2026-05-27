@@ -16,7 +16,8 @@ final class StreamingHandlerTests: XCTestCase {
         var selectedModelId: String? { nil }
         var supportsTranslation: Bool { false }
         var supportsStreaming: Bool { false }
-        var supportedLanguages: [String] { ["en"] }
+        var languages = ["en"]
+        var supportedLanguages: [String] { languages }
         private(set) var transcribeCallCount = 0
         private(set) var lastPrompt: String?
 
@@ -1051,11 +1052,12 @@ final class StreamingHandlerTests: XCTestCase {
         XCTAssertNil(plugin.lastSelection.requestedLanguage)
     }
 
-    func testModelManagerFallsBackToAutoDetectForLegacyPluginsWithMultipleHints() async throws {
+    func testModelManagerUsesFirstSelectedHintForLegacyPluginsWithMultipleHints() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
 
         let plugin = MockBatchPlugin()
+        plugin.languages = ["de", "en"]
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
         PluginManager.shared.loadedPlugins = [
             LoadedPlugin(
@@ -1081,7 +1083,41 @@ final class StreamingHandlerTests: XCTestCase {
             task: .transcribe
         )
 
-        XCTAssertNil(result.detectedLanguage)
+        XCTAssertEqual(result.detectedLanguage, "de")
+    }
+
+    func testModelManagerFiltersUnsupportedHintsBeforeLegacyFallback() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockBatchPlugin()
+        plugin.languages = ["en"]
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.batch",
+                    name: "Mock Batch",
+                    version: "1.0.0",
+                    principalClass: "MockBatchPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+
+        let result = try await modelManager.transcribe(
+            audioSamples: Array(repeating: 0.25, count: 16_000),
+            languageSelection: .hints(["de", "en"]),
+            task: .transcribe
+        )
+
+        XCTAssertEqual(result.detectedLanguage, "en")
     }
 
     func testStreamingHandlerUsesHintAwareLiveSessionWhenAvailable() async throws {

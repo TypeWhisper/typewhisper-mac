@@ -102,7 +102,7 @@ These surfaces remain part of `1.x`, but they are positioned as advanced or auto
 - Sound feedback settings and sound switching
 - Spoken feedback (TTS) enable/disable, voice and speed selection, scope limited to transcription readback
 - Per-request engine/model selection through the HTTP API and CLI
-- Multilingual language hints: picker, search, multi-select, selected count, dictation verification
+- Multilingual language hints: picker, search, ordered multi-select, selected count, first-hint fallback verification
 - Fn hotkey in press-and-release and press-and-hold strategies
 - CLI against a running local server, including `--engine` and `--model`
 - HTTP API `status`, `models`, `transcribe`

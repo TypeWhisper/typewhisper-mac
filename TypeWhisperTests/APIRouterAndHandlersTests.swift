@@ -1521,6 +1521,59 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertNil(MockTranscriptionPlugin.lastLanguageSelection.requestedLanguage)
     }
 
+    func testTranscribeLocalFileEndpointUsesFirstHintForLegacyEngine() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let audioDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+            TestSupport.remove(audioDirectory)
+        }
+
+        context = await MainActor.run {
+            Self.makeAPIContext(appSupportDirectory: appSupportDirectory)
+        }
+        let plugin = StructuredTranscriptionPlugin()
+        await MainActor.run {
+            PluginManager.shared.loadedPlugins.append(
+                LoadedPlugin(
+                    manifest: PluginManifest(
+                        id: "com.typewhisper.mock.structured-transcription",
+                        name: "Structured Mock Transcription",
+                        version: "1.0.0",
+                        principalClass: "APIRouterStructuredTranscriptionPlugin"
+                    ),
+                    instance: plugin,
+                    bundle: Bundle.main,
+                    sourceURL: appSupportDirectory,
+                    isEnabled: true
+                )
+            )
+        }
+
+        let fileURL = audioDirectory.appendingPathComponent("legacy-hinted.wav")
+        try WavEncoder.encode(Array(repeating: Float(0), count: 1600)).write(to: fileURL)
+
+        let body: [String: Any] = [
+            "path": fileURL.path,
+            "language_hints": ["de", "en"],
+            "engine": "structured-mock"
+        ]
+        let response = try Self.jsonObject(await XCTUnwrap(context?.router).route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe/local-file",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: try JSONSerialization.data(withJSONObject: body)
+            )
+        ))
+
+        XCTAssertEqual(response["text"] as? String, "Speaker A: Hello\nSpeaker B: Hi")
+        XCTAssertEqual(response["language"] as? String, "de")
+    }
+
     func testTranscribeLocalFileEndpointRejectsMissingAndUnsupportedFiles() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let audioDirectory = try TestSupport.makeTemporaryDirectory()
@@ -3748,6 +3801,19 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         XCTAssertEqual(profile.inputLanguage, #"["de","en"]"#)
         XCTAssertEqual(profile.inputLanguageSelection, .hints(["de", "en"]))
+    }
+
+    func testLanguageSelectionMovesSelectedCodesInStoredOrder() {
+        let selection = LanguageSelection.hints(["de", "en", "nl"])
+
+        XCTAssertEqual(
+            selection.withSelectedCodeMoved("nl", by: -1, nilBehavior: .auto),
+            .hints(["de", "nl", "en"])
+        )
+        XCTAssertEqual(
+            selection.withSelectedCodeMoved("de", droppedOn: "nl", nilBehavior: .auto),
+            .hints(["en", "nl", "de"])
+        )
     }
 
     func testLanguageSelectionNormalizesAgainstSupportedLanguages() {
