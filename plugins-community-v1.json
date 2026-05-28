@@ -1681,6 +1681,30 @@
           "downloadCount": 8
         }
       ]
+    },
+    {
+      "id": "com.typewhisper.reson8",
+      "name": "Reson8",
+      "author": "Y. Vos",
+      "description": "Cloud transcription via Reson8 speech-to-text API with real-time WebSocket streaming. Requires API key.",
+      "category": "transcription",
+      "downloadCount": 0,
+      "descriptions": {
+        "de": "Cloud-Transkription \u00fcber die Reson8-Speech-to-Text-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key."
+      },
+      "iconSystemName": "waveform.badge.mic",
+      "requiresAPIKey": true,
+      "detailsURL": "https://www.typewhisper.com/addons/reson8/",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "minHostVersion": "0.12.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 253686,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-reson8-v1.0.0/Reson8Plugin.zip",
+          "minOSVersion": "14.0"
+        }
+      ]
     }
   ]
 }
