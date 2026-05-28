@@ -6786,6 +6786,10 @@
 			package = D20600000000000000000001 /* XCRemoteSwiftPackageReference "onnxruntime-swift-package-manager" */;
 			productName = onnxruntime;
 		};
+		RESK00000000000000001 /* TypeWhisperPluginSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TypeWhisperPluginSDK;
+		};
 /* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = EE00000000000000000001 /* Project object */;
