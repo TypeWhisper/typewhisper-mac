@@ -160,7 +160,7 @@ enum LanguageSelection: Equatable, Sendable {
         }
 
         let movedCode = codes.remove(at: fromIndex)
-        let insertionIndex = toIndex
+        let insertionIndex = fromIndex < toIndex ? toIndex - 1 : toIndex
         guard insertionIndex >= codes.startIndex, insertionIndex <= codes.endIndex else {
             return self
         }

@@ -3812,7 +3812,11 @@ final class APIRouterAndHandlersTests: XCTestCase {
         )
         XCTAssertEqual(
             selection.withSelectedCodeMoved("de", droppedOn: "nl", nilBehavior: .auto),
-            .hints(["en", "nl", "de"])
+            .hints(["en", "de", "nl"])
+        )
+        XCTAssertEqual(
+            selection.withSelectedCodeMoved("nl", droppedOn: "de", nilBehavior: .auto),
+            .hints(["nl", "de", "en"])
         )
     }
 
