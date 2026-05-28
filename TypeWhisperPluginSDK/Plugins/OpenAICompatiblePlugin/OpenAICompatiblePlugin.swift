@@ -366,6 +366,7 @@ final class OpenAICompatiblePlugin: NSObject,
     }
 
     func setChatRequestTimeout(_ seconds: Double, for profileId: String) {
+        guard seconds.isFinite else { return }
         let clamped = min(
             max(seconds.rounded(), OpenAICompatibleProfile.minChatRequestTimeout),
             OpenAICompatibleProfile.maxChatRequestTimeout

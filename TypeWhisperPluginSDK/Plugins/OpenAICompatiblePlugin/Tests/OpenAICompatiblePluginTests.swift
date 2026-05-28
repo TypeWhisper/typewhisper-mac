@@ -293,6 +293,23 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         XCTAssertEqual(inceptionJSON["temperature"] as? Double, 0.9)
     }
 
+    func testSetChatRequestTimeoutIgnoresNonFiniteValues() throws {
+        let host = try PluginTestHostServices(defaults: ["baseURL": "https://example.test"])
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+
+        plugin.setChatRequestTimeout(600, for: plugin.providerId)
+        XCTAssertEqual(plugin.profileSnapshot(for: plugin.providerId)?.chatRequestTimeoutSeconds, 600)
+
+        plugin.setChatRequestTimeout(.nan, for: plugin.providerId)
+        plugin.setChatRequestTimeout(.infinity, for: plugin.providerId)
+
+        let stored = try XCTUnwrap(plugin.profileSnapshot(for: plugin.providerId))
+        XCTAssertEqual(stored.chatRequestTimeoutSeconds, 600)
+        XCTAssertTrue(stored.resolvedChatRequestTimeout.isFinite)
+        XCTAssertNoThrow(try JSONEncoder().encode(plugin.profileSnapshots))
+    }
+
     func testProcessFailsWithoutSelectedModel() async throws {
         let host = try PluginTestHostServices(defaults: ["baseURL": "https://example.test"])
         let plugin = OpenAICompatiblePlugin()
