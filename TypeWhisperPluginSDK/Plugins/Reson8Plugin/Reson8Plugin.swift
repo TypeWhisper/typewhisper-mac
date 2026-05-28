@@ -502,7 +502,9 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
         language: String?,
         apiKey: String
     ) async throws -> PluginTranscriptionResult {
-        var components = URLComponents(string: "\(effectiveBaseURL)/v1/speech-to-text/prerecorded")!
+        guard var components = URLComponents(string: "\(effectiveBaseURL)/v1/speech-to-text/prerecorded") else {
+            throw PluginTranscriptionError.apiError("Invalid base URL: \(effectiveBaseURL)")
+        }
         var queryItems = [
             URLQueryItem(name: "encoding", value: "pcm_s16le"),
             URLQueryItem(name: "sample_rate", value: "16000"),
@@ -516,7 +518,10 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
         }
         components.queryItems = queryItems
 
-        var request = URLRequest(url: components.url!)
+        guard let url = components.url else {
+            throw PluginTranscriptionError.apiError("Failed to construct request URL")
+        }
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue(authHeaderValue(apiKey: apiKey), forHTTPHeaderField: effectiveAuthHeader)
         request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
@@ -628,7 +633,7 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
 
                     let currentText = await collector.currentText()
                     if !currentText.isEmpty {
-                        _ = onProgress(currentText)
+                        if !onProgress(currentText) { break }
                     }
                 }
             } catch {
