@@ -311,6 +311,14 @@ let package = Package(
             path: "Plugins/AssemblyAIPlugin/Tests"
         ),
         .testTarget(
+            name: "Reson8PluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "Reson8Plugin",
+            ],
+            path: "Plugins/Reson8Plugin/Tests"
+        ),
+        .testTarget(
             name: "SmallestAIPluginTests",
             dependencies: [
                 "TypeWhisperPluginSDK",

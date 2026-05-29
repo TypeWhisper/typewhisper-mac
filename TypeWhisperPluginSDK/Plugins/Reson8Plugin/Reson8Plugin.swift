@@ -302,7 +302,7 @@ struct Reson8CustomModel: Codable, Sendable {
 // MARK: - Plugin Entry Point
 
 @objc(Reson8Plugin)
-final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, LanguageHintTranscriptionEnginePlugin, @unchecked Sendable {
+final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
     static let pluginId = "com.typewhisper.reson8"
     static let pluginName = "Reson8"
     private static let logger = Logger(subsystem: "com.typewhisper.reson8", category: "Plugin")
@@ -433,7 +433,7 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
         )
     }
 
-    // MARK: - Transcription (LanguageHintTranscriptionEnginePlugin)
+    // MARK: - Transcription (selection helper)
 
     func transcribe(
         audio: AudioData,
@@ -481,14 +481,9 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
         }
     }
 
-    /// Reson8 does not support a list of language hints — when more than one hint is
-    /// supplied (or no language at all), we omit the `language` query param and let
-    /// Reson8 auto-detect. A single explicit language is forwarded as-is.
-    private static func resolveLanguage(selection: PluginLanguageSelection) -> String? {
-        if selection.languageHints.count > 1 {
-            logger.info("Multiple language hints — falling back to Reson8 auto-detect")
-            return nil
-        }
+    /// Reson8 accepts one language query parameter, not an ordered hint list.
+    /// If multiple hints reach this helper, keep #627 semantics by using the first.
+    static func resolveLanguage(selection: PluginLanguageSelection) -> String? {
         if let req = selection.requestedLanguage, !req.isEmpty {
             return req
         }
