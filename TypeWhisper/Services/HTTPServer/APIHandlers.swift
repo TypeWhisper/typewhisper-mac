@@ -291,6 +291,9 @@ final class APIHandlers: @unchecked Sendable {
             let dictionaryPrompt = await MainActor.run {
                 dictionaryService.getTermsForPrompt(providerId: effectiveProviderId)
             }
+            let dictionaryTermHints = await MainActor.run {
+                dictionaryService.getTermHints(providerId: effectiveProviderId)
+            }
             let prompt = mergedPrompt(requestPrompt: options.requestPrompt, dictionaryPrompt: dictionaryPrompt)
             let languageSelection: LanguageSelection
             if !options.languageHints.isEmpty {
@@ -306,7 +309,8 @@ final class APIHandlers: @unchecked Sendable {
                 task: options.task,
                 engineOverrideId: resolvedOverride.engineId,
                 cloudModelOverride: resolvedOverride.modelId,
-                prompt: prompt
+                prompt: prompt,
+                dictionaryTermHints: dictionaryTermHints
             )
 
             var finalText = result.text
@@ -689,21 +693,61 @@ final class APIHandlers: @unchecked Sendable {
     // MARK: - /v1/dictionary/terms
 
     private func handleGetDictionaryTerms(_ request: HTTPRequest) async -> HTTPResponse {
+        struct DictionaryTermEntryResponse: Encodable {
+            let term: String
+            let ctc_min_similarity: Float?
+        }
+
         struct DictionaryTermsResponse: Encodable {
             let terms: [String]
+            let term_entries: [DictionaryTermEntryResponse]
             let count: Int
         }
 
         return await MainActor.run {
-            let terms = dictionaryService.enabledTerms()
-            return .json(DictionaryTermsResponse(terms: terms, count: terms.count))
+            let termHints = dictionaryService.enabledTermHints()
+            let terms = termHints.map(\.text)
+            let entries = termHints.map {
+                DictionaryTermEntryResponse(term: $0.text, ctc_min_similarity: $0.ctcMinSimilarity)
+            }
+            return .json(DictionaryTermsResponse(terms: terms, term_entries: entries, count: terms.count))
         }
     }
 
     private func handlePutDictionaryTerms(_ request: HTTPRequest) async -> HTTPResponse {
+        struct DictionaryTermEntryRequest: Decodable {
+            let term: String
+            let ctcMinSimilarity: Float?
+
+            enum CodingKeys: String, CodingKey {
+                case term
+                case ctcMinSimilarity
+                case ctc_min_similarity
+            }
+
+            init(from decoder: Decoder) throws {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                term = try container.decode(String.self, forKey: .term)
+                ctcMinSimilarity = try container.decodeIfPresent(Float.self, forKey: .ctc_min_similarity)
+                    ?? container.decodeIfPresent(Float.self, forKey: .ctcMinSimilarity)
+            }
+        }
+
         struct DictionaryTermsRequest: Decodable {
-            let terms: [String]
+            let terms: [String]?
+            let termEntries: [DictionaryTermEntryRequest]?
             let replace: Bool?
+
+            enum CodingKeys: String, CodingKey {
+                case terms
+                case termEntries = "term_entries"
+                case replace
+            }
+        }
+
+        struct DictionaryTermEntryResponse: Encodable {
+            let term: String
+            let ctc_min_similarity: Float?
         }
 
         guard !request.body.isEmpty else {
@@ -719,14 +763,31 @@ final class APIHandlers: @unchecked Sendable {
 
         struct DictionaryTermsResponse: Encodable {
             let terms: [String]
+            let term_entries: [DictionaryTermEntryResponse]
             let count: Int
+        }
+
+        guard payload.terms != nil || payload.termEntries != nil else {
+            return .error(status: 400, message: "Missing 'terms' or 'term_entries'")
         }
 
         do {
             return try await MainActor.run {
-                try dictionaryService.setAPITerms(payload.terms, replaceExisting: payload.replace ?? false)
-                let terms = dictionaryService.enabledTerms()
-                return .json(DictionaryTermsResponse(terms: terms, count: terms.count))
+                if let termEntries = payload.termEntries {
+                    try dictionaryService.setAPITermEntries(
+                        termEntries.map { (term: $0.term, ctcMinSimilarity: $0.ctcMinSimilarity) },
+                        replaceExisting: payload.replace ?? false
+                    )
+                } else if let terms = payload.terms {
+                    try dictionaryService.setAPITerms(terms, replaceExisting: payload.replace ?? false)
+                }
+
+                let termHints = dictionaryService.enabledTermHints()
+                let terms = termHints.map(\.text)
+                let entries = termHints.map {
+                    DictionaryTermEntryResponse(term: $0.text, ctc_min_similarity: $0.ctcMinSimilarity)
+                }
+                return .json(DictionaryTermsResponse(terms: terms, term_entries: entries, count: terms.count))
             }
         } catch {
             return .error(status: 500, message: "Failed to save dictionary: \(error.localizedDescription)")

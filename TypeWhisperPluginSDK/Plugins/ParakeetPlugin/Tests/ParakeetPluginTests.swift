@@ -133,6 +133,39 @@ final class ParakeetPluginTests: XCTestCase {
         XCTAssertEqual(enabledPlugin.dictionaryTermsSupport, .supported)
     }
 
+    func testVocabularyHintsPreferStructuredHintsOverPrompt() throws {
+        let hints = ParakeetPlugin.vocabularyHints(
+            prompt: "PromptTerm",
+            dictionaryTermHints: [
+                PluginDictionaryTermHint(text: " Caivex ", ctcMinSimilarity: 0.5),
+                PluginDictionaryTermHint(text: "caivex", ctcMinSimilarity: 0.8),
+                PluginDictionaryTermHint(text: "Reson8", ctcMinSimilarity: nil),
+            ]
+        )
+
+        XCTAssertEqual(hints, [
+            PluginDictionaryTermHint(text: "Caivex", ctcMinSimilarity: 0.5),
+            PluginDictionaryTermHint(text: "Reson8", ctcMinSimilarity: nil),
+        ])
+    }
+
+    func testVocabularyHintsFallbackToPromptAndEncodeThresholdSignature() throws {
+        XCTAssertEqual(
+            ParakeetPlugin.vocabularyHints(prompt: " Alpha, Beta, alpha ", dictionaryTermHints: []),
+            [
+                PluginDictionaryTermHint(text: "Alpha", ctcMinSimilarity: nil),
+                PluginDictionaryTermHint(text: "Beta", ctcMinSimilarity: nil),
+            ]
+        )
+
+        let signature = ParakeetPlugin.vocabularySignature(from: [
+            PluginDictionaryTermHint(text: "Alpha", ctcMinSimilarity: nil),
+            PluginDictionaryTermHint(text: "Beta", ctcMinSimilarity: 0.65),
+        ])
+
+        XCTAssertEqual(signature, "Alpha|auto\u{1F}Beta|0.6500")
+    }
+
     func testSettingsDismissalRequiresOnlyBaseModelReadiness() throws {
         let host = try PluginTestHostServices(defaults: ["vocabularyBoostingEnabled": true])
         let plugin = makePlugin()

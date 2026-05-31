@@ -28,6 +28,7 @@ final class DictionaryEntry {
     var replacement: String?
     var caseSensitive: Bool
     var isEnabled: Bool
+    var ctcMinSimilarity: Float?
     var createdAt: Date
     var usageCount: Int
 
@@ -43,6 +44,7 @@ final class DictionaryEntry {
         replacement: String? = nil,
         caseSensitive: Bool = false,
         isEnabled: Bool = true,
+        ctcMinSimilarity: Float? = nil,
         createdAt: Date = Date(),
         usageCount: Int = 0
     ) {
@@ -52,6 +54,7 @@ final class DictionaryEntry {
         self.replacement = replacement
         self.caseSensitive = caseSensitive
         self.isEnabled = isEnabled
+        self.ctcMinSimilarity = type == .term ? ctcMinSimilarity : nil
         self.createdAt = createdAt
         self.usageCount = usageCount
     }

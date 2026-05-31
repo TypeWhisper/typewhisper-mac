@@ -34,6 +34,27 @@ class DictionaryViewModel: ObservableObject {
     enum FilterTab: Int, CaseIterable {
         case all, terms, corrections, termPacks
     }
+
+    enum TermBoostingMode: String, CaseIterable, Identifiable {
+        case automatic
+        case strong
+        case balanced
+        case precise
+        case advanced
+
+        var id: String { rawValue }
+
+        var displayName: String {
+            switch self {
+            case .automatic: return String(localized: "Auto")
+            case .strong: return String(localized: "Strong")
+            case .balanced: return String(localized: "Balanced")
+            case .precise: return String(localized: "Precise")
+            case .advanced: return String(localized: "Advanced")
+            }
+        }
+    }
+
     @Published var filterTab: FilterTab = .all
 
     // Editor state
@@ -43,9 +64,17 @@ class DictionaryViewModel: ObservableObject {
     @Published var editOriginal = ""
     @Published var editReplacement = ""
     @Published var editCaseSensitive = false
+    @Published var editTermBoostingMode: TermBoostingMode = .automatic
+    @Published var editAdvancedCtcMinSimilarity: Double = 0.65
 
     // Term Packs
     @Published var activatedPackStates: [String: ActivatedTermPackState] = [:]
+
+    static let strongCtcMinSimilarity: Double = 0.50
+    static let balancedCtcMinSimilarity: Double = 0.65
+    static let preciseCtcMinSimilarity: Double = 0.80
+    static let minimumAdvancedCtcMinSimilarity: Double = 0.40
+    static let maximumAdvancedCtcMinSimilarity: Double = 0.95
 
     private let dictionaryService: DictionaryService
     private let licenseService: LicenseService?
@@ -70,6 +99,24 @@ class DictionaryViewModel: ObservableObject {
     var correctionsCount: Int { dictionaryService.correctionsCount }
     var enabledTermsCount: Int { dictionaryService.enabledTermsCount }
     var enabledCorrectionsCount: Int { dictionaryService.enabledCorrectionsCount }
+    var editCtcMinSimilarity: Float? {
+        switch editTermBoostingMode {
+        case .automatic:
+            return nil
+        case .strong:
+            return Float(Self.strongCtcMinSimilarity)
+        case .balanced:
+            return Float(Self.balancedCtcMinSimilarity)
+        case .precise:
+            return Float(Self.preciseCtcMinSimilarity)
+        case .advanced:
+            let value = min(
+                max(editAdvancedCtcMinSimilarity, Self.minimumAdvancedCtcMinSimilarity),
+                Self.maximumAdvancedCtcMinSimilarity
+            )
+            return Float(value)
+        }
+    }
     var hasCommercialLicense: Bool { licenseService?.hasCommercialLicense ?? false }
     var visibleBuiltInPacks: [TermPack] {
         TermPack.allPacks.filter { !$0.requiresCommercialLicense || hasCommercialLicense }
@@ -140,6 +187,7 @@ class DictionaryViewModel: ObservableObject {
         editOriginal = ""
         editReplacement = ""
         editCaseSensitive = false
+        resetTermBoostingEditor()
     }
 
     func startEditing(_ entry: DictionaryEntry) {
@@ -150,6 +198,7 @@ class DictionaryViewModel: ObservableObject {
         editOriginal = entry.original
         editReplacement = entry.replacement ?? ""
         editCaseSensitive = entry.caseSensitive
+        setTermBoostingEditor(to: entry.type == .term ? entry.ctcMinSimilarity : nil)
     }
 
     func cancelEditing() {
@@ -160,6 +209,7 @@ class DictionaryViewModel: ObservableObject {
         editOriginal = ""
         editReplacement = ""
         editCaseSensitive = false
+        resetTermBoostingEditor()
     }
 
     func saveEditing() {
@@ -169,20 +219,23 @@ class DictionaryViewModel: ObservableObject {
         }
 
         let replacement = editType == .correction ? editReplacement : nil
+        let ctcMinSimilarity = editType == .term ? editCtcMinSimilarity : nil
 
         if isCreatingNew {
             dictionaryService.addEntry(
                 type: editType,
                 original: editOriginal,
                 replacement: replacement,
-                caseSensitive: editCaseSensitive
+                caseSensitive: editCaseSensitive,
+                ctcMinSimilarity: ctcMinSimilarity
             )
         } else if let entry = selectedEntry {
             dictionaryService.updateEntry(
                 entry,
                 original: editOriginal,
                 replacement: replacement,
-                caseSensitive: editCaseSensitive
+                caseSensitive: editCaseSensitive,
+                ctcMinSimilarity: ctcMinSimilarity
             )
         }
 
@@ -203,6 +256,41 @@ class DictionaryViewModel: ObservableObject {
 
     func clearImportMessage() {
         importMessage = nil
+    }
+
+    func termBoostingLabel(for threshold: Float?) -> String {
+        termBoostingMode(for: threshold).displayName
+    }
+
+    func formattedCtcMinSimilarity(_ threshold: Float?) -> String {
+        guard let threshold else { return "" }
+        return String(format: "%.2f", Double(threshold))
+    }
+
+    private func resetTermBoostingEditor() {
+        editTermBoostingMode = .automatic
+        editAdvancedCtcMinSimilarity = Self.balancedCtcMinSimilarity
+    }
+
+    private func setTermBoostingEditor(to threshold: Float?) {
+        editTermBoostingMode = termBoostingMode(for: threshold)
+        if let threshold {
+            editAdvancedCtcMinSimilarity = min(
+                max(Double(threshold), Self.minimumAdvancedCtcMinSimilarity),
+                Self.maximumAdvancedCtcMinSimilarity
+            )
+        } else {
+            editAdvancedCtcMinSimilarity = Self.balancedCtcMinSimilarity
+        }
+    }
+
+    private func termBoostingMode(for threshold: Float?) -> TermBoostingMode {
+        guard let threshold else { return .automatic }
+        let value = Double(threshold)
+        if abs(value - Self.strongCtcMinSimilarity) < 0.001 { return .strong }
+        if abs(value - Self.balancedCtcMinSimilarity) < 0.001 { return .balanced }
+        if abs(value - Self.preciseCtcMinSimilarity) < 0.001 { return .precise }
+        return .advanced
     }
 
     // MARK: - Export / Import

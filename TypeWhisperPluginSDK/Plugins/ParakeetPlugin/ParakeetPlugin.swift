@@ -7,7 +7,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(ParakeetPlugin)
-final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, TranscriptPreviewFallbackPolicyProviding, PluginSettingsActivityReporting, @unchecked Sendable {
+final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermHintTranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, TranscriptPreviewFallbackPolicyProviding, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.parakeet"
     static let pluginName = "Parakeet"
     private static let logger = Logger(subsystem: "com.typewhisper.plugin.parakeet", category: "Transcription")
@@ -139,6 +139,22 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
         translate: Bool,
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
+        try await transcribe(
+            audio: audio,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            dictionaryTermHints: []
+        )
+    }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint]
+    ) async throws -> PluginTranscriptionResult {
         guard let asrManager else {
             throw PluginTranscriptionError.notConfigured
         }
@@ -148,7 +164,7 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
         }
 
         if vocabularyBoostingEnabled {
-            await configureBoostingIfNeeded(prompt: prompt)
+            await configureBoostingIfNeeded(prompt: prompt, dictionaryTermHints: dictionaryTermHints)
         }
 
         let normalizedSamples = PluginAudioUtils.paddedSamples(
@@ -302,13 +318,36 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
         }
     }
 
-    private func configureBoostingIfNeeded(prompt: String?) async {
+    static func vocabularyHints(
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint]
+    ) -> [PluginDictionaryTermHint] {
+        if !dictionaryTermHints.isEmpty {
+            return PluginDictionaryTerms.normalizedTermHints(from: dictionaryTermHints)
+        }
+        return PluginDictionaryTerms.termHints(fromPrompt: prompt)
+    }
+
+    static func vocabularySignature(from hints: [PluginDictionaryTermHint]) -> String? {
+        guard !hints.isEmpty else { return nil }
+        return hints.map {
+            let threshold = $0.ctcMinSimilarity.map { String(format: "%.4f", Double($0)) } ?? "auto"
+            return "\($0.text)|\(threshold)"
+        }.joined(separator: "\u{1F}")
+    }
+
+    private func configureBoostingIfNeeded(
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint] = []
+    ) async {
         guard vocabularyBoostingEnabled else { return }
 
-        if prompt == lastConfiguredPrompt { return }
-        lastConfiguredPrompt = prompt
+        let termHints = Self.vocabularyHints(prompt: prompt, dictionaryTermHints: dictionaryTermHints)
+        let signature = Self.vocabularySignature(from: termHints)
+        if signature == lastConfiguredPrompt && (signature != nil || customVocabulary == nil) { return }
+        lastConfiguredPrompt = signature
 
-        guard let prompt, !prompt.isEmpty else {
+        guard !termHints.isEmpty else {
             clearConfiguredVocabulary()
             return
         }
@@ -321,11 +360,10 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
             return
         }
 
-        let termStrings = prompt.split(separator: ",")
-            .map { String($0).trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-
-        let terms = termStrings.compactMap { text -> CustomVocabularyTerm? in
+        // FluidAudio currently exposes only vocabulary-level minSimilarity; per-term
+        // thresholds are preserved in structured hints until the upstream API exists.
+        let terms = termHints.compactMap { hint -> CustomVocabularyTerm? in
+            let text = hint.text
             let ids = ctcTokenizer.encode(text)
             guard !ids.isEmpty else { return nil }
             return CustomVocabularyTerm(text: text, weight: 10.0, ctcTokenIds: ids)

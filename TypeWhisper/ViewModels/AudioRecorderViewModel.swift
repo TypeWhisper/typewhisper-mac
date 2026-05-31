@@ -61,6 +61,7 @@ final class AudioRecorderViewModel: ObservableObject {
         let providerId: String?
         let resolvedModelId: String?
         let prompt: String?
+        let dictionaryTermHints: [PluginDictionaryTermHint]
         let liveSessionResult: TranscriptionResult?
     }
 
@@ -457,6 +458,8 @@ final class AudioRecorderViewModel: ObservableObject {
             if transcriptionEnabled, let url {
                 reconcileSelectionWithAvailablePlugins()
                 let providerId = effectiveProviderId
+                let dictionaryPrompt = dictionaryService.getTermsForPrompt(providerId: providerId)
+                let dictionaryTermHints = dictionaryService.getTermHints(providerId: providerId)
                 finalTranscriptionRequest = FinalTranscriptionRequest(
                     outputURL: url,
                     buffer: recorderService.getCurrentBuffer(),
@@ -464,7 +467,8 @@ final class AudioRecorderViewModel: ObservableObject {
                     task: selectedTask,
                     providerId: providerId,
                     resolvedModelId: effectiveModelId,
-                    prompt: dictionaryService.getTermsForPrompt(providerId: providerId),
+                    prompt: dictionaryPrompt,
+                    dictionaryTermHints: dictionaryTermHints,
                     liveSessionResult: liveSessionResult
                 )
                 state = .finalizing
@@ -688,6 +692,7 @@ final class AudioRecorderViewModel: ObservableObject {
         let task = (selectedTask == .translate && !plugin.supportsTranslation) ? .transcribe : selectedTask
         streamingHandler.start(
             streamPrompt: dictionaryService.getTermsForPrompt(providerId: providerId) ?? "",
+            dictionaryTermHints: dictionaryService.getTermHints(providerId: providerId),
             engineOverrideId: providerId,
             selectedProviderId: modelManager.selectedProviderId,
             languageSelection: languageSelection,
@@ -739,7 +744,8 @@ final class AudioRecorderViewModel: ObservableObject {
                     task: effectiveTask,
                     engineOverrideId: request.providerId,
                     cloudModelOverride: request.resolvedModelId,
-                    prompt: request.prompt
+                    prompt: request.prompt,
+                    dictionaryTermHints: request.dictionaryTermHints
                 )
             }
             let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -514,6 +514,16 @@ public struct PluginLanguageSelection: Sendable, Equatable {
     }
 }
 
+public struct PluginDictionaryTermHint: Sendable, Equatable, Codable {
+    public let text: String
+    public let ctcMinSimilarity: Float?
+
+    public init(text: String, ctcMinSimilarity: Float? = nil) {
+        self.text = text
+        self.ctcMinSimilarity = ctcMinSimilarity
+    }
+}
+
 public enum DictionaryTermsSupport: String, Sendable, CaseIterable {
     case supported
     case requiresPluginSetting
@@ -550,20 +560,27 @@ public protocol LiveTranscriptionSession: AnyObject, Sendable {
 }
 
 public enum PluginDictionaryTerms {
-    public static func normalizedTerms(from terms: [String]) -> [String] {
+    public static func normalizedTermHints(from hints: [PluginDictionaryTermHint]) -> [PluginDictionaryTermHint] {
         var seen = Set<String>()
-        var normalized: [String] = []
+        var normalized: [PluginDictionaryTermHint] = []
 
-        for rawTerm in terms {
-            let term = rawTerm.trimmingCharacters(in: .whitespacesAndNewlines)
+        for rawHint in hints {
+            let term = rawHint.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !term.isEmpty else { continue }
 
             let dedupeKey = term.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
             guard seen.insert(dedupeKey).inserted else { continue }
-            normalized.append(term)
+            normalized.append(PluginDictionaryTermHint(
+                text: term,
+                ctcMinSimilarity: normalizedCtcMinSimilarity(rawHint.ctcMinSimilarity)
+            ))
         }
 
         return normalized
+    }
+
+    public static func normalizedTerms(from terms: [String]) -> [String] {
+        normalizedTermHints(from: terms.map { PluginDictionaryTermHint(text: $0) }).map(\.text)
     }
 
     public static func terms(fromPrompt prompt: String?) -> [String] {
@@ -571,16 +588,26 @@ public enum PluginDictionaryTerms {
         return normalizedTerms(from: prompt.split(separator: ",").map(String.init))
     }
 
-    public static func clippedTerms(from terms: [String], budget: DictionaryTermsBudget?) -> [String] {
-        var clipped = normalizedTerms(from: terms)
+    public static func termHints(fromPrompt prompt: String?) -> [PluginDictionaryTermHint] {
+        guard let prompt, !prompt.isEmpty else { return [] }
+        return normalizedTermHints(from: prompt.split(separator: ",").map {
+            PluginDictionaryTermHint(text: String($0))
+        })
+    }
+
+    public static func clippedTermHints(
+        from hints: [PluginDictionaryTermHint],
+        budget: DictionaryTermsBudget?
+    ) -> [PluginDictionaryTermHint] {
+        var clipped = normalizedTermHints(from: hints)
 
         if let maxCharsPerTerm = budget?.maxCharsPerTerm {
-            clipped = clipped.filter { $0.count <= maxCharsPerTerm }
+            clipped = clipped.filter { $0.text.count <= maxCharsPerTerm }
         }
 
         if let maxWordsPerTerm = budget?.maxWordsPerTerm {
             clipped = clipped.filter {
-                $0.split(whereSeparator: \.isWhitespace).count <= maxWordsPerTerm
+                $0.text.split(whereSeparator: \.isWhitespace).count <= maxWordsPerTerm
             }
         }
 
@@ -592,14 +619,14 @@ public enum PluginDictionaryTerms {
         }
 
         if let maxTotalChars = budget?.maxTotalChars {
-            var limited: [String] = []
+            var limited: [PluginDictionaryTermHint] = []
             var totalChars = 0
 
-            for term in clipped {
+            for hint in clipped {
                 let separatorChars = limited.isEmpty ? 0 : 2
-                let nextTotal = totalChars + separatorChars + term.count
+                let nextTotal = totalChars + separatorChars + hint.text.count
                 guard nextTotal <= maxTotalChars else { break }
-                limited.append(term)
+                limited.append(hint)
                 totalChars = nextTotal
             }
 
@@ -607,6 +634,13 @@ public enum PluginDictionaryTerms {
         }
 
         return clipped
+    }
+
+    public static func clippedTerms(from terms: [String], budget: DictionaryTermsBudget?) -> [String] {
+        clippedTermHints(
+            from: terms.map { PluginDictionaryTermHint(text: $0) },
+            budget: budget
+        ).map(\.text)
     }
 
     public static func prompt(from terms: [String], budget: DictionaryTermsBudget?) -> String? {
@@ -634,6 +668,11 @@ public enum PluginDictionaryTerms {
             term.split(whereSeparator: { $0.isWhitespace || $0 == "," }).map(String.init)
         }
         return normalizedTerms(from: tokens)
+    }
+
+    private static func normalizedCtcMinSimilarity(_ value: Float?) -> Float? {
+        guard let value, value.isFinite else { return nil }
+        return min(max(value, 0), 1)
     }
 }
 
@@ -675,6 +714,25 @@ public protocol StructuredLanguageHintTranscriptionEnginePlugin: StructuredTrans
         translate: Bool,
         prompt: String?
     ) async throws -> PluginStructuredTranscriptionResult
+}
+
+public protocol DictionaryTermHintTranscriptionEnginePlugin: TranscriptionEnginePlugin {
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint]
+    ) async throws -> PluginTranscriptionResult
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult
 }
 
 public protocol DictionaryTermsBudgetProviding: TranscriptionEnginePlugin {
@@ -772,6 +830,25 @@ public extension LanguageHintTranscriptionEnginePlugin {
             languageSelection: languageSelection,
             translate: translate,
             prompt: prompt
+        )
+    }
+}
+
+public extension DictionaryTermHintTranscriptionEnginePlugin {
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        try await transcribe(
+            audio: audio,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            dictionaryTermHints: dictionaryTermHints
         )
     }
 }

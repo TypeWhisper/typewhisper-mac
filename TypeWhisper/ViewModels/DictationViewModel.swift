@@ -1212,9 +1212,9 @@ final class DictationViewModel: ObservableObject {
                 let engineOverride = effectiveEngineOverrideId
                 let cloudModelOverride = effectiveCloudModelOverride
                 let translationTarget = effectiveTranslationTarget
-                let termsPrompt = dictionaryService.getTermsForPrompt(
-                    providerId: engineOverride ?? modelManager.selectedProviderId
-                )
+                let dictionaryProviderId = engineOverride ?? modelManager.selectedProviderId
+                let termsPrompt = dictionaryService.getTermsForPrompt(providerId: dictionaryProviderId)
+                let termHints = dictionaryService.getTermHints(providerId: dictionaryProviderId)
 
                 let result = if let liveSessionResult {
                     liveSessionResult
@@ -1225,7 +1225,8 @@ final class DictationViewModel: ObservableObject {
                         task: task,
                         engineOverrideId: engineOverride,
                         cloudModelOverride: cloudModelOverride,
-                        prompt: termsPrompt
+                        prompt: termsPrompt,
+                        dictionaryTermHints: termHints
                     )
                 }
 
@@ -1511,10 +1512,10 @@ final class DictationViewModel: ObservableObject {
             cloudModelOverride: effectiveCloudModelOverride
         )
         lastStreamingParams = allowLiveTranscription ? params : nil
+        let dictionaryProviderId = params.engineOverrideId ?? params.providerId
         streamingHandler.start(
-            streamPrompt: dictionaryService.getTermsForPrompt(
-                providerId: params.engineOverrideId ?? params.providerId
-            ) ?? "",
+            streamPrompt: dictionaryService.getTermsForPrompt(providerId: dictionaryProviderId) ?? "",
+            dictionaryTermHints: dictionaryService.getTermHints(providerId: dictionaryProviderId),
             engineOverrideId: params.engineOverrideId,
             selectedProviderId: params.providerId,
             languageSelection: params.languageSelection,
