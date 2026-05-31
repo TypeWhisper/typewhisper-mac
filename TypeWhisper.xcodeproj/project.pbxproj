@@ -759,7 +759,6 @@
 		5E5100000000000000000012 /* SenseVoiceModelAssetManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SenseVoiceModelAssetManager.swift; sourceTree = "<group>"; };
 		5E5100000000000000000013 /* SenseVoiceRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SenseVoiceRuntime.swift; sourceTree = "<group>"; };
 		5E5100000000000000000014 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
-		5E5100000000000000000015 /* SenseVoicePlugin-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "SenseVoicePlugin-Bridging-Header.h"; sourceTree = "<group>"; };
 		5E5100000000000000000016 /* SenseVoicePlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SenseVoicePlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		5E5100000000000000000017 /* libsherpa-onnx.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libsherpa-onnx.a"; path = TypeWhisperPluginSDK/Vendor/SherpaONNX/sherpa-onnx.xcframework/macos-arm64_x86_64/libsherpa-onnx.a; sourceTree = "<group>"; };
 		5E5100000000000000000018 /* SenseVoicePluginTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SenseVoicePluginTests.swift; sourceTree = "<group>"; };
@@ -1879,7 +1878,6 @@
 				5E5100000000000000000011 /* SenseVoicePlugin.swift */,
 				5E5100000000000000000012 /* SenseVoiceModelAssetManager.swift */,
 				5E5100000000000000000013 /* SenseVoiceRuntime.swift */,
-				5E5100000000000000000015 /* SenseVoicePlugin-Bridging-Header.h */,
 				5E5100000000000000000014 /* manifest.json */,
 			);
 			name = SenseVoicePlugin;
@@ -4182,8 +4180,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.TypeWhisperTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
-				SWIFT_OBJC_BRIDGING_HEADER = "TypeWhisperPluginSDK/Plugins/SenseVoicePlugin/SenseVoicePlugin-Bridging-Header.h";
-				SWIFT_VERSION = 6.0;
+					SWIFT_VERSION = 6.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TypeWhisper.app/Contents/MacOS/TypeWhisper";
 				TEST_TARGET_NAME = TypeWhisper;
 			};
@@ -4223,8 +4220,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.TypeWhisperTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
-				SWIFT_OBJC_BRIDGING_HEADER = "TypeWhisperPluginSDK/Plugins/SenseVoicePlugin/SenseVoicePlugin-Bridging-Header.h";
-				SWIFT_VERSION = 6.0;
+					SWIFT_VERSION = 6.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TypeWhisper.app/Contents/MacOS/TypeWhisper";
 				TEST_TARGET_NAME = TypeWhisper;
 			};
@@ -5765,8 +5761,7 @@
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/TypeWhisperPluginSDK/build/$(CONFIGURATION)";
-				SWIFT_OBJC_BRIDGING_HEADER = "TypeWhisperPluginSDK/Plugins/SenseVoicePlugin/SenseVoicePlugin-Bridging-Header.h";
-				SWIFT_VERSION = 6.0;
+					SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
 			name = Debug;
@@ -5815,8 +5810,7 @@
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/TypeWhisperPluginSDK/build/$(CONFIGURATION)";
-				SWIFT_OBJC_BRIDGING_HEADER = "TypeWhisperPluginSDK/Plugins/SenseVoicePlugin/SenseVoicePlugin-Bridging-Header.h";
-				SWIFT_VERSION = 6.0;
+					SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
 			};
 			name = Release;

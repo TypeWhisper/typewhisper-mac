@@ -1,4 +1,5 @@
 import Foundation
+import SherpaOnnxC
 
 final class SenseVoiceONNXRecognizer: SenseVoiceRecognizing, @unchecked Sendable {
     private let recognizer: OpaquePointer

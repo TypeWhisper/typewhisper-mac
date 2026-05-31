@@ -9,9 +9,22 @@ ARCHIVE_NAME="sherpa-onnx-${VERSION}-macos-xcframework-static.tar.bz2"
 DOWNLOAD_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/${VERSION}/${ARCHIVE_NAME}"
 VENDOR_ROOT="$PROJECT_DIR/TypeWhisperPluginSDK/Vendor/SherpaONNX"
 XCFRAMEWORK_PATH="$VENDOR_ROOT/sherpa-onnx.xcframework"
+HEADERS_PATH="$XCFRAMEWORK_PATH/macos-arm64_x86_64/Headers"
+MODULEMAP_PATH="$HEADERS_PATH/module.modulemap"
 STAMP_PATH="$VENDOR_ROOT/.version"
 
+write_modulemap() {
+  mkdir -p "$HEADERS_PATH"
+  cat > "$MODULEMAP_PATH" <<'MODULEMAP'
+module SherpaOnnxC {
+  header "sherpa-onnx/c-api/c-api.h"
+  export *
+}
+MODULEMAP
+}
+
 if [ -d "$XCFRAMEWORK_PATH" ] && [ -f "$STAMP_PATH" ] && [ "$(cat "$STAMP_PATH")" = "$VERSION" ]; then
+  write_modulemap
   exit 0
 fi
 
@@ -31,5 +44,6 @@ fi
 
 rm -rf "$XCFRAMEWORK_PATH"
 cp -R "$EXTRACTED" "$XCFRAMEWORK_PATH"
+write_modulemap
 echo "$VERSION" > "$STAMP_PATH"
 echo "Sherpa-ONNX ready at $XCFRAMEWORK_PATH"
