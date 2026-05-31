@@ -30,6 +30,9 @@ xcodebuild -resolvePackageDependencies \
   -project "$PROJECT_DIR/$PROJECT" \
   -scheme "$SCHEME"
 
+echo "--- Bootstrapping Sherpa-ONNX runtime ---"
+"$PROJECT_DIR/scripts/bootstrap_sherpa_onnx.sh"
+
 # Build
 echo "--- Building Release ---"
 set -o pipefail

@@ -35,6 +35,20 @@
 		D20000000000000000000005 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = D20100000000000000000005 /* manifest.json */; };
 		D20000000000000000000006 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = D20700000000000000000001 /* TypeWhisperPluginSDK */; };
 		D20000000000000000000007 /* onnxruntime in Frameworks */ = {isa = PBXBuildFile; productRef = D20700000000000000000002 /* onnxruntime */; };
+		5E5100000000000000000001 /* SenseVoicePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E5100000000000000000011 /* SenseVoicePlugin.swift */; };
+		5E5100000000000000000002 /* SenseVoiceModelAssetManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E5100000000000000000012 /* SenseVoiceModelAssetManager.swift */; };
+		5E5100000000000000000003 /* SenseVoiceRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E5100000000000000000013 /* SenseVoiceRuntime.swift */; };
+		5E5100000000000000000004 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 5E5100000000000000000014 /* manifest.json */; };
+		5E5100000000000000000005 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 5E5100000000000000000034 /* TypeWhisperPluginSDK */; };
+		5E5100000000000000000006 /* libsherpa-onnx.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5E5100000000000000000017 /* libsherpa-onnx.a */; };
+		5E510000000000000000000D /* onnxruntime in Frameworks */ = {isa = PBXBuildFile; productRef = 5E5100000000000000000035 /* onnxruntime */; };
+		5E5100000000000000000007 /* SenseVoicePluginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E5100000000000000000018 /* SenseVoicePluginTests.swift */; };
+		5E5100000000000000000008 /* SenseVoiceRuntimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E5100000000000000000019 /* SenseVoiceRuntimeTests.swift */; };
+		5E5100000000000000000009 /* SenseVoicePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E5100000000000000000011 /* SenseVoicePlugin.swift */; };
+		5E510000000000000000000A /* SenseVoiceModelAssetManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E5100000000000000000012 /* SenseVoiceModelAssetManager.swift */; };
+		5E510000000000000000000B /* SenseVoiceRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E5100000000000000000013 /* SenseVoiceRuntime.swift */; };
+		5E510000000000000000000C /* libsherpa-onnx.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5E5100000000000000000017 /* libsherpa-onnx.a */; };
+		5E510000000000000000000E /* onnxruntime in Frameworks */ = {isa = PBXBuildFile; productRef = 5E5100000000000000000036 /* onnxruntime */; };
 		A10000000000000000000005 /* SpeechFeedbackServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* SpeechFeedbackServiceTests.swift */; };
 		A10000000000000000000006 /* WorkflowServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000005 /* WorkflowServiceTests.swift */; };
 		AA00000000000000000350 /* ObjCExceptionCatcher.m in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000351 /* ObjCExceptionCatcher.m */; };
@@ -741,6 +755,15 @@
 		D20100000000000000000004 /* SupertonicRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupertonicRuntime.swift; sourceTree = "<group>"; };
 		D20100000000000000000005 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		D20100000000000000000006 /* SupertonicPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SupertonicPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		5E5100000000000000000011 /* SenseVoicePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SenseVoicePlugin.swift; sourceTree = "<group>"; };
+		5E5100000000000000000012 /* SenseVoiceModelAssetManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SenseVoiceModelAssetManager.swift; sourceTree = "<group>"; };
+		5E5100000000000000000013 /* SenseVoiceRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SenseVoiceRuntime.swift; sourceTree = "<group>"; };
+		5E5100000000000000000014 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		5E5100000000000000000015 /* SenseVoicePlugin-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "SenseVoicePlugin-Bridging-Header.h"; sourceTree = "<group>"; };
+		5E5100000000000000000016 /* SenseVoicePlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SenseVoicePlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		5E5100000000000000000017 /* libsherpa-onnx.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libsherpa-onnx.a"; path = TypeWhisperPluginSDK/Vendor/SherpaONNX/sherpa-onnx.xcframework/macos-arm64_x86_64/libsherpa-onnx.a; sourceTree = "<group>"; };
+		5E5100000000000000000018 /* SenseVoicePluginTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SenseVoicePluginTests.swift; sourceTree = "<group>"; };
+		5E5100000000000000000019 /* SenseVoiceRuntimeTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SenseVoiceRuntimeTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000232 /* OpenAIVectorMemoryPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIVectorMemoryPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000233 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000234 /* OpenAIVectorMemoryPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OpenAIVectorMemoryPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -859,6 +882,8 @@
 			files = (
 				1834537D0CCC21190DB68EBD /* Cocoa.framework in Frameworks */,
 				928A1F1B7A0D4C62A2B90761 /* TypeWhisperPluginSDK in Frameworks */,
+				5E510000000000000000000C /* libsherpa-onnx.a in Frameworks */,
+				5E510000000000000000000E /* onnxruntime in Frameworks */,
 				C23000000000000000000005 /* MLXVLM in Frameworks */,
 				C23000000000000000000006 /* MLXLMCommon in Frameworks */,
 				C23000000000000000000007 /* Transformers in Frameworks */,
@@ -1110,6 +1135,16 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5E5100000000000000000022 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5E5100000000000000000005 /* TypeWhisperPluginSDK in Frameworks */,
+				5E5100000000000000000006 /* libsherpa-onnx.a in Frameworks */,
+				5E510000000000000000000D /* onnxruntime in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FF00000000000000000120 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -1224,6 +1259,7 @@
 			isa = PBXGroup;
 			children = (
 				4E2BF06351BDA040CC87C5D5 /* OS X */,
+				5E5100000000000000000017 /* libsherpa-onnx.a */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -1268,6 +1304,7 @@
 				CC00000000000000000035 /* FileMemoryPlugin */,
 				C10000000000000000000001 /* SystemTTSPlugin */,
 				D20200000000000000000001 /* SupertonicPlugin */,
+				5E5100000000000000000020 /* SenseVoicePlugin */,
 				CC00000000000000000036 /* OpenAIVectorMemoryPlugin */,
 				CC00000000000000000037 /* FireworksPlugin */,
 				CC00000000000000000038 /* CerebrasPlugin */,
@@ -1836,6 +1873,19 @@
 			path = TypeWhisperPluginSDK/Plugins/SupertonicPlugin;
 			sourceTree = "<group>";
 		};
+		5E5100000000000000000020 /* SenseVoicePlugin */ = {
+			isa = PBXGroup;
+			children = (
+				5E5100000000000000000011 /* SenseVoicePlugin.swift */,
+				5E5100000000000000000012 /* SenseVoiceModelAssetManager.swift */,
+				5E5100000000000000000013 /* SenseVoiceRuntime.swift */,
+				5E5100000000000000000015 /* SenseVoicePlugin-Bridging-Header.h */,
+				5E5100000000000000000014 /* manifest.json */,
+			);
+			name = SenseVoicePlugin;
+			path = TypeWhisperPluginSDK/Plugins/SenseVoicePlugin;
+			sourceTree = "<group>";
+		};
 		CC00000000000000000036 /* OpenAIVectorMemoryPlugin */ = {
 			isa = PBXGroup;
 			children = (
@@ -2007,6 +2057,7 @@
 				BB00000000000000000231 /* FileMemoryPlugin.bundle */,
 				B10000000000000000000003 /* SystemTTSPlugin.bundle */,
 				D20100000000000000000006 /* SupertonicPlugin.bundle */,
+				5E5100000000000000000016 /* SenseVoicePlugin.bundle */,
 				BB00000000000000000234 /* OpenAIVectorMemoryPlugin.bundle */,
 				BB00000000000000000254 /* FireworksPlugin.bundle */,
 				BB00000000000000000257 /* CerebrasPlugin.bundle */,
@@ -2070,6 +2121,8 @@
 				91B4D7E2C5A809F1632E4B7F /* StreamingHandlerTests.swift */,
 				9A584149706C7567496E0101 /* XAIPluginTests.swift */,
 				4D980A5CFE1A4217A10C2102 /* WhisperKitPluginLifecycleTests.swift */,
+				5E5100000000000000000018 /* SenseVoicePluginTests.swift */,
+				5E5100000000000000000019 /* SenseVoiceRuntimeTests.swift */,
 				B26D2C342D877030A62CE027 /* Support */,
 				05313C25F9E79BCFC02899F2 /* TextDiffServiceTests.swift */,
 			);
@@ -2084,9 +2137,11 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 52E9F6F513650CA6EC4DDCA3 /* Build configuration list for PBXNativeTarget "TypeWhisperTests" */;
 			buildPhases = (
+				5E5100000000000000000025 /* Bootstrap Sherpa-ONNX */,
 				D7199BC8CB6EE00511EFCC10 /* Sources */,
 				A5DCBFE5A7ECF9AFC7B5EA6D /* Frameworks */,
 				247A5DE2C113AA399A91B4AD /* Resources */,
+				5E5100000000000000000026 /* Write SenseVoice Runtime Test Flag */,
 			);
 			buildRules = (
 			);
@@ -2103,6 +2158,7 @@
 				PP00000000000000000013 /* MLXAudioCore */,
 				PP00000000000000000015 /* WhisperKit */,
 				PP00000000000000000017 /* FluidAudio */,
+				5E5100000000000000000036 /* onnxruntime */,
 			);
 			productName = TypeWhisperTests;
 			productReference = E6F8E5940EF4832A7B8D735D /* TypeWhisperTests.xctest */;
@@ -2679,6 +2735,28 @@
 			productReference = D20100000000000000000006 /* SupertonicPlugin.bundle */;
 			productType = "com.apple.product-type.bundle";
 		};
+		5E5100000000000000000030 /* SenseVoicePlugin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5E5100000000000000000033 /* Build configuration list for PBXNativeTarget "SenseVoicePlugin" */;
+			buildPhases = (
+				5E5100000000000000000024 /* Bootstrap Sherpa-ONNX */,
+				5E5100000000000000000021 /* Sources */,
+				5E5100000000000000000022 /* Frameworks */,
+				5E5100000000000000000023 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SenseVoicePlugin;
+			packageProductDependencies = (
+				5E5100000000000000000034 /* TypeWhisperPluginSDK */,
+				5E5100000000000000000035 /* onnxruntime */,
+			);
+			productName = SenseVoicePlugin;
+			productReference = 5E5100000000000000000016 /* SenseVoicePlugin.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
 		DD00000000000000000024 /* OpenAIVectorMemoryPlugin */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = FF00000000000000000122 /* Build configuration list for PBXNativeTarget "OpenAIVectorMemoryPlugin" */;
@@ -3017,6 +3095,7 @@
 				DD00000000000000000023 /* FileMemoryPlugin */,
 				D10000000000000000000001 /* SystemTTSPlugin */,
 				D20300000000000000000001 /* SupertonicPlugin */,
+				5E5100000000000000000030 /* SenseVoicePlugin */,
 				DD00000000000000000024 /* OpenAIVectorMemoryPlugin */,
 				DD00000000000000000025 /* FireworksPlugin */,
 				DD00000000000000000026 /* CerebrasPlugin */,
@@ -3289,6 +3368,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5E5100000000000000000023 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5E5100000000000000000004 /* manifest.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FF00000000000000000121 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -3406,6 +3493,71 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		5E5100000000000000000024 /* Bootstrap Sherpa-ONNX */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/scripts/bootstrap_sherpa_onnx.sh",
+			);
+			name = "Bootstrap Sherpa-ONNX";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/TypeWhisperPluginSDK/Vendor/SherpaONNX/sherpa-onnx.xcframework/macos-arm64_x86_64/libsherpa-onnx.a",
+				"$(SRCROOT)/TypeWhisperPluginSDK/Vendor/SherpaONNX/.version",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"$SRCROOT/scripts/bootstrap_sherpa_onnx.sh\"\n";
+		};
+		5E5100000000000000000025 /* Bootstrap Sherpa-ONNX */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/scripts/bootstrap_sherpa_onnx.sh",
+			);
+			name = "Bootstrap Sherpa-ONNX";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(SRCROOT)/TypeWhisperPluginSDK/Vendor/SherpaONNX/sherpa-onnx.xcframework/macos-arm64_x86_64/libsherpa-onnx.a",
+				"$(SRCROOT)/TypeWhisperPluginSDK/Vendor/SherpaONNX/.version",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"$SRCROOT/scripts/bootstrap_sherpa_onnx.sh\"\n";
+		};
+		5E5100000000000000000026 /* Write SenseVoice Runtime Test Flag */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Write SenseVoice Runtime Test Flag";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/SenseVoiceRuntimeTestFlag",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "flag_path=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/SenseVoiceRuntimeTestFlag\"\nmkdir -p \"$(dirname \"$flag_path\")\"\nif [ \"${TYPEWHISPER_RUN_SENSEVOICE_RUNTIME_TESTS:-}\" = \"1\" ]; then\n  printf '1\\n' > \"$flag_path\"\nelse\n  printf '0\\n' > \"$flag_path\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		D7199BC8CB6EE00511EFCC10 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -3469,6 +3621,11 @@
 				204C804898EAE1127B62EC98 /* TestSupport.swift in Sources */,
 				76858B5B28A121356A5D9599 /* TextDiffServiceTests.swift in Sources */,
 				4D980A5CFE1A4217A10C2101 /* WhisperKitPluginLifecycleTests.swift in Sources */,
+				5E5100000000000000000007 /* SenseVoicePluginTests.swift in Sources */,
+				5E5100000000000000000008 /* SenseVoiceRuntimeTests.swift in Sources */,
+				5E5100000000000000000009 /* SenseVoicePlugin.swift in Sources */,
+				5E510000000000000000000A /* SenseVoiceModelAssetManager.swift in Sources */,
+				5E510000000000000000000B /* SenseVoiceRuntime.swift in Sources */,
 				E2DA879FDEFA04FBD013E837 /* OutputFormatter.swift in Sources */,
 				BA68B1E282D5D714132FEA24 /* PortDiscovery.swift in Sources */,
 			);
@@ -3490,6 +3647,16 @@
 				D20000000000000000000002 /* SupertonicModelAssetManager.swift in Sources */,
 				D20000000000000000000003 /* SupertonicPlaybackSession.swift in Sources */,
 				D20000000000000000000004 /* SupertonicRuntime.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5E5100000000000000000021 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5E5100000000000000000001 /* SenseVoicePlugin.swift in Sources */,
+				5E5100000000000000000002 /* SenseVoiceModelAssetManager.swift in Sources */,
+				5E5100000000000000000003 /* SenseVoiceRuntime.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -3988,16 +4155,34 @@
 				CODE_SIGNING_ALLOWED = NO;
 				CODE_SIGNING_REQUIRED = NO;
 				CODE_SIGN_IDENTITY = "-";
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/TypeWhisperPluginSDK/Vendor/SherpaONNX",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/TypeWhisperPluginSDK/Vendor/SherpaONNX/sherpa-onnx.xcframework/macos-arm64_x86_64/Headers",
+				);
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 					"@loader_path/../Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/TypeWhisperPluginSDK/Vendor/SherpaONNX/sherpa-onnx.xcframework/macos-arm64_x86_64",
+				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lc++",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.TypeWhisperTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
+				SWIFT_OBJC_BRIDGING_HEADER = "TypeWhisperPluginSDK/Plugins/SenseVoicePlugin/SenseVoicePlugin-Bridging-Header.h";
 				SWIFT_VERSION = 6.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TypeWhisper.app/Contents/MacOS/TypeWhisper";
 				TEST_TARGET_NAME = TypeWhisper;
@@ -4011,16 +4196,34 @@
 				CODE_SIGNING_ALLOWED = NO;
 				CODE_SIGNING_REQUIRED = NO;
 				CODE_SIGN_IDENTITY = "-";
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/TypeWhisperPluginSDK/Vendor/SherpaONNX",
+				);
 				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/TypeWhisperPluginSDK/Vendor/SherpaONNX/sherpa-onnx.xcframework/macos-arm64_x86_64/Headers",
+				);
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 					"@loader_path/../Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/TypeWhisperPluginSDK/Vendor/SherpaONNX/sherpa-onnx.xcframework/macos-arm64_x86_64",
+				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lc++",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.TypeWhisperTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
+				SWIFT_OBJC_BRIDGING_HEADER = "TypeWhisperPluginSDK/Plugins/SenseVoicePlugin/SenseVoicePlugin-Bridging-Header.h";
 				SWIFT_VERSION = 6.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TypeWhisper.app/Contents/MacOS/TypeWhisper";
 				TEST_TARGET_NAME = TypeWhisper;
@@ -5518,6 +5721,106 @@
 			};
 			name = Release;
 		};
+		5E5100000000000000000031 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/TypeWhisperPluginSDK/build/$(CONFIGURATION)/PackageFrameworks",
+					"$(SRCROOT)/TypeWhisperPluginSDK/Vendor/SherpaONNX",
+				);
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/TypeWhisperPluginSDK/Vendor/SherpaONNX/sherpa-onnx.xcframework/macos-arm64_x86_64/Headers",
+				);
+				INFOPLIST_KEY_CFBundleDisplayName = "SenseVoice (Experimental)";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = SenseVoicePlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@loader_path/../Frameworks",
+					"@executable_path/../Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/TypeWhisperPluginSDK/Vendor/SherpaONNX/sherpa-onnx.xcframework/macos-arm64_x86_64",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lc++",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.sensevoice;
+				PRODUCT_NAME = SenseVoicePlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/TypeWhisperPluginSDK/build/$(CONFIGURATION)";
+				SWIFT_OBJC_BRIDGING_HEADER = "TypeWhisperPluginSDK/Plugins/SenseVoicePlugin/SenseVoicePlugin-Bridging-Header.h";
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
+		5E5100000000000000000032 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/TypeWhisperPluginSDK/build/$(CONFIGURATION)/PackageFrameworks",
+					"$(SRCROOT)/TypeWhisperPluginSDK/Vendor/SherpaONNX",
+				);
+				GENERATE_INFOPLIST_FILE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/TypeWhisperPluginSDK/Vendor/SherpaONNX/sherpa-onnx.xcframework/macos-arm64_x86_64/Headers",
+				);
+				INFOPLIST_KEY_CFBundleDisplayName = "SenseVoice (Experimental)";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = SenseVoicePlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@loader_path/../Frameworks",
+					"@executable_path/../Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/TypeWhisperPluginSDK/Vendor/SherpaONNX/sherpa-onnx.xcframework/macos-arm64_x86_64",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lc++",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.sensevoice;
+				PRODUCT_NAME = SenseVoicePlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/TypeWhisperPluginSDK/build/$(CONFIGURATION)";
+				SWIFT_OBJC_BRIDGING_HEADER = "TypeWhisperPluginSDK/Plugins/SenseVoicePlugin/SenseVoicePlugin-Bridging-Header.h";
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
 		XX00000000000000000097 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -6376,6 +6679,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		5E5100000000000000000033 /* Build configuration list for PBXNativeTarget "SenseVoicePlugin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5E5100000000000000000031 /* Debug */,
+				5E5100000000000000000032 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		FF00000000000000000122 /* Build configuration list for PBXNativeTarget "OpenAIVectorMemoryPlugin" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -6782,6 +7094,20 @@
 			productName = TypeWhisperPluginSDK;
 		};
 		D20700000000000000000002 /* onnxruntime */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D20600000000000000000001 /* XCRemoteSwiftPackageReference "onnxruntime-swift-package-manager" */;
+			productName = onnxruntime;
+		};
+		5E5100000000000000000034 /* TypeWhisperPluginSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TypeWhisperPluginSDK;
+		};
+		5E5100000000000000000035 /* onnxruntime */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D20600000000000000000001 /* XCRemoteSwiftPackageReference "onnxruntime-swift-package-manager" */;
+			productName = onnxruntime;
+		};
+		5E5100000000000000000036 /* onnxruntime */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = D20600000000000000000001 /* XCRemoteSwiftPackageReference "onnxruntime-swift-package-manager" */;
 			productName = onnxruntime;

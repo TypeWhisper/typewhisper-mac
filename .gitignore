@@ -14,6 +14,7 @@ DerivedData/
 .build/
 .swiftpm/
 Package.resolved
+TypeWhisperPluginSDK/Vendor/SherpaONNX/
 
 # macOS
 .DS_Store

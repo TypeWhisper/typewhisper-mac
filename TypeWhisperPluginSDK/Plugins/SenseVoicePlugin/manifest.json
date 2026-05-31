@@ -1,0 +1,22 @@
+{
+    "id": "com.typewhisper.sensevoice",
+    "name": "SenseVoice (Experimental)",
+    "version": "0.1.0",
+    "minHostVersion": "1.4.0",
+    "sdkCompatibilityVersion": "v1",
+    "minOSVersion": "14.0",
+    "supportedArchitectures": [
+        "arm64"
+    ],
+    "author": "TypeWhisper",
+    "description": "Experimental local speech-to-text powered by SenseVoice Small through Sherpa-ONNX. Supports zh, en, ja, ko, and yue.",
+    "descriptions": {
+        "de": "Experimentelle lokale Spracherkennung mit SenseVoice Small via Sherpa-ONNX. Unterstützt zh, en, ja, ko und yue."
+    },
+    "requiresAPIKey": false,
+    "hosting": "local",
+    "category": "transcription",
+    "iconSystemName": "waveform.badge.magnifyingglass",
+    "principalClass": "SenseVoicePlugin",
+    "detailsURL": "https://github.com/FunAudioLLM/SenseVoice"
+}
