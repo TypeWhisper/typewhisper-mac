@@ -118,6 +118,7 @@ jobs:
             supertonic) TARGET="SupertonicPlugin" ;;
             filler-words) TARGET="FillerWordsPlugin" ;;
             xai) TARGET="XAIPlugin" ;;
+            sensevoice) TARGET="SenseVoicePlugin" ;;
             *) echo "Unknown plugin: $PLUGIN_NAME" && exit 1 ;;
           esac
           # Set deployment target and Swift embedding per plugin
