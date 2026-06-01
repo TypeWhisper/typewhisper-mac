@@ -140,7 +140,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Connection Method"
+            "value": "接続方法"
           }
         }
       }
@@ -332,7 +332,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Reasoning Effort"
+            "value": "推論の労力"
           }
         }
       }

@@ -44,7 +44,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Add Example"
+            "value": "例を追加"
           }
         }
       }
@@ -60,7 +60,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Add Script"
+            "value": "スクリプトを追加"
           }
         }
       }
@@ -124,7 +124,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Edit Script"
+            "value": "スクリプトを編集"
           }
         }
       }
@@ -140,7 +140,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Execution Log"
+            "value": "実行ログ"
           }
         }
       }
@@ -204,7 +204,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "No Scripts"
+            "value": "スクリプトなし"
           }
         }
       }
@@ -268,7 +268,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Script Runner"
+            "value": "スクリプトランナー"
           }
         }
       }

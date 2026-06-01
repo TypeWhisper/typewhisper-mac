@@ -97,7 +97,7 @@ struct LicenseSettingsView: View {
                 }
 
                 planSelectionButton(
-                    title: "Team",
+                    title: String(localized: "Team"),
                     price: String(localized: "from 19 EUR/mo"),
                     description: String(localized: "Procurement, support, managed seats, and up to 10 devices."),
                     systemImage: "person.3",
@@ -434,8 +434,7 @@ struct LicenseSettingsView: View {
                 }
 
                 if !supporterDiscord.claimStatus.linkedRoles.isEmpty {
-                    Text(String(localized: "Active roles: \(supporterDiscord.claimStatus.linkedRoles.joined(separator: ", "))"))"
-                    ))
+                    Text(String(localized: "Active roles: \(supporterDiscord.claimStatus.linkedRoles.joined(separator: ", "))"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

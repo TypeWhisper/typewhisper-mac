@@ -44,7 +44,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Download Now"
+            "value": "今すぐダウンロード"
           }
         }
       }
@@ -124,7 +124,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Model Version"
+            "value": "モデルバージョン"
           }
         }
       }
