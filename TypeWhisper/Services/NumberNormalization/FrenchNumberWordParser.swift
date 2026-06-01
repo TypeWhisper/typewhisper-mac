@@ -157,7 +157,7 @@ enum FrenchNumberWordParser {
         words: [String],
         startingAt startIndex: Int
     ) -> (value: Int, nextIndex: Int) {
-        var index = startIndex
+        let index = startIndex
 
         if index < words.count, words[index] == "et" {
             let afterEt = index + 1

@@ -167,7 +167,7 @@ enum SpanishNumberWordParser {
         startingAt startIndex: Int,
         allowWithoutY: Bool
     ) -> (value: Int, nextIndex: Int) {
-        var index = startIndex
+        let index = startIndex
 
         if index < words.count, words[index] == "y" {
             let afterY = index + 1
