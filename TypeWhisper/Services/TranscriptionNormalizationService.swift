@@ -115,17 +115,6 @@ enum TranscriptionNormalizationService {
         )
     }
 
-    static func normalizationLanguage(
-        task: TranscriptionTask,
-        detectedLanguage: String?,
-        configuredLanguage: String?
-    ) -> String? {
-        if task == .translate {
-            return "en"
-        }
-        return detectedLanguage ?? configuredLanguage
-    }
-
     static func normalizationLanguages(
         task: TranscriptionTask,
         detectedLanguage: String?,

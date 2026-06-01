@@ -13,6 +13,7 @@ enum GermanNumberWordParser {
         "achtzehn": 18, "neunzehn": 19,
     ]
 
+    // Include common ASR spelling variants for spoken-number cleanup.
     private static let tens: [String: Int] = [
         "zwanzig": 20, "dreissig": 30, "dreizig": 30, "vierzig": 40,
         "funfzig": 50, "fuenfzig": 50, "sechzig": 60, "siebzig": 70,

@@ -139,6 +139,7 @@ enum SpanishNumberWordParser {
         let word = words[startIndex]
 
         if word == "veinte" {
+            // Keep ASR tolerance for split "veintiuno" forms like "veinte uno".
             return appendSpanishUnit(base: 20, words: words, startingAt: startIndex + 1, allowWithoutY: true)
         }
 
