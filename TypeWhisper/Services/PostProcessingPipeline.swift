@@ -89,14 +89,15 @@ final class PostProcessingPipeline {
             do {
                 switch step.id {
                 case -6:
-                    let language = TranscriptionNormalizationService.normalizationLanguage(
+                    let languages = TranscriptionNormalizationService.normalizationLanguages(
                         task: .transcribe,
                         detectedLanguage: dictationContext?.detectedLanguage ?? context.language,
-                        configuredLanguage: dictationContext?.configuredLanguage ?? context.language
+                        configuredLanguage: dictationContext?.configuredLanguage ?? context.language,
+                        configuredLanguageCandidates: dictationContext?.configuredLanguageCandidates ?? []
                     )
                     result = TranscriptionNormalizationService.normalizeText(
                         result,
-                        language: language,
+                        languages: languages,
                         normalizeNumbers: normalizeNumbers
                     )
                 case -4:

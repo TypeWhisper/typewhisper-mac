@@ -1213,6 +1213,7 @@ final class DictationViewModel: ObservableObject {
                 let activeApp = capturedActiveApp ?? textInsertionService.captureActiveApp()
                 let languageSelection = effectiveLanguageSelection
                 let language = languageSelection.requestedLanguage
+                let languageCandidates = languageSelection.selectedCodes
                 let task = effectiveTask
                 let engineOverride = effectiveEngineOverrideId
                 let cloudModelOverride = effectiveCloudModelOverride
@@ -1290,6 +1291,7 @@ final class DictationViewModel: ObservableObject {
                         cloudModelOverride: cloudModelOverride
                     ),
                     configuredLanguage: language,
+                    configuredLanguageCandidates: languageCandidates,
                     detectedLanguage: result.detectedLanguage
                 )
                 let ppResult = try await postProcessingPipeline.process(

@@ -9,6 +9,7 @@ final class StreamingHandler: @unchecked Sendable {
         var liveSessionHandle: ModelManagerService.LiveTranscriptionSessionHandle?
         var normalizeNumbers: Bool?
         var configuredLanguage: String?
+        var configuredLanguageCandidates: [String] = []
         var task: TranscriptionTask = .transcribe
         var livePreviewAudioGate = LivePreviewAudioGate()
         var sampleCursor = 0
@@ -117,6 +118,7 @@ final class StreamingHandler: @unchecked Sendable {
         sharedState.withLock { state in
             state.normalizeNumbers = normalizeNumbers
             state.configuredLanguage = languageSelection.requestedLanguage
+            state.configuredLanguageCandidates = languageSelection.selectedCodes
             state.task = task
         }
         onStreamingStateChange?(true)
@@ -190,6 +192,7 @@ final class StreamingHandler: @unchecked Sendable {
                 handle,
                 bufferedDuration: bufferedDurationProvider(),
                 language: sharedState.withLock { $0.configuredLanguage },
+                languageCandidates: sharedState.withLock { $0.configuredLanguageCandidates },
                 task: sharedState.withLock { $0.task },
                 normalizeNumbers: sharedState.withLock { $0.normalizeNumbers }
             )
@@ -302,6 +305,7 @@ final class StreamingHandler: @unchecked Sendable {
             state.liveSessionHandle = nil
             state.normalizeNumbers = nil
             state.configuredLanguage = nil
+            state.configuredLanguageCandidates = []
             state.task = .transcribe
             state.sampleCursor = 0
         }

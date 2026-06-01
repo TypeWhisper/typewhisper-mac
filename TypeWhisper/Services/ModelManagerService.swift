@@ -374,6 +374,7 @@ final class ModelManagerService: ObservableObject {
         _ handle: LiveTranscriptionSessionHandle,
         bufferedDuration: Double,
         language: String? = nil,
+        languageCandidates: [String] = [],
         task: TranscriptionTask = .transcribe,
         normalizeNumbers: Bool? = nil
     ) async throws -> TranscriptionResult {
@@ -387,6 +388,7 @@ final class ModelManagerService: ObservableObject {
             text: result.text,
             detectedLanguage: result.detectedLanguage,
             configuredLanguage: language,
+            configuredLanguageCandidates: languageCandidates,
             duration: bufferedDuration,
             processingTime: processingTime,
             engineUsed: handle.providerId,
@@ -451,6 +453,10 @@ final class ModelManagerService: ObservableObject {
         let startTime = CFAbsoluteTimeGetCurrent()
         let audio = await Self.makeAudioData(from: audioSamples)
         let runtimeSelection = runtimeLanguageSelection(for: languageSelection, plugin: plugin)
+        let normalizationLanguageCandidates = normalizationLanguageCandidates(
+            for: languageSelection,
+            plugin: plugin
+        )
 
         let result = try await transcribeWithResolvedLanguageSelection(
             plugin: plugin,
@@ -468,6 +474,7 @@ final class ModelManagerService: ObservableObject {
             text: result.text,
             detectedLanguage: result.detectedLanguage,
             configuredLanguage: runtimeSelection.requestedLanguage,
+            configuredLanguageCandidates: normalizationLanguageCandidates,
             duration: audio.duration,
             processingTime: processingTime,
             engineUsed: providerId,
@@ -535,6 +542,10 @@ final class ModelManagerService: ObservableObject {
         let startTime = CFAbsoluteTimeGetCurrent()
         let audio = await Self.makeAudioData(from: audioSamples)
         let runtimeSelection = runtimeLanguageSelection(for: languageSelection, plugin: plugin)
+        let normalizationLanguageCandidates = normalizationLanguageCandidates(
+            for: languageSelection,
+            plugin: plugin
+        )
 
         let result = try await transcribeWithResolvedLanguageSelection(
             plugin: plugin,
@@ -553,6 +564,7 @@ final class ModelManagerService: ObservableObject {
             text: result.text,
             detectedLanguage: result.detectedLanguage,
             configuredLanguage: runtimeSelection.requestedLanguage,
+            configuredLanguageCandidates: normalizationLanguageCandidates,
             duration: audio.duration,
             processingTime: processingTime,
             engineUsed: providerId,
@@ -633,6 +645,15 @@ final class ModelManagerService: ObservableObject {
         case .inheritGlobal, .auto:
             return PluginLanguageSelection()
         }
+    }
+
+    private func normalizationLanguageCandidates(
+        for languageSelection: LanguageSelection,
+        plugin: TranscriptionEnginePlugin
+    ) -> [String] {
+        languageSelection
+            .normalizedForSupportedLanguages(plugin.supportedLanguages)
+            .selectedCodes
     }
 
     private func transcribeWithResolvedLanguageSelection(
