@@ -36,6 +36,25 @@ final class NumberWordNormalizerTests: XCTestCase {
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "minus two point five", language: "en"), "-2.5")
     }
 
+    func testEnglishAndSeparatorDoesNotMergeIndependentNumbers() {
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "two and three", language: "en"), "2 and 3")
+        XCTAssertEqual(
+            NumberWordNormalizer.normalize(text: "between two and three minutes", language: "en"),
+            "between 2 and 3 minutes"
+        )
+    }
+
+    func testEnglishHundredAndScaleAndStillNormalize() {
+        XCTAssertEqual(
+            NumberWordNormalizer.normalize(text: "one hundred and twenty three", language: "en"),
+            "123"
+        )
+        XCTAssertEqual(
+            NumberWordNormalizer.normalize(text: "one thousand and five", language: "en"),
+            "1005"
+        )
+    }
+
     func testGermanNegativeDecimalNormalizesToDigits() {
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "minus zwei komma fünf", language: "de"), "-2,5")
     }

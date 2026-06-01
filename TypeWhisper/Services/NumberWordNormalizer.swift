@@ -187,14 +187,6 @@ private enum EnglishNumberParser {
         var consumedScale = false
 
         while index < words.count {
-            if words[index] == "and",
-               let nextGroup = parseGroup(words, startingAt: index + 1) {
-                group = nextGroup
-                current += group.value
-                index = group.nextIndex
-                continue
-            }
-
             guard let scale = scaleValues[words[index]] else { break }
             total += current * scale
             current = 0

@@ -172,8 +172,12 @@ final class APIHandlers: @unchecked Sendable {
             }
 
             if let normalizePart = parts.first(where: { $0.name == "normalize_numbers" }),
-               let val = String(data: normalizePart.data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) {
-                options.normalizeNumbers = Self.parseBoolean(val)
+               let val = String(data: normalizePart.data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !val.isEmpty {
+                guard let parsed = Self.parseBoolean(val) else {
+                    return .error(status: 400, message: "Invalid 'normalize_numbers' value")
+                }
+                options.normalizeNumbers = parsed
             }
         } else if !request.body.isEmpty {
             audioData = request.body
@@ -204,7 +208,10 @@ final class APIHandlers: @unchecked Sendable {
             }
             if let normalizeNumbers = request.headers["x-normalize-numbers"]?.trimmingCharacters(in: .whitespacesAndNewlines),
                !normalizeNumbers.isEmpty {
-                options.normalizeNumbers = Self.parseBoolean(normalizeNumbers)
+                guard let parsed = Self.parseBoolean(normalizeNumbers) else {
+                    return .error(status: 400, message: "Invalid 'x-normalize-numbers' value")
+                }
+                options.normalizeNumbers = parsed
             }
         } else {
             return .error(status: 400, message: "No audio data provided")
