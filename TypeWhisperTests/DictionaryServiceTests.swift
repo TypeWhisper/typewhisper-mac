@@ -151,16 +151,58 @@ final class DictionaryServiceTests: XCTestCase {
         defer { TestSupport.remove(appSupportDirectory) }
 
         let service = DictionaryService(appSupportDirectory: appSupportDirectory)
-        service.addEntry(type: .term, original: " Kubernetes ")
+        service.addEntry(type: .term, original: " Kubernetes ", ctcMinSimilarity: 0.65)
         service.addEntry(type: .term, original: "MLX")
         service.addEntry(type: .term, original: "mlx")
         service.addEntry(type: .term, original: "TypeWhisper")
 
         XCTAssertEqual(service.enabledTerms(), ["Kubernetes", "MLX", "TypeWhisper"])
+        XCTAssertEqual(service.enabledTermHints(), [
+            PluginDictionaryTermHint(text: "Kubernetes", ctcMinSimilarity: 0.65),
+            PluginDictionaryTermHint(text: "MLX", ctcMinSimilarity: nil),
+            PluginDictionaryTermHint(text: "TypeWhisper", ctcMinSimilarity: nil),
+        ])
         XCTAssertEqual(
             service.getTermsForPrompt(providerId: nil),
             PluginDictionaryTerms.prompt(from: ["Kubernetes", "MLX", "TypeWhisper"])
         )
+    }
+
+    @MainActor
+    func testAPITermEntriesPersistThresholdsAndPlainTermsPreserveExistingValues() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        try service.setAPITermEntries(
+            [
+                (term: " TypeWhisper ", ctcMinSimilarity: 0.65),
+                (term: "Reson8", ctcMinSimilarity: nil),
+            ],
+            replaceExisting: true
+        )
+
+        XCTAssertEqual(service.enabledTermHints(), [
+            PluginDictionaryTermHint(text: "Reson8", ctcMinSimilarity: nil),
+            PluginDictionaryTermHint(text: "TypeWhisper", ctcMinSimilarity: 0.65),
+        ])
+
+        try service.setAPITerms(["typewhisper", "Caivex"], replaceExisting: false)
+
+        XCTAssertEqual(service.enabledTermHints(), [
+            PluginDictionaryTermHint(text: "Caivex", ctcMinSimilarity: nil),
+            PluginDictionaryTermHint(text: "Reson8", ctcMinSimilarity: nil),
+            PluginDictionaryTermHint(text: "typewhisper", ctcMinSimilarity: 0.65),
+        ])
+
+        try service.setAPITermEntries(
+            [(term: "TypeWhisper", ctcMinSimilarity: nil)],
+            replaceExisting: true
+        )
+
+        XCTAssertEqual(service.enabledTermHints(), [
+            PluginDictionaryTermHint(text: "TypeWhisper", ctcMinSimilarity: nil),
+        ])
     }
 
     @MainActor
@@ -177,6 +219,10 @@ final class DictionaryServiceTests: XCTestCase {
         installPlugins([plugin], appSupportDirectory: appSupportDirectory)
 
         XCTAssertEqual(service.getTermsForPrompt(providerId: plugin.providerId), "Alpha, Gamma")
+        XCTAssertEqual(service.getTermHints(providerId: plugin.providerId), [
+            PluginDictionaryTermHint(text: "Alpha", ctcMinSimilarity: nil),
+            PluginDictionaryTermHint(text: "Gamma", ctcMinSimilarity: nil),
+        ])
     }
 
     @MainActor

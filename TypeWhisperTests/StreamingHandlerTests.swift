@@ -160,6 +160,42 @@ final class StreamingHandlerTests: XCTestCase {
         }
     }
 
+    private final class MockDictionaryTermHintPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlugin, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.dictionary-term-hints" }
+        static var pluginName: String { "Mock Dictionary Term Hints" }
+
+        var providerId: String { "mock-dictionary-term-hints" }
+        var providerDisplayName: String { "Mock Dictionary Term Hints" }
+        var isConfigured: Bool { true }
+        var transcriptionModels: [PluginModelInfo] { [] }
+        var selectedModelId: String? { nil }
+        var supportsTranslation: Bool { false }
+        var supportsStreaming: Bool { false }
+        private(set) var lastPrompt: String?
+        private(set) var lastHints: [PluginDictionaryTermHint] = []
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+        func selectModel(_ modelId: String) {}
+
+        func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+            XCTFail("Legacy dictionary prompt API should not be used when structured term hints are available")
+            return PluginTranscriptionResult(text: "", detectedLanguage: language)
+        }
+
+        func transcribe(
+            audio: AudioData,
+            language: String?,
+            translate: Bool,
+            prompt: String?,
+            dictionaryTermHints: [PluginDictionaryTermHint]
+        ) async throws -> PluginTranscriptionResult {
+            lastPrompt = prompt
+            lastHints = dictionaryTermHints
+            return PluginTranscriptionResult(text: "hinted terms", detectedLanguage: language)
+        }
+    }
+
     private final class MockLivePlugin: NSObject, LiveTranscriptionCapablePlugin, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.live" }
         static var pluginName: String { "Mock Live" }
@@ -1050,6 +1086,84 @@ final class StreamingHandlerTests: XCTestCase {
 
         XCTAssertEqual(plugin.lastSelection.languageHints, ["de", "en"])
         XCTAssertNil(plugin.lastSelection.requestedLanguage)
+    }
+
+    func testModelManagerPassesDictionaryTermHintsToOptInPlugin() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockDictionaryTermHintPlugin()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.dictionary-term-hints",
+                    name: "Mock Dictionary Term Hints",
+                    version: "1.0.0",
+                    principalClass: "MockDictionaryTermHintPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+
+        let result = try await modelManager.transcribe(
+            audioSamples: Array(repeating: 0.25, count: 16_000),
+            languageSelection: .exact("en"),
+            task: .transcribe,
+            prompt: "Prompt Terms",
+            dictionaryTermHints: [
+                PluginDictionaryTermHint(text: "Caivex", ctcMinSimilarity: 0.65),
+                PluginDictionaryTermHint(text: "Reson8", ctcMinSimilarity: nil),
+            ]
+        )
+
+        XCTAssertEqual(result.text, "hinted terms")
+        XCTAssertEqual(plugin.lastPrompt, "Prompt Terms")
+        XCTAssertEqual(plugin.lastHints, [
+            PluginDictionaryTermHint(text: "Caivex", ctcMinSimilarity: 0.65),
+            PluginDictionaryTermHint(text: "Reson8", ctcMinSimilarity: nil),
+        ])
+    }
+
+    func testModelManagerKeepsPromptFallbackForPluginsWithoutDictionaryTermHintProtocol() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockBatchPlugin()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.batch",
+                    name: "Mock Batch",
+                    version: "1.0.0",
+                    principalClass: "MockBatchPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+
+        _ = try await modelManager.transcribe(
+            audioSamples: Array(repeating: 0.25, count: 16_000),
+            languageSelection: .exact("en"),
+            task: .transcribe,
+            prompt: "Prompt Terms",
+            dictionaryTermHints: [PluginDictionaryTermHint(text: "Caivex", ctcMinSimilarity: 0.65)]
+        )
+
+        XCTAssertEqual(plugin.lastPrompt, "Prompt Terms")
     }
 
     func testModelManagerUsesFirstSelectedHintForLegacyPluginsWithMultipleHints() async throws {

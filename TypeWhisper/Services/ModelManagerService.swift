@@ -396,7 +396,8 @@ final class ModelManagerService: ObservableObject {
         task: TranscriptionTask,
         engineOverrideId: String? = nil,
         cloudModelOverride: String? = nil,
-        prompt: String? = nil
+        prompt: String? = nil,
+        dictionaryTermHints: [PluginDictionaryTermHint] = []
     ) async throws -> TranscriptionResult {
         try await transcribe(
             audioSamples: audioSamples,
@@ -404,7 +405,8 @@ final class ModelManagerService: ObservableObject {
             task: task,
             engineOverrideId: engineOverrideId,
             cloudModelOverride: cloudModelOverride,
-            prompt: prompt
+            prompt: prompt,
+            dictionaryTermHints: dictionaryTermHints
         )
     }
 
@@ -414,7 +416,8 @@ final class ModelManagerService: ObservableObject {
         task: TranscriptionTask,
         engineOverrideId: String? = nil,
         cloudModelOverride: String? = nil,
-        prompt: String? = nil
+        prompt: String? = nil,
+        dictionaryTermHints: [PluginDictionaryTermHint] = []
     ) async throws -> TranscriptionResult {
         let providerId = engineOverrideId ?? selectedProviderId
         guard let providerId,
@@ -447,7 +450,8 @@ final class ModelManagerService: ObservableObject {
             audio: audio,
             languageSelection: runtimeLanguageSelection(for: languageSelection, plugin: plugin),
             task: task,
-            prompt: prompt
+            prompt: prompt,
+            dictionaryTermHints: dictionaryTermHints
         )
 
         let processingTime = CFAbsoluteTimeGetCurrent() - startTime
@@ -471,6 +475,7 @@ final class ModelManagerService: ObservableObject {
         engineOverrideId: String? = nil,
         cloudModelOverride: String? = nil,
         prompt: String? = nil,
+        dictionaryTermHints: [PluginDictionaryTermHint] = [],
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> TranscriptionResult {
         try await transcribe(
@@ -480,6 +485,7 @@ final class ModelManagerService: ObservableObject {
             engineOverrideId: engineOverrideId,
             cloudModelOverride: cloudModelOverride,
             prompt: prompt,
+            dictionaryTermHints: dictionaryTermHints,
             onProgress: onProgress
         )
     }
@@ -491,6 +497,7 @@ final class ModelManagerService: ObservableObject {
         engineOverrideId: String? = nil,
         cloudModelOverride: String? = nil,
         prompt: String? = nil,
+        dictionaryTermHints: [PluginDictionaryTermHint] = [],
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> TranscriptionResult {
         let providerId = engineOverrideId ?? selectedProviderId
@@ -525,6 +532,7 @@ final class ModelManagerService: ObservableObject {
             languageSelection: runtimeLanguageSelection(for: languageSelection, plugin: plugin),
             task: task,
             prompt: prompt,
+            dictionaryTermHints: dictionaryTermHints,
             onProgress: onProgress
         )
 
@@ -620,7 +628,8 @@ final class ModelManagerService: ObservableObject {
         audio: AudioData,
         languageSelection: PluginLanguageSelection,
         task: TranscriptionTask,
-        prompt: String?
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint]
     ) async throws -> PluginStructuredTranscriptionResult {
         if !languageSelection.languageHints.isEmpty,
            let structuredHintPlugin = plugin as? StructuredLanguageHintTranscriptionEnginePlugin {
@@ -639,6 +648,17 @@ final class ModelManagerService: ObservableObject {
                 languageSelection: languageSelection,
                 translate: task == .translate,
                 prompt: prompt
+            ))
+        }
+
+        if !dictionaryTermHints.isEmpty,
+           let termHintPlugin = plugin as? DictionaryTermHintTranscriptionEnginePlugin {
+            return Self.structuredResult(from: try await termHintPlugin.transcribe(
+                audio: audio,
+                language: languageSelection.requestedLanguage,
+                translate: task == .translate,
+                prompt: prompt,
+                dictionaryTermHints: dictionaryTermHints
             ))
         }
 
@@ -665,6 +685,7 @@ final class ModelManagerService: ObservableObject {
         languageSelection: PluginLanguageSelection,
         task: TranscriptionTask,
         prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginStructuredTranscriptionResult {
         if !languageSelection.languageHints.isEmpty,
@@ -687,6 +708,18 @@ final class ModelManagerService: ObservableObject {
                 languageSelection: languageSelection,
                 translate: task == .translate,
                 prompt: prompt,
+                onProgress: onProgress
+            ))
+        }
+
+        if !dictionaryTermHints.isEmpty,
+           let termHintPlugin = plugin as? DictionaryTermHintTranscriptionEnginePlugin {
+            return Self.structuredResult(from: try await termHintPlugin.transcribe(
+                audio: audio,
+                language: languageSelection.requestedLanguage,
+                translate: task == .translate,
+                prompt: prompt,
+                dictionaryTermHints: dictionaryTermHints,
                 onProgress: onProgress
             ))
         }

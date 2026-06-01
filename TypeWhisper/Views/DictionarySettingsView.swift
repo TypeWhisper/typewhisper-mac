@@ -548,6 +548,11 @@ private struct DictionaryCardView: View {
                 Text(entry.original)
                     .font(.callout)
                     .fontWeight(.medium)
+
+                DictionaryBoostingBadge(
+                    label: viewModel.termBoostingLabel(for: entry.ctcMinSimilarity),
+                    value: viewModel.formattedCtcMinSimilarity(entry.ctcMinSimilarity)
+                )
             }
 
             if entry.caseSensitive {
@@ -598,6 +603,26 @@ private struct DictionaryCardView: View {
                 viewModel.deleteEntry(entry)
             }
         }
+    }
+}
+
+private struct DictionaryBoostingBadge: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "slider.horizontal.3")
+                .font(.caption2)
+            Text(value.isEmpty ? label : "\(label) \(value)")
+                .font(.caption2)
+                .lineLimit(1)
+        }
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(Color.secondary.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 }
 
@@ -664,6 +689,40 @@ private struct DictionaryEditorSheet: View {
                     }
                     .padding(.vertical, 8)
                 }
+
+                if viewModel.editType == .term {
+                    GroupBox(String(localized: "Boosting")) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Picker(String(localized: "Boosting"), selection: $viewModel.editTermBoostingMode) {
+                                ForEach(DictionaryViewModel.TermBoostingMode.allCases) { mode in
+                                    Text(mode.displayName).tag(mode)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .labelsHidden()
+
+                            if viewModel.editTermBoostingMode == .advanced {
+                                HStack(spacing: 10) {
+                                    Text(String(localized: "Threshold"))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+
+                                    Slider(
+                                        value: $viewModel.editAdvancedCtcMinSimilarity,
+                                        in: DictionaryViewModel.minimumAdvancedCtcMinSimilarity...DictionaryViewModel.maximumAdvancedCtcMinSimilarity
+                                    )
+
+                                    Text(String(format: "%.2f", viewModel.editAdvancedCtcMinSimilarity))
+                                        .font(.caption)
+                                        .monospacedDigit()
+                                        .frame(width: 36, alignment: .trailing)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .padding(.vertical, 8)
+                    }
+                }
             }
             .padding()
 
@@ -691,7 +750,7 @@ private struct DictionaryEditorSheet: View {
             .padding()
             .background(Color(NSColor.windowBackgroundColor))
         }
-        .frame(width: 400, height: 340)
+        .frame(width: 430, height: viewModel.editType == .term ? 455 : 340)
         .onAppear {
             focusedField = .original
         }

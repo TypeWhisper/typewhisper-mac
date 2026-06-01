@@ -604,6 +604,29 @@ final class ProtocolContractTests: XCTestCase {
         )
     }
 
+    func testPluginDictionaryTermHintsNormalizeAndPreserveThresholds() {
+        let hints = PluginDictionaryTerms.normalizedTermHints(from: [
+            PluginDictionaryTermHint(text: " Kubernetes ", ctcMinSimilarity: 0.65),
+            PluginDictionaryTermHint(text: "kubernetes", ctcMinSimilarity: 0.8),
+            PluginDictionaryTermHint(text: "MLX", ctcMinSimilarity: nil),
+            PluginDictionaryTermHint(text: "Clipped Low", ctcMinSimilarity: -0.25),
+            PluginDictionaryTermHint(text: "Clipped High", ctcMinSimilarity: 1.25),
+            PluginDictionaryTermHint(text: "Invalid", ctcMinSimilarity: .nan),
+        ])
+
+        XCTAssertEqual(hints, [
+            PluginDictionaryTermHint(text: "Kubernetes", ctcMinSimilarity: 0.65),
+            PluginDictionaryTermHint(text: "MLX", ctcMinSimilarity: nil),
+            PluginDictionaryTermHint(text: "Clipped Low", ctcMinSimilarity: 0),
+            PluginDictionaryTermHint(text: "Clipped High", ctcMinSimilarity: 1),
+            PluginDictionaryTermHint(text: "Invalid", ctcMinSimilarity: nil),
+        ])
+        XCTAssertEqual(
+            PluginDictionaryTerms.clippedTermHints(from: hints, budget: DictionaryTermsBudget(maxTotalChars: 12)),
+            [PluginDictionaryTermHint(text: "Kubernetes", ctcMinSimilarity: 0.65)]
+        )
+    }
+
     func testPluginDictionaryTermsClippedTermsApplyPerTermFiltersBeforeMaxTerms() {
         XCTAssertEqual(
             PluginDictionaryTerms.clippedTerms(
