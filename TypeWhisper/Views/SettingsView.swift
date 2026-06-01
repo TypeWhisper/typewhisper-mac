@@ -578,6 +578,15 @@ struct RecordingSettingsView: View {
                 Text(String(localized: "Automatically format transcribed text based on the target app. Configure the output format per workflow."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                Toggle(String(localized: "Normalize spoken numbers to digits"), isOn: Binding(
+                    get: { TranscriptionNormalizationService.numberNormalizationEnabled() },
+                    set: { UserDefaults.standard.set($0, forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled) }
+                ))
+
+                Text(String(localized: "Converts spoken English and German numbers, such as twenty three or dreiundzwanzig, into digits before insertion and export."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section(String(localized: "Audio Ducking")) {

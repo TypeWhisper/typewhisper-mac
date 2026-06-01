@@ -238,6 +238,7 @@ final class DictationViewModel: ObservableObject {
         let languageSelection: LanguageSelection
         let task: TranscriptionTask
         let cloudModelOverride: String?
+        let normalizeNumbers: Bool?
     }
     private var lastStreamingParams: StreamingParamsSnapshot?
     private var isStopInFlight = false
@@ -1081,6 +1082,10 @@ final class DictationViewModel: ObservableObject {
         matchedWorkflow?.output.format
     }
 
+    private var effectiveNumberNormalizationOverride: Bool? {
+        matchedWorkflow?.output.numberNormalizationMode.overrideValue
+    }
+
     private var effectiveActionPluginId: String? {
         matchedWorkflow?.output.targetActionPluginId
     }
@@ -1225,7 +1230,8 @@ final class DictationViewModel: ObservableObject {
                         task: task,
                         engineOverrideId: engineOverride,
                         cloudModelOverride: cloudModelOverride,
-                        prompt: termsPrompt
+                        prompt: termsPrompt,
+                        normalizeNumbers: effectiveNumberNormalizationOverride
                     )
                 }
 
@@ -1289,7 +1295,8 @@ final class DictationViewModel: ObservableObject {
                 let ppResult = try await postProcessingPipeline.process(
                     text: text, context: ppContext, dictationContext: dictationContext, llmHandler: llmHandler,
                     outputFormat: self.effectiveOutputFormat,
-                    llmStepName: llmStepName
+                    llmStepName: llmStepName,
+                    normalizeNumbers: self.effectiveNumberNormalizationOverride
                 )
                 text = ppResult.text
                 let transcriptionID = sessionID ?? UUID()
@@ -1508,7 +1515,8 @@ final class DictationViewModel: ObservableObject {
             providerId: modelManager.selectedProviderId,
             languageSelection: effectiveLanguageSelection,
             task: effectiveTask,
-            cloudModelOverride: effectiveCloudModelOverride
+            cloudModelOverride: effectiveCloudModelOverride,
+            normalizeNumbers: effectiveNumberNormalizationOverride
         )
         lastStreamingParams = allowLiveTranscription ? params : nil
         streamingHandler.start(
@@ -1520,6 +1528,7 @@ final class DictationViewModel: ObservableObject {
             languageSelection: params.languageSelection,
             task: params.task,
             cloudModelOverride: params.cloudModelOverride,
+            normalizeNumbers: params.normalizeNumbers,
             allowLiveTranscription: allowLiveTranscription,
             stateCheck: { [weak self] in self?.state == .recording }
         )
@@ -1538,7 +1547,8 @@ final class DictationViewModel: ObservableObject {
             providerId: modelManager.selectedProviderId,
             languageSelection: effectiveLanguageSelection,
             task: effectiveTask,
-            cloudModelOverride: effectiveCloudModelOverride
+            cloudModelOverride: effectiveCloudModelOverride,
+            normalizeNumbers: effectiveNumberNormalizationOverride
         )
         guard newParams != previous else { return }
         logger.info("Streaming params changed after URL resolution, restarting live session")

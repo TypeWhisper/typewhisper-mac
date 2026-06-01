@@ -372,7 +372,10 @@ final class ModelManagerService: ObservableObject {
 
     func finishLiveTranscriptionSession(
         _ handle: LiveTranscriptionSessionHandle,
-        bufferedDuration: Double
+        bufferedDuration: Double,
+        language: String? = nil,
+        task: TranscriptionTask = .transcribe,
+        normalizeNumbers: Bool? = nil
     ) async throws -> TranscriptionResult {
         let startTime = CFAbsoluteTimeGetCurrent()
         let result = try await handle.session.finish()
@@ -380,13 +383,16 @@ final class ModelManagerService: ObservableObject {
 
         scheduleAutoUnloadIfNeeded()
 
-        return TranscriptionResult(
+        return TranscriptionNormalizationService.normalizeResult(
             text: result.text,
             detectedLanguage: result.detectedLanguage,
+            configuredLanguage: language,
             duration: bufferedDuration,
             processingTime: processingTime,
             engineUsed: handle.providerId,
-            segments: Self.transcriptionSegments(from: result.segments)
+            segments: Self.transcriptionSegments(from: result.segments),
+            task: task,
+            normalizeNumbers: normalizeNumbers
         )
     }
 
@@ -396,7 +402,8 @@ final class ModelManagerService: ObservableObject {
         task: TranscriptionTask,
         engineOverrideId: String? = nil,
         cloudModelOverride: String? = nil,
-        prompt: String? = nil
+        prompt: String? = nil,
+        normalizeNumbers: Bool? = nil
     ) async throws -> TranscriptionResult {
         try await transcribe(
             audioSamples: audioSamples,
@@ -404,7 +411,8 @@ final class ModelManagerService: ObservableObject {
             task: task,
             engineOverrideId: engineOverrideId,
             cloudModelOverride: cloudModelOverride,
-            prompt: prompt
+            prompt: prompt,
+            normalizeNumbers: normalizeNumbers
         )
     }
 
@@ -414,7 +422,8 @@ final class ModelManagerService: ObservableObject {
         task: TranscriptionTask,
         engineOverrideId: String? = nil,
         cloudModelOverride: String? = nil,
-        prompt: String? = nil
+        prompt: String? = nil,
+        normalizeNumbers: Bool? = nil
     ) async throws -> TranscriptionResult {
         let providerId = engineOverrideId ?? selectedProviderId
         guard let providerId,
@@ -441,11 +450,12 @@ final class ModelManagerService: ObservableObject {
 
         let startTime = CFAbsoluteTimeGetCurrent()
         let audio = await Self.makeAudioData(from: audioSamples)
+        let runtimeSelection = runtimeLanguageSelection(for: languageSelection, plugin: plugin)
 
         let result = try await transcribeWithResolvedLanguageSelection(
             plugin: plugin,
             audio: audio,
-            languageSelection: runtimeLanguageSelection(for: languageSelection, plugin: plugin),
+            languageSelection: runtimeSelection,
             task: task,
             prompt: prompt
         )
@@ -454,13 +464,16 @@ final class ModelManagerService: ObservableObject {
 
         scheduleAutoUnloadIfNeeded()
 
-        return TranscriptionResult(
+        return TranscriptionNormalizationService.normalizeResult(
             text: result.text,
             detectedLanguage: result.detectedLanguage,
+            configuredLanguage: runtimeSelection.requestedLanguage,
             duration: audio.duration,
             processingTime: processingTime,
             engineUsed: providerId,
-            segments: Self.transcriptionSegments(from: result.segments)
+            segments: Self.transcriptionSegments(from: result.segments),
+            task: task,
+            normalizeNumbers: normalizeNumbers
         )
     }
 
@@ -471,6 +484,7 @@ final class ModelManagerService: ObservableObject {
         engineOverrideId: String? = nil,
         cloudModelOverride: String? = nil,
         prompt: String? = nil,
+        normalizeNumbers: Bool? = nil,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> TranscriptionResult {
         try await transcribe(
@@ -480,6 +494,7 @@ final class ModelManagerService: ObservableObject {
             engineOverrideId: engineOverrideId,
             cloudModelOverride: cloudModelOverride,
             prompt: prompt,
+            normalizeNumbers: normalizeNumbers,
             onProgress: onProgress
         )
     }
@@ -491,6 +506,7 @@ final class ModelManagerService: ObservableObject {
         engineOverrideId: String? = nil,
         cloudModelOverride: String? = nil,
         prompt: String? = nil,
+        normalizeNumbers: Bool? = nil,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> TranscriptionResult {
         let providerId = engineOverrideId ?? selectedProviderId
@@ -518,11 +534,12 @@ final class ModelManagerService: ObservableObject {
 
         let startTime = CFAbsoluteTimeGetCurrent()
         let audio = await Self.makeAudioData(from: audioSamples)
+        let runtimeSelection = runtimeLanguageSelection(for: languageSelection, plugin: plugin)
 
         let result = try await transcribeWithResolvedLanguageSelection(
             plugin: plugin,
             audio: audio,
-            languageSelection: runtimeLanguageSelection(for: languageSelection, plugin: plugin),
+            languageSelection: runtimeSelection,
             task: task,
             prompt: prompt,
             onProgress: onProgress
@@ -532,13 +549,16 @@ final class ModelManagerService: ObservableObject {
 
         scheduleAutoUnloadIfNeeded()
 
-        return TranscriptionResult(
+        return TranscriptionNormalizationService.normalizeResult(
             text: result.text,
             detectedLanguage: result.detectedLanguage,
+            configuredLanguage: runtimeSelection.requestedLanguage,
             duration: audio.duration,
             processingTime: processingTime,
             engineUsed: providerId,
-            segments: Self.transcriptionSegments(from: result.segments)
+            segments: Self.transcriptionSegments(from: result.segments),
+            task: task,
+            normalizeNumbers: normalizeNumbers
         )
     }
 

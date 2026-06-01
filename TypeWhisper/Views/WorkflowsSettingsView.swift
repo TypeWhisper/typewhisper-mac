@@ -903,6 +903,10 @@ private struct WorkflowEditorPage: View {
                                 Divider()
                             }
 
+                            numberNormalizationSection
+
+                            Divider()
+
                             Toggle(localizedAppText("Press Enter after inserting", de: "Nach dem Einfügen Enter drücken"), isOn: $draft.autoEnter)
                         }
                         .padding(.top, 4)
@@ -1757,6 +1761,23 @@ private struct WorkflowEditorPage: View {
             }
         )
     }
+
+    private var numberNormalizationSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Picker(localizedAppText("Number formatting", de: "Zahlenformatierung"), selection: $draft.numberNormalizationMode) {
+                ForEach(WorkflowNumberNormalizationMode.allCases) { mode in
+                    Text(mode.displayName).tag(mode)
+                }
+            }
+
+            Text(localizedAppText(
+                "Controls whether spoken English and German numbers are converted to digits for this workflow.",
+                de: "Steuert, ob gesprochene englische und deutsche Zahlen in diesem Workflow zu Ziffern werden."
+            ))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+    }
 }
 
 private struct WorkflowTemplateCard: View {
@@ -2141,6 +2162,7 @@ struct WorkflowDraft {
     var customInstruction: String
     var outputFormat: String
     var autoEnter: Bool
+    var numberNormalizationMode: WorkflowNumberNormalizationMode
     var transcriptionEngineId: String?
     var transcriptionModelId: String?
     var microphoneBoostOverride: Bool?
@@ -2173,6 +2195,7 @@ struct WorkflowDraft {
         self.customInstruction = ""
         self.outputFormat = ""
         self.autoEnter = false
+        self.numberNormalizationMode = .inherit
         self.transcriptionEngineId = nil
         self.transcriptionModelId = nil
         self.microphoneBoostOverride = nil
@@ -2204,6 +2227,7 @@ struct WorkflowDraft {
         self.customInstruction = behavior.settings["instruction"] ?? behavior.settings["goal"] ?? behavior.settings["prompt"] ?? ""
         self.outputFormat = output.format ?? ""
         self.autoEnter = output.autoEnter
+        self.numberNormalizationMode = output.numberNormalizationMode
         self.transcriptionEngineId = workflow.template == .dictation ? behavior.transcriptionEngineId : nil
         self.transcriptionModelId = workflow.template == .dictation ? behavior.transcriptionModelId : nil
         self.microphoneBoostOverride = behavior.microphoneBoostOverride
@@ -2551,7 +2575,8 @@ struct WorkflowDraft {
         return WorkflowOutput(
             format: usesLLMProcessing && !trimmedFormat.isEmpty ? trimmedFormat : nil,
             autoEnter: autoEnter,
-            targetActionPluginId: template == .dictation ? nil : targetActionPluginId
+            targetActionPluginId: template == .dictation ? nil : targetActionPluginId,
+            numberNormalizationModeRaw: numberNormalizationMode == .inherit ? nil : numberNormalizationMode.rawValue
         )
     }
 

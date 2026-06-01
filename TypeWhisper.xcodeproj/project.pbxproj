@@ -22,6 +22,10 @@
 		24FFE19AC026C48AE32BCD7E /* DictationPunctuationProfileStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5852D6767C5FA955B84C54 /* DictationPunctuationProfileStoreTests.swift */; };
 		24FFE19AC026C48AE32BCD7F /* PunctuationRulesLoaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5852D6767C5FA955B84C55 /* PunctuationRulesLoaderTests.swift */; };
 		24FFE19AC026C48AE32BCD80 /* PunctuationStrategyResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5852D6767C5FA955B84C56 /* PunctuationStrategyResolverTests.swift */; };
+		71F1DCAA4C8685360B145C0B /* NumberWordNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C5E4923A4F803921C03DEDE /* NumberWordNormalizer.swift */; };
+		B346BF6B189F3E7C6CBA1410 /* TranscriptionNormalizationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 206526FD5E41E23B077E3499 /* TranscriptionNormalizationService.swift */; };
+		540AE1FA22F41A63C78B89EC /* NumberWordNormalizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50756E40757C6BC13C52ED74 /* NumberWordNormalizerTests.swift */; };
+		E8FB3269B522A8923134AD9A /* TranscriptionNormalizationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16CD1A34084E0761A8659612 /* TranscriptionNormalizationServiceTests.swift */; };
 		D4A100000000000000000001 /* RecorderTranscriptionBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4A100000000000000000002 /* RecorderTranscriptionBuffer.swift */; };
 		D4A100000000000000000003 /* RecorderTranscriptionBufferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4A100000000000000000004 /* RecorderTranscriptionBufferTests.swift */; };
 		F0A1B2C3D4E5F60718293A4B /* GeminiPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000141 /* GeminiPlugin.swift */; };
@@ -772,6 +776,8 @@
 		BB00000000000000000254 /* FireworksPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FireworksPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000235 /* AppFormatterService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppFormatterService.swift; sourceTree = "<group>"; };
 		BB00000000000000000236 /* SpeechPunctuationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechPunctuationService.swift; sourceTree = "<group>"; };
+		8C5E4923A4F803921C03DEDE /* NumberWordNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NumberWordNormalizer.swift; sourceTree = "<group>"; };
+		206526FD5E41E23B077E3499 /* TranscriptionNormalizationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionNormalizationService.swift; sourceTree = "<group>"; };
 		D4A100000000000000000002 /* RecorderTranscriptionBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderTranscriptionBuffer.swift; sourceTree = "<group>"; };
 		BB00000000000000000238 /* AudioRecorderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderService.swift; sourceTree = "<group>"; };
 		BB00000000000000000239 /* AudioRecorderViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderViewModel.swift; sourceTree = "<group>"; };
@@ -788,6 +794,8 @@
 		B2D4F6A8C0E2143F9B7D5C1A /* PromptActionTemperaturePersistenceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptActionTemperaturePersistenceTests.swift; sourceTree = "<group>"; };
 		CE5852D6767C5FA955B84C52 /* AppFormatterServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppFormatterServiceTests.swift; sourceTree = "<group>"; };
 		CE5852D6767C5FA955B84C53 /* SpeechPunctuationServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeechPunctuationServiceTests.swift; sourceTree = "<group>"; };
+		50756E40757C6BC13C52ED74 /* NumberWordNormalizerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NumberWordNormalizerTests.swift; sourceTree = "<group>"; };
+		16CD1A34084E0761A8659612 /* TranscriptionNormalizationServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TranscriptionNormalizationServiceTests.swift; sourceTree = "<group>"; };
 		CE5852D6767C5FA955B84C54 /* DictationPunctuationProfileStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictationPunctuationProfileStoreTests.swift; sourceTree = "<group>"; };
 		CE5852D6767C5FA955B84C55 /* PunctuationRulesLoaderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PunctuationRulesLoaderTests.swift; sourceTree = "<group>"; };
 		CE5852D6767C5FA955B84C56 /* PunctuationStrategyResolverTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PunctuationStrategyResolverTests.swift; sourceTree = "<group>"; };
@@ -1418,6 +1426,8 @@
 				BB00000000000000000228 /* MemoryService.swift */,
 				BB00000000000000000235 /* AppFormatterService.swift */,
 				BB00000000000000000236 /* SpeechPunctuationService.swift */,
+				8C5E4923A4F803921C03DEDE /* NumberWordNormalizer.swift */,
+				206526FD5E41E23B077E3499 /* TranscriptionNormalizationService.swift */,
 				BB00000000000000000333 /* DictationPunctuationProfileStore.swift */,
 				BB00000000000000000334 /* PunctuationRulesLoader.swift */,
 				BB00000000000000000335 /* PunctuationStrategyResolver.swift */,
@@ -2083,6 +2093,8 @@
 				3A4B5C6D7E8F901234567891 /* AudioEngineRecoverySupportTests.swift */,
 				CE5852D6767C5FA955B84C52 /* AppFormatterServiceTests.swift */,
 				CE5852D6767C5FA955B84C53 /* SpeechPunctuationServiceTests.swift */,
+				50756E40757C6BC13C52ED74 /* NumberWordNormalizerTests.swift */,
+				16CD1A34084E0761A8659612 /* TranscriptionNormalizationServiceTests.swift */,
 				CE5852D6767C5FA955B84C54 /* DictationPunctuationProfileStoreTests.swift */,
 				CE5852D6767C5FA955B84C55 /* PunctuationRulesLoaderTests.swift */,
 				CE5852D6767C5FA955B84C56 /* PunctuationStrategyResolverTests.swift */,
@@ -3564,6 +3576,8 @@
 				7EC0EFA7DA6597CAEA640448 /* APIRouterAndHandlersTests.swift in Sources */,
 				24FFE19AC026C48AE32BCD7C /* AppFormatterServiceTests.swift in Sources */,
 				24FFE19AC026C48AE32BCD7D /* SpeechPunctuationServiceTests.swift in Sources */,
+				540AE1FA22F41A63C78B89EC /* NumberWordNormalizerTests.swift in Sources */,
+				E8FB3269B522A8923134AD9A /* TranscriptionNormalizationServiceTests.swift in Sources */,
 				24FFE19AC026C48AE32BCD7E /* DictationPunctuationProfileStoreTests.swift in Sources */,
 				24FFE19AC026C48AE32BCD7F /* PunctuationRulesLoaderTests.swift in Sources */,
 				24FFE19AC026C48AE32BCD80 /* PunctuationStrategyResolverTests.swift in Sources */,
@@ -3777,6 +3791,8 @@
 				AA00000000000000000240 /* MemoryService.swift in Sources */,
 				AA00000000000000000247 /* AppFormatterService.swift in Sources */,
 				AA00000000000000000248 /* SpeechPunctuationService.swift in Sources */,
+				71F1DCAA4C8685360B145C0B /* NumberWordNormalizer.swift in Sources */,
+				B346BF6B189F3E7C6CBA1410 /* TranscriptionNormalizationService.swift in Sources */,
 				AA00000000000000000333 /* DictationPunctuationProfileStore.swift in Sources */,
 				AA00000000000000000334 /* PunctuationRulesLoader.swift in Sources */,
 				AA00000000000000000335 /* PunctuationStrategyResolver.swift in Sources */,

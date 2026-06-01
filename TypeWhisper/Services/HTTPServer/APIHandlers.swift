@@ -72,6 +72,7 @@ final class APIHandlers: @unchecked Sendable {
         var engineOverride: String? = nil
         var modelOverride: String? = nil
         var awaitDownload = false
+        var normalizeNumbers: Bool? = nil
     }
 
     private struct LocalFileTranscribeRequest: Decodable {
@@ -84,6 +85,7 @@ final class APIHandlers: @unchecked Sendable {
         let prompt: String?
         let engine: String?
         let model: String?
+        let normalizeNumbers: Bool?
 
         enum CodingKeys: String, CodingKey {
             case path
@@ -95,6 +97,7 @@ final class APIHandlers: @unchecked Sendable {
             case prompt
             case engine
             case model
+            case normalizeNumbers = "normalize_numbers"
         }
     }
 
@@ -167,6 +170,11 @@ final class APIHandlers: @unchecked Sendable {
                !val.isEmpty {
                 options.modelOverride = val
             }
+
+            if let normalizePart = parts.first(where: { $0.name == "normalize_numbers" }),
+               let val = String(data: normalizePart.data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) {
+                options.normalizeNumbers = Self.parseBoolean(val)
+            }
         } else if !request.body.isEmpty {
             audioData = request.body
             fileExtension = extensionFromMIME(contentType)
@@ -193,6 +201,10 @@ final class APIHandlers: @unchecked Sendable {
             if let model = request.headers["x-model"]?.trimmingCharacters(in: .whitespacesAndNewlines),
                !model.isEmpty {
                 options.modelOverride = model
+            }
+            if let normalizeNumbers = request.headers["x-normalize-numbers"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !normalizeNumbers.isEmpty {
+                options.normalizeNumbers = Self.parseBoolean(normalizeNumbers)
             }
         } else {
             return .error(status: 400, message: "No audio data provided")
@@ -248,6 +260,7 @@ final class APIHandlers: @unchecked Sendable {
         options.requestPrompt = payload.prompt?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         options.engineOverride = payload.engine?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         options.modelOverride = payload.model?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        options.normalizeNumbers = payload.normalizeNumbers
 
         do {
             let samples = try await audioFileService.loadAudioSamples(from: fileURL)
@@ -306,7 +319,8 @@ final class APIHandlers: @unchecked Sendable {
                 task: options.task,
                 engineOverrideId: resolvedOverride.engineId,
                 cloudModelOverride: resolvedOverride.modelId,
-                prompt: prompt
+                prompt: prompt,
+                normalizeNumbers: options.normalizeNumbers
             )
 
             var finalText = result.text
@@ -534,6 +548,17 @@ final class APIHandlers: @unchecked Sendable {
             .filter { !$0.isEmpty }
         guard !components.isEmpty else { return nil }
         return components.joined(separator: "\n")
+    }
+
+    private static func parseBoolean(_ value: String) -> Bool? {
+        switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "1", "true", "yes", "on":
+            true
+        case "0", "false", "no", "off":
+            false
+        default:
+            nil
+        }
     }
 
     // MARK: - GET /v1/status

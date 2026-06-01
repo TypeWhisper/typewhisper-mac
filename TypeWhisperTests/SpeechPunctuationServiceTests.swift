@@ -157,4 +157,86 @@ final class SpeechPunctuationServiceTests: XCTestCase {
         XCTAssertEqual(result.text, "ciao [mondo]")
         XCTAssertEqual(result.appliedSteps, ["Speech Punctuation", "Corrections"])
     }
+
+    @MainActor
+    func testPipelineNormalizesNumbersBeforeLaterPostProcessing() async throws {
+        let previousDefault = UserDefaults.standard.object(forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled)
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled)
+        defer {
+            if let previousDefault {
+                UserDefaults.standard.set(previousDefault, forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled)
+            }
+        }
+
+        let appSupportDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: appSupportDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: appSupportDirectory) }
+
+        let pipeline = makePipeline(appSupportDirectory: appSupportDirectory)
+
+        let result = try await pipeline.process(
+            text: "twenty three",
+            context: PostProcessingContext(language: "en"),
+            dictationContext: DictationRuntimeContext(
+                engineId: "mock",
+                modelId: "tiny",
+                configuredLanguage: "en",
+                detectedLanguage: nil
+            )
+        )
+
+        XCTAssertEqual(result.text, "23")
+        XCTAssertEqual(result.appliedSteps, ["Number Normalization"])
+    }
+
+    @MainActor
+    func testPipelineNumberNormalizationOverrideOffWinsOverGlobalOn() async throws {
+        let previousDefault = UserDefaults.standard.object(forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled)
+        UserDefaults.standard.set(true, forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled)
+        defer {
+            if let previousDefault {
+                UserDefaults.standard.set(previousDefault, forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled)
+            }
+        }
+
+        let appSupportDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: appSupportDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: appSupportDirectory) }
+
+        let pipeline = makePipeline(appSupportDirectory: appSupportDirectory)
+
+        let result = try await pipeline.process(
+            text: "twenty three",
+            context: PostProcessingContext(language: "en"),
+            dictationContext: DictationRuntimeContext(
+                engineId: "mock",
+                modelId: "tiny",
+                configuredLanguage: "en",
+                detectedLanguage: nil
+            ),
+            normalizeNumbers: false
+        )
+
+        XCTAssertEqual(result.text, "twenty three")
+        XCTAssertFalse(result.appliedSteps.contains("Number Normalization"))
+    }
+
+    @MainActor
+    private func makePipeline(appSupportDirectory: URL) -> PostProcessingPipeline {
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        let profileStore = DictationPunctuationProfileStore(defaults: UserDefaults(suiteName: #function)!, storageKey: #function)
+        return PostProcessingPipeline(
+            snippetService: SnippetService(),
+            dictionaryService: DictionaryService(appSupportDirectory: appSupportDirectory),
+            appFormatterService: nil,
+            speechPunctuationService: SpeechPunctuationService(rulesLoader: makeRulesLoader()),
+            punctuationStrategyResolver: PunctuationStrategyResolver(profileStore: profileStore)
+        )
+    }
 }

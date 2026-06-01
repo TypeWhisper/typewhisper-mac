@@ -330,15 +330,50 @@ struct WorkflowOutput: Codable, Equatable, Sendable {
     var format: String?
     var autoEnter: Bool
     var targetActionPluginId: String?
+    var numberNormalizationModeRaw: String?
 
     init(
         format: String? = nil,
         autoEnter: Bool = false,
-        targetActionPluginId: String? = nil
+        targetActionPluginId: String? = nil,
+        numberNormalizationModeRaw: String? = nil
     ) {
         self.format = format
         self.autoEnter = autoEnter
         self.targetActionPluginId = targetActionPluginId
+        self.numberNormalizationModeRaw = numberNormalizationModeRaw
+    }
+
+    var numberNormalizationMode: WorkflowNumberNormalizationMode {
+        get { WorkflowNumberNormalizationMode(rawValue: numberNormalizationModeRaw ?? "") ?? .inherit }
+        set { numberNormalizationModeRaw = newValue == .inherit ? nil : newValue.rawValue }
+    }
+}
+
+enum WorkflowNumberNormalizationMode: String, CaseIterable, Identifiable, Codable, Sendable {
+    case inherit
+    case enabled
+    case disabled
+
+    var id: String { rawValue }
+
+    var overrideValue: Bool? {
+        switch self {
+        case .inherit: nil
+        case .enabled: true
+        case .disabled: false
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .inherit:
+            localizedAppText("Use Global Default", de: "Globalen Standard verwenden")
+        case .enabled:
+            localizedAppText("On", de: "An")
+        case .disabled:
+            localizedAppText("Off", de: "Aus")
+        }
     }
 }
 
