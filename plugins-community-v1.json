@@ -1706,35 +1706,6 @@
           "downloadCount": 22
         }
       ]
-    },
-    {
-      "id": "com.typewhisper.sensevoice",
-      "name": "SenseVoice (Experimental)",
-      "author": "TypeWhisper",
-      "description": "Experimental local speech-to-text powered by SenseVoice Small through Sherpa-ONNX. Supports zh, en, ja, ko, and yue.",
-      "category": "transcription",
-      "downloadCount": 5,
-      "descriptions": {
-        "de": "Experimentelle lokale Spracherkennung mit SenseVoice Small via Sherpa-ONNX. Unterst\u00fctzt zh, en, ja, ko und yue."
-      },
-      "iconSystemName": "waveform.badge.magnifyingglass",
-      "requiresAPIKey": false,
-      "hosting": "local",
-      "detailsURL": "https://github.com/FunAudioLLM/SenseVoice",
-      "releases": [
-        {
-          "version": "0.1.0",
-          "minHostVersion": "1.4.0",
-          "sdkCompatibilityVersion": "v1",
-          "size": 10422534,
-          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-sensevoice-v0.1.0/SenseVoicePlugin.zip",
-          "minOSVersion": "14.0",
-          "supportedArchitectures": [
-            "arm64"
-          ],
-          "downloadCount": 5
-        }
-      ]
     }
   ]
 }
