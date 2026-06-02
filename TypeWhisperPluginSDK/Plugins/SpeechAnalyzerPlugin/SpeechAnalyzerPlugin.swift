@@ -361,7 +361,8 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Tran
             return
         }
 
-        if let savedId = host?.userDefault(forKey: "loadedModel") as? String,
+        if normalizedLanguage == nil,
+           let savedId = host?.userDefault(forKey: "loadedModel") as? String,
            let modelDef = cachedModels.first(where: { $0.id == savedId }) {
             await loadModel(modelDef)
             return

@@ -34,12 +34,19 @@ public enum AppleSpeechModelSelection {
         }
 
         if let languageCode {
-            let languageModelId = "\(modelIdPrefix)\(languageCode)"
+            for modelId in localeModelIds(for: languageCode) {
+                if modelIds.contains(modelId) {
+                    return modelId
+                }
+            }
+
+            let normalizedLanguageCode = normalizedLanguageCode(for: languageCode)
+            let languageModelId = "\(modelIdPrefix)\(normalizedLanguageCode)"
             if modelIds.contains(languageModelId) {
                 return languageModelId
             }
 
-            if let match = modelIds.first(where: { modelLanguageCode(for: $0) == languageCode }) {
+            if let match = modelIds.first(where: { modelLanguageCode(for: $0) == normalizedLanguageCode }) {
                 return match
             }
         }
@@ -60,6 +67,15 @@ public enum AppleSpeechModelSelection {
             localeIdentifier.replacingOccurrences(of: "_", with: "-")
         ])
         .map { "\(modelIdPrefix)\($0)" }
+    }
+
+    private static func normalizedLanguageCode(for localeIdentifier: String) -> String {
+        Locale(identifier: localeIdentifier).language.languageCode?.identifier
+            ?? localeIdentifier.split(whereSeparator: { $0 == "-" || $0 == "_" })
+                .first
+                .map(String.init)?
+                .lowercased()
+            ?? localeIdentifier.lowercased()
     }
 
     private static func uniqueModelIds(_ values: [String]) -> [String] {

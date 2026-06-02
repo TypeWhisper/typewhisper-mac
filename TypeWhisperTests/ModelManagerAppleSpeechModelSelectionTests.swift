@@ -69,6 +69,33 @@ final class ModelManagerAppleSpeechModelSelectionTests: XCTestCase {
         XCTAssertEqual(plugin.selectedModelId, "speechanalyzer-de_DE")
     }
 
+    func testExactUnsupportedLanguageDoesNotUseConfiguredAppleSpeechModel() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockAppleSpeechTranscriptionPlugin()
+        plugin.selectModel("speechanalyzer-en_US")
+        let modelManager = installAppleSpeechPlugin(plugin, appSupportDirectory: appSupportDirectory)
+
+        do {
+            _ = try await modelManager.transcribe(
+                audioSamples: [Float](repeating: 0, count: 16_000),
+                languageSelection: .exact("it"),
+                task: .transcribe
+            )
+            XCTFail("Expected unsupported explicit Apple Speech language to fail")
+        } catch {
+            XCTAssertEqual(
+                error.localizedDescription,
+                TranscriptionEngineError.appleSpeechModelNotLoaded.localizedDescription
+            )
+        }
+
+        XCTAssertEqual(plugin.requestedLanguagePreparations, [])
+        XCTAssertEqual(plugin.selectedModelId, "speechanalyzer-en_US")
+        XCTAssertEqual(plugin.transcribedModelIds, [])
+    }
+
     func testManualModelOverrideTakesPrecedenceAndRestoresPreviousSelection() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -183,7 +210,7 @@ private final class MockAppleSpeechTranscriptionPlugin: NSObject, TranscriptionM
     func deactivate() {}
 
     func selectModel(_ modelId: String) {
-        currentModelId = modelId
+        currentModelId = availableModels.contains { $0.id == modelId } ? modelId : nil
     }
 
     @objc func triggerRestoreModel() {

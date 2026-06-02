@@ -41,6 +41,20 @@ final class AppleSpeechModelSelectionTests: XCTestCase {
         XCTAssertEqual(modelId, "speechanalyzer-de_CH")
     }
 
+    func testUsesPrimaryLanguageFallbackForLocaleLanguageCode() {
+        let modelId = AppleSpeechModelSelection.preferredModelId(
+            fromModelIds: [
+                "speechanalyzer-en_US",
+                "speechanalyzer-de_CH"
+            ],
+            localeIdentifier: "de-DE",
+            languageCode: "de-DE",
+            fallbackToFirst: false
+        )
+
+        XCTAssertEqual(modelId, "speechanalyzer-de_CH")
+    }
+
     func testReturnsNilForEmptyModelCatalog() {
         let modelId = AppleSpeechModelSelection.preferredModelId(
             fromModelIds: [],

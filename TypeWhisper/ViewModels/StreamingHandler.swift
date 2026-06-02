@@ -204,7 +204,7 @@ final class StreamingHandler: @unchecked Sendable {
             return result
         } catch {
             logger.warning("Finalizing live transcription failed: \(error.localizedDescription)")
-            await handle.session.cancel()
+            await modelManager.cancelLiveTranscriptionSession(handle)
             clearStreamingState(notifyStreamingStopped: true)
             return nil
         }
@@ -221,8 +221,9 @@ final class StreamingHandler: @unchecked Sendable {
             return handle
         }
         if let handle {
+            let modelManager = self.modelManager
             Task {
-                await handle.session.cancel()
+                await modelManager.cancelLiveTranscriptionSession(handle)
             }
         }
 

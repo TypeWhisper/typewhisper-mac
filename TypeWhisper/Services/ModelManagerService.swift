@@ -41,6 +41,8 @@ final class ModelManagerService: ObservableObject {
     struct LiveTranscriptionSessionHandle: Sendable {
         let providerId: String
         let session: any LiveTranscriptionSession
+        fileprivate let cloudModelOverridePlugin: (any TranscriptionEnginePlugin)?
+        fileprivate let cloudModelOverrideRestoreId: String?
     }
 
     private final class AutoUnloadTarget {
@@ -294,6 +296,11 @@ final class ModelManagerService: ObservableObject {
         plugin.selectModel(previousId)
     }
 
+    private func restoreCloudModelOverride(for handle: LiveTranscriptionSessionHandle) {
+        guard let plugin = handle.cloudModelOverridePlugin else { return }
+        restoreCloudModelOverride(plugin: plugin, previousId: handle.cloudModelOverrideRestoreId)
+    }
+
     nonisolated private static func makeAudioData(from audioSamples: [Float]) async -> AudioData {
         let wavData = await Task.detached(priority: .userInitiated) {
             WavEncoder.encode(audioSamples)
@@ -346,39 +353,56 @@ final class ModelManagerService: ObservableObject {
         }
 
         let runtimeSelection = runtimeLanguageSelection(for: languageSelection, plugin: plugin)
-        let overrideRestoreId = await prepareEngineForTranscription(
+        let preparationLanguage = preparationRequestedLanguage(
+            for: languageSelection,
+            runtimeSelection: runtimeSelection,
+            plugin: plugin
+        )
+        let overrideRestoreId = try await prepareEngineForTranscription(
             plugin,
-            languageSelection: runtimeSelection,
+            requestedLanguage: preparationLanguage,
             cloudModelOverride: cloudModelOverride
         )
-        defer { restoreCloudModelOverride(plugin: plugin, previousId: overrideRestoreId) }
 
         guard plugin.isConfigured else {
+            restoreCloudModelOverride(plugin: plugin, previousId: overrideRestoreId)
             throw modelNotLoadedError(for: plugin)
         }
 
         guard let livePlugin = plugin as? LiveTranscriptionCapablePlugin else {
+            restoreCloudModelOverride(plugin: plugin, previousId: overrideRestoreId)
             return nil
         }
 
         let session: any LiveTranscriptionSession
-        if !runtimeSelection.languageHints.isEmpty,
-           let hintPlugin = livePlugin as? LiveLanguageHintTranscriptionCapablePlugin {
-            session = try await hintPlugin.createLiveTranscriptionSession(
-                languageSelection: runtimeSelection,
-                translate: task == .translate,
-                prompt: prompt,
-                onProgress: onProgress
-            )
-        } else {
-            session = try await livePlugin.createLiveTranscriptionSession(
-                language: runtimeSelection.requestedLanguage,
-                translate: task == .translate,
-                prompt: prompt,
-                onProgress: onProgress
-            )
+        do {
+            if !runtimeSelection.languageHints.isEmpty,
+               let hintPlugin = livePlugin as? LiveLanguageHintTranscriptionCapablePlugin {
+                session = try await hintPlugin.createLiveTranscriptionSession(
+                    languageSelection: runtimeSelection,
+                    translate: task == .translate,
+                    prompt: prompt,
+                    onProgress: onProgress
+                )
+            } else {
+                session = try await livePlugin.createLiveTranscriptionSession(
+                    language: runtimeSelection.requestedLanguage,
+                    translate: task == .translate,
+                    prompt: prompt,
+                    onProgress: onProgress
+                )
+            }
+        } catch {
+            restoreCloudModelOverride(plugin: plugin, previousId: overrideRestoreId)
+            throw error
         }
-        return LiveTranscriptionSessionHandle(providerId: providerId, session: session)
+
+        return LiveTranscriptionSessionHandle(
+            providerId: providerId,
+            session: session,
+            cloudModelOverridePlugin: overrideRestoreId == nil ? nil : plugin,
+            cloudModelOverrideRestoreId: overrideRestoreId
+        )
     }
 
     func finishLiveTranscriptionSession(
@@ -390,6 +414,8 @@ final class ModelManagerService: ObservableObject {
         normalizeNumbers: Bool? = nil
     ) async throws -> TranscriptionResult {
         let startTime = CFAbsoluteTimeGetCurrent()
+        defer { restoreCloudModelOverride(for: handle) }
+
         let result = try await handle.session.finish()
         let processingTime = CFAbsoluteTimeGetCurrent() - startTime
 
@@ -407,6 +433,11 @@ final class ModelManagerService: ObservableObject {
             task: task,
             normalizeNumbers: normalizeNumbers
         )
+    }
+
+    func cancelLiveTranscriptionSession(_ handle: LiveTranscriptionSessionHandle) async {
+        await handle.session.cancel()
+        restoreCloudModelOverride(for: handle)
     }
 
     func transcribe(
@@ -452,9 +483,14 @@ final class ModelManagerService: ObservableObject {
         }
 
         let runtimeSelection = runtimeLanguageSelection(for: languageSelection, plugin: plugin)
-        let overrideRestoreId = await prepareEngineForTranscription(
+        let preparationLanguage = preparationRequestedLanguage(
+            for: languageSelection,
+            runtimeSelection: runtimeSelection,
+            plugin: plugin
+        )
+        let overrideRestoreId = try await prepareEngineForTranscription(
             plugin,
-            languageSelection: runtimeSelection,
+            requestedLanguage: preparationLanguage,
             cloudModelOverride: cloudModelOverride
         )
         defer { restoreCloudModelOverride(plugin: plugin, previousId: overrideRestoreId) }
@@ -542,9 +578,14 @@ final class ModelManagerService: ObservableObject {
         }
 
         let runtimeSelection = runtimeLanguageSelection(for: languageSelection, plugin: plugin)
-        let overrideRestoreId = await prepareEngineForTranscription(
+        let preparationLanguage = preparationRequestedLanguage(
+            for: languageSelection,
+            runtimeSelection: runtimeSelection,
+            plugin: plugin
+        )
+        let overrideRestoreId = try await prepareEngineForTranscription(
             plugin,
-            languageSelection: runtimeSelection,
+            requestedLanguage: preparationLanguage,
             cloudModelOverride: cloudModelOverride
         )
         defer { restoreCloudModelOverride(plugin: plugin, previousId: overrideRestoreId) }
@@ -658,6 +699,17 @@ final class ModelManagerService: ObservableObject {
         case .inheritGlobal, .auto:
             return PluginLanguageSelection()
         }
+    }
+
+    private func preparationRequestedLanguage(
+        for languageSelection: LanguageSelection,
+        runtimeSelection: PluginLanguageSelection,
+        plugin: TranscriptionEnginePlugin
+    ) -> String? {
+        guard plugin.providerId == AppleSpeechModelSelection.providerId else {
+            return runtimeSelection.requestedLanguage
+        }
+        return languageSelection.requestedLanguage ?? runtimeSelection.requestedLanguage
     }
 
     private func normalizationLanguageCandidates(
@@ -810,21 +862,24 @@ final class ModelManagerService: ObservableObject {
 
     private func prepareEngineForTranscription(
         _ plugin: TranscriptionEnginePlugin,
-        languageSelection: PluginLanguageSelection,
+        requestedLanguage: String?,
         cloudModelOverride: String?
-    ) async -> String? {
+    ) async throws -> String? {
         let overrideRestoreId = applyCloudModelOverride(plugin: plugin, override: cloudModelOverride)
 
         if let cloudModelOverride {
-            await waitForPluginConfigured(plugin, selectedModelId: cloudModelOverride)
+            _ = await waitForPluginConfigured(plugin, selectedModelId: cloudModelOverride)
             return overrideRestoreId
         }
 
         if plugin.providerId == AppleSpeechModelSelection.providerId {
-            await triggerAppleSpeechModelPreparation(
+            let prepared = await triggerAppleSpeechModelPreparation(
                 plugin,
-                requestedLanguage: languageSelection.requestedLanguage
+                requestedLanguage: requestedLanguage
             )
+            guard prepared else {
+                throw modelNotLoadedError(for: plugin)
+            }
         } else if !plugin.isConfigured {
             await triggerRestoreModel(plugin)
         }
@@ -841,7 +896,7 @@ final class ModelManagerService: ObservableObject {
     private func triggerAppleSpeechModelPreparation(
         _ plugin: TranscriptionEnginePlugin,
         requestedLanguage: String?
-    ) async {
+    ) async -> Bool {
         let expectedModelId = requestedLanguage.flatMap {
             AppleSpeechModelSelection.preferredModelId(
                 from: plugin.modelCatalog,
@@ -851,8 +906,13 @@ final class ModelManagerService: ObservableObject {
             )
         }
 
+        if requestedLanguage != nil, expectedModelId == nil, !plugin.modelCatalog.isEmpty {
+            return false
+        }
+
         guard let nsPlugin = plugin as? NSObject else {
-            return
+            return plugin.isConfigured
+                && expectedModelId.map { plugin.selectedModelId == $0 } != false
         }
 
         let languageSelector = NSSelectorFromString("triggerRestoreModelForLanguage:")
@@ -866,7 +926,11 @@ final class ModelManagerService: ObservableObject {
             }
         }
 
-        await waitForPluginConfigured(plugin, selectedModelId: expectedModelId)
+        return await waitForPluginConfigured(
+            plugin,
+            selectedModelId: expectedModelId,
+            stopOnMismatchedSelection: expectedModelId != nil
+        )
     }
 
     /// Trigger model restore via ObjC dispatch (avoids Swift protocol witness table issues
@@ -875,18 +939,22 @@ final class ModelManagerService: ObservableObject {
         guard let nsPlugin = plugin as? NSObject,
               nsPlugin.responds(to: NSSelectorFromString("triggerRestoreModel")) else { return }
         _ = nsPlugin.perform(NSSelectorFromString("triggerRestoreModel"))
-        await waitForPluginConfigured(plugin)
+        _ = await waitForPluginConfigured(plugin)
     }
 
     private func waitForPluginConfigured(
         _ plugin: TranscriptionEnginePlugin,
-        selectedModelId: String? = nil
-    ) async {
+        selectedModelId: String? = nil,
+        stopOnMismatchedSelection: Bool = false
+    ) async -> Bool {
         for _ in 0..<300 {
             try? await Task.sleep(for: .milliseconds(100))
             guard plugin.isConfigured else { continue }
-            guard let selectedModelId else { return }
-            if plugin.selectedModelId == selectedModelId { return }
+            guard let selectedModelId else { return true }
+            let currentModelId = plugin.selectedModelId
+            if currentModelId == selectedModelId { return true }
+            if stopOnMismatchedSelection, currentModelId != nil { return false }
         }
+        return false
     }
 }
