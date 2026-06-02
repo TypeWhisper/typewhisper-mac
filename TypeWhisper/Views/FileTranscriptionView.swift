@@ -90,7 +90,7 @@ struct FileTranscriptionView: View {
                         ForEach(watchFolder.availableEngines, id: \.providerId) { engine in
                             HStack {
                                 Text(engine.providerDisplayName)
-                                if !engine.isConfigured {
+                                if !watchFolder.canPrepareForTranscription(engine) {
                                     Text("(\(String(localized: "not ready")))")
                                         .foregroundStyle(.secondary)
                                 }
@@ -509,6 +509,9 @@ struct FileTranscriptionView: View {
         HStack {
             Text(engine.providerDisplayName)
             if !viewModel.canUseForTranscription(engine) {
+                Text("(\(String(localized: "not ready")))")
+                    .foregroundStyle(.secondary)
+            } else if !viewModel.canPrepareForTranscription(engine) {
                 Text("(\(String(localized: "not ready")))")
                     .foregroundStyle(.secondary)
             }

@@ -1624,57 +1624,19 @@ enum SetupWizardEngineSelection {
 }
 
 enum SetupWizardAppleSpeechFallback {
-    static let providerId = "speechAnalyzer"
-    static let manifestId = "com.typewhisper.speechanalyzer"
+    static let providerId = AppleSpeechModelSelection.providerId
+    static let manifestId = AppleSpeechModelSelection.manifestId
 
     static func preferredModelId(
         from models: [PluginModelInfo],
         localeIdentifier: String = Locale.current.identifier,
         languageCode: String? = Locale.current.language.languageCode?.identifier
     ) -> String? {
-        guard !models.isEmpty else { return nil }
-
-        for modelId in localeModelIds(for: localeIdentifier) {
-            if models.contains(where: { $0.id == modelId }) {
-                return modelId
-            }
-        }
-
-        if let languageCode {
-            let languageModelId = "speechanalyzer-\(languageCode)"
-            if models.contains(where: { $0.id == languageModelId }) {
-                return languageModelId
-            }
-
-            if let match = models.first(where: { modelLanguageCode(for: $0.id) == languageCode }) {
-                return match.id
-            }
-        }
-
-        return models.first?.id
-    }
-
-    private static func localeModelIds(for localeIdentifier: String) -> [String] {
-        uniqueModelIds([
-            localeIdentifier,
-            localeIdentifier.replacingOccurrences(of: "-", with: "_"),
-            localeIdentifier.replacingOccurrences(of: "_", with: "-")
-        ])
-        .map { "speechanalyzer-\($0)" }
-    }
-
-    private static func modelLanguageCode(for modelId: String) -> String? {
-        let prefix = "speechanalyzer-"
-        guard modelId.hasPrefix(prefix) else { return nil }
-        let localeIdentifier = String(modelId.dropFirst(prefix.count))
-        return Locale(identifier: localeIdentifier).language.languageCode?.identifier
-    }
-
-    private static func uniqueModelIds(_ values: [String]) -> [String] {
-        values.reduce(into: []) { result, value in
-            guard !value.isEmpty, !result.contains(value) else { return }
-            result.append(value)
-        }
+        AppleSpeechModelSelection.preferredModelId(
+            from: models,
+            localeIdentifier: localeIdentifier,
+            languageCode: languageCode
+        )
     }
 }
 

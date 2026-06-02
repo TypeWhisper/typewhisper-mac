@@ -108,6 +108,10 @@ final class WatchFolderViewModel: ObservableObject {
             .store(in: &cancellables)
     }
 
+    func canPrepareForTranscription(_ engine: TranscriptionEnginePlugin) -> Bool {
+        modelManager.canPrepareForTranscription(engine)
+    }
+
     func selectWatchFolder() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true

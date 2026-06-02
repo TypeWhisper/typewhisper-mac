@@ -170,6 +170,10 @@ final class FileTranscriptionViewModel: ObservableObject {
         modelManager.canUseForTranscription(engine)
     }
 
+    func canPrepareForTranscription(_ engine: TranscriptionEnginePlugin) -> Bool {
+        modelManager.canPrepareForTranscription(engine)
+    }
+
     func addFiles(_ urls: [URL]) {
         let validExtensions = AudioFileService.supportedExtensions
         let existingURLs = Set(files.map(\.url))
@@ -315,8 +319,7 @@ final class FileTranscriptionViewModel: ObservableObject {
         }
 
         guard let engine = resolvedEngine else { return false }
-        guard modelManager.canUseForTranscription(engine) else { return false }
-        return engine.isConfigured
+        return modelManager.canPrepareForTranscription(engine)
     }
 
     private func reconcileSelectionWithAvailablePlugins() {

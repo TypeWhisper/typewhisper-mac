@@ -1,9 +1,50 @@
 import Foundation
 import XCTest
+import TypeWhisperPluginSDK
 @testable import TypeWhisper
 
 @MainActor
 final class FileTranscriptionViewModelTests: XCTestCase {
+    func testFileTranscriptionCanStartWithPrepareableAppleSpeechCatalog() async throws {
+        let previousPluginManager = PluginManager.shared
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer {
+            PluginManager.shared = previousPluginManager
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        let plugin = FileTranscriptionAppleSpeechCatalogPlugin()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: AppleSpeechModelSelection.manifestId,
+                    name: "Apple Speech",
+                    version: "1.0.0",
+                    principalClass: "FileTranscriptionAppleSpeechCatalogPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let defaults = try makeDefaults()
+        let fileURL = makeTemporaryFile(named: "apple-speech-first-use.wav")
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            defaults: defaults
+        )
+
+        viewModel.addFiles([fileURL])
+        viewModel.selectedEngine = AppleSpeechModelSelection.providerId
+
+        XCTAssertFalse(plugin.isConfigured)
+        XCTAssertTrue(viewModel.canTranscribe)
+    }
+
     func testTranscribeAllUsesFileTranscriptionEngineAndModelOverrides() async throws {
         let defaults = try makeDefaults()
         let fileURL = makeTemporaryFile(named: "last-dictation-recovery.wav")
@@ -219,5 +260,35 @@ final class FileTranscriptionViewModelTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(20))
         }
         XCTFail("Recovery transcription was not saved to history")
+    }
+}
+
+private final class FileTranscriptionAppleSpeechCatalogPlugin: NSObject, TranscriptionModelCatalogProviding, @unchecked Sendable {
+    static let pluginId = AppleSpeechModelSelection.manifestId
+    static let pluginName = "Apple Speech"
+
+    var providerId: String { AppleSpeechModelSelection.providerId }
+    var providerDisplayName: String { "Apple Speech" }
+    var isConfigured: Bool { false }
+    var transcriptionModels: [PluginModelInfo] { [] }
+    var availableModels: [PluginModelInfo] {
+        [PluginModelInfo(id: "speechanalyzer-en_US", displayName: "English")]
+    }
+    var selectedModelId: String? { nil }
+    var supportsTranslation: Bool { false }
+    var supportsStreaming: Bool { false }
+    var supportedLanguages: [String] { ["en"] }
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+    func selectModel(_ modelId: String) {}
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        throw PluginTranscriptionError.notConfigured
     }
 }
