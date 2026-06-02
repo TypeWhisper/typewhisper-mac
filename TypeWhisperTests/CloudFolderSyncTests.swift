@@ -2,6 +2,9 @@ import XCTest
 @testable import TypeWhisper
 
 @MainActor
+// @unchecked Sendable is safe here because @MainActor serializes all access in tests,
+// so there are no concurrent cross-thread mutations. Revisit this if the store
+// gains nonisolated mutable state or loses MainActor isolation.
 private final class InMemoryUserDataSyncStore: UserDataSyncStore, @unchecked Sendable {
     var dictionaryEntries: [UserDataSyncDictionaryEntry]
     var snippets: [UserDataSyncSnippet]
@@ -139,6 +142,80 @@ final class CloudFolderSyncTests: XCTestCase {
         } catch CloudFolderSyncError.notEntitled {
             XCTAssertFalse(FileManager.default.fileExists(atPath: CloudFolderSyncEngine.packageURL(for: folder).path))
         }
+    }
+
+    @MainActor
+    func testExportCollapsesDuplicateNaturalKeysToNewestRecord() {
+        let older = Self.snippet(trigger: ";SIG", replacement: "Old", updatedAt: Self.date(10))
+        let newer = Self.snippet(trigger: ";sig", replacement: "New", updatedAt: Self.date(20))
+
+        let records = CloudFolderSyncEngine.records(
+            from: UserDataSyncSnapshot(snippets: [older, newer])
+        )
+
+        let itemID = UserDataSyncIdentity.snippetItemID(trigger: ";sig")
+        XCTAssertEqual(records.count, 1)
+        XCTAssertEqual(records[itemID]?.snippet?.replacement, "New")
+    }
+
+    @MainActor
+    func testOperationEncodingPreservesFractionalSeconds() async throws {
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncFractional")
+        defer { TestSupport.remove(folder) }
+
+        let updatedAt = Date(timeIntervalSince1970: 1_700_000_010.456)
+        let deviceAStore = InMemoryUserDataSyncStore(dictionaryEntries: [
+            Self.dictionaryEntry(original: "TypeWhisper", updatedAt: updatedAt)
+        ])
+        let deviceBStore = InMemoryUserDataSyncStore()
+        var deviceAState = CloudFolderSyncState(deviceId: "mac-a")
+        var deviceBState = CloudFolderSyncState(deviceId: "mac-b")
+
+        _ = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: deviceAStore,
+            state: &deviceAState,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(20)
+        )
+        let operationFile = try XCTUnwrap(Self.operationFiles(folder: folder, deviceId: "mac-a").first)
+        let operationJSON = try String(contentsOf: operationFile, encoding: .utf8)
+        XCTAssertTrue(operationJSON.contains(".456"))
+
+        _ = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: deviceBStore,
+            state: &deviceBState,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(30)
+        )
+
+        let syncedUpdatedAt = try XCTUnwrap(deviceBStore.dictionaryEntries.first?.updatedAt)
+        XCTAssertEqual(syncedUpdatedAt.timeIntervalSince1970, updatedAt.timeIntervalSince1970, accuracy: 0.001)
+    }
+
+    @MainActor
+    func testMalformedOperationFileIsSkipped() async throws {
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncMalformed")
+        defer { TestSupport.remove(folder) }
+
+        let remoteDirectory = CloudFolderSyncEngine.packageURL(for: folder)
+            .appendingPathComponent("ops/remote-device", isDirectory: true)
+        try FileManager.default.createDirectory(at: remoteDirectory, withIntermediateDirectories: true)
+        try Data("not-json".utf8).write(to: remoteDirectory.appendingPathComponent("bad.json"))
+
+        let store = InMemoryUserDataSyncStore()
+        var state = CloudFolderSyncState(deviceId: "mac-a")
+
+        let result = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: store,
+            state: &state,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(20)
+        )
+
+        XCTAssertEqual(result.mutationsApplied, 0)
     }
 
     @MainActor
@@ -310,6 +387,39 @@ final class CloudFolderSyncTests: XCTestCase {
 
         let winner = CloudFolderSyncEngine.winningOperations(from: [older, newer, sameTimeHigherDevice]).values.first
         XCTAssertEqual(winner?.operationId, "tie")
+    }
+
+    @MainActor
+    func testHostStoreSnapshotsObserversBeforeNotifying() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncObservers")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
+        let snippetService = SnippetService(appSupportDirectory: appSupportDirectory)
+        let store = TypeWhisperUserDataSyncStore(
+            dictionaryService: dictionaryService,
+            snippetService: snippetService
+        )
+
+        var firstObserverID: UUID?
+        var firstCalls = 0
+        var secondCalls = 0
+
+        firstObserverID = store.observeLocalChanges {
+            firstCalls += 1
+            if let firstObserverID {
+                store.removeLocalChangeObserver(firstObserverID)
+            }
+        }
+        store.observeLocalChanges {
+            secondCalls += 1
+        }
+
+        dictionaryService.addEntry(type: .term, original: "First")
+        dictionaryService.addEntry(type: .term, original: "Second")
+
+        XCTAssertEqual(firstCalls, 1)
+        XCTAssertEqual(secondCalls, 2)
     }
 
     @MainActor

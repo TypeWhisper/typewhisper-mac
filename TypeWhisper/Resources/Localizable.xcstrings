@@ -9017,7 +9017,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Commercial-Lizenz kaufen"
+            "value" : "Kommerzielle Lizenz kaufen"
           }
         }
       }
@@ -9077,7 +9077,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cloud-Ordner-Sync ist mit einer Commercial-Lizenz verfügbar. Synchronisiere Wörterbücher und Snippets über dein eigenes iCloud Drive, Dropbox, OneDrive, Syncthing oder einen benutzerdefinierten Ordner."
+            "value" : "Cloud-Ordner-Sync ist mit einer kommerziellen Lizenz verfügbar. Synchronisiere Wörterbücher und Snippets über dein eigenes iCloud Drive, Dropbox, OneDrive, Syncthing oder einen benutzerdefinierten Ordner."
           }
         }
       }
@@ -9087,7 +9087,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cloud-Ordner-Sync erfordert eine aktive Commercial-Lizenz."
+            "value" : "Cloud-Ordner-Sync erfordert eine aktive kommerzielle Lizenz."
           }
         }
       }
@@ -9097,7 +9097,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Commercial-Lizenz aktiv"
+            "value" : "Kommerzielle Lizenz aktiv"
           }
         }
       }
@@ -9107,7 +9107,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Commercial-Lizenz erforderlich"
+            "value" : "Kommerzielle Lizenz erforderlich"
           }
         }
       }
@@ -9197,7 +9197,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Supporter-Status ist aktiv. Premium-Features erfordern eine Commercial-Lizenz."
+            "value" : "Supporter-Status ist aktiv. Premium-Features erfordern eine kommerzielle Lizenz."
           }
         }
       }
@@ -9215,9 +9215,39 @@
     "Synced %lld changes." : {
       "localizations" : {
         "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld Änderungen synchronisiert."
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "1 Änderung synchronisiert."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Änderungen synchronisiert."
+                }
+              }
+            }
+          }
+        },
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Synced 1 change."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Synced %lld changes."
+                }
+              }
+            }
           }
         }
       }
@@ -9227,7 +9257,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Synchronisiert"
+            "value" : "Wird synchronisiert"
           }
         }
       }

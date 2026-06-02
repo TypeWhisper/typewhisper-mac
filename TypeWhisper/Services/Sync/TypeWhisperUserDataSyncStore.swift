@@ -67,7 +67,8 @@ final class TypeWhisperUserDataSyncStore: UserDataSyncStore, @unchecked Sendable
 
     private func notifyLocalChange() {
         guard !isApplyingRemoteChanges else { return }
-        for handler in observers.values {
+        let handlers = Array(observers.values)
+        for handler in handlers {
             handler()
         }
     }

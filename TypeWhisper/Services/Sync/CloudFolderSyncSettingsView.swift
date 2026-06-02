@@ -75,8 +75,10 @@ final class CloudFolderSyncController: ObservableObject {
     }
 
     func clearFolder() {
+        scheduledSyncTask?.cancel()
         selectedFolderURL = nil
         provider = .custom
+        resetSyncState()
         removeDefault(forKey: Keys.folderBookmark, legacyKey: Keys.legacyFolderBookmark)
         pendingChanges = 0
         statusMessage = nil
@@ -116,13 +118,23 @@ final class CloudFolderSyncController: ObservableObject {
             saveState()
             lastSyncDate = result.syncedAt
             pendingChanges = 0
-            statusMessage = String(localized: "Synced \(result.operationsRead) changes.")
+            statusMessage = String.localizedStringWithFormat(
+                String(localized: "Synced %lld changes."),
+                Int64(result.operationsRead)
+            )
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
     private func setFolder(_ url: URL) {
+        if selectedFolderURL != url {
+            scheduledSyncTask?.cancel()
+            resetSyncState()
+            pendingChanges = 0
+            statusMessage = nil
+            errorMessage = nil
+        }
         selectedFolderURL = url
         provider = CloudFolderSyncProvider.detect(folderURL: url)
         do {
@@ -166,9 +178,22 @@ final class CloudFolderSyncController: ObservableObject {
         pendingChanges += 1
         scheduledSyncTask?.cancel()
         scheduledSyncTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(2))
-            await self?.syncNow()
+            do {
+                try await Task.sleep(for: .seconds(2))
+                try Task.checkCancellation()
+                await self?.syncNow()
+            } catch is CancellationError {
+                return
+            } catch {
+                return
+            }
         }
+    }
+
+    private func resetSyncState() {
+        state = CloudFolderSyncState()
+        lastSyncDate = nil
+        removeDefault(forKey: Keys.syncState, legacyKey: Keys.legacySyncState)
     }
 
     private func saveState() {

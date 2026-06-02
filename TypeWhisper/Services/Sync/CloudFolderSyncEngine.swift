@@ -244,27 +244,84 @@ enum CloudFolderSyncEngine {
         var records: [String: CloudFolderSyncRecord] = [:]
         for entry in snapshot.dictionaryEntries {
             let itemID = UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original)
-            records[itemID] = CloudFolderSyncRecord(
-                collection: .dictionary,
-                itemID: itemID,
-                updatedAt: entry.updatedAt,
-                version: versionString(for: entry.updatedAt),
-                dictionary: entry,
-                snippet: nil
+            merge(
+                CloudFolderSyncRecord(
+                    collection: .dictionary,
+                    itemID: itemID,
+                    updatedAt: entry.updatedAt,
+                    version: versionString(for: entry.updatedAt),
+                    dictionary: entry,
+                    snippet: nil
+                ),
+                into: &records
             )
         }
         for snippet in snapshot.snippets {
             let itemID = UserDataSyncIdentity.snippetItemID(trigger: snippet.trigger)
-            records[itemID] = CloudFolderSyncRecord(
-                collection: .snippets,
-                itemID: itemID,
-                updatedAt: snippet.updatedAt,
-                version: versionString(for: snippet.updatedAt),
-                dictionary: nil,
-                snippet: snippet
+            merge(
+                CloudFolderSyncRecord(
+                    collection: .snippets,
+                    itemID: itemID,
+                    updatedAt: snippet.updatedAt,
+                    version: versionString(for: snippet.updatedAt),
+                    dictionary: nil,
+                    snippet: snippet
+                ),
+                into: &records
             )
         }
         return records
+    }
+
+    private static func merge(
+        _ candidate: CloudFolderSyncRecord,
+        into records: inout [String: CloudFolderSyncRecord]
+    ) {
+        guard let existing = records[candidate.itemID] else {
+            records[candidate.itemID] = candidate
+            return
+        }
+
+        // Legacy local data can contain duplicates that collapse to one natural sync ID.
+        // Keep the newest deterministic record instead of depending on array order.
+        if prefers(candidate, over: existing) {
+            records[candidate.itemID] = candidate
+        }
+    }
+
+    private static func prefers(_ candidate: CloudFolderSyncRecord, over existing: CloudFolderSyncRecord) -> Bool {
+        if candidate.updatedAt != existing.updatedAt {
+            return candidate.updatedAt > existing.updatedAt
+        }
+        return recordTieBreaker(candidate) > recordTieBreaker(existing)
+    }
+
+    private static func recordTieBreaker(_ record: CloudFolderSyncRecord) -> String {
+        if let dictionary = record.dictionary {
+            return [
+                record.collection.rawValue,
+                dictionary.entryType.rawValue,
+                dictionary.original,
+                dictionary.replacement ?? "",
+                String(dictionary.caseSensitive),
+                String(dictionary.isEnabled),
+                versionString(for: dictionary.createdAt)
+            ].joined(separator: "|")
+        }
+
+        if let snippet = record.snippet {
+            return [
+                record.collection.rawValue,
+                snippet.trigger,
+                snippet.replacement,
+                String(snippet.caseSensitive),
+                String(snippet.isEnabled),
+                snippet.tags.joined(separator: ","),
+                versionString(for: snippet.createdAt)
+            ].joined(separator: "|")
+        }
+
+        return record.itemID
     }
 
     static func winningOperations(from operations: [CloudFolderSyncOperation]) -> [String: CloudFolderSyncOperation] {
@@ -445,21 +502,50 @@ enum CloudFolderSyncEngine {
     }
 
     private static func versionString(for date: Date) -> String {
+        iso8601String(from: date)
+    }
+
+    private static func iso8601String(from date: Date) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter.string(from: date)
     }
 
+    private static func iso8601Date(from string: String) -> Date? {
+        let fractionalFormatter = ISO8601DateFormatter()
+        fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractionalFormatter.date(from: string) {
+            return date
+        }
+
+        let wholeSecondFormatter = ISO8601DateFormatter()
+        wholeSecondFormatter.formatOptions = [.withInternetDateTime]
+        return wholeSecondFormatter.date(from: string)
+    }
+
     private static let encoder: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .custom { date, encoder in
+            var container = encoder.singleValueContainer()
+            try container.encode(iso8601String(from: date))
+        }
         return encoder
     }()
 
     private static let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let value = try container.decode(String.self)
+            if let date = iso8601Date(from: value) {
+                return date
+            }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Invalid ISO-8601 date: \(value)"
+            )
+        }
         return decoder
     }()
 
