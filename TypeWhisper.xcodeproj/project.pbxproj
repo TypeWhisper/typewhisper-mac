@@ -166,6 +166,13 @@
 		AA00000000000000000079 /* DictionaryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000079 /* DictionaryService.swift */; };
 		AA00000000000000000080 /* Snippet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000080 /* Snippet.swift */; };
 		AA00000000000000000081 /* SnippetService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000081 /* SnippetService.swift */; };
+		C1F000000000000000000011 /* UserDataSyncIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000002 /* UserDataSyncIdentity.swift */; };
+		C1F000000000000000000012 /* TypeWhisperUserDataSyncStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000003 /* TypeWhisperUserDataSyncStore.swift */; };
+		C1F000000000000000000013 /* CloudFolderSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000004 /* CloudFolderSyncEngine.swift */; };
+		C1F000000000000000000014 /* CloudFolderSyncSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000005 /* CloudFolderSyncSettingsView.swift */; };
+		C1F000000000000000000015 /* CloudFolderSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000006 /* CloudFolderSyncTests.swift */; };
+		C1F000000000000000000016 /* UserDataSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000007 /* UserDataSync.swift */; };
+		C1F000000000000000000017 /* PremiumSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000008 /* PremiumSettingsView.swift */; };
 		AA00000000000000000082 /* DictionaryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000082 /* DictionaryViewModel.swift */; };
 		AA00000000000000000083 /* DictionarySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000083 /* DictionarySettingsView.swift */; };
 		AA00000000000000000084 /* SnippetsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000084 /* SnippetsViewModel.swift */; };
@@ -586,6 +593,13 @@
 		BB00000000000000000079 /* DictionaryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryService.swift; sourceTree = "<group>"; };
 		BB00000000000000000080 /* Snippet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Snippet.swift; sourceTree = "<group>"; };
 		BB00000000000000000081 /* SnippetService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnippetService.swift; sourceTree = "<group>"; };
+		C1F000000000000000000002 /* UserDataSyncIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDataSyncIdentity.swift; sourceTree = "<group>"; };
+		C1F000000000000000000003 /* TypeWhisperUserDataSyncStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypeWhisperUserDataSyncStore.swift; sourceTree = "<group>"; };
+		C1F000000000000000000004 /* CloudFolderSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudFolderSyncEngine.swift; sourceTree = "<group>"; };
+		C1F000000000000000000005 /* CloudFolderSyncSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudFolderSyncSettingsView.swift; sourceTree = "<group>"; };
+		C1F000000000000000000006 /* CloudFolderSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudFolderSyncTests.swift; sourceTree = "<group>"; };
+		C1F000000000000000000007 /* UserDataSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDataSync.swift; sourceTree = "<group>"; };
+		C1F000000000000000000008 /* PremiumSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumSettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000082 /* DictionaryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000083 /* DictionarySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionarySettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000084 /* SnippetsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnippetsViewModel.swift; sourceTree = "<group>"; };
@@ -1390,6 +1404,7 @@
 				BB00000000000000000079 /* DictionaryService.swift */,
 				BB00000000000000000271 /* DictionaryExporter.swift */,
 				BB00000000000000000081 /* SnippetService.swift */,
+				C1F000000000000000000001 /* Sync */,
 				BB00000000000000000086 /* SoundService.swift */,
 				BB00000000000000000102 /* AudioDeviceService.swift */,
 				BB00000000000000000320 /* AudioEngineRecoverySupport.swift */,
@@ -1437,6 +1452,18 @@
 			path = NumberNormalization;
 			sourceTree = "<group>";
 		};
+		C1F000000000000000000001 /* Sync */ = {
+			isa = PBXGroup;
+			children = (
+				C1F000000000000000000007 /* UserDataSync.swift */,
+				C1F000000000000000000002 /* UserDataSyncIdentity.swift */,
+				C1F000000000000000000003 /* TypeWhisperUserDataSyncStore.swift */,
+				C1F000000000000000000004 /* CloudFolderSyncEngine.swift */,
+				C1F000000000000000000005 /* CloudFolderSyncSettingsView.swift */,
+			);
+			path = Sync;
+			sourceTree = "<group>";
+		};
 		CC00000000000000000007 /* ViewModels */ = {
 			isa = PBXGroup;
 			children = (
@@ -1476,6 +1503,7 @@
 				BB00000000000000000016 /* FileTranscriptionView.swift */,
 				533C00000000000000000003 /* DictationRecoveryView.swift */,
 				BB00000000000000000017 /* SettingsView.swift */,
+				C1F000000000000000000008 /* PremiumSettingsView.swift */,
 				BB00000000000000000359 /* WorkflowsSettingsView.swift */,
 				BB00000000000000000046 /* AdvancedSettingsView.swift */,
 				BB00000000000000000051 /* GeneralSettingsView.swift */,
@@ -2079,6 +2107,7 @@
 				CE5852D6767C5FA955B84C55 /* PunctuationRulesLoaderTests.swift */,
 				CE5852D6767C5FA955B84C56 /* PunctuationStrategyResolverTests.swift */,
 				FD34FDF9D999D85DA1C35375 /* CLISupportTests.swift */,
+				C1F000000000000000000006 /* CloudFolderSyncTests.swift */,
 				2F4D6A8B0C1E3F5A7B9D2C4F /* DictationViewModelIndicatorSettingsTests.swift */,
 				2F4D6A8B0C1E3F5A7B9D2C51 /* IndicatorTranscriptPreviewSizingTests.swift */,
 					6A7B8C9D0E1F223344556679 /* FloatingPanelSpacePolicyTests.swift */,
@@ -3461,6 +3490,7 @@
 				24FFE19AC026C48AE32BCD7F /* PunctuationRulesLoaderTests.swift in Sources */,
 				24FFE19AC026C48AE32BCD80 /* PunctuationStrategyResolverTests.swift in Sources */,
 				7DADCC6E1AEA99CA48F83F50 /* CLISupportTests.swift in Sources */,
+				C1F000000000000000000015 /* CloudFolderSyncTests.swift in Sources */,
 				A40500000000000000000101 /* CLIClient.swift in Sources */,
 				2F4D6A8B0C1E3F5A7B9D2C4E /* DictationViewModelIndicatorSettingsTests.swift in Sources */,
 				2F4D6A8B0C1E3F5A7B9D2C50 /* IndicatorTranscriptPreviewSizingTests.swift in Sources */,
@@ -3607,6 +3637,12 @@
 				AA00000000000000000079 /* DictionaryService.swift in Sources */,
 				AA00000000000000000080 /* Snippet.swift in Sources */,
 				AA00000000000000000081 /* SnippetService.swift in Sources */,
+				C1F000000000000000000011 /* UserDataSyncIdentity.swift in Sources */,
+				C1F000000000000000000012 /* TypeWhisperUserDataSyncStore.swift in Sources */,
+				C1F000000000000000000013 /* CloudFolderSyncEngine.swift in Sources */,
+				C1F000000000000000000014 /* CloudFolderSyncSettingsView.swift in Sources */,
+				C1F000000000000000000016 /* UserDataSync.swift in Sources */,
+				C1F000000000000000000017 /* PremiumSettingsView.swift in Sources */,
 				AA00000000000000000082 /* DictionaryViewModel.swift in Sources */,
 				AA00000000000000000083 /* DictionarySettingsView.swift in Sources */,
 				AA00000000000000000084 /* SnippetsViewModel.swift in Sources */,

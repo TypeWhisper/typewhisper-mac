@@ -112,11 +112,14 @@ final class DictionaryService: ObservableObject {
             return
         }
 
+        let now = Date()
         let entry = DictionaryEntry(
             type: type,
             original: original,
             replacement: replacement,
-            caseSensitive: caseSensitive
+            caseSensitive: caseSensitive,
+            createdAt: now,
+            updatedAt: now
         )
 
         context.insert(entry)
@@ -140,6 +143,7 @@ final class DictionaryService: ObservableObject {
         entry.original = original
         entry.replacement = replacement
         entry.caseSensitive = caseSensitive
+        entry.updatedAt = Date()
 
         do {
             try context.save()
@@ -166,6 +170,7 @@ final class DictionaryService: ObservableObject {
         guard let context = modelContext else { return }
 
         entry.isEnabled.toggle()
+        entry.updatedAt = Date()
 
         do {
             try context.save()
@@ -189,7 +194,8 @@ final class DictionaryService: ObservableObject {
                 type: item.type,
                 original: item.original,
                 replacement: item.replacement,
-                caseSensitive: item.caseSensitive
+                caseSensitive: item.caseSensitive,
+                updatedAt: Date()
             )
             context.insert(entry)
         }
@@ -217,7 +223,8 @@ final class DictionaryService: ObservableObject {
                 original: item.original,
                 replacement: item.replacement,
                 caseSensitive: item.caseSensitive,
-                isEnabled: item.isEnabled
+                isEnabled: item.isEnabled,
+                updatedAt: Date()
             )
             context.insert(entry)
             existingOriginals.insert(key)
@@ -278,6 +285,7 @@ final class DictionaryService: ObservableObject {
             if let desiredTerm = normalizedByKey[key] {
                 entry.original = desiredTerm
                 entry.isEnabled = true
+                entry.updatedAt = Date()
             } else if replaceExisting {
                 context.delete(entry)
             }
@@ -288,7 +296,8 @@ final class DictionaryService: ObservableObject {
         })
 
         for term in normalized where !existingKeys.contains(term.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)) {
-            context.insert(DictionaryEntry(type: .term, original: term, replacement: nil, caseSensitive: false, isEnabled: true))
+            let now = Date()
+            context.insert(DictionaryEntry(type: .term, original: term, replacement: nil, caseSensitive: false, isEnabled: true, createdAt: now, updatedAt: now))
         }
 
         if replaceExisting || !desiredKeys.isEmpty {
@@ -417,13 +426,17 @@ final class DictionaryService: ObservableObject {
             entry.replacement = replacement
             entry.caseSensitive = caseSensitive
             entry.isEnabled = true
+            entry.updatedAt = Date()
         } else {
+            let now = Date()
             let entry = DictionaryEntry(
                 type: .correction,
                 original: original,
                 replacement: replacement,
                 caseSensitive: caseSensitive,
-                isEnabled: true
+                isEnabled: true,
+                createdAt: now,
+                updatedAt: now
             )
             context.insert(entry)
         }
@@ -459,6 +472,94 @@ final class DictionaryService: ObservableObject {
             logger.error("Failed to delete correction: \(error.localizedDescription)")
             throw DictionaryServiceMutationError.saveFailed(error)
         }
+    }
+
+    func userDataSyncEntries(
+        excludingTermItemIDs: Set<String> = [],
+        excludingCorrectionItemIDs: Set<String> = []
+    ) -> [UserDataSyncDictionaryEntry] {
+        entries.compactMap { entry in
+            let itemID = UserDataSyncIdentity.dictionaryItemID(entryType: entry.type, original: entry.original)
+            if entry.type == .term, excludingTermItemIDs.contains(itemID) {
+                return nil
+            }
+            if entry.type == .correction, excludingCorrectionItemIDs.contains(itemID) {
+                return nil
+            }
+
+            return UserDataSyncDictionaryEntry(
+                entryType: UserDataSyncDictionaryEntryType(entry.type),
+                original: entry.original,
+                replacement: entry.type == .correction ? (entry.replacement ?? "") : nil,
+                caseSensitive: entry.caseSensitive,
+                isEnabled: entry.isEnabled,
+                createdAt: entry.createdAt,
+                updatedAt: entry.effectiveUpdatedAt
+            )
+        }
+    }
+
+    func applyUserDataSyncMutations(_ mutations: [UserDataSyncMutation]) throws {
+        guard let context = modelContext else {
+            throw DictionaryServiceMutationError.unavailable
+        }
+        guard !mutations.isEmpty else { return }
+
+        for mutation in mutations {
+            switch mutation {
+            case .upsertDictionary(let synced):
+                upsertSyncedDictionaryEntry(synced, context: context)
+            case .deleteDictionary(let itemID):
+                deleteSyncedDictionaryEntry(itemID: itemID, context: context)
+            case .upsertSnippet, .deleteSnippet:
+                continue
+            }
+        }
+
+        do {
+            try context.save()
+            loadEntries()
+        } catch {
+            logger.error("Failed to apply dictionary sync mutations: \(error.localizedDescription)")
+            throw DictionaryServiceMutationError.saveFailed(error)
+        }
+    }
+
+    private func upsertSyncedDictionaryEntry(_ synced: UserDataSyncDictionaryEntry, context: ModelContext) {
+        let targetType = DictionaryEntryType(synced.entryType)
+        let targetID = UserDataSyncIdentity.dictionaryItemID(entryType: synced.entryType, original: synced.original)
+        let replacement = targetType == .correction ? (synced.replacement ?? "") : nil
+
+        if let entry = entries.first(where: {
+            $0.type == targetType &&
+            UserDataSyncIdentity.dictionaryItemID(entryType: $0.type, original: $0.original) == targetID
+        }) {
+            entry.original = synced.original
+            entry.replacement = replacement
+            entry.caseSensitive = synced.caseSensitive
+            entry.isEnabled = synced.isEnabled
+            entry.updatedAt = synced.updatedAt
+            return
+        }
+
+        context.insert(DictionaryEntry(
+            type: targetType,
+            original: synced.original,
+            replacement: replacement,
+            caseSensitive: synced.caseSensitive,
+            isEnabled: synced.isEnabled,
+            createdAt: synced.createdAt,
+            updatedAt: synced.updatedAt
+        ))
+    }
+
+    private func deleteSyncedDictionaryEntry(itemID: String, context: ModelContext) {
+        guard let entry = entries.first(where: {
+            UserDataSyncIdentity.dictionaryItemID(entryType: $0.type, original: $0.original) == itemID
+        }) else {
+            return
+        }
+        context.delete(entry)
     }
 
     private func incrementUsageCount(for entry: DictionaryEntry) {

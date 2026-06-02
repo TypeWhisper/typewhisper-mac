@@ -21,6 +21,8 @@ final class ServiceContainer: ObservableObject {
     let mediaPlaybackService: MediaPlaybackService
     let dictionaryService: DictionaryService
     let snippetService: SnippetService
+    let userDataSyncStore: TypeWhisperUserDataSyncStore
+    let cloudFolderSyncController: CloudFolderSyncController
     let soundService: SoundService
     let audioDeviceService: AudioDeviceService
     let promptActionService: PromptActionService
@@ -90,6 +92,10 @@ final class ServiceContainer: ObservableObject {
         mediaPlaybackService = MediaPlaybackService()
         dictionaryService = DictionaryService()
         snippetService = SnippetService()
+        userDataSyncStore = TypeWhisperUserDataSyncStore(
+            dictionaryService: dictionaryService,
+            snippetService: snippetService
+        )
         soundService = SoundService()
         audioDeviceService = AudioDeviceService(
             inputActivationGuard: inputActivationGuard
@@ -114,6 +120,10 @@ final class ServiceContainer: ObservableObject {
         errorLogService = ErrorLogService()
         licenseService = LicenseService()
         supporterDiscordService = SupporterDiscordService(licenseService: licenseService)
+        cloudFolderSyncController = CloudFolderSyncController(
+            licenseService: licenseService,
+            syncStore: userDataSyncStore
+        )
 
         // ViewModels (created before HTTP API so DictationViewModel is available)
         fileTranscriptionViewModel = FileTranscriptionViewModel(

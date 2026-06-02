@@ -29,6 +29,7 @@ final class DictionaryEntry {
     var caseSensitive: Bool
     var isEnabled: Bool
     var createdAt: Date
+    var updatedAt: Date?
     var usageCount: Int
 
     var type: DictionaryEntryType {
@@ -44,6 +45,7 @@ final class DictionaryEntry {
         caseSensitive: Bool = false,
         isEnabled: Bool = true,
         createdAt: Date = Date(),
+        updatedAt: Date? = nil,
         usageCount: Int = 0
     ) {
         self.id = id
@@ -53,7 +55,12 @@ final class DictionaryEntry {
         self.caseSensitive = caseSensitive
         self.isEnabled = isEnabled
         self.createdAt = createdAt
+        self.updatedAt = updatedAt ?? createdAt
         self.usageCount = usageCount
+    }
+
+    var effectiveUpdatedAt: Date {
+        updatedAt ?? createdAt
     }
 
     var displayText: String {

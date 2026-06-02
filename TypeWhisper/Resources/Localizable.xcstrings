@@ -9001,6 +9001,256 @@
           }
         }
       }
+    },
+    "Activate or buy a license to start writing sync files." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktiviere oder kaufe eine Lizenz, damit Sync-Dateien geschrieben werden können."
+          }
+        }
+      }
+    },
+    "Buy Commercial License" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Commercial-Lizenz kaufen"
+          }
+        }
+      }
+    },
+    "Choose a cloud-synced folder for TypeWhisper." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wähle einen Cloud-synchronisierten Ordner für TypeWhisper."
+          }
+        }
+      }
+    },
+    "Choose a sync folder first." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wähle zuerst einen Sync-Ordner."
+          }
+        }
+      }
+    },
+    "Choose Folder" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ordner wählen"
+          }
+        }
+      }
+    },
+    "Clear" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leeren"
+          }
+        }
+      }
+    },
+    "Cloud Folder Sync" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cloud-Ordner-Sync"
+          }
+        }
+      }
+    },
+    "Cloud Folder Sync is available with a Commercial license. Sync dictionaries and snippets through your own iCloud Drive, Dropbox, OneDrive, Syncthing, or custom folder." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cloud-Ordner-Sync ist mit einer Commercial-Lizenz verfügbar. Synchronisiere Wörterbücher und Snippets über dein eigenes iCloud Drive, Dropbox, OneDrive, Syncthing oder einen benutzerdefinierten Ordner."
+          }
+        }
+      }
+    },
+    "Cloud Folder Sync requires an active Commercial license." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cloud-Ordner-Sync erfordert eine aktive Commercial-Lizenz."
+          }
+        }
+      }
+    },
+    "Commercial license active" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Commercial-Lizenz aktiv"
+          }
+        }
+      }
+    },
+    "Commercial license required" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Commercial-Lizenz erforderlich"
+          }
+        }
+      }
+    },
+    "Custom Folder" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Benutzerdefinierter Ordner"
+          }
+        }
+      }
+    },
+    "Dictionary and snippets" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wörterbuch und Snippets"
+          }
+        }
+      }
+    },
+    "Enter License Key" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lizenzschlüssel eingeben"
+          }
+        }
+      }
+    },
+    "Folder" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ordner"
+          }
+        }
+      }
+    },
+    "Last Sync" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Letzter Sync"
+          }
+        }
+      }
+    },
+    "No folder selected" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kein Ordner ausgewählt"
+          }
+        }
+      }
+    },
+    "Open License" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lizenz öffnen"
+          }
+        }
+      }
+    },
+    "Premium" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Premium"
+          }
+        }
+      }
+    },
+    "Supporter status is active. Premium features require a Commercial license." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Supporter-Status ist aktiv. Premium-Features erfordern eine Commercial-Lizenz."
+          }
+        }
+      }
+    },
+    "Sync Now" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jetzt synchronisieren"
+          }
+        }
+      }
+    },
+    "Synced %lld changes." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Änderungen synchronisiert."
+          }
+        }
+      }
+    },
+    "Syncing" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Synchronisiert"
+          }
+        }
+      }
+    },
+    "TypeWhisper user data is unavailable." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper-Benutzerdaten sind nicht verfügbar."
+          }
+        }
+      }
+    },
+    "Unlock Premium features" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Premium-Features freischalten"
+          }
+        }
+      }
     }
   },
   "version" : "1.1"

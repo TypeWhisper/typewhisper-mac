@@ -69,10 +69,13 @@ final class SnippetService: ObservableObject {
             return
         }
 
+        let now = Date()
         let snippet = Snippet(
             trigger: trigger,
             replacement: replacement,
-            caseSensitive: caseSensitive
+            caseSensitive: caseSensitive,
+            createdAt: now,
+            updatedAt: now
         )
 
         context.insert(snippet)
@@ -91,6 +94,7 @@ final class SnippetService: ObservableObject {
         snippet.trigger = trigger
         snippet.replacement = replacement
         snippet.caseSensitive = caseSensitive
+        snippet.updatedAt = Date()
 
         do {
             try context.save()
@@ -117,6 +121,7 @@ final class SnippetService: ObservableObject {
         guard let context = modelContext else { return }
 
         snippet.isEnabled.toggle()
+        snippet.updatedAt = Date()
 
         do {
             try context.save()
@@ -164,5 +169,74 @@ final class SnippetService: ObservableObject {
         } catch {
             logger.error("Failed to update usage count: \(error.localizedDescription)")
         }
+    }
+
+    func userDataSyncSnippets() -> [UserDataSyncSnippet] {
+        snippets.map { snippet in
+            UserDataSyncSnippet(
+                trigger: snippet.trigger,
+                replacement: snippet.replacement,
+                caseSensitive: snippet.caseSensitive,
+                isEnabled: snippet.isEnabled,
+                createdAt: snippet.createdAt,
+                updatedAt: snippet.effectiveUpdatedAt
+            )
+        }
+    }
+
+    func applyUserDataSyncMutations(_ mutations: [UserDataSyncMutation]) throws {
+        guard let context = modelContext else { return }
+        guard !mutations.isEmpty else { return }
+
+        for mutation in mutations {
+            switch mutation {
+            case .upsertSnippet(let synced):
+                upsertSyncedSnippet(synced, context: context)
+            case .deleteSnippet(let itemID):
+                deleteSyncedSnippet(itemID: itemID, context: context)
+            case .upsertDictionary, .deleteDictionary:
+                continue
+            }
+        }
+
+        do {
+            try context.save()
+            loadSnippets()
+        } catch {
+            logger.error("Failed to apply snippet sync mutations: \(error.localizedDescription)")
+            throw error
+        }
+    }
+
+    private func upsertSyncedSnippet(_ synced: UserDataSyncSnippet, context: ModelContext) {
+        let targetID = UserDataSyncIdentity.snippetItemID(trigger: synced.trigger)
+        if let snippet = snippets.first(where: {
+            UserDataSyncIdentity.snippetItemID(trigger: $0.trigger) == targetID
+        }) {
+            snippet.trigger = synced.trigger
+            snippet.replacement = synced.replacement
+            snippet.caseSensitive = synced.caseSensitive
+            snippet.isEnabled = synced.isEnabled
+            snippet.updatedAt = synced.updatedAt
+            return
+        }
+
+        context.insert(Snippet(
+            trigger: synced.trigger,
+            replacement: synced.replacement,
+            caseSensitive: synced.caseSensitive,
+            isEnabled: synced.isEnabled,
+            createdAt: synced.createdAt,
+            updatedAt: synced.updatedAt
+        ))
+    }
+
+    private func deleteSyncedSnippet(itemID: String, context: ModelContext) {
+        guard let snippet = snippets.first(where: {
+            UserDataSyncIdentity.snippetItemID(trigger: $0.trigger) == itemID
+        }) else {
+            return
+        }
+        context.delete(snippet)
     }
 }
