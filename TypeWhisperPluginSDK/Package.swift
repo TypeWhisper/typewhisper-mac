@@ -231,6 +231,13 @@ let package = Package(
             path: "Plugins/ParakeetPlugin/Tests"
         ),
         .testTarget(
+            name: "SpeechAnalyzerPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+            ],
+            path: "Plugins/SpeechAnalyzerPlugin/Tests"
+        ),
+        .testTarget(
             name: "FillerWordsPluginTests",
             dependencies: [
                 "TypeWhisperPluginSDK",

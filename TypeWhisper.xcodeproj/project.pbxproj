@@ -93,6 +93,7 @@
 			533A00000000000000000004 /* DictationRecoveryAudioStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 533A00000000000000000003 /* DictationRecoveryAudioStore.swift */; };
 			604D00000000000000000002 /* AudioRecorderViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 604D00000000000000000001 /* AudioRecorderViewModelTests.swift */; };
 			533B00000000000000000002 /* FileTranscriptionViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 533B00000000000000000001 /* FileTranscriptionViewModelTests.swift */; };
+			5A6490000000000000000002 /* ModelManagerAppleSpeechModelSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A6490000000000000000001 /* ModelManagerAppleSpeechModelSelectionTests.swift */; };
 			533C00000000000000000002 /* DictationRecoveryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 533C00000000000000000001 /* DictationRecoveryViewModel.swift */; };
 			533C00000000000000000004 /* DictationRecoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 533C00000000000000000003 /* DictationRecoveryView.swift */; };
 			6A9D1EE0C163693B1A798779 /* HistoryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */; };
@@ -511,6 +512,7 @@
 			533A00000000000000000003 /* DictationRecoveryAudioStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationRecoveryAudioStore.swift; sourceTree = "<group>"; };
 			604D00000000000000000001 /* AudioRecorderViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AudioRecorderViewModelTests.swift; sourceTree = "<group>"; };
 			533B00000000000000000001 /* FileTranscriptionViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FileTranscriptionViewModelTests.swift; sourceTree = "<group>"; };
+			5A6490000000000000000001 /* ModelManagerAppleSpeechModelSelectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModelManagerAppleSpeechModelSelectionTests.swift; sourceTree = "<group>"; };
 			3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HistoryServiceTests.swift; sourceTree = "<group>"; };
 		B91F00000000000000000001 /* SelectionPalettePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionPalettePanel.swift; sourceTree = "<group>"; };
 		B91F00000000000000000002 /* RecentTranscriptionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentTranscriptionStore.swift; sourceTree = "<group>"; };
@@ -2115,6 +2117,7 @@
 					604D00000000000000000001 /* AudioRecorderViewModelTests.swift */,
 					533A00000000000000000001 /* DictationRecoveryAudioStoreTests.swift */,
 					533B00000000000000000001 /* FileTranscriptionViewModelTests.swift */,
+					5A6490000000000000000001 /* ModelManagerAppleSpeechModelSelectionTests.swift */,
 					AA8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift */,
 				D63A42880A0BA4C84F36E873 /* DictionaryServiceTests.swift */,
 				A8D4F2B6E1C3097B5F8A4E62 /* DictionaryExporterTests.swift */,
@@ -3500,6 +3503,7 @@
 					604D00000000000000000002 /* AudioRecorderViewModelTests.swift in Sources */,
 					533A00000000000000000002 /* DictationRecoveryAudioStoreTests.swift in Sources */,
 					533B00000000000000000002 /* FileTranscriptionViewModelTests.swift in Sources */,
+					5A6490000000000000000002 /* ModelManagerAppleSpeechModelSelectionTests.swift in Sources */,
 					BB8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift in Sources */,
 				B4CC04DF94001FF7220789BC /* DictionaryServiceTests.swift in Sources */,
 				C7A3E9F1D5B2084A6E9C3D71 /* DictionaryExporterTests.swift in Sources */,
