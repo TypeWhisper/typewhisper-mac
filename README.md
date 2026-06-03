@@ -274,6 +274,7 @@ Optional parameters:
 - `language_hint` - Repeatable, ordered language hint for restricted auto-detection. Hint-aware engines receive the full list; other engines use the first hint as the requested language. Do not combine with `language`.
 - `task` - `transcribe` (default) or `translate` (translates to English, WhisperKit only).
 - `target_language` - ISO 639-1 code for translation target language (e.g., `es`, `fr`). Uses Apple Translate.
+- `apply_corrections` - Boolean, default `true`. Set to `false` to return raw transcription text without Dictionary Corrections. For raw body uploads, send `x-apply-corrections: false`.
 
 Uploads to `/v1/transcribe` are limited to 256 MiB, including stdin uploads from the CLI. Requests above that size return `413 Payload Too Large`. Local CLI file paths use a direct handoff to the running TypeWhisper app instead of uploading the file bytes.
 
@@ -458,6 +459,7 @@ typewhisper transcribe file.wav # Transcribe an audio file
 | `--language-hint <code>` | Repeatable, ordered language hint for restricted auto-detection; engines without hint support use the first hint |
 | `--task <task>` | `transcribe` (default) or `translate` |
 | `--translate-to <code>` | Target language for translation |
+| `--no-corrections` | Return raw transcription text without Dictionary Corrections |
 
 ### Examples
 
@@ -476,6 +478,8 @@ typewhisper transcribe meeting.m4a --json | jq -r '.text'
 ```
 
 The CLI requires the API server to be running (Settings > Advanced) and follows the documented command and flag surface for the current stable release.
+
+Dictionary Corrections apply to CLI transcriptions by default. Use `--no-corrections` when a script needs the raw engine output.
 
 Local file paths are handed to the running TypeWhisper app directly, so large files do not need to fit inside an HTTP upload body. Stdin usage (`typewhisper transcribe -`) still uses the regular `/v1/transcribe` upload endpoint and is limited to 256 MiB.
 

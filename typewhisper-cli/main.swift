@@ -16,6 +16,7 @@ var translateTo: String?
 var engineOverride: String?
 var modelOverride: String?
 var awaitDownload = false
+var applyCorrections = true
 
 var argIterator = args.makeIterator()
 while let arg = argIterator.next() {
@@ -80,6 +81,8 @@ while let arg = argIterator.next() {
         modelOverride = next
     case "--await-download":
         awaitDownload = true
+    case "--no-corrections":
+        applyCorrections = false
     default:
         // Ignore Apple/Xcode internal flags (e.g. -NSDocumentRevisionsDebugMode)
         if arg.hasPrefix("-NS") || arg.hasPrefix("-Apple") {
@@ -138,7 +141,8 @@ do {
             targetLanguage: translateTo,
             engine: engineOverride,
             model: modelOverride,
-            awaitDownload: awaitDownload
+            awaitDownload: awaitDownload,
+            applyCorrections: applyCorrections
         )
         print(OutputFormatter.formatTranscription(data, json: jsonOutput))
 
@@ -184,6 +188,7 @@ func printUsage() {
           --engine <id>        Override the engine for this request (e.g. groq, qwen3)
           --model <id>         Override the model for this request (e.g. whisper-large-v3-turbo)
           --await-download     Wait for an engine to restore/download its model instead of failing with 409
+          --no-corrections     Return raw transcription text without Dictionary Corrections
 
         Examples:
           typewhisper status

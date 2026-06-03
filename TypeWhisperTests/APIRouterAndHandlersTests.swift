@@ -1326,6 +1326,159 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual(response["text"] as? String, "two")
     }
 
+    func testTranscribeEndpointAppliesDictionaryCorrectionsByDefault() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        defer { MockTranscriptionPlugin.reset() }
+        MockTranscriptionPlugin.setResponseText("teh TypeWhisper")
+        let apiContext = await MainActor.run {
+            Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+        }
+        context = apiContext
+        try await MainActor.run {
+            try apiContext.dictionaryService.upsertAPICorrection(
+                original: "teh",
+                replacement: "the",
+                caseSensitive: false
+            )
+        }
+
+        let response = try Self.jsonObject(await apiContext.router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: ["content-type": "audio/wav", "x-language": "en"],
+                body: WavEncoder.encode(Array(repeating: Float(0), count: 1600))
+            )
+        ))
+
+        XCTAssertEqual(response["text"] as? String, "the TypeWhisper")
+        let usageCount = await MainActor.run {
+            apiContext.dictionaryService.corrections.first?.usageCount
+        }
+        XCTAssertEqual(usageCount, 1)
+    }
+
+    func testTranscribeEndpointApplyCorrectionsFalsePreservesRawText() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        defer { MockTranscriptionPlugin.reset() }
+        MockTranscriptionPlugin.setResponseText("teh TypeWhisper")
+        let apiContext = await MainActor.run {
+            Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+        }
+        context = apiContext
+        try await MainActor.run {
+            try apiContext.dictionaryService.upsertAPICorrection(
+                original: "teh",
+                replacement: "the",
+                caseSensitive: false
+            )
+        }
+
+        let wavData = WavEncoder.encode(Array(repeating: Float(0), count: 1600))
+        let rawResponse = try Self.jsonObject(await apiContext.router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: [
+                    "content-type": "audio/wav",
+                    "x-language": "en",
+                    "x-apply-corrections": "false",
+                ],
+                body: wavData
+            )
+        ))
+
+        XCTAssertEqual(rawResponse["text"] as? String, "teh TypeWhisper")
+
+        let boundary = "Boundary-\(UUID().uuidString)"
+        let multipartResponse = try Self.jsonObject(await apiContext.router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: ["content-type": "multipart/form-data; boundary=\(boundary)"],
+                body: Self.multipartTranscribeBody(
+                    wavData: wavData,
+                    boundary: boundary,
+                    fields: [("apply_corrections", "false")]
+                )
+            )
+        ))
+
+        XCTAssertEqual(multipartResponse["text"] as? String, "teh TypeWhisper")
+        let usageCount = await MainActor.run {
+            apiContext.dictionaryService.corrections.first?.usageCount
+        }
+        XCTAssertEqual(usageCount, 0)
+    }
+
+    func testTranscribeEndpointRejectsInvalidApplyCorrectionsValues() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        context = await MainActor.run {
+            Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+        }
+        let router = try XCTUnwrap(context?.router)
+        let wavData = WavEncoder.encode(Array(repeating: Float(0), count: 1600))
+
+        let rawResponse = await router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: [
+                    "content-type": "audio/wav",
+                    "x-apply-corrections": "maybe",
+                ],
+                body: wavData
+            )
+        )
+        let rawJSON = try Self.jsonObject(rawResponse)
+
+        XCTAssertEqual(rawResponse.status, 400)
+        XCTAssertEqual((rawJSON["error"] as? [String: Any])?["message"] as? String, "Invalid 'x-apply-corrections' value")
+
+        let boundary = "Boundary-\(UUID().uuidString)"
+        let multipartResponse = await router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: ["content-type": "multipart/form-data; boundary=\(boundary)"],
+                body: Self.multipartTranscribeBody(
+                    wavData: wavData,
+                    boundary: boundary,
+                    fields: [("apply_corrections", "maybe")]
+                )
+            )
+        )
+        let multipartJSON = try Self.jsonObject(multipartResponse)
+
+        XCTAssertEqual(multipartResponse.status, 400)
+        XCTAssertEqual((multipartJSON["error"] as? [String: Any])?["message"] as? String, "Invalid 'apply_corrections' value")
+    }
+
     func testTranscribeEndpointRejectsInvalidNormalizeNumbersHeader() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var context: APIContext?
@@ -1623,6 +1776,134 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual(response["text"] as? String, "transcribed")
         XCTAssertEqual(MockTranscriptionPlugin.lastLanguageSelection.languageHints, [])
         XCTAssertNil(MockTranscriptionPlugin.lastLanguageSelection.requestedLanguage)
+    }
+
+    func testTranscribeLocalFileEndpointAppliesDictionaryCorrectionsByDefault() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let audioDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+            TestSupport.remove(audioDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        defer { MockTranscriptionPlugin.reset() }
+        MockTranscriptionPlugin.setResponseText("teh TypeWhisper")
+        let apiContext = await MainActor.run {
+            Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+        }
+        context = apiContext
+        try await MainActor.run {
+            try apiContext.dictionaryService.upsertAPICorrection(
+                original: "teh",
+                replacement: "the",
+                caseSensitive: false
+            )
+        }
+
+        let fileURL = audioDirectory.appendingPathComponent("corrected.wav")
+        try WavEncoder.encode(Array(repeating: Float(0), count: 1600)).write(to: fileURL)
+
+        let response = try Self.jsonObject(await apiContext.router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe/local-file",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: try JSONSerialization.data(withJSONObject: ["path": fileURL.path])
+            )
+        ))
+
+        XCTAssertEqual(response["text"] as? String, "the TypeWhisper")
+        let usageCount = await MainActor.run {
+            apiContext.dictionaryService.corrections.first?.usageCount
+        }
+        XCTAssertEqual(usageCount, 1)
+    }
+
+    func testTranscribeLocalFileEndpointApplyCorrectionsFalsePreservesRawText() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let audioDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+            TestSupport.remove(audioDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        defer { MockTranscriptionPlugin.reset() }
+        MockTranscriptionPlugin.setResponseText("teh TypeWhisper")
+        let apiContext = await MainActor.run {
+            Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+        }
+        context = apiContext
+        try await MainActor.run {
+            try apiContext.dictionaryService.upsertAPICorrection(
+                original: "teh",
+                replacement: "the",
+                caseSensitive: false
+            )
+        }
+
+        let fileURL = audioDirectory.appendingPathComponent("raw.wav")
+        try WavEncoder.encode(Array(repeating: Float(0), count: 1600)).write(to: fileURL)
+
+        let response = try Self.jsonObject(await apiContext.router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe/local-file",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: try JSONSerialization.data(withJSONObject: [
+                    "path": fileURL.path,
+                    "apply_corrections": false,
+                ])
+            )
+        ))
+
+        XCTAssertEqual(response["text"] as? String, "teh TypeWhisper")
+        let usageCount = await MainActor.run {
+            apiContext.dictionaryService.corrections.first?.usageCount
+        }
+        XCTAssertEqual(usageCount, 0)
+    }
+
+    func testTranscribeLocalFileEndpointRejectsInvalidApplyCorrectionsValue() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let audioDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+            TestSupport.remove(audioDirectory)
+        }
+
+        context = await MainActor.run {
+            Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+        }
+        let fileURL = audioDirectory.appendingPathComponent("invalid-corrections.wav")
+        try WavEncoder.encode(Array(repeating: Float(0), count: 1600)).write(to: fileURL)
+
+        let router = try XCTUnwrap(context?.router)
+        let response = await router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe/local-file",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: try JSONSerialization.data(withJSONObject: [
+                    "path": fileURL.path,
+                    "apply_corrections": "maybe",
+                ])
+            )
+        )
+        let json = try Self.jsonObject(response)
+
+        XCTAssertEqual(response.status, 400)
+        XCTAssertEqual((json["error"] as? [String: Any])?["message"] as? String, "Invalid 'apply_corrections' value")
     }
 
     func testTranscribeLocalFileEndpointUsesLanguageHintsAndEngineModelOverrides() async throws {
@@ -4471,6 +4752,33 @@ final class APIRouterAndHandlersTests: XCTestCase {
         } else {
             UserDefaults.standard.removeObject(forKey: key)
         }
+    }
+
+    private static func multipartTranscribeBody(
+        wavData: Data,
+        boundary: String,
+        fields: [(name: String, value: String)] = []
+    ) -> Data {
+        var body = Data()
+
+        func append(_ string: String) {
+            body.append(Data(string.utf8))
+        }
+
+        append("--\(boundary)\r\n")
+        append("Content-Disposition: form-data; name=\"file\"; filename=\"test.wav\"\r\n")
+        append("Content-Type: audio/wav\r\n\r\n")
+        body.append(wavData)
+        append("\r\n")
+
+        for field in fields {
+            append("--\(boundary)\r\n")
+            append("Content-Disposition: form-data; name=\"\(field.name)\"\r\n\r\n")
+            append("\(field.value)\r\n")
+        }
+
+        append("--\(boundary)--\r\n")
+        return body
     }
 
     private static func jsonObject(_ response: HTTPResponse) throws -> [String: Any] {

@@ -93,7 +93,8 @@ struct CLIClient {
         targetLanguage: String?,
         engine: String? = nil,
         model: String? = nil,
-        awaitDownload: Bool = false
+        awaitDownload: Bool = false,
+        applyCorrections: Bool = true
     ) async throws -> Data {
         if let fileURL {
             guard FileManager.default.fileExists(atPath: fileURL.path) else {
@@ -107,7 +108,8 @@ struct CLIClient {
                 targetLanguage: targetLanguage,
                 engine: engine,
                 model: model,
-                awaitDownload: awaitDownload
+                awaitDownload: awaitDownload,
+                applyCorrections: applyCorrections
             )
         }
 
@@ -145,6 +147,9 @@ struct CLIClient {
         if let model {
             body.appendFormField("model", value: model, boundary: boundary)
         }
+        if !applyCorrections {
+            body.appendFormField("apply_corrections", value: "false", boundary: boundary)
+        }
 
         body.append("--\(boundary)--\r\n")
 
@@ -172,7 +177,8 @@ struct CLIClient {
         targetLanguage: String?,
         engine: String?,
         model: String?,
-        awaitDownload: Bool
+        awaitDownload: Bool,
+        applyCorrections: Bool
     ) async throws -> Data {
         var payload: [String: Any] = [
             "path": fileURL.path
@@ -194,6 +200,9 @@ struct CLIClient {
         }
         if let model {
             payload["model"] = model
+        }
+        if !applyCorrections {
+            payload["apply_corrections"] = false
         }
 
         var transcribePath = "/v1/transcribe/local-file"

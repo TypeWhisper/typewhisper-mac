@@ -73,6 +73,7 @@ final class APIHandlers: @unchecked Sendable {
         var modelOverride: String? = nil
         var awaitDownload = false
         var normalizeNumbers: Bool? = nil
+        var applyCorrections = true
     }
 
     private struct LocalFileTranscribeRequest: Decodable {
@@ -86,6 +87,7 @@ final class APIHandlers: @unchecked Sendable {
         let engine: String?
         let model: String?
         let normalizeNumbers: Bool?
+        let applyCorrections: Bool?
 
         enum CodingKeys: String, CodingKey {
             case path
@@ -98,6 +100,7 @@ final class APIHandlers: @unchecked Sendable {
             case engine
             case model
             case normalizeNumbers = "normalize_numbers"
+            case applyCorrections = "apply_corrections"
         }
     }
 
@@ -179,6 +182,15 @@ final class APIHandlers: @unchecked Sendable {
                 }
                 options.normalizeNumbers = parsed
             }
+
+            if let correctionsPart = parts.first(where: { $0.name == "apply_corrections" }),
+               let val = String(data: correctionsPart.data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !val.isEmpty {
+                guard let parsed = Self.parseBoolean(val) else {
+                    return .error(status: 400, message: "Invalid 'apply_corrections' value")
+                }
+                options.applyCorrections = parsed
+            }
         } else if !request.body.isEmpty {
             audioData = request.body
             fileExtension = extensionFromMIME(contentType)
@@ -213,6 +225,13 @@ final class APIHandlers: @unchecked Sendable {
                 }
                 options.normalizeNumbers = parsed
             }
+            if let applyCorrections = request.headers["x-apply-corrections"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !applyCorrections.isEmpty {
+                guard let parsed = Self.parseBoolean(applyCorrections) else {
+                    return .error(status: 400, message: "Invalid 'x-apply-corrections' value")
+                }
+                options.applyCorrections = parsed
+            }
         } else {
             return .error(status: 400, message: "No audio data provided")
         }
@@ -242,6 +261,9 @@ final class APIHandlers: @unchecked Sendable {
         do {
             payload = try JSONDecoder().decode(LocalFileTranscribeRequest.self, from: request.body)
         } catch {
+            if Self.hasInvalidJSONBooleanField("apply_corrections", in: request.body) {
+                return .error(status: 400, message: "Invalid 'apply_corrections' value")
+            }
             return .error(status: 400, message: "Invalid JSON body")
         }
 
@@ -268,6 +290,7 @@ final class APIHandlers: @unchecked Sendable {
         options.engineOverride = payload.engine?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         options.modelOverride = payload.model?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         options.normalizeNumbers = payload.normalizeNumbers
+        options.applyCorrections = payload.applyCorrections ?? true
 
         do {
             let samples = try await audioFileService.loadAudioSamples(from: fileURL)
@@ -365,6 +388,12 @@ final class APIHandlers: @unchecked Sendable {
                 #else
                 return .error(status: 501, message: "Translation requires macOS 15 or later")
                 #endif
+            }
+
+            if options.applyCorrections {
+                finalText = await MainActor.run {
+                    dictionaryService.applyCorrections(to: finalText)
+                }
             }
 
             let modelId = await resolveResponseModelId(
@@ -566,6 +595,15 @@ final class APIHandlers: @unchecked Sendable {
         default:
             nil
         }
+    }
+
+    private static func hasInvalidJSONBooleanField(_ field: String, in body: Data) -> Bool {
+        guard let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+              let value = object[field] else {
+            return false
+        }
+
+        return !(value is Bool) && !(value is NSNull)
     }
 
     // MARK: - GET /v1/status
