@@ -1337,10 +1337,10 @@ final class APIRouterAndHandlersTests: XCTestCase {
         MockTranscriptionPlugin.reset()
         defer { MockTranscriptionPlugin.reset() }
         MockTranscriptionPlugin.setResponseText("teh TypeWhisper")
-        let apiContext = await MainActor.run {
+        context = await MainActor.run {
             Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
         }
-        context = apiContext
+        let apiContext = try XCTUnwrap(context)
         try await MainActor.run {
             try apiContext.dictionaryService.upsertAPICorrection(
                 original: "teh",
@@ -1377,10 +1377,10 @@ final class APIRouterAndHandlersTests: XCTestCase {
         MockTranscriptionPlugin.reset()
         defer { MockTranscriptionPlugin.reset() }
         MockTranscriptionPlugin.setResponseText("teh TypeWhisper")
-        let apiContext = await MainActor.run {
+        context = await MainActor.run {
             Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
         }
-        context = apiContext
+        let apiContext = try XCTUnwrap(context)
         try await MainActor.run {
             try apiContext.dictionaryService.upsertAPICorrection(
                 original: "teh",
@@ -1791,10 +1791,10 @@ final class APIRouterAndHandlersTests: XCTestCase {
         MockTranscriptionPlugin.reset()
         defer { MockTranscriptionPlugin.reset() }
         MockTranscriptionPlugin.setResponseText("teh TypeWhisper")
-        let apiContext = await MainActor.run {
+        context = await MainActor.run {
             Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
         }
-        context = apiContext
+        let apiContext = try XCTUnwrap(context)
         try await MainActor.run {
             try apiContext.dictionaryService.upsertAPICorrection(
                 original: "teh",
@@ -1836,10 +1836,10 @@ final class APIRouterAndHandlersTests: XCTestCase {
         MockTranscriptionPlugin.reset()
         defer { MockTranscriptionPlugin.reset() }
         MockTranscriptionPlugin.setResponseText("teh TypeWhisper")
-        let apiContext = await MainActor.run {
+        context = await MainActor.run {
             Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
         }
-        context = apiContext
+        let apiContext = try XCTUnwrap(context)
         try await MainActor.run {
             try apiContext.dictionaryService.upsertAPICorrection(
                 original: "teh",
