@@ -60,6 +60,9 @@ final class NumberWordNormalizerTests: XCTestCase {
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "thirty first", language: "en"), "31st")
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "forty second", language: "en"), "42nd")
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "twenty third", language: "en"), "23rd")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "twenty-third", language: "en"), "23rd")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "one hundred first", language: "en"), "101st")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "one hundred twenty first", language: "en"), "121st")
     }
 
     func testEnglishStandaloneOrdinalNormalizesToDigits() {
