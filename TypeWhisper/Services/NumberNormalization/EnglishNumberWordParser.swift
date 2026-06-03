@@ -21,6 +21,26 @@ enum EnglishNumberWordParser {
         "million": 1_000_000,
     ]
 
+    // Unit ordinals 1–9. Used only as the tail of a compound such as
+    // "twenty" + "eighth" -> 28th, where the numeric context is unambiguous.
+    private static let ordinalUnitValues: [String: Int] = [
+        "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5,
+        "sixth": 6, "seventh": 7, "eighth": 8, "ninth": 9,
+    ]
+
+    // Ordinals safe to convert on their own. Bare "first" / "second" / "third"
+    // are deliberately excluded — in dictation they are too often non-numeric
+    // ("first, let's...", "wait a second"). They still convert inside a
+    // compound ("twenty first" -> 21st), just not standalone.
+    private static let standaloneOrdinalValues: [String: Int] = [
+        "fourth": 4, "fifth": 5, "sixth": 6, "seventh": 7, "eighth": 8, "ninth": 9,
+        "tenth": 10, "eleventh": 11, "twelfth": 12, "thirteenth": 13, "fourteenth": 14,
+        "fifteenth": 15, "sixteenth": 16, "seventeenth": 17, "eighteenth": 18, "nineteenth": 19,
+        "twentieth": 20, "thirtieth": 30, "fortieth": 40, "fiftieth": 50,
+        "sixtieth": 60, "seventieth": 70, "eightieth": 80, "ninetieth": 90,
+        "hundredth": 100, "thousandth": 1_000,
+    ]
+
     static func parse(_ words: [String]) -> NumberWordNormalizer.ParsedWords? {
         guard !words.isEmpty else { return nil }
         let normalizedWords = words.map(normalizeWord)
@@ -33,23 +53,64 @@ enum EnglishNumberWordParser {
             guard index < normalizedWords.count else { return nil }
         }
 
-        guard let integer = parseInteger(normalizedWords, startingAt: index) else { return nil }
-        index = integer.nextIndex
-        var replacement = "\(integer.value)"
+        if let integer = parseInteger(normalizedWords, startingAt: index) {
+            index = integer.nextIndex
 
-        if index < normalizedWords.count, normalizedWords[index] == "point" {
-            let decimal = parseDecimalDigits(normalizedWords, startingAt: index + 1)
-            if !decimal.digits.isEmpty {
-                replacement += ".\(decimal.digits)"
-                index = decimal.nextIndex
+            // "twenty" + "eighth" -> 28th, "thirty" + "first" -> 31st.
+            if integer.value > 0, integer.value % 10 == 0,
+               index < normalizedWords.count,
+               let unit = ordinalUnitValues[normalizedWords[index]] {
+                index += 1
+                return makeResult(integer.value + unit, ordinal: true, isNegative: isNegative, consumedWords: index)
             }
+
+            var replacement = "\(integer.value)"
+
+            if index < normalizedWords.count, normalizedWords[index] == "point" {
+                let decimal = parseDecimalDigits(normalizedWords, startingAt: index + 1)
+                if !decimal.digits.isEmpty {
+                    replacement += ".\(decimal.digits)"
+                    index = decimal.nextIndex
+                }
+            }
+
+            if isNegative {
+                replacement = "-" + replacement
+            }
+
+            return NumberWordNormalizer.ParsedWords(value: replacement, consumedWords: index)
         }
 
+        // Standalone ordinal word ("eighth", "twelfth", "twentieth", ...),
+        // excluding the ambiguous bare "first" / "second" / "third".
+        if let ordinal = standaloneOrdinalValues[normalizedWords[index]] {
+            index += 1
+            return makeResult(ordinal, ordinal: true, isNegative: isNegative, consumedWords: index)
+        }
+
+        return nil
+    }
+
+    private static func makeResult(_ value: Int, ordinal: Bool, isNegative: Bool, consumedWords: Int) -> NumberWordNormalizer.ParsedWords {
+        var replacement = "\(value)"
+        if ordinal {
+            replacement += ordinalSuffix(value)
+        }
         if isNegative {
             replacement = "-" + replacement
         }
+        return NumberWordNormalizer.ParsedWords(value: replacement, consumedWords: consumedWords)
+    }
 
-        return NumberWordNormalizer.ParsedWords(value: replacement, consumedWords: index)
+    private static func ordinalSuffix(_ value: Int) -> String {
+        let magnitude = abs(value)
+        if (11...13).contains(magnitude % 100) { return "th" }
+        switch magnitude % 10 {
+        case 1: return "st"
+        case 2: return "nd"
+        case 3: return "rd"
+        default: return "th"
+        }
     }
 
     private static func parseInteger(_ words: [String], startingAt startIndex: Int) -> (value: Int, nextIndex: Int)? {

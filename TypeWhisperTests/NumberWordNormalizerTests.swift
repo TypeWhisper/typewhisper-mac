@@ -55,6 +55,55 @@ final class NumberWordNormalizerTests: XCTestCase {
         )
     }
 
+    func testEnglishCompoundOrdinalNormalizesToDigits() {
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "twenty eighth", language: "en"), "28th")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "thirty first", language: "en"), "31st")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "forty second", language: "en"), "42nd")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "twenty third", language: "en"), "23rd")
+    }
+
+    func testEnglishStandaloneOrdinalNormalizesToDigits() {
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "eighth", language: "en"), "8th")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "twelfth", language: "en"), "12th")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "twentieth", language: "en"), "20th")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "thirtieth", language: "en"), "30th")
+    }
+
+    func testEnglishOrdinalSuffixSelection() {
+        // st/nd/rd come from compounds; the th-exception (11–13) from teen ordinals.
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "twenty first", language: "en"), "21st")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "twenty second", language: "en"), "22nd")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "twenty third", language: "en"), "23rd")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "fourth", language: "en"), "4th")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "eleventh", language: "en"), "11th")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "twelfth", language: "en"), "12th")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "thirteenth", language: "en"), "13th")
+    }
+
+    func testEnglishBareFirstSecondThirdAreLeftUnchanged() {
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "first", language: "en"), "first")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "second", language: "en"), "second")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "third", language: "en"), "third")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "first, let's start", language: "en"), "first, let's start")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "wait a second", language: "en"), "wait a second")
+    }
+
+    func testEnglishOrdinalWithinSentenceNormalizesToDigits() {
+        XCTAssertEqual(
+            NumberWordNormalizer.normalize(text: "the thirty first of May", language: "en"),
+            "the 31st of May"
+        )
+        XCTAssertEqual(
+            NumberWordNormalizer.normalize(text: "every twenty fourth hour", language: "en"),
+            "every 24th hour"
+        )
+    }
+
+    func testEnglishOrdinalDigitOutputIsIdempotent() {
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "28th", language: "en"), "28th")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "the 31st of May", language: "en"), "the 31st of May")
+    }
+
     func testGermanNegativeDecimalNormalizesToDigits() {
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "minus zwei komma fünf", language: "de"), "-2,5")
     }
