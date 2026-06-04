@@ -43,6 +43,16 @@ let package = Package(
             ]
         ),
         .target(
+            name: "OpenRouterPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/OpenRouterPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
             name: "Qwen3Plugin",
             dependencies: [
                 "TypeWhisperPluginSDK",
@@ -211,6 +221,15 @@ let package = Package(
                 "OpenAIPlugin",
             ],
             path: "Plugins/OpenAIPlugin/Tests"
+        ),
+        .testTarget(
+            name: "OpenRouterPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "OpenRouterPlugin",
+            ],
+            path: "Plugins/OpenRouterPlugin/Tests"
         ),
         .testTarget(
             name: "Qwen3PluginTests",

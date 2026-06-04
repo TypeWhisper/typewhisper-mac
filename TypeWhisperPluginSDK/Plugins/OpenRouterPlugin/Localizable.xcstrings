@@ -111,6 +111,16 @@
         }
       }
     },
+    "Transcription Model" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transkriptionsmodell"
+          }
+        }
+      }
+    },
     "Using default models. Press Refresh to fetch all available models." : {
       "localizations" : {
         "de" : {
