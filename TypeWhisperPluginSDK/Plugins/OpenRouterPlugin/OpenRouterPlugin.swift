@@ -55,14 +55,40 @@ final class OpenRouterPlugin: NSObject,
            let models = try? JSONDecoder().decode([OpenRouterFetchedModel].self, from: data) {
             _fetchedTranscriptionModels = models
         }
-        _selectedModelId = host.userDefault(forKey: Self.StorageKeys.selectedModel) as? String
-            ?? transcriptionModels.first?.id
-        _selectedLLMModelId = host.userDefault(forKey: Self.StorageKeys.selectedLLMModel) as? String
-            ?? supportedModels.first?.id
+        _selectedModelId = Self.resolvedStoredModelId(
+            host.userDefault(forKey: Self.StorageKeys.selectedModel) as? String,
+            availableModels: transcriptionModels,
+            storageKey: Self.StorageKeys.selectedModel,
+            host: host
+        )
+        _selectedLLMModelId = Self.resolvedStoredModelId(
+            host.userDefault(forKey: Self.StorageKeys.selectedLLMModel) as? String,
+            availableModels: supportedModels,
+            storageKey: Self.StorageKeys.selectedLLMModel,
+            host: host
+        )
         _llmTemperatureModeRaw = host.userDefault(forKey: Self.StorageKeys.llmTemperatureMode) as? String
             ?? PluginLLMTemperatureMode.providerDefault.rawValue
         _llmTemperatureValue = host.userDefault(forKey: Self.StorageKeys.llmTemperatureValue) as? Double
             ?? 0.3
+    }
+
+    private static func resolvedStoredModelId(
+        _ storedModelId: String?,
+        availableModels: [PluginModelInfo],
+        storageKey: String,
+        host: HostServices
+    ) -> String? {
+        let trimmedModelId = storedModelId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let selectedModelId = trimmedModelId.flatMap { modelId in
+            availableModels.contains(where: { $0.id == modelId }) ? modelId : nil
+        } ?? availableModels.first?.id
+
+        if selectedModelId != storedModelId {
+            host.setUserDefault(selectedModelId, forKey: storageKey)
+        }
+
+        return selectedModelId
     }
 
     func deactivate() {

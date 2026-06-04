@@ -48,6 +48,21 @@ final class OpenRouterPluginTests: XCTestCase {
         XCTAssertEqual(reloaded.selectedModelId, "openai/gpt-4o-transcribe")
     }
 
+    func testInvalidPersistedModelSelectionsFallbackAndPersistValidDefaults() throws {
+        let host = try PluginTestHostServices(defaults: [
+            "selectedModel": " retired-stt-model ",
+            "selectedLLMModel": "retired-llm-model",
+        ])
+        let plugin = OpenRouterPlugin()
+
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.selectedModelId, "openai/whisper-1")
+        XCTAssertEqual(plugin.selectedLLMModelId, "openai/gpt-4o")
+        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "openai/whisper-1")
+        XCTAssertEqual(host.userDefault(forKey: "selectedLLMModel") as? String, "openai/gpt-4o")
+    }
+
     func testLLMAndTranscriptionModelFetchesUseSeparateEndpointsAndCaches() async throws {
         let host = try PluginTestHostServices(secrets: ["api-key": "openrouter-key"])
         let plugin = OpenRouterPlugin()
