@@ -84,6 +84,16 @@ final class PromptPaletteHandler {
         let recentEntries = recentTranscriptionStore.mergedEntries(historyRecords: historyService.records)
         guard !workflows.isEmpty || !recentEntries.isEmpty else { return }
 
+        if workflows.isEmpty {
+            showPalette(
+                context: nil,
+                workflows: [],
+                recentEntries: recentEntries,
+                soundFeedbackEnabled: soundFeedbackEnabled
+            )
+            return
+        }
+
         let activeApp = textInsertionService.captureActiveApp()
         let browserInfoTask = makeBrowserInfoTask(activeApp: activeApp)
 

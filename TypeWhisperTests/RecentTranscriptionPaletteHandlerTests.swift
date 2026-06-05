@@ -460,21 +460,15 @@ final class PromptPaletteHandlerTests: XCTestCase {
 
         let textInsertionService = TextInsertionService()
         textInsertionService.accessibilityGrantedOverride = true
-        textInsertionService.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        var didCaptureActiveApp = false
+        textInsertionService.captureActiveAppOverride = {
+            didCaptureActiveApp = true
+            return ("Notes", "com.apple.Notes", nil)
+        }
         textInsertionService.textSelectionOverride = { nil }
         textInsertionService.textSelectionViaCopyOverride = { nil }
 
-        let pasteboard = NSPasteboard.general
-        let savedClipboard = textInsertionService.saveClipboard(from: pasteboard)
-        defer { textInsertionService.restoreClipboard(savedClipboard, to: pasteboard) }
-        pasteboard.clearContents()
-
         let workflowService = WorkflowService(appSupportDirectory: appSupportDirectory)
-        _ = workflowService.addWorkflow(
-            name: "Manual Summary",
-            template: .summary,
-            trigger: .manual()
-        )
 
         let recentTranscriptionStore = RecentTranscriptionStore()
         recentTranscriptionStore.recordTranscription(
@@ -502,12 +496,11 @@ final class PromptPaletteHandlerTests: XCTestCase {
 
         handler.triggerSelection(currentState: .idle, soundFeedbackEnabled: false)
 
-        try await Task.sleep(for: .milliseconds(50))
-
         XCTAssertTrue(controller.isVisible)
         XCTAssertEqual(controller.lastEntryDescriptions, ["recent:Recovered field text"])
         XCTAssertNil(controller.lastSourceText)
         XCTAssertNil(shownError)
+        XCTAssertFalse(didCaptureActiveApp)
     }
 
     func testWorkflowPaletteRecentSelectionInsertsWithoutAutoEnter() async throws {
