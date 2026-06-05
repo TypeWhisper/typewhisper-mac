@@ -338,6 +338,8 @@ final class DictationViewModel: ObservableObject {
         self.promptPaletteHandler = PromptPaletteHandler(
             textInsertionService: textInsertionService,
             workflowService: workflowService,
+            historyService: historyService,
+            recentTranscriptionStore: recentTranscriptionStore,
             promptProcessingService: promptProcessingService,
             workflowTextProcessingService: self.workflowTextProcessingService,
             soundService: soundService,

@@ -27,6 +27,8 @@ final class PromptPaletteHandler {
     private let promptPaletteController: any PromptPaletteControlling
     private let textInsertionService: TextInsertionService
     private let workflowService: WorkflowService
+    private let historyService: HistoryService
+    private let recentTranscriptionStore: RecentTranscriptionStore
     private let workflowTextProcessingService: WorkflowTextProcessingService
     private let soundService: SoundService
     private let accessibilityAnnouncementService: AccessibilityAnnouncementService
@@ -43,6 +45,8 @@ final class PromptPaletteHandler {
     init(
         textInsertionService: TextInsertionService,
         workflowService: WorkflowService,
+        historyService: HistoryService,
+        recentTranscriptionStore: RecentTranscriptionStore,
         promptProcessingService: PromptProcessingService,
         workflowTextProcessingService: WorkflowTextProcessingService? = nil,
         soundService: SoundService,
@@ -52,6 +56,8 @@ final class PromptPaletteHandler {
         self.promptPaletteController = promptPaletteController
         self.textInsertionService = textInsertionService
         self.workflowService = workflowService
+        self.historyService = historyService
+        self.recentTranscriptionStore = recentTranscriptionStore
         self.workflowTextProcessingService = workflowTextProcessingService
             ?? WorkflowTextProcessingService(
                 promptProcessingService: promptProcessingService,
@@ -75,7 +81,8 @@ final class PromptPaletteHandler {
         guard currentState == .idle else { return }
 
         let workflows = workflowService.workflows.filter { $0.isEnabled && $0.isManuallyRunnable }
-        guard !workflows.isEmpty else { return }
+        let recentEntries = recentTranscriptionStore.mergedEntries(historyRecords: historyService.records)
+        guard !workflows.isEmpty || !recentEntries.isEmpty else { return }
 
         let activeApp = textInsertionService.captureActiveApp()
         let browserInfoTask = makeBrowserInfoTask(activeApp: activeApp)
@@ -83,11 +90,24 @@ final class PromptPaletteHandler {
         resolveTextContext(
             activeApp: activeApp,
             browserInfoTask: browserInfoTask,
-            soundFeedbackEnabled: soundFeedbackEnabled
+            onUnavailable: { [weak self] in
+                guard let self else { return }
+                guard !recentEntries.isEmpty else {
+                    self.showMissingTextFeedback(soundFeedbackEnabled: soundFeedbackEnabled)
+                    return
+                }
+                self.showPalette(
+                    context: nil,
+                    workflows: [],
+                    recentEntries: recentEntries,
+                    soundFeedbackEnabled: soundFeedbackEnabled
+                )
+            }
         ) { [weak self] context in
             self?.showPalette(
                 context: context,
                 workflows: workflows,
+                recentEntries: recentEntries,
                 soundFeedbackEnabled: soundFeedbackEnabled
             )
         }
@@ -110,7 +130,9 @@ final class PromptPaletteHandler {
         resolveTextContext(
             activeApp: activeApp,
             browserInfoTask: browserInfoTask,
-            soundFeedbackEnabled: soundFeedbackEnabled
+            onUnavailable: { [weak self] in
+                self?.showMissingTextFeedback(soundFeedbackEnabled: soundFeedbackEnabled)
+            }
         ) { [weak self] context in
             self?.processStandaloneWorkflow(
                 workflow: workflow,
@@ -133,7 +155,7 @@ final class PromptPaletteHandler {
     private func resolveTextContext(
         activeApp: (name: String?, bundleId: String?, url: String?),
         browserInfoTask: Task<(url: String?, title: String?), Never>?,
-        soundFeedbackEnabled: Bool,
+        onUnavailable: @escaping () -> Void,
         completion: @escaping (PaletteContext) -> Void
     ) {
         if let sel = textInsertionService.getTextSelection() {
@@ -171,27 +193,48 @@ final class PromptPaletteHandler {
                         selectionViaCopy: false
                     ))
                 } else {
-                    logger.info("[PromptPalette] No text available, aborting")
-                    let message = "Please select or copy some text first."
-                    soundService.play(.error, enabled: soundFeedbackEnabled)
-                    self.accessibilityAnnouncementService.announceError(message)
-                    self.onShowNotchFeedback?(message, "xmark.circle.fill", 2.5, true, "workflow")
-                    self.onShowError?(message)
+                    logger.info("[PromptPalette] No text available")
+                    onUnavailable()
                 }
             }
         }
     }
 
     private func showPalette(
-        context: PaletteContext,
+        context: PaletteContext?,
         workflows: [Workflow],
+        recentEntries: [RecentTranscriptionStore.Entry],
         soundFeedbackEnabled: Bool
     ) {
         paletteContext = context
 
-        promptPaletteController.show(workflows: workflows, sourceText: context.text) { [weak self] workflow in
-            self?.processStandaloneWorkflow(workflow: workflow, soundFeedbackEnabled: soundFeedbackEnabled)
+        var entries: [PromptPaletteEntry] = []
+        if context != nil {
+            entries.append(contentsOf: workflows.map { .workflow($0) })
         }
+        entries.append(contentsOf: recentEntries.map { .recentTranscription($0) })
+        guard !entries.isEmpty else { return }
+
+        promptPaletteController.show(entries: entries, sourceText: context?.text) { [weak self] entry in
+            guard let self else { return }
+            switch entry {
+            case .workflow(let workflow):
+                self.processStandaloneWorkflow(workflow: workflow, soundFeedbackEnabled: soundFeedbackEnabled)
+            case .recentTranscription(let recentEntry):
+                self.paletteContext = nil
+                Task { @MainActor in
+                    await self.insertRecentTranscription(recentEntry)
+                }
+            }
+        }
+    }
+
+    private func showMissingTextFeedback(soundFeedbackEnabled: Bool) {
+        let message = "Please select or copy some text first."
+        soundService.play(.error, enabled: soundFeedbackEnabled)
+        accessibilityAnnouncementService.announceError(message)
+        onShowNotchFeedback?(message, "xmark.circle.fill", 2.5, true, "workflow")
+        onShowError?(message)
     }
 
     private func processStandaloneWorkflow(workflow: Workflow, soundFeedbackEnabled: Bool) {
@@ -203,6 +246,19 @@ final class PromptPaletteHandler {
             context: ctx,
             soundFeedbackEnabled: soundFeedbackEnabled
         )
+    }
+
+    private func insertRecentTranscription(_ entry: RecentTranscriptionStore.Entry) async {
+        do {
+            _ = try await textInsertionService.insertText(
+                entry.finalText,
+                preserveClipboard: getPreserveClipboard?() ?? false,
+                autoEnter: false
+            )
+            onShowNotchFeedback?(String(localized: "Text inserted"), "checkmark.circle.fill", 2.5, false, nil)
+        } catch {
+            onShowNotchFeedback?(error.localizedDescription, "xmark.circle.fill", 2.5, true, "recentTranscriptions")
+        }
     }
 
     private func processStandaloneWorkflow(

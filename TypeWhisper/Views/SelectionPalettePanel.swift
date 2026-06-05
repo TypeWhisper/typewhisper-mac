@@ -138,7 +138,8 @@ final class SelectionPaletteInteractionModel: ObservableObject {
 
     private func moveSelection(by offset: Int) {
         guard !filteredItems.isEmpty else { return }
-        selectedIndex = min(max(selectedIndex + offset, 0), filteredItems.count - 1)
+        let itemCount = filteredItems.count
+        selectedIndex = (selectedIndex + offset + itemCount) % itemCount
     }
 
     private func acceptSelection() {
