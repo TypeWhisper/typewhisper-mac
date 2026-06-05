@@ -15,11 +15,7 @@ struct SpokenPunctuationSettingsSection: View {
             if let context = activePunctuationContext,
                let resolved = resolvedPunctuationStrategy(for: context) {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text(context.summary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    Picker("Strategy", selection: Binding(
+                    Picker(selection: Binding(
                         get: { resolved.strategy },
                         set: { newValue in
                             savePunctuationStrategy(newValue, for: context, resolved: resolved)
@@ -28,11 +24,12 @@ struct SpokenPunctuationSettingsSection: View {
                         ForEach(PunctuationStrategy.allCases) { strategy in
                             Text(strategy.displayName).tag(strategy)
                         }
+                    } label: {
+                        SettingsInfoLabel(
+                            title: "Strategy",
+                            info: "\(context.summary)\n\n\(resolved.strategy.description)"
+                        )
                     }
-
-                    Text(resolved.strategy.description)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
 
                     Text(resolved.profile.verificationState.statusText)
                         .font(.caption)

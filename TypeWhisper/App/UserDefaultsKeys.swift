@@ -139,6 +139,7 @@ enum UserDefaultsKeys {
     // MARK: - Workflows
     static let workflowDefaultLLMProviderId = "workflowDefaultLLMProviderId"
     static let workflowDefaultLLMCloudModel = "workflowDefaultLLMCloudModel"
+    static let workflowShortTranscriptionMinimumWords = "workflowShortTranscriptionMinimumWords"
 
     // MARK: - Licensing
     static let usageIntent = "usageIntent"

@@ -41,6 +41,9 @@ struct WorkflowMatchResult {
 
 @MainActor
 final class WorkflowService: ObservableObject {
+    static let defaultShortTranscriptionMinimumWords = 0
+    static let shortTranscriptionMinimumWordsRange = 0...10
+
     @Published private(set) var workflows: [Workflow] = []
     @Published var defaultProviderId: String {
         didSet {
@@ -53,6 +56,16 @@ final class WorkflowService: ObservableObject {
     @Published var defaultCloudModel: String {
         didSet {
             userDefaults.set(defaultCloudModel, forKey: UserDefaultsKeys.workflowDefaultLLMCloudModel)
+        }
+    }
+    @Published var shortTranscriptionMinimumWords: Int {
+        didSet {
+            let clamped = Self.clampedShortTranscriptionMinimumWords(shortTranscriptionMinimumWords)
+            guard clamped == shortTranscriptionMinimumWords else {
+                shortTranscriptionMinimumWords = clamped
+                return
+            }
+            userDefaults.set(clamped, forKey: UserDefaultsKeys.workflowShortTranscriptionMinimumWords)
         }
     }
 
@@ -71,6 +84,10 @@ final class WorkflowService: ObservableObject {
         self.defaultCloudModel = userDefaults.string(forKey: UserDefaultsKeys.workflowDefaultLLMCloudModel)
             ?? userDefaults.string(forKey: "llmCloudModel")
             ?? ""
+        self.shortTranscriptionMinimumWords = Self.clampedShortTranscriptionMinimumWords(
+            userDefaults.object(forKey: UserDefaultsKeys.workflowShortTranscriptionMinimumWords) as? Int
+                ?? Self.defaultShortTranscriptionMinimumWords
+        )
 
         let schema = Schema([Workflow.self])
         let storeDir = appSupportDirectory
@@ -98,6 +115,20 @@ final class WorkflowService: ObservableObject {
         modelContext.autosaveEnabled = true
 
         fetchWorkflows()
+    }
+
+    static func clampedShortTranscriptionMinimumWords(_ value: Int) -> Int {
+        min(max(value, shortTranscriptionMinimumWordsRange.lowerBound), shortTranscriptionMinimumWordsRange.upperBound)
+    }
+
+    func shouldSkipAIProcessingForShortDictation(text: String) -> Bool {
+        guard shortTranscriptionMinimumWords > 0 else { return false }
+
+        let wordCount = text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(whereSeparator: \.isWhitespace)
+            .count
+        return wordCount > 0 && wordCount < shortTranscriptionMinimumWords
     }
 
     @discardableResult

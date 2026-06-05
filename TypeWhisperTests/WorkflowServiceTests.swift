@@ -429,6 +429,86 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(reloaded.defaultCloudModel, "gemma-4-large")
     }
 
+    func testWorkflowServiceDefaultsShortTranscriptionSkipSettings() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let suiteName = "WorkflowServiceTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults)
+
+        XCTAssertEqual(service.shortTranscriptionMinimumWords, 0)
+    }
+
+    func testWorkflowServicePersistsShortTranscriptionMinimumWords() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let suiteName = "WorkflowServiceTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults)
+        service.shortTranscriptionMinimumWords = 5
+
+        let reloaded = WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults)
+
+        XCTAssertEqual(reloaded.shortTranscriptionMinimumWords, 5)
+
+        reloaded.shortTranscriptionMinimumWords = 0
+        let disabledReload = WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults)
+
+        XCTAssertEqual(disabledReload.shortTranscriptionMinimumWords, 0)
+    }
+
+    func testWorkflowServiceClampsShortTranscriptionMinimumWords() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let suiteName = "WorkflowServiceTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults)
+
+        service.shortTranscriptionMinimumWords = -1
+        XCTAssertEqual(service.shortTranscriptionMinimumWords, 0)
+
+        service.shortTranscriptionMinimumWords = 99
+        XCTAssertEqual(service.shortTranscriptionMinimumWords, 10)
+
+        defaults.set(0, forKey: UserDefaultsKeys.workflowShortTranscriptionMinimumWords)
+        XCTAssertEqual(
+            WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults).shortTranscriptionMinimumWords,
+            0
+        )
+    }
+
+    func testWorkflowServiceShortTranscriptionSkipUsesThresholdBoundaries() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let suiteName = "WorkflowServiceTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults)
+        service.shortTranscriptionMinimumWords = 3
+
+        XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: ""))
+        XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "   "))
+        XCTAssertTrue(service.shouldSkipAIProcessingForShortDictation(text: "yes"))
+        XCTAssertTrue(service.shouldSkipAIProcessingForShortDictation(text: "thank you"))
+        XCTAssertTrue(service.shouldSkipAIProcessingForShortDictation(text: "thank\nyou!"))
+        XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "open new tab"))
+        XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "open.\nnew tab!"))
+
+        service.shortTranscriptionMinimumWords = 1
+        XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "yes"))
+
+        service.shortTranscriptionMinimumWords = 0
+        XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "yes"))
+        XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "thank you"))
+    }
+
     func testWorkflowServiceResolvesWorkflowDefaultLLMUnlessWorkflowOverridesIt() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
         defer { TestSupport.remove(appSupportDirectory) }

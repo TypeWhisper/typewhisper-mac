@@ -1683,6 +1683,7 @@ final class DictationViewModel: ObservableObject {
         guard let workflow = matchedWorkflow else { return nil }
 
         let workflowProcessor = workflowTextProcessingService
+        let workflowService = workflowService
         guard workflowProcessor.canProcess(
             workflow: workflow,
             fallbackTranslationTarget: translationTarget,
@@ -1693,7 +1694,12 @@ final class DictationViewModel: ObservableObject {
         }
 
         return { text in
-            try await workflowProcessor.process(
+            if workflowService.shouldSkipAIProcessingForShortDictation(text: text) {
+                logger.info("Skipping workflow AI processing for short dictation")
+                return text
+            }
+
+            return try await workflowProcessor.process(
                 workflow: workflow,
                 text: text,
                 fallbackTranslationTarget: translationTarget,
