@@ -30,6 +30,7 @@
 		9A645F000000000000000005 /* HanNumberWordParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A645F000000000000000105 /* HanNumberWordParser.swift */; };
 		9A645F000000000000000006 /* ChineseNumberWordParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A645F000000000000000106 /* ChineseNumberWordParser.swift */; };
 		9A645F000000000000000007 /* JapaneseNumberWordParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A645F000000000000000107 /* JapaneseNumberWordParser.swift */; };
+		9A645F000000000000000008 /* DutchNumberWordParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A645F000000000000000108 /* DutchNumberWordParser.swift */; };
 		B346BF6B189F3E7C6CBA1410 /* TranscriptionNormalizationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 206526FD5E41E23B077E3499 /* TranscriptionNormalizationService.swift */; };
 		540AE1FA22F41A63C78B89EC /* NumberWordNormalizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50756E40757C6BC13C52ED74 /* NumberWordNormalizerTests.swift */; };
 		E8FB3269B522A8923134AD9A /* TranscriptionNormalizationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16CD1A34084E0761A8659612 /* TranscriptionNormalizationServiceTests.swift */; };
@@ -787,6 +788,7 @@
 		9A645F000000000000000105 /* HanNumberWordParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HanNumberWordParser.swift; sourceTree = "<group>"; };
 		9A645F000000000000000106 /* ChineseNumberWordParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChineseNumberWordParser.swift; sourceTree = "<group>"; };
 		9A645F000000000000000107 /* JapaneseNumberWordParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JapaneseNumberWordParser.swift; sourceTree = "<group>"; };
+		9A645F000000000000000108 /* DutchNumberWordParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DutchNumberWordParser.swift; sourceTree = "<group>"; };
 		206526FD5E41E23B077E3499 /* TranscriptionNormalizationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionNormalizationService.swift; sourceTree = "<group>"; };
 		D4A100000000000000000002 /* RecorderTranscriptionBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderTranscriptionBuffer.swift; sourceTree = "<group>"; };
 		BB00000000000000000238 /* AudioRecorderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderService.swift; sourceTree = "<group>"; };
@@ -1446,6 +1448,7 @@
 			isa = PBXGroup;
 			children = (
 				9A645F000000000000000106 /* ChineseNumberWordParser.swift */,
+				9A645F000000000000000108 /* DutchNumberWordParser.swift */,
 				9A645F000000000000000101 /* EnglishNumberWordParser.swift */,
 				9A645F000000000000000103 /* FrenchNumberWordParser.swift */,
 				9A645F000000000000000102 /* GermanNumberWordParser.swift */,
@@ -3707,6 +3710,7 @@
 				9A645F000000000000000005 /* HanNumberWordParser.swift in Sources */,
 				9A645F000000000000000006 /* ChineseNumberWordParser.swift in Sources */,
 				9A645F000000000000000007 /* JapaneseNumberWordParser.swift in Sources */,
+				9A645F000000000000000008 /* DutchNumberWordParser.swift in Sources */,
 				B346BF6B189F3E7C6CBA1410 /* TranscriptionNormalizationService.swift in Sources */,
 				AA00000000000000000333 /* DictationPunctuationProfileStore.swift in Sources */,
 				AA00000000000000000334 /* PunctuationRulesLoader.swift in Sources */,

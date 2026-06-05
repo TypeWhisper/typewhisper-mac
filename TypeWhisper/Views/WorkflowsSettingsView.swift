@@ -1771,8 +1771,8 @@ private struct WorkflowEditorPage: View {
             }
 
             Text(localizedAppText(
-                "Controls whether spoken English and German numbers are converted to digits for this workflow.",
-                de: "Steuert, ob gesprochene englische und deutsche Zahlen in diesem Workflow zu Ziffern werden."
+                "Controls whether spoken numbers in supported languages are converted to digits for this workflow.",
+                de: "Steuert, ob gesprochene Zahlen in unterstützten Sprachen in diesem Workflow zu Ziffern werden."
             ))
             .font(.caption)
             .foregroundStyle(.secondary)

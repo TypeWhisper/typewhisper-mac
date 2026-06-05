@@ -1,7 +1,7 @@
 import Foundation
 
 enum NumberWordNormalizer {
-    private static let supportedLanguageCodes: Set<String> = ["en", "de", "fr", "es", "zh", "ja"]
+    private static let supportedLanguageCodes: Set<String> = ["en", "de", "fr", "es", "nl", "zh", "ja"]
     private static let cjkNumberCharacters = Set("零〇一二两兩三四五六七八九十百千万萬亿億点點負负".map { $0 })
 
     static func normalize(text: String, language: String?) -> String {
@@ -82,6 +82,8 @@ enum NumberWordNormalizer {
             parsed = FrenchNumberWordParser.parse(wordTexts)
         case "es":
             parsed = SpanishNumberWordParser.parse(wordTexts)
+        case "nl":
+            parsed = DutchNumberWordParser.parse(wordTexts)
         case "zh":
             parsed = ChineseNumberWordParser.parse(wordTexts)
         case "ja":

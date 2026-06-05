@@ -19,6 +19,21 @@ final class TranscriptionNormalizationServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testDutchLocaleNormalizesBeforePostProcessing() async throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        defer { defaults.removePersistentDomain(forName: #function) }
+
+        let result = TranscriptionNormalizationService.normalizeText(
+            "ik heb twee vragen",
+            language: "nl-NL",
+            defaults: defaults
+        )
+
+        XCTAssertEqual(result, "ik heb 2 vragen")
+    }
+
+    @MainActor
     func testGlobalOffSkipsNormalization() async throws {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)

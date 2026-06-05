@@ -1948,6 +1948,16 @@
         }
       }
     },
+    "Converts spoken numbers in supported languages into digits before insertion and export." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wandelt gesprochene Zahlen in unterstützten Sprachen vor dem Einfügen und Exportieren in Ziffern um."
+          }
+        }
+      }
+    },
     "Create profiles to use app-specific transcription settings." : {
       "extractionState" : "stale",
       "localizations" : {

@@ -593,7 +593,7 @@ struct RecordingSettingsView: View {
                     set: { UserDefaults.standard.set($0, forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled) }
                 ))
 
-                Text(String(localized: "Converts spoken English and German numbers, such as twenty three or dreiundzwanzig, into digits before insertion and export."))
+                Text(String(localized: "Converts spoken numbers in supported languages into digits before insertion and export."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -136,6 +136,22 @@ final class NumberWordNormalizerTests: XCTestCase {
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "un millón de filas", language: "es"), "1000000 de filas")
     }
 
+    func testDutchNumbersNormalizeToDigits() {
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "ik heb twee vragen", language: "nl"), "ik heb 2 vragen")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "drieëntwintig bestanden", language: "nl"), "23 bestanden")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "twee en twintig bestanden", language: "nl"), "22 bestanden")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "duizend tweehonderd vierendertig", language: "nl"), "1234")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "driehonderdvijfendertig", language: "nl"), "335")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "min twee komma vijf", language: "nl"), "-2,5")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "minus een komma vijf", language: "nl"), "-1,5")
+    }
+
+    func testDutchArticleOneIsPreservedOutsideClearNumberConstructs() {
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "ik heb een probleem", language: "nl"), "ik heb een probleem")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "een miljoen regels", language: "nl"), "1000000 regels")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "een komma vijf seconden", language: "nl"), "1,5 seconden")
+    }
+
     func testChineseHanNumbersNormalizeToDigits() {
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "我有二十三个文件", language: "zh"), "我有23个文件")
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "一千二百三十四", language: "zh"), "1234")
