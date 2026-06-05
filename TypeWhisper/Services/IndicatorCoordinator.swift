@@ -405,15 +405,15 @@ enum IndicatorFullscreenSuppressionPolicy {
         windowFrameProvider: (pid_t) -> CGRect? = IndicatorWindowFrameLookup.frontmostWindowFrame(for:),
         appBundleIdentifier: String? = Bundle.main.bundleIdentifier
     ) -> Bool {
-        guard placement == .notchStrip else {
-            return false
-        }
-
         guard let application = frontmostApplicationProvider() else {
             return false
         }
 
         guard application.processIdentifier != NSRunningApplication.current.processIdentifier else {
+            return false
+        }
+
+        guard placement == .notchStrip || isSafariBundleIdentifier(application.bundleIdentifier) else {
             return false
         }
 
@@ -453,10 +453,6 @@ enum IndicatorFullscreenSuppressionPolicy {
         appBundleIdentifier: String?,
         placement: IndicatorPlacement = .notchStrip
     ) -> Bool {
-        guard placement == .notchStrip else {
-            return false
-        }
-
         guard safeAreaTopInset > 0,
               let candidateWindowFrame = windowFrame,
               !screenFrame.isEmpty,
@@ -468,12 +464,49 @@ enum IndicatorFullscreenSuppressionPolicy {
         let screenFrame = screenFrame.standardized
         let windowFrame = candidateWindowFrame.standardized
 
+        // Safari's hidden fullscreen toolbar can be triggered by auxiliary panels
+        // even when the indicator renders away from the notch strip.
+        if isSafariBundleIdentifier(frontmostBundleIdentifier),
+           isFullscreenLikeWindow(screenFrame: screenFrame, windowFrame: windowFrame) {
+            return windowSubstantiallyOverlapsNotchStrip(
+                screenFrame: screenFrame,
+                safeAreaTopInset: safeAreaTopInset,
+                windowFrame: windowFrame
+            )
+        }
+
+        guard placement == .notchStrip else {
+            return false
+        }
+
         if let focusedWindowIsFullscreen {
             guard focusedWindowIsFullscreen else { return false }
         } else if !isFullscreenLikeWindow(screenFrame: screenFrame, windowFrame: windowFrame) {
             return false
         }
 
+        return windowSubstantiallyOverlapsNotchStrip(
+            screenFrame: screenFrame,
+            safeAreaTopInset: safeAreaTopInset,
+            windowFrame: windowFrame
+        )
+    }
+
+    private static func isFullscreenLikeWindow(screenFrame: CGRect, windowFrame: CGRect) -> Bool {
+        guard screenFrame.width > 0, screenFrame.height > 0 else { return false }
+
+        let widthCoverage = min(windowFrame.width / screenFrame.width, 1)
+        let heightCoverage = min(windowFrame.height / screenFrame.height, 1)
+
+        return widthCoverage >= minimumFullscreenDimensionCoverage
+            && heightCoverage >= minimumFullscreenDimensionCoverage
+    }
+
+    private static func windowSubstantiallyOverlapsNotchStrip(
+        screenFrame: CGRect,
+        safeAreaTopInset: CGFloat,
+        windowFrame: CGRect
+    ) -> Bool {
         let notchStripHeight = min(safeAreaTopInset, screenFrame.height)
         let notchStrip = CGRect(
             x: screenFrame.minX,
@@ -494,16 +527,6 @@ enum IndicatorFullscreenSuppressionPolicy {
             && verticalCoverage >= minimumVerticalCoverage
     }
 
-    private static func isFullscreenLikeWindow(screenFrame: CGRect, windowFrame: CGRect) -> Bool {
-        guard screenFrame.width > 0, screenFrame.height > 0 else { return false }
-
-        let widthCoverage = min(windowFrame.width / screenFrame.width, 1)
-        let heightCoverage = min(windowFrame.height / screenFrame.height, 1)
-
-        return widthCoverage >= minimumFullscreenDimensionCoverage
-            && heightCoverage >= minimumFullscreenDimensionCoverage
-    }
-
     private static func isTypeWhisperBundleIdentifier(
         _ bundleIdentifier: String?,
         appBundleIdentifier: String?
@@ -515,6 +538,11 @@ enum IndicatorFullscreenSuppressionPolicy {
 
         return bundleIdentifier == "com.typewhisper.mac"
             || bundleIdentifier == "com.typewhisper.mac.dev"
+    }
+
+    private static func isSafariBundleIdentifier(_ bundleIdentifier: String?) -> Bool {
+        bundleIdentifier == "com.apple.Safari"
+            || bundleIdentifier == "com.apple.SafariTechnologyPreview"
     }
 
     @MainActor

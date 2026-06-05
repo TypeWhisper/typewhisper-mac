@@ -280,6 +280,67 @@ final class IndicatorFullscreenSuppressionPolicyTests: XCTestCase {
         )
     }
 
+    func testSuppressesSafariFullscreenLikeWindowWhenAXReportsNotFullscreen() {
+        let safariFullscreenWindow = CGRect(x: 0, y: 0, width: 3024, height: 1964)
+
+        XCTAssertTrue(
+            IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                screenFrame: notchedScreenFrame,
+                safeAreaTopInset: 74,
+                windowFrame: safariFullscreenWindow,
+                focusedWindowIsFullscreen: false,
+                frontmostBundleIdentifier: "com.apple.Safari",
+                appBundleIdentifier: "com.typewhisper.mac.dev"
+            )
+        )
+    }
+
+    func testSuppressesSafariTechnologyPreviewFullscreenLikeWindow() {
+        let safariFullscreenWindow = CGRect(x: 0, y: 0, width: 3024, height: 1964)
+
+        XCTAssertTrue(
+            IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                screenFrame: notchedScreenFrame,
+                safeAreaTopInset: 74,
+                windowFrame: safariFullscreenWindow,
+                focusedWindowIsFullscreen: false,
+                frontmostBundleIdentifier: "com.apple.SafariTechnologyPreview",
+                appBundleIdentifier: "com.typewhisper.mac.dev"
+            )
+        )
+    }
+
+    func testSuppressesSafariFullscreenLikeWindowForNonNotchPlacement() {
+        let safariFullscreenWindow = CGRect(x: 0, y: 0, width: 3024, height: 1964)
+
+        XCTAssertTrue(
+            IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                screenFrame: notchedScreenFrame,
+                safeAreaTopInset: 74,
+                windowFrame: safariFullscreenWindow,
+                focusedWindowIsFullscreen: false,
+                frontmostBundleIdentifier: "com.apple.Safari",
+                appBundleIdentifier: "com.typewhisper.mac.dev",
+                placement: .nonNotchArea
+            )
+        )
+    }
+
+    func testDoesNotSuppressSafariWindowBelowNotchStripWhenAXReportsNotFullscreen() {
+        let safariWindowBelowMenuBar = CGRect(x: 7, y: 46, width: 3008, height: 1870)
+
+        XCTAssertFalse(
+            IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                screenFrame: notchedScreenFrame,
+                safeAreaTopInset: 74,
+                windowFrame: safariWindowBelowMenuBar,
+                focusedWindowIsFullscreen: false,
+                frontmostBundleIdentifier: "com.apple.Safari",
+                appBundleIdentifier: "com.typewhisper.mac.dev"
+            )
+        )
+    }
+
     func testDoesNotSuppressForeignMaximizedWindowWhenAXFullscreenIsUnavailable() {
         let screenFrame = CGRect(x: 0, y: 0, width: 1512, height: 982)
         let maximizedWindowBelowMenuBar = CGRect(x: 7, y: 46, width: 1497, height: 929)
