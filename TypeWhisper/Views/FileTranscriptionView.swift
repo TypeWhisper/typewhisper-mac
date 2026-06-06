@@ -513,7 +513,7 @@ struct FileTranscriptionView: View {
                 Text("·")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text(String(localized: "\(viewModel.completedFiles)/\(viewModel.totalFiles)"))
+                Text(String(localized: "\(viewModel.processedFiles)/\(viewModel.totalFiles)"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
@@ -521,7 +521,7 @@ struct FileTranscriptionView: View {
             .fixedSize(horizontal: true, vertical: false)
             .layoutPriority(1)
         } else {
-            Text(String(localized: "\(viewModel.completedFiles)/\(viewModel.totalFiles)"))
+            Text(String(localized: "\(viewModel.processedFiles)/\(viewModel.totalFiles)"))
                 .font(.caption)
                 .monospacedDigit()
                 .fixedSize(horizontal: true, vertical: false)

@@ -408,7 +408,7 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
                 case .prewarming:
                     self?.modelState = .loading(phase: "prewarming")
                 case .loaded, .prewarmed:
-                    self?.modelState = .ready(self?.loadedModelId ?? modelDef.id)
+                    self?.modelState = .loading(phase: "prewarming")
                 case .unloaded:
                     self?.modelState = .notLoaded
                 default:

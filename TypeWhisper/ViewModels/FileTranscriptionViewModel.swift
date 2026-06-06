@@ -198,6 +198,10 @@ final class FileTranscriptionViewModel: ObservableObject {
         files.filter { $0.state == .done }.count
     }
 
+    var processedFiles: Int {
+        files.filter { $0.state == .done || $0.state == .error || $0.state == .cancelled }.count
+    }
+
     func observePluginManager() {
         guard let pluginManager = PluginManager.shared else { return }
         pluginManager.objectWillChange
@@ -297,6 +301,8 @@ final class FileTranscriptionViewModel: ObservableObject {
     }
 
     private func transcribeFile(at index: Int, cancellationFlag: CancellationFlag) async {
+        guard files.indices.contains(index) else { return }
+
         files[index].state = .loading
         files[index].phaseDescription = String(localized: "Loading audio")
         files[index].progressFraction = nil
@@ -322,6 +328,7 @@ final class FileTranscriptionViewModel: ObservableObject {
             )
 
             try Task.checkCancellation()
+            guard files.indices.contains(index) else { return }
             guard !cancellationFlag.isCancelled else {
                 throw CancellationError()
             }
@@ -350,6 +357,7 @@ final class FileTranscriptionViewModel: ObservableObject {
                 { cancellationFlag.isCancelled }
             )
 
+            guard files.indices.contains(index) else { return }
             guard !cancellationFlag.isCancelled else {
                 throw CancellationError()
             }
@@ -360,11 +368,13 @@ final class FileTranscriptionViewModel: ObservableObject {
             files[index].progressFraction = 1.0
             files[index].finishedAt = Date()
         } catch is CancellationError {
+            guard files.indices.contains(index) else { return }
             files[index].state = .cancelled
             files[index].phaseDescription = String(localized: "Cancelled")
             files[index].progressFraction = nil
             files[index].finishedAt = Date()
         } catch {
+            guard files.indices.contains(index) else { return }
             files[index].state = .error
             files[index].errorMessage = error.localizedDescription
             files[index].phaseDescription = String(localized: "Error")

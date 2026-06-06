@@ -116,7 +116,8 @@ final class FileTranscriptionViewModelTests: XCTestCase {
                     duration: 240
                 )))
                 await progressReported.open()
-                await finishLoading.wait()
+                let didFinishLoading = await finishLoading.wait()
+                XCTAssertTrue(didFinishLoading, "Timed out waiting for loading gate")
                 return [0.1, -0.1]
             },
             transcriptionRunner: { _, _, _, engineOverrideId, _, _, _ in
@@ -136,7 +137,8 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         viewModel.selectedEngine = "whisper"
 
         viewModel.transcribeAll()
-        await progressReported.wait()
+        let didReportProgress = await progressReported.wait()
+        XCTAssertTrue(didReportProgress, "Timed out waiting for loading progress callback")
 
         let item = try XCTUnwrap(viewModel.files.first)
         XCTAssertEqual(item.phaseDescription, "Loading audio 25%")
@@ -180,7 +182,8 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         viewModel.selectedEngine = "whisper"
 
         viewModel.transcribeAll()
-        await started.wait()
+        let didStart = await started.wait()
+        XCTAssertTrue(didStart, "Timed out waiting for cancellation loader start")
         viewModel.cancelTranscription()
         try await waitUntil {
             viewModel.batchState == .cancelled
@@ -205,7 +208,8 @@ final class FileTranscriptionViewModelTests: XCTestCase {
             transcriptionRunner: { _, _, _, engineOverrideId, _, onProgress, _ in
                 XCTAssertTrue(onProgress("Partial transcript"))
                 await progressReported.open()
-                await finishRunner.wait()
+                let didFinishRunner = await finishRunner.wait()
+                XCTAssertTrue(didFinishRunner, "Timed out waiting for runner gate")
                 return TranscriptionResult(
                     text: "Final transcript",
                     detectedLanguage: "en",
@@ -222,7 +226,8 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         viewModel.selectedEngine = "whisper"
 
         viewModel.transcribeAll()
-        await progressReported.wait()
+        let didReportProgress = await progressReported.wait()
+        XCTAssertTrue(didReportProgress, "Timed out waiting for transcription progress callback")
 
         XCTAssertEqual(viewModel.files.first?.phaseDescription, "Transcribing")
         XCTAssertEqual(viewModel.files.first?.progressText, "Partial transcript")
@@ -463,10 +468,12 @@ private actor AsyncGate {
         isOpen = true
     }
 
-    func wait() async {
-        while !isOpen {
+    func wait(timeoutAttempts: Int = 300) async -> Bool {
+        for _ in 0..<timeoutAttempts {
+            if isOpen { return true }
             try? await Task.sleep(for: .milliseconds(10))
         }
+        return isOpen
     }
 }
 
