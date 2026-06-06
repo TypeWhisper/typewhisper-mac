@@ -8,6 +8,7 @@ import TypeWhisperPluginSDK
 final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, LLMProviderPlugin, @unchecked Sendable {
     static let pluginId = "com.typewhisper.groq"
     static let pluginName = "Groq"
+    private static let transcriptionRequestTimeout: TimeInterval = 600
 
     fileprivate var host: HostServices?
     fileprivate var _apiKey: String?
@@ -102,13 +103,14 @@ final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapa
             throw PluginTranscriptionError.noModelSelected
         }
 
-        return try await transcriptionHelper.transcribe(
+        return try await transcriptionHelper.transcribeCompressedAudio(
             audio: audio,
             apiKey: apiKey,
             modelName: modelId,
             language: language,
             translate: translate,
-            prompt: prompt
+            prompt: prompt,
+            requestTimeout: Self.transcriptionRequestTimeout
         )
     }
 

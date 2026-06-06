@@ -117,6 +117,16 @@ final class PluginManifestValidationTests: XCTestCase {
         XCTAssertEqual(manifest.resolvedCategoryIdentifiers, ["transcription", "llm", "tts"])
     }
 
+    func testGroqPluginReleaseRequiresHost15() throws {
+        let manifestURL = TestSupport.repoRoot.appendingPathComponent("TypeWhisperPluginSDK/Plugins/GroqPlugin/manifest.json")
+        let data = try Data(contentsOf: manifestURL)
+        let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
+
+        XCTAssertEqual(manifest.version, "1.0.16")
+        XCTAssertEqual(manifest.minHostVersion, "1.5.0")
+        XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
+    }
+
     func testQwen3UnsupportedLanguageSelectionFallsBackToAuto() {
         XCTAssertEqual(
             LanguageSelection.exact("uk").normalizedForSupportedLanguages(Qwen3Plugin.qwenSupportedLanguageCodes),

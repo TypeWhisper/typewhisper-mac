@@ -124,6 +124,33 @@ final class OpenAITranscriptionHelperTests: XCTestCase {
         XCTAssertEqual(result.text, "ok")
         XCTAssertEqual(store.sessions.first?.requestedRequests.first?.timeoutInterval, 600)
     }
+
+    func testTranscribeCompressedAudioRejectsEmptySamplesBeforeUpload() async throws {
+        let store = OpenAITranscriptionMockSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            store.makeSession()
+        }
+
+        let helper = PluginOpenAITranscriptionHelper(baseURL: "https://example.test", responseFormat: "json")
+        let audio = AudioData(samples: [], wavData: Data(), duration: 1.0)
+
+        do {
+            _ = try await helper.transcribeCompressedAudio(
+                audio: audio,
+                apiKey: "test-key",
+                modelName: "whisper-1",
+                language: nil,
+                translate: false,
+                prompt: nil,
+                requestTimeout: 600
+            )
+            XCTFail("Expected empty compressed audio upload to fail")
+        } catch PluginTranscriptionError.apiError(let message) {
+            XCTAssertTrue(message.contains("empty audio upload"))
+        }
+
+        XCTAssertTrue(store.sessions.isEmpty)
+    }
 }
 
 private final class OpenAITranscriptionMockSessionStore: @unchecked Sendable {

@@ -53,6 +53,16 @@ let package = Package(
             ]
         ),
         .target(
+            name: "GroqPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/GroqPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
             name: "Qwen3Plugin",
             dependencies: [
                 "TypeWhisperPluginSDK",
@@ -230,6 +240,15 @@ let package = Package(
                 "OpenRouterPlugin",
             ],
             path: "Plugins/OpenRouterPlugin/Tests"
+        ),
+        .testTarget(
+            name: "GroqPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "GroqPlugin",
+            ],
+            path: "Plugins/GroqPlugin/Tests"
         ),
         .testTarget(
             name: "Qwen3PluginTests",

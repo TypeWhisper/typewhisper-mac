@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import os
 
@@ -282,6 +283,13 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
     private static let defaultRequestTimeout: TimeInterval = 30
     static let minimumUploadDuration: TimeInterval = 1.0
     static let uploadSampleRate = 16000
+    private static let compressedUploadChunkFrames = 16_000 * 30
+
+    private struct UploadFile {
+        let data: Data
+        let filename: String
+        let contentType: String
+    }
 
     public init(baseURL: String, responseFormat: String = "verbose_json") {
         self.baseURL = baseURL
@@ -348,6 +356,43 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         )
     }
 
+    public func transcribeCompressedAudio(
+        audio: AudioData,
+        apiKey: String,
+        modelName: String,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        requestTimeout: TimeInterval,
+        responseFormat: String? = nil
+    ) async throws -> PluginTranscriptionResult {
+        let uploadAudio = normalizedAudioForUpload(audio)
+        let compressedData: Data
+        do {
+            compressedData = try Self.makeCompressedM4AData(from: uploadAudio.samples)
+        } catch {
+            throw PluginTranscriptionError.apiError(
+                "Failed to encode compressed upload: \(error.localizedDescription)"
+            )
+        }
+
+        return try await performTranscribe(
+            audio: uploadAudio,
+            apiKey: apiKey,
+            modelName: modelName,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            responseFormat: responseFormat,
+            requestTimeout: requestTimeout,
+            uploadFile: UploadFile(
+                data: compressedData,
+                filename: "audio.m4a",
+                contentType: "audio/mp4"
+            )
+        )
+    }
+
     private func performTranscribe(
         audio: AudioData,
         apiKey: String,
@@ -356,7 +401,8 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         translate: Bool,
         prompt: String?,
         responseFormat: String?,
-        requestTimeout: TimeInterval
+        requestTimeout: TimeInterval,
+        uploadFile: UploadFile? = nil
     ) async throws -> PluginTranscriptionResult {
         let endpoint: String
         if translate {
@@ -376,14 +422,19 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = requestTimeout
 
-        let uploadAudio = normalizedAudioForUpload(audio)
+        let uploadAudio = uploadFile == nil ? normalizedAudioForUpload(audio) : audio
+        let uploadFile = uploadFile ?? UploadFile(
+            data: uploadAudio.wavData,
+            filename: "audio.wav",
+            contentType: "audio/wav"
+        )
         var body = Data()
 
         // file field
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
-        body.append(uploadAudio.wavData)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(uploadFile.filename)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: \(uploadFile.contentType)\r\n\r\n".data(using: .utf8)!)
+        body.append(uploadFile.data)
         body.append("\r\n".data(using: .utf8)!)
 
         // model field
@@ -427,6 +478,58 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         }
 
         return try parseResponse(responseData)
+    }
+
+    private static func makeCompressedM4AData(from samples: [Float]) throws -> Data {
+        guard !samples.isEmpty else {
+            throw PluginTranscriptionError.apiError("Cannot encode empty audio upload")
+        }
+
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("typewhisper-upload-\(UUID().uuidString).m4a")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatMPEG4AAC,
+            AVSampleRateKey: Double(uploadSampleRate),
+            AVNumberOfChannelsKey: 1,
+        ]
+        guard let format = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: Double(uploadSampleRate),
+            channels: 1,
+            interleaved: false
+        ) else {
+            throw PluginTranscriptionError.apiError("Failed to create compressed upload format")
+        }
+
+        do {
+            let file = try AVAudioFile(
+                forWriting: url,
+                settings: settings,
+                commonFormat: .pcmFormatFloat32,
+                interleaved: false
+            )
+
+            var offset = 0
+            while offset < samples.count {
+                let count = min(compressedUploadChunkFrames, samples.count - offset)
+                guard let buffer = AVAudioPCMBuffer(
+                    pcmFormat: format,
+                    frameCapacity: AVAudioFrameCount(count)
+                ) else {
+                    throw PluginTranscriptionError.apiError("Failed to create compressed upload buffer")
+                }
+                buffer.frameLength = AVAudioFrameCount(count)
+                samples.withUnsafeBufferPointer { pointer in
+                    buffer.floatChannelData?[0].update(from: pointer.baseAddress! + offset, count: count)
+                }
+                try file.write(from: buffer)
+                offset += count
+            }
+        }
+
+        return try Data(contentsOf: url)
     }
 
     public func validateApiKey(_ apiKey: String) async -> Bool {
