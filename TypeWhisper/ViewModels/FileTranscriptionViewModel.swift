@@ -1,18 +1,28 @@
 import Foundation
 import Combine
 import AppKit
+import os
 import UniformTypeIdentifiers
 import TypeWhisperPluginSDK
 
 @MainActor
 final class FileTranscriptionViewModel: ObservableObject {
-    typealias AudioSamplesLoader = @MainActor (URL) async throws -> [Float]
+    typealias AudioProgressHandler = @MainActor @Sendable (AudioFileLoadProgress) -> Bool
+    typealias TranscriptionProgressHandler = @MainActor @Sendable (String) -> Bool
+    typealias CancellationChecker = @Sendable () -> Bool
+    typealias AudioSamplesLoader = @MainActor (
+        URL,
+        @escaping AudioProgressHandler,
+        @escaping CancellationChecker
+    ) async throws -> [Float]
     typealias TranscriptionRunner = @MainActor (
         [Float],
         LanguageSelection,
         TranscriptionTask,
         String?,
-        String?
+        String?,
+        @escaping TranscriptionProgressHandler,
+        @escaping CancellationChecker
     ) async throws -> TranscriptionResult
     typealias EngineReadinessChecker = @MainActor (String?) -> Bool
 
@@ -30,6 +40,11 @@ final class FileTranscriptionViewModel: ObservableObject {
         var state: FileItemState = .pending
         var result: TranscriptionResult?
         var errorMessage: String?
+        var phaseDescription: String?
+        var progressFraction: Double?
+        var progressText: String?
+        var startedAt: Date?
+        var finishedAt: Date?
 
         var fileName: String { url.lastPathComponent }
     }
@@ -40,18 +55,33 @@ final class FileTranscriptionViewModel: ObservableObject {
         case transcribing
         case done
         case error
+        case cancelled
     }
 
     enum BatchState: Equatable {
         case idle
         case processing
         case done
+        case cancelled
+    }
+
+    private final class CancellationFlag: @unchecked Sendable {
+        private let lock = OSAllocatedUnfairLock(initialState: false)
+
+        func cancel() {
+            lock.withLock { $0 = true }
+        }
+
+        var isCancelled: Bool {
+            lock.withLock { $0 }
+        }
     }
 
     @Published var files: [FileItem] = []
     @Published var showFilePickerFromMenu = false
     @Published var batchState: BatchState = .idle
     @Published var currentIndex: Int = 0
+    @Published private var elapsedRefreshDate = Date()
     @Published var languageSelection: LanguageSelection = .auto {
         didSet {
             defaults.set(
@@ -81,6 +111,9 @@ final class FileTranscriptionViewModel: ObservableObject {
     private let engineReadinessChecker: EngineReadinessChecker?
     private var cancellables = Set<AnyCancellable>()
     private var isInitialized = false
+    private var activeBatchTask: Task<Void, Never>?
+    private var activeCancellationFlag: CancellationFlag?
+    private var elapsedTimerTask: Task<Void, Never>?
 
     static let allowedContentTypes: [UTType] = [
         .wav, .mp3, .mpeg4Audio, .aiff, .audio,
@@ -98,16 +131,26 @@ final class FileTranscriptionViewModel: ObservableObject {
         self.modelManager = modelManager
         self.audioFileService = audioFileService
         self.defaults = defaults
-        self.audioSamplesLoader = audioSamplesLoader ?? { [audioFileService] url in
-            try await audioFileService.loadAudioSamples(from: url)
+        self.audioSamplesLoader = audioSamplesLoader ?? { [audioFileService] url, onProgress, isCancelled in
+            try await audioFileService.loadAudioSamples(from: url) { progress in
+                guard !isCancelled() else { return false }
+                return await onProgress(progress)
+            }
         }
-        self.transcriptionRunner = transcriptionRunner ?? { [modelManager] samples, languageSelection, task, engineOverrideId, cloudModelOverride in
+        self.transcriptionRunner = transcriptionRunner ?? { [modelManager] samples, languageSelection, task, engineOverrideId, cloudModelOverride, onProgress, isCancelled in
             try await modelManager.transcribe(
                 audioSamples: samples,
                 languageSelection: languageSelection,
                 task: task,
                 engineOverrideId: engineOverrideId,
-                cloudModelOverride: cloudModelOverride
+                cloudModelOverride: cloudModelOverride,
+                onProgress: { text in
+                    guard !isCancelled() else { return false }
+                    Task { @MainActor in
+                        _ = onProgress(text)
+                    }
+                    return !isCancelled()
+                }
             )
         }
         self.engineReadinessChecker = engineReadinessChecker
@@ -196,8 +239,14 @@ final class FileTranscriptionViewModel: ObservableObject {
     func transcribeAll() {
         guard canTranscribe else { return }
 
+        activeBatchTask?.cancel()
+        activeCancellationFlag?.cancel()
+
+        let cancellationFlag = CancellationFlag()
+        activeCancellationFlag = cancellationFlag
         batchState = .processing
         currentIndex = 0
+        startElapsedTimer()
 
         // Reset pending/error items
         for i in files.indices {
@@ -205,42 +254,122 @@ final class FileTranscriptionViewModel: ObservableObject {
                 files[i].state = .pending
                 files[i].result = nil
                 files[i].errorMessage = nil
+                files[i].phaseDescription = nil
+                files[i].progressFraction = nil
+                files[i].progressText = nil
+                files[i].startedAt = nil
+                files[i].finishedAt = nil
             }
         }
 
-        Task {
+        activeBatchTask = Task { [weak self] in
+            guard let self else { return }
             for i in files.indices {
-                guard batchState == .processing else { break }
+                guard batchState == .processing, !cancellationFlag.isCancelled else { break }
                 guard files[i].state != .done else { continue }
 
                 currentIndex = i
-                await transcribeFile(at: i)
+                await transcribeFile(at: i, cancellationFlag: cancellationFlag)
             }
-            batchState = .done
+
+            if cancellationFlag.isCancelled {
+                batchState = .cancelled
+            } else {
+                batchState = .done
+            }
+            stopElapsedTimer()
+            activeBatchTask = nil
+            activeCancellationFlag = nil
         }
     }
 
-    private func transcribeFile(at index: Int) async {
+    func cancelTranscription() {
+        guard batchState == .processing else { return }
+        activeCancellationFlag?.cancel()
+        activeBatchTask?.cancel()
+        if files.indices.contains(currentIndex),
+           files[currentIndex].state == .loading || files[currentIndex].state == .transcribing {
+            files[currentIndex].state = .cancelled
+            files[currentIndex].phaseDescription = String(localized: "Cancelled")
+            files[currentIndex].progressFraction = nil
+            files[currentIndex].finishedAt = Date()
+        }
+    }
+
+    private func transcribeFile(at index: Int, cancellationFlag: CancellationFlag) async {
         files[index].state = .loading
+        files[index].phaseDescription = String(localized: "Loading audio")
+        files[index].progressFraction = nil
+        files[index].progressText = nil
+        files[index].startedAt = Date()
+        files[index].finishedAt = nil
 
         do {
-            let samples = try await audioSamplesLoader(files[index].url)
+            let samples = try await audioSamplesLoader(
+                files[index].url,
+                { [weak self] progress in
+                    guard let self,
+                          !cancellationFlag.isCancelled,
+                          self.files.indices.contains(index),
+                          self.files[index].state == .loading else {
+                        return false
+                    }
+                    self.files[index].phaseDescription = Self.loadingPhaseDescription(for: progress)
+                    self.files[index].progressFraction = progress.fraction
+                    return true
+                },
+                { cancellationFlag.isCancelled }
+            )
+
+            try Task.checkCancellation()
+            guard !cancellationFlag.isCancelled else {
+                throw CancellationError()
+            }
 
             files[index].state = .transcribing
+            files[index].phaseDescription = String(localized: "Transcribing")
+            files[index].progressFraction = nil
 
             let result = try await transcriptionRunner(
                 samples,
                 languageSelection,
                 selectedTask,
                 selectedEngine,
-                selectedModel
+                selectedModel,
+                { [weak self] text in
+                    guard let self,
+                          !cancellationFlag.isCancelled,
+                          self.files.indices.contains(index),
+                          self.files[index].state == .transcribing else {
+                        return false
+                    }
+                    self.files[index].phaseDescription = String(localized: "Transcribing")
+                    self.files[index].progressText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return true
+                },
+                { cancellationFlag.isCancelled }
             )
+
+            guard !cancellationFlag.isCancelled else {
+                throw CancellationError()
+            }
 
             files[index].result = result
             files[index].state = .done
+            files[index].phaseDescription = String(localized: "Done")
+            files[index].progressFraction = 1.0
+            files[index].finishedAt = Date()
+        } catch is CancellationError {
+            files[index].state = .cancelled
+            files[index].phaseDescription = String(localized: "Cancelled")
+            files[index].progressFraction = nil
+            files[index].finishedAt = Date()
         } catch {
             files[index].state = .error
             files[index].errorMessage = error.localizedDescription
+            files[index].phaseDescription = String(localized: "Error")
+            files[index].progressFraction = nil
+            files[index].finishedAt = Date()
         }
     }
 
@@ -308,9 +437,19 @@ final class FileTranscriptionViewModel: ObservableObject {
     }
 
     func reset() {
+        cancelTranscription()
         files = []
         batchState = .idle
         currentIndex = 0
+        activeBatchTask = nil
+        activeCancellationFlag = nil
+        stopElapsedTimer()
+    }
+
+    func elapsedTime(for item: FileItem) -> TimeInterval? {
+        guard let startedAt = item.startedAt else { return nil }
+        let end = item.finishedAt ?? elapsedRefreshDate
+        return end.timeIntervalSince(startedAt)
     }
 
     private var selectedEngineIsReady: Bool {
@@ -338,5 +477,32 @@ final class FileTranscriptionViewModel: ObservableObject {
         if normalized != languageSelection {
             languageSelection = normalized
         }
+    }
+
+    private static func loadingPhaseDescription(for progress: AudioFileLoadProgress) -> String {
+        guard let fraction = progress.fraction else {
+            return String(localized: "Loading audio")
+        }
+        let percent = Int((fraction * 100).rounded())
+        return String(localized: "Loading audio \(percent)%")
+    }
+
+    private func startElapsedTimer() {
+        elapsedTimerTask?.cancel()
+        elapsedTimerTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { break }
+                await MainActor.run {
+                    self?.elapsedRefreshDate = Date()
+                }
+            }
+        }
+    }
+
+    private func stopElapsedTimer() {
+        elapsedTimerTask?.cancel()
+        elapsedTimerTask = nil
+        elapsedRefreshDate = Date()
     }
 }

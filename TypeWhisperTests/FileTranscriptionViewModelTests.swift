@@ -57,11 +57,11 @@ final class FileTranscriptionViewModelTests: XCTestCase {
             modelManager: ModelManagerService(),
             audioFileService: AudioFileService(),
             defaults: defaults,
-            audioSamplesLoader: { url in
+            audioSamplesLoader: { url, _, _ in
                 XCTAssertEqual(url, fileURL)
                 return [0.1, -0.1]
             },
-            transcriptionRunner: { samples, languageSelection, task, engineOverrideId, cloudModelOverride in
+            transcriptionRunner: { samples, languageSelection, task, engineOverrideId, cloudModelOverride, _, _ in
                 XCTAssertEqual(samples, [0.1, -0.1])
                 capturedLanguageSelection = languageSelection
                 capturedTask = task
@@ -96,6 +96,186 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertEqual(capturedModelOverrideId, "parakeet-large")
         XCTAssertEqual(viewModel.files.first?.state, .done)
         XCTAssertEqual(viewModel.files.first?.result?.text, "Recovered text")
+    }
+
+    func testTranscribeAllExposesLoadingProgressAndElapsedTime() async throws {
+        let defaults = try makeDefaults()
+        let fileURL = makeTemporaryFile(named: "long-video.mp4")
+        let progressReported = AsyncGate()
+        let finishLoading = AsyncGate()
+
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            defaults: defaults,
+            audioSamplesLoader: { url, onProgress, _ in
+                XCTAssertEqual(url, fileURL)
+                XCTAssertTrue(onProgress(AudioFileLoadProgress(
+                    fraction: 0.25,
+                    currentTime: 60,
+                    duration: 240
+                )))
+                await progressReported.open()
+                await finishLoading.wait()
+                return [0.1, -0.1]
+            },
+            transcriptionRunner: { _, _, _, engineOverrideId, _, _, _ in
+                TranscriptionResult(
+                    text: "Done",
+                    detectedLanguage: "en",
+                    duration: 1,
+                    processingTime: 0.1,
+                    engineUsed: engineOverrideId ?? "default",
+                    segments: []
+                )
+            },
+            engineReadinessChecker: { _ in true }
+        )
+
+        viewModel.addFiles([fileURL])
+        viewModel.selectedEngine = "whisper"
+
+        viewModel.transcribeAll()
+        await progressReported.wait()
+
+        let item = try XCTUnwrap(viewModel.files.first)
+        XCTAssertEqual(item.phaseDescription, "Loading audio 25%")
+        XCTAssertNotNil(viewModel.elapsedTime(for: item))
+
+        await finishLoading.open()
+        try await waitForBatchToFinish(viewModel)
+    }
+
+    func testCancelTranscriptionMarksActiveFileCancelledAndStopsBatch() async throws {
+        let defaults = try makeDefaults()
+        let firstURL = makeTemporaryFile(named: "large-video.mp4")
+        let secondURL = makeTemporaryFile(named: "queued-video.mp4")
+        let started = AsyncGate()
+
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            defaults: defaults,
+            audioSamplesLoader: { _, _, isCancelled in
+                await started.open()
+                while !isCancelled() {
+                    try await Task.sleep(for: .milliseconds(10))
+                }
+                throw CancellationError()
+            },
+            transcriptionRunner: { _, _, _, engineOverrideId, _, _, _ in
+                TranscriptionResult(
+                    text: "Should not complete",
+                    detectedLanguage: "en",
+                    duration: 1,
+                    processingTime: 0.1,
+                    engineUsed: engineOverrideId ?? "default",
+                    segments: []
+                )
+            },
+            engineReadinessChecker: { _ in true }
+        )
+
+        viewModel.addFiles([firstURL, secondURL])
+        viewModel.selectedEngine = "whisper"
+
+        viewModel.transcribeAll()
+        await started.wait()
+        viewModel.cancelTranscription()
+        try await waitUntil {
+            viewModel.batchState == .cancelled
+        }
+
+        XCTAssertEqual(viewModel.files.first?.state, .cancelled)
+        XCTAssertEqual(viewModel.files.dropFirst().first?.state, .pending)
+        XCTAssertTrue(viewModel.canTranscribe)
+    }
+
+    func testRunnerProgressUpdatesActiveFileStatus() async throws {
+        let defaults = try makeDefaults()
+        let fileURL = makeTemporaryFile(named: "progress-video.mp4")
+        let progressReported = AsyncGate()
+        let finishRunner = AsyncGate()
+
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            defaults: defaults,
+            audioSamplesLoader: { _, _, _ in [0.1, -0.1] },
+            transcriptionRunner: { _, _, _, engineOverrideId, _, onProgress, _ in
+                XCTAssertTrue(onProgress("Partial transcript"))
+                await progressReported.open()
+                await finishRunner.wait()
+                return TranscriptionResult(
+                    text: "Final transcript",
+                    detectedLanguage: "en",
+                    duration: 1,
+                    processingTime: 0.1,
+                    engineUsed: engineOverrideId ?? "default",
+                    segments: []
+                )
+            },
+            engineReadinessChecker: { _ in true }
+        )
+
+        viewModel.addFiles([fileURL])
+        viewModel.selectedEngine = "whisper"
+
+        viewModel.transcribeAll()
+        await progressReported.wait()
+
+        XCTAssertEqual(viewModel.files.first?.phaseDescription, "Transcribing")
+        XCTAssertEqual(viewModel.files.first?.progressText, "Partial transcript")
+        await finishRunner.open()
+        try await waitForBatchToFinish(viewModel)
+    }
+
+    func testCancellationDuringAudioLoadingIsNotReportedAsError() async throws {
+        let defaults = try makeDefaults()
+        let fileURL = makeTemporaryFile(named: "cancel-loading.mp4")
+
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            defaults: defaults,
+            audioSamplesLoader: { _, onProgress, isCancelled in
+                while !isCancelled() {
+                    try await Task.sleep(for: .milliseconds(10))
+                }
+                XCTAssertFalse(onProgress(AudioFileLoadProgress(
+                    fraction: 0.5,
+                    currentTime: 30,
+                    duration: 60
+                )))
+                throw CancellationError()
+            },
+            transcriptionRunner: { _, _, _, engineOverrideId, _, _, _ in
+                TranscriptionResult(
+                    text: "Should not complete",
+                    detectedLanguage: "en",
+                    duration: 1,
+                    processingTime: 0.1,
+                    engineUsed: engineOverrideId ?? "default",
+                    segments: []
+                )
+            },
+            engineReadinessChecker: { _ in true }
+        )
+
+        viewModel.addFiles([fileURL])
+        viewModel.selectedEngine = "whisper"
+
+        viewModel.transcribeAll()
+        try await waitUntil {
+            viewModel.files.first?.state == .loading
+        }
+        viewModel.cancelTranscription()
+        try await waitUntil {
+            viewModel.batchState == .cancelled
+        }
+
+        XCTAssertEqual(viewModel.files.first?.state, .cancelled)
+        XCTAssertNil(viewModel.files.first?.errorMessage)
     }
 
     func testRecoveryTranscribeUsesRecoveryEngineAndModelOverrides() async throws {
@@ -260,6 +440,33 @@ final class FileTranscriptionViewModelTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(20))
         }
         XCTFail("Recovery transcription was not saved to history")
+    }
+
+    private func waitUntil(
+        timeoutAttempts: Int = 100,
+        condition: @MainActor () -> Bool
+    ) async throws {
+        for _ in 0..<timeoutAttempts {
+            if condition() {
+                return
+            }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTFail("Condition was not met")
+    }
+}
+
+private actor AsyncGate {
+    private var isOpen = false
+
+    func open() {
+        isOpen = true
+    }
+
+    func wait() async {
+        while !isOpen {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
     }
 }
 

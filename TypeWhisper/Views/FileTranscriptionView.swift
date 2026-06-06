@@ -290,6 +290,10 @@ struct FileTranscriptionView: View {
                         Text(String(localized: "\(String(format: "%.1f", result.duration))s - \(String(format: "%.1f", result.processingTime))s processing"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                    } else if let phase = item.phaseDescription {
+                        Text(statusSummary(for: item, phase: phase))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
@@ -328,6 +332,8 @@ struct FileTranscriptionView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 10)
                     .padding(.bottom, 10)
+            } else if item.state == .loading || item.state == .transcribing {
+                activeFileDetails(item)
             }
         }
         .background(RoundedRectangle(cornerRadius: 8).fill(.quaternary))
@@ -356,7 +362,31 @@ struct FileTranscriptionView: View {
             Image(systemName: "exclamationmark.circle.fill")
                 .foregroundStyle(.red)
                 .accessibilityLabel(String(localized: "Error"))
+        case .cancelled:
+            Image(systemName: "stop.circle.fill")
+                .foregroundStyle(.secondary)
+                .accessibilityLabel(String(localized: "Cancelled"))
         }
+    }
+
+    @ViewBuilder
+    private func activeFileDetails(_ item: FileTranscriptionViewModel.FileItem) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let progress = item.progressFraction {
+                ProgressView(value: progress)
+                    .controlSize(.small)
+            }
+
+            if let progressText = item.progressText, !progressText.isEmpty {
+                Text(progressText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .textSelection(.enabled)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.bottom, 10)
     }
 
     @ViewBuilder
@@ -380,6 +410,7 @@ struct FileTranscriptionView: View {
                 }
                 .buttonStyle(.plain)
                 .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
                 .frame(width: 20)
                 .help(String(localized: "Export Subtitles"))
             }
@@ -417,7 +448,7 @@ struct FileTranscriptionView: View {
                     .controlSize(.small)
                 }
 
-                Spacer()
+                Spacer(minLength: 12)
 
                 if viewModel.hasResults {
                     Menu(String(localized: "Export All")) {
@@ -427,15 +458,21 @@ struct FileTranscriptionView: View {
                         Button(String(localized: "Export All as VTT")) { viewModel.exportAllSubtitles(format: .vtt) }
                     }
                     .controlSize(.small)
+                    .fixedSize(horizontal: true, vertical: false)
                 }
 
                 if viewModel.batchState == .processing {
-                    HStack(spacing: 6) {
-                        ProgressView()
-                            .controlSize(.small)
-                        Text(String(localized: "\(viewModel.completedFiles)/\(viewModel.totalFiles)"))
-                            .font(.caption)
-                            .monospacedDigit()
+                    HStack(spacing: 10) {
+                        processingSummary
+
+                        Button(role: .destructive) {
+                            viewModel.cancelTranscription()
+                        } label: {
+                            Label(String(localized: "Stop"), systemImage: "stop.fill")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .fixedSize(horizontal: true, vertical: false)
                     }
                 } else {
                     Button {
@@ -445,6 +482,7 @@ struct FileTranscriptionView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
+                    .fixedSize(horizontal: true, vertical: false)
                     .disabled(!viewModel.canTranscribe)
                 }
 
@@ -455,10 +493,38 @@ struct FileTranscriptionView: View {
                         .foregroundStyle(.red)
                 }
                 .buttonStyle(.plain)
+                .frame(width: 22, height: 22)
                 .disabled(viewModel.batchState == .processing)
                 .help(String(localized: "Clear All"))
                 .accessibilityLabel(String(localized: "Clear All"))
             }
+        }
+    }
+
+    @ViewBuilder
+    private var processingSummary: some View {
+        if viewModel.files.indices.contains(viewModel.currentIndex) {
+            let item = viewModel.files[viewModel.currentIndex]
+            HStack(spacing: 4) {
+                Text(statusSummary(for: item, phase: item.phaseDescription ?? String(localized: "Processing...")))
+                    .font(.caption)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Text("·")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(String(localized: "\(viewModel.completedFiles)/\(viewModel.totalFiles)"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            .fixedSize(horizontal: true, vertical: false)
+            .layoutPriority(1)
+        } else {
+            Text(String(localized: "\(viewModel.completedFiles)/\(viewModel.totalFiles)"))
+                .font(.caption)
+                .monospacedDigit()
+                .fixedSize(horizontal: true, vertical: false)
         }
     }
 
@@ -537,5 +603,20 @@ struct FileTranscriptionView: View {
             handled = true
         }
         return handled
+    }
+
+    private func statusSummary(for item: FileTranscriptionViewModel.FileItem, phase: String) -> String {
+        guard let elapsed = viewModel.elapsedTime(for: item) else { return phase }
+        return "\(phase) - \(formattedElapsed(elapsed))"
+    }
+
+    private func formattedElapsed(_ elapsed: TimeInterval) -> String {
+        let seconds = max(Int(elapsed.rounded()), 0)
+        let minutes = seconds / 60
+        let remainder = seconds % 60
+        if minutes > 0 {
+            return String(format: "%d:%02d", minutes, remainder)
+        }
+        return "\(remainder)s"
     }
 }

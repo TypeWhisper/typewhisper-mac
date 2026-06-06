@@ -1,8 +1,15 @@
 import Foundation
 import AVFoundation
 
+struct AudioFileLoadProgress: Sendable, Equatable {
+    let fraction: Double?
+    let currentTime: TimeInterval?
+    let duration: TimeInterval?
+}
+
 /// Converts audio/video files to 16kHz mono Float32 PCM samples for transcription.
 final class AudioFileService: Sendable {
+    typealias ProgressHandler = @Sendable (AudioFileLoadProgress) async -> Bool
 
     enum AudioFileError: LocalizedError {
         case fileNotFound
@@ -24,7 +31,10 @@ final class AudioFileService: Sendable {
     ]
 
     /// Extracts audio from a file and returns 16kHz mono Float32 samples.
-    func loadAudioSamples(from url: URL) async throws -> [Float] {
+    func loadAudioSamples(
+        from url: URL,
+        onProgress: ProgressHandler? = nil
+    ) async throws -> [Float] {
         guard FileManager.default.fileExists(atPath: url.path) else {
             throw AudioFileError.fileNotFound
         }
@@ -34,12 +44,17 @@ final class AudioFileService: Sendable {
             throw AudioFileError.unsupportedFormat
         }
 
-        return try await extractSamples(from: url)
+        return try await extractSamples(from: url, onProgress: onProgress)
     }
 
-    private func extractSamples(from url: URL) async throws -> [Float] {
+    private func extractSamples(
+        from url: URL,
+        onProgress: ProgressHandler?
+    ) async throws -> [Float] {
         let asset = AVURLAsset(url: url)
 
+        let assetDuration = try? await asset.load(.duration)
+        let duration = assetDuration?.seconds
         let tracks = try await asset.load(.tracks)
         guard let audioTrack = tracks.first(where: { $0.mediaType == .audio }) else {
             throw AudioFileError.conversionFailed("No audio track found")
@@ -68,8 +83,25 @@ final class AudioFileService: Sendable {
         }
 
         var allSamples: [Float] = []
+        var lastProgress = 0.0
 
         while let sampleBuffer = output.copyNextSampleBuffer() {
+            try Task.checkCancellation()
+            if let onProgress {
+                let currentTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer).seconds
+                let fraction = Self.progressFraction(currentTime: currentTime, duration: duration)
+                if fraction - lastProgress >= 0.01 {
+                    lastProgress = fraction
+                    guard await onProgress(AudioFileLoadProgress(
+                        fraction: fraction,
+                        currentTime: currentTime.isFinite ? currentTime : nil,
+                        duration: duration
+                    )) else {
+                        throw CancellationError()
+                    }
+                }
+            }
+
             guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { continue }
 
             let length = CMBlockBufferGetDataLength(blockBuffer)
@@ -91,6 +123,26 @@ final class AudioFileService: Sendable {
             throw AudioFileError.conversionFailed(reader.error?.localizedDescription ?? "Reading incomplete")
         }
 
+        if let onProgress {
+            guard await onProgress(AudioFileLoadProgress(
+                fraction: 1.0,
+                currentTime: duration,
+                duration: duration
+            )) else {
+                throw CancellationError()
+            }
+        }
+
         return allSamples
+    }
+
+    private static func progressFraction(currentTime: TimeInterval, duration: TimeInterval?) -> Double {
+        guard currentTime.isFinite,
+              let duration,
+              duration.isFinite,
+              duration > 0 else {
+            return 0
+        }
+        return min(max(currentTime / duration, 0), 1)
     }
 }
