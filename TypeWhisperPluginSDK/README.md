@@ -414,6 +414,16 @@ let result = try await helper.transcribe(
 )
 ```
 
+For large file transcription paths, use the compressed upload variant. It normalizes the audio for upload, encodes it as M4A before sending the OpenAI-compatible multipart request, and keeps the same response parsing behavior:
+
+```swift
+let result = try await helper.transcribeCompressedAudio(
+    audio: audio, apiKey: apiKey, modelName: "whisper-large-v3",
+    language: nil, translate: false, prompt: nil,
+    requestTimeout: 600
+)
+```
+
 ### PluginAudioUtils
 
 Helpers for short-clip handling:
