@@ -407,6 +407,10 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
                     self?.modelState = .loading(phase: "loading")
                 case .prewarming:
                     self?.modelState = .loading(phase: "prewarming")
+                case .loaded, .prewarmed:
+                    self?.modelState = .ready(self?.loadedModelId ?? modelDef.id)
+                case .unloaded:
+                    self?.modelState = .notLoaded
                 default:
                     break
                 }
@@ -450,6 +454,13 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
         }
         host?.notifyCapabilitiesChanged()
     }
+
+    #if DEBUG
+    func setModelStateForTesting(_ state: WhisperModelState, loadedModelId: String? = nil) {
+        self.loadedModelId = loadedModelId
+        modelState = state
+    }
+    #endif
 
     fileprivate func deleteModelFiles(_ modelDef: WhisperModelDef) throws {
         let modelPath = resolvedModelPath(for: modelDef)
@@ -658,6 +669,7 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
                 progress: downloadProgress
             )
         case .loading(let phase):
+            guard loadedModelId == nil else { return nil }
             let message: String
             switch phase {
             case "prewarming":

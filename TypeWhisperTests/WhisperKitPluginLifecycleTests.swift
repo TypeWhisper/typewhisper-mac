@@ -101,6 +101,32 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
         XCTAssertNil(host.userDefault(forKey: "loadedModel"))
     }
 
+    func testReadyModelStateClearsLoadingSettingsActivity() throws {
+        let host = try makeHost(defaults: [
+            "selectedModel": "openai_whisper-large-v3_turbo",
+            "loadedModel": "openai_whisper-large-v3_turbo",
+        ])
+        defer { TestSupport.remove(host.pluginDataDirectory) }
+
+        let plugin = WhisperKitPlugin()
+        plugin.activate(host: host)
+
+        plugin.setModelStateForTesting(.loading(phase: "loading"))
+        XCTAssertEqual(plugin.currentSettingsActivity?.message, "Loading model")
+
+        plugin.setModelStateForTesting(
+            .loading(phase: "loading"),
+            loadedModelId: "openai_whisper-large-v3_turbo"
+        )
+        XCTAssertNil(plugin.currentSettingsActivity)
+
+        plugin.setModelStateForTesting(
+            .ready("openai_whisper-large-v3_turbo"),
+            loadedModelId: "openai_whisper-large-v3_turbo"
+        )
+        XCTAssertNil(plugin.currentSettingsActivity)
+    }
+
     func testActivationDoesNotMarkPluginConfiguredBeforeRestoreSucceeds() async throws {
         let host = try makeHost(defaults: [
             "selectedModel": "openai_whisper-tiny",
