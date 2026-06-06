@@ -39,6 +39,7 @@ final class TextInsertionService {
     var pasteVerificationPollingDelay: Duration = .milliseconds(50)
     var defaultPasteFallbackRestoreDelay: Duration = .milliseconds(350)
     var terminalPasteFallbackRestoreDelay: Duration = .milliseconds(900)
+    var verifiedRestoreGraceDelay: Duration = .milliseconds(150)
 
     enum InsertionResult: Equatable {
         case insertedViaAccessibility
@@ -478,13 +479,21 @@ final class TextInsertionService {
         logPasteVerification(verification, bundleId: bundleId)
 
         if preserveClipboard {
+            let restoreDelay: Duration
+            if isTerminalApp {
+                restoreDelay = terminalPasteFallbackRestoreDelay
+            } else if verification == .verified {
+                restoreDelay = verifiedRestoreGraceDelay
+            } else {
+                restoreDelay = defaultPasteFallbackRestoreDelay
+            }
+
             if verification != .verified {
-                let restoreDelay = isTerminalApp ? terminalPasteFallbackRestoreDelay : defaultPasteFallbackRestoreDelay
                 logger.warning(
                     "insertText delaying clipboard restore after unverified paste: bundle=\(bundleId ?? "nil", privacy: .public), delay=\(String(describing: restoreDelay), privacy: .public)"
                 )
-                try? await Task.sleep(for: restoreDelay)
             }
+            try? await Task.sleep(for: restoreDelay)
             restoreClipboard(savedItems, to: pasteboard)
             logger.info(
                 "insertText restored clipboard: bundle=\(bundleId ?? "nil", privacy: .public), changeCountAfterRestore=\(pasteboard.changeCount, privacy: .public)"

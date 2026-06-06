@@ -2751,6 +2751,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         service.pasteboardProvider = { pasteboard }
         service.focusedTextElementOverride = { element }
         service.captureActiveAppOverride = { ("iTerm2", "com.googlecode.iterm2", nil) }
+        service.terminalPasteFallbackRestoreDelay = .milliseconds(1)
 
         var pasteCount = 0
         service.pasteSimulatorOverride = {
@@ -2776,6 +2777,90 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         XCTAssertFalse(didAttemptDirectAXInsertion)
         XCTAssertEqual(pasteCount, 1)
+        XCTAssertEqual(result, .pasted(verification: .verified))
+        XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
+    func testVerifiedTerminalPasteKeepsGeneratedTextUntilTerminalRestoreDelay() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("Terminal", "com.apple.Terminal", nil) }
+        service.terminalPasteFallbackRestoreDelay = .milliseconds(80)
+
+        let pasteStarted = expectation(description: "terminal synthetic paste started")
+        var pasteCount = 0
+        service.pasteSimulatorOverride = {
+            pasteCount += 1
+            pasteStarted.fulfill()
+        }
+        service.focusedTextStateOverride = { _ in
+            if pasteCount == 0 {
+                return (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+            }
+            return (value: "Hello", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
+        }
+
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+
+        let insertionTask = Task {
+            try await service.insertText("Hello", preserveClipboard: true)
+        }
+
+        await fulfillment(of: [pasteStarted], timeout: 1.0)
+        XCTAssertEqual(pasteboard.string(forType: .string), "Hello")
+
+        try await Task.sleep(for: .milliseconds(20))
+        XCTAssertEqual(pasteboard.string(forType: .string), "Hello")
+
+        let result = try await insertionTask.value
+        XCTAssertEqual(result, .pasted(verification: .verified))
+        XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
+    func testVerifiedNonTerminalSyntheticPasteUsesGraceDelayBeforeClipboardRestore() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        service.verifiedRestoreGraceDelay = .milliseconds(80)
+
+        let pasteStarted = expectation(description: "non-terminal synthetic paste started")
+        var pasteCount = 0
+        service.pasteSimulatorOverride = {
+            pasteCount += 1
+            pasteStarted.fulfill()
+        }
+        service.focusedTextStateOverride = { _ in
+            if pasteCount == 0 {
+                return (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+            }
+            return (value: "Hello", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
+        }
+
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+
+        let insertionTask = Task {
+            try await service.insertText("**Hello**", preserveClipboard: true, outputFormat: "rtf")
+        }
+
+        await fulfillment(of: [pasteStarted], timeout: 1.0)
+        XCTAssertEqual(pasteboard.string(forType: .string), "Hello")
+
+        try await Task.sleep(for: .milliseconds(20))
+        XCTAssertEqual(pasteboard.string(forType: .string), "Hello")
+
+        let result = try await insertionTask.value
         XCTAssertEqual(result, .pasted(verification: .verified))
         XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
     }
