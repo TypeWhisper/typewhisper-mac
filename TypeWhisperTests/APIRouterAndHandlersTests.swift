@@ -2791,6 +2791,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         service.focusedTextElementOverride = { element }
         service.captureActiveAppOverride = { ("Terminal", "com.apple.Terminal", nil) }
         service.terminalPasteFallbackRestoreDelay = .milliseconds(80)
+        service.verifiedRestoreGraceDelay = .milliseconds(1)
 
         let pasteStarted = expectation(description: "terminal synthetic paste started")
         var pasteCount = 0
@@ -2832,6 +2833,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         service.pasteboardProvider = { pasteboard }
         service.focusedTextElementOverride = { element }
         service.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        service.defaultPasteFallbackRestoreDelay = .milliseconds(1)
         service.verifiedRestoreGraceDelay = .milliseconds(80)
 
         let pasteStarted = expectation(description: "non-terminal synthetic paste started")
