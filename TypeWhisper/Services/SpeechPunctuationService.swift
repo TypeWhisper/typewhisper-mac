@@ -94,13 +94,32 @@ final class SpeechPunctuationService {
             .split(whereSeparator: \.isWhitespace)
             .map { NSRegularExpression.escapedPattern(for: String($0)) }
             .joined(separator: #"\s+"#)
+        if usesUnspacedScript(phrase) {
+            if isKatakanaPhrase(phrase) {
+                return #"\#(escapedWords)(?![ァ-ヿ])"#
+            }
+            return escapedWords
+        }
         return #"(?<![\p{L}\p{N}])\#(escapedWords)(?![\p{L}\p{N}])"#
+    }
+
+    private func isKatakanaPhrase(_ phrase: String) -> Bool {
+        let scalars = phrase.unicodeScalars.filter { !$0.properties.isWhitespace }
+        return !scalars.isEmpty && scalars.allSatisfy { (0x30a0...0x30ff).contains($0.value) }
+    }
+
+    private func usesUnspacedScript(_ phrase: String) -> Bool {
+        phrase.unicodeScalars.contains { scalar in
+            (0x3040...0x30ff).contains(scalar.value)
+                || (0x3400...0x9fff).contains(scalar.value)
+        }
     }
 
     private func normalizeSpacing(in text: String) -> String {
         let openingTokens = CharacterSet(charactersIn: "([{")
         let closingTokens = CharacterSet(charactersIn: ")]}")
         let inlineTokens = CharacterSet(charactersIn: ",.:;?!")
+        let unspacedTokens = CharacterSet(charactersIn: "、。？！：；（）［］｛｝「」『』【】〈〉《》")
 
         var result = ""
         var index = text.startIndex
@@ -113,7 +132,14 @@ final class SpeechPunctuationService {
                 let nextCharacter = nextIndex < text.endIndex ? text[nextIndex] : nil
 
                 if let previous = result.last,
-                   behavior(for: previous, opening: openingTokens, closing: closingTokens, inline: inlineTokens) == .opening {
+                   (behavior(for: previous, opening: openingTokens, closing: closingTokens, inline: inlineTokens) == .opening
+                    || isMember(previous, of: unspacedTokens)) {
+                    index = nextIndex
+                    continue
+                }
+
+                if let nextCharacter,
+                   isMember(nextCharacter, of: unspacedTokens) {
                     index = nextIndex
                     continue
                 }
@@ -151,6 +177,10 @@ final class SpeechPunctuationService {
         }
 
         return result
+    }
+
+    private func isMember(_ character: Character, of characterSet: CharacterSet) -> Bool {
+        character.unicodeScalars.allSatisfy { characterSet.contains($0) }
     }
 
     private func shouldSuppressDuplicateReplacement(

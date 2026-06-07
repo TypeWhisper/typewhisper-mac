@@ -15,7 +15,19 @@ func preferredAppLanguageCode() -> String {
 }
 
 func localizedAppText(_ english: String, de german: String) -> String {
-    preferredAppLanguageCode().hasPrefix("de") ? german : english
+    let language = preferredAppLanguageCode()
+    if language.hasPrefix("de") {
+        return german
+    }
+
+    if language.hasPrefix("ja") {
+        let localized = Bundle.main.localizedString(forKey: english, value: nil, table: nil)
+        if localized != english {
+            return localized
+        }
+    }
+
+    return english
 }
 
 func localizedAppLanguageName(for code: String) -> String {

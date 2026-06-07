@@ -23,4 +23,26 @@ final class PunctuationRulesLoaderTests: XCTestCase {
         XCTAssertEqual(ruleSet?.rules.first?.phrase, "komma")
         XCTAssertEqual(ruleSet?.verificationScenarios.first?.expected, "hallo, welt")
     }
+
+    func testLoaderSupportsJapanesePrimaryLanguageSubtag() {
+        let loader = PunctuationRulesLoader { languageCode in
+            guard languageCode == "ja" else { return nil }
+            return """
+            {
+              "language": "ja",
+              "rules": [
+                { "phrase": "まる", "replacement": "。", "category": "punctuation" }
+              ],
+              "verificationScenarios": [
+                { "spoken": "確認しましたまる", "expected": "確認しました。" }
+              ]
+            }
+            """.data(using: .utf8)
+        }
+
+        let ruleSet = loader.ruleSet(for: "ja-JP")
+        XCTAssertEqual(ruleSet?.language, "ja")
+        XCTAssertEqual(ruleSet?.rules.first?.phrase, "まる")
+        XCTAssertEqual(ruleSet?.verificationScenarios.first?.expected, "確認しました。")
+    }
 }

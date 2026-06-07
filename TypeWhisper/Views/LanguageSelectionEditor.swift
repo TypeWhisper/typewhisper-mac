@@ -26,8 +26,8 @@ struct LanguageSelectionEditor: View {
     let availableLanguages: [(code: String, name: String)]
     var nilBehavior: LanguageSelectionNilBehavior = .auto
     var inheritTitle: String? = nil
-    var autoTitle: String = "Auto-detect all languages"
-    var restrictedTitle: String = "Restrict detection to selected languages"
+    var autoTitle: String = localizedAppText("Auto-detect all languages", de: "Alle Sprachen automatisch erkennen")
+    var restrictedTitle: String = localizedAppText("Restrict detection to selected languages", de: "Erkennung auf ausgewählte Sprachen beschränken")
     var hintBehavior: LanguageSelectionHintBehavior = .unknown
 
     @State private var isPickerPresented = false
@@ -88,11 +88,11 @@ struct LanguageSelectionEditor: View {
 
         switch hintBehavior {
         case .acceptsHints:
-            return "This engine uses the ordered list as language hints."
+            return localizedAppText("This engine uses the ordered list as language hints.", de: "Diese Engine verwendet die sortierte Liste als Sprachhinweise.")
         case .firstSelectedFallback:
-            return "This engine does not support multiple language hints. It will use #1 as the spoken language."
+            return localizedAppText("This engine does not support multiple language hints. It will use #1 as the spoken language.", de: "Diese Engine unterstützt keine mehreren Sprachhinweise. Sie verwendet Nr. 1 als gesprochene Sprache.")
         case .unknown:
-            return "Engines that support language hints use this ordered list. Other engines use #1 as the spoken language."
+            return localizedAppText("Engines that support language hints use this ordered list. Other engines use #1 as the spoken language.", de: "Engines mit Sprachhinweisen verwenden diese sortierte Liste. Andere Engines verwenden Nr. 1 als gesprochene Sprache.")
         }
     }
 
@@ -101,20 +101,20 @@ struct LanguageSelectionEditor: View {
             if let inheritTitle {
                 modeButton(
                     title: inheritTitle,
-                    subtitle: "Use the global spoken language setting for this context.",
+                    subtitle: localizedAppText("Use the global spoken language setting for this context.", de: "Verwende die globale Einstellung für die gesprochene Sprache in diesem Kontext."),
                     mode: .inheritGlobal
                 )
             }
 
             modeButton(
                 title: autoTitle,
-                subtitle: "Let the engine detect the spoken language without restrictions.",
+                subtitle: localizedAppText("Let the engine detect the spoken language without restrictions.", de: "Lasse die Engine die gesprochene Sprache ohne Einschränkungen erkennen."),
                 mode: .auto
             )
 
             modeButton(
                 title: restrictedTitle,
-                subtitle: "Improve detection by limiting it to one or more expected languages.",
+                subtitle: localizedAppText("Improve detection by limiting it to one or more expected languages.", de: "Verbessere die Erkennung, indem du sie auf eine oder mehrere erwartete Sprachen beschränkst."),
                 mode: .restricted
             )
 
@@ -123,13 +123,18 @@ struct LanguageSelectionEditor: View {
                     Button {
                         isPickerPresented = true
                     } label: {
-                        Label(selectedCodes.isEmpty ? "Select languages" : "Selected: \(selectedCodes.count)", systemImage: "plus.circle")
+                        Label(
+                            selectedCodes.isEmpty
+                                ? localizedAppText("Select languages", de: "Sprachen auswählen")
+                                : "\(localizedAppText("Selected:", de: "Ausgewählt:")) \(selectedCodes.count)",
+                            systemImage: "plus.circle"
+                        )
                     }
                     .buttonStyle(.bordered)
                 }
 
                 if selectedCodes.isEmpty {
-                    Text("No languages selected yet.")
+                    Text(localizedAppText("No languages selected yet.", de: "Noch keine Sprachen ausgewählt."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
@@ -145,7 +150,7 @@ struct LanguageSelectionEditor: View {
         }
         .popover(isPresented: $isPickerPresented, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: 8) {
-                TextField("Search languages", text: $searchQuery)
+                TextField(localizedAppText("Search languages", de: "Sprachen suchen"), text: $searchQuery)
                     .textFieldStyle(.roundedBorder)
 
                 ScrollView {

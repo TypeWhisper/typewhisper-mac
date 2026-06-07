@@ -1,0 +1,22 @@
+{
+  "language": "ja",
+  "rules": [
+    { "phrase": "句点", "replacement": "。", "category": "punctuation" },
+    { "phrase": "読点", "replacement": "、", "category": "punctuation" },
+    { "phrase": "疑問符", "replacement": "？", "category": "punctuation" },
+    { "phrase": "感嘆符", "replacement": "！", "category": "punctuation" },
+    { "phrase": "コロン", "replacement": "：", "category": "punctuation" },
+    { "phrase": "セミコロン", "replacement": "；", "category": "punctuation" },
+    { "phrase": "かっこ開く", "replacement": "（", "category": "brackets" },
+    { "phrase": "かっこ閉じる", "replacement": "）", "category": "brackets" },
+    { "phrase": "鍵かっこ開く", "replacement": "「", "category": "quotes" },
+    { "phrase": "鍵かっこ閉じる", "replacement": "」", "category": "quotes" }
+  ],
+  "verificationScenarios": [
+    { "spoken": "今日はいい天気です 句点", "expected": "今日はいい天気です。" },
+    { "spoken": "予約は明日ですか 疑問符", "expected": "予約は明日ですか？" },
+    { "spoken": "こんにちは 読点 よろしくお願いします", "expected": "こんにちは、よろしくお願いします" },
+    { "spoken": "タイトル コロン 確認事項", "expected": "タイトル：確認事項" },
+    { "spoken": "メモ かっこ開く 重要 かっこ閉じる", "expected": "メモ（重要）" }
+  ]
+}

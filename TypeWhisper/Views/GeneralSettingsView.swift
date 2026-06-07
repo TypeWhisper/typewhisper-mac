@@ -13,7 +13,11 @@ struct GeneralSettingsView: View {
         if let lang = UserDefaults.standard.string(forKey: UserDefaultsKeys.preferredAppLanguage) {
             return lang
         }
-        return Locale.preferredLanguages.first?.hasPrefix("de") == true ? "de" : "en"
+        let preferredLanguage = Locale.preferredLanguages.first
+        if preferredLanguage?.hasPrefix("ja") == true {
+            return "ja"
+        }
+        return preferredLanguage?.hasPrefix("de") == true ? "de" : "en"
     }()
     @State private var showRestartAlert = false
     @AppStorage(UserDefaultsKeys.showMenuBarIcon) private var showMenuBarIcon = true
@@ -118,6 +122,7 @@ struct GeneralSettingsView: View {
                 Picker(String(localized: "App Language"), selection: $appLanguage) {
                     Text("English").tag("en")
                     Text("Deutsch").tag("de")
+                    Text("日本語").tag("ja")
                 }
                 .onChange(of: appLanguage) {
                     UserDefaults.standard.set(appLanguage, forKey: UserDefaultsKeys.preferredAppLanguage)
