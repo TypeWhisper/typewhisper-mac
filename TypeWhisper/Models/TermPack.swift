@@ -57,13 +57,21 @@ struct TermPack: Identifiable {
     }
 
     /// Built-in convenience init - same signature as the old memberwise init
-    init(id: String, nameKey: String, descriptionKey: String, icon: String, terms: [String], requiresCommercialLicense: Bool = false) {
+    init(
+        id: String,
+        nameKey: String,
+        descriptionKey: String,
+        icon: String,
+        terms: [String],
+        corrections: [TermPackCorrection] = [],
+        requiresCommercialLicense: Bool = false
+    ) {
         self.id = id
         self.defaultName = nameKey
         self.defaultDescription = descriptionKey
         self.icon = icon
         self.terms = terms
-        self.corrections = []
+        self.corrections = corrections
         self.source = .builtIn
         self.version = nil
         self.author = nil
