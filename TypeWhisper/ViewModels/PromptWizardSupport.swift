@@ -495,13 +495,20 @@ enum PromptWizardComposer {
     }
 
     static func languageNameForDisplay(_ code: String) -> String {
-        switch code.lowercased() {
+        let normalizedCode = code
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "_", with: "-")
+        let primaryCode = normalizedCode.split(separator: "-").first.map(String.init) ?? normalizedCode
+
+        switch primaryCode.lowercased() {
         case "en", "english":
             return "English"
         case "de", "german":
             return "German"
+        case "ja", "japanese":
+            return localizedAppText("Japanese", de: "Japanisch", ja: "日本語")
         default:
-            return code
+            return Locale.current.localizedString(forLanguageCode: primaryCode) ?? code
         }
     }
 

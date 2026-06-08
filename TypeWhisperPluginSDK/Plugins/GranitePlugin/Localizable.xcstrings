@@ -92,7 +92,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "オプション。ダウンロードレート制限を解除します。huggingface.co/settings/tokensで無料で取得可能です。"
+            "value": "オプション。ダウンロードレート制限を引き上げます。huggingface.co/settings/tokensで無料で取得可能です。"
           }
         }
       }

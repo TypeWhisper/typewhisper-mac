@@ -2603,7 +2603,7 @@ struct WorkflowDraft {
                     parts.append(localizedAppText(
                         "the apps \(workflowCompactList(appBundleIdentifiers.map(workflowAppDisplayName(for:)), conjunction: localizedAppText("and", de: "und")))",
                         de: "die Apps \(workflowCompactList(appBundleIdentifiers.map(workflowAppDisplayName(for:)), conjunction: "und"))",
-                        ja: "アプリ \(workflowCompactList(appBundleIdentifiers.map(workflowAppDisplayName(for:)), conjunction: localizedAppText("and", de: "und")))"
+                        ja: "アプリ \(workflowCompactList(appBundleIdentifiers.map(workflowAppDisplayName(for:)), conjunction: "と"))"
                     ))
                 }
             }
@@ -2615,7 +2615,7 @@ struct WorkflowDraft {
                     parts.append(localizedAppText(
                         "the websites \(workflowCompactList(websitePatterns, conjunction: localizedAppText("and", de: "und")))",
                         de: "die Websites \(workflowCompactList(websitePatterns, conjunction: "und"))",
-                        ja: "Webサイト \(workflowCompactList(websitePatterns, conjunction: localizedAppText("and", de: "und")))"
+                        ja: "Webサイト \(workflowCompactList(websitePatterns, conjunction: "と"))"
                     ))
                 }
             }
@@ -2623,7 +2623,7 @@ struct WorkflowDraft {
             if isHotkeyTriggerEnabled {
                 let shortcuts = workflowCompactList(
                     hotkeys.map(HotkeyService.displayName(for:)),
-                    conjunction: localizedAppText("and", de: "und")
+                    conjunction: localizedAppText("and", de: "und", ja: "と")
                 )
                 if shortcuts.isEmpty {
                     parts.append(localizedAppText("a hotkey", de: "einen Hotkey"))
@@ -2649,7 +2649,7 @@ struct WorkflowDraft {
                 return localizedAppText("an automatic trigger", de: "einen automatischen Trigger")
             }
 
-            return workflowCompactList(parts, conjunction: localizedAppText("and", de: "und"))
+            return workflowCompactList(parts, conjunction: localizedAppText("and", de: "und", ja: "と"))
         case .global:
             return localizedAppText("always", de: "immer")
         case .manual:
@@ -2752,7 +2752,8 @@ private func workflowOutputRouteSentence(targetActionPluginId: String?) -> Strin
     guard targetActionPluginId != nil else { return "" }
     return localizedAppText(
         " Output: action plugin.",
-        de: " Ausgabe: Action-Plugin."
+        de: " Ausgabe: Action-Plugin.",
+        ja: "。出力: アクションプラグイン。"
     )
 }
 
@@ -2919,7 +2920,7 @@ private func workflowAppDisplayName(for bundleIdentifier: String) -> String {
     return fallback.replacingOccurrences(of: "-", with: " ").capitalized
 }
 
-private func workflowCompactList(_ values: [String], conjunction: String = localizedAppText("and", de: "und")) -> String {
+private func workflowCompactList(_ values: [String], conjunction: String = localizedAppText("and", de: "und", ja: "と")) -> String {
     let filtered = values.filter { !$0.isEmpty }
     switch filtered.count {
     case 0:

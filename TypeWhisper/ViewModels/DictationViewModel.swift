@@ -1587,7 +1587,8 @@ final class DictationViewModel: ObservableObject {
             } else {
                 base = localizedAppText(
                     "This workflow applies because the app and website were detected together.",
-                    de: "Dieser Workflow greift, weil App und Website zusammen erkannt wurden."
+                    de: "Dieser Workflow greift, weil App und Website zusammen erkannt wurden.",
+                    ja: "アプリとWebサイトが一緒に検出されたため、このワークフローが適用されます。"
                 )
             }
         case .website:
@@ -1600,7 +1601,8 @@ final class DictationViewModel: ObservableObject {
             } else {
                 base = localizedAppText(
                     "This workflow applies because the current website was detected.",
-                    de: "Dieser Workflow greift, weil die aktuelle Website erkannt wurde."
+                    de: "Dieser Workflow greift, weil die aktuelle Website erkannt wurde.",
+                    ja: "現在のWebサイトが検出されたため、このワークフローが適用されます。"
                 )
             }
         case .app:
@@ -1612,19 +1614,22 @@ final class DictationViewModel: ObservableObject {
         case .globalFallback:
             base = localizedAppText(
                 "This workflow applies because no more specific workflow matched.",
-                de: "Dieser Workflow greift, weil kein spezifischerer Workflow gepasst hat."
+                de: "Dieser Workflow greift, weil kein spezifischerer Workflow gepasst hat.",
+                ja: "より具体的なワークフローに一致しなかったため、このワークフローが適用されます。"
             )
         case .manualOverride:
             base = localizedAppText(
                 "This workflow was manually triggered via its keyboard shortcut.",
-                de: "Dieser Workflow wurde manuell ueber seine Tastenkombination ausgeloest."
+                de: "Dieser Workflow wurde manuell ueber seine Tastenkombination ausgeloest.",
+                ja: "このワークフローはキーボードショートカットで手動実行されました。"
             )
         }
 
         guard match.wonBySortOrder else { return base }
         return base + localizedAppText(
             " Among multiple matching workflows, the one higher in the list wins here.",
-            de: " Unter mehreren passenden Workflows gewinnt hier der weiter oben stehende Eintrag."
+            de: " Unter mehreren passenden Workflows gewinnt hier der weiter oben stehende Eintrag.",
+            ja: " 複数の一致するワークフローがある場合は、一覧で上位のものが優先されます。"
         )
     }
 

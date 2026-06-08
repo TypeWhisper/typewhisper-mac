@@ -804,7 +804,7 @@ struct LicenseSettingsView: View {
         switch entitlement {
         case .commercial(let tier, let isLifetime):
             let lifetimeSuffix = isLifetime
-                ? localizedAppText(" (Lifetime)", de: " (Dauerlizenz)")
+                ? localizedAppText(" (Lifetime)", de: " (Dauerlizenz)", ja: "（永久ライセンス）")
                 : ""
             return localizedAppText(
                 "Detected commercial key: \(businessTierDisplayName(tier))\(lifetimeSuffix).",
@@ -821,7 +821,9 @@ struct LicenseSettingsView: View {
     }
 
     private func activeTierLabel(for tier: LicenseTier) -> String {
-        let lifetimeSuffix = license.licenseIsLifetime ? localizedAppText(", Lifetime", de: ", Dauerlizenz") : ""
+        let lifetimeSuffix = license.licenseIsLifetime
+            ? localizedAppText(", Lifetime", de: ", Dauerlizenz", ja: "、永久ライセンス")
+            : ""
         return "(\(businessTierDisplayName(tier))\(lifetimeSuffix))"
     }
 
