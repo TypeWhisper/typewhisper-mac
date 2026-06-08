@@ -784,17 +784,29 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
     #if !APPSTORE
     private final class FakeMediaPlaybackController: MediaPlaybackControlling {
-        var returnedSnapshot: (isPlaying: Bool, bundleIdentifier: String?) = (false, nil)
-        var onGetPlaybackSnapshot: ((@escaping (_ isPlaying: Bool, _ bundleIdentifier: String?) -> Void) -> Void)?
+        var returnedSnapshot: MediaPlaybackSnapshot? = FakeMediaPlaybackController.snapshot(
+            isPlaying: false,
+            playbackRate: nil,
+            bundleIdentifier: nil
+        )
+        var snapshotQueue: [MediaPlaybackSnapshot?] = []
+        var onGetPlaybackSnapshot: ((@escaping (_ snapshot: MediaPlaybackSnapshot?) -> Void) -> Void)?
         private(set) var pauseCalls = 0
         private(set) var playCalls = 0
+        private(set) var togglePlayPauseCalls = 0
 
-        func getPlaybackSnapshot(_ onReceive: @escaping (_ isPlaying: Bool, _ bundleIdentifier: String?) -> Void) {
+        func getPlaybackSnapshot(_ onReceive: @escaping (_ snapshot: MediaPlaybackSnapshot?) -> Void) {
             if let onGetPlaybackSnapshot {
                 onGetPlaybackSnapshot(onReceive)
                 return
             }
-            onReceive(returnedSnapshot.isPlaying, returnedSnapshot.bundleIdentifier)
+
+            if !snapshotQueue.isEmpty {
+                onReceive(snapshotQueue.removeFirst())
+                return
+            }
+
+            onReceive(returnedSnapshot)
         }
 
         func play() {
@@ -803,6 +815,24 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         func pause() {
             pauseCalls += 1
+        }
+
+        func togglePlayPause() {
+            togglePlayPauseCalls += 1
+        }
+
+        static func snapshot(
+            isPlaying: Bool?,
+            playbackRate: Double?,
+            bundleIdentifier: String? = "com.apple.Music",
+            trackIdentifier: String? = "Song||Artist||Album"
+        ) -> MediaPlaybackSnapshot {
+            MediaPlaybackSnapshot(
+                isApplicationPlaying: isPlaying,
+                playbackRate: playbackRate,
+                bundleIdentifier: bundleIdentifier,
+                trackIdentifier: trackIdentifier
+            )
         }
     }
 
@@ -816,11 +846,15 @@ final class APIRouterAndHandlersTests: XCTestCase {
             actions.append(action)
         }
 
+        func runNextAction() {
+            guard !actions.isEmpty else { return }
+            let action = actions.removeFirst()
+            action()
+        }
+
         func runPendingActions() {
-            let pendingActions = actions
-            actions.removeAll()
-            for action in pendingActions {
-                action()
+            while !actions.isEmpty {
+                runNextAction()
             }
         }
     }
@@ -3375,7 +3409,9 @@ final class APIRouterAndHandlersTests: XCTestCase {
     func testDictationDirectInsertionAddsTrailingSpaceWithoutMutatingStoredTranscription() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let historyEnabledKey = UserDefaultsKeys.historyEnabled
+        let preserveClipboardKey = UserDefaultsKeys.preserveClipboard
         let originalHistoryEnabled = UserDefaults.standard.object(forKey: historyEnabledKey)
+        let originalPreserveClipboard = UserDefaults.standard.object(forKey: preserveClipboardKey)
         var dictationContext: DictationContext?
         defer {
             dictationContext = nil
@@ -3384,13 +3420,20 @@ final class APIRouterAndHandlersTests: XCTestCase {
             } else {
                 UserDefaults.standard.removeObject(forKey: historyEnabledKey)
             }
+            if let originalPreserveClipboard {
+                UserDefaults.standard.set(originalPreserveClipboard, forKey: preserveClipboardKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: preserveClipboardKey)
+            }
             TestSupport.remove(appSupportDirectory)
         }
 
         UserDefaults.standard.set(true, forKey: historyEnabledKey)
+        UserDefaults.standard.set(false, forKey: preserveClipboardKey)
 
         dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
         let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.preserveClipboard = false
         let pasteboard = NSPasteboard.withUniqueName()
         context.textInsertionService.pasteboardProvider = { pasteboard }
         context.textInsertionService.captureActiveAppOverride = {
@@ -3901,10 +3944,10 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
     #if !APPSTORE
     @MainActor
-    func testMediaPlaybackServicePausesAndResumesFromOneShotTrackInfo() {
+    func testMediaPlaybackServicePausesAndResumesFromConfirmedTrackInfo() {
         let controller = FakeMediaPlaybackController()
         let scheduler = TestMediaPlaybackResumeScheduler()
-        controller.returnedSnapshot = (true, "com.apple.Music")
+        controller.returnedSnapshot = FakeMediaPlaybackController.snapshot(isPlaying: true, playbackRate: 1)
         let service = MediaPlaybackService(
             startListening: false,
             resumeDelay: 0.6,
@@ -3912,13 +3955,21 @@ final class APIRouterAndHandlersTests: XCTestCase {
         ) { controller }
 
         service.pauseIfPlaying()
+
+        XCTAssertEqual(controller.pauseCalls, 0)
+        XCTAssertEqual(scheduler.scheduledDelays, [0.15])
+
+        scheduler.runNextAction()
+
+        XCTAssertEqual(controller.pauseCalls, 1)
+
         service.resumeIfWePaused()
 
         XCTAssertEqual(controller.pauseCalls, 1)
         XCTAssertEqual(controller.playCalls, 0)
-        XCTAssertEqual(scheduler.scheduledDelays, [0.6])
+        XCTAssertEqual(scheduler.scheduledDelays, [0.15, 0.6])
 
-        scheduler.runPendingActions()
+        scheduler.runNextAction()
 
         XCTAssertEqual(controller.playCalls, 1)
     }
@@ -3926,7 +3977,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
     @MainActor
     func testMediaPlaybackServiceSkipsPauseWhenPlaybackIsAlreadyStopped() {
         let controller = FakeMediaPlaybackController()
-        controller.returnedSnapshot = (false, nil)
+        controller.returnedSnapshot = FakeMediaPlaybackController.snapshot(isPlaying: false, playbackRate: nil, bundleIdentifier: nil)
         let service = MediaPlaybackService(startListening: false) { controller }
 
         service.pauseIfPlaying()
@@ -3937,10 +3988,220 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    func testMediaPlaybackServiceSkipsPauseForSpotifyPausedSnapshot() {
+        let controller = FakeMediaPlaybackController()
+        let scheduler = TestMediaPlaybackResumeScheduler()
+        controller.returnedSnapshot = FakeMediaPlaybackController.snapshot(
+            isPlaying: false,
+            playbackRate: nil,
+            bundleIdentifier: "com.spotify.client",
+            trackIdentifier: "Wildberry Lillet||Nina Chuba||Glas"
+        )
+        let service = MediaPlaybackService(
+            startListening: false,
+            resumeDelay: 0.6,
+            resumeScheduler: scheduler.schedule(after:action:)
+        ) { controller }
+
+        service.pauseIfPlaying()
+        service.resumeIfWePaused()
+        scheduler.runPendingActions()
+
+        XCTAssertEqual(controller.pauseCalls, 0)
+        XCTAssertEqual(controller.playCalls, 0)
+        XCTAssertTrue(scheduler.scheduledDelays.isEmpty)
+    }
+
+    @MainActor
+    func testMediaPlaybackServicePausesAndResumesForSpotifyPlayingSnapshot() {
+        let controller = FakeMediaPlaybackController()
+        let scheduler = TestMediaPlaybackResumeScheduler()
+        controller.returnedSnapshot = FakeMediaPlaybackController.snapshot(
+            isPlaying: true,
+            playbackRate: 1,
+            bundleIdentifier: "com.spotify.client",
+            trackIdentifier: "Wildberry Lillet||Nina Chuba||Glas"
+        )
+        let service = MediaPlaybackService(
+            startListening: false,
+            resumeDelay: 0.6,
+            resumeScheduler: scheduler.schedule(after:action:)
+        ) { controller }
+
+        service.pauseIfPlaying()
+        scheduler.runNextAction()
+        service.resumeIfWePaused()
+        scheduler.runNextAction()
+
+        XCTAssertEqual(controller.pauseCalls, 1)
+        XCTAssertEqual(controller.playCalls, 1)
+    }
+
+    @MainActor
+    func testMediaPlaybackServiceFallsBackToToggleWhenResumePlayDoesNotRestartConfirmedMedia() {
+        let controller = FakeMediaPlaybackController()
+        let scheduler = TestMediaPlaybackResumeScheduler()
+        controller.snapshotQueue = [
+            FakeMediaPlaybackController.snapshot(
+                isPlaying: true,
+                playbackRate: 1,
+                bundleIdentifier: "com.spotify.client",
+                trackIdentifier: "Wildberry Lillet||Nina Chuba||Glas"
+            ),
+            FakeMediaPlaybackController.snapshot(
+                isPlaying: true,
+                playbackRate: 1,
+                bundleIdentifier: "com.spotify.client",
+                trackIdentifier: "Wildberry Lillet||Nina Chuba||Glas"
+            ),
+            FakeMediaPlaybackController.snapshot(
+                isPlaying: false,
+                playbackRate: nil,
+                bundleIdentifier: "com.spotify.client",
+                trackIdentifier: "Wildberry Lillet||Nina Chuba||Glas"
+            )
+        ]
+        let service = MediaPlaybackService(
+            startListening: false,
+            resumeDelay: 0.6,
+            resumeScheduler: scheduler.schedule(after:action:)
+        ) { controller }
+
+        service.pauseIfPlaying()
+        scheduler.runNextAction()
+        service.resumeIfWePaused()
+        scheduler.runNextAction()
+        scheduler.runNextAction()
+
+        XCTAssertEqual(controller.pauseCalls, 1)
+        XCTAssertEqual(controller.playCalls, 1)
+        XCTAssertEqual(controller.togglePlayPauseCalls, 1)
+        XCTAssertEqual(scheduler.scheduledDelays, [0.15, 0.6, 0.25])
+
+        service.resumeIfWePaused()
+        scheduler.runPendingActions()
+
+        XCTAssertEqual(controller.playCalls, 1)
+        XCTAssertEqual(controller.togglePlayPauseCalls, 1)
+    }
+
+    @MainActor
+    func testMediaPlaybackServiceSkipsTransientStalePlaybackStateWhenConfirmReportsPaused() {
+        let controller = FakeMediaPlaybackController()
+        let scheduler = TestMediaPlaybackResumeScheduler()
+        controller.snapshotQueue = [
+            FakeMediaPlaybackController.snapshot(
+                isPlaying: true,
+                playbackRate: 1,
+                bundleIdentifier: "com.spotify.client",
+                trackIdentifier: "Wildberry Lillet||Nina Chuba||Glas"
+            ),
+            FakeMediaPlaybackController.snapshot(
+                isPlaying: false,
+                playbackRate: nil,
+                bundleIdentifier: "com.spotify.client",
+                trackIdentifier: "Wildberry Lillet||Nina Chuba||Glas"
+            )
+        ]
+        let service = MediaPlaybackService(
+            startListening: false,
+            resumeDelay: 0.6,
+            resumeScheduler: scheduler.schedule(after:action:)
+        ) { controller }
+
+        service.pauseIfPlaying()
+        scheduler.runNextAction()
+        service.resumeIfWePaused()
+        scheduler.runPendingActions()
+
+        XCTAssertEqual(controller.pauseCalls, 0)
+        XCTAssertEqual(controller.playCalls, 0)
+    }
+
+    @MainActor
+    func testMediaPlaybackServiceSkipsPauseWhenPlaybackRateIsActiveButApplicationIsNotPlaying() {
+        let controller = FakeMediaPlaybackController()
+        let scheduler = TestMediaPlaybackResumeScheduler()
+        controller.returnedSnapshot = FakeMediaPlaybackController.snapshot(isPlaying: false, playbackRate: 1)
+        let service = MediaPlaybackService(
+            startListening: false,
+            resumeDelay: 0.6,
+            resumeScheduler: scheduler.schedule(after:action:)
+        ) { controller }
+
+        service.pauseIfPlaying()
+        service.resumeIfWePaused()
+        scheduler.runPendingActions()
+
+        XCTAssertEqual(controller.pauseCalls, 0)
+        XCTAssertEqual(controller.playCalls, 0)
+        XCTAssertTrue(scheduler.scheduledDelays.isEmpty)
+    }
+
+    @MainActor
+    func testMediaPlaybackServiceSkipsPauseWhenPlaybackRateIsZero() {
+        let controller = FakeMediaPlaybackController()
+        let scheduler = TestMediaPlaybackResumeScheduler()
+        controller.returnedSnapshot = FakeMediaPlaybackController.snapshot(isPlaying: true, playbackRate: 0)
+        let service = MediaPlaybackService(
+            startListening: false,
+            resumeDelay: 0.6,
+            resumeScheduler: scheduler.schedule(after:action:)
+        ) { controller }
+
+        service.pauseIfPlaying()
+        service.resumeIfWePaused()
+        scheduler.runPendingActions()
+
+        XCTAssertEqual(controller.pauseCalls, 0)
+        XCTAssertEqual(controller.playCalls, 0)
+        XCTAssertTrue(scheduler.scheduledDelays.isEmpty)
+    }
+
+    @MainActor
+    func testMediaPlaybackServicePausesWhenApplicationIsPlayingAndPlaybackRateIsMissing() {
+        let controller = FakeMediaPlaybackController()
+        let scheduler = TestMediaPlaybackResumeScheduler()
+        controller.returnedSnapshot = FakeMediaPlaybackController.snapshot(isPlaying: true, playbackRate: nil)
+        let service = MediaPlaybackService(
+            startListening: false,
+            resumeDelay: 0.6,
+            resumeScheduler: scheduler.schedule(after:action:)
+        ) { controller }
+
+        service.pauseIfPlaying()
+        scheduler.runNextAction()
+
+        XCTAssertEqual(controller.pauseCalls, 1)
+    }
+
+    @MainActor
+    func testMediaPlaybackServiceStopBeforePauseConfirmInvalidatesPendingPause() {
+        let controller = FakeMediaPlaybackController()
+        let scheduler = TestMediaPlaybackResumeScheduler()
+        controller.snapshotQueue = [
+            FakeMediaPlaybackController.snapshot(isPlaying: true, playbackRate: 1),
+            FakeMediaPlaybackController.snapshot(isPlaying: true, playbackRate: 1)
+        ]
+        let service = MediaPlaybackService(
+            startListening: false,
+            resumeDelay: 0.6,
+            resumeScheduler: scheduler.schedule(after:action:)
+        ) { controller }
+
+        service.pauseIfPlaying()
+        service.resumeIfWePaused()
+        scheduler.runPendingActions()
+
+        XCTAssertEqual(controller.pauseCalls, 0)
+        XCTAssertEqual(controller.playCalls, 0)
+    }
+
+    @MainActor
     func testMediaPlaybackServiceIgnoresStalePauseProbeAfterResume() {
         let controller = FakeMediaPlaybackController()
         let scheduler = TestMediaPlaybackResumeScheduler()
-        var deferredCallback: ((_ isPlaying: Bool, _ bundleIdentifier: String?) -> Void)?
+        var deferredCallback: ((_ snapshot: MediaPlaybackSnapshot?) -> Void)?
         controller.onGetPlaybackSnapshot = { callback in
             deferredCallback = callback
         }
@@ -3952,7 +4213,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         service.pauseIfPlaying()
         service.resumeIfWePaused()
-        deferredCallback?(true, "com.apple.Music")
+        deferredCallback?(FakeMediaPlaybackController.snapshot(isPlaying: true, playbackRate: 1))
 
         XCTAssertEqual(controller.pauseCalls, 0)
         XCTAssertEqual(controller.playCalls, 0)
@@ -3967,7 +4228,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
     func testMediaPlaybackServiceCancelsPendingResumeWhenRecordingRestartsBeforeDelayElapses() {
         let controller = FakeMediaPlaybackController()
         let scheduler = TestMediaPlaybackResumeScheduler()
-        controller.returnedSnapshot = (true, "com.apple.Music")
+        controller.returnedSnapshot = FakeMediaPlaybackController.snapshot(isPlaying: true, playbackRate: 1)
         let service = MediaPlaybackService(
             startListening: false,
             resumeDelay: 0.6,
@@ -3975,6 +4236,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         ) { controller }
 
         service.pauseIfPlaying()
+        scheduler.runNextAction()
         service.resumeIfWePaused()
         service.pauseIfPlaying()
 
@@ -3993,7 +4255,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
     func testMediaPlaybackServiceCoalescesDuplicateResumeRequestsIntoSinglePlay() {
         let controller = FakeMediaPlaybackController()
         let scheduler = TestMediaPlaybackResumeScheduler()
-        controller.returnedSnapshot = (true, "com.apple.Music")
+        controller.returnedSnapshot = FakeMediaPlaybackController.snapshot(isPlaying: true, playbackRate: 1)
         let service = MediaPlaybackService(
             startListening: false,
             resumeDelay: 0.6,
@@ -4001,6 +4263,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         ) { controller }
 
         service.pauseIfPlaying()
+        scheduler.runNextAction()
         service.resumeIfWePaused()
         service.resumeIfWePaused()
 
