@@ -56,6 +56,12 @@
             "state": "translated",
             "value": "EU"
           }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "EU"
+          }
         }
       }
     },
@@ -158,6 +164,12 @@
     "US": {
       "localizations": {
         "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "US"
+          }
+        },
+        "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "US"

@@ -56,6 +56,12 @@
             "state": "translated",
             "value": "HuggingFace Token"
           }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HuggingFaceトークン"
+          }
         }
       }
     },

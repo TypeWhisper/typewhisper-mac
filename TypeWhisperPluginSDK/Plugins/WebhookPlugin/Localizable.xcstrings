@@ -248,6 +248,12 @@
             "state": "translated",
             "value": "URL"
           }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "URL"
+          }
         }
       }
     },
