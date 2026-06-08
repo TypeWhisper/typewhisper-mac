@@ -28,7 +28,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "APIキーは鍵環に安全に保存されます"
+            "value": "APIキーはキーチェーンに安全に保存されます"
           }
         }
       }

@@ -30,7 +30,9 @@ final class SpeechPunctuationServiceTests: XCTestCase {
                     { "phrase": "疑問符", "replacement": "？", "category": "punctuation" },
                     { "phrase": "コロン", "replacement": "：", "category": "punctuation" },
                     { "phrase": "かっこ開く", "replacement": "（", "category": "brackets" },
-                    { "phrase": "かっこ閉じる", "replacement": "）", "category": "brackets" }
+                    { "phrase": "かっこ閉じる", "replacement": "）", "category": "brackets" },
+                    { "phrase": "鍵かっこ開く", "replacement": "「", "category": "quotes" },
+                    { "phrase": "鍵かっこ閉じる", "replacement": "」", "category": "quotes" }
                   ],
                   "verificationScenarios": []
                 }
@@ -134,12 +136,26 @@ final class SpeechPunctuationServiceTests: XCTestCase {
         let service = SpeechPunctuationService(rulesLoader: makeRulesLoader())
 
         XCTAssertEqual(
-            service.normalize(text: "このあと始まるので止まるまで待ちます", language: "ja"),
-            "このあと始まるので止まるまで待ちます"
+            service.normalize(text: "疑問符号の説明を確認します", language: "ja"),
+            "疑問符号の説明を確認します"
         )
         XCTAssertEqual(
             service.normalize(text: "コロンビアの予定を確認します", language: "ja"),
             "コロンビアの予定を確認します"
+        )
+    }
+
+    @MainActor
+    func testJapaneseLongerBracketPhrasesTakePrecedence() {
+        let service = SpeechPunctuationService(rulesLoader: makeRulesLoader())
+
+        XCTAssertEqual(
+            service.normalize(text: "メモ 鍵かっこ開く 重要 鍵かっこ閉じる", language: "ja"),
+            "メモ「重要」"
+        )
+        XCTAssertEqual(
+            service.normalize(text: "メモ 鍵かっこ開く 重要 鍵かっこ閉じる", language: "ja-JP"),
+            "メモ「重要」"
         )
     }
 

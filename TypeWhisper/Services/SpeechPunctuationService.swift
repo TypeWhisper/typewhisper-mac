@@ -54,7 +54,7 @@ final class SpeechPunctuationService {
         in text: String
     ) -> String {
         guard let regex = try? NSRegularExpression(
-            pattern: wholePhrasePattern(for: phrase),
+            pattern: wholePhrasePattern(for: phrase, category: category),
             options: [.caseInsensitive]
         ) else {
             return text
@@ -89,7 +89,7 @@ final class SpeechPunctuationService {
         return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func wholePhrasePattern(for phrase: String) -> String {
+    private func wholePhrasePattern(for phrase: String, category: PunctuationRuleCategory) -> String {
         let escapedWords = phrase
             .split(whereSeparator: \.isWhitespace)
             .map { NSRegularExpression.escapedPattern(for: String($0)) }
@@ -97,6 +97,9 @@ final class SpeechPunctuationService {
         if usesUnspacedScript(phrase) {
             if isKatakanaPhrase(phrase) {
                 return #"\#(escapedWords)(?![ァ-ヿ])"#
+            }
+            if category == .punctuation {
+                return #"\#(escapedWords)(?![的号])"#
             }
             return escapedWords
         }

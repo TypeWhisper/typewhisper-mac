@@ -108,7 +108,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "音声認識"
+            "value": "話者分離"
           }
         }
       }

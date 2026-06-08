@@ -312,6 +312,12 @@
             "state": "translated",
             "value": "Vault"
           }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault"
+          }
         }
       }
     },
