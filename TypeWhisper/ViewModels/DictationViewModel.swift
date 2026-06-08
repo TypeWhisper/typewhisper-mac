@@ -1581,7 +1581,8 @@ final class DictationViewModel: ObservableObject {
             if let domain = match.matchedDomain {
                 base = localizedAppText(
                     "This workflow applies because \(appDescriptor) was detected together with \(domain).",
-                    de: "Dieser Workflow greift, weil \(appDescriptor) zusammen mit \(domain) erkannt wurde."
+                    de: "Dieser Workflow greift, weil \(appDescriptor) zusammen mit \(domain) erkannt wurde.",
+                    ja: "\(appDescriptor) と \(domain) が一緒に検出されたため、このワークフローが適用されます。"
                 )
             } else {
                 base = localizedAppText(
@@ -1593,7 +1594,8 @@ final class DictationViewModel: ObservableObject {
             if let domain = match.matchedDomain {
                 base = localizedAppText(
                     "This workflow applies because \(domain) was detected.",
-                    de: "Dieser Workflow greift, weil \(domain) erkannt wurde."
+                    de: "Dieser Workflow greift, weil \(domain) erkannt wurde.",
+                    ja: "\(domain) が検出されたため、このワークフローが適用されます。"
                 )
             } else {
                 base = localizedAppText(
@@ -1604,7 +1606,8 @@ final class DictationViewModel: ObservableObject {
         case .app:
             base = localizedAppText(
                 "This workflow applies because \(appDescriptor) was detected.",
-                de: "Dieser Workflow greift, weil \(appDescriptor) erkannt wurde."
+                de: "Dieser Workflow greift, weil \(appDescriptor) erkannt wurde.",
+                ja: "\(appDescriptor) が検出されたため、このワークフローが適用されます。"
             )
         case .globalFallback:
             base = localizedAppText(

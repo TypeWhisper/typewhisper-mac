@@ -161,7 +161,8 @@ private struct MyWorkflowsPage: View {
                 Text(
                     localizedAppText(
                         "This removes “\(workflow.name)” from the active workflow list.",
-                        de: "Dadurch wird „\(workflow.name)“ aus der aktiven Workflow-Liste entfernt."
+                        de: "Dadurch wird „\(workflow.name)“ aus der aktiven Workflow-Liste entfernt.",
+                        ja: "「\(workflow.name)」を有効なワークフロー一覧から削除します。"
                     )
                 )
             }
@@ -954,7 +955,8 @@ private struct WorkflowEditorPage: View {
                     Text(
                         localizedAppText(
                             "Unavailable Action Target (\(targetActionPluginId))",
-                            de: "Nicht verfügbares Action-Ziel (\(targetActionPluginId))"
+                            de: "Nicht verfügbares Action-Ziel (\(targetActionPluginId))",
+                            ja: "利用できないアクション対象（\(targetActionPluginId)）"
                         )
                     )
                     .tag(targetActionPluginId as String?)
@@ -1196,7 +1198,8 @@ private struct WorkflowEditorPage: View {
                     Text(
                         localizedAppText(
                             "Use Workflow Default (\(promptProcessingService.displayName(for: workflowService.defaultProviderId)))",
-                            de: "Workflow-Standard verwenden (\(promptProcessingService.displayName(for: workflowService.defaultProviderId)))"
+                            de: "Workflow-Standard verwenden (\(promptProcessingService.displayName(for: workflowService.defaultProviderId)))",
+                            ja: "ワークフロー既定値を使用（\(promptProcessingService.displayName(for: workflowService.defaultProviderId))）"
                         )
                     )
                     .tag(nil as String?)
@@ -1649,7 +1652,8 @@ private struct WorkflowEditorPage: View {
            let conflictWorkflow = workflowService.workflow(id: workflowId) {
             validationMessage = localizedAppText(
                 "This hotkey is already used by workflow “\(conflictWorkflow.name)”.",
-                de: "Dieser Hotkey wird bereits vom Workflow „\(conflictWorkflow.name)“ verwendet."
+                de: "Dieser Hotkey wird bereits vom Workflow „\(conflictWorkflow.name)“ verwendet.",
+                ja: "このホットキーはすでにワークフロー「\(conflictWorkflow.name)」で使用されています。"
             )
             return
         }
@@ -1657,7 +1661,8 @@ private struct WorkflowEditorPage: View {
         if let slot = hotkeyService.isHotkeyAssignedToGlobalSlot(hotkey) {
             validationMessage = localizedAppText(
                 "This hotkey is already used by the global slot “\(slot.rawValue)”.",
-                de: "Dieser Hotkey wird bereits vom globalen Slot „\(slot.rawValue)“ verwendet."
+                de: "Dieser Hotkey wird bereits vom globalen Slot „\(slot.rawValue)“ verwendet.",
+                ja: "このホットキーはすでにグローバルスロット「\(slot.rawValue)」で使用されています。"
             )
             return
         }
@@ -2296,27 +2301,31 @@ struct WorkflowDraft {
     var reviewText: String {
         let languageSentence = localizedAppText(
             " Spoken language: \(workflowInputLanguageSummary(for: inputLanguageSelection)).",
-            de: " Gesprochene Sprache: \(workflowInputLanguageSummary(for: inputLanguageSelection))."
+            de: " Gesprochene Sprache: \(workflowInputLanguageSummary(for: inputLanguageSelection)).",
+            ja: " 話す言語: \(workflowInputLanguageSummary(for: inputLanguageSelection))。"
         )
         let outputRouteSentence = workflowOutputRouteSentence(targetActionPluginId: targetActionPluginId)
 
         if triggerMode == .manual {
             return localizedAppText(
                 "\(resolvedName) is available as \(template.definition.name) from the Workflow Palette.\(languageSentence)\(outputRouteSentence)",
-                de: "\(resolvedName) ist als \(template.definition.name) über die Workflow-Palette verfügbar.\(languageSentence)\(outputRouteSentence)"
+                de: "\(resolvedName) ist als \(template.definition.name) über die Workflow-Palette verfügbar.\(languageSentence)\(outputRouteSentence)",
+                ja: "\(resolvedName)はワークフローパレットから\(template.definition.name)として利用できます。\(languageSentence)\(outputRouteSentence)"
             )
         }
 
         if triggerMode == .global {
             return localizedAppText(
                 "\(resolvedName) runs always as \(template.definition.name).\(languageSentence)\(outputRouteSentence)",
-                de: "\(resolvedName) läuft immer als \(template.definition.name).\(languageSentence)\(outputRouteSentence)"
+                de: "\(resolvedName) läuft immer als \(template.definition.name).\(languageSentence)\(outputRouteSentence)",
+                ja: "\(resolvedName)は常に\(template.definition.name)として実行されます。\(languageSentence)\(outputRouteSentence)"
             )
         }
 
         return localizedAppText(
             "\(resolvedName) runs as \(template.definition.name) via \(triggerReviewText).\(languageSentence)\(outputRouteSentence)",
-            de: "\(resolvedName) läuft als \(template.definition.name) über \(triggerReviewText).\(languageSentence)\(outputRouteSentence)"
+            de: "\(resolvedName) läuft als \(template.definition.name) über \(triggerReviewText).\(languageSentence)\(outputRouteSentence)",
+            ja: "\(resolvedName)は\(triggerReviewText)により\(template.definition.name)として実行されます。\(languageSentence)\(outputRouteSentence)"
         )
     }
 
@@ -2441,14 +2450,16 @@ struct WorkflowDraft {
                        let conflictWorkflow = workflowService.workflow(id: conflictWorkflowId) {
                         return localizedAppText(
                             "This hotkey is already used by workflow “\(conflictWorkflow.name)”.",
-                            de: "Dieser Hotkey wird bereits vom Workflow „\(conflictWorkflow.name)“ verwendet."
+                            de: "Dieser Hotkey wird bereits vom Workflow „\(conflictWorkflow.name)“ verwendet.",
+                            ja: "このホットキーはすでにワークフロー「\(conflictWorkflow.name)」で使用されています。"
                         )
                     }
 
                     if let conflictSlot = hotkeyService.isHotkeyAssignedToGlobalSlot(hotkey) {
                         return localizedAppText(
                             "This hotkey is already used by the global slot “\(conflictSlot.rawValue)”.",
-                            de: "Dieser Hotkey wird bereits vom globalen Slot „\(conflictSlot.rawValue)“ verwendet."
+                            de: "Dieser Hotkey wird bereits vom globalen Slot „\(conflictSlot.rawValue)“ verwendet.",
+                            ja: "このホットキーはすでにグローバルスロット「\(conflictSlot.rawValue)」で使用されています。"
                         )
                     }
                 }
@@ -2591,7 +2602,8 @@ struct WorkflowDraft {
                 } else {
                     parts.append(localizedAppText(
                         "the apps \(workflowCompactList(appBundleIdentifiers.map(workflowAppDisplayName(for:)), conjunction: localizedAppText("and", de: "und")))",
-                        de: "die Apps \(workflowCompactList(appBundleIdentifiers.map(workflowAppDisplayName(for:)), conjunction: "und"))"
+                        de: "die Apps \(workflowCompactList(appBundleIdentifiers.map(workflowAppDisplayName(for:)), conjunction: "und"))",
+                        ja: "アプリ \(workflowCompactList(appBundleIdentifiers.map(workflowAppDisplayName(for:)), conjunction: localizedAppText("and", de: "und")))"
                     ))
                 }
             }
@@ -2602,7 +2614,8 @@ struct WorkflowDraft {
                 } else {
                     parts.append(localizedAppText(
                         "the websites \(workflowCompactList(websitePatterns, conjunction: localizedAppText("and", de: "und")))",
-                        de: "die Websites \(workflowCompactList(websitePatterns, conjunction: "und"))"
+                        de: "die Websites \(workflowCompactList(websitePatterns, conjunction: "und"))",
+                        ja: "Webサイト \(workflowCompactList(websitePatterns, conjunction: localizedAppText("and", de: "und")))"
                     ))
                 }
             }
@@ -2619,12 +2632,14 @@ struct WorkflowDraft {
                     case .startDictation:
                         parts.append(localizedAppText(
                             "the shortcuts \(shortcuts) to start dictation",
-                            de: "die Shortcuts \(shortcuts) zum Starten des Diktats"
+                            de: "die Shortcuts \(shortcuts) zum Starten des Diktats",
+                            ja: "音声入力を開始するショートカット \(shortcuts)"
                         ))
                     case .processSelectedText:
                         parts.append(localizedAppText(
                             "the shortcuts \(shortcuts) to process selected text",
-                            de: "die Shortcuts \(shortcuts) zum Verarbeiten markierten Texts"
+                            de: "die Shortcuts \(shortcuts) zum Verarbeiten markierten Texts",
+                            ja: "選択テキストを処理するショートカット \(shortcuts)"
                         ))
                     }
                 }
@@ -2709,12 +2724,14 @@ private func workflowSummaryText(for workflow: Workflow) -> String {
             if workflow.usesAppleTranslate {
                 return localizedAppText(
                     "Apple Translate to \(localizedAppLanguageName(for: targetLanguage))",
-                    de: "Apple Translate nach \(localizedAppLanguageName(for: targetLanguage))"
+                    de: "Apple Translate nach \(localizedAppLanguageName(for: targetLanguage))",
+                    ja: "\(localizedAppLanguageName(for: targetLanguage))へのApple Translate"
                 )
             }
             return localizedAppText(
                 "\(templateName) to \(targetLanguage)",
-                de: "\(templateName) nach \(targetLanguage)"
+                de: "\(templateName) nach \(targetLanguage)",
+                ja: "\(targetLanguage)への\(templateName)"
             )
         }
         return templateName
@@ -2754,7 +2771,8 @@ private func workflowInputLanguageSummary(for selection: LanguageSelection) -> S
         }
         return localizedAppText(
             "Auto-detect between \(workflowLanguageNameList(normalizedCodes))",
-            de: "Automatische Erkennung zwischen \(workflowLanguageNameList(normalizedCodes))"
+            de: "Automatische Erkennung zwischen \(workflowLanguageNameList(normalizedCodes))",
+            ja: "\(workflowLanguageNameList(normalizedCodes))間で自動検出"
         )
     }
 }
@@ -2769,13 +2787,15 @@ private func workflowLanguageNameList(_ codes: [String]) -> String {
     case 2:
         return localizedAppText(
             "\(names[0]) and \(names[1])",
-            de: "\(names[0]) und \(names[1])"
+            de: "\(names[0]) und \(names[1])",
+            ja: "\(names[0])と\(names[1])"
         )
     default:
         let allButLast = names.dropLast().joined(separator: ", ")
         return localizedAppText(
             "\(allButLast), and \(names[names.count - 1])",
-            de: "\(allButLast) und \(names[names.count - 1])"
+            de: "\(allButLast) und \(names[names.count - 1])",
+            ja: "\(allButLast)、\(names[names.count - 1])"
         )
     }
 }
@@ -2850,34 +2870,39 @@ private func workflowReviewText(for workflow: Workflow) -> String {
     let triggerDetail = workflowTriggerDetail(for: workflow)
     let languageSentence = localizedAppText(
         ". Spoken language: \(workflowInputLanguageSummary(for: workflow.inputLanguageSelection))",
-        de: ". Gesprochene Sprache: \(workflowInputLanguageSummary(for: workflow.inputLanguageSelection))"
+        de: ". Gesprochene Sprache: \(workflowInputLanguageSummary(for: workflow.inputLanguageSelection))",
+        ja: "。話す言語: \(workflowInputLanguageSummary(for: workflow.inputLanguageSelection))"
     )
     let outputRouteSentence = workflowOutputRouteSentence(targetActionPluginId: workflow.output.targetActionPluginId)
 
     if workflow.trigger?.kind == .global {
         return localizedAppText(
             "\(summary) runs always\(languageSentence)\(outputRouteSentence)",
-            de: "\(summary) läuft immer\(languageSentence)\(outputRouteSentence)"
+            de: "\(summary) läuft immer\(languageSentence)\(outputRouteSentence)",
+            ja: "\(summary)は常に実行されます\(languageSentence)\(outputRouteSentence)"
         )
     }
 
     if workflow.trigger?.kind == .manual {
         return localizedAppText(
             "\(summary) is available from the Workflow Palette\(languageSentence)\(outputRouteSentence)",
-            de: "\(summary) ist über die Workflow-Palette verfügbar\(languageSentence)\(outputRouteSentence)"
+            de: "\(summary) ist über die Workflow-Palette verfügbar\(languageSentence)\(outputRouteSentence)",
+            ja: "\(summary)はワークフローパレットから利用できます\(languageSentence)\(outputRouteSentence)"
         )
     }
 
     if triggerDetail.isEmpty {
         return localizedAppText(
             "\(summary) via \(triggerSummary)\(languageSentence)\(outputRouteSentence)",
-            de: "\(summary) über \(triggerSummary)\(languageSentence)\(outputRouteSentence)"
+            de: "\(summary) über \(triggerSummary)\(languageSentence)\(outputRouteSentence)",
+            ja: "\(summary)は\(triggerSummary)で実行されます\(languageSentence)\(outputRouteSentence)"
         )
     }
 
     return localizedAppText(
         "\(summary) via \(triggerSummary): \(triggerDetail)\(languageSentence)\(outputRouteSentence)",
-        de: "\(summary) über \(triggerSummary): \(triggerDetail)\(languageSentence)\(outputRouteSentence)"
+        de: "\(summary) über \(triggerSummary): \(triggerDetail)\(languageSentence)\(outputRouteSentence)",
+        ja: "\(summary)は\(triggerSummary): \(triggerDetail)で実行されます\(languageSentence)\(outputRouteSentence)"
     )
 }
 

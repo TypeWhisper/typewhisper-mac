@@ -623,12 +623,14 @@ enum PromptWizardNameSuggester {
             case .direct(let targetLanguage):
                 return localizedAppText(
                     "Translate to \(displayName(for: targetLanguage))",
-                    de: "Nach \(displayName(for: targetLanguage)) übersetzen"
+                    de: "Nach \(displayName(for: targetLanguage)) übersetzen",
+                    ja: "\(displayName(for: targetLanguage))へ翻訳"
                 )
             case .alternatingPair(let primaryLanguage, let secondaryLanguage):
                 return localizedAppText(
                     "Translate \(displayName(for: primaryLanguage)) / \(displayName(for: secondaryLanguage))",
-                    de: "\(displayName(for: primaryLanguage)) / \(displayName(for: secondaryLanguage)) übersetzen"
+                    de: "\(displayName(for: primaryLanguage)) / \(displayName(for: secondaryLanguage)) übersetzen",
+                    ja: "\(displayName(for: primaryLanguage)) / \(displayName(for: secondaryLanguage))を翻訳"
                 )
             case nil:
                 return localizedAppText("Translate", de: "Übersetzen")

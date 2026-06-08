@@ -546,7 +546,8 @@ private struct PromptActionRow: View {
         if let providerType = action.providerType {
             return localizedAppText(
                 "Provider: \(processingService.displayName(for: providerType))",
-                de: "Provider: \(processingService.displayName(for: providerType))"
+                de: "Provider: \(processingService.displayName(for: providerType))",
+                ja: "プロバイダー: \(processingService.displayName(for: providerType))"
             )
         }
 
@@ -561,7 +562,8 @@ private struct PromptActionRow: View {
 
         return localizedAppText(
             "Target: \(plugin.actionName)",
-            de: "Ziel: \(plugin.actionName)"
+            de: "Ziel: \(plugin.actionName)",
+            ja: "対象: \(plugin.actionName)"
         )
     }
 
@@ -745,7 +747,8 @@ private struct PromptWizardSheet: View {
                 promptWizardInfoChip(
                     localizedAppText(
                         "Step \(currentStepNumber) of \(totalSteps)",
-                        de: "Schritt \(currentStepNumber) von \(totalSteps)"
+                        de: "Schritt \(currentStepNumber) von \(totalSteps)",
+                        ja: "\(totalSteps)ステップ中\(currentStepNumber)"
                     ),
                     tint: .accentColor
                 )
@@ -759,7 +762,8 @@ private struct PromptWizardSheet: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(localizedAppText(
                     "Step \(currentStepNumber) of \(totalSteps)",
-                    de: "Schritt \(currentStepNumber) von \(totalSteps)"
+                    de: "Schritt \(currentStepNumber) von \(totalSteps)",
+                    ja: "\(totalSteps)ステップ中\(currentStepNumber)"
                 ))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
@@ -1444,7 +1448,8 @@ private struct PromptWizardResponseStep: View {
                 } else {
                     Text(localizedAppText(
                         "Uses the global default provider: \(processingService.displayName(for: processingService.selectedProviderId)).",
-                        de: "Verwendet den globalen Standard-Provider: \(processingService.displayName(for: processingService.selectedProviderId))."
+                        de: "Verwendet den globalen Standard-Provider: \(processingService.displayName(for: processingService.selectedProviderId)).",
+                        ja: "グローバル既定プロバイダーを使用: \(processingService.displayName(for: processingService.selectedProviderId))。"
                     ))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -1529,7 +1534,8 @@ private struct PromptWizardResponseStep: View {
         case .custom:
             items.append(localizedAppText(
                 "Temp \(formattedTemperature)",
-                de: "Temp \(formattedTemperature)"
+                de: "Temp \(formattedTemperature)",
+                ja: "温度 \(formattedTemperature)"
             ))
         }
 

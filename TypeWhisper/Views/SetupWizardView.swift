@@ -103,7 +103,8 @@ struct SetupWizardView: View {
     private func announceCurrentStep() {
         accessibilityAnnouncementService.announce(localizedAppText(
             "\(currentWizardStep.title). Step \(currentStep + 1) of \(SetupWizardStep.allCases.count). \(currentWizardStep.subtitle)",
-            de: "\(currentWizardStep.title). Schritt \(currentStep + 1) von \(SetupWizardStep.allCases.count). \(currentWizardStep.subtitle)"
+            de: "\(currentWizardStep.title). Schritt \(currentStep + 1) von \(SetupWizardStep.allCases.count). \(currentWizardStep.subtitle)",
+            ja: "\(currentWizardStep.title)。\(SetupWizardStep.allCases.count)ステップ中\(currentStep + 1)。\(currentWizardStep.subtitle)"
         ))
     }
 
@@ -169,7 +170,8 @@ struct SetupWizardView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(localizedAppText(
             "Step \(step.rawValue + 1) of \(SetupWizardStep.allCases.count), \(step.progressTitle)",
-            de: "Schritt \(step.rawValue + 1) von \(SetupWizardStep.allCases.count), \(step.progressTitle)"
+            de: "Schritt \(step.rawValue + 1) von \(SetupWizardStep.allCases.count), \(step.progressTitle)",
+            ja: "\(SetupWizardStep.allCases.count)ステップ中\(step.rawValue + 1)、\(step.progressTitle)"
         ))
         .accessibilityValue(progressAccessibilityStatus(for: step))
     }
@@ -645,7 +647,8 @@ struct SetupWizardView: View {
             return (
                 localizedAppText(
                     "Fn is already used by \(hotkeyModeTitle(for: slot)). Record another shortcut to continue.",
-                    de: "Fn wird bereits von \(hotkeyModeTitle(for: slot)) verwendet. Nimm einen anderen Shortcut auf, um fortzufahren."
+                    de: "Fn wird bereits von \(hotkeyModeTitle(for: slot)) verwendet. Nimm einen anderen Shortcut auf, um fortzufahren.",
+                    ja: "Fnはすでに\(hotkeyModeTitle(for: slot))で使用されています。続行するには別のショートカットを録音してください。"
                 ),
                 "exclamationmark.triangle.fill",
                 .orange

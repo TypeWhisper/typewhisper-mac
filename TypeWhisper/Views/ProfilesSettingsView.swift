@@ -327,7 +327,8 @@ private struct RuleRow: View {
         } message: {
             Text(localizedAppText(
                 "Do you really want to delete “\(profile.name)”?",
-                de: "Möchtest du „\(profile.name)“ wirklich löschen?"
+                de: "Möchtest du „\(profile.name)“ wirklich löschen?",
+                ja: "「\(profile.name)」を本当に削除しますか？"
             ))
         }
     }
@@ -367,7 +368,7 @@ private struct RulePromptChip: View {
 
     var body: some View {
         Label(
-            localizedAppText("Prompt: \(action.name)", de: "Prompt: \(action.name)"),
+            localizedAppText("Prompt: \(action.name)", de: "Prompt: \(action.name)", ja: "プロンプト: \(action.name)"),
             systemImage: action.icon
         )
         .font(.caption.weight(.semibold))
@@ -444,7 +445,7 @@ private struct RuleEditorSheet: View {
 
             VStack(alignment: .trailing, spacing: 10) {
                 infoChip(
-                    localizedAppText("Step \(currentStepNumber) of \(totalSteps)", de: "Schritt \(currentStepNumber) von \(totalSteps)"),
+                    localizedAppText("Step \(currentStepNumber) of \(totalSteps)", de: "Schritt \(currentStepNumber) von \(totalSteps)", ja: "\(totalSteps)ステップ中\(currentStepNumber)"),
                     tint: .orange
                 )
 
@@ -460,7 +461,7 @@ private struct RuleEditorSheet: View {
     private var footer: some View {
         HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(localizedAppText("Step \(currentStepNumber) of \(totalSteps)", de: "Schritt \(currentStepNumber) von \(totalSteps)"))
+                Text(localizedAppText("Step \(currentStepNumber) of \(totalSteps)", de: "Schritt \(currentStepNumber) von \(totalSteps)", ja: "\(totalSteps)ステップ中\(currentStepNumber)"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Text(stepGuidance)
@@ -711,7 +712,7 @@ private struct RuleScopeStep: View {
 
     private var websiteToggleTitle: String {
         if let appName = viewModel.editorRelevantBrowserName {
-            return localizedAppText("Limit website in \(appName)", de: "Website in \(appName) eingrenzen")
+            return localizedAppText("Limit website in \(appName)", de: "Website in \(appName) eingrenzen", ja: "\(appName)内のWebサイトに限定")
         }
 
         return localizedAppText("Optional: limit to a website", de: "Optional: auf eine Website eingrenzen")
@@ -721,14 +722,16 @@ private struct RuleScopeStep: View {
         if let detectedDomain = viewModel.editorDetectedDomain, viewModel.editorDetectedIsSupportedBrowser {
             return localizedAppText(
                 "Currently detected: \(detectedDomain). This lets you limit the rule to a specific page or domain.",
-                de: "Aktuell erkannt: \(detectedDomain). Die Regel kann damit auf eine konkrete Seite oder Domain begrenzt werden."
+                de: "Aktuell erkannt: \(detectedDomain). Die Regel kann damit auf eine konkrete Seite oder Domain begrenzt werden.",
+                ja: "現在検出中: \(detectedDomain)。このルールを特定のページやドメインに限定できます。"
             )
         }
 
         if let appName = viewModel.editorRelevantBrowserName {
             return localizedAppText(
                 "\(appName) is selected as the browser. Optionally add a domain here if the rule should not apply to every page.",
-                de: "\(appName) ist als Browser gewählt. Ergänze hier optional eine Domain, wenn die Regel nicht für alle Seiten gelten soll."
+                de: "\(appName) ist als Browser gewählt. Ergänze hier optional eine Domain, wenn die Regel nicht für alle Seiten gelten soll.",
+                ja: "\(appName)がブラウザとして選択されています。すべてのページに適用しない場合は、必要に応じてここにドメインを追加してください。"
             )
         }
 
@@ -1221,7 +1224,8 @@ private struct RuleReviewStep: View {
                                     Label(
                                         localizedAppText(
                                             "This hotkey is also assigned to slot \(globalSlot.rawValue).",
-                                            de: "Dieser Hotkey ist auch dem Slot \(globalSlot.rawValue) zugewiesen."
+                                            de: "Dieser Hotkey ist auch dem Slot \(globalSlot.rawValue) zugewiesen.",
+                                            ja: "このホットキーはスロット\(globalSlot.rawValue)にも割り当てられています。"
                                         ),
                                         systemImage: "exclamationmark.triangle"
                                     )

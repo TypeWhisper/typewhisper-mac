@@ -442,7 +442,8 @@ struct LicenseSettingsView: View {
 
                 Text(localizedAppText(
                     "Connect Discord to claim your \(supporterTierDisplayName(tier)) supporter status in the community server.",
-                    de: "Verbinde Discord, um deinen \(supporterTierDisplayName(tier))-Supporter-Status im Community-Server zu bestätigen."
+                    de: "Verbinde Discord, um deinen \(supporterTierDisplayName(tier))-Supporter-Status im Community-Server zu bestätigen.",
+                    ja: "Discordを連携して、コミュニティサーバーで\(supporterTierDisplayName(tier))サポーターステータスを受け取ります。"
                 ))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -473,7 +474,7 @@ struct LicenseSettingsView: View {
                     .foregroundStyle(.green)
 
                 if let username = supporterDiscord.claimStatus.discordUsername {
-                    Text(localizedAppText("Linked account: \(username)", de: "Verknüpftes Konto: \(username)"))
+                    Text(localizedAppText("Linked account: \(username)", de: "Verknüpftes Konto: \(username)", ja: "連携済みアカウント: \(username)"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -481,7 +482,8 @@ struct LicenseSettingsView: View {
                 if !supporterDiscord.claimStatus.linkedRoles.isEmpty {
                     Text(localizedAppText(
                         "Active roles: \(supporterDiscord.claimStatus.linkedRoles.joined(separator: ", "))",
-                        de: "Aktive Rollen: \(supporterDiscord.claimStatus.linkedRoles.joined(separator: ", "))"
+                        de: "Aktive Rollen: \(supporterDiscord.claimStatus.linkedRoles.joined(separator: ", "))",
+                        ja: "有効なロール: \(supporterDiscord.claimStatus.linkedRoles.joined(separator: ", "))"
                     ))
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -806,12 +808,14 @@ struct LicenseSettingsView: View {
                 : ""
             return localizedAppText(
                 "Detected commercial key: \(businessTierDisplayName(tier))\(lifetimeSuffix).",
-                de: "Kommerzieller Schlüssel erkannt: \(businessTierDisplayName(tier))\(lifetimeSuffix)."
+                de: "Kommerzieller Schlüssel erkannt: \(businessTierDisplayName(tier))\(lifetimeSuffix).",
+                ja: "商用キーを検出しました: \(businessTierDisplayName(tier))\(lifetimeSuffix)。"
             )
         case .supporter(let tier):
             return localizedAppText(
                 "Detected supporter key: \(supporterTierDisplayName(tier)).",
-                de: "Supporter-Schlüssel erkannt: \(supporterTierDisplayName(tier))."
+                de: "Supporter-Schlüssel erkannt: \(supporterTierDisplayName(tier)).",
+                ja: "サポーターキーを検出しました: \(supporterTierDisplayName(tier))。"
             )
         }
     }

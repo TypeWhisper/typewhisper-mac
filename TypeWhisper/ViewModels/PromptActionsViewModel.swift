@@ -241,7 +241,8 @@ class PromptActionsViewModel: ObservableObject {
             let ruleCount = status.ruleCount
             return localizedAppText(
                 "Used in \(ruleCount) rule\(ruleCount == 1 ? "" : "s")",
-                de: "In \(ruleCount) Regel\(ruleCount == 1 ? "" : "n") verwendet"
+                de: "In \(ruleCount) Regel\(ruleCount == 1 ? "" : "n") verwendet",
+                ja: "\(ruleCount)件のルールで使用中"
             )
         }
 

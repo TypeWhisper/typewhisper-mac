@@ -94,28 +94,7 @@ final class SpeechPunctuationService {
             .split(whereSeparator: \.isWhitespace)
             .map { NSRegularExpression.escapedPattern(for: String($0)) }
             .joined(separator: #"\s+"#)
-        if usesUnspacedScript(phrase) {
-            if isKatakanaPhrase(phrase) {
-                return #"\#(escapedWords)(?![ァ-ヿ])"#
-            }
-            if category == .punctuation {
-                return #"\#(escapedWords)(?![的号])"#
-            }
-            return escapedWords
-        }
         return #"(?<![\p{L}\p{N}])\#(escapedWords)(?![\p{L}\p{N}])"#
-    }
-
-    private func isKatakanaPhrase(_ phrase: String) -> Bool {
-        let scalars = phrase.unicodeScalars.filter { !$0.properties.isWhitespace }
-        return !scalars.isEmpty && scalars.allSatisfy { (0x30a0...0x30ff).contains($0.value) }
-    }
-
-    private func usesUnspacedScript(_ phrase: String) -> Bool {
-        phrase.unicodeScalars.contains { scalar in
-            (0x3040...0x30ff).contains(scalar.value)
-                || (0x3400...0x9fff).contains(scalar.value)
-        }
     }
 
     private func normalizeSpacing(in text: String) -> String {
@@ -198,8 +177,30 @@ final class SpeechPunctuationService {
             return false
         }
 
-        return previousNonWhitespaceCharacter(in: text, before: range.lowerBound) == replacementCharacter
-            || nextNonWhitespaceCharacter(in: text, after: range.upperBound) == replacementCharacter
+        return isDuplicatePunctuation(
+            previousNonWhitespaceCharacter(in: text, before: range.lowerBound),
+            replacement: replacementCharacter
+        ) || isDuplicatePunctuation(
+            nextNonWhitespaceCharacter(in: text, after: range.upperBound),
+            replacement: replacementCharacter
+        )
+    }
+
+    private func isDuplicatePunctuation(_ candidate: Character?, replacement: Character) -> Bool {
+        guard let candidate else { return false }
+        return canonicalPunctuationCharacter(candidate) == canonicalPunctuationCharacter(replacement)
+    }
+
+    private func canonicalPunctuationCharacter(_ character: Character) -> Character {
+        switch character {
+        case "。": "."
+        case "、": ","
+        case "？": "?"
+        case "！": "!"
+        case "：": ":"
+        case "；": ";"
+        default: character
+        }
     }
 
     private func previousNonWhitespaceCharacter(

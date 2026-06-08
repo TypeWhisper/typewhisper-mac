@@ -304,12 +304,14 @@ struct PluginSettingsView: View {
         if updates > 0 {
             return localizedAppText(
                 "\(installed) installed · \(updates) updates · \(available) available",
-                de: "\(installed) installiert · \(updates) Updates · \(available) verfügbar"
+                de: "\(installed) installiert · \(updates) Updates · \(available) verfügbar",
+                ja: "\(installed)件インストール済み · \(updates)件の更新 · \(available)件利用可能"
             )
         }
         return localizedAppText(
             "\(installed) installed · \(available) available",
-            de: "\(installed) installiert · \(available) verfügbar"
+            de: "\(installed) installiert · \(available) verfügbar",
+            ja: "\(installed)件インストール済み · \(available)件利用可能"
         )
     }
 
@@ -425,9 +427,9 @@ struct PluginSettingsView: View {
         let count = integrationTabCount(for: tab)
         switch tab {
         case .installed:
-            return localizedAppText("\(count) installed", de: "\(count) installiert")
+            return localizedAppText("\(count) installed", de: "\(count) installiert", ja: "\(count)件インストール済み")
         case .discover:
-            return localizedAppText("\(count) available", de: "\(count) verfügbar")
+            return localizedAppText("\(count) available", de: "\(count) verfügbar", ja: "\(count)件利用可能")
         }
     }
 
@@ -939,7 +941,7 @@ struct PluginSettingsView: View {
             return category.badgeTitle
         }
 
-        return localizedAppText("\(selected.count) functions", de: "\(selected.count) Funktionen")
+        return localizedAppText("\(selected.count) functions", de: "\(selected.count) Funktionen", ja: "\(selected.count)件の機能")
     }
 
     private func toggleCapabilityFilter(_ category: PluginCategory) {
@@ -1229,9 +1231,9 @@ private struct HostingSummaryInline: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Label(localizedAppText("\(localCount) Local", de: "\(localCount) lokal"), systemImage: "desktopcomputer")
+            Label(localizedAppText("\(localCount) Local", de: "\(localCount) lokal", ja: "\(localCount)件ローカル"), systemImage: "desktopcomputer")
                 .foregroundStyle(.green)
-            Label("\(cloudCount) Cloud", systemImage: "cloud")
+            Label(localizedAppText("\(cloudCount) Cloud", de: "\(cloudCount) Cloud", ja: "\(cloudCount)件クラウド"), systemImage: "cloud")
                 .foregroundStyle(.cyan)
         }
         .font(.caption.weight(.medium))
@@ -1630,7 +1632,7 @@ private struct InstalledPluginRow: View {
                         .menuStyle(.borderlessButton)
                         .fixedSize()
                         .help(localizedAppText("More Actions", de: "Weitere Aktionen"))
-                        .accessibilityLabel(localizedAppText("More Actions for \(plugin.manifest.name)", de: "Weitere Aktionen für \(plugin.manifest.name)"))
+                        .accessibilityLabel(localizedAppText("More Actions for \(plugin.manifest.name)", de: "Weitere Aktionen für \(plugin.manifest.name)", ja: "\(plugin.manifest.name)のその他の操作"))
                     }
                 }
             }
@@ -1943,7 +1945,7 @@ private struct AvailablePluginRow: View {
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                    .accessibilityLabel(localizedAppText("Open details for \(plugin.name)", de: "Details für \(plugin.name) öffnen"))
+                    .accessibilityLabel(localizedAppText("Open details for \(plugin.name)", de: "Details für \(plugin.name) öffnen", ja: "\(plugin.name)の詳細を開く"))
                 }
             }
         }
