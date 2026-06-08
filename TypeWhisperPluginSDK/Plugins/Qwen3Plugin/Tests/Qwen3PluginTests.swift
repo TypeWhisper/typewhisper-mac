@@ -34,11 +34,11 @@ final class Qwen3PluginTests: XCTestCase {
         XCTAssertEqual(Qwen3Plugin.resolveLanguageName("tl"), "Filipino")
     }
 
-    func testContextFormatterAddsAntiHallucinationInstructionAndDictionaryTerms() {
-        let context = Qwen3Plugin.contextBiasString(from: " TypeWhisper, MLX, TypeWhisper ")
+    func testContextFormatterIncludesExplicitPromptContext() {
+        let context = Qwen3Plugin.contextBiasString(from: " Use TypeWhisper and MLX spelling. ")
 
         XCTAssertTrue(context.contains(Qwen3ContextBiasFormatter.baseInstruction))
-        XCTAssertTrue(context.contains("Technical terms: TypeWhisper, MLX."))
+        XCTAssertTrue(context.contains("Use TypeWhisper and MLX spelling."))
     }
 
     func testContextFormatterIncludesBaseInstructionWithoutDictionaryTerms() {
@@ -46,6 +46,10 @@ final class Qwen3PluginTests: XCTestCase {
             Qwen3Plugin.contextBiasString(from: nil),
             Qwen3ContextBiasFormatter.baseInstruction
         )
+    }
+
+    func testDictionaryTermsAreNotAdvertisedForQwen3Prompting() {
+        XCTAssertEqual(Qwen3Plugin().dictionaryTermsSupport, .unsupported)
     }
 
     func testFrenchTrailingOuiArtifactIsRemovedOnlyAfterSentencePunctuation() {

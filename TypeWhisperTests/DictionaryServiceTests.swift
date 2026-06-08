@@ -50,6 +50,30 @@ private final class LegacyDictionaryEnginePlugin: NSObject, TranscriptionEngineP
     }
 }
 
+private final class UnsupportedDictionaryEnginePlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.tests.unsupported-dictionary-engine"
+    static let pluginName = "Unsupported Dictionary Engine"
+    var providerIdValue = "unsupported"
+
+    required override init() {}
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    var providerId: String { providerIdValue }
+    var providerDisplayName: String { "Unsupported Mock" }
+    var isConfigured: Bool { true }
+    var transcriptionModels: [PluginModelInfo] { [] }
+    var selectedModelId: String? { nil }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .unsupported }
+    func selectModel(_ modelId: String) {}
+    var supportsTranslation: Bool { false }
+
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "ok", detectedLanguage: language)
+    }
+}
+
 final class DictionaryServiceTests: XCTestCase {
     override func setUp() {
         super.setUp()
@@ -196,6 +220,20 @@ final class DictionaryServiceTests: XCTestCase {
         XCTAssertEqual(service.getTermsForPrompt(providerId: plugin.providerId), expectedFallback)
         XCTAssertEqual(service.getTermsForPrompt(providerId: "missing"), expectedFallback)
         XCTAssertLessThanOrEqual(expectedFallback?.count ?? 0, 600)
+    }
+
+    @MainActor
+    func testGetTermsForPromptReturnsNilForUnsupportedEngines() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.setTerms(["Alpha", "Beta"], replaceExisting: true)
+
+        let plugin = UnsupportedDictionaryEnginePlugin()
+        installPlugins([plugin], appSupportDirectory: appSupportDirectory)
+
+        XCTAssertNil(service.getTermsForPrompt(providerId: plugin.providerId))
     }
 
     @MainActor

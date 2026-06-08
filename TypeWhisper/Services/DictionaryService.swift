@@ -360,8 +360,15 @@ final class DictionaryService: ObservableObject {
         guard !terms.isEmpty else { return nil }
 
         guard let providerId,
-              let plugin = PluginManager.shared?.transcriptionEngine(for: providerId),
-              let budget = (plugin as? any DictionaryTermsBudgetProviding)?.dictionaryTermsBudget else {
+              let plugin = PluginManager.shared?.transcriptionEngine(for: providerId) else {
+            return PluginDictionaryTerms.prompt(from: terms)
+        }
+
+        if (plugin as? any DictionaryTermsCapabilityProviding)?.dictionaryTermsSupport == .unsupported {
+            return nil
+        }
+
+        guard let budget = (plugin as? any DictionaryTermsBudgetProviding)?.dictionaryTermsBudget else {
             return PluginDictionaryTerms.prompt(from: terms)
         }
 
