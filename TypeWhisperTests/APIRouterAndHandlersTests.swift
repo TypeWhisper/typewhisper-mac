@@ -825,13 +825,14 @@ final class APIRouterAndHandlersTests: XCTestCase {
             isPlaying: Bool?,
             playbackRate: Double?,
             bundleIdentifier: String? = "com.apple.Music",
-            trackIdentifier: String? = "Song||Artist||Album"
+            trackIdentifier: String? = nil
         ) -> MediaPlaybackSnapshot {
-            MediaPlaybackSnapshot(
+            let resolvedTrackIdentifier = bundleIdentifier == nil ? nil : (trackIdentifier ?? "Song||Artist||Album")
+            return MediaPlaybackSnapshot(
                 isApplicationPlaying: isPlaying,
                 playbackRate: playbackRate,
                 bundleIdentifier: bundleIdentifier,
-                trackIdentifier: trackIdentifier
+                trackIdentifier: resolvedTrackIdentifier
             )
         }
     }
@@ -3972,6 +3973,11 @@ final class APIRouterAndHandlersTests: XCTestCase {
         scheduler.runNextAction()
 
         XCTAssertEqual(controller.playCalls, 1)
+        XCTAssertEqual(scheduler.scheduledDelays, [0.15, 0.6, 0.25])
+
+        scheduler.runNextAction()
+
+        XCTAssertEqual(controller.togglePlayPauseCalls, 0)
     }
 
     @MainActor
@@ -4035,6 +4041,11 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         XCTAssertEqual(controller.pauseCalls, 1)
         XCTAssertEqual(controller.playCalls, 1)
+        XCTAssertEqual(scheduler.scheduledDelays, [0.15, 0.6, 0.25])
+
+        scheduler.runNextAction()
+
+        XCTAssertEqual(controller.togglePlayPauseCalls, 0)
     }
 
     @MainActor
