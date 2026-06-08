@@ -891,17 +891,17 @@ struct LicenseSettingsView: View {
 
     private func businessTierDisplayName(_ tier: LicenseTier) -> String {
         switch tier {
-        case .individual: return localizedAppText("Individual", de: "Einzelnutzer")
-        case .team: return localizedAppText("Team", de: "Team")
-        case .enterprise: return localizedAppText("Enterprise", de: "Unternehmensplan")
+        case .individual: return localizedAppText("Individual", de: "Einzelnutzer", ja: "個人")
+        case .team: return localizedAppText("Team", de: "Team", ja: "チーム")
+        case .enterprise: return localizedAppText("Enterprise", de: "Unternehmensplan", ja: "エンタープライズ")
         }
     }
 
     private func supporterTierDisplayName(_ tier: SupporterTier) -> String {
         switch tier {
-        case .bronze: return localizedAppText("Bronze", de: "Bronze")
-        case .silver: return localizedAppText("Silver", de: "Silber")
-        case .gold: return localizedAppText("Gold", de: "Gold")
+        case .bronze: return localizedAppText("Bronze", de: "Bronze", ja: "ブロンズ")
+        case .silver: return localizedAppText("Silver", de: "Silber", ja: "シルバー")
+        case .gold: return localizedAppText("Gold", de: "Gold", ja: "ゴールド")
         }
     }
 

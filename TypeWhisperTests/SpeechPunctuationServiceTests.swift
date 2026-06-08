@@ -127,8 +127,30 @@ final class SpeechPunctuationServiceTests: XCTestCase {
             "こんにちは、よろしくお願いします"
         )
         XCTAssertEqual(
+            service.normalize(text: "こんにちは 読点   よろしくお願いします", language: "ja"),
+            "こんにちは、よろしくお願いします"
+        )
+        XCTAssertEqual(
             service.normalize(text: "メモ かっこ開く 重要 かっこ閉じる", language: "ja"),
             "メモ（重要）"
+        )
+    }
+
+    @MainActor
+    func testJapanesePunctuationPreservesSpaceBeforeLatinText() {
+        let service = SpeechPunctuationService(rulesLoader: makeRulesLoader())
+
+        XCTAssertEqual(
+            service.normalize(text: "これは TypeWhisper 疑問符 next", language: "ja"),
+            "これは TypeWhisper？ next"
+        )
+        XCTAssertEqual(
+            service.normalize(text: "これは TypeWhisper 疑問符 2026", language: "ja"),
+            "これは TypeWhisper？ 2026"
+        )
+        XCTAssertEqual(
+            service.normalize(text: "これは TypeWhisper 疑問符 𠮷田さん", language: "ja"),
+            "これは TypeWhisper？𠮷田さん"
         )
     }
 

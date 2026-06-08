@@ -102,6 +102,7 @@ final class SpeechPunctuationService {
         let closingTokens = CharacterSet(charactersIn: ")]}")
         let inlineTokens = CharacterSet(charactersIn: ",.:;?!")
         let unspacedTokens = CharacterSet(charactersIn: "、。？！：；（）［］｛｝「」『』【】〈〉《》")
+        let unspacedOpeningTokens = CharacterSet(charactersIn: "（［｛「『【〈《")
 
         var result = ""
         var index = text.startIndex
@@ -112,16 +113,27 @@ final class SpeechPunctuationService {
             if character.isWhitespace {
                 let nextIndex = text.index(after: index)
                 let nextCharacter = nextIndex < text.endIndex ? text[nextIndex] : nil
+                let followingNonWhitespace = nextNonWhitespaceCharacter(in: text, after: index)
 
                 if let previous = result.last,
-                   (behavior(for: previous, opening: openingTokens, closing: closingTokens, inline: inlineTokens) == .opening
-                    || isMember(previous, of: unspacedTokens)) {
+                   behavior(for: previous, opening: openingTokens, closing: closingTokens, inline: inlineTokens) == .opening {
                     index = nextIndex
                     continue
                 }
 
-                if let nextCharacter,
-                   isMember(nextCharacter, of: unspacedTokens) {
+                if let previous = result.last,
+                   isMember(previous, of: unspacedTokens),
+                   shouldRemoveSpaceAfterUnspacedToken(
+                    previous,
+                    next: followingNonWhitespace,
+                    openingTokens: unspacedOpeningTokens
+                   ) {
+                    index = nextIndex
+                    continue
+                }
+
+                if let followingNonWhitespace,
+                   isMember(followingNonWhitespace, of: unspacedTokens) {
                     index = nextIndex
                     continue
                 }
@@ -163,6 +175,42 @@ final class SpeechPunctuationService {
 
     private func isMember(_ character: Character, of characterSet: CharacterSet) -> Bool {
         character.unicodeScalars.allSatisfy { characterSet.contains($0) }
+    }
+
+    private func shouldRemoveSpaceAfterUnspacedToken(
+        _ previous: Character,
+        next: Character?,
+        openingTokens: CharacterSet
+    ) -> Bool {
+        if isMember(previous, of: openingTokens) {
+            return true
+        }
+
+        guard let next else {
+            return true
+        }
+
+        return isUnspacedScript(next)
+    }
+
+    private func isUnspacedScript(_ character: Character) -> Bool {
+        character.unicodeScalars.allSatisfy { scalar in
+            switch scalar.value {
+            case 0x3040...0x30FF, // Hiragana and Katakana
+                 0x3400...0x9FFF, // CJK ideographs
+                 0x20000...0x2A6DF, // CJK extension B
+                 0x2A700...0x2B73F, // CJK extension C
+                 0x2B740...0x2B81F, // CJK extension D
+                 0x2B820...0x2CEAF, // CJK extension E-F
+                 0x2CEB0...0x2EBEF, // CJK extension F-I
+                 0x30000...0x323AF, // CJK extension G-H
+                 0xF900...0xFAFF, // CJK compatibility ideographs
+                 0xFF00...0xFFEF: // Halfwidth and fullwidth forms
+                return true
+            default:
+                return false
+            }
+        }
     }
 
     private func shouldSuppressDuplicateReplacement(
