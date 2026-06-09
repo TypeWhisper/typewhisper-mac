@@ -500,7 +500,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             UserDefaultsKeys.showMenuBarIcon: true,
             UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden: DockIconBehavior.keepVisible.rawValue,
             UserDefaultsKeys.updateChannel: AppConstants.defaultReleaseChannel.rawValue,
-            UserDefaultsKeys.appFormattingEnabled: false,
+            UserDefaultsKeys.appFormattingEnabled: true,
             UserDefaultsKeys.transcriptionNumberNormalizationEnabled: true
         ])
     }

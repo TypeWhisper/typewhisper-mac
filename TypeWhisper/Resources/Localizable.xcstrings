@@ -1916,18 +1916,18 @@
         }
       }
     },
-    "Automatically format transcribed text based on the target app. Configure the output format per workflow.": {
+    "Automatically format transcribed text based on the target app and use available cursor context for smarter insertion. Configure the output format per workflow.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Transkribierten Text automatisch basierend auf der Ziel-App formatieren. Das Ausgabeformat kann pro Workflow konfiguriert werden."
+            "value": "Transkribierten Text automatisch basierend auf der Ziel-App formatieren und verfügbaren Cursor-Kontext für intelligenteres Einfügen nutzen. Das Ausgabeformat kann pro Workflow konfiguriert werden."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "対象アプリに基づいて文字起こしテキストを自動整形します。出力形式はワークフローごとに設定できます。"
+            "value": "対象アプリに基づいて文字起こしテキストを自動整形し、利用可能なカーソルの文脈を使ってよりスマートに挿入します。出力形式はワークフローごとに設定できます。"
           }
         }
       }

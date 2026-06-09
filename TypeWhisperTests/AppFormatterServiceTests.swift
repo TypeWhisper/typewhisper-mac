@@ -91,7 +91,7 @@ final class AppFormatterServiceTests: XCTestCase {
 
         AppDelegate.registerDefaultUserDefaults(defaults)
 
-        XCTAssertEqual(defaults.object(forKey: UserDefaultsKeys.appFormattingEnabled) as? Bool, false)
+        XCTAssertEqual(defaults.object(forKey: UserDefaultsKeys.appFormattingEnabled) as? Bool, true)
         XCTAssertEqual(defaults.object(forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled) as? Bool, true)
     }
 }

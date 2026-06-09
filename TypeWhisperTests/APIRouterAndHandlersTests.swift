@@ -2728,6 +2728,38 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    func testCaptureInsertionContextIncludesCharactersAroundSelectionRange() throws {
+        let service = TextInsertionService()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.focusedTextElementOverride = { element }
+        service.focusedTextStateOverride = { _ in
+            (value: "coffeemachine", selectedText: nil, selectedRange: NSRange(location: 6, length: 0))
+        }
+
+        let context = try XCTUnwrap(service.captureInsertionContext())
+
+        XCTAssertEqual(context.value, "coffeemachine")
+        XCTAssertEqual(context.selectedRange, NSRange(location: 6, length: 0))
+        XCTAssertNil(context.selectedText)
+        XCTAssertEqual(context.previousCharacter, "e")
+        XCTAssertEqual(context.nextCharacter, "m")
+    }
+
+    @MainActor
+    func testCaptureInsertionContextReturnsNilWhenFocusedTextStateIsIncomplete() {
+        let service = TextInsertionService()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.focusedTextElementOverride = { element }
+        service.focusedTextStateOverride = { _ in
+            (value: "coffee", selectedText: nil, selectedRange: nil)
+        }
+
+        XCTAssertNil(service.captureInsertionContext())
+    }
+
+    @MainActor
     func testSyntheticPasteReturnsUnverifiedWhenFocusedTextStateIsUnavailable() async throws {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard.withUniqueName()
@@ -3469,6 +3501,84 @@ final class APIRouterAndHandlersTests: XCTestCase {
             context.recentTranscriptionStore.latestEntry(historyRecords: context.historyService.records)?.finalText,
             "transcribed"
         )
+    }
+
+    @MainActor
+    func testDictationDirectInsertionUsesContextWhenAppAwareFormattingIsEnabled() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let historyEnabledKey = UserDefaultsKeys.historyEnabled
+        let preserveClipboardKey = UserDefaultsKeys.preserveClipboard
+        let appFormattingKey = UserDefaultsKeys.appFormattingEnabled
+        let originalHistoryEnabled = UserDefaults.standard.object(forKey: historyEnabledKey)
+        let originalPreserveClipboard = UserDefaults.standard.object(forKey: preserveClipboardKey)
+        let originalAppFormatting = UserDefaults.standard.object(forKey: appFormattingKey)
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            MockTranscriptionPlugin.reset()
+            if let originalHistoryEnabled {
+                UserDefaults.standard.set(originalHistoryEnabled, forKey: historyEnabledKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: historyEnabledKey)
+            }
+            if let originalPreserveClipboard {
+                UserDefaults.standard.set(originalPreserveClipboard, forKey: preserveClipboardKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: preserveClipboardKey)
+            }
+            if let originalAppFormatting {
+                UserDefaults.standard.set(originalAppFormatting, forKey: appFormattingKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: appFormattingKey)
+            }
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        UserDefaults.standard.set(true, forKey: historyEnabledKey)
+        UserDefaults.standard.set(false, forKey: preserveClipboardKey)
+        UserDefaults.standard.set(true, forKey: appFormattingKey)
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("Strong.")
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.preserveClipboard = false
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.captureActiveAppOverride = {
+            ("Notes", "com.apple.Notes", nil)
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.focusedTextElementOverride = { element }
+        context.textInsertionService.focusedTextStateOverride = { _ in
+            (value: "coffeemachine", selectedText: nil, selectedRange: NSRange(location: 6, length: 0))
+        }
+        context.textInsertionService.pasteVerificationAttempts = 0
+        context.textInsertionService.pasteSimulatorOverride = {}
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        _ = context.dictationViewModel.apiStopRecording()
+
+        for _ in 0..<40 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .completed {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+
+        let session = try XCTUnwrap(context.dictationViewModel.apiDictationSession(id: sessionID))
+        XCTAssertEqual(session.status, .completed)
+        XCTAssertEqual(pasteboard.string(forType: .string), " strong ")
+        XCTAssertEqual(session.transcription?.text, "Strong.")
+        XCTAssertEqual(context.historyService.records.first?.finalText, "Strong.")
     }
 
     @MainActor

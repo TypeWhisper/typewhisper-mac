@@ -263,6 +263,14 @@ final class TextInsertionService {
         let element: AXUIElement
     }
 
+    struct InsertionContext: Equatable {
+        let value: String
+        let selectedRange: NSRange
+        let selectedText: String?
+        let previousCharacter: Character?
+        let nextCharacter: Character?
+    }
+
     typealias ClipboardItemSnapshot = [NSPasteboard.PasteboardType: Data]
     typealias ClipboardSnapshot = [ClipboardItemSnapshot]
 
@@ -395,6 +403,30 @@ final class TextInsertionService {
 
     func capturePasteVerificationState() -> PasteVerificationState {
         PasteVerificationState(focusedTextState: captureFocusedTextState())
+    }
+
+    func captureInsertionContext() -> InsertionContext? {
+        guard let state = captureFocusedTextState(),
+              let value = state.value,
+              let selectedRange = state.selectedRange,
+              let stringRange = Range(selectedRange, in: value) else {
+            return nil
+        }
+
+        let previousCharacter = stringRange.lowerBound > value.startIndex
+            ? value[value.index(before: stringRange.lowerBound)]
+            : nil
+        let nextCharacter = stringRange.upperBound < value.endIndex
+            ? value[stringRange.upperBound]
+            : nil
+
+        return InsertionContext(
+            value: value,
+            selectedRange: selectedRange,
+            selectedText: state.selectedText,
+            previousCharacter: previousCharacter,
+            nextCharacter: nextCharacter
+        )
     }
 
     func canRestoreClipboard(afterPasteUsing state: PasteVerificationState) -> Bool {
