@@ -584,7 +584,7 @@ struct RecordingSettingsView: View {
                     set: { UserDefaults.standard.set($0, forKey: UserDefaultsKeys.appFormattingEnabled) }
                 ))
 
-                Text(String(localized: "Automatically format transcribed text based on the target app and use available cursor context for smarter insertion. Configure the output format per workflow."))
+                Text(String(localized: "When enabled, TypeWhisper uses target-app rules and available cursor context for smarter insertion. Workflow output format settings still choose the inserted format for each workflow."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 

@@ -1916,18 +1916,18 @@
         }
       }
     },
-    "Automatically format transcribed text based on the target app and use available cursor context for smarter insertion. Configure the output format per workflow.": {
+    "When enabled, TypeWhisper uses target-app rules and available cursor context for smarter insertion. Workflow output format settings still choose the inserted format for each workflow.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Transkribierten Text automatisch basierend auf der Ziel-App formatieren und verfügbaren Cursor-Kontext für intelligenteres Einfügen nutzen. Das Ausgabeformat kann pro Workflow konfiguriert werden."
+            "value": "Wenn aktiviert, nutzt TypeWhisper Regeln der Ziel-App und verfügbaren Cursor-Kontext für intelligenteres Einfügen. Die Ausgabeformat-Einstellungen des Workflows bestimmen weiterhin das eingefügte Format für jeden Workflow."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "対象アプリに基づいて文字起こしテキストを自動整形し、利用可能なカーソルの文脈を使ってよりスマートに挿入します。出力形式はワークフローごとに設定できます。"
+            "value": "有効にすると、TypeWhisper は対象アプリのルールと利用可能なカーソルの文脈を使って、よりスマートに挿入します。ワークフローの出力形式設定は、各ワークフローで挿入する形式を引き続き決定します。"
           }
         }
       }
