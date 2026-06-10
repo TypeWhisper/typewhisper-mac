@@ -726,13 +726,7 @@ public struct PluginOpenAIChatHelper: Sendable {
         case 429:
             throw PluginChatError.rateLimited
         default:
-            var displayMessage = "HTTP \(httpResponse.statusCode)"
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let error = json["error"] as? [String: Any],
-               let message = error["message"] as? String {
-                displayMessage = message
-            }
-            throw PluginChatError.apiError(displayMessage)
+            throw PluginChatError.apiError(Self.errorMessage(from: data, statusCode: httpResponse.statusCode))
         }
 
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -808,6 +802,32 @@ public struct PluginOpenAIChatHelper: Sendable {
             temperature: temperature,
             requestTimeout: requestTimeout
         )
+    }
+
+    /// Extracts a human-readable error message from an OpenAI-compatible error body,
+    /// falling back to `HTTP <status>` when no message can be found.
+    ///
+    /// Most providers return `{"error": {"message": ...}}`, but some (notably
+    /// Google's Gemini OpenAI-compat endpoint) wrap the error in a top-level JSON
+    /// array: `[{"error": {"message": ...}}]`. Both shapes are handled here so the
+    /// descriptive message survives instead of being collapsed to `HTTP 404`.
+    static func errorMessage(from data: Data, statusCode: Int) -> String {
+        let json = try? JSONSerialization.jsonObject(with: data)
+
+        let errorObject: [String: Any]?
+        if let dictionary = json as? [String: Any] {
+            errorObject = dictionary["error"] as? [String: Any]
+        } else if let array = json as? [Any],
+                  let first = array.first as? [String: Any] {
+            errorObject = first["error"] as? [String: Any]
+        } else {
+            errorObject = nil
+        }
+
+        if let message = errorObject?["message"] as? String, !message.isEmpty {
+            return message
+        }
+        return "HTTP \(statusCode)"
     }
 
     func requestBody(

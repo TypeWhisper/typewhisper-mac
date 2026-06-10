@@ -63,6 +63,46 @@ let package = Package(
             ]
         ),
         .target(
+            name: "GeminiPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/GeminiPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
+            name: "CerebrasPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/CerebrasPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
+            name: "FireworksPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/FireworksPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
+            name: "ClaudePlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/ClaudePlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
             name: "Qwen3Plugin",
             dependencies: [
                 "TypeWhisperPluginSDK",
@@ -249,6 +289,42 @@ let package = Package(
                 "GroqPlugin",
             ],
             path: "Plugins/GroqPlugin/Tests"
+        ),
+        .testTarget(
+            name: "GeminiPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "GeminiPlugin",
+            ],
+            path: "Plugins/GeminiPlugin/Tests"
+        ),
+        .testTarget(
+            name: "CerebrasPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "CerebrasPlugin",
+            ],
+            path: "Plugins/CerebrasPlugin/Tests"
+        ),
+        .testTarget(
+            name: "FireworksPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "FireworksPlugin",
+            ],
+            path: "Plugins/FireworksPlugin/Tests"
+        ),
+        .testTarget(
+            name: "ClaudePluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "ClaudePlugin",
+            ],
+            path: "Plugins/ClaudePlugin/Tests"
         ),
         .testTarget(
             name: "Qwen3PluginTests",

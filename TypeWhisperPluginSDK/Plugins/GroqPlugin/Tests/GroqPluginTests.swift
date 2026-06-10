@@ -46,6 +46,18 @@ final class GroqPluginTests: XCTestCase {
         XCTAssertFalse(bodyText.contains(#"filename="audio.wav""#))
     }
 
+    func testPreferredModelIdReflectsSelectedLLMModel() throws {
+        let host = try PluginTestHostServices()
+        let plugin = GroqPlugin()
+        plugin.activate(host: host)
+
+        let target = try XCTUnwrap(plugin.supportedModels.first?.id)
+        plugin.selectLLMModel(target)
+
+        let preferred = (plugin as? LLMModelSelectable)?.preferredModelId
+        XCTAssertEqual(preferred, target)
+    }
+
     private static func httpResponse(url: String, statusCode: Int) -> HTTPURLResponse {
         HTTPURLResponse(
             url: URL(string: url)!,

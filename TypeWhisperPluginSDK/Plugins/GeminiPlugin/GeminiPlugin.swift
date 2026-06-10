@@ -5,7 +5,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(GeminiPlugin)
-final class GeminiPlugin: NSObject, LLMProviderPlugin, @unchecked Sendable {
+final class GeminiPlugin: NSObject, LLMProviderPlugin, LLMModelSelectable, @unchecked Sendable {
     static let pluginId = "com.typewhisper.gemini"
     static let pluginName = "Gemini"
     private static let cachedLLMModelsKey = "fetchedLLMModels.v2"
@@ -117,6 +117,7 @@ final class GeminiPlugin: NSObject, LLMProviderPlugin, @unchecked Sendable {
     }
 
     var selectedLLMModelId: String? { _selectedLLMModelId }
+    @objc var preferredModelId: String? { _selectedLLMModelId }
     var llmTemperatureMode: PluginLLMTemperatureMode {
         PluginLLMTemperatureMode(rawValue: _llmTemperatureModeRaw) ?? .providerDefault
     }

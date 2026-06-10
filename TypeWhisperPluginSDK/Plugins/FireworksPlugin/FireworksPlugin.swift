@@ -5,7 +5,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(FireworksPlugin)
-final class FireworksPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, LLMProviderPlugin, @unchecked Sendable {
+final class FireworksPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, LLMProviderPlugin, LLMModelSelectable, @unchecked Sendable {
     static let pluginId = "com.typewhisper.fireworks"
     static let pluginName = "Fireworks AI"
 
@@ -212,6 +212,7 @@ final class FireworksPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerm
     }
 
     var selectedLLMModelId: String? { _selectedLLMModelId }
+    @objc var preferredModelId: String? { _selectedLLMModelId }
     var llmTemperatureMode: PluginLLMTemperatureMode {
         PluginLLMTemperatureMode(rawValue: _llmTemperatureModeRaw) ?? .providerDefault
     }

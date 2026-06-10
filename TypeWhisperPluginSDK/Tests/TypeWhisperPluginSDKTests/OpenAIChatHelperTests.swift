@@ -86,4 +86,49 @@ final class OpenAIChatHelperTests: XCTestCase {
 
         XCTAssertNil(requestBody["temperature"])
     }
+
+    // MARK: - Error body parsing
+
+    func testErrorMessageParsesDictionaryBody() {
+        let data = Data(#"{"error":{"code":404,"message":"OpenAI says no"}}"#.utf8)
+
+        let message = PluginOpenAIChatHelper.errorMessage(from: data, statusCode: 404)
+
+        XCTAssertEqual(message, "OpenAI says no")
+    }
+
+    func testErrorMessageParsesTopLevelArrayBody() {
+        // Gemini's OpenAI-compat endpoint wraps the error in a top-level array.
+        let data = Data(
+            """
+            [{
+              "error": {
+                "code": 404,
+                "message": "This model models/gemini-2.0-flash is no longer available.",
+                "status": "NOT_FOUND"
+              }
+            }]
+            """.utf8
+        )
+
+        let message = PluginOpenAIChatHelper.errorMessage(from: data, statusCode: 404)
+
+        XCTAssertEqual(message, "This model models/gemini-2.0-flash is no longer available.")
+    }
+
+    func testErrorMessageFallsBackToStatusForUnparseableBody() {
+        let data = Data("not json".utf8)
+
+        let message = PluginOpenAIChatHelper.errorMessage(from: data, statusCode: 404)
+
+        XCTAssertEqual(message, "HTTP 404")
+    }
+
+    func testErrorMessageFallsBackToStatusForEmptyArrayBody() {
+        let data = Data("[]".utf8)
+
+        let message = PluginOpenAIChatHelper.errorMessage(from: data, statusCode: 503)
+
+        XCTAssertEqual(message, "HTTP 503")
+    }
 }

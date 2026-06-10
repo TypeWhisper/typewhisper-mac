@@ -5,7 +5,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(GroqPlugin)
-final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, LLMProviderPlugin, @unchecked Sendable {
+final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, LLMProviderPlugin, LLMModelSelectable, @unchecked Sendable {
     static let pluginId = "com.typewhisper.groq"
     static let pluginName = "Groq"
     private static let transcriptionRequestTimeout: TimeInterval = 600
@@ -169,6 +169,7 @@ final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapa
     }
 
     var selectedLLMModelId: String? { _selectedLLMModelId }
+    @objc var preferredModelId: String? { _selectedLLMModelId }
     var llmTemperatureMode: PluginLLMTemperatureMode {
         PluginLLMTemperatureMode(rawValue: _llmTemperatureModeRaw) ?? .providerDefault
     }
