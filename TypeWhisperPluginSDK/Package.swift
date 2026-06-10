@@ -147,6 +147,7 @@ let package = Package(
             path: "Plugins/SupertonicPlugin",
             exclude: ["Tests"],
             resources: [
+                .process("Localizable.xcstrings"),
                 .process("manifest.json"),
             ]
         ),

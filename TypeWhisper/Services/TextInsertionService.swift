@@ -564,7 +564,7 @@ final class TextInsertionService {
         case .verified:
             logger.info("insertText paste verified: bundle=\(bundleId ?? "nil", privacy: .public)")
         case .unverified(let reason):
-            logger.warning(
+            logger.info(
                 "insertText paste unverified: bundle=\(bundleId ?? "nil", privacy: .public), reason=\(reason.rawValue, privacy: .public)"
             )
         }

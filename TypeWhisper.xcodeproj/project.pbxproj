@@ -45,6 +45,7 @@
 		D20000000000000000000003 /* SupertonicPlaybackSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20100000000000000000003 /* SupertonicPlaybackSession.swift */; };
 		D20000000000000000000004 /* SupertonicRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20100000000000000000004 /* SupertonicRuntime.swift */; };
 		D20000000000000000000005 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = D20100000000000000000005 /* manifest.json */; };
+		D20000000000000000000008 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = D20100000000000000000007 /* Localizable.xcstrings */; };
 		D20000000000000000000006 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = D20700000000000000000001 /* TypeWhisperPluginSDK */; };
 		D20000000000000000000007 /* onnxruntime in Frameworks */ = {isa = PBXBuildFile; productRef = D20700000000000000000002 /* onnxruntime */; };
 		A10000000000000000000005 /* SpeechFeedbackServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* SpeechFeedbackServiceTests.swift */; };
@@ -333,6 +334,7 @@
 		AA00000000000000000236 /* MLXAudioCore in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000030 /* MLXAudioCore */; };
 		AA00000000000000000237 /* CloudflareASRPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000225 /* CloudflareASRPlugin.swift */; };
 		AA00000000000000000238 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000226 /* manifest.json */; };
+		AA0000000000000000023A /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000022A /* Localizable.xcstrings */; };
 		AA00000000000000000239 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000031 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000240 /* MemoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000228 /* MemoryService.swift */; };
 		AA00000000000000000241 /* FileMemoryPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000229 /* FileMemoryPlugin.swift */; };
@@ -423,6 +425,7 @@
 		AA00000000000000000278 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000038 /* TypeWhisperPluginSDK */; };
 		BF1DFDDFBF91D87134DA57E7 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 1D584661B6B55F6329CB5FC4 /* manifest.json */; };
 		F1177F582D186041B081F9C5 /* GoogleCloudSTTPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01D368E23E2A0AB2390B34EA /* GoogleCloudSTTPlugin.swift */; };
+		F1177F582D186041B081F9C6 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 1D584661B6B55F6329CB5FC5 /* Localizable.xcstrings */; };
 		F774802B61AFC0DCA9E8E668 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 67BE633BCFA1507F72199015 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000300 /* LicenseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000286 /* LicenseService.swift */; };
 		AA00000000000000000301 /* LicenseSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000287 /* LicenseSettingsView.swift */; };
@@ -759,6 +762,7 @@
 		BB00000000000000000224 /* GranitePlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GranitePlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000225 /* CloudflareASRPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudflareASRPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000226 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		BB0000000000000000022A /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		BB00000000000000000227 /* CloudflareASRPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CloudflareASRPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000228 /* MemoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryService.swift; sourceTree = "<group>"; };
 		BB00000000000000000229 /* FileMemoryPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileMemoryPlugin.swift; sourceTree = "<group>"; };
@@ -772,6 +776,7 @@
 		D20100000000000000000003 /* SupertonicPlaybackSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupertonicPlaybackSession.swift; sourceTree = "<group>"; };
 		D20100000000000000000004 /* SupertonicRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupertonicRuntime.swift; sourceTree = "<group>"; };
 		D20100000000000000000005 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		D20100000000000000000007 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		D20100000000000000000006 /* SupertonicPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SupertonicPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000232 /* OpenAIVectorMemoryPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIVectorMemoryPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000233 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
@@ -885,6 +890,7 @@
 		BB00000000000000000294 /* SpeechmaticsPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SpeechmaticsPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		01D368E23E2A0AB2390B34EA /* GoogleCloudSTTPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleCloudSTTPlugin.swift; sourceTree = "<group>"; };
 		1D584661B6B55F6329CB5FC4 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		1D584661B6B55F6329CB5FC5 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		5CA4DB761B06383B5B8CF082 /* GoogleCloudSTTPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GoogleCloudSTTPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000274 /* OpenRouterPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenRouterPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000275 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
@@ -1875,6 +1881,7 @@
 			children = (
 				BB00000000000000000225 /* CloudflareASRPlugin.swift */,
 				BB00000000000000000226 /* manifest.json */,
+				BB0000000000000000022A /* Localizable.xcstrings */,
 			);
 			name = CloudflareASRPlugin;
 			path = TypeWhisperPluginSDK/Plugins/CloudflareASRPlugin;
@@ -1908,6 +1915,7 @@
 				D20100000000000000000003 /* SupertonicPlaybackSession.swift */,
 				D20100000000000000000004 /* SupertonicRuntime.swift */,
 				D20100000000000000000005 /* manifest.json */,
+				D20100000000000000000007 /* Localizable.xcstrings */,
 			);
 			name = SupertonicPlugin;
 			path = TypeWhisperPluginSDK/Plugins/SupertonicPlugin;
@@ -2050,6 +2058,7 @@
 			children = (
 				01D368E23E2A0AB2390B34EA /* GoogleCloudSTTPlugin.swift */,
 				1D584661B6B55F6329CB5FC4 /* manifest.json */,
+				1D584661B6B55F6329CB5FC5 /* Localizable.xcstrings */,
 			);
 			name = GoogleCloudSTTPlugin;
 			path = TypeWhisperPluginSDK/Plugins/GoogleCloudSTTPlugin;
@@ -3346,6 +3355,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000238 /* manifest.json in Resources */,
+				AA0000000000000000023A /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -3370,6 +3380,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D20000000000000000000005 /* manifest.json in Resources */,
+				D20000000000000000000008 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -3440,6 +3451,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				BF1DFDDFBF91D87134DA57E7 /* manifest.json in Resources */,
+				F1177F582D186041B081F9C6 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -1339,7 +1339,7 @@ final class DictationViewModel: ObservableObject {
                         outputFormat: self.effectiveOutputFormat
                     )
                     if case .pasted(.unverified(let reason)) = insertionResult {
-                        logger.warning(
+                        logger.info(
                             "Text insertion paste could not be verified; continuing with clipboard paste fallback. reason=\(reason.rawValue, privacy: .public), app=\(activeApp.bundleId ?? "nil", privacy: .public)"
                         )
                     }

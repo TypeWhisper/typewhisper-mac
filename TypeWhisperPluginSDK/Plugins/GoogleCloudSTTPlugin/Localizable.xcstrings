@@ -1,0 +1,29 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "Cloud Speech-to-Text API is not enabled for this Google Cloud project. Enable speech.googleapis.com in Google Cloud, wait a few minutes, and retry.": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "このGoogle CloudプロジェクトでCloud Speech-to-Text APIが有効になっていません。Google Cloudでspeech.googleapis.comを有効化し、数分待ってから再試行してください。" } } } },
+    "Credentials look valid and Speech-to-Text is reachable.": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "認証情報は有効で、Speech-to-Textに接続できます。" } } } },
+    "Default Language": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "既定の言語" } } } },
+    "Google Cloud billing is not enabled for this project. Enable billing for the project and retry.": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "このプロジェクトでGoogle Cloudの請求が有効になっていません。プロジェクトの請求を有効化してから再試行してください。" } } } },
+    "Google Cloud rate-limited the request. Please wait a moment and retry.": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "Google Cloudによりリクエストがレート制限されました。少し待ってから再試行してください。" } } } },
+    "Google denied access to Speech-to-Text. Make sure the API is enabled and the service account has the Cloud Speech Client role.": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "GoogleがSpeech-to-Textへのアクセスを拒否しました。APIが有効で、サービスアカウントにCloud Speech Clientロールがあることを確認してください。" } } } },
+    "Google rejected the service-account credentials.": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "Googleがサービスアカウント認証情報を拒否しました。" } } } },
+    "Google rejected the service-account credentials. Check that you pasted the full JSON key file for the correct project.": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "Googleがサービスアカウント認証情報を拒否しました。正しいプロジェクトのJSONキーファイル全体を貼り付けたか確認してください。" } } } },
+    "Google Speech-to-Text does not accept simple API keys. Paste a Google Cloud service-account JSON key here. Credentials are stored in the macOS Keychain.": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "Google Speech-to-Textでは単純なAPIキーは使えません。Google CloudのサービスアカウントJSONキー全体をここに貼り付けてください。認証情報はmacOSキーチェーンに保存されます。" } } } },
+    "If TypeWhisper already passes a spoken language, that value wins. Otherwise this BCP-47 code is used for Google recognition requests.": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "TypeWhisperから発話言語が渡される場合は、その値が優先されます。それ以外の場合、このBCP-47コードがGoogle認識リクエストに使われます。" } } } },
+    "Model": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "モデル" } } } },
+    "No Google recognition model is selected.": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "Google認識モデルが選択されていません。" } } } },
+    "No service-account JSON is configured yet.": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "サービスアカウントJSONがまだ設定されていません。" } } } },
+    "Remove": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "削除" } } } },
+    "Replace Credentials": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "認証情報を置き換え" } } } },
+    "Save Credentials": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "認証情報を保存" } } } },
+    "Service Account JSON": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "サービスアカウントJSON" } } } },
+    "Stored credentials are active. Paste a new JSON key above to replace them.": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "保存済みの認証情報が有効です。置き換えるには上に新しいJSONキーを貼り付けてください。" } } } },
+    "Test Stored Credentials": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "保存済み認証情報をテスト" } } } },
+    "The JSON could not be parsed. Paste the full Google service-account JSON file.": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "JSONを解析できませんでした。GoogleサービスアカウントJSONファイル全体を貼り付けてください。" } } } },
+    "The verification audio was rejected as too large.": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "検証用音声が大きすぎるため拒否されました。" } } } },
+    "Use `default` or `command_and_search` for the broadest language coverage. The newer `latest_*` models can be more restrictive depending on language support.": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "最も広い言語対応には `default` または `command_and_search` を使ってください。新しい `latest_*` モデルは、言語サポートによって制限が強い場合があります。" } } } },
+    "Validating...": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "検証中..." } } } }
+  },
+  "version": "1.0"
+}

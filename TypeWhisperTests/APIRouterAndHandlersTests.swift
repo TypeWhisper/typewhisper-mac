@@ -2765,6 +2765,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let pasteboard = NSPasteboard.withUniqueName()
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { nil }
 
         var pasteCount = 0
         service.pasteSimulatorOverride = {
@@ -2784,6 +2785,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let pasteboard = NSPasteboard.withUniqueName()
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { nil }
         service.defaultPasteFallbackRestoreDelay = .milliseconds(80)
 
         let pasteStarted = expectation(description: "synthetic paste started")

@@ -113,6 +113,26 @@
         }
       }
     },
+    "Hugging Face Token": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Faceトークン"
+          }
+        }
+      }
+    },
+    "Invalid Hugging Face Token": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無効なHugging Faceトークン"
+          }
+        }
+      }
+    },
     "Model Version": {
       "localizations": {
         "de": {
@@ -161,6 +181,16 @@
         }
       }
     },
+    "Optional. Increases download rate limits. Free at huggingface.co/settings/tokens": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "任意です。ダウンロードのレート制限を緩和できます。huggingface.co/settings/tokens で無料作成できます"
+          }
+        }
+      }
+    },
     "Ready - %lld terms loaded": {
       "localizations": {
         "de": {
@@ -193,6 +223,16 @@
         }
       }
     },
+    "Remove": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "削除"
+          }
+        }
+      }
+    },
     "Retry": {
       "localizations": {
         "de": {
@@ -209,6 +249,16 @@
         }
       }
     },
+    "Save": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
+          }
+        }
+      }
+    },
     "Unload": {
       "localizations": {
         "de": {
@@ -221,6 +271,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "無効化"
+          }
+        }
+      }
+    },
+    "Valid Hugging Face Token": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有効なHugging Faceトークン"
+          }
+        }
+      }
+    },
+    "Validating token...": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "トークンを検証中..."
           }
         }
       }

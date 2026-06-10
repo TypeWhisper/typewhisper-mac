@@ -1,0 +1,23 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "API Key": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "APIキー" } } } },
+    "All credentials are stored securely in the macOS Keychain.": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "すべての認証情報はmacOSキーチェーンに安全に保存されます。" } } } },
+    "Cloudflare Tunnel Auth": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "Cloudflare Tunnel認証" } } } },
+    "Connected": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "接続済み" } } } },
+    "Connection Failed": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "接続失敗" } } } },
+    "Model": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "モデル" } } } },
+    "Model name": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "モデル名" } } } },
+    "No models found. Enter model name manually.": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "モデルが見つかりません。モデル名を手動で入力してください。" } } } },
+    "None": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "なし" } } } },
+    "Optional Bearer token for the upstream API behind the tunnel.": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "Tunnel背後の上流APIに渡す任意のBearerトークンです。" } } } },
+    "Refresh": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "更新" } } } },
+    "Save": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "保存" } } } },
+    "Server URL": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "サーバーURL" } } } },
+    "Service token credentials for Cloudflare Access. Stored in macOS Keychain.": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "Cloudflare Accessのサービストークン認証情報です。macOSキーチェーンに保存されます。" } } } },
+    "Test Connection": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "接続テスト" } } } },
+    "Testing...": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "テスト中..." } } } },
+    "Transcription Model": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "文字起こしモデル" } } } }
+  },
+  "version": "1.0"
+}

@@ -375,6 +375,7 @@ private extension Data {
 
 private struct CloudflareASRSettingsView: View {
     let plugin: CloudflareASRPlugin
+    private let bundle = Bundle(for: CloudflareASRPlugin.self)
     @State private var baseURLInput = ""
     @State private var apiKeyInput = ""
     @State private var cfClientIdInput = ""
@@ -393,7 +394,7 @@ private struct CloudflareASRSettingsView: View {
         VStack(alignment: .leading, spacing: 16) {
             // Server URL
             VStack(alignment: .leading, spacing: 8) {
-                Text("Server URL")
+                Text("Server URL", bundle: bundle)
                     .font(.headline)
 
                 TextField("e.g. https://asr.example.com", text: $baseURLInput)
@@ -403,7 +404,7 @@ private struct CloudflareASRSettingsView: View {
 
             // Cloudflare Tunnel Auth
             VStack(alignment: .leading, spacing: 8) {
-                Text("Cloudflare Tunnel Auth")
+                Text("Cloudflare Tunnel Auth", bundle: bundle)
                     .font(.headline)
 
                 TextField("CF-Access-Client-Id", text: $cfClientIdInput)
@@ -428,23 +429,23 @@ private struct CloudflareASRSettingsView: View {
                     .buttonStyle(.borderless)
                 }
 
-                Text("Service token credentials for Cloudflare Access. Stored in macOS Keychain.")
+                Text("Service token credentials for Cloudflare Access. Stored in macOS Keychain.", bundle: bundle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             // API Key (optional)
             VStack(alignment: .leading, spacing: 8) {
-                Text("API Key")
+                Text("API Key", bundle: bundle)
                     .font(.headline)
 
                 HStack(spacing: 8) {
                     if showApiKey {
-                        TextField("API Key", text: $apiKeyInput)
+                        TextField(String(localized: "API Key", bundle: bundle), text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.body, design: .monospaced))
                     } else {
-                        SecureField("API Key", text: $apiKeyInput)
+                        SecureField(String(localized: "API Key", bundle: bundle), text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
                     }
 
@@ -456,7 +457,7 @@ private struct CloudflareASRSettingsView: View {
                     .buttonStyle(.borderless)
                 }
 
-                Text("Optional Bearer token for the upstream API behind the tunnel.")
+                Text("Optional Bearer token for the upstream API behind the tunnel.", bundle: bundle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -466,7 +467,7 @@ private struct CloudflareASRSettingsView: View {
                 Button {
                     testConnection()
                 } label: {
-                    Text("Test Connection")
+                    Text("Test Connection", bundle: bundle)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
@@ -477,13 +478,13 @@ private struct CloudflareASRSettingsView: View {
 
                 if isTesting {
                     ProgressView().controlSize(.small)
-                    Text("Testing...")
+                    Text("Testing...", bundle: bundle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else if let result = connectionResult {
                     Image(systemName: result ? "checkmark.circle.fill" : "xmark.circle.fill")
                         .foregroundStyle(result ? .green : .red)
-                    Text(result ? "Connected" : "Connection Failed")
+                    Text(result ? String(localized: "Connected", bundle: bundle) : String(localized: "Connection Failed", bundle: bundle))
                         .font(.caption)
                         .foregroundStyle(result ? .green : .red)
                 }
@@ -495,21 +496,21 @@ private struct CloudflareASRSettingsView: View {
                 // Model Selection
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
-                        Text("Model")
+                        Text("Model", bundle: bundle)
                             .font(.headline)
                         Spacer()
                         Button {
                             refreshModels()
                         } label: {
-                            Label("Refresh", systemImage: "arrow.clockwise")
+                            Label(String(localized: "Refresh", bundle: bundle), systemImage: "arrow.clockwise")
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                     }
 
                     if hasModels {
-                        Picker("Transcription Model", selection: $selectedModel) {
-                            Text("None").tag("")
+                        Picker(String(localized: "Transcription Model", bundle: bundle), selection: $selectedModel) {
+                            Text("None", bundle: bundle).tag("")
                             ForEach(fetchedModels, id: \.id) { model in
                                 Text(model.id).tag(model.id)
                             }
@@ -519,17 +520,17 @@ private struct CloudflareASRSettingsView: View {
                             plugin.selectModel(selectedModel)
                         }
                     } else {
-                        Text("No models found. Enter model name manually.")
+                        Text("No models found. Enter model name manually.", bundle: bundle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
                         HStack(spacing: 8) {
-                            TextField("Model name", text: $manualModel)
+                            TextField(String(localized: "Model name", bundle: bundle), text: $manualModel)
                                 .textFieldStyle(.roundedBorder)
                                 .font(.system(.body, design: .monospaced))
                                 .onSubmit { saveManualModel() }
 
-                            Button("Save") { saveManualModel() }
+                            Button(String(localized: "Save", bundle: bundle)) { saveManualModel() }
                                 .buttonStyle(.bordered)
                                 .controlSize(.small)
                                 .disabled(manualModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -538,7 +539,7 @@ private struct CloudflareASRSettingsView: View {
                 }
             }
 
-            Text("All credentials are stored securely in the macOS Keychain.")
+            Text("All credentials are stored securely in the macOS Keychain.", bundle: bundle)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
