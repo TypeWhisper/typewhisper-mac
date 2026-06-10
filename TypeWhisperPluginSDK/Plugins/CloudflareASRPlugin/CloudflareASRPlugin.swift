@@ -375,7 +375,7 @@ private extension Data {
 
 private struct CloudflareASRSettingsView: View {
     let plugin: CloudflareASRPlugin
-    private let bundle = Bundle(for: CloudflareASRPlugin.self)
+    private let bundle = pluginModuleBundle
     @State private var baseURLInput = ""
     @State private var apiKeyInput = ""
     @State private var cfClientIdInput = ""
@@ -604,3 +604,11 @@ private struct CloudflareASRSettingsView: View {
         }
     }
 }
+
+private let pluginModuleBundle: Bundle = {
+#if SWIFT_PACKAGE
+    Bundle.module
+#else
+    Bundle(for: CloudflareASRPlugin.self)
+#endif
+}()

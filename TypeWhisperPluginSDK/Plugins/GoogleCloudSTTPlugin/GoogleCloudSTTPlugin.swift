@@ -789,7 +789,7 @@ final class GoogleCloudSTTPlugin: NSObject, TranscriptionEnginePlugin, Dictionar
 
 private struct GoogleCloudSTTSettingsView: View {
     let plugin: GoogleCloudSTTPlugin
-    private let bundle = Bundle(for: GoogleCloudSTTPlugin.self)
+    private let bundle = pluginModuleBundle
 
     @State private var serviceAccountInput = ""
     @State private var isValidating = false
@@ -945,3 +945,11 @@ private struct GoogleCloudSTTSettingsView: View {
         }
     }
 }
+
+private let pluginModuleBundle: Bundle = {
+#if SWIFT_PACKAGE
+    Bundle.module
+#else
+    Bundle(for: GoogleCloudSTTPlugin.self)
+#endif
+}()

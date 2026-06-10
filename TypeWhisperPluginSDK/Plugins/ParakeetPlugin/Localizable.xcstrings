@@ -115,6 +115,12 @@
     },
     "Hugging Face Token": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Face Token"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -125,6 +131,12 @@
     },
     "Invalid Hugging Face Token": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ungültiger Hugging Face Token"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -183,6 +195,12 @@
     },
     "Optional. Increases download rate limits. Free at huggingface.co/settings/tokens": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Optional. Erhöht die Download-Rate-Limits. Kostenlos unter huggingface.co/settings/tokens"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -225,6 +243,12 @@
     },
     "Remove": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entfernen"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -251,6 +275,12 @@
     },
     "Save": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speichern"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -277,6 +307,12 @@
     },
     "Valid Hugging Face Token": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gültiger Hugging Face Token"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -287,6 +323,12 @@
     },
     "Validating token...": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token wird geprüft..."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
