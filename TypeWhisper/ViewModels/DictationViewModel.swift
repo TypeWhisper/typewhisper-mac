@@ -1912,21 +1912,22 @@ enum DictationInsertionTextFormatter {
             return textWithTrailingSpaceIfNeeded(text)
         }
 
-        var result = text
-        if isHighConfidenceMidSentenceInsertion(insertionContext) {
+        let boundaries = insertionBoundaries(for: insertionContext)
+        var result = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if isHighConfidenceMidSentenceInsertion(boundaries) {
             result = lowercasingFirstWordIfSafe(result)
         }
-        if shouldStripFinalPeriod(insertionContext) {
+        if shouldStripFinalPeriod(boundaries) {
             result = strippingSingleFinalPeriod(result)
         }
 
-        if let previous = insertionContext.previousCharacter,
+        if let previous = boundaries.previousCharacter,
            let first = result.first,
            shouldInsertSpace(between: previous, and: first) {
             result = " " + result
         }
 
-        if let next = insertionContext.nextCharacter {
+        if let next = boundaries.nextCharacter {
             if let last = result.last,
                shouldInsertSpace(between: last, and: next) {
                 result += " "
@@ -1944,19 +1945,95 @@ enum DictationInsertionTextFormatter {
         return text + " "
     }
 
+    private struct InsertionBoundaries {
+        let previousCharacter: Character?
+        let nextCharacter: Character?
+        let previousNonWhitespaceCharacter: Character?
+        let nextNonWhitespaceCharacter: Character?
+    }
+
+    private static func insertionBoundaries(
+        for context: TextInsertionService.InsertionContext
+    ) -> InsertionBoundaries {
+        guard let selectedRange = Range(context.selectedRange, in: context.value) else {
+            return InsertionBoundaries(
+                previousCharacter: context.previousCharacter,
+                nextCharacter: context.nextCharacter,
+                previousNonWhitespaceCharacter: nonWhitespaceCharacter(context.previousCharacter),
+                nextNonWhitespaceCharacter: nonWhitespaceCharacter(context.nextCharacter)
+            )
+        }
+
+        let previousCharacter = selectedRange.lowerBound > context.value.startIndex
+            ? context.value[context.value.index(before: selectedRange.lowerBound)]
+            : nil
+        let nextCharacter = selectedRange.upperBound < context.value.endIndex
+            ? context.value[selectedRange.upperBound]
+            : nil
+
+        return InsertionBoundaries(
+            previousCharacter: previousCharacter,
+            nextCharacter: nextCharacter,
+            previousNonWhitespaceCharacter: previousNonWhitespaceCharacter(
+                before: selectedRange.lowerBound,
+                in: context.value
+            ),
+            nextNonWhitespaceCharacter: nextNonWhitespaceCharacter(
+                after: selectedRange.upperBound,
+                in: context.value
+            )
+        )
+    }
+
+    private static func previousNonWhitespaceCharacter(
+        before index: String.Index,
+        in value: String
+    ) -> Character? {
+        var currentIndex = index
+        while currentIndex > value.startIndex {
+            let previousIndex = value.index(before: currentIndex)
+            let character = value[previousIndex]
+            if !isWhitespace(character) {
+                return character
+            }
+            currentIndex = previousIndex
+        }
+        return nil
+    }
+
+    private static func nextNonWhitespaceCharacter(
+        after index: String.Index,
+        in value: String
+    ) -> Character? {
+        var currentIndex = index
+        while currentIndex < value.endIndex {
+            let character = value[currentIndex]
+            if !isWhitespace(character) {
+                return character
+            }
+            currentIndex = value.index(after: currentIndex)
+        }
+        return nil
+    }
+
+    private static func nonWhitespaceCharacter(_ character: Character?) -> Character? {
+        guard let character, !isWhitespace(character) else { return nil }
+        return character
+    }
+
     private static func isHighConfidenceMidSentenceInsertion(
-        _ context: TextInsertionService.InsertionContext
+        _ boundaries: InsertionBoundaries
     ) -> Bool {
-        guard let previous = context.previousCharacter else { return false }
+        guard let previous = boundaries.previousNonWhitespaceCharacter else { return false }
         return isWordLike(previous)
     }
 
-    private static func shouldStripFinalPeriod(_ context: TextInsertionService.InsertionContext) -> Bool {
-        guard isHighConfidenceMidSentenceInsertion(context),
-              let next = context.nextCharacter else {
+    private static func shouldStripFinalPeriod(_ boundaries: InsertionBoundaries) -> Bool {
+        guard isHighConfidenceMidSentenceInsertion(boundaries),
+              let next = boundaries.nextNonWhitespaceCharacter else {
             return false
         }
-        return isWordLike(next)
+        return isWordLike(next) || closingPunctuation.contains(next)
     }
 
     private static func lowercasingFirstWordIfSafe(_ text: String) -> String {
