@@ -131,4 +131,20 @@ final class OpenAIChatHelperTests: XCTestCase {
 
         XCTAssertEqual(message, "HTTP 503")
     }
+
+    func testErrorMessagePrefersTopLevelDetail() {
+        let data = Data(#"{"detail":"Invalid request payload"}"#.utf8)
+
+        let message = PluginOpenAIChatHelper.errorMessage(from: data, statusCode: 422)
+
+        XCTAssertEqual(message, "Invalid request payload")
+    }
+
+    func testErrorMessageFallsBackToTopLevelMessage() {
+        let data = Data(#"{"message":"Something went wrong"}"#.utf8)
+
+        let message = PluginOpenAIChatHelper.errorMessage(from: data, statusCode: 500)
+
+        XCTAssertEqual(message, "Something went wrong")
+    }
 }

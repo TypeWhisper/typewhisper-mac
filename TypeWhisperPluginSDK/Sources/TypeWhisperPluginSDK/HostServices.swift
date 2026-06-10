@@ -814,20 +814,37 @@ public struct PluginOpenAIChatHelper: Sendable {
     static func errorMessage(from data: Data, statusCode: Int) -> String {
         let json = try? JSONSerialization.jsonObject(with: data)
 
-        let errorObject: [String: Any]?
+        let object: [String: Any]?
         if let dictionary = json as? [String: Any] {
-            errorObject = dictionary["error"] as? [String: Any]
+            object = dictionary
         } else if let array = json as? [Any],
                   let first = array.first as? [String: Any] {
-            errorObject = first["error"] as? [String: Any]
+            object = first
         } else {
-            errorObject = nil
+            object = nil
         }
 
-        if let message = errorObject?["message"] as? String, !message.isEmpty {
+        if let object, let message = message(fromErrorObject: object) {
             return message
         }
         return "HTTP \(statusCode)"
+    }
+
+    /// Extracts a message from a single error object following the precedence used
+    /// across providers: top-level `detail`, then nested `error.message`, then a
+    /// top-level `message`.
+    private static func message(fromErrorObject object: [String: Any]) -> String? {
+        if let detail = object["detail"] as? String, !detail.isEmpty {
+            return detail
+        }
+        if let error = object["error"] as? [String: Any],
+           let message = error["message"] as? String, !message.isEmpty {
+            return message
+        }
+        if let message = object["message"] as? String, !message.isEmpty {
+            return message
+        }
+        return nil
     }
 
     func requestBody(

@@ -10,6 +10,11 @@ final class ClaudePluginTests: XCTestCase {
         let plugin = ClaudePlugin()
         plugin.activate(host: host)
 
+        XCTAssertNil(
+            (plugin as? LLMModelSelectable)?.preferredModelId ?? nil,
+            "preferredModelId must be nil until the user selects a model"
+        )
+
         let target = try XCTUnwrap(plugin.supportedModels.first?.id)
         plugin.selectLLMModel(target)
 

@@ -23,7 +23,6 @@ final class ClaudePlugin: NSObject, LLMProviderPlugin, LLMModelSelectable, @unch
         self.host = host
         _apiKey = host.loadSecret(key: "api-key")
         _selectedLLMModelId = host.userDefault(forKey: "selectedLLMModel") as? String
-            ?? supportedModels.first?.id
         _llmTemperatureModeRaw = host.userDefault(forKey: "llmTemperatureMode") as? String
             ?? PluginLLMTemperatureMode.providerDefault.rawValue
         _llmTemperatureValue = host.userDefault(forKey: "llmTemperatureValue") as? Double
