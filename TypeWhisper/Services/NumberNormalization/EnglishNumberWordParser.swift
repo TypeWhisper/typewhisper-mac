@@ -21,6 +21,17 @@ enum EnglishNumberWordParser {
         "million": 1_000_000,
     ]
 
+    // Spoken zeros inside a digit sequence ("four oh two" -> the "oh" is 0).
+    // Only read as 0 when flanked by real digits; never starts or ends a run,
+    // so a bare interjection "oh" is left alone.
+    private static let sequenceZeroWords: Set<String> = ["oh", "o"]
+
+    // Minimum length, in digit positions, before a run of bare single digits is
+    // read as one sequence ("one nine eight four" -> 1984) instead of spaced
+    // individual digits. Kept high so dictated counting like "one two three"
+    // stays split — the false-positive risk lives in the short runs.
+    private static let minDigitSequenceLength = 4
+
     // Unit ordinals 1–9. Used only as the tail of a compound such as
     // "twenty" + "eighth" -> 28th, where the numeric context is unambiguous.
     private static let ordinalUnitValues: [String: Int] = [
@@ -44,6 +55,14 @@ enum EnglishNumberWordParser {
     static func parse(_ words: [String]) -> NumberWordNormalizer.ParsedWords? {
         guard !words.isEmpty else { return nil }
         let normalizedWords = words.map(normalizeWord)
+
+        // A long run of bare single digits is a sequence ("one nine eight four"
+        // -> 1984), not a cardinal. Checked first because the cardinal path
+        // would otherwise emit the same digits spaced apart.
+        if let sequence = parseDigitSequence(normalizedWords) {
+            return sequence
+        }
+
         var index = 0
         var isNegative = false
 
@@ -89,6 +108,41 @@ enum EnglishNumberWordParser {
         }
 
         return nil
+    }
+
+    // Reads a leading run of bare single-digit words as one joined sequence,
+    // e.g. ["one","nine","eight","four"] -> "1984". An "oh"/"o" inside the run
+    // counts as 0. The run must start and end on a real digit, and reach
+    // `minDigitSequenceLength` positions, or this returns nil and the caller
+    // falls back to the cardinal reading.
+    private static func parseDigitSequence(_ words: [String]) -> NumberWordNormalizer.ParsedWords? {
+        // Must start on a real digit so a leading "oh" is never swallowed as 0.
+        guard let first = words.first, unitValues[first] != nil else { return nil }
+
+        var index = 0
+        var lastRealDigitIndex = -1
+        while index < words.count {
+            let word = words[index]
+            if unitValues[word] != nil {
+                lastRealDigitIndex = index
+            } else if !sequenceZeroWords.contains(word) {
+                break
+            }
+            index += 1
+        }
+
+        // End on a real digit: a trailing "oh"/"o" is not consumed.
+        let positions = lastRealDigitIndex + 1
+        guard positions >= minDigitSequenceLength else { return nil }
+
+        var sequence = ""
+        for position in 0..<positions {
+            // Within the run, anything that is not a unit digit is a flanked
+            // "oh"/"o", which reads as 0.
+            sequence += "\(unitValues[words[position]] ?? 0)"
+        }
+
+        return NumberWordNormalizer.ParsedWords(value: sequence, consumedWords: positions)
     }
 
     private static func makeResult(_ value: Int, ordinal: Bool, isNegative: Bool, consumedWords: Int) -> NumberWordNormalizer.ParsedWords {

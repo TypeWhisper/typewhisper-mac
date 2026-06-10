@@ -107,6 +107,52 @@ final class NumberWordNormalizerTests: XCTestCase {
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "the 31st of May", language: "en"), "the 31st of May")
     }
 
+    func testEnglishDigitSequenceJoinsBareSingleDigits() {
+        // A run of four or more bare single digits is read as one sequence
+        // (phone numbers, PINs, codes, digit-by-digit years) instead of the
+        // spaced individual digits the cardinal path would emit.
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "one nine eight four", language: "en"), "1984")
+        XCTAssertEqual(
+            NumberWordNormalizer.normalize(text: "my pin is one two three four", language: "en"),
+            "my pin is 1234"
+        )
+        XCTAssertEqual(
+            NumberWordNormalizer.normalize(text: "call five five five one two one two now", language: "en"),
+            "call 5551212 now"
+        )
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "one two three four dogs", language: "en"), "1234 dogs")
+    }
+
+    func testEnglishDigitSequenceReadsOhAsZeroWhenFlanked() {
+        XCTAssertEqual(
+            NumberWordNormalizer.normalize(text: "five five five oh one two three", language: "en"),
+            "5550123"
+        )
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "four oh oh two", language: "en"), "4002")
+        // A leading zero is preserved because the run is emitted as written.
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "zero one two three", language: "en"), "0123")
+    }
+
+    func testEnglishShortDigitRunsStaySplit() {
+        // Below the four-digit threshold, dictated counting must not collapse.
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "one two three", language: "en"), "1 2 3")
+        // "oh" is only zero when flanked by digits inside a qualifying run;
+        // a short run leaves it as an interjection.
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "four oh two", language: "en"), "4 oh 2")
+    }
+
+    func testEnglishDigitSequenceDoesNotDisturbCardinalsOrOrdinals() {
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "one hundred", language: "en"), "100")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "two thousand", language: "en"), "2000")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "twenty third", language: "en"), "23rd")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "two point five", language: "en"), "2.5")
+    }
+
+    func testEnglishDigitSequenceOutputIsIdempotent() {
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "1984", language: "en"), "1984")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "5550123", language: "en"), "5550123")
+    }
+
     func testGermanNegativeDecimalNormalizesToDigits() {
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "minus zwei komma fünf", language: "de"), "-2,5")
     }
