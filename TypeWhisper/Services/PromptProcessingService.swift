@@ -367,33 +367,72 @@ class PromptProcessingService: ObservableObject {
         requestedModel: String?,
         persistGlobalSelection: Bool
     ) -> String? {
-        let models = modelsForProvider(providerId)
-        guard !models.isEmpty else { return requestedModel }
-
-        let validIds = Set(models.map(\.id))
-        if let requestedModel,
-           validIds.contains(requestedModel) {
-            return requestedModel
-        }
-
         let preferredModelId = (PluginManager.shared.llmProvider(for: providerId) as? LLMModelSelectable)?.preferredModelId as? String
-        let fallbackModelId: String?
-        if let preferredModelId,
-           validIds.contains(preferredModelId) {
-            fallbackModelId = preferredModelId
-        } else if !selectedCloudModel.isEmpty,
-                  validIds.contains(selectedCloudModel) {
-            fallbackModelId = selectedCloudModel
-        } else {
-            fallbackModelId = models.first?.id
-        }
+        let resolution = Self.resolveModel(
+            requestedModel: requestedModel,
+            preferredModelId: preferredModelId,
+            selectedCloudModel: selectedCloudModel,
+            availableModelIds: modelsForProvider(providerId).map(\.id)
+        )
 
         if persistGlobalSelection,
-           let fallbackModelId,
-           selectedCloudModel != fallbackModelId {
-            selectedCloudModel = fallbackModelId
+           resolution.persistGlobally,
+           let modelId = resolution.modelId,
+           selectedCloudModel != modelId {
+            selectedCloudModel = modelId
         }
 
-        return fallbackModelId
+        return resolution.modelId
+    }
+
+    struct ModelResolution: Equatable {
+        let modelId: String?
+        /// Whether `modelId` reflects a deliberate choice (a still-valid global
+        /// selection's provider preference) that may be written back to the
+        /// legacy `llmCloudModel` key, versus a pure fallback guess.
+        let persistGlobally: Bool
+    }
+
+    /// Resolves the model to use for a provider, kept pure so the persistence
+    /// decision is unit-testable.
+    ///
+    /// The global is written through with a deliberate choice — the provider
+    /// plugin's preference, or a self-healing repair of an existing-but-invalid
+    /// global — but never when no model was ever selected. Adopting the
+    /// alphabetically-first (oldest) model as a permanent default the user never
+    /// chose is how a later-retired model (e.g. `gemini-2.0-flash`, which sorts
+    /// first) silently poisons the global key and makes every future run 404.
+    static func resolveModel(
+        requestedModel: String?,
+        preferredModelId: String?,
+        selectedCloudModel: String,
+        availableModelIds: [String]
+    ) -> ModelResolution {
+        guard !availableModelIds.isEmpty else {
+            return ModelResolution(modelId: requestedModel, persistGlobally: false)
+        }
+
+        let validIds = Set(availableModelIds)
+        if let requestedModel, validIds.contains(requestedModel) {
+            return ModelResolution(modelId: requestedModel, persistGlobally: false)
+        }
+
+        if let preferredModelId, validIds.contains(preferredModelId) {
+            return ModelResolution(modelId: preferredModelId, persistGlobally: true)
+        }
+
+        if !selectedCloudModel.isEmpty, validIds.contains(selectedCloudModel) {
+            return ModelResolution(modelId: selectedCloudModel, persistGlobally: false)
+        }
+
+        // Fall back to the first available model for this run. Persist it only to
+        // repair a non-empty global that is no longer valid (self-healing); when
+        // no model was ever selected, use the fallback transiently without
+        // poisoning the global with the oldest model.
+        let isRepairingInvalidSelection = !selectedCloudModel.isEmpty
+        return ModelResolution(
+            modelId: availableModelIds.first,
+            persistGlobally: isRepairingInvalidSelection
+        )
     }
 }
