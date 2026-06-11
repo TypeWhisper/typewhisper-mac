@@ -48,7 +48,6 @@ final class GeminiPlugin: NSObject, LLMProviderPlugin, LLMModelSelectable, @unch
             _fetchedLLMModels = models
         }
         host.setUserDefault(nil, forKey: Self.legacyCachedLLMModelsKey)
-        _selectedLLMModelId = host.userDefault(forKey: Self.selectedLLMModelKey) as? String
         _llmTemperatureModeRaw = host.userDefault(forKey: "llmTemperatureMode") as? String
             ?? PluginLLMTemperatureMode.providerDefault.rawValue
         _llmTemperatureValue = host.userDefault(forKey: "llmTemperatureValue") as? Double
@@ -76,6 +75,17 @@ final class GeminiPlugin: NSObject, LLMProviderPlugin, LLMModelSelectable, @unch
         PluginModelInfo(id: "gemini-flash-lite-latest", displayName: "Gemini Flash-Lite Latest"),
     ]
 
+    /// Transient default when the user has not selected a model. Prefers the
+    /// curated auto-updating alias over `supportedModels.first`, which for
+    /// fetched models is the alphabetically-oldest (and possibly retired)
+    /// model, e.g. `gemini-2.0-flash`.
+    private static let curatedDefaultModelId = "gemini-flash-latest"
+
+    fileprivate var defaultLLMModelId: String? {
+        let models = supportedModels
+        return models.first(where: { $0.id == Self.curatedDefaultModelId })?.id ?? models.first?.id
+    }
+
     var supportedModels: [PluginModelInfo] {
         if !_fetchedLLMModels.isEmpty {
             return _fetchedLLMModels.map { PluginModelInfo(id: $0.id, displayName: $0.displayName ?? $0.id) }
@@ -101,7 +111,9 @@ final class GeminiPlugin: NSObject, LLMProviderPlugin, LLMModelSelectable, @unch
         guard let apiKey = _apiKey, !apiKey.isEmpty else {
             throw PluginChatError.notConfigured
         }
-        let modelId = model ?? _selectedLLMModelId ?? supportedModels.first!.id
+        guard let modelId = model ?? _selectedLLMModelId ?? defaultLLMModelId else {
+            throw PluginChatError.notConfigured
+        }
         return try await chatHelper.process(
             apiKey: apiKey,
             model: modelId,
@@ -237,22 +249,19 @@ final class GeminiPlugin: NSObject, LLMProviderPlugin, LLMModelSelectable, @unch
         return !excludedCompatibleModelTokens.contains { id.contains($0) }
     }
 
+    /// Validates the persisted selection against the current model list.
+    /// `_selectedLLMModelId` (and thus `preferredModelId`) only ever holds an
+    /// explicit, still-valid user selection — a fallback is never seeded into
+    /// it or persisted, so the host cannot mistake the alphabetically-oldest
+    /// fetched model for a deliberate choice. The stored value is kept even
+    /// while invalid so it re-validates if the model reappears after a fetch.
     private func normalizeSelectedModel() {
+        let storedModelId = host?.userDefault(forKey: Self.selectedLLMModelKey) as? String
         let supportedIds = Set(supportedModels.map(\.id))
-        guard !supportedIds.isEmpty else {
+        if let storedModelId, supportedIds.contains(storedModelId) {
+            _selectedLLMModelId = storedModelId
+        } else {
             _selectedLLMModelId = nil
-            return
-        }
-
-        if let selectedModelId = _selectedLLMModelId,
-           supportedIds.contains(selectedModelId) {
-            return
-        }
-
-        let fallbackModelId = supportedModels.first?.id
-        _selectedLLMModelId = fallbackModelId
-        if let fallbackModelId {
-            host?.setUserDefault(fallbackModelId, forKey: Self.selectedLLMModelKey)
         }
     }
 
@@ -450,7 +459,7 @@ private struct GeminiSettingsView: View {
             if let key = plugin._apiKey, !key.isEmpty {
                 apiKeyInput = key
             }
-            selectedModel = plugin.selectedLLMModelId ?? plugin.supportedModels.first?.id ?? ""
+            selectedModel = plugin.selectedLLMModelId ?? plugin.defaultLLMModelId ?? ""
             llmTemperatureMode = plugin.llmTemperatureMode
             llmTemperatureValue = plugin.llmTemperatureValue
             fetchedLLMModels = plugin._fetchedLLMModels
@@ -497,9 +506,9 @@ private struct GeminiSettingsView: View {
                     fetchedLLMModels = models
                     plugin.setFetchedLLMModels(models)
                     if !models.contains(where: { $0.id == selectedModel }),
-                       let first = models.first {
-                        selectedModel = first.id
-                        plugin.selectLLMModel(first.id)
+                       let fallback = plugin.defaultLLMModelId {
+                        selectedModel = fallback
+                        plugin.selectLLMModel(fallback)
                     }
                 }
             }
