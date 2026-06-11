@@ -70,6 +70,7 @@ private actor TranscriptCollector {
 final class SonioxPlugin: NSObject, SourceProgressLanguageHintTranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.soniox"
     static let pluginName = "Soniox"
+    static let asyncModelId = "stt-async-v5"
 
     fileprivate var host: HostServices?
     fileprivate var _apiKey: String?
@@ -149,7 +150,7 @@ final class SonioxPlugin: NSObject, SourceProgressLanguageHintTranscriptionEngin
             throw PluginTranscriptionError.notConfigured
         }
 
-        let effectiveHints = resolvedLanguageHints(
+        let effectiveHints = Self.resolvedLanguageHints(
             requestedLanguage: languageSelection.requestedLanguage,
             languageHints: languageSelection.languageHints
         )
@@ -249,7 +250,7 @@ final class SonioxPlugin: NSObject, SourceProgressLanguageHintTranscriptionEngin
             throw PluginTranscriptionError.noModelSelected
         }
 
-        let effectiveHints = resolvedLanguageHints(
+        let effectiveHints = Self.resolvedLanguageHints(
             requestedLanguage: languageSelection.requestedLanguage,
             languageHints: languageSelection.languageHints
         )
@@ -309,7 +310,7 @@ final class SonioxPlugin: NSObject, SourceProgressLanguageHintTranscriptionEngin
             "enable_endpoint_detection": true,
         ]
 
-        let effectiveHints = resolvedLanguageHints(requestedLanguage: language, languageHints: languageHints)
+        let effectiveHints = Self.resolvedLanguageHints(requestedLanguage: language, languageHints: languageHints)
         if !effectiveHints.isEmpty {
             config["language_hints"] = effectiveHints
         }
@@ -556,36 +557,14 @@ final class SonioxPlugin: NSObject, SourceProgressLanguageHintTranscriptionEngin
         apiKey: String,
         prompt: String?
     ) async throws -> String {
-        guard let url = URL(string: "https://api.soniox.com/v1/transcriptions") else {
-            throw PluginTranscriptionError.apiError("Invalid transcriptions URL")
-        }
-
-        var body: [String: Any] = [
-            "file_id": fileId,
-            "model": "stt-async-v4",
-        ]
-
-        let effectiveHints = resolvedLanguageHints(requestedLanguage: language, languageHints: languageHints)
-        if !effectiveHints.isEmpty {
-            body["language_hints"] = effectiveHints
-        }
-
-        if translate {
-            body["translation"] = [
-                "type": "one_way",
-                "target_language": "en",
-            ]
-        }
-        if let context = Self.contextPayload(prompt: prompt) {
-            body["context"] = context
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        request.timeoutInterval = 30
+        let request = try Self.makeCreateTranscriptionRequest(
+            fileId: fileId,
+            language: language,
+            languageHints: languageHints,
+            translate: translate,
+            apiKey: apiKey,
+            prompt: prompt
+        )
 
         let (data, response) = try await PluginHTTPClient.data(for: request)
 
@@ -610,13 +589,54 @@ final class SonioxPlugin: NSObject, SourceProgressLanguageHintTranscriptionEngin
         return id
     }
 
+    static func makeCreateTranscriptionRequest(
+        fileId: String,
+        language: String?,
+        languageHints: [String] = [],
+        translate: Bool,
+        apiKey: String,
+        prompt: String?
+    ) throws -> URLRequest {
+        guard let url = URL(string: "https://api.soniox.com/v1/transcriptions") else {
+            throw PluginTranscriptionError.apiError("Invalid transcriptions URL")
+        }
+
+        var body: [String: Any] = [
+            "file_id": fileId,
+            "model": Self.asyncModelId,
+        ]
+
+        let effectiveHints = Self.resolvedLanguageHints(requestedLanguage: language, languageHints: languageHints)
+        if !effectiveHints.isEmpty {
+            body["language_hints"] = effectiveHints
+        }
+
+        if translate {
+            body["translation"] = [
+                "type": "one_way",
+                "target_language": "en",
+            ]
+        }
+        if let context = Self.contextPayload(prompt: prompt) {
+            body["context"] = context
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        request.timeoutInterval = 30
+        return request
+    }
+
     private static func contextPayload(prompt: String?) -> [String: Any]? {
         let terms = PluginDictionaryTerms.terms(fromPrompt: prompt)
         guard !terms.isEmpty else { return nil }
         return ["terms": terms]
     }
 
-    private func resolvedLanguageHints(requestedLanguage: String?, languageHints: [String]) -> [String] {
+    private static func resolvedLanguageHints(requestedLanguage: String?, languageHints: [String]) -> [String] {
         if !languageHints.isEmpty {
             return languageHints
         }

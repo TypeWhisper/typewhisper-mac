@@ -1,8 +1,35 @@
+import Foundation
 import XCTest
 import TypeWhisperPluginSDK
 @testable import SonioxPlugin
 
 final class SonioxPluginTests: XCTestCase {
+    func testCreateTranscriptionRequestUsesAsyncV5Model() throws {
+        let request = try SonioxPlugin.makeCreateTranscriptionRequest(
+            fileId: "file_123",
+            language: "de",
+            languageHints: ["en", "de"],
+            translate: true,
+            apiKey: "soniox-key",
+            prompt: nil
+        )
+
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.url?.absoluteString, "https://api.soniox.com/v1/transcriptions")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer soniox-key")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+        XCTAssertEqual(request.timeoutInterval, 30)
+
+        let body = try Self.jsonBody(from: request)
+        XCTAssertEqual(body["file_id"] as? String, "file_123")
+        XCTAssertEqual(body["model"] as? String, "stt-async-v5")
+        XCTAssertEqual(body["language_hints"] as? [String], ["en", "de"])
+
+        let translation = try XCTUnwrap(body["translation"] as? [String: Any])
+        XCTAssertEqual(translation["type"] as? String, "one_way")
+        XCTAssertEqual(translation["target_language"] as? String, "en")
+    }
+
     func testSourceProgressUsesFinalOriginalTokenTiming() {
         let progress = SonioxPlugin.sourceProgress(
             fromTokens: [
@@ -40,5 +67,10 @@ final class SonioxPluginTests: XCTestCase {
             ],
             totalDuration: 0
         ))
+    }
+
+    private static func jsonBody(from request: URLRequest) throws -> [String: Any] {
+        let data = try XCTUnwrap(request.httpBody)
+        return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
     }
 }
