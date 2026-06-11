@@ -213,7 +213,14 @@ public protocol LLMProviderSetupStatusProviding {
 /// Optional protocol for LLM plugins that expose their selected model.
 /// Kept separate from LLMProviderPlugin to preserve binary compatibility with existing plugins.
 @objc public protocol LLMModelSelectable {
+    /// The model the user explicitly selected, or nil when no deliberate
+    /// selection exists. Hosts may treat this as a persistable preference.
     @objc optional var preferredModelId: String? { get }
+    /// The model the provider recommends when no explicit selection exists.
+    /// A transient fallback hint, not a user choice: hosts should prefer it
+    /// over picking from `supportedModels` themselves (whose ordering may put
+    /// a retired model first), but must not surface it as a user preference.
+    @objc optional var defaultModelId: String? { get }
 }
 
 // MARK: - Post-Processor Plugin

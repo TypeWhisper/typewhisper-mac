@@ -171,7 +171,8 @@ struct PromptActionsSettingsView: View {
 
                             ModelPickerView(
                                 models: processingService.modelsForProvider(processingService.selectedProviderId),
-                                selection: $processingService.selectedCloudModel
+                                selection: $processingService.selectedCloudModel,
+                                fallbackModelId: processingService.defaultModelId(for: processingService.selectedProviderId)
                             )
                             .frame(maxWidth: 320, alignment: .leading)
 
@@ -377,6 +378,9 @@ private func promptProviderFixedModelName(for providerId: String) -> String? {
 struct ModelPickerView: View {
     let models: [PluginModelInfo]
     @Binding var selection: String
+    /// Provider-recommended model to preselect when the current selection is
+    /// empty or invalid; falls back to the first listed model when absent.
+    var fallbackModelId: String? = nil
     @State private var searchText = ""
 
     private var filteredModels: [PluginModelInfo] {
@@ -410,7 +414,10 @@ struct ModelPickerView: View {
 
     private func ensureValidSelection() {
         if selection.isEmpty || !models.contains(where: { $0.id == selection }) {
-            selection = models.first?.id ?? ""
+            let validFallback = fallbackModelId.flatMap { id in
+                models.contains(where: { $0.id == id }) ? id : nil
+            }
+            selection = validFallback ?? models.first?.id ?? ""
         }
     }
 }

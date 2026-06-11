@@ -130,6 +130,7 @@ final class GeminiPlugin: NSObject, LLMProviderPlugin, LLMModelSelectable, @unch
 
     var selectedLLMModelId: String? { _selectedLLMModelId }
     @objc var preferredModelId: String? { _selectedLLMModelId }
+    @objc var defaultModelId: String? { defaultLLMModelId }
     var llmTemperatureMode: PluginLLMTemperatureMode {
         PluginLLMTemperatureMode(rawValue: _llmTemperatureModeRaw) ?? .providerDefault
     }

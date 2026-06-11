@@ -46,6 +46,35 @@ final class PromptProcessingModelResolutionTests: XCTestCase {
         XCTAssertFalse(resolution.persistGlobally)
     }
 
+    func testProviderDefaultIsPreferredOverAlphabeticalFallback() {
+        // When nothing is selected, the provider's recommended default beats
+        // first-available — for Gemini the alphabetically-first model is the
+        // retired gemini-2.0-flash, which would 404 even transiently.
+        let resolution = PromptProcessingService.resolveModel(
+            requestedModel: nil,
+            preferredModelId: nil,
+            selectedCloudModel: "",
+            availableModelIds: models,
+            providerDefaultModelId: "gemini-flash-latest"
+        )
+
+        XCTAssertEqual(resolution.modelId, "gemini-flash-latest")
+        XCTAssertFalse(resolution.persistGlobally)
+    }
+
+    func testProviderDefaultNotInAvailableModelsIsIgnored() {
+        let resolution = PromptProcessingService.resolveModel(
+            requestedModel: nil,
+            preferredModelId: nil,
+            selectedCloudModel: "",
+            availableModelIds: models,
+            providerDefaultModelId: "not-a-listed-model"
+        )
+
+        XCTAssertEqual(resolution.modelId, "gemini-2.0-flash")
+        XCTAssertFalse(resolution.persistGlobally)
+    }
+
     func testInvalidNonEmptyGlobalIsRepairedToFallbackAndPersisted() {
         // A non-empty global that is no longer valid is self-healed to a valid
         // model and persisted, so the stale value is not retried forever.
@@ -57,6 +86,21 @@ final class PromptProcessingModelResolutionTests: XCTestCase {
         )
 
         XCTAssertEqual(resolution.modelId, "gemini-2.0-flash")
+        XCTAssertTrue(resolution.persistGlobally)
+    }
+
+    func testInvalidNonEmptyGlobalIsRepairedToProviderDefault() {
+        // Self-healing must repair to the provider's recommended default when
+        // one exists, not adopt (and persist) the retired oldest model.
+        let resolution = PromptProcessingService.resolveModel(
+            requestedModel: "retired-model",
+            preferredModelId: nil,
+            selectedCloudModel: "retired-model",
+            availableModelIds: models,
+            providerDefaultModelId: "gemini-flash-latest"
+        )
+
+        XCTAssertEqual(resolution.modelId, "gemini-flash-latest")
         XCTAssertTrue(resolution.persistGlobally)
     }
 

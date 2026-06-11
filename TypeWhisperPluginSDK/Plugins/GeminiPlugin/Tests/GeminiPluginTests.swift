@@ -72,6 +72,20 @@ final class GeminiPluginTests: XCTestCase {
         )
     }
 
+    func testDefaultModelIdPrefersCuratedAliasOverOldestFetchedModel() throws {
+        let host = try PluginTestHostServices(
+            defaults: [Self.cachedLLMModelsKey: try Self.cachedModelsData()]
+        )
+        let plugin = GeminiPlugin()
+        plugin.activate(host: host)
+
+        XCTAssertEqual(
+            (plugin as? LLMModelSelectable)?.defaultModelId,
+            "gemini-flash-latest",
+            "the host-visible default must be the curated alias, not the retired alphabetically-first model"
+        )
+    }
+
     func testValidStoredSelectionSurvivesActivation() throws {
         let host = try PluginTestHostServices(
             defaults: [

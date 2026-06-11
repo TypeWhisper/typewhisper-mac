@@ -362,6 +362,12 @@ class PromptProcessingService: ObservableObject {
         )
     }
 
+    /// The provider plugin's recommended fallback for when no explicit model
+    /// selection exists. A display/processing hint, never a user preference.
+    func defaultModelId(for providerId: String) -> String? {
+        (PluginManager.shared.llmProvider(for: providerId) as? LLMModelSelectable)?.defaultModelId as? String
+    }
+
     private func resolvedModelId(
         for providerId: String,
         requestedModel: String?,
@@ -372,7 +378,8 @@ class PromptProcessingService: ObservableObject {
             requestedModel: requestedModel,
             preferredModelId: preferredModelId,
             selectedCloudModel: selectedCloudModel,
-            availableModelIds: modelsForProvider(providerId).map(\.id)
+            availableModelIds: modelsForProvider(providerId).map(\.id),
+            providerDefaultModelId: defaultModelId(for: providerId)
         )
 
         if persistGlobalSelection,
@@ -406,7 +413,8 @@ class PromptProcessingService: ObservableObject {
         requestedModel: String?,
         preferredModelId: String?,
         selectedCloudModel: String,
-        availableModelIds: [String]
+        availableModelIds: [String],
+        providerDefaultModelId: String? = nil
     ) -> ModelResolution {
         guard !availableModelIds.isEmpty else {
             return ModelResolution(modelId: requestedModel, persistGlobally: false)
@@ -425,13 +433,17 @@ class PromptProcessingService: ObservableObject {
             return ModelResolution(modelId: selectedCloudModel, persistGlobally: false)
         }
 
-        // Fall back to the first available model for this run. Persist it only to
-        // repair a non-empty global that is no longer valid (self-healing); when
-        // no model was ever selected, use the fallback transiently without
-        // poisoning the global with the oldest model.
+        // Fall back for this run, preferring the provider's recommended default
+        // over the first available model — for providers whose model list sorts
+        // a retired model first (Gemini's `gemini-2.0-flash`), first-available
+        // would 404. Persist the fallback only to repair a non-empty global
+        // that is no longer valid (self-healing); when no model was ever
+        // selected, use it transiently without poisoning the global.
+        let fallbackModelId = providerDefaultModelId.flatMap { validIds.contains($0) ? $0 : nil }
+            ?? availableModelIds.first
         let isRepairingInvalidSelection = !selectedCloudModel.isEmpty
         return ModelResolution(
-            modelId: availableModelIds.first,
+            modelId: fallbackModelId,
             persistGlobally: isRepairingInvalidSelection
         )
     }
