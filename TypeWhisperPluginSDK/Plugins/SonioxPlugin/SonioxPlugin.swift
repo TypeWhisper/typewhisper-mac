@@ -67,7 +67,7 @@ private actor TranscriptCollector {
 // MARK: - Plugin Entry Point
 
 @objc(SonioxPlugin)
-final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, @unchecked Sendable {
+final class SonioxPlugin: NSObject, SourceProgressLanguageHintTranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.soniox"
     static let pluginName = "Soniox"
 
@@ -173,6 +173,24 @@ final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
         prompt: String?,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
+        try await transcribe(
+            audio: audio,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            onProgress: onProgress,
+            onSourceProgress: { _ in true }
+        )
+    }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool,
+        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
+    ) async throws -> PluginTranscriptionResult {
         guard let apiKey = _apiKey, !apiKey.isEmpty else {
             throw PluginTranscriptionError.notConfigured
         }
@@ -183,7 +201,9 @@ final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
         do {
             return try await transcribeWebSocket(
                 audio: audio, language: language, translate: translate,
-                modelId: modelId, prompt: prompt, apiKey: apiKey, onProgress: onProgress
+                modelId: modelId, prompt: prompt, apiKey: apiKey,
+                onProgress: onProgress,
+                onSourceProgress: onSourceProgress
             )
         } catch {
             logger.warning("WebSocket streaming failed, falling back to REST: \(error.localizedDescription)")
@@ -203,6 +223,24 @@ final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
         translate: Bool,
         prompt: String?,
         onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        try await transcribe(
+            audio: audio,
+            languageSelection: languageSelection,
+            translate: translate,
+            prompt: prompt,
+            onProgress: onProgress,
+            onSourceProgress: { _ in true }
+        )
+    }
+
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool,
+        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
     ) async throws -> PluginTranscriptionResult {
         guard let apiKey = _apiKey, !apiKey.isEmpty else {
             throw PluginTranscriptionError.notConfigured
@@ -225,7 +263,8 @@ final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
                 modelId: modelId,
                 prompt: prompt,
                 apiKey: apiKey,
-                onProgress: onProgress
+                onProgress: onProgress,
+                onSourceProgress: onSourceProgress
             )
         } catch {
             logger.warning("WebSocket streaming failed, falling back to REST: \(error.localizedDescription)")
@@ -250,7 +289,8 @@ final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
         modelId: String,
         prompt: String?,
         apiKey: String,
-        onProgress: @Sendable @escaping (String) -> Bool
+        onProgress: @Sendable @escaping (String) -> Bool,
+        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
     ) async throws -> PluginTranscriptionResult {
         guard let url = URL(string: "wss://stt-rt.soniox.com/transcribe-websocket") else {
             throw PluginTranscriptionError.apiError("Invalid Soniox WebSocket URL")
@@ -320,6 +360,13 @@ final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
 
                     // Parse tokens
                     guard let tokens = json["tokens"] as? [[String: Any]] else { continue }
+
+                    if let sourceProgress = Self.sourceProgress(
+                        fromTokens: tokens,
+                        totalDuration: audio.duration
+                    ) {
+                        _ = onSourceProgress(sourceProgress)
+                    }
 
                     var finalText: [String] = []
                     var interimText: [String] = []
@@ -397,6 +444,39 @@ final class SonioxPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
         let finalText = await collector.finalResult()
         let detectedLanguage = await collector.detectedLanguage(fallback: language)
         return PluginTranscriptionResult(text: finalText, detectedLanguage: detectedLanguage)
+    }
+
+    static func sourceProgress(
+        fromTokens tokens: [[String: Any]],
+        totalDuration: TimeInterval
+    ) -> PluginTranscriptionSourceProgress? {
+        guard totalDuration.isFinite, totalDuration > 0 else { return nil }
+        let latestFinalEndMs = tokens.compactMap { token -> Double? in
+            guard token["is_final"] as? Bool == true else { return nil }
+            if (token["translation_status"] as? String) == "translation" {
+                return nil
+            }
+            return doubleValue(token["end_ms"])
+        }.max()
+
+        guard let latestFinalEndMs, latestFinalEndMs > 0 else { return nil }
+        return PluginTranscriptionSourceProgress(
+            processedDuration: min(latestFinalEndMs / 1000.0, totalDuration),
+            totalDuration: totalDuration
+        )
+    }
+
+    private static func doubleValue(_ value: Any?) -> Double? {
+        if let value = value as? Double {
+            return value
+        }
+        if let value = value as? NSNumber {
+            return value.doubleValue
+        }
+        if let value = value as? String {
+            return Double(value)
+        }
+        return nil
     }
 
     // MARK: - REST Implementation (4-Step Async)

@@ -9,6 +9,10 @@ public enum PluginHosting: String, Codable, Sendable {
     }
 }
 
+public enum PluginCapability: String, Codable, Sendable, CaseIterable {
+    case sourceFootageProgress = "source-footage-progress"
+}
+
 public struct PluginManifest: Codable, Equatable, Sendable {
     public let id: String
     public let name: String
@@ -25,6 +29,7 @@ public struct PluginManifest: Codable, Equatable, Sendable {
     public let iconResourceName: String?
     public let category: String?
     public let categories: [String]?
+    public let capabilities: [String]?
     public let detailsURL: String?
     public let homepageURL: String?
     public let iconURL: String?
@@ -46,6 +51,7 @@ public struct PluginManifest: Codable, Equatable, Sendable {
         iconResourceName: String? = nil,
         category: String? = nil,
         categories: [String]? = nil,
+        capabilities: [String]? = nil,
         detailsURL: String? = nil,
         homepageURL: String? = nil,
         iconURL: String? = nil,
@@ -66,6 +72,7 @@ public struct PluginManifest: Codable, Equatable, Sendable {
         self.iconResourceName = iconResourceName
         self.category = category
         self.categories = categories
+        self.capabilities = capabilities
         self.detailsURL = detailsURL
         self.homepageURL = homepageURL
         self.iconURL = iconURL
@@ -82,11 +89,33 @@ public extension PluginManifest {
         Self.normalizedCategoryIdentifiers(primary: category, categories: categories)
     }
 
+    var resolvedCapabilityIdentifiers: [String] {
+        Self.normalizedCapabilityIdentifiers(capabilities)
+    }
+
+    func supportsCapability(_ capability: PluginCapability) -> Bool {
+        resolvedCapabilityIdentifiers.contains(capability.rawValue)
+    }
+
     static func normalizedCategoryIdentifiers(primary: String?, categories: [String]?) -> [String] {
         var seen: Set<String> = []
         var result: [String] = []
 
         for value in [primary].compactMap({ $0 }) + (categories ?? []) {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            guard seen.insert(trimmed).inserted else { continue }
+            result.append(trimmed)
+        }
+
+        return result
+    }
+
+    static func normalizedCapabilityIdentifiers(_ capabilities: [String]?) -> [String] {
+        var seen: Set<String> = []
+        var result: [String] = []
+
+        for value in capabilities ?? [] {
             let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { continue }
             guard seen.insert(trimmed).inserted else { continue }

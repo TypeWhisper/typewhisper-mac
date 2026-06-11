@@ -1,8 +1,8 @@
 {
     "id": "com.typewhisper.parakeet",
     "name": "Parakeet",
-    "version": "1.2.13",
-    "minHostVersion": "1.2.1",
+    "version": "1.3.0",
+    "minHostVersion": "1.5.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "supportedArchitectures": [
@@ -14,6 +14,9 @@
         "de": "Lokale Spracherkennung mit NVIDIA Parakeet TDT. Schnell und präzise, 25 Sprachen."
     },
     "category": "transcription",
+    "capabilities": [
+        "source-footage-progress"
+    ],
     "iconSystemName": "bird",
     "principalClass": "ParakeetPlugin",
     "detailsURL": "https://www.typewhisper.com/addons/parakeet/"

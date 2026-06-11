@@ -6,12 +6,13 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(WhisperKitPlugin)
-final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, @unchecked Sendable {
+final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, @unchecked Sendable {
     static let pluginId = "com.typewhisper.whisperkit"
     static let pluginName = "WhisperKit"
     private static let maxConditioningPromptChars = 500
     private static let modelRepo = "argmaxinc/whisperkit-coreml"
     private static let modelEndpoint = "https://huggingface.co"
+    private static let defaultModelLoadTimeoutDuration: Duration = .seconds(600)
 
     fileprivate var host: HostServices?
     fileprivate var whisperKit: WhisperKit?
@@ -20,6 +21,8 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
     fileprivate var _hfToken: String?
     fileprivate var modelState: WhisperModelState = .notLoaded
     fileprivate var downloadProgress: Double = 0
+    private var modelLoadGeneration = 0
+    fileprivate var modelLoadTimeoutDuration = WhisperKitPlugin.defaultModelLoadTimeoutDuration
 
     required override init() {
         super.init()
@@ -40,6 +43,7 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
     }
 
     func deactivate() {
+        invalidateModelLoad()
         releaseWhisperKitResources()
         whisperKit = nil
         loadedModelId = nil
@@ -51,7 +55,10 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
 
     private func releaseWhisperKitResources() {
         guard let whisperKit else { return }
+        releaseWhisperKitResources(whisperKit)
+    }
 
+    private func releaseWhisperKitResources(_ whisperKit: WhisperKit) {
         // Release Core ML submodels and callbacks explicitly instead of relying
         // solely on WhisperKit deallocation to eventually tear them down.
         autoreleasepool {
@@ -67,6 +74,48 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
         }
     }
 
+    @discardableResult
+    private func beginModelLoad() -> Int {
+        modelLoadGeneration += 1
+        return modelLoadGeneration
+    }
+
+    private func invalidateModelLoad() {
+        modelLoadGeneration += 1
+    }
+
+    private func isCurrentModelLoad(_ generation: Int) -> Bool {
+        generation == modelLoadGeneration
+    }
+
+    private func startModelLoadTimeout(generation: Int, modelName: String) {
+        let timeout = modelLoadTimeoutDuration
+        Task { [weak self] in
+            try? await Task.sleep(for: timeout)
+            guard let self,
+                  self.isCurrentModelLoad(generation),
+                  self.loadedModelId == nil else {
+                return
+            }
+
+            switch self.modelState {
+            case .loading:
+                self.invalidateModelLoad()
+                self.releaseWhisperKitResources()
+                self.whisperKit = nil
+                self.loadedModelId = nil
+                self.downloadProgress = 0
+                self.modelState = .error(
+                    "Model load is taking too long while macOS compiles \(modelName) for the Neural Engine. Try again, or remove and re-download the model."
+                )
+                self.host?.setUserDefault(nil, forKey: "loadedModel")
+                self.host?.notifyCapabilitiesChanged()
+            default:
+                break
+            }
+        }
+    }
+
     // MARK: - TranscriptionEnginePlugin
 
     var providerId: String { "whisper" }
@@ -74,6 +123,17 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
 
     var isConfigured: Bool {
         whisperKit != nil && loadedModelId != nil
+    }
+
+    var settingsModelState: WhisperModelState {
+        guard let loadedModelId else { return modelState }
+
+        switch modelState {
+        case .loading, .ready:
+            return .ready(loadedModelId)
+        case .notLoaded, .downloading, .error:
+            return modelState
+        }
     }
 
     var transcriptionModels: [PluginModelInfo] {
@@ -208,6 +268,24 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
         prompt: String?,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
+        try await transcribe(
+            audio: audio,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            onProgress: onProgress,
+            onSourceProgress: { _ in true }
+        )
+    }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool,
+        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
+    ) async throws -> PluginTranscriptionResult {
         guard let whisperKit else {
             throw PluginTranscriptionError.notConfigured
         }
@@ -232,6 +310,17 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
             options.usePrefillPrompt = true
         }
 
+        whisperKit.segmentDiscoveryCallback = { segments in
+            guard let progress = Self.sourceProgress(
+                fromDiscoveredSegments: segments,
+                totalDuration: audio.duration
+            ) else {
+                return
+            }
+            _ = onSourceProgress(progress)
+        }
+        defer { whisperKit.segmentDiscoveryCallback = nil }
+
         let results = try await whisperKit.transcribe(
             audioArray: audio.samples,
             decodeOptions: options,
@@ -252,6 +341,31 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
         }
 
         return PluginTranscriptionResult(text: text, detectedLanguage: detectedLanguage, segments: segments)
+    }
+
+    static func sourceProgress(
+        fromDiscoveredSegments segments: [TranscriptionSegment],
+        totalDuration: TimeInterval
+    ) -> PluginTranscriptionSourceProgress? {
+        sourceProgress(
+            fromSegmentEnds: segments.map { Double($0.end) },
+            totalDuration: totalDuration
+        )
+    }
+
+    static func sourceProgress(
+        fromSegmentEnds segmentEnds: [Double],
+        totalDuration: TimeInterval
+    ) -> PluginTranscriptionSourceProgress? {
+        guard totalDuration.isFinite, totalDuration > 0 else { return nil }
+        let latestSegmentEnd = segmentEnds
+            .filter { $0.isFinite }
+            .max() ?? 0
+        guard latestSegmentEnd > 0 else { return nil }
+        return PluginTranscriptionSourceProgress(
+            processedDuration: min(latestSegmentEnd, totalDuration),
+            totalDuration: totalDuration
+        )
     }
 
     private static func promptTokens(from prompt: String?, tokenizer: WhisperTokenizer) -> [Int]? {
@@ -354,6 +468,7 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
     }
 
     fileprivate func loadModel(_ modelDef: WhisperModelDef) async {
+        let loadGeneration = beginModelLoad()
         do {
             // Migrate old models if they exist
             migrateOldModels(for: modelDef)
@@ -382,11 +497,14 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
                     self.downloadProgress = mapped
                 }
             }
+            guard isCurrentModelLoad(loadGeneration) else { return }
             try await repairDownloadedModelIfNeeded(at: modelFolder, variant: modelDef.id)
+            guard isCurrentModelLoad(loadGeneration) else { return }
 
             // Load
-            modelState = .loading(phase: "loading")
+            modelState = .loading(phase: "compiling")
             downloadProgress = 0.80
+            startModelLoadTimeout(generation: loadGeneration, modelName: modelDef.displayName)
 
             let config = WhisperKitConfig(
                 downloadBase: downloadBase,
@@ -400,25 +518,41 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
             )
 
             let kit = try await WhisperKit(config)
+            guard isCurrentModelLoad(loadGeneration) else {
+                releaseWhisperKitResources(kit)
+                return
+            }
 
             kit.modelStateCallback = { [weak self] _, newState in
+                guard let self, self.isCurrentModelLoad(loadGeneration) else { return }
                 switch newState {
                 case .loading:
-                    self?.modelState = .loading(phase: "loading")
+                    guard self.loadedModelId == nil else { return }
+                    self.modelState = .loading(phase: "compiling")
                 case .prewarming:
-                    self?.modelState = .loading(phase: "prewarming")
+                    guard self.loadedModelId == nil else { return }
+                    self.modelState = .loading(phase: "prewarming")
                 case .loaded, .prewarmed:
-                    self?.modelState = .loading(phase: "prewarming")
+                    guard self.loadedModelId == nil else { return }
+                    self.modelState = .loading(phase: "prewarming")
                 case .unloaded:
-                    self?.modelState = .notLoaded
+                    self.modelState = .notLoaded
                 default:
                     break
                 }
             }
 
             try await kit.loadModels()
+            guard isCurrentModelLoad(loadGeneration) else {
+                releaseWhisperKitResources(kit)
+                return
+            }
             downloadProgress = 0.90
             try await kit.prewarmModels()
+            guard isCurrentModelLoad(loadGeneration) else {
+                releaseWhisperKitResources(kit)
+                return
+            }
 
             whisperKit = kit
             loadedModelId = modelDef.id
@@ -430,6 +564,7 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
             host?.setUserDefault(modelDef.id, forKey: "loadedModel")
             host?.notifyCapabilitiesChanged()
         } catch {
+            guard isCurrentModelLoad(loadGeneration) else { return }
             releaseWhisperKitResources()
             whisperKit = nil
             loadedModelId = nil
@@ -444,6 +579,7 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
     @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: true) } }
 
     func unloadModel(clearPersistence: Bool = true) {
+        invalidateModelLoad()
         releaseWhisperKitResources()
         whisperKit = nil
         loadedModelId = nil
@@ -459,6 +595,16 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
     func setModelStateForTesting(_ state: WhisperModelState, loadedModelId: String? = nil) {
         self.loadedModelId = loadedModelId
         modelState = state
+    }
+
+    func setModelLoadTimeoutForTesting(_ timeout: Duration) {
+        modelLoadTimeoutDuration = timeout
+    }
+
+    func startModelLoadTimeoutForTesting(modelName: String) {
+        let generation = beginModelLoad()
+        modelState = .loading(phase: "compiling")
+        startModelLoadTimeout(generation: generation, modelName: modelName)
     }
     #endif
 
@@ -672,7 +818,7 @@ final class WhisperKitPlugin: NSObject, TranscriptionEnginePlugin, Transcription
             guard loadedModelId == nil else { return nil }
             let message: String
             switch phase {
-            case "prewarming":
+            case "compiling", "prewarming":
                 message = "Optimizing model"
             case "loading":
                 message = "Loading model"
@@ -871,11 +1017,11 @@ private struct WhisperKitSettingsView: View {
     }
 
     private var normalizedPluginModelState: WhisperModelState {
-        switch plugin.modelState {
+        switch plugin.settingsModelState {
         case .downloading, .loading, .error:
-            return plugin.modelState
+            return plugin.settingsModelState
         case .ready:
-            return (plugin.whisperKit != nil && plugin.loadedModelId != nil) ? plugin.modelState : .notLoaded
+            return (plugin.whisperKit != nil && plugin.loadedModelId != nil) ? plugin.settingsModelState : .notLoaded
         case .notLoaded:
             return .notLoaded
         }
@@ -1108,6 +1254,12 @@ private struct WhisperKitSettingsView: View {
                     .controlSize(.small)
                 Text(phaseText(phase))
                     .font(.caption)
+                Button(String(localized: "Cancel", bundle: bundle)) {
+                    plugin.unloadModel(clearPersistence: false)
+                    syncViewStateFromPlugin()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             }
         } else {
             HStack(spacing: 8) {
@@ -1161,7 +1313,7 @@ private struct WhisperKitSettingsView: View {
 
     private func phaseText(_ phase: String) -> String {
         switch phase {
-        case "prewarming":
+        case "compiling", "prewarming":
             String(localized: "Optimizing for Neural Engine...", bundle: bundle)
         case "loading":
             String(localized: "Loading model...", bundle: bundle)

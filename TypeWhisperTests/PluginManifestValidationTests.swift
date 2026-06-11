@@ -87,9 +87,24 @@ final class PluginManifestValidationTests: XCTestCase {
         }
     }
 
-    func testDownloadedModelManagingPluginReleasesRequireHost14() throws {
+    func testSourceFootageProgressPluginsDeclareCapability() throws {
         let manifestPaths = [
             "TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/manifest.json",
+            "TypeWhisperPluginSDK/Plugins/ParakeetPlugin/manifest.json",
+            "TypeWhisperPluginSDK/Plugins/SonioxPlugin/manifest.json",
+        ]
+
+        for relativePath in manifestPaths {
+            let manifestURL = TestSupport.repoRoot.appendingPathComponent(relativePath)
+            let data = try Data(contentsOf: manifestURL)
+            let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
+            XCTAssertTrue(manifest.supportsCapability(.sourceFootageProgress), relativePath)
+            XCTAssertEqual(manifest.minHostVersion, "1.5.0", relativePath)
+        }
+    }
+
+    func testDownloadedModelManagingPluginReleasesRequireHost14() throws {
+        let manifestPaths = [
             "TypeWhisperPluginSDK/Plugins/Gemma4Plugin/manifest.json",
             "TypeWhisperPluginSDK/Plugins/Qwen3Plugin/manifest.json",
             "TypeWhisperPluginSDK/Plugins/VoxtralPlugin/manifest.json",

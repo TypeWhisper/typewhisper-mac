@@ -203,6 +203,7 @@ final class PluginRegistryServiceTests: XCTestCase {
                   "description": "Transcribes and provides LLM processing.",
                   "category": "transcription",
                   "categories": ["transcription", "llm", "memory"],
+                  "capabilities": ["source-footage-progress", "source-footage-progress", "  future-capability  ", ""],
                   "releases": [
                     {
                       "version": "1.0.0",
@@ -227,6 +228,61 @@ final class PluginRegistryServiceTests: XCTestCase {
         XCTAssertEqual(plugins.count, 1)
         XCTAssertEqual(plugins.first?.category, "transcription")
         XCTAssertEqual(plugins.first?.categories, ["transcription", "llm", "memory"])
+        XCTAssertEqual(plugins.first?.capabilities, ["source-footage-progress", "future-capability"])
+        XCTAssertEqual(plugins.first?.supportsCapability(.sourceFootageProgress), true)
+    }
+
+    func testReleaseScopedCapabilitiesDoNotMarkLegacyCompatibleReleaseAsSourceProgressCapable() throws {
+        let data = Data(
+            """
+            {
+              "schemaVersion": 2,
+              "plugins": [
+                {
+                  "id": "com.typewhisper.whisperkit",
+                  "name": "WhisperKit",
+                  "author": "TypeWhisper",
+                  "description": "Local speech-to-text powered by WhisperKit.",
+                  "category": "transcription",
+                  "capabilities": ["source-footage-progress"],
+                  "releases": [
+                    {
+                      "version": "1.0.24",
+                      "minHostVersion": "1.4.0",
+                      "sdkCompatibilityVersion": "v1",
+                      "capabilities": [],
+                      "size": 10,
+                      "downloadURL": "https://example.com/whisperkit-1.0.24.zip"
+                    },
+                    {
+                      "version": "1.0.25",
+                      "minHostVersion": "1.5.0",
+                      "sdkCompatibilityVersion": "v1",
+                      "capabilities": ["source-footage-progress"],
+                      "size": 12,
+                      "downloadURL": "https://example.com/whisperkit-1.0.25.zip"
+                    }
+                  ]
+                }
+              ]
+            }
+            """.utf8
+        )
+
+        let response = try JSONDecoder().decode(PluginRegistryResponse.self, from: data)
+        let pre15Plugin = try XCTUnwrap(response.resolvedPlugins(
+            appVersion: "1.4.9",
+            sdkCompatibilityVersion: sdkCompatibilityVersion
+        ).first)
+        let plugin15 = try XCTUnwrap(response.resolvedPlugins(
+            appVersion: "1.5.0",
+            sdkCompatibilityVersion: sdkCompatibilityVersion
+        ).first)
+
+        XCTAssertEqual(pre15Plugin.version, "1.0.24")
+        XCTAssertFalse(pre15Plugin.supportsCapability(.sourceFootageProgress))
+        XCTAssertEqual(plugin15.version, "1.0.25")
+        XCTAssertTrue(plugin15.supportsCapability(.sourceFootageProgress))
     }
 
     func testMultiReleaseRegistryRejectsReleaseWithMismatchedSDKCompatibilityVersionAtSameHostVersion() throws {

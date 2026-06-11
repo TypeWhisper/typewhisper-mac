@@ -9,6 +9,7 @@ import TypeWhisperPluginSDK
 final class FileTranscriptionViewModel: ObservableObject {
     typealias AudioProgressHandler = @MainActor @Sendable (AudioFileLoadProgress) -> Bool
     typealias TranscriptionProgressHandler = @MainActor @Sendable (String) -> Bool
+    typealias SourceProgressHandler = @MainActor @Sendable (PluginTranscriptionSourceProgress) -> Bool
     typealias CancellationChecker = @Sendable () -> Bool
     typealias AudioSamplesLoader = @MainActor (
         URL,
@@ -22,6 +23,7 @@ final class FileTranscriptionViewModel: ObservableObject {
         String?,
         String?,
         @escaping TranscriptionProgressHandler,
+        @escaping SourceProgressHandler,
         @escaping CancellationChecker
     ) async throws -> TranscriptionResult
     typealias EngineReadinessChecker = @MainActor (String?) -> Bool
@@ -43,6 +45,7 @@ final class FileTranscriptionViewModel: ObservableObject {
         var phaseDescription: String?
         var progressFraction: Double?
         var progressText: String?
+        var sourceProgress: PluginTranscriptionSourceProgress?
         var startedAt: Date?
         var finishedAt: Date?
 
@@ -137,7 +140,7 @@ final class FileTranscriptionViewModel: ObservableObject {
                 return await onProgress(progress)
             }
         }
-        self.transcriptionRunner = transcriptionRunner ?? { [modelManager] samples, languageSelection, task, engineOverrideId, cloudModelOverride, onProgress, isCancelled in
+        self.transcriptionRunner = transcriptionRunner ?? { [modelManager] samples, languageSelection, task, engineOverrideId, cloudModelOverride, onProgress, onSourceProgress, isCancelled in
             try await modelManager.transcribe(
                 audioSamples: samples,
                 languageSelection: languageSelection,
@@ -148,6 +151,13 @@ final class FileTranscriptionViewModel: ObservableObject {
                     guard !isCancelled() else { return false }
                     Task { @MainActor in
                         _ = onProgress(text)
+                    }
+                    return !isCancelled()
+                },
+                onSourceProgress: { progress in
+                    guard !isCancelled() else { return false }
+                    Task { @MainActor in
+                        _ = onSourceProgress(progress)
                     }
                     return !isCancelled()
                 }
@@ -261,6 +271,7 @@ final class FileTranscriptionViewModel: ObservableObject {
                 files[i].phaseDescription = nil
                 files[i].progressFraction = nil
                 files[i].progressText = nil
+                files[i].sourceProgress = nil
                 files[i].startedAt = nil
                 files[i].finishedAt = nil
             }
@@ -296,6 +307,7 @@ final class FileTranscriptionViewModel: ObservableObject {
             files[currentIndex].state = .cancelled
             files[currentIndex].phaseDescription = String(localized: "Cancelled")
             files[currentIndex].progressFraction = nil
+            files[currentIndex].sourceProgress = nil
             files[currentIndex].finishedAt = Date()
         }
     }
@@ -307,6 +319,7 @@ final class FileTranscriptionViewModel: ObservableObject {
         files[index].phaseDescription = String(localized: "Loading audio")
         files[index].progressFraction = nil
         files[index].progressText = nil
+        files[index].sourceProgress = nil
         files[index].startedAt = Date()
         files[index].finishedAt = nil
 
@@ -336,6 +349,7 @@ final class FileTranscriptionViewModel: ObservableObject {
             files[index].state = .transcribing
             files[index].phaseDescription = String(localized: "Transcribing")
             files[index].progressFraction = nil
+            files[index].sourceProgress = nil
 
             let result = try await transcriptionRunner(
                 samples,
@@ -351,7 +365,35 @@ final class FileTranscriptionViewModel: ObservableObject {
                         return false
                     }
                     self.files[index].phaseDescription = String(localized: "Transcribing")
-                    self.files[index].progressText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if self.files[index].sourceProgress != nil {
+                        self.files[index].progressText = Self.stableProgressPreviewText(
+                            current: self.files[index].progressText,
+                            candidate: trimmedText
+                        )
+                    } else {
+                        self.files[index].progressText = trimmedText
+                    }
+                    return true
+                },
+                { [weak self] progress in
+                    guard let self,
+                          !cancellationFlag.isCancelled,
+                          self.files.indices.contains(index),
+                          self.files[index].state == .transcribing,
+                          let normalized = Self.normalizedSourceProgress(progress) else {
+                        return false
+                    }
+                    self.files[index].phaseDescription = String(localized: "Transcribing")
+                    self.files[index].sourceProgress = normalized
+                    self.files[index].progressFraction = normalized.fractionCompleted
+                    if let previewText = normalized.previewText?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !previewText.isEmpty {
+                        self.files[index].progressText = Self.stableProgressPreviewText(
+                            current: self.files[index].progressText,
+                            candidate: previewText
+                        )
+                    }
                     return true
                 },
                 { cancellationFlag.isCancelled }
@@ -366,12 +408,14 @@ final class FileTranscriptionViewModel: ObservableObject {
             files[index].state = .done
             files[index].phaseDescription = String(localized: "Done")
             files[index].progressFraction = 1.0
+            files[index].sourceProgress = nil
             files[index].finishedAt = Date()
         } catch is CancellationError {
             guard files.indices.contains(index) else { return }
             files[index].state = .cancelled
             files[index].phaseDescription = String(localized: "Cancelled")
             files[index].progressFraction = nil
+            files[index].sourceProgress = nil
             files[index].finishedAt = Date()
         } catch {
             guard files.indices.contains(index) else { return }
@@ -379,6 +423,7 @@ final class FileTranscriptionViewModel: ObservableObject {
             files[index].errorMessage = error.localizedDescription
             files[index].phaseDescription = String(localized: "Error")
             files[index].progressFraction = nil
+            files[index].sourceProgress = nil
             files[index].finishedAt = Date()
         }
     }
@@ -495,6 +540,52 @@ final class FileTranscriptionViewModel: ObservableObject {
         }
         let percent = Int((fraction * 100).rounded())
         return String(localized: "Loading audio \(percent)%")
+    }
+
+    private static func normalizedSourceProgress(
+        _ progress: PluginTranscriptionSourceProgress
+    ) -> PluginTranscriptionSourceProgress? {
+        guard progress.processedDuration.isFinite,
+              progress.totalDuration.isFinite,
+              progress.totalDuration > 0 else {
+            return nil
+        }
+
+        let processedDuration = min(max(progress.processedDuration, 0), progress.totalDuration)
+        return PluginTranscriptionSourceProgress(
+            processedDuration: processedDuration,
+            totalDuration: progress.totalDuration,
+            previewText: progress.previewText
+        )
+    }
+
+    static func stableProgressPreviewText(current: String?, candidate: String) -> String {
+        let candidate = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !candidate.isEmpty else { return current ?? "" }
+        guard let current = current?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !current.isEmpty else {
+            return candidate
+        }
+
+        guard candidate != current else { return current }
+
+        if candidate.hasPrefix(current) || candidate.count >= current.count + 24 {
+            return candidate
+        }
+
+        if current.hasPrefix(candidate) || current.localizedCaseInsensitiveContains(candidate) {
+            return current
+        }
+
+        let sharedPrefix = candidate.commonPrefix(
+            with: current,
+            options: [.caseInsensitive, .diacriticInsensitive]
+        ).count
+        if sharedPrefix >= min(24, min(candidate.count, current.count)) {
+            return candidate.count >= current.count ? candidate : current
+        }
+
+        return current
     }
 
     private func startElapsedTimer() {

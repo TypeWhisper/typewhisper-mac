@@ -7,7 +7,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(ParakeetPlugin)
-final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, TranscriptPreviewFallbackPolicyProviding, PluginSettingsActivityReporting, @unchecked Sendable {
+final class ParakeetPlugin: NSObject, SourceProgressTranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, TranscriptPreviewFallbackPolicyProviding, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.parakeet"
     static let pluginName = "Parakeet"
     private static let logger = Logger(subsystem: "com.typewhisper.plugin.parakeet", category: "Transcription")
@@ -139,6 +139,24 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
         translate: Bool,
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
+        try await transcribe(
+            audio: audio,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            onProgress: { _ in true },
+            onSourceProgress: { _ in true }
+        )
+    }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool,
+        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
+    ) async throws -> PluginTranscriptionResult {
         guard let asrManager else {
             throw PluginTranscriptionError.notConfigured
         }
@@ -158,6 +176,24 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
         )
         let fluidLanguage = Self.fluidAudioLanguage(for: language)
         var decoderState = TdtDecoderState.make(decoderLayers: await asrManager.decoderLayerCount)
+        let progressTask = Task { [asrManager, duration = audio.duration, onSourceProgress] in
+            let stream = await asrManager.transcriptionProgressStream
+            do {
+                for try await fraction in stream {
+                    guard !Task.isCancelled else { break }
+                    guard let progress = Self.sourceProgress(fromFraction: fraction, totalDuration: duration) else {
+                        continue
+                    }
+                    if !onSourceProgress(progress) {
+                        break
+                    }
+                }
+            } catch {
+                // The transcription task reports the underlying error; progress is best-effort.
+            }
+        }
+        defer { progressTask.cancel() }
+
         let result = try await asrManager.transcribe(
             normalizedSamples,
             decoderState: &decoderState,
@@ -194,7 +230,24 @@ final class ParakeetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
             segments = []
         }
 
+        _ = onProgress(finalResult.text)
         return PluginTranscriptionResult(text: finalResult.text, detectedLanguage: nil, segments: segments)
+    }
+
+    static func sourceProgress(
+        fromFraction fraction: Double,
+        totalDuration: TimeInterval
+    ) -> PluginTranscriptionSourceProgress? {
+        guard fraction.isFinite,
+              totalDuration.isFinite,
+              totalDuration > 0 else {
+            return nil
+        }
+        let clampedFraction = min(max(fraction, 0), 1)
+        return PluginTranscriptionSourceProgress(
+            processedDuration: totalDuration * clampedFraction,
+            totalDuration: totalDuration
+        )
     }
 
     private static func fluidAudioLanguage(for language: String?) -> Language? {

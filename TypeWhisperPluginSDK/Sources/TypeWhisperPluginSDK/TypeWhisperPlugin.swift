@@ -466,6 +466,31 @@ public struct PluginTranscriptionResult: Sendable {
     }
 }
 
+public struct PluginTranscriptionSourceProgress: Sendable, Equatable {
+    public let processedDuration: TimeInterval
+    public let totalDuration: TimeInterval
+    public let previewText: String?
+
+    public init(
+        processedDuration: TimeInterval,
+        totalDuration: TimeInterval,
+        previewText: String? = nil
+    ) {
+        self.processedDuration = processedDuration
+        self.totalDuration = totalDuration
+        self.previewText = previewText
+    }
+
+    public var fractionCompleted: Double? {
+        guard processedDuration.isFinite,
+              totalDuration.isFinite,
+              totalDuration > 0 else {
+            return nil
+        }
+        return min(max(processedDuration / totalDuration, 0), 1)
+    }
+}
+
 public struct PluginStructuredTranscriptionSegment: Sendable {
     public let text: String
     public let start: Double
@@ -694,6 +719,51 @@ public protocol TranscriptPreviewFallbackPolicyProviding: TranscriptionEnginePlu
 
 public extension TranscriptPreviewFallbackPolicyProviding {
     var allowsTranscriptPreviewFallback: Bool { true }
+}
+
+public protocol SourceProgressTranscriptionEnginePlugin: TranscriptionEnginePlugin {
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool,
+        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
+    ) async throws -> PluginTranscriptionResult
+}
+
+public protocol SourceProgressLanguageHintTranscriptionEnginePlugin:
+    SourceProgressTranscriptionEnginePlugin,
+    LanguageHintTranscriptionEnginePlugin
+{
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool,
+        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
+    ) async throws -> PluginTranscriptionResult
+}
+
+public extension SourceProgressLanguageHintTranscriptionEnginePlugin {
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool,
+        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        try await transcribe(
+            audio: audio,
+            language: languageSelection.requestedLanguage,
+            translate: translate,
+            prompt: prompt,
+            onProgress: onProgress,
+            onSourceProgress: onSourceProgress
+        )
+    }
 }
 
 public extension TranscriptionEnginePlugin {

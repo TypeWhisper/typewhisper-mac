@@ -61,7 +61,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
                 XCTAssertEqual(url, fileURL)
                 return [0.1, -0.1]
             },
-            transcriptionRunner: { samples, languageSelection, task, engineOverrideId, cloudModelOverride, _, _ in
+            transcriptionRunner: { samples, languageSelection, task, engineOverrideId, cloudModelOverride, _, _, _ in
                 XCTAssertEqual(samples, [0.1, -0.1])
                 capturedLanguageSelection = languageSelection
                 capturedTask = task
@@ -120,7 +120,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
                 XCTAssertTrue(didFinishLoading, "Timed out waiting for loading gate")
                 return [0.1, -0.1]
             },
-            transcriptionRunner: { _, _, _, engineOverrideId, _, _, _ in
+            transcriptionRunner: { _, _, _, engineOverrideId, _, _, _, _ in
                 TranscriptionResult(
                     text: "Done",
                     detectedLanguage: "en",
@@ -165,7 +165,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
                 }
                 throw CancellationError()
             },
-            transcriptionRunner: { _, _, _, engineOverrideId, _, _, _ in
+            transcriptionRunner: { _, _, _, engineOverrideId, _, _, _, _ in
                 TranscriptionResult(
                     text: "Should not complete",
                     detectedLanguage: "en",
@@ -205,7 +205,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
             audioFileService: AudioFileService(),
             defaults: defaults,
             audioSamplesLoader: { _, _, _ in [0.1, -0.1] },
-            transcriptionRunner: { _, _, _, engineOverrideId, _, onProgress, _ in
+            transcriptionRunner: { _, _, _, engineOverrideId, _, onProgress, _, _ in
                 XCTAssertTrue(onProgress("Partial transcript"))
                 await progressReported.open()
                 let didFinishRunner = await finishRunner.wait()
@@ -235,6 +235,82 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         try await waitForBatchToFinish(viewModel)
     }
 
+    func testRunnerSourceProgressUpdatesActiveFileStatus() async throws {
+        let defaults = try makeDefaults()
+        let fileURL = makeTemporaryFile(named: "source-progress-video.mp4")
+        let progressReported = AsyncGate()
+        let finishRunner = AsyncGate()
+
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            defaults: defaults,
+            audioSamplesLoader: { _, _, _ in [0.1, -0.1] },
+            transcriptionRunner: { _, _, _, engineOverrideId, _, _, onSourceProgress, _ in
+                XCTAssertTrue(onSourceProgress(PluginTranscriptionSourceProgress(
+                    processedDuration: 60,
+                    totalDuration: 240,
+                    previewText: "Minute one"
+                )))
+                await progressReported.open()
+                let didFinishRunner = await finishRunner.wait()
+                XCTAssertTrue(didFinishRunner, "Timed out waiting for runner gate")
+                return TranscriptionResult(
+                    text: "Final transcript",
+                    detectedLanguage: "en",
+                    duration: 240,
+                    processingTime: 0.1,
+                    engineUsed: engineOverrideId ?? "default",
+                    segments: []
+                )
+            },
+            engineReadinessChecker: { _ in true }
+        )
+
+        viewModel.addFiles([fileURL])
+        viewModel.selectedEngine = "whisper"
+
+        viewModel.transcribeAll()
+        let didReportProgress = await progressReported.wait()
+        XCTAssertTrue(didReportProgress, "Timed out waiting for source progress callback")
+
+        let item = try XCTUnwrap(viewModel.files.first)
+        XCTAssertEqual(item.phaseDescription, "Transcribing")
+        XCTAssertEqual(item.progressFraction, 0.25)
+        XCTAssertEqual(item.progressText, "Minute one")
+        XCTAssertEqual(item.sourceProgress?.processedDuration, 60)
+        XCTAssertEqual(item.sourceProgress?.totalDuration, 240)
+
+        await finishRunner.open()
+        try await waitForBatchToFinish(viewModel)
+    }
+
+    func testStableProgressPreviewIgnoresDisjointReplacementText() {
+        let current = "Basically, Deepgram, Whisper, Speechmatics, and Assembly."
+        let candidate = "use Whisper through OpenAI APIs. They are a Mac file size"
+
+        XCTAssertEqual(
+            FileTranscriptionViewModel.stableProgressPreviewText(
+                current: current,
+                candidate: candidate
+            ),
+            current
+        )
+    }
+
+    func testStableProgressPreviewAcceptsLongerContinuation() {
+        let current = "Basically, Deepgram, Whisper"
+        let candidate = "Basically, Deepgram, Whisper, Speechmatics, and Assembly."
+
+        XCTAssertEqual(
+            FileTranscriptionViewModel.stableProgressPreviewText(
+                current: current,
+                candidate: candidate
+            ),
+            candidate
+        )
+    }
+
     func testCancellationDuringAudioLoadingIsNotReportedAsError() async throws {
         let defaults = try makeDefaults()
         let fileURL = makeTemporaryFile(named: "cancel-loading.mp4")
@@ -254,7 +330,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
                 )))
                 throw CancellationError()
             },
-            transcriptionRunner: { _, _, _, engineOverrideId, _, _, _ in
+            transcriptionRunner: { _, _, _, engineOverrideId, _, _, _, _ in
                 TranscriptionResult(
                     text: "Should not complete",
                     detectedLanguage: "en",

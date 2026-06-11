@@ -505,6 +505,7 @@ let wavData = PluginWavEncoder.encode(samples, sampleRate: 16000)
 | `principalClass` | Yes | Objective-C class name, must match `@objc(Name)` |
 | `category` | No | Primary/legacy marketplace category: `transcription`, `tts`, `llm`, `post-processor`, `action`, `memory`, or `utility`. |
 | `categories` | No | Optional list of all plugin capabilities. Use this for plugins that cover multiple surfaces, for example `["transcription", "llm"]`. |
+| `capabilities` | No | Optional list of feature-level capability identifiers for overview/filter UI. Use `source-footage-progress` for engines that report real source-audio progress during file transcription. |
 | `hosting` | No | Marketplace hosting classification: `local` or `cloud`. If omitted, TypeWhisper falls back to `requiresAPIKey == true` as cloud and otherwise local. |
 | `requiresAPIKey` | No | Whether the plugin specifically needs an API key credential. This is not the Local/Cloud category; use `hosting` for that. |
 | `iconSystemName` | No | SF Symbol name for marketplace and settings UI. |
@@ -545,6 +546,7 @@ Registry entry format:
   "source": "community",
   "category": "transcription|tts|llm|post-processor|action|memory|utility",
   "categories": ["transcription", "llm"],
+  "capabilities": ["source-footage-progress"],
   "hosting": "local|cloud",
   "requiresAPIKey": false,
   "iconSystemName": "star.fill",

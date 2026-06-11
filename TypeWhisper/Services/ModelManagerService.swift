@@ -550,7 +550,8 @@ final class ModelManagerService: ObservableObject {
             cloudModelOverride: cloudModelOverride,
             prompt: prompt,
             normalizeNumbers: normalizeNumbers,
-            onProgress: onProgress
+            onProgress: onProgress,
+            onSourceProgress: { _ in true }
         )
     }
 
@@ -563,6 +564,54 @@ final class ModelManagerService: ObservableObject {
         prompt: String? = nil,
         normalizeNumbers: Bool? = nil,
         onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> TranscriptionResult {
+        try await transcribe(
+            audioSamples: audioSamples,
+            languageSelection: languageSelection,
+            task: task,
+            engineOverrideId: engineOverrideId,
+            cloudModelOverride: cloudModelOverride,
+            prompt: prompt,
+            normalizeNumbers: normalizeNumbers,
+            onProgress: onProgress,
+            onSourceProgress: { _ in true }
+        )
+    }
+
+    func transcribe(
+        audioSamples: [Float],
+        language: String?,
+        task: TranscriptionTask,
+        engineOverrideId: String? = nil,
+        cloudModelOverride: String? = nil,
+        prompt: String? = nil,
+        normalizeNumbers: Bool? = nil,
+        onProgress: @Sendable @escaping (String) -> Bool,
+        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
+    ) async throws -> TranscriptionResult {
+        try await transcribe(
+            audioSamples: audioSamples,
+            languageSelection: language.map(LanguageSelection.exact) ?? .auto,
+            task: task,
+            engineOverrideId: engineOverrideId,
+            cloudModelOverride: cloudModelOverride,
+            prompt: prompt,
+            normalizeNumbers: normalizeNumbers,
+            onProgress: onProgress,
+            onSourceProgress: onSourceProgress
+        )
+    }
+
+    func transcribe(
+        audioSamples: [Float],
+        languageSelection: LanguageSelection,
+        task: TranscriptionTask,
+        engineOverrideId: String? = nil,
+        cloudModelOverride: String? = nil,
+        prompt: String? = nil,
+        normalizeNumbers: Bool? = nil,
+        onProgress: @Sendable @escaping (String) -> Bool,
+        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
     ) async throws -> TranscriptionResult {
         let providerId = engineOverrideId ?? selectedProviderId
         guard let providerId,
@@ -607,7 +656,8 @@ final class ModelManagerService: ObservableObject {
             languageSelection: runtimeSelection,
             task: task,
             prompt: prompt,
-            onProgress: onProgress
+            onProgress: onProgress,
+            onSourceProgress: onSourceProgress
         )
 
         let processingTime = CFAbsoluteTimeGetCurrent() - startTime
@@ -826,6 +876,48 @@ final class ModelManagerService: ObservableObject {
         )
         let _ = onProgress(result.text)
         return Self.structuredResult(from: result)
+    }
+
+    private func transcribeWithResolvedLanguageSelection(
+        plugin: TranscriptionEnginePlugin,
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        task: TranscriptionTask,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool,
+        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
+    ) async throws -> PluginStructuredTranscriptionResult {
+        if !languageSelection.languageHints.isEmpty,
+           let sourceHintPlugin = plugin as? SourceProgressLanguageHintTranscriptionEnginePlugin {
+            return Self.structuredResult(from: try await sourceHintPlugin.transcribe(
+                audio: audio,
+                languageSelection: languageSelection,
+                translate: task == .translate,
+                prompt: prompt,
+                onProgress: onProgress,
+                onSourceProgress: onSourceProgress
+            ))
+        }
+
+        if let sourcePlugin = plugin as? SourceProgressTranscriptionEnginePlugin {
+            return Self.structuredResult(from: try await sourcePlugin.transcribe(
+                audio: audio,
+                language: languageSelection.requestedLanguage,
+                translate: task == .translate,
+                prompt: prompt,
+                onProgress: onProgress,
+                onSourceProgress: onSourceProgress
+            ))
+        }
+
+        return try await transcribeWithResolvedLanguageSelection(
+            plugin: plugin,
+            audio: audio,
+            languageSelection: languageSelection,
+            task: task,
+            prompt: prompt,
+            onProgress: onProgress
+        )
     }
 
     nonisolated private static func structuredResult(

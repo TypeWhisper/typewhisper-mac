@@ -101,7 +101,8 @@ final class PluginManifestTests: XCTestCase {
               "version": "1.2.3",
               "principalClass": "MultiPlugin",
               "category": "transcription",
-              "categories": ["transcription", "llm", "memory"]
+              "categories": ["transcription", "llm", "memory"],
+              "capabilities": ["source-footage-progress", "source-footage-progress", "  future-capability  ", ""]
             }
             """.utf8
         )
@@ -111,6 +112,8 @@ final class PluginManifestTests: XCTestCase {
         XCTAssertEqual(manifest.category, "transcription")
         XCTAssertEqual(manifest.categories, ["transcription", "llm", "memory"])
         XCTAssertEqual(manifest.resolvedCategoryIdentifiers, ["transcription", "llm", "memory"])
+        XCTAssertEqual(manifest.resolvedCapabilityIdentifiers, ["source-footage-progress", "future-capability"])
+        XCTAssertTrue(manifest.supportsCapability(.sourceFootageProgress))
     }
 
     func testPluginManifestResolvedHostingFallsBackToAPIKeyRequirement() {

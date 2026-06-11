@@ -121,6 +121,27 @@ final class ParakeetPluginTests: XCTestCase {
         XCTAssertNil(plugin as? any LiveTranscriptionCapablePlugin)
     }
 
+    func testSourceProgressMapsProgressFractionToAudioDuration() {
+        let progress = ParakeetPlugin.sourceProgress(fromFraction: 0.25, totalDuration: 240)
+
+        XCTAssertEqual(progress?.processedDuration, 60)
+        XCTAssertEqual(progress?.totalDuration, 240)
+        XCTAssertEqual(progress?.fractionCompleted, 0.25)
+    }
+
+    func testSourceProgressClampsAndRejectsInvalidDurations() {
+        XCTAssertEqual(
+            ParakeetPlugin.sourceProgress(fromFraction: 1.5, totalDuration: 10)?.processedDuration,
+            10
+        )
+        XCTAssertEqual(
+            ParakeetPlugin.sourceProgress(fromFraction: -0.5, totalDuration: 10)?.processedDuration,
+            0
+        )
+        XCTAssertNil(ParakeetPlugin.sourceProgress(fromFraction: .nan, totalDuration: 10))
+        XCTAssertNil(ParakeetPlugin.sourceProgress(fromFraction: 0.5, totalDuration: 0))
+    }
+
     func testDictionaryTermsSupportReflectsStoredBoostingPreference() throws {
         let defaultHost = try PluginTestHostServices()
         let defaultPlugin = makePlugin()

@@ -1,8 +1,8 @@
 {
     "id": "com.typewhisper.soniox",
     "name": "Soniox",
-    "version": "1.0.0",
-    "minHostVersion": "0.12.0",
+    "version": "1.1.0",
+    "minHostVersion": "1.5.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
@@ -11,6 +11,9 @@
         "de": "Cloud-Transkription über die Soniox-API mit Echtzeit-WebSocket-Streaming und Übersetzungsunterstützung. Erfordert API-Key."
     },
     "category": "transcription",
+    "capabilities": [
+        "source-footage-progress"
+    ],
     "iconSystemName": "waveform.badge.mic",
     "principalClass": "SonioxPlugin",
     "requiresAPIKey": true,

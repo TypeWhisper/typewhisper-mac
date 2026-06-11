@@ -121,6 +121,32 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
         XCTAssertNil(plugin.currentSettingsActivity)
     }
 
+    func testSourceProgressUsesLatestDiscoveredSegmentEnd() {
+        let progress = WhisperKitPlugin.sourceProgress(
+            fromSegmentEnds: [10, 75],
+            totalDuration: 120
+        )
+
+        XCTAssertEqual(progress?.processedDuration, 75)
+        XCTAssertEqual(progress?.totalDuration, 120)
+        XCTAssertEqual(progress?.fractionCompleted, 0.625)
+    }
+
+    func testSourceProgressClampsLatestDiscoveredSegmentEndToTotalDuration() {
+        let progress = WhisperKitPlugin.sourceProgress(
+            fromSegmentEnds: [300],
+            totalDuration: 120
+        )
+
+        XCTAssertEqual(progress?.processedDuration, 120)
+        XCTAssertEqual(progress?.totalDuration, 120)
+        XCTAssertNil(WhisperKitPlugin.sourceProgress(fromSegmentEnds: [], totalDuration: 120))
+        XCTAssertNil(WhisperKitPlugin.sourceProgress(
+            fromSegmentEnds: [10],
+            totalDuration: 0
+        ))
+    }
+
     func testLoadedModelSuppressesLoadingSettingsActivity() throws {
         let host = try makeHost(defaults: [
             "selectedModel": "openai_whisper-large-v3_turbo",
@@ -136,6 +162,46 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
             loadedModelId: "openai_whisper-large-v3_turbo"
         )
         XCTAssertNil(plugin.currentSettingsActivity)
+    }
+
+    func testLoadedModelKeepsSettingsStateReadyWhenWhisperKitReportsPrewarming() throws {
+        let host = try makeHost(defaults: [
+            "selectedModel": "openai_whisper-large-v3_turbo",
+            "loadedModel": "openai_whisper-large-v3_turbo",
+        ])
+        defer { TestSupport.remove(host.pluginDataDirectory) }
+
+        let plugin = WhisperKitPlugin()
+        plugin.activate(host: host)
+
+        plugin.setModelStateForTesting(
+            .loading(phase: "prewarming"),
+            loadedModelId: "openai_whisper-large-v3_turbo"
+        )
+
+        XCTAssertEqual(plugin.settingsModelState, .ready("openai_whisper-large-v3_turbo"))
+    }
+
+    func testModelLoadTimeoutClearsPersistedLoadedModelAndReportsError() async throws {
+        let host = try makeHost(defaults: [
+            "selectedModel": "openai_whisper-large-v3_turbo",
+            "loadedModel": "openai_whisper-large-v3_turbo",
+        ])
+        defer { TestSupport.remove(host.pluginDataDirectory) }
+
+        let plugin = WhisperKitPlugin()
+        plugin.activate(host: host)
+        plugin.setModelLoadTimeoutForTesting(.milliseconds(10))
+        plugin.startModelLoadTimeoutForTesting(modelName: "Large v3 Turbo")
+
+        try await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertFalse(plugin.isConfigured)
+        XCTAssertNil(host.userDefault(forKey: "loadedModel"))
+        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "openai_whisper-large-v3_turbo")
+        XCTAssertEqual(plugin.currentSettingsActivity?.isError, true)
+        XCTAssertEqual(host.capabilitiesChangedCount, 1)
+        XCTAssertTrue(plugin.currentSettingsActivity?.message.contains("Large v3 Turbo") == true)
     }
 
     func testActivationDoesNotMarkPluginConfiguredBeforeRestoreSucceeds() async throws {

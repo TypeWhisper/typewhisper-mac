@@ -287,7 +287,7 @@ struct FileTranscriptionView: View {
                             .foregroundStyle(.red)
                             .lineLimit(1)
                     } else if let result = item.result {
-                        Text(String(localized: "\(String(format: "%.1f", result.duration))s - \(String(format: "%.1f", result.processingTime))s processing"))
+                        Text(String(localized: "Audio \(String(format: "%.1f", result.duration))s - processed in \(String(format: "%.1f", result.processingTime))s"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else if let phase = item.phaseDescription {
@@ -607,6 +607,16 @@ struct FileTranscriptionView: View {
 
     private func statusSummary(for item: FileTranscriptionViewModel.FileItem, phase: String) -> String {
         guard let elapsed = viewModel.elapsedTime(for: item) else { return phase }
+        if let sourceProgress = item.sourceProgress {
+            var parts = [
+                "\(phase) - \(formattedSourceDuration(sourceProgress.processedDuration)) / \(formattedSourceDuration(sourceProgress.totalDuration)) \(String(localized: "processed"))"
+            ]
+            if let realtimeFactor = realtimeFactor(for: sourceProgress, elapsed: elapsed) {
+                parts.append("\(realtimeFactor)x \(String(localized: "realtime"))")
+            }
+            parts.append(formattedElapsed(elapsed))
+            return parts.joined(separator: " - ")
+        }
         return "\(phase) - \(formattedElapsed(elapsed))"
     }
 
@@ -618,5 +628,28 @@ struct FileTranscriptionView: View {
             return String(format: "%d:%02d", minutes, remainder)
         }
         return "\(remainder)s"
+    }
+
+    private func formattedSourceDuration(_ duration: TimeInterval) -> String {
+        let seconds = max(Int(duration.rounded()), 0)
+        let hours = seconds / 3600
+        let minutes = (seconds % 3600) / 60
+        let remainder = seconds % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, remainder)
+        }
+        return String(format: "%d:%02d", minutes, remainder)
+    }
+
+    private func realtimeFactor(
+        for sourceProgress: PluginTranscriptionSourceProgress,
+        elapsed: TimeInterval
+    ) -> String? {
+        guard elapsed > 0,
+              elapsed >= 5,
+              sourceProgress.processedDuration >= 30 else {
+            return nil
+        }
+        return String(format: "%.1f", sourceProgress.processedDuration / elapsed)
     }
 }

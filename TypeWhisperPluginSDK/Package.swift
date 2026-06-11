@@ -170,6 +170,16 @@ let package = Package(
             ]
         ),
         .target(
+            name: "SonioxPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/SonioxPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
             name: "AssemblyAIPlugin",
             dependencies: ["TypeWhisperPluginSDK"],
             path: "Plugins/AssemblyAIPlugin",
@@ -345,6 +355,15 @@ let package = Package(
                 "LiveTranscriptPlugin",
             ],
             path: "Plugins/LiveTranscriptPlugin/Tests"
+        ),
+        .testTarget(
+            name: "SonioxPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "SonioxPlugin",
+            ],
+            path: "Plugins/SonioxPlugin/Tests"
         ),
         .testTarget(
             name: "AssemblyAIPluginTests",
