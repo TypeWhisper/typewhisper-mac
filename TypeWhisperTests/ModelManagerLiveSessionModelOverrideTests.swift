@@ -91,6 +91,34 @@ final class ModelManagerLiveSessionModelOverrideTests: XCTestCase {
         XCTAssertEqual(progress.fractionCompleted, 0.375)
     }
 
+    func testBatchTranscriptionPreservesLanguageHintsForSourceProgressPluginWithoutSourceHintSupport() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = SourceProgressModelManagerPlugin()
+        let modelManager = installBatchPlugin(plugin, appSupportDirectory: appSupportDirectory)
+
+        let result = try await modelManager.transcribe(
+            audioSamples: [Float](repeating: 0, count: 16_000),
+            languageSelection: .hints(["de", "en"]),
+            task: .transcribe,
+            onProgress: { text in
+                XCTAssertEqual(text, "legacy partial")
+                return true
+            },
+            onSourceProgress: { _ in
+                XCTFail("Source-progress path should not be used when language hints would be dropped")
+                return true
+            }
+        )
+
+        XCTAssertEqual(result.text, "hint source done")
+        XCTAssertEqual(result.detectedLanguage, "de")
+        XCTAssertEqual(plugin.receivedLanguageHints, ["de", "en"])
+        XCTAssertTrue(plugin.usedLanguageHintStreamingTranscribe)
+        XCTAssertFalse(plugin.usedSourceProgressTranscribe)
+    }
+
     func testBatchTranscriptionKeepsLegacyProgressPathWithoutOptionalProtocol() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -182,12 +210,15 @@ private final class ModelManagerSourceProgressRecorder: @unchecked Sendable {
     }
 }
 
-private final class SourceProgressModelManagerPlugin: NSObject, SourceProgressTranscriptionEnginePlugin, @unchecked Sendable {
+private final class SourceProgressModelManagerPlugin: NSObject, SourceProgressTranscriptionEnginePlugin, LanguageHintTranscriptionEnginePlugin, @unchecked Sendable {
     static let pluginId = "com.typewhisper.mock.source-progress-model-manager"
     static let pluginName = "Source Progress Model Manager Mock"
 
     private(set) var usedLegacyTranscribe = false
+    private(set) var usedLegacyStreamingTranscribe = false
+    private(set) var usedLanguageHintStreamingTranscribe = false
     private(set) var usedSourceProgressTranscribe = false
+    private(set) var receivedLanguageHints: [String] = []
 
     var providerId: String { "mock-source-progress-model-manager" }
     var providerDisplayName: String { Self.pluginName }
@@ -196,7 +227,7 @@ private final class SourceProgressModelManagerPlugin: NSObject, SourceProgressTr
     var transcriptionModels: [PluginModelInfo] { [] }
     var supportsTranslation: Bool { false }
     var supportsStreaming: Bool { true }
-    var supportedLanguages: [String] { ["en"] }
+    var supportedLanguages: [String] { ["de", "en"] }
 
     func activate(host: HostServices) {}
     func deactivate() {}
@@ -209,6 +240,47 @@ private final class SourceProgressModelManagerPlugin: NSObject, SourceProgressTr
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
         usedLegacyTranscribe = true
+        return PluginTranscriptionResult(text: "legacy source done", detectedLanguage: language)
+    }
+
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        receivedLanguageHints = languageSelection.languageHints
+        return PluginTranscriptionResult(
+            text: "hint source done",
+            detectedLanguage: languageSelection.languageHints.first
+        )
+    }
+
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        usedLanguageHintStreamingTranscribe = true
+        receivedLanguageHints = languageSelection.languageHints
+        _ = onProgress("legacy partial")
+        return PluginTranscriptionResult(
+            text: "hint source done",
+            detectedLanguage: languageSelection.languageHints.first
+        )
+    }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        usedLegacyStreamingTranscribe = true
+        _ = onProgress("legacy partial")
         return PluginTranscriptionResult(text: "legacy source done", detectedLanguage: language)
     }
 

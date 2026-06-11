@@ -899,7 +899,8 @@ final class ModelManagerService: ObservableObject {
             ))
         }
 
-        if let sourcePlugin = plugin as? SourceProgressTranscriptionEnginePlugin {
+        if languageSelection.languageHints.isEmpty,
+           let sourcePlugin = plugin as? SourceProgressTranscriptionEnginePlugin {
             return Self.structuredResult(from: try await sourcePlugin.transcribe(
                 audio: audio,
                 language: languageSelection.requestedLanguage,

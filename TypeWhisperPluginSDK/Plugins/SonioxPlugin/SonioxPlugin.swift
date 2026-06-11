@@ -336,6 +336,7 @@ final class SonioxPlugin: NSObject, SourceProgressLanguageHintTranscriptionEngin
         let isTranslating = translate
 
         let receiveTask = Task {
+            var shouldEmitSourceProgress = true
             do {
                 while !Task.isCancelled {
                     let message = try await wsTask.receive()
@@ -361,11 +362,12 @@ final class SonioxPlugin: NSObject, SourceProgressLanguageHintTranscriptionEngin
                     // Parse tokens
                     guard let tokens = json["tokens"] as? [[String: Any]] else { continue }
 
-                    if let sourceProgress = Self.sourceProgress(
-                        fromTokens: tokens,
-                        totalDuration: audio.duration
-                    ) {
-                        _ = onSourceProgress(sourceProgress)
+                    if shouldEmitSourceProgress,
+                       let sourceProgress = Self.sourceProgress(
+                           fromTokens: tokens,
+                           totalDuration: audio.duration
+                       ) {
+                        shouldEmitSourceProgress = onSourceProgress(sourceProgress)
                     }
 
                     var finalText: [String] = []
