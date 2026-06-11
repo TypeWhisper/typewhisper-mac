@@ -6181,7 +6181,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
-    func testGeminiPluginActivationIgnoresLegacyCacheAndRepairsInvalidSelection() throws {
+    func testGeminiPluginActivationIgnoresLegacyCacheAndDoesNotExposeInvalidSelection() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
 
@@ -6200,8 +6200,12 @@ final class APIRouterAndHandlersTests: XCTestCase {
         plugin.activate(host: host)
 
         XCTAssertEqual(plugin.supportedModels.map(\.id), ["gemini-flash-latest", "gemini-pro-latest", "gemini-flash-lite-latest"])
-        XCTAssertEqual(plugin.selectedLLMModelId, "gemini-flash-latest")
-        XCTAssertEqual(host.userDefault(forKey: "selectedLLMModel") as? String, "gemini-flash-latest")
+        XCTAssertNil(host.userDefault(forKey: "fetchedLLMModels"), "legacy cache key must be cleared")
+        // A stored selection that is not in the current model list is neither
+        // exposed as a selection nor rewritten to a fallback; it stays
+        // persisted so it can re-validate once models are fetched again.
+        XCTAssertNil(plugin.selectedLLMModelId)
+        XCTAssertEqual(host.userDefault(forKey: "selectedLLMModel") as? String, "gemini-1.5-pro")
     }
 
     @MainActor

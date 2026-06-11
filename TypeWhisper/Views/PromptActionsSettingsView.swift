@@ -399,6 +399,12 @@ struct ModelPickerView: View {
                     .controlSize(.small)
             }
             Picker(String(localized: "Model"), selection: $selection) {
+                if let defaultModel = models.first(where: { $0.id == effectiveFallbackId }) {
+                    Text(localizedAppText(
+                        "Default (\(defaultModel.displayName))",
+                        de: "Standard (\(defaultModel.displayName))"
+                    )).tag("")
+                }
                 ForEach(filteredModels, id: \.id) { model in
                     Text(model.displayName).tag(model.id)
                 }
@@ -412,13 +418,22 @@ struct ModelPickerView: View {
         }
     }
 
+    /// The model runtime resolution will use when no explicit selection
+    /// exists: the provider default when listed, otherwise the first model.
+    private var effectiveFallbackId: String? {
+        fallbackModelId.flatMap { id in
+            models.contains(where: { $0.id == id }) ? id : nil
+        } ?? models.first?.id
+    }
+
     private func ensureValidSelection() {
-        if selection.isEmpty || !models.contains(where: { $0.id == selection }) {
-            let validFallback = fallbackModelId.flatMap { id in
-                models.contains(where: { $0.id == id }) ? id : nil
-            }
-            selection = validFallback ?? models.first?.id ?? ""
-        }
+        // An empty selection is the deliberate "use the provider default"
+        // state (shown as the Default row) — leave it untouched so a
+        // transient hint is never auto-promoted into a stored user choice.
+        // Only self-heal a non-empty selection that is no longer listed.
+        guard !selection.isEmpty,
+              !models.contains(where: { $0.id == selection }) else { return }
+        selection = effectiveFallbackId ?? ""
     }
 }
 
