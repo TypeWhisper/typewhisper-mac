@@ -218,6 +218,88 @@ final class SaluteSpeechPluginTests: XCTestCase {
         XCTAssertEqual(requests[1].value(forHTTPHeaderField: "Content-Type"), "audio/x-pcm;bit=16;rate=16000")
     }
 
+    func testDeactivateClearsConfigurationSnapshot() async throws {
+        let host = try PluginTestHostServices(
+            defaults: ["scope": SaluteSpeechPlugin.personalScope],
+            secrets: ["authorization-key": "encoded-key"]
+        )
+        let plugin = SaluteSpeechPlugin()
+        plugin.activate(host: host)
+
+        XCTAssertTrue(plugin.isConfigured)
+
+        plugin.deactivate()
+
+        XCTAssertFalse(plugin.isConfigured)
+        do {
+            _ = try await plugin.transcribe(
+                audio: AudioData(samples: [0, 0.1], wavData: Data(), duration: 1),
+                language: "ru",
+                translate: false,
+                prompt: nil
+            )
+            XCTFail("Expected notConfigured")
+        } catch let error as PluginTranscriptionError {
+            guard case .notConfigured = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+    }
+
+    func testTranscribeRefreshesOAuthTokenAfterAuthorizationKeyChange() async throws {
+        let host = try PluginTestHostServices(
+            defaults: ["scope": SaluteSpeechPlugin.personalScope],
+            secrets: ["authorization-key": "encoded-key-1"]
+        )
+        let plugin = SaluteSpeechPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"access_token":"access-token-1","expires_at":4102444800000}"#.utf8),
+                    Self.httpResponse(url: "https://ngw.devices.sberbank.ru:9443/api/v2/oauth", statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"result":["Первый"]}"#.utf8),
+                    Self.httpResponse(url: "https://smartspeech.sber.ru/rest/v1/speech:recognize", statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"access_token":"access-token-2","expires_at":4102444800000}"#.utf8),
+                    Self.httpResponse(url: "https://ngw.devices.sberbank.ru:9443/api/v2/oauth", statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"result":["Второй"]}"#.utf8),
+                    Self.httpResponse(url: "https://smartspeech.sber.ru/rest/v1/speech:recognize", statusCode: 200)
+                ),
+            ])
+        }
+
+        _ = try await plugin.transcribe(
+            audio: AudioData(samples: [0, 0.1], wavData: Data(), duration: 1),
+            language: "ru",
+            translate: false,
+            prompt: nil
+        )
+        try plugin.setAuthorizationKey("encoded-key-2")
+        let secondResult = try await plugin.transcribe(
+            audio: AudioData(samples: [0, 0.1], wavData: Data(), duration: 1),
+            language: "ru",
+            translate: false,
+            prompt: nil
+        )
+
+        XCTAssertEqual(secondResult.text, "Второй")
+
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(requests.count, 4)
+        XCTAssertEqual(requests[0].value(forHTTPHeaderField: "Authorization"), "Basic encoded-key-1")
+        XCTAssertEqual(requests[1].value(forHTTPHeaderField: "Authorization"), "Bearer access-token-1")
+        XCTAssertEqual(requests[2].value(forHTTPHeaderField: "Authorization"), "Basic encoded-key-2")
+        XCTAssertEqual(requests[3].value(forHTTPHeaderField: "Authorization"), "Bearer access-token-2")
+    }
+
     func testSuccessfulTranscriptionTracksRecognitionUsageAndPersistsIt() async throws {
         let host = try PluginTestHostServices(
             defaults: ["scope": SaluteSpeechPlugin.personalScope],

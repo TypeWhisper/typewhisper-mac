@@ -257,6 +257,9 @@ private final class SaluteSpeechPluginState: @unchecked Sendable {
     func deactivate() {
         lock.withLock {
             host = nil
+            authorizationKey = nil
+            scope = SaluteSpeechPlugin.personalScope
+            selectedModelId = nil
         }
     }
 
@@ -296,15 +299,25 @@ private final class SaluteSpeechPluginState: @unchecked Sendable {
 private actor SaluteSpeechTokenCache {
     private var token: String?
     private var expiresAt: Date?
+    private var authorizationKey: String?
+    private var scope: String?
 
-    func cachedToken(now: Date = Date()) -> String? {
+    func cachedToken(authorizationKey: String, scope: String, now: Date = Date()) -> String? {
         guard let token, let expiresAt else { return nil }
+        guard self.authorizationKey == authorizationKey, self.scope == scope else { return nil }
         guard expiresAt.timeIntervalSince(now) > 60 else { return nil }
         return token
     }
 
-    func store(token: String, expiresAtMilliseconds: Int64?) {
+    func store(
+        token: String,
+        authorizationKey: String,
+        scope: String,
+        expiresAtMilliseconds: Int64?
+    ) {
         self.token = token
+        self.authorizationKey = authorizationKey
+        self.scope = scope
 
         guard let expiresAtMilliseconds else {
             expiresAt = Date().addingTimeInterval(29 * 60)
@@ -319,6 +332,8 @@ private actor SaluteSpeechTokenCache {
     func clear() {
         token = nil
         expiresAt = nil
+        authorizationKey = nil
+        scope = nil
     }
 }
 
@@ -373,6 +388,7 @@ private struct SaluteSpeechUsageState: Codable, Sendable {
 private final class SaluteSpeechUsageStore: @unchecked Sendable {
     private let lock = NSLock()
     private let fileName = "recognition-usage.json"
+    private let logger = Logger(subsystem: "com.typewhisper.sber-salutespeech", category: "Usage")
     private var fileURL: URL?
     private var state = SaluteSpeechUsageState()
 
@@ -394,7 +410,11 @@ private final class SaluteSpeechUsageStore: @unchecked Sendable {
         lock.withLock {
             state.trackedSeconds += seconds
             state.lastTranscriptionAt = Date()
-            try? persistLocked()
+            do {
+                try persistLocked()
+            } catch {
+                logger.error("Failed to persist Sber SaluteSpeech recognition usage: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -878,7 +898,10 @@ extension SaluteSpeechPlugin {
 
 private extension SaluteSpeechPlugin {
     func accessToken(authorizationKey: String, scope: String) async throws -> String {
-        if let cached = await tokenCache.cachedToken() {
+        if let cached = await tokenCache.cachedToken(
+            authorizationKey: authorizationKey,
+            scope: scope
+        ) {
             return cached
         }
 
@@ -888,6 +911,8 @@ private extension SaluteSpeechPlugin {
         )
         await tokenCache.store(
             token: response.accessToken,
+            authorizationKey: authorizationKey,
+            scope: scope,
             expiresAtMilliseconds: response.expiresAtMilliseconds
         )
         return response.accessToken
