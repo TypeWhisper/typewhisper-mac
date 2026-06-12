@@ -52,6 +52,12 @@ final class GeminiSTTPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerm
         }
         _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
             ?? Self.defaultModels.first?.id
+        // Migration: the 3.1 Flash Lite preview graduated to a stable model id.
+        // Remap any persisted preview selection so existing users move to the stable model.
+        if _selectedModelId == "gemini-3.1-flash-lite-preview" {
+            _selectedModelId = "gemini-3.1-flash-lite"
+            host.setUserDefault("gemini-3.1-flash-lite", forKey: "selectedModel")
+        }
         _systemPrompt = host.userDefault(forKey: "systemPrompt") as? String
         _glossary = host.userDefault(forKey: "glossary") as? String
         if let t = host.userDefault(forKey: "temperature") as? Double {
@@ -75,7 +81,8 @@ final class GeminiSTTPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerm
     }
 
     static let defaultModels: [PluginModelInfo] = [
-        PluginModelInfo(id: "gemini-3.1-flash-lite-preview", displayName: "Gemini 3.1 Flash Lite (fastest, 100% accurate w/ glossary)"),
+        PluginModelInfo(id: "gemini-3.5-flash", displayName: "Gemini 3.5 Flash (newest, thinking disabled)"),
+        PluginModelInfo(id: "gemini-3.1-flash-lite", displayName: "Gemini 3.1 Flash Lite (fastest, 100% accurate w/ glossary)"),
         PluginModelInfo(id: "gemini-3-flash-preview", displayName: "Gemini 3 Flash (higher quality)"),
         PluginModelInfo(id: "gemini-2.5-flash", displayName: "Gemini 2.5 Flash (stable)"),
         PluginModelInfo(id: "gemini-2.5-flash-lite", displayName: "Gemini 2.5 Flash Lite (stable, cheapest)"),
@@ -391,10 +398,22 @@ final class GeminiSTTPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerm
 
     // MARK: - Gemini config helpers (Phase 1)
 
-    /// Gemini 3.x silently ignores `thinkingBudget: 0`; the documented minimum-thinking
-    /// flag for 3.x models is `thinkingLevel: "minimal"`. Gemini 2.5 keeps the older
-    /// `thinkingBudget: 0` contract. This helper picks the right one per model.
+    /// Per-model "no thinking" configuration. Validated 2026-05-27 against
+    /// `usageMetadata.thoughtsTokenCount` (smoking gun: 0/absent = no thinking,
+    /// any positive value = the model still thought).
+    ///
+    /// - `gemini-3.5-flash`: thinks ~1963 tokens by default. `thinkingBudget: 0`
+    ///   was validated to produce `thoughtsTokenCount: None` (1.9s vs 10.5s
+    ///   default). `thinkingLevel: "minimal"` also works but is less aggressive
+    ///   and the two are mutually exclusive (HTTP 400 if both set).
+    /// - `gemini-3.1-flash-lite` / `gemini-3-flash-preview`: `thinkingLevel:
+    ///   "minimal"` validated to produce 0 thoughts.
+    /// - `gemini-2.5*`: `thinkingBudget: 0` is the documented disable knob.
+    /// - `thinkingLevel: "off"` and `"none"` are rejected by the API (HTTP 400).
     static func thinkingConfig(for modelId: String) -> [String: Any] {
+        if modelId == "gemini-3.5-flash" {
+            return ["thinkingBudget": 0]
+        }
         if modelId.hasPrefix("gemini-3") {
             return ["thinkingLevel": "minimal"]
         }

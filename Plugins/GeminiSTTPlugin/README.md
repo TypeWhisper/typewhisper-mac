@@ -88,7 +88,7 @@ click the gear icon → paste your AI Studio API key.
 - **API Key** — get one free at
   [aistudio.google.com/apikey](https://aistudio.google.com/apikey). Stored in
   Keychain, scoped to the plugin ID.
-- **Model** — defaults to `gemini-3.1-flash-lite-preview` (fastest + most
+- **Model** — defaults to `gemini-3.1-flash-lite` (fastest + most
   accurate in our tests). `gemini-3-flash-preview` is available as a
   higher-quality fallback.
 - **System Prompt** — full template, editable. Use `{GLOSSARY}` as the token
