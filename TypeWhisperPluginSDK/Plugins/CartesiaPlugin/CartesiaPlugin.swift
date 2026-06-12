@@ -306,6 +306,12 @@ final class CartesiaPlugin: NSObject,
 
     func deactivate() {
         host = nil
+        _apiKey = nil
+        _transcriptionLanguage = Self.defaultTranscriptionLanguage
+        _englishTranslationEnabled = false
+        _selectedVoiceId = Self.defaultVoiceId
+        _customVoiceId = ""
+        _fetchedVoices = []
     }
 
     func authStatus(for role: PluginAuthRole) -> PluginAuthRoleStatus {

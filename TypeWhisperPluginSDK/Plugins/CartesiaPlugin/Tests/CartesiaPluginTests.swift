@@ -47,6 +47,48 @@ final class CartesiaPluginTests: XCTestCase {
         XCTAssertFalse(configuredPlugin.authStatus(for: .llm).isAvailable)
     }
 
+    func testDeactivateClearsCachedConfigurationSnapshot() async throws {
+        let fetchedVoices = try JSONEncoder().encode([
+            CartesiaFetchedVoice(id: "voice-x", name: "Voice X", language: "en", country: "US")
+        ])
+        let plugin = CartesiaPlugin()
+        plugin.activate(host: try PluginTestHostServices(
+            defaults: [
+                "transcriptionLanguage": "en",
+                "englishTranslationEnabled": true,
+                "selectedVoice": "voice-x",
+                "customVoiceId": "custom-voice",
+                "fetchedVoices": fetchedVoices,
+            ],
+            secrets: ["api-key": "sk_car_live"]
+        ))
+
+        XCTAssertTrue(plugin.isConfigured)
+        XCTAssertTrue(plugin.supportsTranslation)
+        XCTAssertEqual(plugin.selectedVoiceId, "custom-voice")
+        XCTAssertEqual(plugin.availableVoices.map(\.id), ["voice-x"])
+
+        plugin.deactivate()
+
+        XCTAssertFalse(plugin.isConfigured)
+        XCTAssertFalse(plugin.supportsTranslation)
+        XCTAssertFalse(plugin.authStatus(for: .transcription).isAvailable)
+        XCTAssertEqual(plugin.selectedVoiceId, CartesiaPlugin.defaultVoiceId)
+        XCTAssertEqual(plugin.availableVoices.map(\.id), [CartesiaPlugin.defaultVoiceId])
+
+        do {
+            _ = try await plugin.transcribe(
+                audio: AudioData(samples: [0], wavData: Data("wav".utf8), duration: 1),
+                language: "en-US",
+                translate: false,
+                prompt: nil
+            )
+            XCTFail("Expected deactivated plugin to require configuration")
+        } catch PluginTranscriptionError.notConfigured {
+            // Expected.
+        }
+    }
+
     func testLanguageResolutionUsesPrimarySubtagAndDropsUnsupportedValues() {
         XCTAssertEqual(
             CartesiaPlugin.resolvedLanguage("de-DE", supportedLanguages: CartesiaPlugin.sttSupportedLanguages),
