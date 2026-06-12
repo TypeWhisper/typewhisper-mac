@@ -111,6 +111,7 @@ jobs:
             cerebras) TARGET="CerebrasPlugin" ;;
             openrouter) TARGET="OpenRouterPlugin" ;;
             soniox) TARGET="SonioxPlugin" ;;
+            sber-salutespeech) TARGET="SaluteSpeechPlugin" ;;
             reson8) TARGET="Reson8Plugin" ;;
             cohere) TARGET="CoherePlugin" ;;
             speechmatics) TARGET="SpeechmaticsPlugin" ;;
