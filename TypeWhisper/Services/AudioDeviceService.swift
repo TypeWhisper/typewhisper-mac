@@ -114,9 +114,12 @@ struct AudioInputDiagnosticsReport: Encodable, Equatable, Sendable {
         let transportTypeFourCC: String?
         let isDefaultInput: Bool
         let isSelected: Bool
+        let isAggregate: Bool
+        let isVirtual: Bool
         let isAggregateOrVirtual: Bool
         let listedByTypeWhisper: Bool
         let compatibility: String
+        let exclusionReason: String?
         let inputOnlyCaptureFormat: String?
         let inputOnlyCaptureFormatError: String?
     }
@@ -986,7 +989,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     }
 
     static func isInputDeviceAvailable(_ deviceID: AudioDeviceID) -> Bool {
-        inputChannelCount(for: deviceID) > 0 && !isAggregateDevice(deviceID)
+        inputChannelCount(for: deviceID) > 0
     }
 
     private func listInputDevices() -> [AudioInputDevice] {
@@ -1017,17 +1020,60 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
 
         var devices: [AudioInputDevice] = []
         for id in deviceIDs {
-            guard isInputDeviceAvailable(id) else { continue }
-            guard let name = deviceName(for: id),
-                  let uid = deviceUID(for: id) else { continue }
-            // Filter virtual/internal devices by known patterns
-            let lowerName = name.lowercased()
-            if lowerName.contains("cadefault") || lowerName.contains("aggregate") {
-                continue
-            }
-            devices.append(AudioInputDevice(deviceID: id, name: name, uid: uid))
+            let snapshot = AudioInputDeviceSnapshot(
+                deviceID: id,
+                name: deviceName(for: id),
+                uid: deviceUID(for: id),
+                inputChannels: inputChannelCount(for: id),
+                outputChannels: outputChannelCount(for: id),
+                nominalSampleRate: nominalSampleRate(for: id),
+                transportType: transportType(for: id)
+            )
+            guard let device = listedInputDevice(from: snapshot) else { continue }
+            devices.append(device)
         }
         return devices
+    }
+
+    fileprivate struct AudioInputDeviceSnapshot: Sendable, Equatable {
+        let deviceID: AudioDeviceID
+        let name: String?
+        let uid: String?
+        let inputChannels: Int
+        let outputChannels: Int
+        let nominalSampleRate: Double?
+        let transportType: UInt32?
+    }
+
+    private enum AudioInputDeviceExclusionReason: String {
+        case noInputChannels
+        case missingName
+        case missingUID
+        case nameMatchedCADefault
+    }
+
+    private static func listedInputDevice(from snapshot: AudioInputDeviceSnapshot) -> AudioInputDevice? {
+        guard inputDeviceExclusionReason(for: snapshot) == nil,
+              let name = snapshot.name,
+              let uid = snapshot.uid else {
+            return nil
+        }
+        return AudioInputDevice(deviceID: snapshot.deviceID, name: name, uid: uid)
+    }
+
+    private static func inputDeviceExclusionReason(
+        for snapshot: AudioInputDeviceSnapshot
+    ) -> AudioInputDeviceExclusionReason? {
+        guard snapshot.inputChannels > 0 else { return .noInputChannels }
+        guard let name = snapshot.name, !name.isEmpty else { return .missingName }
+        guard let uid = snapshot.uid, !uid.isEmpty else { return .missingUID }
+
+        let lowerName = name.lowercased()
+        if lowerName.contains("cadefault") {
+            return .nameMatchedCADefault
+        }
+
+        return nil
     }
 
     private static func deviceName(for deviceID: AudioDeviceID) -> String? {
@@ -1131,26 +1177,43 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         let transport = transportType(for: deviceID)
         let transportName = transport.map { value in transportTypeName(value) }
         let transportFourCC = transport.map { value in transportTypeFourCC(value) }
-        let isAggregateOrVirtual = transport.map { value in isAggregateOrVirtualTransport(value) } ?? false
+        let isAggregate = transport == kAudioDeviceTransportTypeAggregate
+        let isVirtual = transport == kAudioDeviceTransportTypeVirtual
+        let isAggregateOrVirtual = isAggregate || isVirtual
         let isSelectedByID = selectedDeviceID == deviceID
         let isSelectedByUID = selectedDeviceID == nil && listedDevice?.uid == selectedDeviceUID
         let formatDiagnostic = inputOnlyCaptureFormatDiagnostic(for: deviceID)
-
-        return AudioInputDiagnosticsReport.Device(
-            deviceID: UInt32(deviceID),
-            uid: coreAudioUID ?? listedDevice?.uid,
+        let snapshot = AudioInputDeviceSnapshot(
+            deviceID: deviceID,
             name: deviceName(for: deviceID) ?? listedDevice?.name,
+            uid: coreAudioUID ?? listedDevice?.uid,
             inputChannels: inputChannelCount(for: deviceID),
             outputChannels: outputChannelCount(for: deviceID),
             nominalSampleRate: nominalSampleRate(for: deviceID),
+            transportType: transport
+        )
+        let exclusionReason = listedDevice == nil
+            ? inputDeviceExclusionReason(for: snapshot)?.rawValue ?? "notListed"
+            : nil
+
+        return AudioInputDiagnosticsReport.Device(
+            deviceID: UInt32(deviceID),
+            uid: snapshot.uid,
+            name: snapshot.name,
+            inputChannels: snapshot.inputChannels,
+            outputChannels: snapshot.outputChannels,
+            nominalSampleRate: snapshot.nominalSampleRate,
             transportType: transport,
             transportTypeName: transportName,
             transportTypeFourCC: transportFourCC,
             isDefaultInput: defaultInputDeviceID == deviceID,
             isSelected: isSelectedByID || isSelectedByUID,
+            isAggregate: isAggregate,
+            isVirtual: isVirtual,
             isAggregateOrVirtual: isAggregateOrVirtual,
             listedByTypeWhisper: listedDevice != nil,
             compatibility: listedDevice?.compatibility.diagnosticsValue ?? "notListed",
+            exclusionReason: exclusionReason,
             inputOnlyCaptureFormat: formatDiagnostic.format,
             inputOnlyCaptureFormatError: formatDiagnostic.error
         )
@@ -1243,16 +1306,6 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &transportType)
         guard status == noErr else { return nil }
         return transportType
-    }
-
-    private static func isAggregateDevice(_ deviceID: AudioDeviceID) -> Bool {
-        guard let transportType = transportType(for: deviceID) else { return false }
-        return isAggregateOrVirtualTransport(transportType)
-    }
-
-    private static func isAggregateOrVirtualTransport(_ transportType: UInt32) -> Bool {
-        transportType == kAudioDeviceTransportTypeAggregate
-            || transportType == kAudioDeviceTransportTypeVirtual
     }
 
     private static func transportTypeName(_ transportType: UInt32) -> String {
@@ -2605,6 +2658,99 @@ private func audioStatusString(_ status: OSStatus) -> String {
 
 #if DEBUG
 extension AudioDeviceService {
+    struct TestingInputDeviceSnapshot: Sendable, Equatable {
+        let deviceID: AudioDeviceID
+        let name: String?
+        let uid: String?
+        let inputChannels: Int
+        let outputChannels: Int
+        let transportType: UInt32?
+
+        init(
+            deviceID: AudioDeviceID,
+            name: String?,
+            uid: String?,
+            inputChannels: Int,
+            outputChannels: Int,
+            transportType: UInt32?
+        ) {
+            self.deviceID = deviceID
+            self.name = name
+            self.uid = uid
+            self.inputChannels = inputChannels
+            self.outputChannels = outputChannels
+            self.transportType = transportType
+        }
+
+        fileprivate var snapshot: AudioInputDeviceSnapshot {
+            AudioInputDeviceSnapshot(
+                deviceID: deviceID,
+                name: name,
+                uid: uid,
+                inputChannels: inputChannels,
+                outputChannels: outputChannels,
+                nominalSampleRate: nil,
+                transportType: transportType
+            )
+        }
+    }
+
+    static func testingAvailableInputDevices(
+        from snapshots: [TestingInputDeviceSnapshot]
+    ) -> [AudioInputDevice] {
+        snapshots.compactMap { listedInputDevice(from: $0.snapshot) }
+    }
+
+    static func testingInputDeviceDiagnostics(
+        from snapshots: [TestingInputDeviceSnapshot],
+        listedDevices: [AudioInputDevice]
+    ) -> [AudioInputDiagnosticsReport.Device] {
+        var listedDevicesByID: [AudioDeviceID: AudioInputDevice] = [:]
+        var listedDevicesByUID: [String: AudioInputDevice] = [:]
+        for device in listedDevices {
+            listedDevicesByID[device.deviceID] = device
+            listedDevicesByUID[device.uid] = device
+        }
+
+        return snapshots.map { testingSnapshot in
+            let snapshot = testingSnapshot.snapshot
+            var listedDevice = listedDevicesByID[snapshot.deviceID]
+            if listedDevice == nil, let uid = snapshot.uid {
+                listedDevice = listedDevicesByUID[uid]
+            }
+
+            let transportName = snapshot.transportType.map { value in transportTypeName(value) }
+            let transportFourCC = snapshot.transportType.map { value in transportTypeFourCC(value) }
+            let isAggregate = snapshot.transportType == kAudioDeviceTransportTypeAggregate
+            let isVirtual = snapshot.transportType == kAudioDeviceTransportTypeVirtual
+            let exclusionReason = listedDevice == nil
+                ? inputDeviceExclusionReason(for: snapshot)?.rawValue ?? "notListed"
+                : nil
+
+            return AudioInputDiagnosticsReport.Device(
+                deviceID: UInt32(snapshot.deviceID),
+                uid: snapshot.uid,
+                name: snapshot.name,
+                inputChannels: snapshot.inputChannels,
+                outputChannels: snapshot.outputChannels,
+                nominalSampleRate: snapshot.nominalSampleRate,
+                transportType: snapshot.transportType,
+                transportTypeName: transportName,
+                transportTypeFourCC: transportFourCC,
+                isDefaultInput: false,
+                isSelected: false,
+                isAggregate: isAggregate,
+                isVirtual: isVirtual,
+                isAggregateOrVirtual: isAggregate || isVirtual,
+                listedByTypeWhisper: listedDevice != nil,
+                compatibility: listedDevice?.compatibility.diagnosticsValue ?? "notListed",
+                exclusionReason: exclusionReason,
+                inputOnlyCaptureFormat: nil,
+                inputOnlyCaptureFormatError: nil
+            )
+        }
+    }
+
     @discardableResult
     func testingReplacePreviewEngineForRecoveryIfNeeded(_ engine: AVAudioEngine) -> AVAudioEngine? {
         replacePreviewAudioEngineForRecoveryIfNeeded(engine)
