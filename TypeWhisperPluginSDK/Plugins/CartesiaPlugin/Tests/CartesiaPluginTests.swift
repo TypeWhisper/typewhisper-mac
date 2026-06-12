@@ -16,6 +16,7 @@ final class CartesiaPluginTests: XCTestCase {
         XCTAssertTrue(plugin is any TranscriptionEnginePlugin)
         XCTAssertTrue(plugin is any LanguageHintTranscriptionEnginePlugin)
         XCTAssertTrue(plugin is any TTSProviderPlugin)
+        XCTAssertTrue((plugin as? any TranscriptionEnginePlugin)?.supportsTranslation == true)
     }
 
     func testAuthRolesRequireCartesiaAPIKeyForSTTAndTTS() throws {
@@ -50,9 +51,23 @@ final class CartesiaPluginTests: XCTestCase {
         XCTAssertNil(CartesiaPlugin.resolvedLanguage("  ", supportedLanguages: CartesiaPlugin.sttSupportedLanguages))
     }
 
-    func testTranscriptionLanguageResolutionDefaultsToRussianAndUsesHints() {
-        XCTAssertEqual(CartesiaPlugin.resolvedTranscriptionLanguage(requestedLanguage: nil, languageHints: []), "ru")
-        XCTAssertEqual(CartesiaPlugin.resolvedTranscriptionLanguage(requestedLanguage: " ", languageHints: []), "ru")
+    func testTranscriptionLanguageResolutionUsesSelectedHintsAndPreferredLanguage() {
+        XCTAssertEqual(
+            CartesiaPlugin.resolvedTranscriptionLanguage(
+                requestedLanguage: nil,
+                languageHints: [],
+                preferredLanguages: ["ru-RU", "en-US"]
+            ),
+            "ru"
+        )
+        XCTAssertEqual(
+            CartesiaPlugin.resolvedTranscriptionLanguage(
+                requestedLanguage: " ",
+                languageHints: [],
+                preferredLanguages: ["de-DE"]
+            ),
+            "de"
+        )
         XCTAssertEqual(
             CartesiaPlugin.resolvedTranscriptionLanguage(requestedLanguage: nil, languageHints: ["en-US", "de-DE"]),
             "en"
@@ -60,6 +75,22 @@ final class CartesiaPluginTests: XCTestCase {
         XCTAssertEqual(
             CartesiaPlugin.resolvedTranscriptionLanguage(requestedLanguage: "de-DE", languageHints: ["en-US"]),
             "de"
+        )
+        XCTAssertEqual(
+            CartesiaPlugin.resolvedTranscriptionLanguage(
+                requestedLanguage: nil,
+                languageHints: [],
+                preferredLanguages: ["xx-YY"]
+            ),
+            "en"
+        )
+        XCTAssertNil(
+            CartesiaPlugin.resolvedTranscriptionLanguage(
+                requestedLanguage: "ru-RU",
+                languageHints: [],
+                translate: true,
+                preferredLanguages: ["ru-RU"]
+            )
         )
     }
 
@@ -207,7 +238,7 @@ final class CartesiaPluginTests: XCTestCase {
         XCTAssertTrue(body.contains("name=\"language\"\r\n\r\nde"))
     }
 
-    func testTranscribeDefaultsAutoSelectionToRussianLanguage() async throws {
+    func testTranscribeTranslateOmitsLanguageForOptInEnglishTranslation() async throws {
         let host = try PluginTestHostServices(secrets: ["api-key": "sk_car_live"])
         let plugin = CartesiaPlugin()
         plugin.activate(host: host)
@@ -216,7 +247,7 @@ final class CartesiaPluginTests: XCTestCase {
         PluginHTTPClientTestHarness.configure { _ in
             store.makeSession(outcomes: [
                 .success(
-                    Data(#"{"type":"transcript","text":"Привет, как дела?","language":"ru","words":[]}"#.utf8),
+                    Data(#"{"type":"transcript","text":"Hello, how are you?","language":"en","words":[]}"#.utf8),
                     Self.httpResponse(url: "https://api.cartesia.ai/stt", statusCode: 200)
                 )
             ])
@@ -224,16 +255,17 @@ final class CartesiaPluginTests: XCTestCase {
 
         let result = try await plugin.transcribe(
             audio: AudioData(samples: [0], wavData: Data("wav".utf8), duration: 1),
-            language: nil,
-            translate: false,
+            language: "ru-RU",
+            translate: true,
             prompt: nil
         )
 
-        XCTAssertEqual(result.text, "Привет, как дела?")
+        XCTAssertEqual(result.text, "Hello, how are you?")
+        XCTAssertEqual(result.detectedLanguage, "en")
 
         let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
         let body = try XCTUnwrap(String(data: try XCTUnwrap(request.httpBody), encoding: .utf8))
-        XCTAssertTrue(body.contains("name=\"language\"\r\n\r\nru"))
+        XCTAssertFalse(body.contains("name=\"language\""))
     }
 
     func testTranscribeUsesFirstLanguageHintWhenNoExactLanguageSelected() async throws {

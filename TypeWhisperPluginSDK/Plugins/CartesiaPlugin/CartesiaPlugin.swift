@@ -223,7 +223,7 @@ final class CartesiaPlugin: NSObject,
     static let apiBaseURL = "https://api.cartesia.ai"
     static let apiVersion = "2026-03-01"
     static let sttModelId = "ink-whisper"
-    static let defaultSTTLanguage = "ru"
+    static let translationLanguage = "en"
     static let ttsModelId = "sonic-3.5"
     static let ttsSampleRate = 44_100
     static let defaultVoiceId = "6ccbfb76-1fc6-48f7-b71d-91ac6298247b"
@@ -316,7 +316,7 @@ final class CartesiaPlugin: NSObject,
 
     func selectModel(_ modelId: String) {}
 
-    var supportsTranslation: Bool { false }
+    var supportsTranslation: Bool { true }
     var supportedLanguages: [String] { Self.sttSupportedLanguages }
 
     func transcribe(
@@ -356,16 +356,14 @@ final class CartesiaPlugin: NSObject,
         translate: Bool,
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
-        guard !translate else {
-            throw PluginTranscriptionError.apiError("Cartesia does not support Whisper Translate.")
-        }
         guard let apiKey = normalizedAPIKey else {
             throw PluginTranscriptionError.notConfigured
         }
 
         let resolvedLanguage = Self.resolvedTranscriptionLanguage(
             requestedLanguage: language,
-            languageHints: languageHints
+            languageHints: languageHints,
+            translate: translate
         )
         let request = try Self.makeTranscriptionRequest(
             wavData: audio.wavData,
@@ -376,7 +374,10 @@ final class CartesiaPlugin: NSObject,
 
         let (data, response) = try await PluginHTTPClient.data(for: request)
         try Self.validateHTTPResponse(data: data, response: response)
-        return try Self.parseTranscriptionResponse(data, fallbackLanguage: resolvedLanguage)
+        return try Self.parseTranscriptionResponse(
+            data,
+            fallbackLanguage: translate ? Self.translationLanguage : resolvedLanguage
+        )
     }
 
     // MARK: - TTSProviderPlugin
@@ -535,7 +536,14 @@ final class CartesiaPlugin: NSObject,
 }
 
 extension CartesiaPlugin {
-    static func resolvedTranscriptionLanguage(requestedLanguage: String?, languageHints: [String]) -> String {
+    static func resolvedTranscriptionLanguage(
+        requestedLanguage: String?,
+        languageHints: [String],
+        translate: Bool = false,
+        preferredLanguages: [String] = Locale.preferredLanguages
+    ) -> String? {
+        guard !translate else { return nil }
+
         if let requested = resolvedLanguage(requestedLanguage, supportedLanguages: sttSupportedLanguages) {
             return requested
         }
@@ -544,7 +552,20 @@ extension CartesiaPlugin {
                 return resolved
             }
         }
-        return defaultSTTLanguage
+
+        // Cartesia documents the batch STT language default as "en". For normal
+        // transcription, send a concrete source language so the empty-language
+        // path is reserved for the explicit "Translate to English" task.
+        return preferredTranscriptionLanguage(preferredLanguages: preferredLanguages) ?? Self.translationLanguage
+    }
+
+    static func preferredTranscriptionLanguage(preferredLanguages: [String]) -> String? {
+        for language in preferredLanguages {
+            if let resolved = resolvedLanguage(language, supportedLanguages: sttSupportedLanguages) {
+                return resolved
+            }
+        }
+        return nil
     }
 
     static func resolvedLanguage(_ language: String?, supportedLanguages: [String]) -> String? {
