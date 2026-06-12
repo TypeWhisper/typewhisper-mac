@@ -18,6 +18,7 @@ final class SaluteSpeechPlugin: NSObject, TranscriptionEnginePlugin, PluginAuthR
 
     private let state = SaluteSpeechPluginState()
     private let tokenCache = SaluteSpeechTokenCache()
+    private let usageStore = SaluteSpeechUsageStore()
     private let logger = Logger(subsystem: "com.typewhisper.sber-salutespeech", category: "Plugin")
 
     required override init() {
@@ -25,6 +26,7 @@ final class SaluteSpeechPlugin: NSObject, TranscriptionEnginePlugin, PluginAuthR
     }
 
     func activate(host: HostServices) {
+        usageStore.configure(dataDirectory: host.pluginDataDirectory)
         state.activate(
             host: host,
             authorizationKey: Self.normalizedAuthorizationKey(
@@ -94,20 +96,24 @@ final class SaluteSpeechPlugin: NSObject, TranscriptionEnginePlugin, PluginAuthR
         )
         let modelId = snapshot.selectedModelId ?? Self.defaultModelId
 
+        let result: PluginTranscriptionResult
         if pcmData.count <= Self.syncMaxBytes, audio.duration <= Self.syncMaxDuration {
-            return try await recognizeSync(
+            result = try await recognizeSync(
                 pcmData: pcmData,
                 token: token,
                 modelId: modelId
             )
+        } else {
+            result = try await recognizeAsync(
+                pcmData: pcmData,
+                token: token,
+                modelId: modelId,
+                duration: audio.duration
+            )
         }
 
-        return try await recognizeAsync(
-            pcmData: pcmData,
-            token: token,
-            modelId: modelId,
-            duration: audio.duration
-        )
+        usageStore.recordSuccessfulRecognition(duration: audio.duration)
+        return result
     }
 
     @MainActor
@@ -196,6 +202,22 @@ final class SaluteSpeechPlugin: NSObject, TranscriptionEnginePlugin, PluginAuthR
         } catch {
             return .transientError
         }
+    }
+
+    var usageSnapshotForSettings: SaluteSpeechUsageSnapshot {
+        usageStore.snapshot()
+    }
+
+    func setUsageBalanceCorrection(remainingMinutes: Double?, validUntil: Date?) throws {
+        try usageStore.setBalanceCorrection(remainingMinutes: remainingMinutes, validUntil: validUntil)
+    }
+
+    func clearUsageBalanceCorrection() throws {
+        try usageStore.clearBalanceCorrection()
+    }
+
+    func resetRecognitionUsage() throws {
+        try usageStore.resetTrackedUsage()
     }
 
     enum AuthorizationKeyValidationResult: Equatable {
@@ -297,6 +319,138 @@ private actor SaluteSpeechTokenCache {
     func clear() {
         token = nil
         expiresAt = nil
+    }
+}
+
+struct SaluteSpeechUsageSnapshot: Equatable, Sendable {
+    let trackedSeconds: TimeInterval
+    let lastTranscriptionAt: Date?
+    let balanceRemainingSeconds: TimeInterval?
+    let balanceRecordedTrackedSeconds: TimeInterval?
+    let balanceUpdatedAt: Date?
+    let balanceValidUntil: Date?
+
+    static let empty = SaluteSpeechUsageSnapshot(
+        trackedSeconds: 0,
+        lastTranscriptionAt: nil,
+        balanceRemainingSeconds: nil,
+        balanceRecordedTrackedSeconds: nil,
+        balanceUpdatedAt: nil,
+        balanceValidUntil: nil
+    )
+
+    var spentSinceBalanceCorrectionSeconds: TimeInterval {
+        guard let balanceRecordedTrackedSeconds else { return 0 }
+        return max(0, trackedSeconds - balanceRecordedTrackedSeconds)
+    }
+
+    var estimatedRemainingSeconds: TimeInterval? {
+        guard let balanceRemainingSeconds else { return nil }
+        return max(0, balanceRemainingSeconds - spentSinceBalanceCorrectionSeconds)
+    }
+}
+
+private struct SaluteSpeechUsageState: Codable, Sendable {
+    var trackedSeconds: TimeInterval = 0
+    var lastTranscriptionAt: Date?
+    var balanceRemainingSeconds: TimeInterval?
+    var balanceRecordedTrackedSeconds: TimeInterval?
+    var balanceUpdatedAt: Date?
+    var balanceValidUntil: Date?
+
+    var snapshot: SaluteSpeechUsageSnapshot {
+        SaluteSpeechUsageSnapshot(
+            trackedSeconds: trackedSeconds,
+            lastTranscriptionAt: lastTranscriptionAt,
+            balanceRemainingSeconds: balanceRemainingSeconds,
+            balanceRecordedTrackedSeconds: balanceRecordedTrackedSeconds,
+            balanceUpdatedAt: balanceUpdatedAt,
+            balanceValidUntil: balanceValidUntil
+        )
+    }
+}
+
+private final class SaluteSpeechUsageStore: @unchecked Sendable {
+    private let lock = NSLock()
+    private let fileName = "recognition-usage.json"
+    private var fileURL: URL?
+    private var state = SaluteSpeechUsageState()
+
+    func configure(dataDirectory: URL) {
+        lock.withLock {
+            fileURL = dataDirectory.appendingPathComponent(fileName)
+            state = Self.loadState(from: fileURL) ?? SaluteSpeechUsageState()
+        }
+    }
+
+    func snapshot() -> SaluteSpeechUsageSnapshot {
+        lock.withLock { state.snapshot }
+    }
+
+    func recordSuccessfulRecognition(duration: TimeInterval) {
+        let seconds = max(0, duration)
+        guard seconds > 0 else { return }
+
+        lock.withLock {
+            state.trackedSeconds += seconds
+            state.lastTranscriptionAt = Date()
+            try? persistLocked()
+        }
+    }
+
+    func setBalanceCorrection(remainingMinutes: Double?, validUntil: Date?) throws {
+        try lock.withLock {
+            if let remainingMinutes {
+                state.balanceRemainingSeconds = max(0, remainingMinutes) * 60
+                state.balanceRecordedTrackedSeconds = state.trackedSeconds
+                state.balanceUpdatedAt = Date()
+            } else {
+                state.balanceRemainingSeconds = nil
+                state.balanceRecordedTrackedSeconds = nil
+                state.balanceUpdatedAt = nil
+            }
+            state.balanceValidUntil = validUntil
+            try persistLocked()
+        }
+    }
+
+    func clearBalanceCorrection() throws {
+        try lock.withLock {
+            state.balanceRemainingSeconds = nil
+            state.balanceRecordedTrackedSeconds = nil
+            state.balanceUpdatedAt = nil
+            state.balanceValidUntil = nil
+            try persistLocked()
+        }
+    }
+
+    func resetTrackedUsage() throws {
+        try lock.withLock {
+            state.trackedSeconds = 0
+            state.lastTranscriptionAt = nil
+            if state.balanceRemainingSeconds != nil {
+                state.balanceRecordedTrackedSeconds = 0
+            }
+            try persistLocked()
+        }
+    }
+
+    private static func loadState(from url: URL?) -> SaluteSpeechUsageState? {
+        guard let url,
+              let data = try? Data(contentsOf: url) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(SaluteSpeechUsageState.self, from: data)
+    }
+
+    private func persistLocked() throws {
+        guard let fileURL else { return }
+        try FileManager.default.createDirectory(
+            at: fileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let data = try JSONEncoder().encode(state)
+        try data.write(to: fileURL, options: .atomic)
     }
 }
 
@@ -854,6 +1008,10 @@ private struct SaluteSpeechSettingsView: View {
     @State private var isValidating = false
     @State private var validationResult: SaluteSpeechPlugin.AuthorizationKeyValidationResult?
     @State private var settingsErrorMessage: String?
+    @State private var usageSnapshot = SaluteSpeechUsageSnapshot.empty
+    @State private var balanceRemainingInput = ""
+    @State private var balanceValidUntilInput = ""
+    @State private var usageErrorMessage: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -955,6 +1113,10 @@ private struct SaluteSpeechSettingsView: View {
                         plugin.selectModel(selectedModel)
                     }
                 }
+
+                Divider()
+
+                usageSection
             }
 
             Text("Authorization Key is stored securely in the Keychain. If validation fails with a certificate error, install the SaluteSpeech certificate trusted by macOS.")
@@ -968,6 +1130,124 @@ private struct SaluteSpeechSettingsView: View {
             }
             selectedScope = plugin.scopeForSettings
             selectedModel = plugin.selectedModelId ?? plugin.transcriptionModels.first?.id ?? ""
+            refreshUsage()
+        }
+    }
+
+    private var usageSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text("Recognition Usage")
+                    .font(.headline)
+
+                Spacer()
+
+                Button {
+                    refreshUsage()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .help("Refresh")
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                usageMetricRow(
+                    title: "Tracked spent",
+                    value: Self.formatMinutes(seconds: usageSnapshot.trackedSeconds)
+                )
+
+                if let estimatedRemainingSeconds = usageSnapshot.estimatedRemainingSeconds {
+                    usageMetricRow(
+                        title: "Estimated remaining",
+                        value: Self.formatMinutes(seconds: estimatedRemainingSeconds)
+                    )
+                    usageMetricRow(
+                        title: "Spent since balance update",
+                        value: Self.formatMinutes(seconds: usageSnapshot.spentSinceBalanceCorrectionSeconds)
+                    )
+                }
+
+                if let balanceUpdatedAt = usageSnapshot.balanceUpdatedAt {
+                    usageMetricRow(
+                        title: "Balance updated",
+                        value: Self.formatDisplayDate(balanceUpdatedAt)
+                    )
+                }
+
+                if let balanceValidUntil = usageSnapshot.balanceValidUntil {
+                    usageMetricRow(
+                        title: "Valid until",
+                        value: Self.formatDateInput(balanceValidUntil)
+                    )
+                }
+
+                if let lastTranscriptionAt = usageSnapshot.lastTranscriptionAt {
+                    usageMetricRow(
+                        title: "Last recognition",
+                        value: Self.formatDisplayDate(lastTranscriptionAt)
+                    )
+                }
+            }
+
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                TextField("Studio remaining minutes", text: $balanceRemainingInput)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 180)
+
+                TextField("Valid until YYYY-MM-DD", text: $balanceValidUntilInput)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 170)
+
+                Button("Save") {
+                    saveUsageBalanceCorrection()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(balanceRemainingInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                if usageSnapshot.balanceRemainingSeconds != nil {
+                    Button("Clear") {
+                        clearUsageBalanceCorrection()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            }
+
+            HStack(spacing: 8) {
+                Button("Reset tracked usage") {
+                    resetRecognitionUsage()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .foregroundStyle(.red)
+
+                Text("Local estimate. Update it from SaluteSpeech Studio.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let usageErrorMessage {
+                HStack(spacing: 4) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.red)
+                    Text(usageErrorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+    }
+
+    private func usageMetricRow(title: String, value: String) -> some View {
+        HStack {
+            Text(title)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .font(.system(.body, design: .rounded))
+                .monospacedDigit()
         }
     }
 
@@ -1022,6 +1302,106 @@ private struct SaluteSpeechSettingsView: View {
                 .orange
             )
         }
+    }
+
+    private func refreshUsage() {
+        usageSnapshot = plugin.usageSnapshotForSettings
+        balanceRemainingInput = usageSnapshot.balanceRemainingSeconds
+            .map { Self.formatEditableMinutes(seconds: $0) }
+            ?? ""
+        balanceValidUntilInput = usageSnapshot.balanceValidUntil
+            .map { Self.formatDateInput($0) }
+            ?? ""
+        usageErrorMessage = nil
+    }
+
+    private func saveUsageBalanceCorrection() {
+        usageErrorMessage = nil
+        let remainingText = balanceRemainingInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let remainingMinutes = Self.parseMinutes(remainingText) else {
+            usageErrorMessage = "Enter remaining minutes as a number."
+            return
+        }
+
+        let validUntilText = balanceValidUntilInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        let validUntil: Date?
+        if validUntilText.isEmpty {
+            validUntil = nil
+        } else if let parsedDate = Self.parseDateInput(validUntilText) {
+            validUntil = parsedDate
+        } else {
+            usageErrorMessage = "Use date format YYYY-MM-DD."
+            return
+        }
+
+        do {
+            try plugin.setUsageBalanceCorrection(
+                remainingMinutes: remainingMinutes,
+                validUntil: validUntil
+            )
+            refreshUsage()
+        } catch {
+            usageErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func clearUsageBalanceCorrection() {
+        do {
+            try plugin.clearUsageBalanceCorrection()
+            refreshUsage()
+        } catch {
+            usageErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func resetRecognitionUsage() {
+        do {
+            try plugin.resetRecognitionUsage()
+            refreshUsage()
+        } catch {
+            usageErrorMessage = error.localizedDescription
+        }
+    }
+
+    private static func parseMinutes(_ text: String) -> Double? {
+        let normalized = text.replacingOccurrences(of: ",", with: ".")
+        guard let value = Double(normalized), value >= 0 else { return nil }
+        return value
+    }
+
+    private static func parseDateInput(_ text: String) -> Date? {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.date(from: text)
+    }
+
+    private static func formatDateInput(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+
+    private static func formatDisplayDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+
+    private static func formatEditableMinutes(seconds: TimeInterval) -> String {
+        let minutes = max(0, seconds / 60)
+        if minutes.rounded() == minutes {
+            return String(format: "%.0f", minutes)
+        }
+        return String(format: "%.1f", minutes)
+    }
+
+    private static func formatMinutes(seconds: TimeInterval) -> String {
+        "\(formatEditableMinutes(seconds: seconds)) min"
     }
 }
 
