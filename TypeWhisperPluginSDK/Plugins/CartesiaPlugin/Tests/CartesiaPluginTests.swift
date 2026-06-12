@@ -318,28 +318,36 @@ final class CartesiaPluginTests: XCTestCase {
         XCTAssertTrue(body.contains("name=\"language\"\r\n\r\nen"))
     }
 
-    func testTranscribeRejectsTranslationWhenTranslationIsDisabled() async throws {
+    func testTranscribeIgnoresTranslateTaskWhenPluginTranslationIsDisabled() async throws {
         let host = try PluginTestHostServices(secrets: ["api-key": "sk_car_live"])
         let plugin = CartesiaPlugin()
         plugin.activate(host: host)
 
-        do {
-            _ = try await plugin.transcribe(
-                audio: AudioData(samples: [0], wavData: Data("wav".utf8), duration: 1),
-                language: "ru-RU",
-                translate: true,
-                prompt: nil
-            )
-            XCTFail("Expected disabled translation to throw")
-        } catch let error as PluginTranscriptionError {
-            guard case .apiError(let message) = error else {
-                return XCTFail("Unexpected error: \(error)")
-            }
-            XCTAssertTrue(message.contains("Enable Cartesia Translate to English"))
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"type":"transcript","text":"Привет, как дела?","language":"ru","words":[]}"#.utf8),
+                    Self.httpResponse(url: "https://api.cartesia.ai/stt", statusCode: 200)
+                )
+            ])
         }
+
+        let result = try await plugin.transcribe(
+            audio: AudioData(samples: [0], wavData: Data("wav".utf8), duration: 1),
+            language: "ru-RU",
+            translate: true,
+            prompt: nil
+        )
+
+        XCTAssertEqual(result.text, "Привет, как дела?")
+
+        let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
+        let body = try XCTUnwrap(String(data: try XCTUnwrap(request.httpBody), encoding: .utf8))
+        XCTAssertTrue(body.contains("name=\"language\"\r\n\r\nru"))
     }
 
-    func testTranscribeTranslateOmitsLanguageForOptInEnglishTranslation() async throws {
+    func testTranscribeOmitsLanguageWhenPluginEnglishTranslationIsEnabled() async throws {
         let host = try PluginTestHostServices(
             defaults: ["englishTranslationEnabled": true],
             secrets: ["api-key": "sk_car_live"]
@@ -361,7 +369,7 @@ final class CartesiaPluginTests: XCTestCase {
         let result = try await plugin.transcribe(
             audio: AudioData(samples: [0], wavData: Data("wav".utf8), duration: 1),
             language: "ru-RU",
-            translate: true,
+            translate: false,
             prompt: nil
         )
 

@@ -385,18 +385,16 @@ final class CartesiaPlugin: NSObject,
         translate: Bool,
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
-        guard !translate || _englishTranslationEnabled else {
-            throw PluginTranscriptionError.apiError("Enable Cartesia Translate to English in plugin settings before using this task.")
-        }
         guard let apiKey = normalizedAPIKey else {
             throw PluginTranscriptionError.notConfigured
         }
 
+        let shouldTranslate = _englishTranslationEnabled
         let resolvedLanguage = Self.resolvedTranscriptionLanguage(
             requestedLanguage: language,
             languageHints: languageHints,
             configuredLanguage: _transcriptionLanguage,
-            translate: translate
+            translate: shouldTranslate
         )
         let request = try Self.makeTranscriptionRequest(
             wavData: audio.wavData,
@@ -409,7 +407,7 @@ final class CartesiaPlugin: NSObject,
         try Self.validateHTTPResponse(data: data, response: response)
         return try Self.parseTranscriptionResponse(
             data,
-            fallbackLanguage: translate ? Self.translationLanguage : resolvedLanguage
+            fallbackLanguage: shouldTranslate ? Self.translationLanguage : resolvedLanguage
         )
     }
 
@@ -887,6 +885,7 @@ private struct CartesiaSettingsView: View {
                             Text(language.displayName).tag(language.code)
                         }
                     }
+                    .disabled(englishTranslationEnabled)
                     .onChange(of: transcriptionLanguage) {
                         plugin.selectTranscriptionLanguage(transcriptionLanguage)
                     }
@@ -896,7 +895,9 @@ private struct CartesiaSettingsView: View {
                             plugin.setEnglishTranslationEnabled(englishTranslationEnabled)
                         }
 
-                    Text("Cartesia batch speech recognition requires a source language. English translation is off by default.")
+                    Text(englishTranslationEnabled
+                         ? "Translation mode ignores the spoken language picker and asks Cartesia for English output."
+                         : "Spoken Language is the source audio language. Choose English only when the audio itself is English.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
