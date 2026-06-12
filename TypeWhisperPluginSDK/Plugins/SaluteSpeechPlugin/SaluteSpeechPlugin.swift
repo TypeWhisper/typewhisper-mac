@@ -1010,7 +1010,8 @@ private struct SaluteSpeechSettingsView: View {
     @State private var settingsErrorMessage: String?
     @State private var usageSnapshot = SaluteSpeechUsageSnapshot.empty
     @State private var balanceRemainingInput = ""
-    @State private var balanceValidUntilInput = ""
+    @State private var hasBalanceValidUntil = false
+    @State private var balanceValidUntilDate = Date()
     @State private var usageErrorMessage: String?
 
     var body: some View {
@@ -1190,30 +1191,7 @@ private struct SaluteSpeechSettingsView: View {
                 }
             }
 
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                TextField("Studio remaining minutes", text: $balanceRemainingInput)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 180)
-
-                TextField("Valid until YYYY-MM-DD", text: $balanceValidUntilInput)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 170)
-
-                Button("Save") {
-                    saveUsageBalanceCorrection()
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .disabled(balanceRemainingInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                if usageSnapshot.balanceRemainingSeconds != nil {
-                    Button("Clear") {
-                        clearUsageBalanceCorrection()
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                }
-            }
+            usageCorrectionControls
 
             HStack(spacing: 8) {
                 Button("Reset tracked usage") {
@@ -1235,6 +1213,55 @@ private struct SaluteSpeechSettingsView: View {
                     Text(usageErrorMessage)
                         .font(.caption)
                         .foregroundStyle(.red)
+                }
+            }
+        }
+    }
+
+    private var usageCorrectionControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("Studio remaining")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 126, alignment: .leading)
+
+                TextField("Minutes", text: $balanceRemainingInput)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 120)
+
+                Text("min")
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Toggle("Valid until", isOn: $hasBalanceValidUntil)
+                    .toggleStyle(.checkbox)
+                    .frame(width: 126, alignment: .leading)
+
+                DatePicker(
+                    "",
+                    selection: $balanceValidUntilDate,
+                    displayedComponents: .date
+                )
+                .labelsHidden()
+                .disabled(!hasBalanceValidUntil)
+                .opacity(hasBalanceValidUntil ? 1 : 0.55)
+            }
+
+            HStack(spacing: 8) {
+                Button("Save balance") {
+                    saveUsageBalanceCorrection()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(balanceRemainingInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                if usageSnapshot.balanceRemainingSeconds != nil {
+                    Button("Clear balance") {
+                        clearUsageBalanceCorrection()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                 }
             }
         }
@@ -1309,9 +1336,13 @@ private struct SaluteSpeechSettingsView: View {
         balanceRemainingInput = usageSnapshot.balanceRemainingSeconds
             .map { Self.formatEditableMinutes(seconds: $0) }
             ?? ""
-        balanceValidUntilInput = usageSnapshot.balanceValidUntil
-            .map { Self.formatDateInput($0) }
-            ?? ""
+        if let balanceValidUntil = usageSnapshot.balanceValidUntil {
+            hasBalanceValidUntil = true
+            balanceValidUntilDate = balanceValidUntil
+        } else {
+            hasBalanceValidUntil = false
+            balanceValidUntilDate = Date()
+        }
         usageErrorMessage = nil
     }
 
@@ -1323,21 +1354,10 @@ private struct SaluteSpeechSettingsView: View {
             return
         }
 
-        let validUntilText = balanceValidUntilInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        let validUntil: Date?
-        if validUntilText.isEmpty {
-            validUntil = nil
-        } else if let parsedDate = Self.parseDateInput(validUntilText) {
-            validUntil = parsedDate
-        } else {
-            usageErrorMessage = "Use date format YYYY-MM-DD."
-            return
-        }
-
         do {
             try plugin.setUsageBalanceCorrection(
                 remainingMinutes: remainingMinutes,
-                validUntil: validUntil
+                validUntil: hasBalanceValidUntil ? balanceValidUntilDate : nil
             )
             refreshUsage()
         } catch {
@@ -1367,14 +1387,6 @@ private struct SaluteSpeechSettingsView: View {
         let normalized = text.replacingOccurrences(of: ",", with: ".")
         guard let value = Double(normalized), value >= 0 else { return nil }
         return value
-    }
-
-    private static func parseDateInput(_ text: String) -> Date? {
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.date(from: text)
     }
 
     private static func formatDateInput(_ date: Date) -> String {
