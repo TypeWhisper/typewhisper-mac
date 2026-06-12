@@ -1731,6 +1731,28 @@
           "downloadCount": 36
         }
       ]
+    },
+    {
+      "id": "com.typewhisper.sber-salutespeech",
+      "name": "Sber SaluteSpeech",
+      "author": "TypeWhisper",
+      "description": "Cloud transcription via the Sber SaluteSpeech REST API. Requires a SaluteSpeech Authorization Key.",
+      "category": "transcription",
+      "downloadCount": 0,
+      "iconSystemName": "waveform.badge.mic",
+      "requiresAPIKey": true,
+      "hosting": "cloud",
+      "detailsURL": "https://developers.sber.ru/docs/ru/salutespeech/quick-start/integration-individuals",
+      "releases": [
+        {
+          "version": "0.1.0",
+          "minHostVersion": "1.4.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 317547,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-sber-salutespeech-v0.1.0/SaluteSpeechPlugin.zip",
+          "minOSVersion": "14.0"
+        }
+      ]
     }
   ]
 }
