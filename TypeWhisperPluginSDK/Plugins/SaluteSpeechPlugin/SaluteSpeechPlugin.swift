@@ -15,6 +15,7 @@ final class SaluteSpeechPlugin: NSObject, TranscriptionEnginePlugin, PluginAuthR
     private static let selectedModelDefault = "selectedModel"
     private static let scopeDefault = "scope"
     private static let defaultModelId = "general"
+    private static let defaultRecognitionLanguage = "ru-RU"
 
     private let state = SaluteSpeechPluginState()
     private let tokenCache = SaluteSpeechTokenCache()
@@ -68,6 +69,10 @@ final class SaluteSpeechPlugin: NSObject, TranscriptionEnginePlugin, PluginAuthR
 
     var supportsTranslation: Bool { false }
 
+    var supportedLanguages: [String] {
+        ["ru", "ru-RU", "en", "en-US"]
+    }
+
     var allowsTranscriptPreviewFallback: Bool { false }
 
     func transcribe(
@@ -95,19 +100,22 @@ final class SaluteSpeechPlugin: NSObject, TranscriptionEnginePlugin, PluginAuthR
             scope: snapshot.scope
         )
         let modelId = snapshot.selectedModelId ?? Self.defaultModelId
+        let recognitionLanguage = Self.resolvedRecognitionLanguage(language)
 
         let result: PluginTranscriptionResult
         if pcmData.count <= Self.syncMaxBytes, audio.duration <= Self.syncMaxDuration {
             result = try await recognizeSync(
                 pcmData: pcmData,
                 token: token,
-                modelId: modelId
+                modelId: modelId,
+                language: recognitionLanguage
             )
         } else {
             result = try await recognizeAsync(
                 pcmData: pcmData,
                 token: token,
                 modelId: modelId,
+                language: recognitionLanguage,
                 duration: audio.duration
             )
         }
@@ -514,6 +522,26 @@ extension SaluteSpeechPlugin {
         }
     }
 
+    static func resolvedRecognitionLanguage(_ language: String?) -> String {
+        let normalized = language?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "_", with: "-")
+            .lowercased()
+
+        guard let normalized, !normalized.isEmpty else {
+            return defaultRecognitionLanguage
+        }
+
+        if normalized == "en" || normalized.hasPrefix("en-") {
+            return "en-US"
+        }
+        if normalized == "ru" || normalized.hasPrefix("ru-") {
+            return "ru-RU"
+        }
+
+        return defaultRecognitionLanguage
+    }
+
     static func makePCM16LEData(samples: [Float]) -> Data {
         var data = Data(capacity: samples.count * 2)
         for sample in samples {
@@ -555,10 +583,14 @@ extension SaluteSpeechPlugin {
     static func makeSyncRecognitionRequest(
         pcmData: Data,
         token: String,
-        modelId: String
+        modelId: String,
+        language: String
     ) throws -> URLRequest {
         var components = URLComponents(string: "\(restBaseURL)/speech:recognize")
-        components?.queryItems = [URLQueryItem(name: "model", value: modelId)]
+        components?.queryItems = [
+            URLQueryItem(name: "model", value: modelId),
+            URLQueryItem(name: "language", value: language),
+        ]
         guard let url = components?.url else {
             throw PluginTranscriptionError.apiError("Invalid Sber SaluteSpeech recognition URL")
         }
@@ -592,7 +624,8 @@ extension SaluteSpeechPlugin {
     static func makeStartAsyncRecognitionRequest(
         requestFileId: String,
         token: String,
-        modelId: String
+        modelId: String,
+        language: String
     ) throws -> URLRequest {
         guard let url = URL(string: "\(restBaseURL)/speech:async_recognize") else {
             throw PluginTranscriptionError.apiError("Invalid Sber SaluteSpeech async recognition URL")
@@ -601,6 +634,7 @@ extension SaluteSpeechPlugin {
         let body = AsyncRecognitionRequest(
             options: AsyncRecognitionOptions(
                 model: modelId,
+                language: language,
                 audioEncoding: "PCM_S16LE",
                 sampleRate: sampleRate,
                 channelsCount: 1
@@ -873,12 +907,14 @@ extension SaluteSpeechPlugin {
 
     struct AsyncRecognitionOptions: Encodable {
         let model: String
+        let language: String
         let audioEncoding: String
         let sampleRate: Int
         let channelsCount: Int
 
         enum CodingKeys: String, CodingKey {
             case model
+            case language
             case audioEncoding = "audio_encoding"
             case sampleRate = "sample_rate"
             case channelsCount = "channels_count"
@@ -938,12 +974,14 @@ private extension SaluteSpeechPlugin {
     func recognizeSync(
         pcmData: Data,
         token: String,
-        modelId: String
+        modelId: String,
+        language: String
     ) async throws -> PluginTranscriptionResult {
         let request = try Self.makeSyncRecognitionRequest(
             pcmData: pcmData,
             token: token,
-            modelId: modelId
+            modelId: modelId,
+            language: language
         )
         let (data, response) = try await PluginHTTPClient.data(for: request)
         try Self.validateHTTPResponse(data: data, response: response)
@@ -954,6 +992,7 @@ private extension SaluteSpeechPlugin {
         pcmData: Data,
         token: String,
         modelId: String,
+        language: String,
         duration: TimeInterval
     ) async throws -> PluginTranscriptionResult {
         let uploadRequest = try Self.makeUploadRequest(pcmData: pcmData, token: token)
@@ -964,7 +1003,8 @@ private extension SaluteSpeechPlugin {
         let startRequest = try Self.makeStartAsyncRecognitionRequest(
             requestFileId: requestFileId,
             token: token,
-            modelId: modelId
+            modelId: modelId,
+            language: language
         )
         let (startData, startResponse) = try await PluginHTTPClient.data(for: startRequest)
         try Self.validateHTTPResponse(data: startData, response: startResponse)

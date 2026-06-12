@@ -38,11 +38,28 @@ final class SaluteSpeechPluginTests: XCTestCase {
         XCTAssertEqual(String(data: request.httpBody ?? Data(), encoding: .utf8), "scope=SALUTE_SPEECH_PERS")
     }
 
-    func testSyncRecognitionRequestUsesPCMContentTypeAndBearerToken() throws {
+    func testRecognitionLanguageMappingSupportsRussianEnglishAndDefault() {
+        XCTAssertEqual(SaluteSpeechPlugin.resolvedRecognitionLanguage(nil), "ru-RU")
+        XCTAssertEqual(SaluteSpeechPlugin.resolvedRecognitionLanguage(" "), "ru-RU")
+        XCTAssertEqual(SaluteSpeechPlugin.resolvedRecognitionLanguage("ru"), "ru-RU")
+        XCTAssertEqual(SaluteSpeechPlugin.resolvedRecognitionLanguage("ru_RU"), "ru-RU")
+        XCTAssertEqual(SaluteSpeechPlugin.resolvedRecognitionLanguage("en"), "en-US")
+        XCTAssertEqual(SaluteSpeechPlugin.resolvedRecognitionLanguage("en_GB"), "en-US")
+        XCTAssertEqual(SaluteSpeechPlugin.resolvedRecognitionLanguage("de"), "ru-RU")
+    }
+
+    func testSupportedLanguagesExposeRussianAndEnglish() {
+        let plugin = SaluteSpeechPlugin()
+
+        XCTAssertEqual(plugin.supportedLanguages, ["ru", "ru-RU", "en", "en-US"])
+    }
+
+    func testSyncRecognitionRequestUsesPCMContentTypeBearerTokenAndLanguage() throws {
         let request = try SaluteSpeechPlugin.makeSyncRecognitionRequest(
             pcmData: Data([0x01, 0x02]),
             token: "access-token",
-            modelId: "general"
+            modelId: "general",
+            language: "en-US"
         )
 
         XCTAssertEqual(request.httpMethod, "POST")
@@ -56,13 +73,15 @@ final class SaluteSpeechPluginTests: XCTestCase {
         let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
         let query = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
         XCTAssertEqual(query["model"], "general")
+        XCTAssertEqual(query["language"], "en-US")
     }
 
-    func testStartAsyncRequestUsesPCMOptions() throws {
+    func testStartAsyncRequestUsesPCMOptionsAndLanguage() throws {
         let request = try SaluteSpeechPlugin.makeStartAsyncRecognitionRequest(
             requestFileId: "file-id",
             token: "access-token",
-            modelId: "general"
+            modelId: "general",
+            language: "en-US"
         )
 
         XCTAssertEqual(request.httpMethod, "POST")
@@ -76,6 +95,7 @@ final class SaluteSpeechPluginTests: XCTestCase {
         let options = try XCTUnwrap(json["options"] as? [String: Any])
         XCTAssertEqual(json["request_file_id"] as? String, "file-id")
         XCTAssertEqual(options["model"] as? String, "general")
+        XCTAssertEqual(options["language"] as? String, "en-US")
         XCTAssertEqual(options["audio_encoding"] as? String, "PCM_S16LE")
         XCTAssertEqual(options["sample_rate"] as? Int, 16_000)
         XCTAssertEqual(options["channels_count"] as? Int, 1)
@@ -216,6 +236,110 @@ final class SaluteSpeechPluginTests: XCTestCase {
         XCTAssertEqual(requests[1].url?.path, "/rest/v1/speech:recognize")
         XCTAssertEqual(requests[1].value(forHTTPHeaderField: "Authorization"), "Bearer access-token")
         XCTAssertEqual(requests[1].value(forHTTPHeaderField: "Content-Type"), "audio/x-pcm;bit=16;rate=16000")
+
+        let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(requests[1].url), resolvingAgainstBaseURL: false))
+        let query = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+        XCTAssertEqual(query["language"], "ru-RU")
+    }
+
+    func testTranscribeUsesSelectedEnglishLanguageForSyncRecognition() async throws {
+        let host = try PluginTestHostServices(
+            defaults: ["scope": SaluteSpeechPlugin.personalScope],
+            secrets: ["authorization-key": "encoded-key"]
+        )
+        let plugin = SaluteSpeechPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"access_token":"access-token","expires_at":4102444800000}"#.utf8),
+                    Self.httpResponse(url: "https://ngw.devices.sberbank.ru:9443/api/v2/oauth", statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"result":["Hello world"]}"#.utf8),
+                    Self.httpResponse(url: "https://smartspeech.sber.ru/rest/v1/speech:recognize", statusCode: 200)
+                ),
+            ])
+        }
+
+        let result = try await plugin.transcribe(
+            audio: AudioData(samples: [0, 0.25, -0.25], wavData: Data(), duration: 0.2),
+            language: "en",
+            translate: false,
+            prompt: nil
+        )
+
+        XCTAssertEqual(result.text, "Hello world")
+
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(requests.map(\.url?.path), ["/api/v2/oauth", "/rest/v1/speech:recognize"])
+
+        let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(requests[1].url), resolvingAgainstBaseURL: false))
+        let query = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+        XCTAssertEqual(query["language"], "en-US")
+    }
+
+    func testTranscribeUsesSelectedEnglishLanguageForAsyncRecognition() async throws {
+        let host = try PluginTestHostServices(
+            defaults: ["scope": SaluteSpeechPlugin.personalScope],
+            secrets: ["authorization-key": "encoded-key"]
+        )
+        let plugin = SaluteSpeechPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"access_token":"access-token","expires_at":4102444800000}"#.utf8),
+                    Self.httpResponse(url: "https://ngw.devices.sberbank.ru:9443/api/v2/oauth", statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"result":{"request_file_id":"request-file"}}"#.utf8),
+                    Self.httpResponse(url: "https://smartspeech.sber.ru/rest/v1/data:upload", statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"result":{"id":"task-id","status":"CREATED"}}"#.utf8),
+                    Self.httpResponse(url: "https://smartspeech.sber.ru/rest/v1/speech:async_recognize", statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"result":{"status":"DONE","response_file_id":"response-file"}}"#.utf8),
+                    Self.httpResponse(url: "https://smartspeech.sber.ru/rest/v1/task:get", statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"result":["Hello async"]}"#.utf8),
+                    Self.httpResponse(url: "https://smartspeech.sber.ru/rest/v1/data:download", statusCode: 200)
+                ),
+            ])
+        }
+
+        let result = try await plugin.transcribe(
+            audio: AudioData(samples: [0, 0.25, -0.25], wavData: Data(), duration: 61),
+            language: "en-US",
+            translate: false,
+            prompt: nil
+        )
+
+        XCTAssertEqual(result.text, "Hello async")
+
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(
+            requests.map(\.url?.path),
+            [
+                "/api/v2/oauth",
+                "/rest/v1/data:upload",
+                "/rest/v1/speech:async_recognize",
+                "/rest/v1/task:get",
+                "/rest/v1/data:download",
+            ]
+        )
+
+        let body = try XCTUnwrap(requests[2].httpBody)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let options = try XCTUnwrap(json["options"] as? [String: Any])
+        XCTAssertEqual(options["language"] as? String, "en-US")
     }
 
     func testDeactivateClearsConfigurationSnapshot() async throws {
