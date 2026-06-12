@@ -1012,6 +1012,7 @@ private struct SaluteSpeechSettingsView: View {
     @State private var balanceRemainingInput = ""
     @State private var hasBalanceValidUntil = false
     @State private var balanceValidUntilDate = Date()
+    @State private var showBalanceDatePicker = false
     @State private var usageErrorMessage: String?
 
     var body: some View {
@@ -1238,14 +1239,32 @@ private struct SaluteSpeechSettingsView: View {
                     .toggleStyle(.checkbox)
                     .frame(width: 126, alignment: .leading)
 
-                DatePicker(
-                    "",
-                    selection: $balanceValidUntilDate,
-                    displayedComponents: .date
-                )
-                .labelsHidden()
+                Button {
+                    showBalanceDatePicker = true
+                } label: {
+                    Label(Self.formatDateInput(balanceValidUntilDate), systemImage: "calendar")
+                        .frame(width: 132, alignment: .leading)
+                }
+                .buttonStyle(.bordered)
                 .disabled(!hasBalanceValidUntil)
                 .opacity(hasBalanceValidUntil ? 1 : 0.55)
+                .popover(isPresented: $showBalanceDatePicker, arrowEdge: .bottom) {
+                    VStack(alignment: .trailing, spacing: 10) {
+                        DatePicker(
+                            "",
+                            selection: $balanceValidUntilDate,
+                            displayedComponents: .date
+                        )
+                        .datePickerStyle(.graphical)
+                        .labelsHidden()
+
+                        Button("Done") {
+                            showBalanceDatePicker = false
+                        }
+                        .keyboardShortcut(.defaultAction)
+                    }
+                    .padding(12)
+                }
             }
 
             HStack(spacing: 8) {
@@ -1357,7 +1376,9 @@ private struct SaluteSpeechSettingsView: View {
         do {
             try plugin.setUsageBalanceCorrection(
                 remainingMinutes: remainingMinutes,
-                validUntil: hasBalanceValidUntil ? balanceValidUntilDate : nil
+                validUntil: hasBalanceValidUntil
+                    ? Calendar.current.startOfDay(for: balanceValidUntilDate)
+                    : nil
             )
             refreshUsage()
         } catch {
