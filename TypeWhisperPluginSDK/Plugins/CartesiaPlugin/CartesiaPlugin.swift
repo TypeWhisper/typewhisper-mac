@@ -165,6 +165,9 @@ private final class CartesiaAVAudioPlayback: CartesiaTTSAudioPlayback, @unchecke
         guard let format else {
             throw CartesiaPluginError.playbackUnavailable("Audio playback was not started")
         }
+        guard data.count.isMultiple(of: MemoryLayout<Int16>.size) else {
+            throw CartesiaPluginError.playbackUnavailable("PCM16 audio data must contain whole samples.")
+        }
 
         let frameCount = data.count / MemoryLayout<Int16>.size
         guard frameCount > 0,

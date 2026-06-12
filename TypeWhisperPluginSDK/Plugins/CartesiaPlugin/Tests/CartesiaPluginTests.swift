@@ -10,13 +10,16 @@ final class CartesiaPluginTests: XCTestCase {
         super.tearDown()
     }
 
-    func testPluginAdvertisesTranscriptionAndTTSProtocols() {
-        let plugin: Any = CartesiaPlugin()
+    func testPluginAdvertisesTranscriptionAndTTSProtocols() throws {
+        let cartesiaPlugin = CartesiaPlugin()
+        cartesiaPlugin.activate(host: try PluginTestHostServices())
+        let plugin: Any = cartesiaPlugin
 
         XCTAssertTrue(plugin is any TranscriptionEnginePlugin)
         XCTAssertTrue(plugin is any LanguageHintTranscriptionEnginePlugin)
         XCTAssertTrue(plugin is any TTSProviderPlugin)
-        XCTAssertTrue((plugin as? any TranscriptionEnginePlugin)?.supportsTranslation == false)
+        let transcriptionPlugin = try XCTUnwrap(plugin as? any TranscriptionEnginePlugin)
+        XCTAssertFalse(transcriptionPlugin.supportsTranslation)
     }
 
     func testTranslationCapabilityIsOptIn() throws {
