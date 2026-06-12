@@ -14,6 +14,7 @@ final class CartesiaPluginTests: XCTestCase {
         let plugin: Any = CartesiaPlugin()
 
         XCTAssertTrue(plugin is any TranscriptionEnginePlugin)
+        XCTAssertTrue(plugin is any LanguageHintTranscriptionEnginePlugin)
         XCTAssertTrue(plugin is any TTSProviderPlugin)
     }
 
@@ -47,6 +48,19 @@ final class CartesiaPluginTests: XCTestCase {
         )
         XCTAssertNil(CartesiaPlugin.resolvedLanguage("xx", supportedLanguages: CartesiaPlugin.sttSupportedLanguages))
         XCTAssertNil(CartesiaPlugin.resolvedLanguage("  ", supportedLanguages: CartesiaPlugin.sttSupportedLanguages))
+    }
+
+    func testTranscriptionLanguageResolutionDefaultsToRussianAndUsesHints() {
+        XCTAssertEqual(CartesiaPlugin.resolvedTranscriptionLanguage(requestedLanguage: nil, languageHints: []), "ru")
+        XCTAssertEqual(CartesiaPlugin.resolvedTranscriptionLanguage(requestedLanguage: " ", languageHints: []), "ru")
+        XCTAssertEqual(
+            CartesiaPlugin.resolvedTranscriptionLanguage(requestedLanguage: nil, languageHints: ["en-US", "de-DE"]),
+            "en"
+        )
+        XCTAssertEqual(
+            CartesiaPlugin.resolvedTranscriptionLanguage(requestedLanguage: "de-DE", languageHints: ["en-US"]),
+            "de"
+        )
     }
 
     func testTranscriptionRequestUsesNativeCartesiaEndpointHeadersLanguageAndWordTimestamps() throws {
@@ -191,6 +205,62 @@ final class CartesiaPluginTests: XCTestCase {
 
         let body = try XCTUnwrap(String(data: try XCTUnwrap(request.httpBody), encoding: .utf8))
         XCTAssertTrue(body.contains("name=\"language\"\r\n\r\nde"))
+    }
+
+    func testTranscribeDefaultsAutoSelectionToRussianLanguage() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "sk_car_live"])
+        let plugin = CartesiaPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"type":"transcript","text":"Привет, как дела?","language":"ru","words":[]}"#.utf8),
+                    Self.httpResponse(url: "https://api.cartesia.ai/stt", statusCode: 200)
+                )
+            ])
+        }
+
+        let result = try await plugin.transcribe(
+            audio: AudioData(samples: [0], wavData: Data("wav".utf8), duration: 1),
+            language: nil,
+            translate: false,
+            prompt: nil
+        )
+
+        XCTAssertEqual(result.text, "Привет, как дела?")
+
+        let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
+        let body = try XCTUnwrap(String(data: try XCTUnwrap(request.httpBody), encoding: .utf8))
+        XCTAssertTrue(body.contains("name=\"language\"\r\n\r\nru"))
+    }
+
+    func testTranscribeUsesFirstLanguageHintWhenNoExactLanguageSelected() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "sk_car_live"])
+        let plugin = CartesiaPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"type":"transcript","text":"Hello","language":"en","words":[]}"#.utf8),
+                    Self.httpResponse(url: "https://api.cartesia.ai/stt", statusCode: 200)
+                )
+            ])
+        }
+
+        _ = try await plugin.transcribe(
+            audio: AudioData(samples: [0], wavData: Data("wav".utf8), duration: 1),
+            languageSelection: PluginLanguageSelection(languageHints: ["en-US", "de-DE"]),
+            translate: false,
+            prompt: nil
+        )
+
+        let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
+        let body = try XCTUnwrap(String(data: try XCTUnwrap(request.httpBody), encoding: .utf8))
+        XCTAssertTrue(body.contains("name=\"language\"\r\n\r\nen"))
     }
 
     func testParseVoicesResponseSortsAndBuildsLocales() throws {

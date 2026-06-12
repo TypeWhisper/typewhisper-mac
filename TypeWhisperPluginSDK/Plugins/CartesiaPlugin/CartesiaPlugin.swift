@@ -212,6 +212,7 @@ private final class CartesiaAVAudioPlayback: CartesiaTTSAudioPlayback, @unchecke
 @objc(CartesiaPlugin)
 final class CartesiaPlugin: NSObject,
     TranscriptionEnginePlugin,
+    LanguageHintTranscriptionEnginePlugin,
     TTSProviderPlugin,
     PluginAuthRoleStatusProviding,
     @unchecked Sendable
@@ -222,6 +223,7 @@ final class CartesiaPlugin: NSObject,
     static let apiBaseURL = "https://api.cartesia.ai"
     static let apiVersion = "2026-03-01"
     static let sttModelId = "ink-whisper"
+    static let defaultSTTLanguage = "ru"
     static let ttsModelId = "sonic-3.5"
     static let ttsSampleRate = 44_100
     static let defaultVoiceId = "6ccbfb76-1fc6-48f7-b71d-91ac6298247b"
@@ -323,6 +325,37 @@ final class CartesiaPlugin: NSObject,
         translate: Bool,
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
+        try await transcribe(
+            audio: audio,
+            language: language,
+            languageHints: [],
+            translate: translate,
+            prompt: prompt
+        )
+    }
+
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        try await transcribe(
+            audio: audio,
+            language: languageSelection.requestedLanguage,
+            languageHints: languageSelection.languageHints,
+            translate: translate,
+            prompt: prompt
+        )
+    }
+
+    private func transcribe(
+        audio: AudioData,
+        language: String?,
+        languageHints: [String],
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
         guard !translate else {
             throw PluginTranscriptionError.apiError("Cartesia does not support Whisper Translate.")
         }
@@ -330,9 +363,9 @@ final class CartesiaPlugin: NSObject,
             throw PluginTranscriptionError.notConfigured
         }
 
-        let resolvedLanguage = Self.resolvedLanguage(
-            language,
-            supportedLanguages: Self.sttSupportedLanguages
+        let resolvedLanguage = Self.resolvedTranscriptionLanguage(
+            requestedLanguage: language,
+            languageHints: languageHints
         )
         let request = try Self.makeTranscriptionRequest(
             wavData: audio.wavData,
@@ -502,6 +535,18 @@ final class CartesiaPlugin: NSObject,
 }
 
 extension CartesiaPlugin {
+    static func resolvedTranscriptionLanguage(requestedLanguage: String?, languageHints: [String]) -> String {
+        if let requested = resolvedLanguage(requestedLanguage, supportedLanguages: sttSupportedLanguages) {
+            return requested
+        }
+        for hint in languageHints {
+            if let resolved = resolvedLanguage(hint, supportedLanguages: sttSupportedLanguages) {
+                return resolved
+            }
+        }
+        return defaultSTTLanguage
+    }
+
     static func resolvedLanguage(_ language: String?, supportedLanguages: [String]) -> String? {
         guard let language else { return nil }
         let normalized = language
