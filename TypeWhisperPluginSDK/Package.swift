@@ -252,6 +252,15 @@ let package = Package(
             ]
         ),
         .target(
+            name: "SaluteSpeechPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/SaluteSpeechPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
             name: "WebhookPlugin",
             dependencies: ["TypeWhisperPluginSDK"],
             path: "Plugins/WebhookPlugin",
@@ -467,6 +476,15 @@ let package = Package(
                 "SmallestAIPlugin",
             ],
             path: "Plugins/SmallestAIPlugin/Tests"
+        ),
+        .testTarget(
+            name: "SaluteSpeechPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "SaluteSpeechPlugin",
+            ],
+            path: "Plugins/SaluteSpeechPlugin/Tests"
         ),
         .testTarget(
             name: "WebhookPluginTests",
