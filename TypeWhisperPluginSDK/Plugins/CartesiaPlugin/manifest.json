@@ -1,0 +1,21 @@
+{
+    "id": "com.typewhisper.cartesia",
+    "name": "Cartesia",
+    "version": "1.0.0",
+    "minHostVersion": "1.4.0",
+    "sdkCompatibilityVersion": "v1",
+    "minOSVersion": "14.0",
+    "author": "TypeWhisper",
+    "description": "Cloud speech-to-text and text-to-speech via Cartesia APIs. Requires a Cartesia API key.",
+    "descriptions": {
+        "de": "Cloud Speech-to-Text und Text-to-Speech über Cartesia APIs. Erfordert einen Cartesia API-Key."
+    },
+    "category": "transcription",
+    "categories": ["transcription", "tts"],
+    "hosting": "cloud",
+    "iconSystemName": "waveform",
+    "principalClass": "CartesiaPlugin",
+    "requiresAPIKey": true,
+    "detailsURL": "https://www.typewhisper.com/addons/cartesia/",
+    "homepageURL": "https://www.cartesia.ai/"
+}

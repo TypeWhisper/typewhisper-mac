@@ -1122,6 +1122,7 @@ struct PluginSettingsView: View {
 
 private let typeWhisperAddonSlugsByPluginID: [String: String] = [
     "com.typewhisper.assemblyai": "assemblyai",
+    "com.typewhisper.cartesia": "cartesia",
     "com.typewhisper.cerebras": "cerebras",
     "com.typewhisper.claude": "claude",
     "com.typewhisper.cloudflare-asr": "cloudflare-asr",
