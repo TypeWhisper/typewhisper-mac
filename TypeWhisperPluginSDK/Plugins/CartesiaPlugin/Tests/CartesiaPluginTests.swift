@@ -304,7 +304,7 @@ final class CartesiaPluginTests: XCTestCase {
         XCTAssertTrue(body.contains("name=\"language\"\r\n\r\nde"))
     }
 
-    func testTranscribeDefaultsAutoSelectionToConfiguredEnglishLanguage() async throws {
+    func testTranscribeDefaultsToEnglishWhenNoLanguageConfigured() async throws {
         let host = try PluginTestHostServices(secrets: ["api-key": "sk_car_live"])
         let plugin = CartesiaPlugin()
         plugin.activate(host: host)

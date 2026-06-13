@@ -161,6 +161,22 @@
         }
       }
     },
+    "Speech: %@; Voice: %@; Cartesia": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprache: %@; Stimme: %@; Cartesia"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音声認識: %@; 音声: %@; Cartesia"
+          }
+        }
+      }
+    },
     "Spoken Language": {
       "localizations": {
         "de": {

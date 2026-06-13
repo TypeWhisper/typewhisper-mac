@@ -242,7 +242,7 @@ final class CartesiaPlugin: NSObject,
         [
             PluginVoiceInfo(
                 id: defaultVoiceId,
-                displayName: String(localized: "Default Voice", bundle: Bundle(for: CartesiaPlugin.self)),
+                displayName: String(localized: "Default Voice", bundle: pluginModuleBundle),
                 localeIdentifier: "en"
             )
         ]
@@ -437,8 +437,9 @@ final class CartesiaPlugin: NSObject,
         let speechLanguage = Self.displayName(forLanguageCode: _transcriptionLanguage)
         let voice = availableVoices.first { $0.id == selectedVoiceId }?.displayName
             ?? selectedVoiceId
-            ?? "Default Voice"
-        return "Speech: \(speechLanguage); Voice: \(voice); Cartesia"
+            ?? String(localized: "Default Voice", bundle: pluginModuleBundle)
+        let format = String(localized: "Speech: %@; Voice: %@; Cartesia", bundle: pluginModuleBundle)
+        return String(format: format, speechLanguage, voice)
     }
 
     func selectVoice(_ voiceId: String?) {
@@ -819,7 +820,7 @@ private struct CartesiaSettingsView: View {
     @State private var voiceOptions: [PluginVoiceInfo] = []
     @State private var selectedVoiceId = ""
     @State private var customVoiceId = ""
-    private let bundle = Bundle(for: CartesiaPlugin.self)
+    private let bundle = pluginModuleBundle
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -1043,6 +1044,14 @@ private struct CartesiaSettingsView: View {
         }
     }
 }
+
+private let pluginModuleBundle: Bundle = {
+#if SWIFT_PACKAGE
+    Bundle.module
+#else
+    Bundle(for: CartesiaPlugin.self)
+#endif
+}()
 
 private extension Data {
     mutating func appendMultipartField(boundary: String, name: String, value: String) {
