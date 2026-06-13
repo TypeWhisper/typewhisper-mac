@@ -262,7 +262,8 @@ jobs:
           gh release create "$TAG" "$ASSET" \
             --target "$GITHUB_SHA" \
             --title "${TARGET} v${PLUGIN_VERSION}" \
-            --notes ""
+            --notes "" \
+            --latest=false
 
       - name: Update Plugin Registry
         env:
