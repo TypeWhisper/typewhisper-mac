@@ -21,11 +21,8 @@ final class InceptionPlugin: NSObject,
     fileprivate var _llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue
     fileprivate var _llmTemperatureValue: Double = 0.75
     fileprivate var _reasoningEffort: String = "medium"
+    fileprivate var _outputModeRaw: String = InceptionOutputMode.streaming.rawValue
     fileprivate var _fetchedModels: [InceptionFetchedModel] = []
-
-    private let chatHelper = PluginOpenAIChatHelper(
-        baseURL: "https://api.inceptionlabs.ai"
-    )
 
     required override init() {
         super.init()
@@ -45,6 +42,8 @@ final class InceptionPlugin: NSObject,
             ?? 0.75
         _reasoningEffort = host.userDefault(forKey: "reasoningEffort") as? String
             ?? "medium"
+        _outputModeRaw = host.userDefault(forKey: "outputMode") as? String
+            ?? InceptionOutputMode.streaming.rawValue
     }
 
     func deactivate() {
@@ -98,7 +97,7 @@ final class InceptionPlugin: NSObject,
             throw PluginChatError.notConfigured
         }
         let modelId = model ?? _selectedLLMModelId ?? supportedModels.first!.id
-        return try await chatHelper.process(
+        return try await Self.processStreamingChatCompletion(
             apiKey: apiKey,
             model: modelId,
             systemPrompt: systemPrompt,
@@ -106,6 +105,7 @@ final class InceptionPlugin: NSObject,
             maxOutputTokens: 8192,
             reasoningEffort: _reasoningEffort,
             temperature: providerTemperatureDirective.resolvedTemperature(applying: temperatureDirective),
+            outputMode: outputMode,
             requestTimeout: 120
         )
     }
@@ -175,6 +175,15 @@ final class InceptionPlugin: NSObject,
         host?.setUserDefault(value, forKey: "reasoningEffort")
     }
 
+    func setOutputMode(_ mode: InceptionOutputMode) {
+        _outputModeRaw = mode.rawValue
+        host?.setUserDefault(mode.rawValue, forKey: "outputMode")
+    }
+
+    var outputMode: InceptionOutputMode {
+        InceptionOutputMode(rawValue: _outputModeRaw) ?? .streaming
+    }
+
     func validateApiKey(_ key: String) async -> Bool {
         guard !key.isEmpty,
               let url = URL(string: "https://api.inceptionlabs.ai/v1/models") else { return false }
@@ -226,6 +235,145 @@ final class InceptionPlugin: NSObject,
     }
 
     fileprivate static let reasoningEfforts = ["instant", "low", "medium", "high"]
+
+    private static func processStreamingChatCompletion(
+        apiKey: String,
+        model: String,
+        systemPrompt: String,
+        userText: String,
+        maxOutputTokens: Int,
+        reasoningEffort: String,
+        temperature: Double?,
+        outputMode: InceptionOutputMode,
+        requestTimeout: TimeInterval
+    ) async throws -> String {
+        guard let url = URL(string: "https://api.inceptionlabs.ai/v1/chat/completions") else {
+            throw PluginChatError.apiError("Invalid Inception chat URL")
+        }
+
+        var requestBody: [String: Any] = [
+            "model": model,
+            "messages": [
+                ["role": "system", "content": systemPrompt],
+                ["role": "user", "content": userText],
+            ],
+            "max_tokens": maxOutputTokens,
+            "reasoning_effort": reasoningEffort,
+            "stream": true,
+        ]
+
+        if let temperature {
+            requestBody["temperature"] = temperature
+        }
+
+        if outputMode == .diffusion {
+            requestBody["diffusing"] = true
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        request.timeoutInterval = requestTimeout
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+
+        let (data, response) = try await PluginHTTPClient.data(for: request, resourceTimeout: requestTimeout)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw PluginChatError.networkError("Invalid response")
+        }
+
+        switch httpResponse.statusCode {
+        case 200:
+            break
+        case 401:
+            throw PluginChatError.invalidApiKey
+        case 429:
+            throw PluginChatError.rateLimited
+        default:
+            throw PluginChatError.apiError(errorMessage(from: data, statusCode: httpResponse.statusCode))
+        }
+
+        let content = try parseStreamingContent(from: data, outputMode: outputMode)
+        return content.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static func parseStreamingContent(from data: Data, outputMode: InceptionOutputMode) throws -> String {
+        guard let stream = String(data: data, encoding: .utf8) else {
+            throw PluginChatError.apiError("Failed to parse streaming response")
+        }
+
+        var accumulated = ""
+        var latest = ""
+
+        for rawLine in stream.split(whereSeparator: \.isNewline) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard line.hasPrefix("data: ") else { continue }
+
+            let payload = String(line.dropFirst(6))
+            guard payload != "[DONE]" else { continue }
+
+            guard let payloadData = payload.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any],
+                  let choices = json["choices"] as? [[String: Any]] else {
+                continue
+            }
+
+            for choice in choices {
+                guard let delta = choice["delta"] as? [String: Any],
+                      let content = delta["content"] as? String,
+                      !content.isEmpty else {
+                    continue
+                }
+
+                switch outputMode {
+                case .streaming:
+                    accumulated += content
+                case .diffusion:
+                    latest = content
+                }
+            }
+        }
+
+        let content = outputMode == .diffusion ? latest : accumulated
+        guard !content.isEmpty else {
+            throw PluginChatError.apiError("Failed to parse streaming response")
+        }
+        return content
+    }
+
+    private static func errorMessage(from data: Data, statusCode: Int) -> String {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return "HTTP \(statusCode)"
+        }
+        if let detail = object["detail"] as? String, !detail.isEmpty {
+            return detail
+        }
+        if let error = object["error"] as? [String: Any],
+           let message = error["message"] as? String,
+           !message.isEmpty {
+            return message
+        }
+        if let message = object["message"] as? String, !message.isEmpty {
+            return message
+        }
+        return "HTTP \(statusCode)"
+    }
+}
+
+enum InceptionOutputMode: String, CaseIterable, Sendable {
+    case streaming
+    case diffusion
+
+    var displayName: String {
+        switch self {
+        case .streaming:
+            return "Streaming"
+        case .diffusion:
+            return "Diffusion"
+        }
+    }
 }
 
 // MARK: - Fetched Model
@@ -271,6 +419,7 @@ private struct InceptionSettingsView: View {
     @State private var showApiKey = false
     @State private var selectedModel: String = ""
     @State private var reasoningEffort: String = "medium"
+    @State private var outputMode: InceptionOutputMode = .streaming
     @State private var llmTemperatureMode: PluginLLMTemperatureMode = .providerDefault
     @State private var llmTemperatureValue: Double = 0.75
     @State private var fetchedModels: [InceptionFetchedModel] = []
@@ -377,16 +526,32 @@ private struct InceptionSettingsView: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Reasoning Effort")
+                    Text("Thinking Level")
                         .font(.headline)
 
-                    Picker("Reasoning Effort", selection: $reasoningEffort) {
+                    Picker("Thinking Level", selection: $reasoningEffort) {
                         ForEach(InceptionPlugin.reasoningEfforts, id: \.self) { value in
                             Text(value.capitalized).tag(value)
                         }
                     }
                     .onChange(of: reasoningEffort) {
                         plugin.setReasoningEffort(reasoningEffort)
+                    }
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Output Mode")
+                        .font(.headline)
+
+                    Picker("Output Mode", selection: $outputMode) {
+                        ForEach(InceptionOutputMode.allCases, id: \.self) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+                    .onChange(of: outputMode) {
+                        plugin.setOutputMode(outputMode)
                     }
                 }
 
@@ -434,6 +599,7 @@ private struct InceptionSettingsView: View {
             }
             selectedModel = plugin.selectedLLMModelId ?? plugin.supportedModels.first?.id ?? ""
             reasoningEffort = plugin._reasoningEffort
+            outputMode = plugin.outputMode
             llmTemperatureMode = plugin.llmTemperatureMode
             llmTemperatureValue = plugin.llmTemperatureValue
             fetchedModels = plugin._fetchedModels
