@@ -83,6 +83,15 @@ let package = Package(
             ]
         ),
         .target(
+            name: "InceptionPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/InceptionPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
             name: "FireworksPlugin",
             dependencies: ["TypeWhisperPluginSDK"],
             path: "Plugins/FireworksPlugin",
@@ -336,6 +345,15 @@ let package = Package(
                 "CerebrasPlugin",
             ],
             path: "Plugins/CerebrasPlugin/Tests"
+        ),
+        .testTarget(
+            name: "InceptionPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "InceptionPlugin",
+            ],
+            path: "Plugins/InceptionPlugin/Tests"
         ),
         .testTarget(
             name: "FireworksPluginTests",

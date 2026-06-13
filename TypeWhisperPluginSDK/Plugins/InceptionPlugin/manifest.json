@@ -1,0 +1,18 @@
+{
+  "id": "com.typewhisper.inception",
+  "name": "Inception",
+  "version": "1.0.0",
+  "minHostVersion": "1.5.0",
+  "sdkCompatibilityVersion": "v1",
+  "minOSVersion": "14.0",
+  "author": "TypeWhisper",
+  "description": "LLM post-processing via Inception Mercury diffusion models. Requires an Inception API key.",
+  "descriptions": {
+    "de": "LLM-Nachbearbeitung über Inception Mercury Diffusion-Modelle. Erfordert einen Inception API-Key."
+  },
+  "category": "llm",
+  "iconSystemName": "sparkles",
+  "principalClass": "InceptionPlugin",
+  "requiresAPIKey": true,
+  "detailsURL": "https://www.inceptionlabs.ai/models"
+}

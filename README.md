@@ -511,7 +511,7 @@ Multiple engines can be loaded simultaneously for instant switching between work
 
 TypeWhisper supports plugins for adding custom LLM providers, transcription engines, TTS providers, post-processors, and action plugins. Plugins are macOS `.bundle` files placed in `~/Library/Application Support/TypeWhisper/Plugins/`.
 
-Bundled engines and integrations (WhisperKit, Parakeet, SpeechAnalyzer, Granite, Qwen3, Voxtral, Supertonic, Groq, OpenAI, xAI/Grok, OpenAI Compatible, Gemini, Linear, Webhook, and more) are implemented as plugins and serve as reference implementations.
+Bundled engines and integrations (WhisperKit, Parakeet, SpeechAnalyzer, Granite, Qwen3, Voxtral, Supertonic, Groq, OpenAI, Inception, xAI/Grok, OpenAI Compatible, Gemini, Linear, Webhook, and more) are implemented as plugins and serve as reference implementations.
 
 See [TypeWhisperPluginSDK/Plugins/README.md](TypeWhisperPluginSDK/Plugins/README.md) for the full plugin development guide, including the event bus, host services API, and manifest format.
 
