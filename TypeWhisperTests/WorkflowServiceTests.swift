@@ -379,6 +379,41 @@ final class WorkflowServiceTests: XCTestCase {
         )
     }
 
+    func testWorkflowDraftPreservesAppleTranslateOutputFormatWhenSaving() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        var draft = WorkflowDraft(template: .translation)
+        draft.translationProcessor = .appleTranslate
+        draft.translationTargetLanguage = "de"
+        draft.outputFormat = "rtf"
+        draft.outputFormatOverrides = [
+            WorkflowOutputFormatOverrideDraft(
+                bundleIdentifiersText: "com.apple.Pages",
+                format: "markdown"
+            )
+        ]
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory)
+        _ = service.addWorkflow(
+            name: draft.resolvedName,
+            template: draft.template,
+            trigger: try XCTUnwrap(draft.resolvedTrigger()),
+            behavior: draft.resolvedBehavior(),
+            output: draft.resolvedOutput(),
+            isEnabled: draft.isEnabled
+        )
+
+        let reloaded = WorkflowService(appSupportDirectory: appSupportDirectory)
+        let workflow = try XCTUnwrap(reloaded.workflows.first)
+
+        XCTAssertEqual(workflow.translationProcessor, .appleTranslate)
+        XCTAssertEqual(workflow.output.format, "rtf")
+        XCTAssertEqual(workflow.output.formatOverrides, [
+            WorkflowOutputFormatOverride(bundleIdentifiers: ["com.apple.Pages"], format: "markdown")
+        ])
+    }
+
     func testWorkflowDraftPreservesDictationTranscriptionOverridesWhenSaving() throws {
         let hotkey = UnifiedHotkey(keyCode: 15, modifierFlags: NSEvent.ModifierFlags.command.rawValue, isFn: false)
         let workflow = Workflow(

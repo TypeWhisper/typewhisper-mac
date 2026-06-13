@@ -928,7 +928,9 @@ private struct WorkflowEditorPage: View {
                                 workflowProviderOverrideSection
 
                                 Divider()
+                            }
 
+                            if draft.supportsOutputFormatting {
                                 outputFormatSection
 
                                 Divider()
@@ -2464,6 +2466,10 @@ struct WorkflowDraft {
         !usesAppleTranslate && template != .dictation
     }
 
+    var supportsOutputFormatting: Bool {
+        template != .dictation
+    }
+
     var reviewText: String {
         let languageSentence = localizedAppText(
             " Spoken language: \(workflowInputLanguageSummary(for: inputLanguageSelection)).",
@@ -2670,7 +2676,7 @@ struct WorkflowDraft {
             }
         }
 
-        if usesLLMProcessing, let outputFormatOverrideValidationError {
+        if supportsOutputFormatting, let outputFormatOverrideValidationError {
             return outputFormatOverrideValidationError
         }
 
@@ -2788,8 +2794,8 @@ struct WorkflowDraft {
     func resolvedOutput() -> WorkflowOutput {
         let trimmedFormat = outputFormat.trimmingCharacters(in: .whitespacesAndNewlines)
         return WorkflowOutput(
-            format: usesLLMProcessing && !trimmedFormat.isEmpty ? trimmedFormat : nil,
-            formatOverrides: usesLLMProcessing
+            format: supportsOutputFormatting && !trimmedFormat.isEmpty ? trimmedFormat : nil,
+            formatOverrides: supportsOutputFormatting
                 ? outputFormatOverrides.compactMap(\.resolvedOverride)
                 : [],
             autoEnter: autoEnter,
