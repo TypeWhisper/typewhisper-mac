@@ -1,0 +1,16 @@
+{
+    "id": "com.typewhisper.sber-salutespeech",
+    "name": "Sber SaluteSpeech",
+    "version": "0.1.0",
+    "minHostVersion": "1.4.0",
+    "sdkCompatibilityVersion": "v1",
+    "minOSVersion": "14.0",
+    "author": "TypeWhisper",
+    "description": "Cloud transcription via the Sber SaluteSpeech REST API. Requires a SaluteSpeech Authorization Key.",
+    "category": "transcription",
+    "hosting": "cloud",
+    "iconSystemName": "waveform.badge.mic",
+    "principalClass": "SaluteSpeechPlugin",
+    "requiresAPIKey": true,
+    "detailsURL": "https://developers.sber.ru/docs/ru/salutespeech/quick-start/integration-individuals"
+}
