@@ -57,8 +57,8 @@ struct NotchIndicatorView: View {
         presentation.state == .inserting && presentation.actionFeedbackMessage != nil
     }
 
-    private var hasRecordingCancelWarning: Bool {
-        presentation.state == .recording && presentation.recordingCancelWarningMessage != nil
+    private var hasCancelWarning: Bool {
+        presentation.cancelWarningMessage != nil
     }
 
     private var hasProcessingPhase: Bool {
@@ -78,7 +78,7 @@ struct NotchIndicatorView: View {
     }
 
     private var expansionMode: NotchExpansionMode {
-        if hasRecordingCancelWarning { return .feedback }
+        if hasCancelWarning { return .feedback }
         if transcriptBodyVisible { return .transcript }
         if hasActionFeedback { return .feedback }
         if hasProcessingPhase { return .processing }
@@ -109,7 +109,7 @@ struct NotchIndicatorView: View {
     }
 
     private var expandedBodyHeight: CGFloat {
-        if hasRecordingCancelWarning {
+        if hasCancelWarning {
             return feedbackBodyHeight
         }
         if hasTranscriptSection {
@@ -197,7 +197,7 @@ struct NotchIndicatorView: View {
         case .idle, .promptSelection, .promptProcessing:
             return String(localized: "Idle")
         case .recording:
-            if let warning = presentation.recordingCancelWarningMessage {
+            if let warning = presentation.cancelWarningMessage {
                 return warning
             }
             if !presentation.isRecordingInputReady {
@@ -205,6 +205,9 @@ struct NotchIndicatorView: View {
             }
             return String(localized: "Recording")
         case .processing:
+            if let warning = presentation.cancelWarningMessage {
+                return warning
+            }
             return String(localized: "Processing transcription")
         case .inserting:
             if let feedback = presentation.actionFeedbackMessage {
@@ -235,9 +238,9 @@ struct NotchIndicatorView: View {
 
     @ViewBuilder
     private var expandedBodyContent: some View {
-        if hasRecordingCancelWarning {
+        if hasCancelWarning {
             IndicatorActionFeedback(
-                message: presentation.recordingCancelWarningMessage ?? "",
+                message: presentation.cancelWarningMessage ?? "",
                 icon: "exclamationmark.triangle.fill",
                 isError: false,
                 iconColor: .yellow,

@@ -60,7 +60,7 @@ struct IndicatorPresentationData {
     let activeRuleName: String?
     let activeAppIcon: NSImage?
     let isRecordingInputReady: Bool
-    let recordingCancelWarningMessage: String?
+    let cancelWarningMessage: String?
     let processingPhase: String?
     let actionFeedbackMessage: String?
     let actionFeedbackIcon: String?
@@ -92,7 +92,7 @@ struct IndicatorPresentationData {
                 activeRuleName: dictation.activeRuleName,
                 activeAppIcon: dictation.activeAppIcon,
                 isRecordingInputReady: dictation.isRecordingInputReady,
-                recordingCancelWarningMessage: dictation.recordingCancelWarningMessage,
+                cancelWarningMessage: dictation.cancelWarningMessage,
                 processingPhase: dictation.processingPhase,
                 actionFeedbackMessage: dictation.actionFeedbackMessage,
                 actionFeedbackIcon: dictation.actionFeedbackIcon,
@@ -109,7 +109,7 @@ struct IndicatorPresentationData {
                 activeRuleName: nil,
                 activeAppIcon: nil,
                 isRecordingInputReady: true,
-                recordingCancelWarningMessage: nil,
+                cancelWarningMessage: nil,
                 processingPhase: nil,
                 actionFeedbackMessage: nil,
                 actionFeedbackIcon: nil,

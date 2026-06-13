@@ -6769,7 +6769,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         XCTAssertEqual(context.dictationViewModel.state, .recording)
         XCTAssertEqual(
-            context.dictationViewModel.recordingCancelWarningMessage,
+            context.dictationViewModel.cancelWarningMessage,
             try TestSupport.localizedCatalogValueForCurrentLocale(for: "Press Esc again to cancel recording")
         )
         XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
@@ -6792,7 +6792,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         context.dictationViewModel.handleCancelHotkey()
 
         XCTAssertEqual(context.dictationViewModel.state, .inserting)
-        XCTAssertNil(context.dictationViewModel.recordingCancelWarningMessage)
+        XCTAssertNil(context.dictationViewModel.cancelWarningMessage)
         XCTAssertEqual(
             context.dictationViewModel.actionFeedbackMessage,
             try TestSupport.localizedCatalogValueForCurrentLocale(for: "Cancelled")
@@ -6843,7 +6843,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
-    func testHandleCancelHotkey_processingStillCancelsImmediately() throws {
+    func testHandleCancelHotkey_processingRequiresSecondEscapeToCancel() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?
         defer {
@@ -6857,8 +6857,17 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         context.dictationViewModel.handleCancelHotkey()
 
+        XCTAssertEqual(context.dictationViewModel.state, .processing)
+        XCTAssertEqual(
+            context.dictationViewModel.cancelWarningMessage,
+            try TestSupport.localizedCatalogValueForCurrentLocale(for: "Press Esc again to cancel transcription")
+        )
+        XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
+
+        context.dictationViewModel.handleCancelHotkey()
+
         XCTAssertEqual(context.dictationViewModel.state, .inserting)
-        XCTAssertNil(context.dictationViewModel.recordingCancelWarningMessage)
+        XCTAssertNil(context.dictationViewModel.cancelWarningMessage)
         XCTAssertEqual(
             context.dictationViewModel.actionFeedbackMessage,
             try TestSupport.localizedCatalogValueForCurrentLocale(for: "Cancelled")
@@ -6927,7 +6936,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         context.dictationViewModel.handleCancelHotkey()
         context.dictationViewModel.state = .processing
 
-        XCTAssertNil(context.dictationViewModel.recordingCancelWarningMessage)
+        XCTAssertNil(context.dictationViewModel.cancelWarningMessage)
     }
 }
 

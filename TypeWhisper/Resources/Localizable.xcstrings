@@ -8457,6 +8457,22 @@
         }
       }
     },
+    "Press Esc again to cancel transcription": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drücke Esc erneut, um die Transkription abzubrechen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escを再度押して文字起こしをキャンセル"
+          }
+        }
+      }
+    },
     "Press to start, press again to stop.": {
       "localizations": {
         "de": {

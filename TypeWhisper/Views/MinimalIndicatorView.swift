@@ -44,9 +44,8 @@ struct MinimalIndicatorView: View {
         return presentation.actionFeedbackMessage
     }
 
-    private var recordingCancelWarningMessage: String? {
-        guard presentation.state == .recording else { return nil }
-        return presentation.recordingCancelWarningMessage
+    private var cancelWarningMessage: String? {
+        presentation.cancelWarningMessage
     }
 
     private var errorMessage: String? {
@@ -55,7 +54,7 @@ struct MinimalIndicatorView: View {
     }
 
     private var showsExpandedMessage: Bool {
-        recordingCancelWarningMessage != nil || actionFeedbackMessage != nil || errorMessage != nil
+        cancelWarningMessage != nil || actionFeedbackMessage != nil || errorMessage != nil
     }
 
     private var currentWidth: CGFloat {
@@ -107,7 +106,7 @@ struct MinimalIndicatorView: View {
         }
 
     private var accessibilityLabel: String {
-        if let message = recordingCancelWarningMessage {
+        if let message = cancelWarningMessage {
             return message
         }
 
@@ -140,7 +139,7 @@ struct MinimalIndicatorView: View {
                     icon: "xmark.circle.fill",
                     iconColor: .red
                 )
-            } else if let message = recordingCancelWarningMessage {
+            } else if let message = cancelWarningMessage {
                 compactMessage(
                     text: message,
                     icon: "exclamationmark.triangle.fill",
