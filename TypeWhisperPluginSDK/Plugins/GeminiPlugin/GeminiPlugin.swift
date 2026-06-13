@@ -172,10 +172,12 @@ final class GeminiPlugin: NSObject,
     var isConfigured: Bool { isAvailable }
 
     private static let defaultTranscriptionModels: [PluginModelInfo] = [
+        PluginModelInfo(id: "gemini-flash-lite-latest", displayName: "Gemini Flash-Lite Latest"),
+        PluginModelInfo(id: "gemini-flash-latest", displayName: "Gemini Flash Latest"),
         PluginModelInfo(id: "gemini-3.1-flash-lite", displayName: "Gemini 3.1 Flash-Lite"),
+        PluginModelInfo(id: "gemini-3.5-flash", displayName: "Gemini 3.5 Flash"),
         PluginModelInfo(id: "gemini-2.5-flash-lite", displayName: "Gemini 2.5 Flash-Lite"),
         PluginModelInfo(id: "gemini-2.5-flash", displayName: "Gemini 2.5 Flash"),
-        PluginModelInfo(id: "gemini-3.5-flash", displayName: "Gemini 3.5 Flash"),
     ]
 
     private static var defaultTranscriptionModelId: String {

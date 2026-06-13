@@ -117,17 +117,19 @@ final class GeminiPluginTests: XCTestCase {
         XCTAssertFalse(plugin.supportsTranslation)
         XCTAssertFalse(plugin.supportsStreaming)
         XCTAssertEqual(plugin.dictionaryTermsSupport, .supported)
-        XCTAssertEqual(plugin.selectedModelId, "gemini-3.1-flash-lite")
+        XCTAssertEqual(plugin.selectedModelId, "gemini-flash-lite-latest")
         XCTAssertEqual(
             plugin.transcriptionModels.map(\.id),
             [
+                "gemini-flash-lite-latest",
+                "gemini-flash-latest",
                 "gemini-3.1-flash-lite",
+                "gemini-3.5-flash",
                 "gemini-2.5-flash-lite",
                 "gemini-2.5-flash",
-                "gemini-3.5-flash",
             ]
         )
-        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "gemini-3.1-flash-lite")
+        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "gemini-flash-lite-latest")
     }
 
     func testSelectedTranscriptionModelPersistsAcrossActivation() throws {
@@ -151,15 +153,15 @@ final class GeminiPluginTests: XCTestCase {
 
         plugin.activate(host: host)
 
-        XCTAssertEqual(plugin.selectedModelId, "gemini-3.1-flash-lite")
-        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "gemini-3.1-flash-lite")
+        XCTAssertEqual(plugin.selectedModelId, "gemini-flash-lite-latest")
+        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "gemini-flash-lite-latest")
     }
 
     func testTranscriptionRequestUsesGenerateContentJSONAudioPromptAndLanguage() throws {
         let request = try GeminiPlugin.makeTranscriptionRequest(
             audio: Self.audio(),
             apiKey: "gemini-key",
-            modelId: "gemini-3.1-flash-lite",
+            modelId: "gemini-flash-lite-latest",
             language: " de ",
             prompt: "Qwen3, MLX, proxy_read_timeout",
             timeout: 60
@@ -168,7 +170,7 @@ final class GeminiPluginTests: XCTestCase {
         XCTAssertEqual(request.httpMethod, "POST")
         XCTAssertEqual(
             request.url?.absoluteString,
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent"
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent"
         )
         XCTAssertEqual(request.value(forHTTPHeaderField: "x-goog-api-key"), "gemini-key")
         XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
@@ -181,7 +183,7 @@ final class GeminiPluginTests: XCTestCase {
         let parts = try XCTUnwrap(contents.first?["parts"] as? [[String: Any]])
         let promptText = try XCTUnwrap(parts.first?["text"] as? String)
         XCTAssertTrue(promptText.contains("technical dictation"))
-        XCTAssertTrue(promptText.contains("Qwen3, MLX, proxy_read_timeout"))
+        XCTAssertTrue(promptText.contains("User dictionary terms: Qwen3, MLX, proxy_read_timeout"))
         XCTAssertTrue(promptText.contains("Language hint: de"))
 
         let inlineData = try XCTUnwrap(parts.last?["inlineData"] as? [String: Any])
@@ -192,9 +194,42 @@ final class GeminiPluginTests: XCTestCase {
         XCTAssertEqual(generationConfig["temperature"] as? Double, 0.2)
         XCTAssertEqual(generationConfig["maxOutputTokens"] as? Int, 2048)
         XCTAssertEqual(generationConfig["responseMimeType"] as? String, "text/plain")
+        XCTAssertNil(generationConfig["thinkingConfig"])
+    }
+
+    func testPinnedGeminiThreeTranscriptionRequestUsesMinimalThinkingLevel() throws {
+        let request = try GeminiPlugin.makeTranscriptionRequest(
+            audio: Self.audio(),
+            apiKey: "gemini-key",
+            modelId: "gemini-3.1-flash-lite",
+            language: nil,
+            prompt: nil,
+            timeout: 60
+        )
+
+        let body = try Self.jsonBody(from: request)
+        let generationConfig = try XCTUnwrap(body["generationConfig"] as? [String: Any])
         XCTAssertEqual(
             (generationConfig["thinkingConfig"] as? [String: Any])?["thinkingLevel"] as? String,
             "MINIMAL"
+        )
+    }
+
+    func testPinnedGeminiTwoPointFiveTranscriptionRequestUsesZeroThinkingBudget() throws {
+        let request = try GeminiPlugin.makeTranscriptionRequest(
+            audio: Self.audio(),
+            apiKey: "gemini-key",
+            modelId: "gemini-2.5-flash",
+            language: nil,
+            prompt: nil,
+            timeout: 60
+        )
+
+        let body = try Self.jsonBody(from: request)
+        let generationConfig = try XCTUnwrap(body["generationConfig"] as? [String: Any])
+        XCTAssertEqual(
+            (generationConfig["thinkingConfig"] as? [String: Any])?["thinkingBudget"] as? Int,
+            0
         )
     }
 
@@ -202,7 +237,7 @@ final class GeminiPluginTests: XCTestCase {
         let request = try GeminiPlugin.makeTranscriptionRequest(
             audio: Self.audio(),
             apiKey: "gemini-key",
-            modelId: "gemini-2.5-flash",
+            modelId: "gemini-flash-lite-latest",
             language: " ",
             prompt: " ",
             timeout: 60
@@ -214,12 +249,6 @@ final class GeminiPluginTests: XCTestCase {
         let promptText = try XCTUnwrap(parts.first?["text"] as? String)
         XCTAssertFalse(promptText.contains("User dictionary terms:"))
         XCTAssertFalse(promptText.contains("Language hint:"))
-
-        let generationConfig = try XCTUnwrap(body["generationConfig"] as? [String: Any])
-        XCTAssertEqual(
-            (generationConfig["thinkingConfig"] as? [String: Any])?["thinkingBudget"] as? Int,
-            0
-        )
     }
 
     func testTranscribeFailsWithoutAPIKey() async throws {
@@ -270,7 +299,7 @@ final class GeminiPluginTests: XCTestCase {
         let host = try PluginTestHostServices(
             defaults: [
                 Self.cachedLLMModelsKey: try Self.cachedModelsData(),
-                "selectedModel": "gemini-3.1-flash-lite",
+                "selectedModel": "gemini-flash-lite-latest",
             ],
             secrets: ["api-key": "gemini-key"]
         )
@@ -296,7 +325,7 @@ final class GeminiPluginTests: XCTestCase {
                         }
                         """.utf8
                     ),
-                    Self.httpResponse(url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent", statusCode: 200)
+                    Self.httpResponse(url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent", statusCode: 200)
                 ),
             ])
         }
@@ -312,7 +341,7 @@ final class GeminiPluginTests: XCTestCase {
         XCTAssertEqual(result.detectedLanguage, "en")
 
         let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
-        XCTAssertEqual(request.url?.path, "/v1beta/models/gemini-3.1-flash-lite:generateContent")
+        XCTAssertEqual(request.url?.path, "/v1beta/models/gemini-flash-lite-latest:generateContent")
         XCTAssertEqual(request.value(forHTTPHeaderField: "x-goog-api-key"), "gemini-key")
 
         let body = try Self.jsonBody(from: request)
