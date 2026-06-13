@@ -7,7 +7,6 @@ import os
 private enum CartesiaDefaultsKey {
     static let apiKey = "api-key"
     static let transcriptionLanguage = "transcriptionLanguage"
-    static let englishTranslationEnabled = "englishTranslationEnabled"
     static let selectedVoice = "selectedVoice"
     static let customVoiceId = "customVoiceId"
     static let fetchedVoices = "fetchedVoices"
@@ -235,14 +234,19 @@ final class CartesiaPlugin: NSObject,
     static let apiBaseURL = "https://api.cartesia.ai"
     static let apiVersion = "2026-03-01"
     static let sttModelId = "ink-whisper"
-    static let defaultTranscriptionLanguage = "ru"
-    static let translationLanguage = "en"
+    static let defaultTranscriptionLanguage = "en"
     static let ttsModelId = "sonic-3.5"
     static let ttsSampleRate = 44_100
     static let defaultVoiceId = "6ccbfb76-1fc6-48f7-b71d-91ac6298247b"
-    static let fallbackVoices = [
-        PluginVoiceInfo(id: defaultVoiceId, displayName: "Default Voice", localeIdentifier: "en")
-    ]
+    static var fallbackVoices: [PluginVoiceInfo] {
+        [
+            PluginVoiceInfo(
+                id: defaultVoiceId,
+                displayName: String(localized: "Default Voice", bundle: Bundle(for: CartesiaPlugin.self)),
+                localeIdentifier: "en"
+            )
+        ]
+    }
 
     static let sttSupportedLanguages = [
         "af", "am", "ar", "as", "az", "ba", "be", "bg", "bn", "bo",
@@ -271,8 +275,6 @@ final class CartesiaPlugin: NSObject,
             .sorted { lhs, rhs in
                 if lhs.code == defaultTranscriptionLanguage { return true }
                 if rhs.code == defaultTranscriptionLanguage { return false }
-                if lhs.code == translationLanguage { return true }
-                if rhs.code == translationLanguage { return false }
                 return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
             }
     }
@@ -281,7 +283,6 @@ final class CartesiaPlugin: NSObject,
     fileprivate var host: HostServices?
     fileprivate var _apiKey: String?
     fileprivate var _transcriptionLanguage = CartesiaPlugin.defaultTranscriptionLanguage
-    fileprivate var _englishTranslationEnabled = false
     fileprivate var _selectedVoiceId: String?
     fileprivate var _customVoiceId = ""
     fileprivate var _fetchedVoices: [CartesiaFetchedVoice] = []
@@ -297,7 +298,6 @@ final class CartesiaPlugin: NSObject,
             host.userDefault(forKey: CartesiaDefaultsKey.transcriptionLanguage) as? String,
             supportedLanguages: Self.sttSupportedLanguages
         ) ?? Self.defaultTranscriptionLanguage
-        _englishTranslationEnabled = host.userDefault(forKey: CartesiaDefaultsKey.englishTranslationEnabled) as? Bool ?? false
         _selectedVoiceId = host.userDefault(forKey: CartesiaDefaultsKey.selectedVoice) as? String
             ?? Self.defaultVoiceId
         _customVoiceId = host.userDefault(forKey: CartesiaDefaultsKey.customVoiceId) as? String ?? ""
@@ -311,7 +311,6 @@ final class CartesiaPlugin: NSObject,
         host = nil
         _apiKey = nil
         _transcriptionLanguage = Self.defaultTranscriptionLanguage
-        _englishTranslationEnabled = false
         _selectedVoiceId = Self.defaultVoiceId
         _customVoiceId = ""
         _fetchedVoices = []
@@ -354,7 +353,7 @@ final class CartesiaPlugin: NSObject,
 
     func selectModel(_ modelId: String) {}
 
-    var supportsTranslation: Bool { _englishTranslationEnabled }
+    var supportsTranslation: Bool { false }
     var supportedLanguages: [String] { Self.sttSupportedLanguages }
 
     func transcribe(
@@ -367,7 +366,6 @@ final class CartesiaPlugin: NSObject,
             audio: audio,
             language: language,
             languageHints: [],
-            translate: translate,
             prompt: prompt
         )
     }
@@ -382,7 +380,6 @@ final class CartesiaPlugin: NSObject,
             audio: audio,
             language: languageSelection.requestedLanguage,
             languageHints: languageSelection.languageHints,
-            translate: translate,
             prompt: prompt
         )
     }
@@ -391,19 +388,16 @@ final class CartesiaPlugin: NSObject,
         audio: AudioData,
         language: String?,
         languageHints: [String],
-        translate: Bool,
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
         guard let apiKey = normalizedAPIKey else {
             throw PluginTranscriptionError.notConfigured
         }
 
-        let shouldTranslate = _englishTranslationEnabled
         let resolvedLanguage = Self.resolvedTranscriptionLanguage(
             requestedLanguage: language,
             languageHints: languageHints,
-            configuredLanguage: _transcriptionLanguage,
-            translate: shouldTranslate
+            configuredLanguage: _transcriptionLanguage
         )
         let request = try Self.makeTranscriptionRequest(
             wavData: audio.wavData,
@@ -416,7 +410,7 @@ final class CartesiaPlugin: NSObject,
         try Self.validateHTTPResponse(data: data, response: response)
         return try Self.parseTranscriptionResponse(
             data,
-            fallbackLanguage: shouldTranslate ? Self.translationLanguage : resolvedLanguage
+            fallbackLanguage: resolvedLanguage
         )
     }
 
@@ -444,8 +438,7 @@ final class CartesiaPlugin: NSObject,
         let voice = availableVoices.first { $0.id == selectedVoiceId }?.displayName
             ?? selectedVoiceId
             ?? "Default Voice"
-        let translation = _englishTranslationEnabled ? "; Translate enabled" : ""
-        return "Speech: \(speechLanguage); Voice: \(voice)\(translation); Cartesia"
+        return "Speech: \(speechLanguage); Voice: \(voice); Cartesia"
     }
 
     func selectVoice(_ voiceId: String?) {
@@ -505,7 +498,6 @@ final class CartesiaPlugin: NSObject,
 
     fileprivate var apiKeyForSettings: String? { _apiKey }
     fileprivate var transcriptionLanguageForSettings: String { _transcriptionLanguage }
-    fileprivate var englishTranslationEnabledForSettings: Bool { _englishTranslationEnabled }
 
     fileprivate func setApiKey(_ key: String) throws {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -540,13 +532,6 @@ final class CartesiaPlugin: NSObject,
         guard resolved != _transcriptionLanguage else { return }
         _transcriptionLanguage = resolved
         host?.setUserDefault(resolved, forKey: CartesiaDefaultsKey.transcriptionLanguage)
-        host?.notifyCapabilitiesChanged()
-    }
-
-    fileprivate func setEnglishTranslationEnabled(_ enabled: Bool) {
-        guard enabled != _englishTranslationEnabled else { return }
-        _englishTranslationEnabled = enabled
-        host?.setUserDefault(enabled, forKey: CartesiaDefaultsKey.englishTranslationEnabled)
         host?.notifyCapabilitiesChanged()
     }
 
@@ -602,10 +587,7 @@ extension CartesiaPlugin {
         requestedLanguage: String?,
         languageHints: [String],
         configuredLanguage: String?,
-        translate: Bool = false,
     ) -> String? {
-        guard !translate else { return nil }
-
         if let requested = resolvedLanguage(requestedLanguage, supportedLanguages: sttSupportedLanguages) {
             return requested
         }
@@ -834,24 +816,24 @@ private struct CartesiaSettingsView: View {
     @State private var validationResult: CartesiaAPIKeyValidationResult?
     @State private var settingsErrorMessage: String?
     @State private var transcriptionLanguage = CartesiaPlugin.defaultTranscriptionLanguage
-    @State private var englishTranslationEnabled = false
     @State private var voiceOptions: [PluginVoiceInfo] = []
     @State private var selectedVoiceId = ""
     @State private var customVoiceId = ""
+    private let bundle = Bundle(for: CartesiaPlugin.self)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("API Key")
+                Text("API Key", bundle: bundle)
                     .font(.headline)
 
                 HStack(spacing: 8) {
                     if showApiKey {
-                        TextField("API Key", text: $apiKeyInput)
+                        TextField(String(localized: "API Key", bundle: bundle), text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.body, design: .monospaced))
                     } else {
-                        SecureField("API Key", text: $apiKeyInput)
+                        SecureField(String(localized: "API Key", bundle: bundle), text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
                     }
 
@@ -863,14 +845,14 @@ private struct CartesiaSettingsView: View {
                     .buttonStyle(.borderless)
 
                     if plugin.isConfigured {
-                        Button("Remove") {
+                        Button(String(localized: "Remove", bundle: bundle)) {
                             removeApiKey()
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                         .foregroundStyle(.red)
                     } else {
-                        Button("Save") {
+                        Button(String(localized: "Save", bundle: bundle)) {
                             saveApiKey()
                         }
                         .buttonStyle(.borderedProminent)
@@ -886,27 +868,19 @@ private struct CartesiaSettingsView: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Speech Recognition")
+                    Text("Speech Recognition", bundle: bundle)
                         .font(.headline)
 
-                    Picker("Spoken Language", selection: $transcriptionLanguage) {
+                    Picker(String(localized: "Spoken Language", bundle: bundle), selection: $transcriptionLanguage) {
                         ForEach(CartesiaPlugin.sttLanguageOptions) { language in
                             Text(language.displayName).tag(language.code)
                         }
                     }
-                    .disabled(englishTranslationEnabled)
                     .onChange(of: transcriptionLanguage) {
                         plugin.selectTranscriptionLanguage(transcriptionLanguage)
                     }
 
-                    Toggle("Enable Translate to English", isOn: $englishTranslationEnabled)
-                        .onChange(of: englishTranslationEnabled) {
-                            plugin.setEnglishTranslationEnabled(englishTranslationEnabled)
-                        }
-
-                    Text(englishTranslationEnabled
-                         ? "Translation mode ignores the spoken language picker and asks Cartesia for English output."
-                         : "Spoken Language is the source audio language. Choose English only when the audio itself is English.")
+                    Text("Spoken Language is the source audio language. Choose English only when the audio itself is English.", bundle: bundle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -915,17 +889,17 @@ private struct CartesiaSettingsView: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("Text-to-Speech Voice")
+                        Text("Text-to-Speech Voice", bundle: bundle)
                             .font(.headline)
                         Spacer()
-                        Button("Refresh") {
+                        Button(String(localized: "Refresh", bundle: bundle)) {
                             refreshVoices()
                         }
                         .controlSize(.small)
                         .disabled(isRefreshingVoices)
                     }
 
-                    Picker("Text-to-Speech Voice", selection: $selectedVoiceId) {
+                    Picker(String(localized: "Text-to-Speech Voice", bundle: bundle), selection: $selectedVoiceId) {
                         ForEach(voiceOptions, id: \.id) { voice in
                             Text(voice.displayName).tag(voice.id)
                         }
@@ -936,10 +910,10 @@ private struct CartesiaSettingsView: View {
                     }
 
                     HStack(spacing: 8) {
-                        TextField("Custom Voice ID", text: $customVoiceId)
+                        TextField(String(localized: "Custom Voice ID", bundle: bundle), text: $customVoiceId)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.body, design: .monospaced))
-                        Button("Use") {
+                        Button(String(localized: "Use", bundle: bundle)) {
                             plugin.setCustomVoiceId(customVoiceId)
                             selectedVoiceId = plugin.selectedVoiceId ?? CartesiaPlugin.defaultVoiceId
                         }
@@ -949,7 +923,7 @@ private struct CartesiaSettingsView: View {
                 }
             }
 
-            Text("API keys are stored securely in the Keychain")
+            Text("API keys are stored securely in the Keychain", bundle: bundle)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -965,7 +939,7 @@ private struct CartesiaSettingsView: View {
         if isValidating {
             HStack(spacing: 4) {
                 ProgressView().controlSize(.small)
-                Text("Validating...")
+                Text("Validating...", bundle: bundle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -1039,7 +1013,6 @@ private struct CartesiaSettingsView: View {
 
     private func refreshLocalVoiceState() {
         transcriptionLanguage = plugin.transcriptionLanguageForSettings
-        englishTranslationEnabled = plugin.englishTranslationEnabledForSettings
         voiceOptions = plugin.availableVoices
         selectedVoiceId = plugin.selectedVoiceId ?? CartesiaPlugin.defaultVoiceId
         customVoiceId = plugin._customVoiceId
@@ -1050,13 +1023,21 @@ private struct CartesiaSettingsView: View {
     ) -> (systemName: String, message: String, color: Color) {
         switch result {
         case .valid:
-            return ("checkmark.circle.fill", "Valid API Key", .green)
+            return (
+                "checkmark.circle.fill",
+                String(localized: "Valid API Key", bundle: bundle),
+                .green
+            )
         case .invalidKey:
-            return ("xmark.circle.fill", "Invalid API Key", .red)
+            return (
+                "xmark.circle.fill",
+                String(localized: "Invalid API Key", bundle: bundle),
+                .red
+            )
         case .transientError:
             return (
                 "exclamationmark.triangle.fill",
-                "Could not validate API Key. Check your connection and try again.",
+                String(localized: "Could not validate API Key. Check your connection and try again.", bundle: bundle),
                 .orange
             )
         }

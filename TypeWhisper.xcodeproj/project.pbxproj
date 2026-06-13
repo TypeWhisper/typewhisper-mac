@@ -318,6 +318,7 @@
 		5B2200000000000000000003 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 5B2200000000000000000030 /* TypeWhisperPluginSDK */; };
 		CART00000000000000000001 /* CartesiaPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = CART00000000000000000010 /* CartesiaPlugin.swift */; };
 		CART00000000000000000002 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = CART00000000000000000011 /* manifest.json */; };
+		CART00000000000000000004 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = CART00000000000000000013 /* Localizable.xcstrings */; };
 		CART00000000000000000003 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = CART00000000000000000030 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000217 /* IndicatorPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000207 /* IndicatorPreviewView.swift */; };
 		AA00000000000000000218 /* ObsidianPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000208 /* ObsidianPlugin.swift */; };
@@ -752,6 +753,7 @@
 		CART00000000000000000010 /* CartesiaPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CartesiaPlugin.swift; sourceTree = "<group>"; };
 		CART00000000000000000011 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		CART00000000000000000012 /* CartesiaPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CartesiaPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		CART00000000000000000013 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		BB00000000000000000207 /* IndicatorPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndicatorPreviewView.swift; sourceTree = "<group>"; };
 		BB00000000000000000208 /* ObsidianPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObsidianPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000209 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
@@ -1859,6 +1861,7 @@
 			children = (
 				CART00000000000000000010 /* CartesiaPlugin.swift */,
 				CART00000000000000000011 /* manifest.json */,
+				CART00000000000000000013 /* Localizable.xcstrings */,
 			);
 			name = CartesiaPlugin;
 			path = TypeWhisperPluginSDK/Plugins/CartesiaPlugin;
@@ -3408,6 +3411,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				CART00000000000000000002 /* manifest.json in Resources */,
+				CART00000000000000000004 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

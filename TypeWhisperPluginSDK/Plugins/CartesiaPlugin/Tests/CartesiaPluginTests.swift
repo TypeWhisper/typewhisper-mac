@@ -22,17 +22,17 @@ final class CartesiaPluginTests: XCTestCase {
         XCTAssertFalse(transcriptionPlugin.supportsTranslation)
     }
 
-    func testTranslationCapabilityIsOptIn() throws {
+    func testTranslationCapabilityIsNeverAdvertised() throws {
         let plugin = CartesiaPlugin()
         plugin.activate(host: try PluginTestHostServices(secrets: ["api-key": "sk_car_live"]))
         XCTAssertFalse(plugin.supportsTranslation)
 
-        let enabledPlugin = CartesiaPlugin()
-        enabledPlugin.activate(host: try PluginTestHostServices(
+        let pluginWithStaleTranslationDefault = CartesiaPlugin()
+        pluginWithStaleTranslationDefault.activate(host: try PluginTestHostServices(
             defaults: ["englishTranslationEnabled": true],
             secrets: ["api-key": "sk_car_live"]
         ))
-        XCTAssertTrue(enabledPlugin.supportsTranslation)
+        XCTAssertFalse(pluginWithStaleTranslationDefault.supportsTranslation)
     }
 
     func testAuthRolesRequireCartesiaAPIKeyForSTTAndTTS() throws {
@@ -67,7 +67,7 @@ final class CartesiaPluginTests: XCTestCase {
         ))
 
         XCTAssertTrue(plugin.isConfigured)
-        XCTAssertTrue(plugin.supportsTranslation)
+        XCTAssertFalse(plugin.supportsTranslation)
         XCTAssertEqual(plugin.selectedVoiceId, "custom-voice")
         XCTAssertEqual(plugin.availableVoices.map(\.id), ["voice-x"])
 
@@ -148,15 +148,15 @@ final class CartesiaPluginTests: XCTestCase {
                 languageHints: [],
                 configuredLanguage: "xx-YY"
             ),
-            "ru"
+            "en"
         )
-        XCTAssertNil(
+        XCTAssertEqual(
             CartesiaPlugin.resolvedTranscriptionLanguage(
                 requestedLanguage: "ru-RU",
                 languageHints: [],
-                configuredLanguage: "ru-RU",
-                translate: true
-            )
+                configuredLanguage: "ru-RU"
+            ),
+            "ru"
         )
     }
 
@@ -304,7 +304,7 @@ final class CartesiaPluginTests: XCTestCase {
         XCTAssertTrue(body.contains("name=\"language\"\r\n\r\nde"))
     }
 
-    func testTranscribeDefaultsAutoSelectionToConfiguredRussianLanguage() async throws {
+    func testTranscribeDefaultsAutoSelectionToConfiguredEnglishLanguage() async throws {
         let host = try PluginTestHostServices(secrets: ["api-key": "sk_car_live"])
         let plugin = CartesiaPlugin()
         plugin.activate(host: host)
@@ -313,7 +313,7 @@ final class CartesiaPluginTests: XCTestCase {
         PluginHTTPClientTestHarness.configure { _ in
             store.makeSession(outcomes: [
                 .success(
-                    Data(#"{"type":"transcript","text":"Привет, как дела?","language":"ru","words":[]}"#.utf8),
+                    Data(#"{"type":"transcript","text":"Hello, how are you?","language":"en","words":[]}"#.utf8),
                     Self.httpResponse(url: "https://api.cartesia.ai/stt", statusCode: 200)
                 )
             ])
@@ -326,11 +326,11 @@ final class CartesiaPluginTests: XCTestCase {
             prompt: nil
         )
 
-        XCTAssertEqual(result.text, "Привет, как дела?")
+        XCTAssertEqual(result.text, "Hello, how are you?")
 
         let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
         let body = try XCTUnwrap(String(data: try XCTUnwrap(request.httpBody), encoding: .utf8))
-        XCTAssertTrue(body.contains("name=\"language\"\r\n\r\nru"))
+        XCTAssertTrue(body.contains("name=\"language\"\r\n\r\nen"))
     }
 
     func testTranscribeUsesConfiguredEnglishLanguageWhenSelected() async throws {
@@ -392,20 +392,20 @@ final class CartesiaPluginTests: XCTestCase {
         XCTAssertTrue(body.contains("name=\"language\"\r\n\r\nru"))
     }
 
-    func testTranscribeOmitsLanguageWhenPluginEnglishTranslationIsEnabled() async throws {
+    func testTranscribeIgnoresStaleEnglishTranslationDefault() async throws {
         let host = try PluginTestHostServices(
             defaults: ["englishTranslationEnabled": true],
             secrets: ["api-key": "sk_car_live"]
         )
         let plugin = CartesiaPlugin()
         plugin.activate(host: host)
-        XCTAssertTrue(plugin.supportsTranslation)
+        XCTAssertFalse(plugin.supportsTranslation)
 
         let store = PluginHTTPClientSessionStore()
         PluginHTTPClientTestHarness.configure { _ in
             store.makeSession(outcomes: [
                 .success(
-                    Data(#"{"type":"transcript","text":"Hello, how are you?","language":"en","words":[]}"#.utf8),
+                    Data(#"{"type":"transcript","text":"Привет, как дела?","language":"ru","words":[]}"#.utf8),
                     Self.httpResponse(url: "https://api.cartesia.ai/stt", statusCode: 200)
                 )
             ])
@@ -418,12 +418,12 @@ final class CartesiaPluginTests: XCTestCase {
             prompt: nil
         )
 
-        XCTAssertEqual(result.text, "Hello, how are you?")
-        XCTAssertEqual(result.detectedLanguage, "en")
+        XCTAssertEqual(result.text, "Привет, как дела?")
+        XCTAssertEqual(result.detectedLanguage, "ru")
 
         let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
         let body = try XCTUnwrap(String(data: try XCTUnwrap(request.httpBody), encoding: .utf8))
-        XCTAssertFalse(body.contains("name=\"language\""))
+        XCTAssertTrue(body.contains("name=\"language\"\r\n\r\nru"))
     }
 
     func testTranscribeUsesFirstLanguageHintWhenNoExactLanguageSelected() async throws {

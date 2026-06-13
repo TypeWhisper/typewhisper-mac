@@ -266,6 +266,7 @@ let package = Package(
             path: "Plugins/CartesiaPlugin",
             exclude: ["Tests"],
             resources: [
+                .process("Localizable.xcstrings"),
                 .process("manifest.json"),
             ]
         ),
