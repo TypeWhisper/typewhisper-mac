@@ -326,22 +326,86 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
     }
 }
 
+struct WorkflowOutputFormatOverride: Codable, Equatable, Sendable, Identifiable {
+    var bundleIdentifiers: [String]
+    var format: String
+
+    init(bundleIdentifiers: [String] = [], format: String) {
+        self.bundleIdentifiers = bundleIdentifiers
+        self.format = format
+    }
+
+    var id: String {
+        "\(bundleIdentifiers.joined(separator: ",")):\(format)"
+    }
+
+    func matches(bundleIdentifier: String?) -> Bool {
+        guard let bundleIdentifier = bundleIdentifier?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              !bundleIdentifier.isEmpty
+        else { return false }
+
+        return bundleIdentifiers.contains { candidate in
+            candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+                .caseInsensitiveCompare(bundleIdentifier) == .orderedSame
+        }
+    }
+}
+
 struct WorkflowOutput: Codable, Equatable, Sendable {
     var format: String?
+    var formatOverrides: [WorkflowOutputFormatOverride]
     var autoEnter: Bool
     var targetActionPluginId: String?
     var numberNormalizationModeRaw: String?
 
+    private enum CodingKeys: String, CodingKey {
+        case format
+        case formatOverrides
+        case autoEnter
+        case targetActionPluginId
+        case numberNormalizationModeRaw
+    }
+
     init(
         format: String? = nil,
+        formatOverrides: [WorkflowOutputFormatOverride] = [],
         autoEnter: Bool = false,
         targetActionPluginId: String? = nil,
         numberNormalizationModeRaw: String? = nil
     ) {
         self.format = format
+        self.formatOverrides = formatOverrides
         self.autoEnter = autoEnter
         self.targetActionPluginId = targetActionPluginId
         self.numberNormalizationModeRaw = numberNormalizationModeRaw
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.format = try container.decodeIfPresent(String.self, forKey: .format)
+        self.formatOverrides = try container.decodeIfPresent(
+            [WorkflowOutputFormatOverride].self,
+            forKey: .formatOverrides
+        ) ?? []
+        self.autoEnter = try container.decodeIfPresent(Bool.self, forKey: .autoEnter) ?? false
+        self.targetActionPluginId = try container.decodeIfPresent(String.self, forKey: .targetActionPluginId)
+        self.numberNormalizationModeRaw = try container.decodeIfPresent(
+            String.self,
+            forKey: .numberNormalizationModeRaw
+        )
+    }
+
+    func resolvedFormat(for bundleIdentifier: String?) -> String? {
+        if let override = formatOverrides.first(where: { $0.matches(bundleIdentifier: bundleIdentifier) }) {
+            let trimmedOverride = override.format.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedOverride.isEmpty {
+                return trimmedOverride
+            }
+        }
+
+        let trimmedFormat = format?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedFormat?.isEmpty == false ? trimmedFormat : nil
     }
 
     var numberNormalizationMode: WorkflowNumberNormalizationMode {
@@ -592,9 +656,10 @@ extension Workflow {
     func systemPrompt(
         fallbackTranslationTarget: String? = nil,
         detectedLanguage: String? = nil,
-        configuredLanguage: String? = nil
+        configuredLanguage: String? = nil,
+        activeBundleIdentifier: String? = nil
     ) -> String? {
-        let outputInstruction = workflowOutputInstruction(for: output)
+        let outputInstruction = workflowOutputInstruction(for: output, activeBundleIdentifier: activeBundleIdentifier)
         let settingsInstruction = workflowSettingsInstruction(for: behavior.settings)
         let fineTuningInstruction = workflowFineTuningInstruction(for: behavior.fineTuning)
         let inputBoundaryInstruction = workflowInputBoundaryInstruction(for: template)
@@ -699,9 +764,12 @@ extension Workflow {
         return "\nFine-tuning:\n\(trimmed)"
     }
 
-    private func workflowOutputInstruction(for output: WorkflowOutput) -> String {
+    private func workflowOutputInstruction(
+        for output: WorkflowOutput,
+        activeBundleIdentifier: String? = nil
+    ) -> String {
         var lines: [String] = []
-        if let format = output.format?.trimmingCharacters(in: .whitespacesAndNewlines), !format.isEmpty {
+        if let format = output.resolvedFormat(for: activeBundleIdentifier), !format.isEmpty {
             let normalizedFormat = format.lowercased()
             if normalizedFormat == "rtf" || normalizedFormat == "richtext" || normalizedFormat == "rich text" {
                 lines.append("Return Markdown-compatible text for rich-text conversion.")

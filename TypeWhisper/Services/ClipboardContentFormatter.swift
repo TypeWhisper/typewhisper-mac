@@ -28,16 +28,17 @@ struct ClipboardContentPayload {
         !additionalRepresentations.isEmpty
     }
 
-    func write(to pasteboard: NSPasteboard) {
-        guard !additionalRepresentations.isEmpty else {
-            pasteboard.setString(plainText, forType: .string)
-            return
-        }
-
+    func write(
+        to pasteboard: NSPasteboard,
+        markerTypes: [NSPasteboard.PasteboardType] = []
+    ) {
         let item = NSPasteboardItem()
         item.setString(plainText, forType: .string)
         for representation in additionalRepresentations {
             item.setData(representation.data, forType: representation.type)
+        }
+        for markerType in markerTypes {
+            item.setData(Data(), forType: markerType)
         }
         pasteboard.writeObjects([item])
     }
@@ -111,7 +112,8 @@ private enum RichTextClipboardContentFormatter {
     }
 
     private static func richTextSource(from text: String) -> String {
-        let normalized = normalizeNewlines(text).trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = normalizeSpaces(normalizeNewlines(text))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         let source = extractFirstMarkdownFence(from: normalized) ?? normalized
         return removingTypeWhisperBoundaryMarkers(from: source)
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -160,6 +162,13 @@ private enum RichTextClipboardContentFormatter {
         text
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
+    }
+
+    private static func normalizeSpaces(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: "\u{00A0}", with: " ")
+            .replacingOccurrences(of: "\u{2007}", with: " ")
+            .replacingOccurrences(of: "\u{202F}", with: " ")
     }
 
     private static func attributedString(from text: String) -> NSAttributedString {

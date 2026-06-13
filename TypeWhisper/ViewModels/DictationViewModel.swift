@@ -1084,6 +1084,10 @@ final class DictationViewModel: ObservableObject {
         matchedWorkflow?.output.format
     }
 
+    private func effectiveOutputFormat(for bundleIdentifier: String?) -> String? {
+        matchedWorkflow?.output.resolvedFormat(for: bundleIdentifier)
+    }
+
     private var effectiveNumberNormalizationOverride: Bool? {
         matchedWorkflow?.output.numberNormalizationMode.overrideValue
     }
@@ -1220,6 +1224,7 @@ final class DictationViewModel: ObservableObject {
                 let engineOverride = effectiveEngineOverrideId
                 let cloudModelOverride = effectiveCloudModelOverride
                 let translationTarget = effectiveTranslationTarget
+                let outputFormat = self.effectiveOutputFormat(for: activeApp.bundleId)
                 let termsPrompt = dictionaryService.getTermsForPrompt(
                     providerId: engineOverride ?? modelManager.selectedProviderId
                 )
@@ -1261,7 +1266,8 @@ final class DictationViewModel: ObservableObject {
                 let llmHandler = buildLLMHandler(
                     translationTarget: translationTarget,
                     detectedLanguage: result.detectedLanguage,
-                    configuredLanguage: language
+                    configuredLanguage: language,
+                    activeBundleIdentifier: activeApp.bundleId
                 )
 
                 guard !Task.isCancelled else { return }
@@ -1298,7 +1304,7 @@ final class DictationViewModel: ObservableObject {
                 )
                 let ppResult = try await postProcessingPipeline.process(
                     text: text, context: ppContext, dictationContext: dictationContext, llmHandler: llmHandler,
-                    outputFormat: self.effectiveOutputFormat,
+                    outputFormat: outputFormat,
                     llmStepName: llmStepName,
                     normalizeNumbers: self.effectiveNumberNormalizationOverride
                 )
@@ -1336,7 +1342,7 @@ final class DictationViewModel: ObservableObject {
                         insertionText,
                         preserveClipboard: preserveClipboard,
                         autoEnter: self.effectiveAutoEnterEnabled,
-                        outputFormat: self.effectiveOutputFormat
+                        outputFormat: outputFormat
                     )
                     if case .pasted(.unverified(let reason)) = insertionResult {
                         logger.info(
@@ -1648,12 +1654,14 @@ final class DictationViewModel: ObservableObject {
     private func buildLLMHandler(
         translationTarget: String?,
         detectedLanguage: String?,
-        configuredLanguage: String?
+        configuredLanguage: String?,
+        activeBundleIdentifier: String?
     ) -> ((String) async throws -> String)? {
         if let workflowHandler = buildWorkflowTextProcessingHandler(
             translationTarget: translationTarget,
             detectedLanguage: detectedLanguage,
-            configuredLanguage: configuredLanguage
+            configuredLanguage: configuredLanguage,
+            activeBundleIdentifier: activeBundleIdentifier
         ) {
             return workflowHandler
         }
@@ -1694,7 +1702,8 @@ final class DictationViewModel: ObservableObject {
     private func buildWorkflowTextProcessingHandler(
         translationTarget: String?,
         detectedLanguage: String?,
-        configuredLanguage: String?
+        configuredLanguage: String?,
+        activeBundleIdentifier: String?
     ) -> ((String) async throws -> String)? {
         guard let workflow = matchedWorkflow else { return nil }
 
@@ -1704,7 +1713,8 @@ final class DictationViewModel: ObservableObject {
             workflow: workflow,
             fallbackTranslationTarget: translationTarget,
             detectedLanguage: detectedLanguage,
-            configuredLanguage: configuredLanguage
+            configuredLanguage: configuredLanguage,
+            activeBundleIdentifier: activeBundleIdentifier
         ) else {
             return nil
         }
@@ -1720,7 +1730,8 @@ final class DictationViewModel: ObservableObject {
                 text: text,
                 fallbackTranslationTarget: translationTarget,
                 detectedLanguage: detectedLanguage,
-                configuredLanguage: configuredLanguage
+                configuredLanguage: configuredLanguage,
+                activeBundleIdentifier: activeBundleIdentifier
             )
         }
     }

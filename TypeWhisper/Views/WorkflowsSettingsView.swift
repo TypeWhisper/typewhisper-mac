@@ -46,6 +46,48 @@ struct WorkflowOutputFormatPreset: Identifiable, Equatable {
     ]
 }
 
+struct WorkflowOutputFormatOverrideDraft: Identifiable, Equatable {
+    let id: UUID
+    var bundleIdentifiersText: String
+    var format: String
+
+    init(
+        id: UUID = UUID(),
+        bundleIdentifiersText: String = "",
+        format: String = "rtf"
+    ) {
+        self.id = id
+        self.bundleIdentifiersText = bundleIdentifiersText
+        self.format = format
+    }
+
+    init(_ override: WorkflowOutputFormatOverride) {
+        self.id = UUID()
+        self.bundleIdentifiersText = override.bundleIdentifiers.joined(separator: ", ")
+        self.format = override.format
+    }
+
+    var resolvedOverride: WorkflowOutputFormatOverride? {
+        let bundleIdentifiers = bundleIdentifiersText
+            .split { character in
+                character == "," || character == "\n" || character == " "
+            }
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        let trimmedFormat = format.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !bundleIdentifiers.isEmpty, !trimmedFormat.isEmpty else { return nil }
+        return WorkflowOutputFormatOverride(
+            bundleIdentifiers: Array(Set(bundleIdentifiers)).sorted(),
+            format: trimmedFormat
+        )
+    }
+}
+
+private struct WorkflowOutputFormatOverridePickerRequest: Identifiable {
+    let id: UUID
+}
+
 struct WorkflowsSettingsView: View {
     @ObservedObject private var workflowService = ServiceContainer.shared.workflowService
     @ObservedObject private var navigation = WorkflowsNavigationCoordinator.shared
@@ -695,6 +737,7 @@ private struct WorkflowEditorPage: View {
     @State private var validationMessage: String?
     @State private var isAdvancedExpanded = false
     @State private var showingAppPicker = false
+    @State private var outputFormatOverrideAppPicker: WorkflowOutputFormatOverridePickerRequest?
     @State private var websiteInput = ""
 
     init(workflow: Workflow?) {
@@ -728,6 +771,12 @@ private struct WorkflowEditorPage: View {
             WorkflowAppPickerSheet(
                 installedApps: profilesViewModel.installedApps,
                 selectedBundleIdentifiers: $draft.appBundleIdentifiers
+            )
+        }
+        .sheet(item: $outputFormatOverrideAppPicker) { request in
+            WorkflowAppPickerSheet(
+                installedApps: profilesViewModel.installedApps,
+                selectedBundleIdentifiers: outputFormatOverrideBundleIdentifiersBinding(for: request.id)
             )
         }
     }
@@ -879,27 +928,10 @@ private struct WorkflowEditorPage: View {
                                 workflowProviderOverrideSection
 
                                 Divider()
+                            }
 
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(localizedAppText("Output Format", de: "Ausgabeformat"))
-                                        .font(.subheadline.weight(.semibold))
-                                    HStack(spacing: 8) {
-                                        TextField(localizedAppText("e.g. Markdown, RTF, JSON, plain text", de: "z. B. Markdown, RTF, JSON, Plain Text"), text: $draft.outputFormat)
-                                            .textFieldStyle(.roundedBorder)
-
-                                        Menu {
-                                            ForEach(WorkflowOutputFormatPreset.all) { preset in
-                                                Button(preset.title) {
-                                                    draft.outputFormat = preset.value
-                                                }
-                                            }
-                                        } label: {
-                                            Label(localizedAppText("Presets", de: "Presets"), systemImage: "list.bullet.rectangle")
-                                        }
-                                        .menuStyle(.borderlessButton)
-                                        .help(localizedAppText("Choose an output format preset", de: "Ausgabeformat-Preset wählen"))
-                                    }
-                                }
+                            if draft.supportsOutputFormatting {
+                                outputFormatSection
 
                                 Divider()
                             }
@@ -920,6 +952,139 @@ private struct WorkflowEditorPage: View {
     private var shouldShowActionTargetSection: Bool {
         draft.template != .dictation
             && (!sortedActionPlugins.isEmpty || draft.targetActionPluginId != nil)
+    }
+
+    private var outputFormatSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(localizedAppText("Output Format", de: "Ausgabeformat"))
+                    .font(.subheadline.weight(.semibold))
+                HStack(spacing: 8) {
+                    TextField(localizedAppText("e.g. Markdown, RTF, JSON, plain text", de: "z. B. Markdown, RTF, JSON, Plain Text"), text: $draft.outputFormat)
+                        .textFieldStyle(.roundedBorder)
+
+                    outputFormatPresetMenu(selection: $draft.outputFormat)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(localizedAppText("App Overrides", de: "App-Überschreibungen"))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+
+                    Button {
+                        draft.outputFormatOverrides.append(WorkflowOutputFormatOverrideDraft())
+                    } label: {
+                        Label(localizedAppText("Add", de: "Hinzufügen"), systemImage: "plus")
+                    }
+                    .buttonStyle(.borderless)
+                }
+
+                ForEach($draft.outputFormatOverrides) { $override in
+                    VStack(alignment: .leading, spacing: 8) {
+                        if overrideBundleIdentifiers(for: override).isEmpty {
+                            Text(localizedAppText("No apps selected yet.", de: "Noch keine Apps ausgewählt."))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            VStack(alignment: .leading, spacing: 6) {
+                                ForEach(overrideBundleIdentifiers(for: override), id: \.self) { bundleId in
+                                    WorkflowSelectionRow(
+                                        title: installedAppName(for: bundleId),
+                                        subtitle: bundleId,
+                                        icon: installedAppIcon(for: bundleId)
+                                    ) {
+                                        removeOutputFormatOverrideBundleIdentifier(bundleId, from: override.id)
+                                    }
+                                }
+                            }
+                        }
+
+                        HStack(spacing: 8) {
+                            Button(localizedAppText("Select Apps…", de: "Apps auswählen…")) {
+                                outputFormatOverrideAppPicker = WorkflowOutputFormatOverridePickerRequest(id: override.id)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+
+                            TextField(localizedAppText("Format", de: "Format"), text: $override.format)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 110)
+
+                            outputFormatPresetMenu(selection: $override.format)
+
+                            Spacer()
+
+                            Button(role: .destructive) {
+                                draft.outputFormatOverrides.removeAll { $0.id == override.id }
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.borderless)
+                            .help(localizedAppText("Remove override", de: "Überschreibung entfernen"))
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+        }
+    }
+
+    private func outputFormatPresetMenu(selection: Binding<String>) -> some View {
+        Menu {
+            ForEach(WorkflowOutputFormatPreset.all) { preset in
+                Button(preset.title) {
+                    selection.wrappedValue = preset.value
+                }
+            }
+        } label: {
+            Label(localizedAppText("Presets", de: "Presets"), systemImage: "list.bullet.rectangle")
+        }
+        .menuStyle(.borderlessButton)
+        .help(localizedAppText("Choose an output format preset", de: "Ausgabeformat-Preset wählen"))
+    }
+
+    private func outputFormatOverrideBundleIdentifiersBinding(for overrideId: UUID) -> Binding<[String]> {
+        Binding(
+            get: {
+                guard let override = draft.outputFormatOverrides.first(where: { $0.id == overrideId }) else {
+                    return []
+                }
+                return overrideBundleIdentifiers(for: override)
+            },
+            set: { bundleIdentifiers in
+                updateOutputFormatOverrideBundleIdentifiers(bundleIdentifiers, for: overrideId)
+            }
+        )
+    }
+
+    private func overrideBundleIdentifiers(for override: WorkflowOutputFormatOverrideDraft) -> [String] {
+        override.bundleIdentifiersText
+            .split { character in
+                character == "," || character == "\n" || character == " "
+            }
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private func updateOutputFormatOverrideBundleIdentifiers(_ bundleIdentifiers: [String], for overrideId: UUID) {
+        guard let index = draft.outputFormatOverrides.firstIndex(where: { $0.id == overrideId }) else {
+            return
+        }
+
+        draft.outputFormatOverrides[index].bundleIdentifiersText = bundleIdentifiers
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: ", ")
+    }
+
+    private func removeOutputFormatOverrideBundleIdentifier(_ bundleIdentifier: String, from overrideId: UUID) {
+        let updated = outputFormatOverrideBundleIdentifiersBinding(for: overrideId).wrappedValue
+            .filter { $0 != bundleIdentifier }
+        updateOutputFormatOverrideBundleIdentifiers(updated, for: overrideId)
     }
 
     private var sortedActionPlugins: [ActionPlugin] {
@@ -2166,6 +2331,7 @@ struct WorkflowDraft {
     var translationProcessor: WorkflowTranslationProcessor
     var customInstruction: String
     var outputFormat: String
+    var outputFormatOverrides: [WorkflowOutputFormatOverrideDraft]
     var autoEnter: Bool
     var numberNormalizationMode: WorkflowNumberNormalizationMode
     var transcriptionEngineId: String?
@@ -2199,6 +2365,7 @@ struct WorkflowDraft {
             : ""
         self.customInstruction = ""
         self.outputFormat = ""
+        self.outputFormatOverrides = []
         self.autoEnter = false
         self.numberNormalizationMode = .inherit
         self.transcriptionEngineId = nil
@@ -2231,6 +2398,7 @@ struct WorkflowDraft {
         }
         self.customInstruction = behavior.settings["instruction"] ?? behavior.settings["goal"] ?? behavior.settings["prompt"] ?? ""
         self.outputFormat = output.format ?? ""
+        self.outputFormatOverrides = output.formatOverrides.map(WorkflowOutputFormatOverrideDraft.init)
         self.autoEnter = output.autoEnter
         self.numberNormalizationMode = output.numberNormalizationMode
         self.transcriptionEngineId = workflow.template == .dictation ? behavior.transcriptionEngineId : nil
@@ -2298,6 +2466,10 @@ struct WorkflowDraft {
         !usesAppleTranslate && template != .dictation
     }
 
+    var supportsOutputFormatting: Bool {
+        template != .dictation
+    }
+
     var reviewText: String {
         let languageSentence = localizedAppText(
             " Spoken language: \(workflowInputLanguageSummary(for: inputLanguageSelection)).",
@@ -2356,6 +2528,7 @@ struct WorkflowDraft {
         if newTemplate == .dictation {
             fineTuning = ""
             outputFormat = ""
+            outputFormatOverrides = []
             providerId = nil
             cloudModel = nil
             targetActionPluginId = nil
@@ -2503,6 +2676,43 @@ struct WorkflowDraft {
             }
         }
 
+        if supportsOutputFormatting, let outputFormatOverrideValidationError {
+            return outputFormatOverrideValidationError
+        }
+
+        return nil
+    }
+
+    private var outputFormatOverrideValidationError: String? {
+        var seenBundleIdentifiers: Set<String> = []
+
+        for override in outputFormatOverrides {
+            let bundleIdentifiers = override.bundleIdentifiersText
+                .split { character in
+                    character == "," || character == "\n" || character == " "
+                }
+                .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            let trimmedFormat = override.format.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if bundleIdentifiers.isEmpty || trimmedFormat.isEmpty {
+                return localizedAppText(
+                    "App output overrides need at least one bundle identifier and an output format.",
+                    de: "App-Ausgabeüberschreibungen benötigen mindestens eine Bundle-ID und ein Ausgabeformat."
+                )
+            }
+
+            for bundleIdentifier in bundleIdentifiers {
+                let normalizedBundleIdentifier = bundleIdentifier.lowercased()
+                guard seenBundleIdentifiers.insert(normalizedBundleIdentifier).inserted else {
+                    return localizedAppText(
+                        "Each app bundle identifier can only appear in one output override.",
+                        de: "Jede App-Bundle-ID darf nur in einer Ausgabeüberschreibung vorkommen."
+                    )
+                }
+            }
+        }
+
         return nil
     }
 
@@ -2584,7 +2794,10 @@ struct WorkflowDraft {
     func resolvedOutput() -> WorkflowOutput {
         let trimmedFormat = outputFormat.trimmingCharacters(in: .whitespacesAndNewlines)
         return WorkflowOutput(
-            format: usesLLMProcessing && !trimmedFormat.isEmpty ? trimmedFormat : nil,
+            format: supportsOutputFormatting && !trimmedFormat.isEmpty ? trimmedFormat : nil,
+            formatOverrides: supportsOutputFormatting
+                ? outputFormatOverrides.compactMap(\.resolvedOverride)
+                : [],
             autoEnter: autoEnter,
             targetActionPluginId: template == .dictation ? nil : targetActionPluginId,
             numberNormalizationModeRaw: numberNormalizationMode == .inherit ? nil : numberNormalizationMode.rawValue

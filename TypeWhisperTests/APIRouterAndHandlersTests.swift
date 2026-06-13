@@ -2760,6 +2760,21 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    func testGetTextSelectionDerivesSelectedTextFromFocusedValueAndRange() {
+        let service = TextInsertionService()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.focusedTextElementOverride = { element }
+        service.focusedTextStateOverride = { _ in
+            (value: "Before selected after", selectedText: nil, selectedRange: NSRange(location: 7, length: 8))
+        }
+
+        let selection = service.getTextSelection()
+
+        XCTAssertEqual(selection?.text, "selected")
+    }
+
+    @MainActor
     func testSyntheticPasteReturnsUnverifiedWhenFocusedTextStateIsUnavailable() async throws {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard.withUniqueName()
@@ -2808,6 +2823,77 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         let result = try await insertionTask.value
         XCTAssertEqual(result, .pasted(verification: .unverified(.focusedTextStateUnavailable)))
+        XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
+    func testDeferredCopySelectionRestoresOriginalClipboardAfterVerifiedPaste() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("Pages", "com.apple.iWork.Pages", nil) }
+        service.verifiedRestoreGraceDelay = .milliseconds(1)
+
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+        service.copySimulatorOverride = {
+            pasteboard.clearContents()
+            pasteboard.setString("Selected source", forType: .string)
+        }
+
+        let copiedSelectionResult = await service.getTextSelectionViaCopyPreservingClipboardForInsertion()
+        let copiedSelection = try XCTUnwrap(copiedSelectionResult)
+        XCTAssertEqual(copiedSelection.text, "Selected source")
+        XCTAssertEqual(pasteboard.string(forType: .string), "Selected source")
+
+        var pasteCount = 0
+        service.pasteSimulatorOverride = {
+            pasteCount += 1
+        }
+        service.focusedTextStateOverride = { _ in
+            if pasteCount == 0 {
+                return (value: "Selected source", selectedText: "Selected source", selectedRange: NSRange(location: 0, length: 15))
+            }
+            return (value: "Processed result", selectedText: nil, selectedRange: NSRange(location: 16, length: 0))
+        }
+
+        let result = try await service.insertText(
+            "**Processed result**",
+            preserveClipboard: true,
+            outputFormat: "rtf",
+            deferredClipboardRestore: copiedSelection.deferredClipboardRestore
+        )
+
+        XCTAssertEqual(result, .pasted(verification: .verified))
+        XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
+    func testCopySelectionRetriesWhenFirstCopyAttemptDoesNotUpdatePasteboard() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        service.pasteboardProvider = { pasteboard }
+        service.copySelectionRetryDelay = .milliseconds(1)
+        service.copySelectionReadSettleDelay = .milliseconds(1)
+
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+
+        var copyAttempts = 0
+        service.copySimulatorOverride = {
+            copyAttempts += 1
+            guard copyAttempts == 2 else { return }
+            pasteboard.clearContents()
+            pasteboard.setString("Selected source", forType: .string)
+        }
+
+        let copiedSelection = await service.getTextSelectionViaCopy()
+
+        XCTAssertEqual(copiedSelection, "Selected source")
+        XCTAssertEqual(copyAttempts, 2)
         XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
     }
 
@@ -2894,7 +2980,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
-    func testVerifiedNonTerminalSyntheticPasteUsesGraceDelayBeforeClipboardRestore() async throws {
+    func testVerifiedRichTextPasteForNonPagesAppRestoresOldClipboard() async throws {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard.withUniqueName()
         let element = AXUIElementCreateSystemWide()
@@ -3064,7 +3150,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
         service.focusedTextElementOverride = { element }
-        service.defaultPasteFallbackRestoreDelay = .milliseconds(1)
+        service.richTextPasteFallbackRestoreDelay = .milliseconds(1)
         service.pasteVerificationAttempts = 0
         service.focusedTextStateOverride = { _ in
             (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
@@ -3175,7 +3261,35 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
-    func testRTFPreserveClipboardUsesPasteboardInsteadOfPlainAccessibilityInsertion() async throws {
+    func testRTFOutputNormalizesNoBreakSpaces() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.pasteSimulatorOverride = {}
+
+        _ = try await service.insertText(
+            "In June\u{202F}2025, U.S. Senator Ruben\u{202F}Gallego",
+            outputFormat: "rtf"
+        )
+
+        XCTAssertEqual(
+            pasteboard.string(forType: .string),
+            "In June 2025, U.S. Senator Ruben Gallego"
+        )
+
+        let rtfData = try XCTUnwrap(pasteboard.data(forType: .rtf))
+        let attributed = try NSAttributedString(
+            data: rtfData,
+            options: [.documentType: NSAttributedString.DocumentType.rtf],
+            documentAttributes: nil
+        )
+
+        XCTAssertEqual(attributed.string, "In June 2025, U.S. Senator Ruben Gallego")
+    }
+
+    @MainActor
+    func testRTFPreserveClipboardUsesPasteboardInsertionAndRestoresOldClipboard() async throws {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard.withUniqueName()
         let element = AXUIElementCreateSystemWide()
@@ -3195,8 +3309,10 @@ final class APIRouterAndHandlersTests: XCTestCase {
         }
 
         var didSimulatePaste = false
+        var pasteboardTypesAtPaste: [NSPasteboard.PasteboardType] = []
         service.pasteSimulatorOverride = {
             didSimulatePaste = true
+            pasteboardTypesAtPaste = pasteboard.pasteboardItems?.first?.types ?? []
         }
 
         pasteboard.clearContents()
@@ -3206,6 +3322,70 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         XCTAssertNil(insertedText)
         XCTAssertTrue(didSimulatePaste)
+        XCTAssertTrue(pasteboardTypesAtPaste.contains(.init("org.nspasteboard.TransientType")))
+        XCTAssertTrue(pasteboardTypesAtPaste.contains(.init("org.nspasteboard.AutoGeneratedType")))
+        XCTAssertTrue(pasteboardTypesAtPaste.contains(.init("com.typewhisper.SpeechTranscription")))
+        XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
+    func testRTFPreserveClipboardRestoresOldClipboardForVerifiedPagesPaste() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("Pages", "com.apple.iWork.Pages", nil) }
+        service.verifiedRestoreGraceDelay = .milliseconds(1)
+
+        var pasteCount = 0
+        service.pasteSimulatorOverride = {
+            pasteCount += 1
+        }
+        service.focusedTextStateOverride = { _ in
+            if pasteCount == 0 {
+                return (value: "Original", selectedText: "Original", selectedRange: NSRange(location: 0, length: 8))
+            }
+            return (value: "Hello", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
+        }
+
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+
+        let result = try await service.insertText("**Hello**", preserveClipboard: true, outputFormat: "rtf")
+
+        XCTAssertEqual(result, .pasted(verification: .verified))
+        XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
+    func testRTFPreserveClipboardRestoresOldClipboardForUnverifiedPagesPaste() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("Pages", "com.apple.iWork.Pages", nil) }
+        service.richTextPasteFallbackRestoreDelay = .milliseconds(1)
+        service.pasteVerificationAttempts = 0
+        service.focusedTextStateOverride = { _ in
+            (value: "Original", selectedText: "Original", selectedRange: NSRange(location: 0, length: 8))
+        }
+
+        var didSimulatePaste = false
+        service.pasteSimulatorOverride = {
+            didSimulatePaste = true
+        }
+
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+
+        let result = try await service.insertText("**Hello**", preserveClipboard: true, outputFormat: "rtf")
+
+        XCTAssertTrue(didSimulatePaste)
+        XCTAssertEqual(result, .pasted(verification: .unverified(.focusedTextUnchanged)))
         XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
     }
 
@@ -7972,21 +8152,94 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
 
         var textWorkflowId: UUID?
         var startedWorkflowId: UUID?
-        service.onWorkflowTextProcessing = { textWorkflowId = $0 }
+        let textProcessingCallback = expectation(description: "workflow text processing callback")
+        service.onWorkflowTextProcessing = {
+            textWorkflowId = $0
+            textProcessingCallback.fulfill()
+        }
         service.onWorkflowDictationStart = { workflowId, _ in startedWorkflowId = workflowId }
 
         let keyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
         let keyUp = try makeKeyboardEvent(keyCode: 0x31, keyDown: false)
 
         XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
-        XCTAssertEqual(textWorkflowId, workflowId)
+        XCTAssertNil(textWorkflowId)
         XCTAssertNil(startedWorkflowId)
         XCTAssertNil(service.currentMode)
-        XCTAssertNil(service.activeWorkflowId)
+        XCTAssertEqual(service.activeWorkflowId, workflowId)
 
         XCTAssertTrue(service.processEventForTesting(keyUp, source: .monitor))
+        wait(for: [textProcessingCallback], timeout: 1.0)
+        XCTAssertEqual(textWorkflowId, workflowId)
         XCTAssertNil(service.currentMode)
         XCTAssertNil(service.activeWorkflowId)
+    }
+
+    @MainActor
+    func testWorkflowHotkeyTextProcessingWaitsForShortcutModifiersToRelease() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.workflowTextProcessingModifierPollInterval = 0.001
+        service.workflowTextProcessingModifierReleaseTimeout = 0.25
+        service.workflowTextProcessingPostReleaseDelay = 0.001
+
+        let workflowId = UUID()
+        service.registerWorkflowHotkeys([(id: workflowId, hotkey: spaceHotkey(), behavior: .processSelectedText)])
+
+        var currentFlags = NSEvent.ModifierFlags([.control, .option, .shift, .command])
+        service.modifierFlagsStateProvider = { currentFlags }
+
+        let callbackAfterRelease = expectation(description: "workflow callback waits for modifier release")
+        var textWorkflowId: UUID?
+        service.onWorkflowTextProcessing = {
+            textWorkflowId = $0
+            callbackAfterRelease.fulfill()
+        }
+
+        let keyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
+        let keyUp = try makeKeyboardEvent(keyCode: 0x31, keyDown: false)
+
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertTrue(service.processEventForTesting(keyUp, source: .monitor))
+        XCTAssertNil(textWorkflowId)
+
+        currentFlags = []
+        wait(for: [callbackAfterRelease], timeout: 1.0)
+        XCTAssertEqual(textWorkflowId, workflowId)
+    }
+
+    @MainActor
+    func testWorkflowHotkeyTextProcessingWaitsForStrayModifiersAfterBareKeyHotkey() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.workflowTextProcessingModifierPollInterval = 0.001
+        service.workflowTextProcessingModifierReleaseTimeout = 0.25
+        service.workflowTextProcessingPostReleaseDelay = 0.001
+
+        let workflowId = UUID()
+        let bareSpaceHotkey = UnifiedHotkey(keyCode: 0x31, modifierFlags: 0, isFn: false)
+        service.registerWorkflowHotkeys([(id: workflowId, hotkey: bareSpaceHotkey, behavior: .processSelectedText)])
+
+        var currentFlags = NSEvent.ModifierFlags([.control, .option, .shift, .command])
+        service.modifierFlagsStateProvider = { currentFlags }
+
+        let callbackAfterRelease = expectation(description: "workflow callback waits for stray modifier release")
+        var textWorkflowId: UUID?
+        service.onWorkflowTextProcessing = {
+            textWorkflowId = $0
+            callbackAfterRelease.fulfill()
+        }
+
+        let keyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true, flags: [])
+        let keyUp = try makeKeyboardEvent(keyCode: 0x31, keyDown: false, flags: [])
+
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertTrue(service.processEventForTesting(keyUp, source: .monitor))
+        XCTAssertNil(textWorkflowId)
+
+        currentFlags = []
+        wait(for: [callbackAfterRelease], timeout: 1.0)
+        XCTAssertEqual(textWorkflowId, workflowId)
     }
 
     @MainActor
