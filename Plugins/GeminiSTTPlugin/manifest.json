@@ -1,0 +1,17 @@
+{
+    "id": "com.typewhisper.gemini-stt",
+    "name": "Gemini STT",
+    "version": "1.0.0",
+    "sdkCompatibilityVersion": "v1",
+    "minHostVersion": "0.9.0",
+    "minOSVersion": "14.0",
+    "author": "TypeWhisper",
+    "description": "Speech-to-text via Google Gemini (AI Studio direct). Editable system prompt and glossary for high-accuracy technical dictation. Requires API key.",
+    "descriptions": {
+        "de": "Spracherkennung \u00fcber Google Gemini (AI Studio direkt). Bearbeitbarer System-Prompt und Glossar f\u00fcr pr\u00e4zise technische Diktate. Erfordert API-Key."
+    },
+    "category": "transcription",
+    "iconSystemName": "sparkles",
+    "requiresAPIKey": true,
+    "principalClass": "GeminiSTTPlugin"
+}
