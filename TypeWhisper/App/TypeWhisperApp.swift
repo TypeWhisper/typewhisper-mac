@@ -472,7 +472,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     private var appActivationObserver: NSObjectProtocol?
     private var workspaceWakeObserver: NSObjectProtocol?
     private var hasInteractiveForegroundContent = false
-    private var shouldOpenSettingsOnInitialLaunch = false
+    private var pendingInitialManagedWindowId: String?
     private var hasRequestedInitialManagedWindow = false
     private lazy var updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil)
 
@@ -552,18 +552,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             UserDefaults.standard.set(false, forKey: UserDefaultsKeys.setupWizardCompleted)
             HomeViewModel.shared.showSetupWizard = true
             NSApp.setActivationPolicy(.regular)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                self.requestInitialManagedWindow(id: "setup")
-            }
+            scheduleInitialManagedWindow(id: "setup", delay: 0.5)
         } else if PostUpdatePromptCoordinator.shared.shouldAutoOpenSettingsOnLaunch {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                self.requestInitialManagedWindow(id: "settings")
-            }
-        } else {
-            shouldOpenSettingsOnInitialLaunch = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                self.openSettingsOnInitialLaunchIfNeeded()
-            }
+            scheduleInitialManagedWindow(id: "settings", delay: 0.2)
         }
 
         // Observe appearance preference changes
@@ -613,7 +604,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
-        openSettingsOnInitialLaunchIfNeeded()
+        openPendingInitialManagedWindowIfNeeded()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
@@ -641,18 +632,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         ManagedAppWindowOpener.shared.open(id: "setup")
     }
 
+    private func scheduleInitialManagedWindow(id: String, delay: TimeInterval) {
+        guard pendingInitialManagedWindowId == nil, !hasRequestedInitialManagedWindow else { return }
+        pendingInitialManagedWindowId = id
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            self.openPendingInitialManagedWindowIfNeeded()
+        }
+    }
+
     private func requestInitialManagedWindow(id: String) {
         guard !hasRequestedInitialManagedWindow else { return }
         hasRequestedInitialManagedWindow = true
+        pendingInitialManagedWindowId = nil
         ManagedAppWindowOpener.shared.open(id: id)
     }
 
-    private func openSettingsOnInitialLaunchIfNeeded() {
-        guard shouldOpenSettingsOnInitialLaunch else { return }
-        shouldOpenSettingsOnInitialLaunch = false
+    private func openPendingInitialManagedWindowIfNeeded() {
+        guard let pendingInitialManagedWindowId else { return }
 
-        guard !hasVisibleManagedWindow else { return }
-        requestInitialManagedWindow(id: "settings")
+        guard !hasVisibleManagedWindow else {
+            self.pendingInitialManagedWindowId = nil
+            return
+        }
+        requestInitialManagedWindow(id: pendingInitialManagedWindowId)
     }
 
     private func handleIncomingURL(_ url: URL) {
