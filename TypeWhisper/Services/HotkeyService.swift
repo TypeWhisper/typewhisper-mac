@@ -145,6 +145,7 @@ final class HotkeyService: ObservableObject {
 
     private struct HotkeyDispatchKey: Hashable {
         enum Target: Hashable {
+            case cancel
             case slot(HotkeySlotType)
             case profile(UUID)
             case workflow(UUID)
@@ -191,6 +192,8 @@ final class HotkeyService: ObservableObject {
     private static let toggleThreshold: TimeInterval = 1.0
     private static let doubleTapThreshold: TimeInterval = 0.4
     private static let monitorDedupWindow: TimeInterval = 0.12
+    private static let escapeKeyCode: UInt16 = 0x35
+    private static let escapeHotkey = UnifiedHotkey(keyCode: escapeKeyCode, modifierFlags: 0, isFn: false)
     private static let capsLockKeyCode: UInt16 = 0x39
     private static let capsLockSuppressionWindow: TimeInterval = 0.25
 
@@ -668,8 +671,15 @@ final class HotkeyService: ObservableObject {
     @discardableResult
     private func handleEvent(_ event: NSEvent, source: HotkeyEventSource) -> Bool {
         // Escape key cancels active recording/transcription
-        if event.type == .keyDown && event.keyCode == 0x35 {
-            onCancelPressed?()
+        if event.type == .keyDown && event.keyCode == Self.escapeKeyCode {
+            if shouldDispatch(
+                target: .cancel,
+                phase: .down,
+                hotkey: Self.escapeHotkey,
+                source: source
+            ) {
+                onCancelPressed?()
+            }
             return false
         }
 

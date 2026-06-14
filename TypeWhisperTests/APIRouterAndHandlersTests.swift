@@ -6983,6 +6983,26 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testEscapeKeyDedupesFollowingEventTapDispatch() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        var cancelCount = 0
+        service.onCancelPressed = {
+            cancelCount += 1
+        }
+
+        let escape = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [])
+
+        XCTAssertFalse(service.processEventForTesting(escape, source: .eventTap))
+        await Task.yield()
+        XCTAssertEqual(cancelCount, 1)
+
+        XCTAssertFalse(service.processEventForTesting(escape, source: .monitor))
+        XCTAssertEqual(cancelCount, 1)
+    }
+
+    @MainActor
     func testMonitorFallbackStartsToggleHotkey() throws {
         let service = HotkeyService()
         service.suspendMonitoring()
