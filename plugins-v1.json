@@ -10,7 +10,7 @@
         "de": "Geraetebasierte Spracherkennung mit Apples Speech-Framework. Erfordert macOS 26+, Streaming-Unterstuetzung."
       },
       "category": "transcription",
-      "downloadCount": 8169,
+      "downloadCount": 8198,
       "iconSystemName": "apple.logo",
       "detailsURL": "https://www.typewhisper.com/addons/apple-speech/",
       "releases": [
@@ -21,7 +21,7 @@
           "size": 205581,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-speechanalyzer-v1.0.14/SpeechAnalyzerPlugin.zip",
           "minOSVersion": "26.0",
-          "downloadCount": 3603
+          "downloadCount": 3632
         },
         {
           "version": "1.0.13",
@@ -52,7 +52,7 @@
         "de": "Lokale Spracherkennung mit WhisperKit. 8 Modellgroessen, 99 Sprachen, Streaming-Unterstuetzung."
       },
       "category": "transcription",
-      "downloadCount": 10017,
+      "downloadCount": 10060,
       "iconSystemName": "waveform",
       "detailsURL": "https://www.typewhisper.com/addons/whisperkit/",
       "releases": [
@@ -66,7 +66,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 1384
+          "downloadCount": 1427
         },
         {
           "version": "1.0.23",
@@ -139,7 +139,7 @@
         "de": "Lokale Spracherkennung mit NVIDIA Parakeet TDT. Schnell und praezise, 25 Sprachen."
       },
       "category": "transcription",
-      "downloadCount": 26139,
+      "downloadCount": 26243,
       "iconSystemName": "bird",
       "detailsURL": "https://www.typewhisper.com/addons/parakeet/",
       "releases": [
@@ -153,7 +153,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 5200
+          "downloadCount": 5303
         },
         {
           "version": "1.2.14",
@@ -262,7 +262,7 @@
         "de": "Cloud-Transkription und LLM ueber die Groq-API. Schnelle Inferenz, erfordert API-Key."
       },
       "category": "transcription",
-      "downloadCount": 7547,
+      "downloadCount": 7587,
       "iconSystemName": "bolt.fill",
       "iconURL": "https://www.typewhisper.com/brand-logos/groq/logo.svg",
       "requiresAPIKey": true,
@@ -275,7 +275,7 @@
           "size": 182186,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-groq-v1.0.20/GroqPlugin.zip",
           "minOSVersion": "14.0",
-          "downloadCount": 3428
+          "downloadCount": 3466
         },
         {
           "version": "1.0.19",
@@ -306,7 +306,7 @@
         "de": "Cloud-Transkription, OpenAI-/ChatGPT-Prompts und Text-to-Speech. STT/TTS brauchen einen API-Key, Prompts funktionieren auch per ChatGPT-Login."
       },
       "category": "transcription",
-      "downloadCount": 1953,
+      "downloadCount": 1964,
       "iconSystemName": "brain",
       "iconURL": "https://www.typewhisper.com/brand-logos/openai/logo-light.svg",
       "iconDarkURL": "https://www.typewhisper.com/brand-logos/openai/logo-dark.svg",
@@ -320,7 +320,7 @@
           "size": 527055,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-v1.2.0/OpenAIPlugin.zip",
           "minOSVersion": "14.0",
-          "downloadCount": 284
+          "downloadCount": 295
         },
         {
           "version": "1.1.6",
@@ -361,7 +361,7 @@
         "de": "Verbindung zu jedem OpenAI-kompatiblen API-Server f\u00fcr Transkription und LLM. Funktioniert mit Ollama, LM Studio, vLLM und mehr."
       },
       "category": "transcription",
-      "downloadCount": 2120,
+      "downloadCount": 2135,
       "iconSystemName": "server.rack",
       "detailsURL": "https://www.typewhisper.com/addons/openai-compatible/",
       "releases": [
@@ -372,7 +372,7 @@
           "size": 326406,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-compatible-v1.1.0/OpenAICompatiblePlugin.zip",
           "minOSVersion": "14.0",
-          "downloadCount": 47
+          "downloadCount": 49
         },
         {
           "version": "1.0.16",
@@ -381,7 +381,7 @@
           "size": 202689,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-compatible-v1.0.16/OpenAICompatiblePlugin.zip",
           "minOSVersion": "14.0",
-          "downloadCount": 356
+          "downloadCount": 368
         },
         {
           "version": "1.0.15",
@@ -425,7 +425,7 @@
         "de": "Lokale Qwen3-ASR-Spracherkennung mit MLX auf Apple Silicon. 30 Sprachen plus chinesische Dialektabdeckung, kein API-Key n\u00f6tig."
       },
       "category": "transcription",
-      "downloadCount": 3038,
+      "downloadCount": 3047,
       "iconSystemName": "cpu",
       "detailsURL": "https://www.typewhisper.com/addons/qwen3-asr/",
       "releases": [
@@ -439,7 +439,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 105
+          "downloadCount": 114
         },
         {
           "version": "1.1.1",
@@ -524,7 +524,7 @@
         "de": "LLM-Anbieter ueber die Anthropic Claude API. Erfordert API-Key."
       },
       "category": "llm",
-      "downloadCount": 808,
+      "downloadCount": 814,
       "iconSystemName": "brain.head.profile",
       "iconURL": "https://www.typewhisper.com/brand-logos/claude-ai/logo.svg",
       "requiresAPIKey": true,
@@ -537,7 +537,7 @@
           "size": 142371,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-claude-v1.0.3/ClaudePlugin.zip",
           "minOSVersion": "14.0",
-          "downloadCount": 429
+          "downloadCount": 435
         },
         {
           "version": "1.0.2",
@@ -559,7 +559,7 @@
         "de": "Ultra-schnelle LLM-Inferenz ueber die Cerebras-API. Bis zu 3.000 Tokens/Sek. Erfordert API-Key."
       },
       "category": "llm",
-      "downloadCount": 201,
+      "downloadCount": 202,
       "iconSystemName": "bolt.fill",
       "requiresAPIKey": true,
       "detailsURL": "https://www.typewhisper.com/addons/cerebras/",
@@ -571,7 +571,7 @@
           "size": 173427,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cerebras-v1.0.4/CerebrasPlugin.zip",
           "minOSVersion": "14.0",
-          "downloadCount": 62
+          "downloadCount": 63
         },
         {
           "version": "1.0.3",
@@ -636,7 +636,7 @@
         "de": "Cloud-Transkription ueber die Cohere Transcribe API. Beste Genauigkeit fuer 14 Sprachen. Erfordert API-Key."
       },
       "category": "transcription",
-      "downloadCount": 100,
+      "downloadCount": 101,
       "iconSystemName": "waveform.badge.mic",
       "iconURL": "https://www.typewhisper.com/brand-logos/cohere/logo.svg",
       "requiresAPIKey": true,
@@ -649,7 +649,7 @@
           "size": 103238,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cohere-v1.0.4/CoherePlugin.zip",
           "minOSVersion": "14.0",
-          "downloadCount": 30
+          "downloadCount": 31
         },
         {
           "version": "1.0.3",
@@ -703,7 +703,7 @@
         "de": "Cloud-Transkription ueber die ElevenLabs-Scribe-API mit Echtzeit-WebSocket-Streaming."
       },
       "category": "transcription",
-      "downloadCount": 292,
+      "downloadCount": 296,
       "iconSystemName": "waveform.badge.mic",
       "requiresAPIKey": true,
       "detailsURL": "https://www.typewhisper.com/addons/elevenlabs/",
@@ -715,7 +715,7 @@
           "size": 179526,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-elevenlabs-v1.0.5/ElevenLabsPlugin.zip",
           "minOSVersion": "14.0",
-          "downloadCount": 174
+          "downloadCount": 178
         },
         {
           "version": "1.0.4",
@@ -737,7 +737,7 @@
         "de": "Cloud-Transkription ueber die Deepgram-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key."
       },
       "category": "transcription",
-      "downloadCount": 131,
+      "downloadCount": 132,
       "iconSystemName": "waveform.badge.mic",
       "requiresAPIKey": true,
       "detailsURL": "https://www.typewhisper.com/addons/deepgram/",
@@ -749,7 +749,7 @@
           "size": 216541,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-deepgram-v1.0.9/DeepgramPlugin.zip",
           "minOSVersion": "14.0",
-          "downloadCount": 52
+          "downloadCount": 53
         },
         {
           "version": "1.0.8",
@@ -780,7 +780,7 @@
         "de": "LLM-Anbieter und Cloud-Spracherkennung \u00fcber die Google Gemini API. Erfordert API-Key."
       },
       "category": "transcription",
-      "downloadCount": 1268,
+      "downloadCount": 1279,
       "iconSystemName": "sparkles",
       "iconURL": "https://www.typewhisper.com/brand-logos/gemini/logo.svg",
       "requiresAPIKey": true,
@@ -792,7 +792,8 @@
           "sdkCompatibilityVersion": "v1",
           "size": 229303,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gemini-v1.0.18/GeminiPlugin.zip",
-          "minOSVersion": "14.0"
+          "minOSVersion": "14.0",
+          "downloadCount": 5
         },
         {
           "version": "1.0.16",
@@ -801,7 +802,7 @@
           "size": 185614,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gemini-v1.0.16/GeminiPlugin.zip",
           "minOSVersion": "14.0",
-          "downloadCount": 409
+          "downloadCount": 415
         },
         {
           "version": "1.0.15",
@@ -935,7 +936,7 @@
         "de": "Cloud-Transkription ueber Google Cloud Speech-to-Text mit einem Service-Account-JSON-Schluessel. Zerlegt laengere Aufnahmen automatisch in mehrere Recognize-Requests."
       },
       "category": "transcription",
-      "downloadCount": 303,
+      "downloadCount": 305,
       "iconSystemName": "globe.badge.chevron.backward",
       "iconURL": "https://www.typewhisper.com/brand-logos/google-cloud/logo.svg",
       "requiresAPIKey": true,
@@ -948,7 +949,7 @@
           "size": 242032,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-google-cloud-stt-v1.0.4/GoogleCloudSTTPlugin.zip",
           "minOSVersion": "14.0",
-          "downloadCount": 141
+          "downloadCount": 143
         },
         {
           "version": "1.0.3",
@@ -1101,7 +1102,7 @@
         "de": "Transkriptionen als Markdown-Notizen in deinem Obsidian-Vault speichern. Unterstuetzt Tagesnotizen, Frontmatter und Auto-Export."
       },
       "category": "action",
-      "downloadCount": 1449,
+      "downloadCount": 1459,
       "iconSystemName": "doc.text",
       "iconURL": "https://www.typewhisper.com/brand-logos/obsidian/logo.svg",
       "detailsURL": "https://www.typewhisper.com/addons/obsidian/",
@@ -1113,7 +1114,7 @@
           "size": 162393,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-obsidian-v1.0.5/ObsidianPlugin.zip",
           "minOSVersion": "14.0",
-          "downloadCount": 354
+          "downloadCount": 364
         },
         {
           "version": "1.0.4",
@@ -1144,7 +1145,7 @@
         "de": "Zugriff auf OpenRouter-Spracherkennungsmodelle und \u00fcber 300 LLMs von OpenAI, Anthropic, Meta, Google und mehr. Zeigt Modellpreise und Kontoguthaben. Erfordert API-Key."
       },
       "category": "transcription",
-      "downloadCount": 616,
+      "downloadCount": 620,
       "iconSystemName": "globe",
       "iconURL": "https://www.typewhisper.com/brand-logos/openrouter/logo-light.svg",
       "iconDarkURL": "https://www.typewhisper.com/brand-logos/openrouter/logo-dark.svg",
@@ -1158,7 +1159,7 @@
           "size": 244896,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openrouter-v1.1.0/OpenRouterPlugin.zip",
           "minOSVersion": "14.0",
-          "downloadCount": 72
+          "downloadCount": 76
         },
         {
           "version": "1.0.4",
@@ -1193,7 +1194,7 @@
         "de": "Speichert und durchsucht Erinnerungen ueber die OpenAI Vector Store API mit semantischen Embeddings."
       },
       "category": "memory",
-      "downloadCount": 1953,
+      "downloadCount": 1964,
       "iconSystemName": "brain",
       "detailsURL": "https://www.typewhisper.com/addons/openai-vector-memory/",
       "releases": [
@@ -1225,7 +1226,7 @@
         "de": "Lokales LLM mit Google Gemma 4 auf Apple Silicon via MLX. Kein API-Key erforderlich."
       },
       "category": "llm",
-      "downloadCount": 3814,
+      "downloadCount": 3839,
       "iconSystemName": "cpu",
       "detailsURL": "https://www.typewhisper.com/addons/gemma4/",
       "releases": [
@@ -1239,7 +1240,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 706
+          "downloadCount": 731
         },
         {
           "version": "1.0.6",
@@ -1419,7 +1420,7 @@
         "de": "Transkribierten oder verarbeiteten Text per HTTP POST an eine beliebige Webhook-URL senden."
       },
       "category": "post-processor",
-      "downloadCount": 806,
+      "downloadCount": 808,
       "iconSystemName": "arrow.up.forward.app",
       "detailsURL": "https://www.typewhisper.com/addons/webhook/",
       "releases": [
@@ -1430,7 +1431,7 @@
           "size": 208937,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-webhook-v1.0.13/WebhookPlugin.zip",
           "minOSVersion": "14.0",
-          "downloadCount": 247
+          "downloadCount": 249
         },
         {
           "version": "1.0.12",
@@ -1483,7 +1484,7 @@
         "de": "Lokale Spracherkennung und Uebersetzung von IBM mit MLX auf Apple Silicon. 6 Sprachen mit bidirektionaler Uebersetzung."
       },
       "category": "transcription",
-      "downloadCount": 758,
+      "downloadCount": 762,
       "iconSystemName": "cpu",
       "detailsURL": "https://www.typewhisper.com/addons/granite/",
       "releases": [
@@ -1497,7 +1498,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 100
+          "downloadCount": 104
         },
         {
           "version": "1.0.7",
@@ -1546,7 +1547,7 @@
         "de": "Lokale Spracherkennung mit Voxtral MLX auf Apple Silicon. Schnell und praezise."
       },
       "category": "transcription",
-      "downloadCount": 1327,
+      "downloadCount": 1336,
       "iconSystemName": "cpu",
       "detailsURL": "https://www.typewhisper.com/addons/voxtral/",
       "releases": [
@@ -1560,7 +1561,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 157
+          "downloadCount": 166
         },
         {
           "version": "1.0.11",
@@ -1607,7 +1608,7 @@
       "description": "",
       "descriptions": {},
       "category": "post-processor",
-      "downloadCount": 1308,
+      "downloadCount": 1328,
       "iconSystemName": "text.badge.minus",
       "requiresAPIKey": false,
       "detailsURL": "https://www.typewhisper.com/addons/filler-words/",
@@ -1619,7 +1620,7 @@
           "size": 78119,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-filler-words-v1.0.0/FillerWordsPlugin.zip",
           "minOSVersion": "14.0",
-          "downloadCount": 1308
+          "downloadCount": 1328
         }
       ]
     },
@@ -1750,7 +1751,7 @@
       "author": "TypeWhisper",
       "description": "Cloud transcription via the Sber SaluteSpeech REST API. Requires a SaluteSpeech Authorization Key.",
       "category": "transcription",
-      "downloadCount": 2,
+      "downloadCount": 3,
       "iconSystemName": "waveform.badge.mic",
       "requiresAPIKey": true,
       "hosting": "cloud",
@@ -1763,7 +1764,7 @@
           "size": 317547,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-sber-salutespeech-v0.1.0/SaluteSpeechPlugin.zip",
           "minOSVersion": "14.0",
-          "downloadCount": 2
+          "downloadCount": 3
         }
       ]
     },
@@ -1773,7 +1774,7 @@
       "author": "TypeWhisper",
       "description": "Cloud speech-to-text and text-to-speech via Cartesia APIs. Requires a Cartesia API key.",
       "category": "transcription",
-      "downloadCount": 2,
+      "downloadCount": 5,
       "descriptions": {
         "de": "Cloud Speech-to-Text und Text-to-Speech \u00fcber Cartesia APIs. Erfordert einen Cartesia API-Key."
       },
@@ -1793,7 +1794,8 @@
           "sdkCompatibilityVersion": "v1",
           "size": 254411,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cartesia-v1.0.1/CartesiaPlugin.zip",
-          "minOSVersion": "14.0"
+          "minOSVersion": "14.0",
+          "downloadCount": 3
         },
         {
           "version": "1.0.0",
