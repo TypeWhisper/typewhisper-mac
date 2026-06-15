@@ -162,6 +162,25 @@ final class NumberWordNormalizerTests: XCTestCase {
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "vingt trois fichiers", language: "fr"), "23 fichiers")
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "mille deux cent trente quatre", language: "fr"), "1234")
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "moins deux virgule cinq", language: "fr"), "-2,5")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "trois point six", language: "fr"), "3.6")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "moins trois point six", language: "fr"), "-3.6")
+    }
+
+    func testFrenchDigitPointDecimalsNormalizeToDigits() {
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "3 point 6", language: "fr"), "3.6")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "2 point 75", language: "fr"), "2.75")
+        XCTAssertEqual(
+            NumberWordNormalizer.normalize(text: "la valeur est 3 point 6 aujourd'hui", language: "fr"),
+            "la valeur est 3.6 aujourd'hui"
+        )
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "3 Point 6", language: "fr"), "3.6")
+    }
+
+    func testFrenchPointIsPreservedOutsideDigitDecimals() {
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "point final", language: "fr"), "point final")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "au point du jour", language: "fr"), "au point du jour")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "3 point final", language: "fr"), "3 point final")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "3 point 6", language: "en"), "3 point 6")
     }
 
     func testFrenchArticleOneIsPreservedOutsideClearNumberConstructs() {

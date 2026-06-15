@@ -34,10 +34,10 @@ enum FrenchNumberWordParser {
         index = integer.nextIndex
         var replacement = "\(integer.value)"
 
-        if index < normalizedWords.count, normalizedWords[index] == "virgule" {
+        if index < normalizedWords.count, let decimalSeparator = decimalSeparator(for: normalizedWords[index]) {
             let decimal = parseDecimalDigits(normalizedWords, startingAt: index + 1)
             if !decimal.digits.isEmpty {
-                replacement += ",\(decimal.digits)"
+                replacement += "\(decimalSeparator)\(decimal.digits)"
                 index = decimal.nextIndex
             }
         }
@@ -208,6 +208,17 @@ enum FrenchNumberWordParser {
         }
 
         return (digits, index)
+    }
+
+    private static func decimalSeparator(for word: String) -> String? {
+        switch word {
+        case "virgule":
+            return ","
+        case "point":
+            return "."
+        default:
+            return nil
+        }
     }
 
     private static func unitValue(_ word: String, allowArticleOne: Bool) -> Int? {

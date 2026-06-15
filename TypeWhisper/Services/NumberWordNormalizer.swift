@@ -17,7 +17,10 @@ enum NumberWordNormalizer {
         var result = ""
         var index = 0
         while index < tokens.count {
-            if tokens[index].isWord,
+            if let decimal = parseDigitDecimal(startingAt: index, in: tokens, languageCode: languageCode) {
+                result.append(decimal.replacement)
+                index = decimal.endIndex
+            } else if tokens[index].isWord,
                let parsed = parseNumber(startingAt: index, in: tokens, languageCode: languageCode) {
                 result.append(parsed.replacement)
                 index = parsed.endIndex
@@ -37,6 +40,7 @@ enum NumberWordNormalizer {
 
     private enum TokenKind {
         case word
+        case digit
         case cjkNumber
         case other
 
@@ -44,7 +48,16 @@ enum NumberWordNormalizer {
             switch self {
             case .word, .cjkNumber:
                 return true
-            case .other:
+            case .digit, .other:
+                return false
+            }
+        }
+
+        var isDigit: Bool {
+            switch self {
+            case .digit:
+                return true
+            case .word, .cjkNumber, .other:
                 return false
             }
         }
@@ -55,6 +68,7 @@ enum NumberWordNormalizer {
         let kind: TokenKind
 
         var isWord: Bool { kind.isWord }
+        var isDigit: Bool { kind.isDigit }
     }
 
     private struct ParsedNumber {
@@ -65,6 +79,38 @@ enum NumberWordNormalizer {
     private struct WordCandidate {
         let tokenIndex: Int
         let text: String
+    }
+
+    private static func parseDigitDecimal(startingAt index: Int, in tokens: [Token], languageCode: String) -> ParsedNumber? {
+        guard let decimalSeparator = digitDecimalSeparator(for: languageCode),
+              index + 4 < tokens.count,
+              tokens[index].isDigit,
+              isWordConnector(tokens[index + 1].text),
+              tokens[index + 2].isWord,
+              normalizedDecimalWord(tokens[index + 2].text, languageCode: languageCode) == "point",
+              isWordConnector(tokens[index + 3].text),
+              tokens[index + 4].isDigit else {
+            return nil
+        }
+
+        return ParsedNumber(
+            replacement: tokens[index].text + decimalSeparator + tokens[index + 4].text,
+            endIndex: index + 5
+        )
+    }
+
+    private static func digitDecimalSeparator(for languageCode: String) -> String? {
+        switch languageCode {
+        case "fr":
+            return "."
+        default:
+            return nil
+        }
+    }
+
+    private static func normalizedDecimalWord(_ word: String, languageCode: String) -> String {
+        word.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: languageCode))
+            .lowercased()
     }
 
     private static func parseNumber(startingAt index: Int, in tokens: [Token], languageCode: String) -> ParsedNumber? {
@@ -152,6 +198,10 @@ enum NumberWordNormalizer {
             return .cjkNumber
         }
 
+        if isDigitCharacter(character) {
+            return .digit
+        }
+
         if isWordCharacter(character) {
             return .word
         }
@@ -161,6 +211,10 @@ enum NumberWordNormalizer {
 
     private static func isWordCharacter(_ character: Character) -> Bool {
         character.unicodeScalars.allSatisfy { CharacterSet.letters.contains($0) }
+    }
+
+    private static func isDigitCharacter(_ character: Character) -> Bool {
+        character.unicodeScalars.allSatisfy { CharacterSet.decimalDigits.contains($0) }
     }
 
     private static func isWordConnector(_ text: String) -> Bool {
