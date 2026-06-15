@@ -51,6 +51,7 @@
 - Community term pack download and apply
 - Built-in term packs render localized metadata in English and German
 - App audio recording with separate tracks
+- System Audio Recorder settings: verify final transcript creation and live transcript preview are separate toggles, and recorder engine/model controls remain visible when live preview is off
 - Google Cloud Speech-to-Text plugin
 - Sound feedback settings (enable, disable, and custom sounds)
 - Non-blocking model download
