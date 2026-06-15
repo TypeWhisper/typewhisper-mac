@@ -102,6 +102,9 @@ final class AudioRecorderViewModel: ObservableObject {
     @Published var transcriptionEnabled: Bool {
         didSet { defaults.set(transcriptionEnabled, forKey: UserDefaultsKeys.recorderTranscriptionEnabled) }
     }
+    @Published var livePreviewEnabled: Bool {
+        didSet { defaults.set(livePreviewEnabled, forKey: UserDefaultsKeys.recorderLivePreviewEnabled) }
+    }
     @Published var selectedEngine: String? {
         didSet {
             defaults.set(selectedEngine, forKey: UserDefaultsKeys.recorderTranscriptionEngine)
@@ -165,6 +168,7 @@ final class AudioRecorderViewModel: ObservableObject {
     private let dictionaryService: DictionaryService
     private let defaults: UserDefaults
     private let streamingHandler: StreamingHandler
+    private let livePreviewStartObserver: (() -> Void)?
     private var cancellables = Set<AnyCancellable>()
     private var currentOutputURL: URL?
     private var activeRecorderAPISessionID: UUID?
@@ -175,12 +179,14 @@ final class AudioRecorderViewModel: ObservableObject {
         recorderService: AudioRecorderService,
         modelManager: ModelManagerService,
         dictionaryService: DictionaryService,
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        livePreviewStartObserver: (() -> Void)? = nil
     ) {
         self.recorderService = recorderService
         self.modelManager = modelManager
         self.dictionaryService = dictionaryService
         self.defaults = defaults
+        self.livePreviewStartObserver = livePreviewStartObserver
         self.streamingHandler = StreamingHandler(
             modelManager: modelManager,
             bufferProvider: { [weak recorderService] in
@@ -230,6 +236,11 @@ final class AudioRecorderViewModel: ObservableObject {
             self.transcriptionEnabled = true
         } else {
             self.transcriptionEnabled = defaults.bool(forKey: UserDefaultsKeys.recorderTranscriptionEnabled)
+        }
+        if defaults.object(forKey: UserDefaultsKeys.recorderLivePreviewEnabled) == nil {
+            self.livePreviewEnabled = false
+        } else {
+            self.livePreviewEnabled = defaults.bool(forKey: UserDefaultsKeys.recorderLivePreviewEnabled)
         }
         self.selectedEngine = defaults.string(forKey: UserDefaultsKeys.recorderTranscriptionEngine)
         self.selectedModel = defaults.string(forKey: UserDefaultsKeys.recorderTranscriptionModel)
@@ -437,7 +448,7 @@ final class AudioRecorderViewModel: ObservableObject {
 
         EventBus.shared.emit(.recordingStarted(RecordingStartedPayload()))
 
-        if transcriptionEnabled {
+        if transcriptionEnabled && livePreviewEnabled {
             startStreamingTranscription()
         } else {
             isTranscribing = false
@@ -485,7 +496,7 @@ final class AudioRecorderViewModel: ObservableObject {
             }
 
             // Emit final transcript to LiveTranscriptPlugin
-            if !partialText.isEmpty {
+            if livePreviewEnabled && !partialText.isEmpty {
                 EventBus.shared.emit(.partialTranscriptionUpdate(PartialTranscriptionPayload(
                     text: partialText, isFinal: true, elapsedSeconds: recordingDuration
                 )))
@@ -685,6 +696,7 @@ final class AudioRecorderViewModel: ObservableObject {
             return
         }
 
+        livePreviewStartObserver?()
         let task = (selectedTask == .translate && !plugin.supportsTranslation) ? .transcribe : selectedTask
         streamingHandler.start(
             streamPrompt: dictionaryService.getTermsForPrompt(providerId: providerId) ?? "",

@@ -93,16 +93,82 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.effectiveProviderId, "groq")
     }
 
+    func testRecorderLivePreviewDefaultsOffAndPersistsSeparately() throws {
+        let defaults = try makeDefaults()
+
+        let viewModel = makeViewModel(defaults: defaults)
+
+        XCTAssertFalse(viewModel.livePreviewEnabled)
+        XCTAssertNil(defaults.object(forKey: UserDefaultsKeys.recorderLivePreviewEnabled))
+
+        viewModel.livePreviewEnabled = true
+
+        XCTAssertTrue(defaults.bool(forKey: UserDefaultsKeys.recorderLivePreviewEnabled))
+    }
+
+    func testLivePreviewStartsOnlyWhenTranscriptAndPreviewAreEnabled() async throws {
+        try preserveStandardDefaults()
+        setupPluginManager()
+
+        let disabledCount = try await livePreviewStartCount(
+            transcriptionEnabled: false,
+            livePreviewEnabled: true
+        )
+        let transcriptOnlyCount = try await livePreviewStartCount(
+            transcriptionEnabled: true,
+            livePreviewEnabled: false
+        )
+        let splitEnabledCount = try await livePreviewStartCount(
+            transcriptionEnabled: true,
+            livePreviewEnabled: true
+        )
+
+        XCTAssertEqual(disabledCount, 0)
+        XCTAssertEqual(transcriptOnlyCount, 0)
+        XCTAssertEqual(splitEnabledCount, 1)
+    }
+
     private func makeViewModel(
         defaults: UserDefaults,
-        modelManager: ModelManagerService = ModelManagerService()
+        modelManager: ModelManagerService = ModelManagerService(),
+        recorderService: AudioRecorderService = AudioRecorderService(),
+        livePreviewStartObserver: (() -> Void)? = nil
     ) -> AudioRecorderViewModel {
         AudioRecorderViewModel(
-            recorderService: AudioRecorderService(),
+            recorderService: recorderService,
             modelManager: modelManager,
             dictionaryService: DictionaryService(appSupportDirectory: makeTemporaryDirectory()),
-            defaults: defaults
+            defaults: defaults,
+            livePreviewStartObserver: livePreviewStartObserver
         )
+    }
+
+    private func livePreviewStartCount(
+        transcriptionEnabled: Bool,
+        livePreviewEnabled: Bool
+    ) async throws -> Int {
+        let defaults = try makeDefaults()
+        let recorderService = AudioRecorderService()
+        recorderService.recordingsDirectoryOverride = makeTemporaryDirectory()
+        recorderService.startRecordingOverride = { _, _, _, outputURL in
+            try Data("placeholder".utf8).write(to: outputURL)
+            return outputURL
+        }
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        var startCount = 0
+        let viewModel = makeViewModel(
+            defaults: defaults,
+            modelManager: modelManager,
+            recorderService: recorderService,
+            livePreviewStartObserver: { startCount += 1 }
+        )
+        viewModel.transcriptionEnabled = transcriptionEnabled
+        viewModel.livePreviewEnabled = livePreviewEnabled
+
+        _ = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+
+        return startCount
     }
 
     private func setupPluginManager() {

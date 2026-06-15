@@ -160,85 +160,105 @@ struct AudioRecorderView: View {
 
             // Transcription Settings
             Section(String(localized: "recorder.transcription")) {
-                Toggle(String(localized: "recorder.liveTranscription"), isOn: $viewModel.transcriptionEnabled)
+                Toggle(String(localized: "recorder.createTranscriptAfterRecording"), isOn: $viewModel.transcriptionEnabled)
                     .disabled(isEditingLocked)
 
-                if viewModel.transcriptionEnabled {
-                    // Engine picker
-                    let engines = pluginManager.transcriptionEngines
-                    Picker(String(localized: "Engine"), selection: $viewModel.selectedEngine) {
-                        Text(String(localized: "Default Engine")).tag(nil as String?)
-                        Divider()
-                        ForEach(engines, id: \.providerId) { engine in
-                            enginePickerLabel(for: engine)
-                                .tag(engine.providerId as String?)
-                                .disabled(!viewModel.canUseForTranscription(engine))
-                        }
-                    }
-                    .disabled(isEditingLocked)
+                Text(String(localized: "recorder.createTranscriptAfterRecording.description"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
-                    if let notice = transcriptionAuthNotice(for: engines) {
-                        Label(notice, systemImage: "key")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    // Model picker
-                    if let engine = viewModel.resolvedEngine,
-                       viewModel.canUseForTranscription(engine) {
-                        let models = engine.transcriptionModels
-                        if models.count > 1 {
-                            Picker(String(localized: "Model"), selection: $viewModel.selectedModel) {
-                                Text(String(localized: "watchFolder.model.default")).tag(nil as String?)
-                                Divider()
-                                ForEach(models, id: \.id) { model in
-                                    Text(model.displayName).tag(model.id as String?)
-                                }
-                            }
-                            .disabled(isEditingLocked)
-                        }
-
-                        if !modelManager.supportsLiveTranscriptionSession(engineOverrideId: engine.providerId) {
-                            Label(
-                                localizedAppText(
-                                    "This engine uses a lightweight live preview that updates every few seconds. Final transcription still runs on the full recording after you stop.",
-                                    de: "Diese Engine nutzt eine leichte Live-Vorschau, die nur alle paar Sekunden aktualisiert wird. Die finale Transkription laeuft nach dem Stoppen weiterhin auf der gesamten Aufnahme."
-                                ),
-                                systemImage: "info.circle"
-                            )
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    let languageOptions: [(code: String, name: String)] = {
-                        let supportedLanguages = viewModel.selectedEngineSupportedLanguages
-                        guard !supportedLanguages.isEmpty else {
-                            return SettingsViewModel.shared.availableLanguages
-                        }
-                        return localizedAppLanguageOptions(for: supportedLanguages)
-                            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-                            .map { (code: $0.code, name: $0.name) }
-                    }()
-
-                    LanguageSelectionEditor(
-                        selection: $viewModel.languageSelection,
-                        availableLanguages: languageOptions,
-                        hintBehavior: LanguageSelectionHintBehavior(engine: viewModel.resolvedEngine)
+                VStack(alignment: .leading, spacing: 4) {
+                    recorderSummaryRow(
+                        title: String(localized: "recorder.effectiveEngine"),
+                        value: viewModel.activeEngineName ?? String(localized: "recorder.noEngineSelected")
                     )
-                    .disabled(isEditingLocked)
+                    recorderSummaryRow(
+                        title: String(localized: "recorder.effectiveModel"),
+                        value: viewModel.activeModelName ?? String(localized: "watchFolder.model.default")
+                    )
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
-                    // Task picker (transcribe/translate)
-                    if viewModel.supportsTranslation {
-                        Picker(String(localized: "Task"), selection: $viewModel.selectedTask) {
-                            ForEach(TranscriptionTask.allCases) { task in
-                                Text(task.displayName).tag(task)
+                let engines = pluginManager.transcriptionEngines
+                Picker(String(localized: "Engine"), selection: $viewModel.selectedEngine) {
+                    Text(String(localized: "recorder.useDictationDefaultEngine")).tag(nil as String?)
+                    Divider()
+                    ForEach(engines, id: \.providerId) { engine in
+                        enginePickerLabel(for: engine)
+                            .tag(engine.providerId as String?)
+                            .disabled(!viewModel.canUseForTranscription(engine))
+                    }
+                }
+                .disabled(isEditingLocked || !viewModel.transcriptionEnabled)
+
+                if let notice = transcriptionAuthNotice(for: engines) {
+                    Label(notice, systemImage: "key")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let engine = viewModel.resolvedEngine,
+                   viewModel.canUseForTranscription(engine) {
+                    let models = engine.transcriptionModels
+                    if models.count > 1 {
+                        Picker(String(localized: "Model"), selection: $viewModel.selectedModel) {
+                            Text(String(localized: "watchFolder.model.default")).tag(nil as String?)
+                            Divider()
+                            ForEach(models, id: \.id) { model in
+                                Text(model.displayName).tag(model.id as String?)
                             }
                         }
-                        .disabled(isEditingLocked)
+                        .disabled(isEditingLocked || !viewModel.transcriptionEnabled)
+                    }
+                }
+
+                let languageOptions: [(code: String, name: String)] = {
+                    let supportedLanguages = viewModel.selectedEngineSupportedLanguages
+                    guard !supportedLanguages.isEmpty else {
+                        return SettingsViewModel.shared.availableLanguages
+                    }
+                    return localizedAppLanguageOptions(for: supportedLanguages)
+                        .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+                        .map { (code: $0.code, name: $0.name) }
+                }()
+
+                LanguageSelectionEditor(
+                    selection: $viewModel.languageSelection,
+                    availableLanguages: languageOptions,
+                    hintBehavior: LanguageSelectionHintBehavior(engine: viewModel.resolvedEngine)
+                )
+                .disabled(isEditingLocked || !viewModel.transcriptionEnabled)
+
+                if viewModel.supportsTranslation {
+                    Picker(String(localized: "Task"), selection: $viewModel.selectedTask) {
+                        ForEach(TranscriptionTask.allCases) { task in
+                            Text(task.displayName).tag(task)
+                        }
+                    }
+                    .disabled(isEditingLocked || !viewModel.transcriptionEnabled)
+                }
+
+                if !viewModel.transcriptionEnabled {
+                    Label(String(localized: "recorder.transcriptionSettingsDisabledHint"), systemImage: "info.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Toggle(String(localized: "recorder.showLiveTranscriptWhileRecording"), isOn: $viewModel.livePreviewEnabled)
+                    .disabled(isEditingLocked || !viewModel.transcriptionEnabled)
+
+                if viewModel.livePreviewEnabled {
+                    if let engine = viewModel.resolvedEngine,
+                       !modelManager.supportsLiveTranscriptionSession(engineOverrideId: engine.providerId) {
+                        Label(
+                            String(localized: "recorder.livePreviewLightweightHint"),
+                            systemImage: "info.circle"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     }
 
-                    // LiveTranscriptPlugin status
                     if isLiveTranscriptPluginActive {
                         Label(
                             String(localized: "recorder.liveTranscriptActive"),
@@ -297,6 +317,17 @@ struct AudioRecorderView: View {
 
     private var isLiveTranscriptPluginActive: Bool {
         pluginManager.loadedPlugins.contains { $0.manifest.id == "com.typewhisper.livetranscript" && $0.isEnabled }
+    }
+
+    private func recorderSummaryRow(title: String, value: String) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .frame(width: 96, alignment: .leading)
+            Text(value)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
     }
 }
 

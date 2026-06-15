@@ -9323,6 +9323,116 @@
         }
       }
     },
+    "recorder.createTranscriptAfterRecording": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkript nach der Aufnahme erstellen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create transcript after recording"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "録音後に文字起こしを作成"
+          }
+        }
+      }
+    },
+    "recorder.createTranscriptAfterRecording.description": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speichert ein Transkript fuer Recorder-Aufnahmen. Die Auswahl unten gilt nur fuer den System Audio Recorder, nicht fuer normale Dictation."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saves a transcript for recorder files. The settings below apply only to the System Audio Recorder, not normal dictation."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "レコーダーのファイルに文字起こしを保存します。以下の設定は通常のDictationではなくSystem Audio Recorderのみに適用されます。"
+          }
+        }
+      }
+    },
+    "recorder.effectiveEngine": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recorder-Engine"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recorder engine"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "レコーダーエンジン"
+          }
+        }
+      }
+    },
+    "recorder.effectiveModel": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recorder-Modell"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recorder model"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "レコーダーモデル"
+          }
+        }
+      }
+    },
+    "recorder.livePreviewLightweightHint": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Engine aktualisiert die Live-Vorschau nur alle paar Sekunden. Das finale Transkript wird nach dem Stoppen aus der gesamten Aufnahme erstellt."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This engine updates the live preview every few seconds. The final transcript is still created from the full recording after you stop."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このエンジンはライブプレビューを数秒ごとに更新します。最終的な文字起こしは停止後に録音全体から作成されます。"
+          }
+        }
+      }
+    },
     "recorder.liveTranscript": {
       "extractionState": "stale",
       "localizations": {
@@ -9390,28 +9500,6 @@
         }
       }
     },
-    "recorder.liveTranscription": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Live-Transkription"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Live Transcription"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ライブ音声認識"
-          }
-        }
-      }
-    },
     "recorder.mic": {
       "localizations": {
         "de": {
@@ -9430,6 +9518,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "マイク"
+          }
+        }
+      }
+    },
+    "recorder.noEngineSelected": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Engine ausgewaehlt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No engine selected"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "エンジン未選択"
           }
         }
       }
@@ -9572,19 +9682,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aufnahme starten"
+            "value": "Recorder starten"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Start Recording"
+            "value": "Start Recorder"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "録音を開始"
+            "value": "レコーダーを開始"
           }
         }
       }
@@ -9594,19 +9704,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aufnahme stoppen"
+            "value": "Recorder stoppen"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stop Recording"
+            "value": "Stop Recorder"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "録音を停止"
+            "value": "レコーダーを停止"
           }
         }
       }
@@ -9616,19 +9726,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Startet oder stoppt den Recorder mit deinen gespeicherten Mikrofon- und Systemaudio-Einstellungen."
+            "value": "Startet oder stoppt den System Audio Recorder mit deinen gespeicherten Mikrofon- und Systemaudio-Einstellungen."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Start or stop the Recorder with your saved microphone and system audio settings."
+            "value": "Start or stop the System Audio Recorder with your saved microphone and system audio settings."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "保存されたマイクおよびシステムオーディオ設定を使用して、Recorderを開始または停止します。"
+            "value": "保存されたマイクおよびシステムオーディオ設定でSystem Audio Recorderを開始または停止します。"
           }
         }
       }
@@ -9638,19 +9748,41 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Recorder-Shortcut"
+            "value": "System Audio Recorder Shortcut"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Recorder shortcut"
+            "value": "System Audio Recorder shortcut"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Recorderのショートカット"
+            "value": "System Audio Recorderのショートカット"
+          }
+        }
+      }
+    },
+    "recorder.showLiveTranscriptWhileRecording": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live-Transkript waehrend der Aufnahme anzeigen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show live transcript while recording"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "録音中にライブ文字起こしを表示"
           }
         }
       }
@@ -9770,19 +9902,63 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Transkription"
+            "value": "Recorder-Transkriptionseinstellungen"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Transcription"
+            "value": "Recorder transcription settings"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "音声認識"
+            "value": "レコーダーの文字起こし設定"
+          }
+        }
+      }
+    },
+    "recorder.transcriptionSettingsDisabledHint": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktiviere das Transkript, um Engine, Modell, Sprache und Aufgabe fuer Recorder-Aufnahmen zu aendern."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn on transcript creation to change the engine, model, language, and task for recorder files."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "レコーダーファイルのエンジン、モデル、言語、タスクを変更するには文字起こし作成をオンにしてください。"
+          }
+        }
+      }
+    },
+    "recorder.useDictationDefaultEngine": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dictation-Standard-Engine verwenden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use Dictation default engine"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dictationのデフォルトエンジンを使用"
           }
         }
       }
