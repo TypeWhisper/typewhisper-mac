@@ -54,6 +54,7 @@ enum WorkflowOutputFormatResolver {
         storedFormat: String?,
         bundleIdentifier: String?,
         url: String? = nil,
+        // Reserved for future AX role hints; current auto detection stays deterministic by app and URL.
         accessibilityRole _: String? = nil
     ) -> String? {
         guard let storedFormat = trimmedNonEmpty(storedFormat) else {
@@ -90,6 +91,7 @@ enum WorkflowOutputFormatResolver {
             return plainTextFormat
         }
 
+        // Initial browser coverage is intentionally narrow; extend this list after validating more web editors.
         switch host {
         case "docs.google.com":
             return "rtf"
