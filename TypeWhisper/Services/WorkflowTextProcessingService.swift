@@ -88,7 +88,8 @@ struct WorkflowTextProcessingService {
         text: String,
         fallbackTranslationTarget: String? = nil,
         detectedLanguage: String? = nil,
-        configuredLanguage: String? = nil
+        configuredLanguage: String? = nil,
+        activeBundleIdentifier: String? = nil
     ) async throws -> String {
         if workflow.usesAppleTranslate {
             return try await processAppleTranslate(
@@ -103,7 +104,8 @@ struct WorkflowTextProcessingService {
         guard let systemPrompt = workflow.systemPrompt(
             fallbackTranslationTarget: fallbackTranslationTarget,
             detectedLanguage: detectedLanguage,
-            configuredLanguage: configuredLanguage
+            configuredLanguage: configuredLanguage,
+            activeBundleIdentifier: activeBundleIdentifier
         ) else {
             return text
         }
@@ -132,7 +134,8 @@ struct WorkflowTextProcessingService {
         workflow: Workflow,
         fallbackTranslationTarget: String? = nil,
         detectedLanguage: String? = nil,
-        configuredLanguage: String? = nil
+        configuredLanguage: String? = nil,
+        activeBundleIdentifier: String? = nil
     ) -> Bool {
         if workflow.usesAppleTranslate {
             return true
@@ -141,7 +144,8 @@ struct WorkflowTextProcessingService {
         return workflow.systemPrompt(
             fallbackTranslationTarget: fallbackTranslationTarget,
             detectedLanguage: detectedLanguage,
-            configuredLanguage: configuredLanguage
+            configuredLanguage: configuredLanguage,
+            activeBundleIdentifier: activeBundleIdentifier
         ) != nil
     }
 

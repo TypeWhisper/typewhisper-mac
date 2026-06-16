@@ -332,6 +332,88 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(output.targetActionPluginId, "plugin.unavailable")
     }
 
+    @MainActor
+    func testWorkflowDraftValidationRejectsIncompleteOutputFormatOverride() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        var draft = WorkflowDraft(template: .summary)
+        draft.outputFormatOverrides = [
+            WorkflowOutputFormatOverrideDraft(bundleIdentifiersText: "", format: "rtf")
+        ]
+
+        let error = draft.validationError(
+            hotkeyService: HotkeyService(),
+            workflowService: WorkflowService(appSupportDirectory: appSupportDirectory),
+            pluginManager: PluginManager(appSupportDirectory: appSupportDirectory),
+            existingWorkflowId: nil
+        )
+
+        XCTAssertEqual(
+            error,
+            "App output overrides need at least one bundle identifier and an output format."
+        )
+    }
+
+    @MainActor
+    func testWorkflowDraftValidationRejectsDuplicateOutputFormatOverrideBundleIdentifiers() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        var draft = WorkflowDraft(template: .summary)
+        draft.outputFormatOverrides = [
+            WorkflowOutputFormatOverrideDraft(bundleIdentifiersText: "com.apple.Pages", format: "rtf"),
+            WorkflowOutputFormatOverrideDraft(bundleIdentifiersText: " COM.APPLE.PAGES ", format: "markdown")
+        ]
+
+        let error = draft.validationError(
+            hotkeyService: HotkeyService(),
+            workflowService: WorkflowService(appSupportDirectory: appSupportDirectory),
+            pluginManager: PluginManager(appSupportDirectory: appSupportDirectory),
+            existingWorkflowId: nil
+        )
+
+        XCTAssertEqual(
+            error,
+            "Each app bundle identifier can only appear in one output override."
+        )
+    }
+
+    func testWorkflowDraftPreservesAppleTranslateOutputFormatWhenSaving() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        var draft = WorkflowDraft(template: .translation)
+        draft.translationProcessor = .appleTranslate
+        draft.translationTargetLanguage = "de"
+        draft.outputFormat = "rtf"
+        draft.outputFormatOverrides = [
+            WorkflowOutputFormatOverrideDraft(
+                bundleIdentifiersText: "com.apple.Pages",
+                format: "markdown"
+            )
+        ]
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory)
+        _ = service.addWorkflow(
+            name: draft.resolvedName,
+            template: draft.template,
+            trigger: try XCTUnwrap(draft.resolvedTrigger()),
+            behavior: draft.resolvedBehavior(),
+            output: draft.resolvedOutput(),
+            isEnabled: draft.isEnabled
+        )
+
+        let reloaded = WorkflowService(appSupportDirectory: appSupportDirectory)
+        let workflow = try XCTUnwrap(reloaded.workflows.first)
+
+        XCTAssertEqual(workflow.translationProcessor, .appleTranslate)
+        XCTAssertEqual(workflow.output.format, "rtf")
+        XCTAssertEqual(workflow.output.formatOverrides, [
+            WorkflowOutputFormatOverride(bundleIdentifiers: ["com.apple.Pages"], format: "markdown")
+        ])
+    }
+
     func testWorkflowDraftPreservesDictationTranscriptionOverridesWhenSaving() throws {
         let hotkey = UnifiedHotkey(keyCode: 15, modifierFlags: NSEvent.ModifierFlags.command.rawValue, isFn: false)
         let workflow = Workflow(
@@ -1058,6 +1140,48 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertFalse(prompt.contains("Return the result as rtf."))
         XCTAssertFalse(prompt.contains("\\rtf"))
         assertNoAllCapsWorkflowSafetyProse(prompt)
+    }
+
+    func testWorkflowOutputResolvesAppSpecificFormatOverride() {
+        let output = WorkflowOutput(
+            format: "plaintext",
+            formatOverrides: [
+                WorkflowOutputFormatOverride(
+                    bundleIdentifiers: ["com.apple.iWork.Pages", "com.microsoft.Word"],
+                    format: "rtf"
+                )
+            ]
+        )
+
+        XCTAssertEqual(output.resolvedFormat(for: "com.apple.iWork.Pages"), "rtf")
+        XCTAssertEqual(output.resolvedFormat(for: "com.microsoft.word"), "rtf")
+        XCTAssertEqual(output.resolvedFormat(for: "com.apple.Notes"), "plaintext")
+        XCTAssertEqual(output.resolvedFormat(for: nil), "plaintext")
+    }
+
+    func testSystemPromptUsesAppSpecificOutputFormatOverride() throws {
+        let workflow = Workflow(
+            name: "Adaptive Notes",
+            template: .meetingNotes,
+            trigger: .manual(),
+            output: WorkflowOutput(
+                format: "plaintext",
+                formatOverrides: [
+                    WorkflowOutputFormatOverride(
+                        bundleIdentifiers: ["com.apple.iWork.Pages"],
+                        format: "rtf"
+                    )
+                ]
+            )
+        )
+
+        let richTextPrompt = try XCTUnwrap(workflow.systemPrompt(activeBundleIdentifier: "com.apple.iWork.Pages"))
+        XCTAssertTrue(richTextPrompt.contains("Return Markdown-compatible text for rich-text conversion."))
+        XCTAssertFalse(richTextPrompt.contains("Return the result as plaintext."))
+
+        let plainTextPrompt = try XCTUnwrap(workflow.systemPrompt(activeBundleIdentifier: "com.apple.Notes"))
+        XCTAssertTrue(plainTextPrompt.contains("Return the result as plaintext."))
+        XCTAssertFalse(plainTextPrompt.contains("Return Markdown-compatible text for rich-text conversion."))
     }
 
     func testWorkflowOutputFormatPresetsExposeRTF() {
