@@ -32,6 +32,7 @@ final class PromptPaletteHandler {
     private let workflowTextProcessingService: WorkflowTextProcessingService
     private let soundService: SoundService
     private let accessibilityAnnouncementService: AccessibilityAnnouncementService
+    private let activateAndPasteOverride: (@MainActor (String?) async -> Bool)?
 
     var onShowNotchFeedback: ((String, String, TimeInterval, Bool, String?) -> Void)?
     var onShowError: ((String) -> Void)?
@@ -51,7 +52,8 @@ final class PromptPaletteHandler {
         workflowTextProcessingService: WorkflowTextProcessingService? = nil,
         soundService: SoundService,
         accessibilityAnnouncementService: AccessibilityAnnouncementService,
-        promptPaletteController: any PromptPaletteControlling = PromptPaletteController()
+        promptPaletteController: any PromptPaletteControlling = PromptPaletteController(),
+        activateAndPasteOverride: (@MainActor (String?) async -> Bool)? = nil
     ) {
         self.promptPaletteController = promptPaletteController
         self.textInsertionService = textInsertionService
@@ -66,6 +68,7 @@ final class PromptPaletteHandler {
             )
         self.soundService = soundService
         self.accessibilityAnnouncementService = accessibilityAnnouncementService
+        self.activateAndPasteOverride = activateAndPasteOverride
     }
 
     func hide() {
@@ -282,19 +285,34 @@ final class PromptPaletteHandler {
         Task { [weak self] in
             guard let self else { return }
             do {
+                let browserInfo = await ctx.browserInfoTask?.value
+                let resolvedUrl = browserInfo?.url ?? ctx.activeApp.url
+                let resolvedApp = (
+                    name: browserInfo?.title ?? ctx.activeApp.name,
+                    bundleId: ctx.activeApp.bundleId,
+                    url: resolvedUrl
+                )
+                let resolvedOutputFormat = WorkflowOutputFormatResolver.resolvedFormat(
+                    storedFormat: workflow.output.format,
+                    bundleIdentifier: ctx.activeApp.bundleId,
+                    url: resolvedUrl
+                )
+                if workflow.output.format != nil {
+                    logger.info(
+                        "[PromptPalette] Workflow output format resolved: stored=\(workflow.output.format ?? "nil", privacy: .public), resolved=\(resolvedOutputFormat ?? "nil", privacy: .public), bundle=\(ctx.activeApp.bundleId ?? "nil", privacy: .public), url=\(resolvedUrl ?? "nil", privacy: .public)"
+                    )
+                }
+
                 let result = try await workflowTextProcessingService.process(
                     workflow: workflow,
-                    text: ctx.text
+                    text: ctx.text,
+                    resolvedOutputFormat: resolvedOutputFormat
                 )
                 guard !Task.isCancelled else { return }
 
                 // Route to action plugin if configured
                 if let actionPluginId = workflow.output.targetActionPluginId,
                    let actionPlugin = PluginManager.shared.actionPlugin(for: actionPluginId) {
-                    let browserInfo = await ctx.browserInfoTask?.value
-                    let resolvedUrl = browserInfo?.url ?? ctx.activeApp.url
-                    let resolvedApp = (name: browserInfo?.title ?? ctx.activeApp.name,
-                                       bundleId: ctx.activeApp.bundleId, url: resolvedUrl)
                     try await executeActionPlugin?(
                         actionPlugin, actionPluginId, result,
                         resolvedApp, ctx.text, nil
@@ -319,10 +337,22 @@ final class PromptPaletteHandler {
                 // Always put result on clipboard so the user can paste it
                 let pasteboard = NSPasteboard.general
                 pasteboard.clearContents()
-                pasteboard.setString(result, forType: .string)
+                if let formattedClipboardPayload = ClipboardContentFormatter.payload(
+                    for: result,
+                    outputFormat: resolvedOutputFormat
+                ) {
+                    formattedClipboardPayload.write(to: pasteboard)
+                } else {
+                    pasteboard.setString(result, forType: .string)
+                }
+                let requiresPasteboardInsertion = ClipboardContentFormatter.requiresPasteboardInsertion(
+                    outputFormat: resolvedOutputFormat
+                )
 
                 let insertionOutcome: InsertionOutcome
-                if let selection = ctx.selection {
+                if requiresPasteboardInsertion {
+                    insertionOutcome = await activateAndPaste(bundleId: ctx.activeApp.bundleId) ? .insertedViaPaste : .failed
+                } else if let selection = ctx.selection {
                     insertionOutcome = await insertViaAXWithPasteFallback(
                         selection: selection,
                         result: result,
@@ -402,6 +432,10 @@ final class PromptPaletteHandler {
 
     /// Activate the source app and paste from clipboard. Result must already be on the clipboard.
     private func activateAndPaste(bundleId: String?) async -> Bool {
+        if let activateAndPasteOverride {
+            return await activateAndPasteOverride(bundleId)
+        }
+
         guard let bundleId,
               let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).first else {
             logger.warning("[PromptPalette] No running app for bundleId: \(bundleId ?? "nil")")

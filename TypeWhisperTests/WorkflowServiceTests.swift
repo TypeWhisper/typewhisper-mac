@@ -1060,9 +1060,103 @@ final class WorkflowServiceTests: XCTestCase {
         assertNoAllCapsWorkflowSafetyProse(prompt)
     }
 
+    func testAutoWorkflowSystemPromptRequestsRichTextForNativeRichTextApps() throws {
+        let workflow = Workflow(
+            name: "Auto Rich Notes",
+            template: .meetingNotes,
+            trigger: .manual(),
+            output: WorkflowOutput(format: "auto")
+        )
+        let resolvedFormat = WorkflowOutputFormatResolver.resolvedFormat(
+            storedFormat: workflow.output.format,
+            bundleIdentifier: "com.apple.iWork.Pages"
+        )
+
+        let prompt = try XCTUnwrap(workflow.systemPrompt(resolvedOutputFormat: resolvedFormat))
+
+        XCTAssertEqual(resolvedFormat, "rtf")
+        XCTAssertTrue(prompt.contains("Return Markdown-compatible text for rich-text conversion."))
+        XCTAssertFalse(prompt.contains("Return the result as auto."))
+        assertNoAllCapsWorkflowSafetyProse(prompt)
+    }
+
+    func testAutoWorkflowSystemPromptRequestsRichTextForGoogleDocsBrowserContext() throws {
+        let workflow = Workflow(
+            name: "Auto Browser Notes",
+            template: .meetingNotes,
+            trigger: .manual(),
+            output: WorkflowOutput(format: "auto")
+        )
+        let resolvedFormat = WorkflowOutputFormatResolver.resolvedFormat(
+            storedFormat: workflow.output.format,
+            bundleIdentifier: "com.google.Chrome",
+            url: "https://docs.google.com/document/d/abc/edit"
+        )
+
+        let prompt = try XCTUnwrap(workflow.systemPrompt(resolvedOutputFormat: resolvedFormat))
+
+        XCTAssertEqual(resolvedFormat, "rtf")
+        XCTAssertTrue(prompt.contains("Return Markdown-compatible text for rich-text conversion."))
+        XCTAssertFalse(prompt.contains("Return the result as auto."))
+        assertNoAllCapsWorkflowSafetyProse(prompt)
+    }
+
+    func testAutoWorkflowSystemPromptFallsBackToPlainTextForUnknownBrowserContext() throws {
+        let workflow = Workflow(
+            name: "Auto GitHub Notes",
+            template: .meetingNotes,
+            trigger: .manual(),
+            output: WorkflowOutput(format: "auto")
+        )
+        let resolvedFormat = WorkflowOutputFormatResolver.resolvedFormat(
+            storedFormat: workflow.output.format,
+            bundleIdentifier: "com.google.Chrome",
+            url: "https://github.com/TypeWhisper/typewhisper-mac/issues/701"
+        )
+
+        let prompt = try XCTUnwrap(workflow.systemPrompt(resolvedOutputFormat: resolvedFormat))
+
+        XCTAssertEqual(resolvedFormat, "plaintext")
+        XCTAssertTrue(prompt.contains("Return the result as plaintext."))
+        XCTAssertFalse(prompt.contains("Return Markdown-compatible text for rich-text conversion."))
+        XCTAssertFalse(prompt.contains("Return the result as auto."))
+        assertNoAllCapsWorkflowSafetyProse(prompt)
+    }
+
+    func testExplicitWorkflowOutputFormatWinsOverAutomaticResolution() {
+        XCTAssertEqual(
+            WorkflowOutputFormatResolver.resolvedFormat(
+                storedFormat: "rtf",
+                bundleIdentifier: "com.google.Chrome",
+                url: "https://github.com/TypeWhisper/typewhisper-mac/issues/701"
+            ),
+            "rtf"
+        )
+        XCTAssertEqual(
+            WorkflowOutputFormatResolver.resolvedFormat(
+                storedFormat: "markdown",
+                bundleIdentifier: "com.apple.iWork.Pages"
+            ),
+            "markdown"
+        )
+        XCTAssertEqual(
+            WorkflowOutputFormatResolver.resolvedFormat(
+                storedFormat: "plaintext",
+                bundleIdentifier: "com.apple.iWork.Pages"
+            ),
+            "plaintext"
+        )
+    }
+
     func testWorkflowOutputFormatPresetsExposeRTF() {
         XCTAssertTrue(WorkflowOutputFormatPreset.all.contains { preset in
             preset.title == "RTF" && preset.value == "rtf"
+        })
+    }
+
+    func testWorkflowOutputFormatPresetsExposeAutoDetect() {
+        XCTAssertTrue(WorkflowOutputFormatPreset.all.contains { preset in
+            preset.title == "Auto-Detect" && preset.value == "auto"
         })
     }
 

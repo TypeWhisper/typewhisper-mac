@@ -1112,6 +1112,23 @@ final class DictationViewModel: ObservableObject {
         matchedWorkflow?.output.format
     }
 
+    private func resolvedEffectiveOutputFormat(
+        for activeApp: (name: String?, bundleId: String?, url: String?)
+    ) -> String? {
+        let storedFormat = effectiveOutputFormat
+        let resolvedFormat = WorkflowOutputFormatResolver.resolvedFormat(
+            storedFormat: storedFormat,
+            bundleIdentifier: activeApp.bundleId,
+            url: activeApp.url
+        )
+        if storedFormat != nil {
+            logger.info(
+                "Workflow output format resolved: stored=\(storedFormat ?? "nil", privacy: .public), resolved=\(resolvedFormat ?? "nil", privacy: .public), bundle=\(activeApp.bundleId ?? "nil", privacy: .public), url=\(activeApp.url ?? "nil", privacy: .public)"
+            )
+        }
+        return resolvedFormat
+    }
+
     private var effectiveNumberNormalizationOverride: Bool? {
         matchedWorkflow?.output.numberNormalizationMode.overrideValue
     }
@@ -1241,6 +1258,7 @@ final class DictationViewModel: ObservableObject {
                 await urlResolutionTask?.value
 
                 let activeApp = capturedActiveApp ?? textInsertionService.captureActiveApp()
+                let resolvedOutputFormat = self.resolvedEffectiveOutputFormat(for: activeApp)
                 let languageSelection = effectiveLanguageSelection
                 let language = languageSelection.requestedLanguage
                 let languageCandidates = languageSelection.selectedCodes
@@ -1289,7 +1307,8 @@ final class DictationViewModel: ObservableObject {
                 let llmHandler = buildLLMHandler(
                     translationTarget: translationTarget,
                     detectedLanguage: result.detectedLanguage,
-                    configuredLanguage: language
+                    configuredLanguage: language,
+                    resolvedOutputFormat: resolvedOutputFormat
                 )
 
                 guard !Task.isCancelled else { return }
@@ -1326,7 +1345,7 @@ final class DictationViewModel: ObservableObject {
                 )
                 let ppResult = try await postProcessingPipeline.process(
                     text: text, context: ppContext, dictationContext: dictationContext, llmHandler: llmHandler,
-                    outputFormat: self.effectiveOutputFormat,
+                    outputFormat: resolvedOutputFormat,
                     llmStepName: llmStepName,
                     normalizeNumbers: self.effectiveNumberNormalizationOverride
                 )
@@ -1364,7 +1383,7 @@ final class DictationViewModel: ObservableObject {
                         insertionText,
                         preserveClipboard: preserveClipboard,
                         autoEnter: self.effectiveAutoEnterEnabled,
-                        outputFormat: self.effectiveOutputFormat
+                        outputFormat: resolvedOutputFormat
                     )
                     if case .pasted(.unverified(let reason)) = insertionResult {
                         logger.info(
@@ -1676,12 +1695,14 @@ final class DictationViewModel: ObservableObject {
     private func buildLLMHandler(
         translationTarget: String?,
         detectedLanguage: String?,
-        configuredLanguage: String?
+        configuredLanguage: String?,
+        resolvedOutputFormat: String?
     ) -> ((String) async throws -> String)? {
         if let workflowHandler = buildWorkflowTextProcessingHandler(
             translationTarget: translationTarget,
             detectedLanguage: detectedLanguage,
-            configuredLanguage: configuredLanguage
+            configuredLanguage: configuredLanguage,
+            resolvedOutputFormat: resolvedOutputFormat
         ) {
             return workflowHandler
         }
@@ -1722,7 +1743,8 @@ final class DictationViewModel: ObservableObject {
     private func buildWorkflowTextProcessingHandler(
         translationTarget: String?,
         detectedLanguage: String?,
-        configuredLanguage: String?
+        configuredLanguage: String?,
+        resolvedOutputFormat: String?
     ) -> ((String) async throws -> String)? {
         guard let workflow = matchedWorkflow else { return nil }
 
@@ -1732,7 +1754,8 @@ final class DictationViewModel: ObservableObject {
             workflow: workflow,
             fallbackTranslationTarget: translationTarget,
             detectedLanguage: detectedLanguage,
-            configuredLanguage: configuredLanguage
+            configuredLanguage: configuredLanguage,
+            resolvedOutputFormat: resolvedOutputFormat
         ) else {
             return nil
         }
@@ -1748,7 +1771,8 @@ final class DictationViewModel: ObservableObject {
                 text: text,
                 fallbackTranslationTarget: translationTarget,
                 detectedLanguage: detectedLanguage,
-                configuredLanguage: configuredLanguage
+                configuredLanguage: configuredLanguage,
+                resolvedOutputFormat: resolvedOutputFormat
             )
         }
     }

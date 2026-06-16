@@ -104,6 +104,7 @@ final class PostProcessingPipeline {
                     result = appFormatterService!.format(
                         text: result,
                         bundleId: context.bundleIdentifier,
+                        url: context.url,
                         outputFormat: outputFormat
                     )
                 case -5:

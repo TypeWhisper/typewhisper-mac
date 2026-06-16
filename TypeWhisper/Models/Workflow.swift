@@ -592,9 +592,15 @@ extension Workflow {
     func systemPrompt(
         fallbackTranslationTarget: String? = nil,
         detectedLanguage: String? = nil,
-        configuredLanguage: String? = nil
+        configuredLanguage: String? = nil,
+        resolvedOutputFormat: String? = nil
     ) -> String? {
-        let outputInstruction = workflowOutputInstruction(for: output)
+        let outputFormat = resolvedOutputFormat ?? WorkflowOutputFormatResolver.resolvedFormat(
+            storedFormat: output.format,
+            bundleIdentifier: nil,
+            url: nil
+        )
+        let outputInstruction = workflowOutputInstruction(outputFormat: outputFormat, output: output)
         let settingsInstruction = workflowSettingsInstruction(for: behavior.settings)
         let fineTuningInstruction = workflowFineTuningInstruction(for: behavior.fineTuning)
         let inputBoundaryInstruction = workflowInputBoundaryInstruction(for: template)
@@ -699,9 +705,9 @@ extension Workflow {
         return "\nFine-tuning:\n\(trimmed)"
     }
 
-    private func workflowOutputInstruction(for output: WorkflowOutput) -> String {
+    private func workflowOutputInstruction(outputFormat: String?, output: WorkflowOutput) -> String {
         var lines: [String] = []
-        if let format = output.format?.trimmingCharacters(in: .whitespacesAndNewlines), !format.isEmpty {
+        if let format = outputFormat?.trimmingCharacters(in: .whitespacesAndNewlines), !format.isEmpty {
             let normalizedFormat = format.lowercased()
             if normalizedFormat == "rtf" || normalizedFormat == "richtext" || normalizedFormat == "rich text" {
                 lines.append("Return Markdown-compatible text for rich-text conversion.")

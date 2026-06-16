@@ -249,6 +249,81 @@ final class PromptPaletteHandlerTests: XCTestCase {
         XCTAssertEqual(insertedText, "Processed: Selected source")
     }
 
+    func testDirectWorkflowHotkeyAutoRichTextUsesResolvedPasteboardPayload() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let textInsertionService = TextInsertionService()
+        textInsertionService.accessibilityGrantedOverride = true
+        textInsertionService.captureActiveAppOverride = { ("Pages", "com.apple.iWork.Pages", nil) }
+        let selectedElement = AXUIElementCreateSystemWide()
+        textInsertionService.textSelectionOverride = {
+            TextInsertionService.TextSelection(text: "Selected source", element: selectedElement)
+        }
+
+        var insertedText: String?
+        textInsertionService.insertTextAtOverride = { _, text in
+            insertedText = text
+            return true
+        }
+
+        let pasteboard = NSPasteboard.general
+        let savedClipboard = textInsertionService.saveClipboard(from: pasteboard)
+        defer { textInsertionService.restoreClipboard(savedClipboard, to: pasteboard) }
+        pasteboard.clearContents()
+
+        let workflowService = WorkflowService(appSupportDirectory: appSupportDirectory)
+        let workflow = Workflow(
+            name: "Direct Rich Summary",
+            template: .summary,
+            trigger: .hotkeys([
+                UnifiedHotkey(keyCode: 17, modifierFlags: 0, isFn: false)
+            ], behavior: .processSelectedText),
+            output: WorkflowOutput(format: "auto")
+        )
+
+        var capturedPrompt: String?
+        var pasteCount = 0
+        let controller = PromptPaletteControllerSpy()
+        let handler = PromptPaletteHandler(
+            textInsertionService: textInsertionService,
+            workflowService: workflowService,
+            historyService: HistoryService(appSupportDirectory: appSupportDirectory),
+            recentTranscriptionStore: RecentTranscriptionStore(),
+            promptProcessingService: PromptProcessingService(),
+            workflowTextProcessingService: WorkflowTextProcessingService(
+                promptProcessor: { prompt, _, _, _, _ in
+                    capturedPrompt = prompt
+                    return "**Launch**\n- Budget"
+                },
+                appleTranslator: nil
+            ),
+            soundService: SoundService(),
+            accessibilityAnnouncementService: AccessibilityAnnouncementService(),
+            promptPaletteController: controller,
+            activateAndPasteOverride: { _ in
+                pasteCount += 1
+                textInsertionService.pasteFromClipboard()
+                return true
+            }
+        )
+
+        handler.processWorkflowDirectly(
+            workflow: workflow,
+            currentState: .idle,
+            soundFeedbackEnabled: false
+        )
+
+        try await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertFalse(controller.isVisible)
+        XCTAssertNil(insertedText)
+        XCTAssertEqual(pasteCount, 1)
+        XCTAssertTrue(capturedPrompt?.contains("Return Markdown-compatible text for rich-text conversion.") == true)
+        XCTAssertEqual(pasteboard.string(forType: .string), "Launch\n- Budget")
+        XCTAssertNotNil(pasteboard.data(forType: .rtf))
+    }
+
     func testDirectWorkflowHotkeyRoutesProcessedTextToActionPluginInsteadOfInsertion() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

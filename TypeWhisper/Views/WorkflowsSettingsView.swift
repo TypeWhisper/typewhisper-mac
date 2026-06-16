@@ -37,6 +37,7 @@ struct WorkflowOutputFormatPreset: Identifiable, Equatable {
     var id: String { value }
 
     static let all: [WorkflowOutputFormatPreset] = [
+        WorkflowOutputFormatPreset(title: "Auto-Detect", value: "auto"),
         WorkflowOutputFormatPreset(title: "Markdown", value: "markdown"),
         WorkflowOutputFormatPreset(title: "HTML", value: "html"),
         WorkflowOutputFormatPreset(title: "RTF", value: "rtf"),
@@ -884,7 +885,7 @@ private struct WorkflowEditorPage: View {
                                     Text(localizedAppText("Output Format", de: "Ausgabeformat"))
                                         .font(.subheadline.weight(.semibold))
                                     HStack(spacing: 8) {
-                                        TextField(localizedAppText("e.g. Markdown, RTF, JSON, plain text", de: "z. B. Markdown, RTF, JSON, Plain Text"), text: $draft.outputFormat)
+                                        TextField(localizedAppText("e.g. Auto, Markdown, RTF, JSON, plain text", de: "z. B. Auto, Markdown, RTF, JSON, Plain Text"), text: $draft.outputFormat)
                                             .textFieldStyle(.roundedBorder)
 
                                         Menu {
