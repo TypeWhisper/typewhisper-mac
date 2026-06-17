@@ -1,0 +1,23 @@
+{
+    "id": "com.minerale.mistralai",
+    "name": "Mistral AI",
+    "version": "1.0.0",
+    "minHostVersion": "1.5.0",
+    "sdkCompatibilityVersion": "v1",
+    "minOSVersion": "14.0",
+    "author": "MinerAle",
+    "description": "LLM provider and cloud speech transcription via Mistral AI API. Requires API key.",
+    "descriptions": {
+        "de": "LLM-Anbieter und Cloud-Spracherkennung über die Mistral AI API. Erfordert API-Key."
+    },
+    "category": "transcription",
+    "categories": [
+        "transcription",
+        "llm"
+    ],
+    "hosting": "cloud",
+    "iconURL": "https://upload.wikimedia.org/wikipedia/commons/e/e6/Mistral_AI_logo_%282025%E2%80%93%29.svg",
+    "principalClass": "MistralAIPlugin",
+    "requiresAPIKey": true,
+    "detailsURL": "https://mistral.ai/"
+}

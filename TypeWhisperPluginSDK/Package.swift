@@ -280,6 +280,16 @@ let package = Package(
                 .process("manifest.json"),
             ]
         ),
+        .target(
+            name: "MistralAIPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/MistralAIPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
         .testTarget(
             name: "TypeWhisperPluginSDKTests",
             dependencies: ["TypeWhisperPluginSDK"]
@@ -513,6 +523,15 @@ let package = Package(
                 "WebhookPlugin",
             ],
             path: "Plugins/WebhookPlugin/Tests"
+        ),
+        .testTarget(
+            name: "MistralAIPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "MistralAIPlugin",
+            ],
+            path: "Plugins/MistralAIPlugin/Tests"
         ),
     ]
 )
