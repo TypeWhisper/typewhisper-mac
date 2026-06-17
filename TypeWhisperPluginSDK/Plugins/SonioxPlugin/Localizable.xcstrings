@@ -49,6 +49,22 @@
         }
       }
     },
+    "File transcription uses STT Async v5 automatically.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dateitranskription verwendet automatisch STT Async v5."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ファイル文字起こしではSTT Async v5が自動的に使用されます。"
+          }
+        }
+      }
+    },
     "Model": {
       "localizations": {
         "de": {
@@ -61,6 +77,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "モデル"
+          }
+        }
+      }
+    },
+    "Realtime model": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Echtzeitmodell"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リアルタイムモデル"
           }
         }
       }
