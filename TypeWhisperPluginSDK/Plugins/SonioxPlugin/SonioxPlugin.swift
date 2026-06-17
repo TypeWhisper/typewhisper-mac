@@ -178,24 +178,6 @@ final class SonioxPlugin: NSObject, SourceProgressLanguageHintTranscriptionEngin
         prompt: String?,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
-        try await transcribe(
-            audio: audio,
-            language: language,
-            translate: translate,
-            prompt: prompt,
-            onProgress: onProgress,
-            onSourceProgress: { _ in true }
-        )
-    }
-
-    func transcribe(
-        audio: AudioData,
-        language: String?,
-        translate: Bool,
-        prompt: String?,
-        onProgress: @Sendable @escaping (String) -> Bool,
-        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
-    ) async throws -> PluginTranscriptionResult {
         guard let apiKey = _apiKey, !apiKey.isEmpty else {
             throw PluginTranscriptionError.notConfigured
         }
@@ -208,7 +190,7 @@ final class SonioxPlugin: NSObject, SourceProgressLanguageHintTranscriptionEngin
                 audio: audio, language: language, translate: translate,
                 modelId: modelId, prompt: prompt, apiKey: apiKey,
                 onProgress: onProgress,
-                onSourceProgress: onSourceProgress
+                onSourceProgress: { _ in true }
             )
         } catch {
             logger.warning("WebSocket streaming failed, falling back to REST: \(error.localizedDescription)")
@@ -224,19 +206,25 @@ final class SonioxPlugin: NSObject, SourceProgressLanguageHintTranscriptionEngin
 
     func transcribe(
         audio: AudioData,
-        languageSelection: PluginLanguageSelection,
+        language: String?,
         translate: Bool,
         prompt: String?,
-        onProgress: @Sendable @escaping (String) -> Bool
+        onProgress: @Sendable @escaping (String) -> Bool,
+        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
     ) async throws -> PluginTranscriptionResult {
-        try await transcribe(
+        guard let apiKey = _apiKey, !apiKey.isEmpty else {
+            throw PluginTranscriptionError.notConfigured
+        }
+
+        let result = try await transcribeREST(
             audio: audio,
-            languageSelection: languageSelection,
+            language: language,
             translate: translate,
-            prompt: prompt,
-            onProgress: onProgress,
-            onSourceProgress: { _ in true }
+            apiKey: apiKey,
+            prompt: prompt
         )
+        Self.emitFinalProgress(result, onProgress: onProgress)
+        return result
     }
 
     func transcribe(
@@ -244,8 +232,7 @@ final class SonioxPlugin: NSObject, SourceProgressLanguageHintTranscriptionEngin
         languageSelection: PluginLanguageSelection,
         translate: Bool,
         prompt: String?,
-        onProgress: @Sendable @escaping (String) -> Bool,
-        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
+        onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
         guard let apiKey = _apiKey, !apiKey.isEmpty else {
             throw PluginTranscriptionError.notConfigured
@@ -269,7 +256,7 @@ final class SonioxPlugin: NSObject, SourceProgressLanguageHintTranscriptionEngin
                 prompt: prompt,
                 apiKey: apiKey,
                 onProgress: onProgress,
-                onSourceProgress: onSourceProgress
+                onSourceProgress: { _ in true }
             )
         } catch {
             logger.warning("WebSocket streaming failed, falling back to REST: \(error.localizedDescription)")
@@ -282,6 +269,35 @@ final class SonioxPlugin: NSObject, SourceProgressLanguageHintTranscriptionEngin
                 prompt: prompt
             )
         }
+    }
+
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool,
+        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        guard let apiKey = _apiKey, !apiKey.isEmpty else {
+            throw PluginTranscriptionError.notConfigured
+        }
+
+        let effectiveHints = Self.resolvedLanguageHints(
+            requestedLanguage: languageSelection.requestedLanguage,
+            languageHints: languageSelection.languageHints
+        )
+
+        let result = try await transcribeREST(
+            audio: audio,
+            language: languageSelection.requestedLanguage,
+            languageHints: effectiveHints,
+            translate: translate,
+            apiKey: apiKey,
+            prompt: prompt
+        )
+        Self.emitFinalProgress(result, onProgress: onProgress)
+        return result
     }
 
     // MARK: - WebSocket Implementation
@@ -650,6 +666,13 @@ final class SonioxPlugin: NSObject, SourceProgressLanguageHintTranscriptionEngin
         return []
     }
 
+    private static func emitFinalProgress(
+        _ result: PluginTranscriptionResult,
+        onProgress: @Sendable (String) -> Bool
+    ) {
+        _ = onProgress(result.text)
+    }
+
     private static func resolvedRealtimeModelId(_ storedModelId: String?, host: HostServices?) -> String {
         let trimmedModelId = storedModelId?.trimmingCharacters(in: .whitespacesAndNewlines)
         let supportedIds = Set([Self.realtimeModelId])
@@ -887,10 +910,10 @@ private struct SonioxSettingsView: View {
 
                 // Model Selection
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Model", bundle: bundle)
+                    Text("Realtime model", bundle: bundle)
                         .font(.headline)
 
-                    Picker("Model", selection: $selectedModel) {
+                    Picker("Realtime model", selection: $selectedModel) {
                         ForEach(plugin.transcriptionModels, id: \.id) { model in
                             Text(model.displayName).tag(model.id)
                         }
@@ -899,6 +922,10 @@ private struct SonioxSettingsView: View {
                     .onChange(of: selectedModel) {
                         plugin.selectModel(selectedModel)
                     }
+
+                    Text("File transcription uses STT Async v5 automatically.", bundle: bundle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
 

@@ -5,6 +5,11 @@ import TypeWhisperPluginSDK
 @testable import SonioxPlugin
 
 final class SonioxPluginTests: XCTestCase {
+    override func tearDown() {
+        PluginHTTPClientTestHarness.reset()
+        super.tearDown()
+    }
+
     func testDefaultRealtimeModelUsesRTV5AndPersistsSelection() throws {
         let host = try PluginTestHostServices()
         let plugin = SonioxPlugin()
@@ -52,6 +57,72 @@ final class SonioxPluginTests: XCTestCase {
         XCTAssertEqual(translation["target_language"] as? String, "en")
     }
 
+    func testSourceProgressTranscriptionUsesAsyncV5RESTPathAndEmitsFinalProgress() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "soniox-key"])
+        let plugin = SonioxPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"id":"file_123"}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/files", statusCode: 201)
+                ),
+                .success(
+                    Data(#"{"id":"transcription_123"}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/transcriptions", statusCode: 201)
+                ),
+                .success(
+                    Data(#"{"status":"completed"}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/transcriptions/transcription_123", statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"text":"Async file transcript"}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/transcriptions/transcription_123/transcript", statusCode: 200)
+                ),
+            ])
+        }
+
+        let progressRecorder = StringRecorder()
+        let sourceProgressRecorder = SourceProgressRecorder()
+
+        let result = try await plugin.transcribe(
+            audio: AudioData(samples: [0], wavData: Data("wav".utf8), duration: 1),
+            languageSelection: PluginLanguageSelection(languageHints: ["en", "de"]),
+            translate: false,
+            prompt: nil,
+            onProgress: { text in
+                progressRecorder.append(text)
+                return true
+            },
+            onSourceProgress: { progress in
+                sourceProgressRecorder.append(progress)
+                return true
+            }
+        )
+
+        XCTAssertEqual(result.text, "Async file transcript")
+        XCTAssertEqual(progressRecorder.values, ["Async file transcript"])
+        XCTAssertEqual(sourceProgressRecorder.count, 0)
+
+        let session = try XCTUnwrap(store.sessions.first)
+        XCTAssertEqual(
+            session.requestedPaths,
+            [
+                "/v1/files",
+                "/v1/transcriptions",
+                "/v1/transcriptions/transcription_123",
+                "/v1/transcriptions/transcription_123/transcript",
+            ]
+        )
+
+        let createRequest = try XCTUnwrap(session.requestedRequests.first { $0.url?.path == "/v1/transcriptions" })
+        let body = try Self.jsonBody(from: createRequest)
+        XCTAssertEqual(body["model"] as? String, "stt-async-v5")
+        XCTAssertEqual(body["language_hints"] as? [String], ["en", "de"])
+    }
+
     func testSourceProgressUsesFinalOriginalTokenTiming() {
         let progress = SonioxPlugin.sourceProgress(
             fromTokens: [
@@ -94,5 +165,44 @@ final class SonioxPluginTests: XCTestCase {
     private static func jsonBody(from request: URLRequest) throws -> [String: Any] {
         let data = try XCTUnwrap(request.httpBody)
         return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    }
+
+    private static func httpResponse(url: String, statusCode: Int) -> HTTPURLResponse {
+        HTTPURLResponse(
+            url: URL(string: url)!,
+            statusCode: statusCode,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+    }
+}
+
+private final class StringRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [String] = []
+
+    var values: [String] {
+        lock.withLock { storage }
+    }
+
+    func append(_ value: String) {
+        lock.withLock {
+            storage.append(value)
+        }
+    }
+}
+
+private final class SourceProgressRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [PluginTranscriptionSourceProgress] = []
+
+    var count: Int {
+        lock.withLock { storage.count }
+    }
+
+    func append(_ value: PluginTranscriptionSourceProgress) {
+        lock.withLock {
+            storage.append(value)
+        }
     }
 }
