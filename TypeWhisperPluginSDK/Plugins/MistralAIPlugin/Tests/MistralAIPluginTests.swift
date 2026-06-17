@@ -18,6 +18,16 @@ final class MistralAIPluginTests: XCTestCase {
         XCTAssertTrue(plugin.transcriptionModels.isEmpty)
     }
 
+    func testMistralAIIsAvailable() throws {
+        let plugin = MistralAIPlugin()
+        XCTAssertFalse(plugin.isAvailable)
+        
+        let host = try PluginTestHostServices(secrets: ["api-key": "test-key"])
+        plugin.activate(host: host)
+        
+        XCTAssertTrue(plugin.isAvailable)
+    }
+
     func testMistralAITranscriptionModelsIncludeVoxtral() throws {
         let host = try PluginTestHostServices(secrets: ["api-key": "test-key"])
         let plugin = MistralAIPlugin()
