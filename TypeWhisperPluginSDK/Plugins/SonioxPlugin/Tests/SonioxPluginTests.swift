@@ -1,9 +1,31 @@
 import Foundation
 import XCTest
 import TypeWhisperPluginSDK
+@_spi(Testing) import TypeWhisperPluginSDKTesting
 @testable import SonioxPlugin
 
 final class SonioxPluginTests: XCTestCase {
+    func testDefaultRealtimeModelUsesRTV5AndPersistsSelection() throws {
+        let host = try PluginTestHostServices()
+        let plugin = SonioxPlugin()
+
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.selectedModelId, "stt-rt-v5")
+        XCTAssertEqual(plugin.transcriptionModels.map(\.id), ["stt-rt-v5"])
+        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "stt-rt-v5")
+    }
+
+    func testRetiredRealtimeModelMigratesToRTV5() throws {
+        let host = try PluginTestHostServices(defaults: ["selectedModel": "stt-rt-v4"])
+        let plugin = SonioxPlugin()
+
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.selectedModelId, "stt-rt-v5")
+        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "stt-rt-v5")
+    }
+
     func testCreateTranscriptionRequestUsesAsyncV5Model() throws {
         let request = try SonioxPlugin.makeCreateTranscriptionRequest(
             fileId: "file_123",

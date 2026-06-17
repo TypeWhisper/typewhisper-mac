@@ -71,6 +71,8 @@ final class SonioxPlugin: NSObject, SourceProgressLanguageHintTranscriptionEngin
     static let pluginId = "com.typewhisper.soniox"
     static let pluginName = "Soniox"
     static let asyncModelId = "stt-async-v5"
+    static let realtimeModelId = "stt-rt-v5"
+    private static let selectedModelKey = "selectedModel"
 
     fileprivate var host: HostServices?
     fileprivate var _apiKey: String?
@@ -85,8 +87,10 @@ final class SonioxPlugin: NSObject, SourceProgressLanguageHintTranscriptionEngin
     func activate(host: HostServices) {
         self.host = host
         _apiKey = host.loadSecret(key: "api-key")
-        _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
-            ?? transcriptionModels.first?.id
+        _selectedModelId = Self.resolvedRealtimeModelId(
+            host.userDefault(forKey: Self.selectedModelKey) as? String,
+            host: host
+        )
     }
 
     func deactivate() {
@@ -105,16 +109,16 @@ final class SonioxPlugin: NSObject, SourceProgressLanguageHintTranscriptionEngin
 
     var transcriptionModels: [PluginModelInfo] {
         [
-            PluginModelInfo(id: "stt-rt-v4", displayName: "STT RT v4"),
-            PluginModelInfo(id: "stt-rt-preview", displayName: "STT RT Preview"),
+            PluginModelInfo(id: Self.realtimeModelId, displayName: "STT RT v5"),
         ]
     }
 
     var selectedModelId: String? { _selectedModelId }
 
     func selectModel(_ modelId: String) {
-        _selectedModelId = modelId
-        host?.setUserDefault(modelId, forKey: "selectedModel")
+        let resolvedModelId = Self.resolvedRealtimeModelId(modelId, host: host)
+        _selectedModelId = resolvedModelId
+        host?.setUserDefault(resolvedModelId, forKey: Self.selectedModelKey)
     }
 
     var supportsTranslation: Bool { true }
@@ -644,6 +648,19 @@ final class SonioxPlugin: NSObject, SourceProgressLanguageHintTranscriptionEngin
             return [requestedLanguage]
         }
         return []
+    }
+
+    private static func resolvedRealtimeModelId(_ storedModelId: String?, host: HostServices?) -> String {
+        let trimmedModelId = storedModelId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let supportedIds = Set([Self.realtimeModelId])
+        let modelId = trimmedModelId.flatMap { supportedIds.contains($0) ? $0 : nil }
+            ?? Self.realtimeModelId
+
+        if modelId != storedModelId {
+            host?.setUserDefault(modelId, forKey: Self.selectedModelKey)
+        }
+
+        return modelId
     }
 
     private func pollUntilCompleted(id: String, apiKey: String) async throws {
