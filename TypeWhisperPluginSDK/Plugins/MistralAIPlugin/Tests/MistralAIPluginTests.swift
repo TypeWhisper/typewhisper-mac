@@ -10,6 +10,8 @@ final class MistralAIPluginTests: XCTestCase {
         
         XCTAssertTrue(plugin is any LLMProviderPlugin)
         XCTAssertTrue(plugin is any TranscriptionEnginePlugin)
+        XCTAssertTrue(plugin is any LLMProviderIdentityProviding)
+        XCTAssertTrue(plugin is any LLMModelSelectable)
     }
 
     func testMistralAIModelsAreEmptyWithoutAPIKey() {
@@ -59,5 +61,24 @@ final class MistralAIPluginTests: XCTestCase {
         
         XCTAssertEqual(plugin.selectedLLMModelId, "mistral-large-latest")
         XCTAssertEqual(plugin.selectedModelId, "voxtral-mini-latest")
+    }
+
+    func testMistralAIProviderContractAndIdentity() throws {
+        let plugin = MistralAIPlugin()
+        
+        // Identity checks
+        XCTAssertEqual(plugin.providerId, "mistral", "Stable provider ID should be 'mistral'")
+        XCTAssertEqual(plugin.providerDisplayName, "Mistral AI")
+        
+        // LLMModelSelectable checks
+        let selectable: any LLMModelSelectable = plugin
+        XCTAssertEqual(selectable.defaultModelId, "mistral-small-latest")
+        XCTAssertNil(selectable.preferredModelId ?? nil)
+        
+        let host = try PluginTestHostServices(secrets: ["api-key": "test-key"])
+        plugin.activate(host: host)
+        plugin.selectLLMModel("pixtral-12b-2409")
+        
+        XCTAssertEqual(selectable.preferredModelId ?? nil, "pixtral-12b-2409")
     }
 }

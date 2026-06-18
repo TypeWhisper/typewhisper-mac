@@ -3,7 +3,7 @@ import TypeWhisperPluginSDK
 import SwiftUI
 
 @objc(MistralAIPlugin)
-public final class MistralAIPlugin: NSObject, LLMProviderPlugin, TranscriptionEnginePlugin, @unchecked Sendable {
+public final class MistralAIPlugin: NSObject, LLMProviderPlugin, LLMProviderIdentityProviding, LLMModelSelectable, TranscriptionEnginePlugin, @unchecked Sendable {
     
     public static var pluginId: String { "com.minerale.mistralai" }
     public static var pluginName: String { "Mistral AI" }
@@ -91,11 +91,15 @@ public final class MistralAIPlugin: NSObject, LLMProviderPlugin, TranscriptionEn
         return try await client.processChat(systemPrompt: systemPrompt, userText: userText, model: selectedModel)
     }
     
-    // MARK: - Custom Model Selectable (Mocked since SDK doesn't have it)
+    // MARK: - LLMModelSelectable
     
     private var _selectedLLMModelId: String?
     
     public var selectedLLMModelId: String? { lock.withLock { _selectedLLMModelId } }
+    
+    @objc public var preferredModelId: String? { lock.withLock { _selectedLLMModelId } }
+    
+    @objc public var defaultModelId: String? { "mistral-small-latest" }
     
     public func selectLLMModel(_ modelId: String) {
         let normalized = modelId.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -107,10 +111,10 @@ public final class MistralAIPlugin: NSObject, LLMProviderPlugin, TranscriptionEn
         host?.notifyCapabilitiesChanged()
     }
     
-    // MARK: - TranscriptionEnginePlugin
+    // MARK: - Identity & TranscriptionEnginePlugin
     
-    public var providerId: String { "com.ale.mistralai.transcription" }
-    public var providerDisplayName: String { "Mistral STT (Voxtral)" }
+    public var providerId: String { "mistral" }
+    public var providerDisplayName: String { "Mistral AI" }
     public var isConfigured: Bool { isAvailable }
     
     public var transcriptionModels: [PluginModelInfo] {
