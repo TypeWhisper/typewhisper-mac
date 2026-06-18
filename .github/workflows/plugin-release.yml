@@ -85,6 +85,7 @@ jobs:
             webhook) TARGET="WebhookPlugin" ;;
             groq) TARGET="GroqPlugin" ;;
             openai) TARGET="OpenAIPlugin" ;;
+            mistral) TARGET="MistralAIPlugin" ;;
             gemini) TARGET="GeminiPlugin" ;;
             whisperkit) TARGET="WhisperKitPlugin" ;;
             parakeet) TARGET="ParakeetPlugin" ;;
