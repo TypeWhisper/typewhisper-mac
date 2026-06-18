@@ -38,6 +38,10 @@
 		D4A100000000000000000001 /* RecorderTranscriptionBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4A100000000000000000002 /* RecorderTranscriptionBuffer.swift */; };
 		D4A100000000000000000003 /* RecorderTranscriptionBufferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4A100000000000000000004 /* RecorderTranscriptionBufferTests.swift */; };
 		F0A1B2C3D4E5F60718293A4B /* GeminiPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000141 /* GeminiPlugin.swift */; };
+		4D49535452414C0000000001 /* MistralAIPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D49535452414C0000000002 /* MistralAIPlugin.swift */; };
+		4D49535452414C0000000010 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 4D49535452414C0000000003 /* manifest.json */; };
+		4D49535452414C0000000011 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 4D49535452414C0000000004 /* Localizable.xcstrings */; };
+		4D49535452414C000000000B /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 4D49535452414C000000000C /* TypeWhisperPluginSDK */; };
 		A10000000000000000000001 /* SystemTTSPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000001 /* SystemTTSPlugin.swift */; };
 		A10000000000000000000002 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000002 /* manifest.json */; };
 		A10000000000000000000003 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000044 /* TypeWhisperPluginSDK */; };
@@ -671,6 +675,10 @@
 		BB00000000000000000141 /* GeminiPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000142 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000143 /* GeminiPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GeminiPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		4D49535452414C0000000002 /* MistralAIPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MistralAIPlugin.swift; sourceTree = "<group>"; };
+		4D49535452414C0000000003 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		4D49535452414C0000000004 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		4D49535452414C0000000005 /* MistralAIPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MistralAIPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000144 /* LinearPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinearPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000145 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000146 /* LinearPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LinearPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -989,6 +997,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000143 /* TypeWhisperPluginSDK in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4D49535452414C000000000A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4D49535452414C000000000B /* TypeWhisperPluginSDK in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1329,6 +1345,7 @@
 				CC00000000000000000016 /* GroqPlugin */,
 				CC00000000000000000017 /* OpenAIPlugin */,
 				CC00000000000000000018 /* GeminiPlugin */,
+				4D49535452414C0000000006 /* MistralAIPlugin */,
 				CC00000000000000000019 /* LinearPlugin */,
 				CC00000000000000000020 /* Qwen3Plugin */,
 				CC00000000000000000021 /* WhisperKitPlugin */,
@@ -1698,6 +1715,17 @@
 			);
 			name = GeminiPlugin;
 			path = TypeWhisperPluginSDK/Plugins/GeminiPlugin;
+			sourceTree = "<group>";
+		};
+		4D49535452414C0000000006 /* MistralAIPlugin */ = {
+			isa = PBXGroup;
+			children = (
+				4D49535452414C0000000002 /* MistralAIPlugin.swift */,
+				4D49535452414C0000000003 /* manifest.json */,
+				4D49535452414C0000000004 /* Localizable.xcstrings */,
+			);
+			name = MistralAIPlugin;
+			path = TypeWhisperPluginSDK/Plugins/MistralAIPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000019 /* LinearPlugin */ = {
@@ -2128,6 +2156,7 @@
 				BB00000000000000000134 /* GroqPlugin.bundle */,
 				BB00000000000000000135 /* OpenAIPlugin.bundle */,
 				BB00000000000000000143 /* GeminiPlugin.bundle */,
+				4D49535452414C0000000005 /* MistralAIPlugin.bundle */,
 				BB00000000000000000146 /* LinearPlugin.bundle */,
 				BB00000000000000000149 /* Qwen3Plugin.bundle */,
 				BB00000000000000000153 /* WhisperKitPlugin.bundle */,
@@ -2380,6 +2409,26 @@
 			);
 			productName = GeminiPlugin;
 			productReference = BB00000000000000000143 /* GeminiPlugin.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
+		4D49535452414C0000000007 /* MistralAIPlugin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4D49535452414C000000000F /* Build configuration list for PBXNativeTarget "MistralAIPlugin" */;
+			buildPhases = (
+				4D49535452414C0000000008 /* Sources */,
+				4D49535452414C000000000A /* Frameworks */,
+				4D49535452414C0000000009 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MistralAIPlugin;
+			packageProductDependencies = (
+				4D49535452414C000000000C /* TypeWhisperPluginSDK */,
+			);
+			productName = MistralAIPlugin;
+			productReference = 4D49535452414C0000000005 /* MistralAIPlugin.bundle */;
 			productType = "com.apple.product-type.bundle";
 		};
 		DD00000000000000000007 /* LinearPlugin */ = {
@@ -3187,6 +3236,7 @@
 				DD00000000000000000004 /* GroqPlugin */,
 				DD00000000000000000005 /* OpenAIPlugin */,
 				DD00000000000000000006 /* GeminiPlugin */,
+				4D49535452414C0000000007 /* MistralAIPlugin */,
 				DD00000000000000000007 /* LinearPlugin */,
 				DD00000000000000000009 /* Qwen3Plugin */,
 				DD00000000000000000010 /* WhisperKitPlugin */,
@@ -3287,6 +3337,15 @@
 			files = (
 				AA00000000000000000142 /* manifest.json in Resources */,
 				AA00000000000000000175 /* Localizable.xcstrings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4D49535452414C0000000009 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4D49535452414C0000000010 /* manifest.json in Resources */,
+				4D49535452414C0000000011 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -3915,6 +3974,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000141 /* GeminiPlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4D49535452414C0000000008 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4D49535452414C0000000001 /* MistralAIPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -4712,6 +4779,52 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.gemini;
 				PRODUCT_NAME = GeminiPlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
+		4D49535452414C000000000D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Mistral AI";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = MistralAIPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.minerale.mistralai;
+				PRODUCT_NAME = MistralAIPlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
+		4D49535452414C000000000E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Mistral AI";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = MistralAIPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.minerale.mistralai;
+				PRODUCT_NAME = MistralAIPlugin;
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
@@ -6575,6 +6688,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		4D49535452414C000000000F /* Build configuration list for PBXNativeTarget "MistralAIPlugin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4D49535452414C000000000D /* Debug */,
+				4D49535452414C000000000E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		FF00000000000000000053 /* Build configuration list for PBXNativeTarget "LinearPlugin" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -7175,6 +7297,10 @@
 			productName = TypeWhisperPluginSDK;
 		};
 		PP00000000000000000044 /* TypeWhisperPluginSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TypeWhisperPluginSDK;
+		};
+		4D49535452414C000000000C /* TypeWhisperPluginSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TypeWhisperPluginSDK;
 		};
