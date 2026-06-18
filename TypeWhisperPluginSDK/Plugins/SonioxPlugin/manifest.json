@@ -1,16 +1,17 @@
 {
     "id": "com.typewhisper.soniox",
     "name": "Soniox",
-    "version": "1.1.1",
+    "version": "1.2.0",
     "minHostVersion": "1.5.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
-    "description": "Cloud transcription via Soniox API with real-time WebSocket streaming and translation support. Requires API key.",
+    "description": "Cloud speech-to-text and text-to-speech via Soniox APIs with regional endpoint support. Requires API key.",
     "descriptions": {
-        "de": "Cloud-Transkription über die Soniox-API mit Echtzeit-WebSocket-Streaming und Übersetzungsunterstützung. Erfordert API-Key."
+        "de": "Cloud Speech-to-Text und Text-to-Speech über Soniox APIs mit regionaler Endpunkt-Auswahl. Erfordert API-Key."
     },
     "category": "transcription",
+    "categories": ["transcription", "tts"],
     "capabilities": [
         "source-footage-progress"
     ],

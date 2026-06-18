@@ -18,7 +18,7 @@ final class SonioxPluginTests: XCTestCase {
 
         XCTAssertEqual(plugin.selectedModelId, "stt-rt-v5")
         XCTAssertEqual(plugin.transcriptionModels.map(\.id), ["stt-rt-v5"])
-        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "stt-rt-v5")
+        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "automatic")
     }
 
     func testRetiredRealtimeModelMigratesToRTV5() throws {
@@ -28,7 +28,70 @@ final class SonioxPluginTests: XCTestCase {
         plugin.activate(host: host)
 
         XCTAssertEqual(plugin.selectedModelId, "stt-rt-v5")
-        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "stt-rt-v5")
+        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "automatic")
+    }
+
+    func testFetchedRealtimeModelsDriveAutomaticLatestSelection() throws {
+        let models = [
+            SonioxFetchedModel(
+                id: "stt-rt-v5",
+                aliasedModelId: nil,
+                name: "STT RT v5",
+                transcriptionMode: "real_time",
+                languages: []
+            ),
+            SonioxFetchedModel(
+                id: "stt-rt-v6",
+                aliasedModelId: nil,
+                name: "STT RT v6",
+                transcriptionMode: "real_time",
+                languages: []
+            ),
+            SonioxFetchedModel(
+                id: "stt-async-v6",
+                aliasedModelId: nil,
+                name: "STT Async v6",
+                transcriptionMode: "async",
+                languages: []
+            ),
+        ]
+        let data = try JSONEncoder().encode(models)
+        let host = try PluginTestHostServices(defaults: ["fetchedModels": data])
+        let plugin = SonioxPlugin()
+
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.selectedModelId, "stt-rt-v6")
+        XCTAssertEqual(plugin.transcriptionModels.map(\.id), ["stt-rt-v5", "stt-rt-v6"])
+    }
+
+    func testDefaultRegionUsesUSAndPersistsSelection() throws {
+        let host = try PluginTestHostServices()
+        let plugin = SonioxPlugin()
+
+        plugin.activate(host: host)
+
+        XCTAssertEqual(host.userDefault(forKey: "selectedRegion") as? String, "us")
+    }
+
+    func testInvalidStoredRegionMigratesToUS() throws {
+        let host = try PluginTestHostServices(defaults: ["selectedRegion": "moon"])
+        let plugin = SonioxPlugin()
+
+        plugin.activate(host: host)
+
+        XCTAssertEqual(host.userDefault(forKey: "selectedRegion") as? String, "us")
+    }
+
+    func testSonioxPluginAdvertisesTTSProtocolAndDefaultVoice() throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "soniox-key"])
+        let plugin = SonioxPlugin()
+
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.selectedVoiceId, "Maya")
+        XCTAssertTrue(plugin.availableVoices.contains { $0.id == "Adrian" })
+        XCTAssertTrue(plugin.authStatus(for: .tts).isAvailable)
     }
 
     func testCreateTranscriptionRequestUsesAsyncV5Model() throws {
@@ -55,6 +118,59 @@ final class SonioxPluginTests: XCTestCase {
         let translation = try XCTUnwrap(body["translation"] as? [String: Any])
         XCTAssertEqual(translation["type"] as? String, "one_way")
         XCTAssertEqual(translation["target_language"] as? String, "en")
+    }
+
+    func testCreateTranscriptionRequestUsesEURegionWhenSelected() throws {
+        let request = try SonioxPlugin.makeCreateTranscriptionRequest(
+            fileId: "file_123",
+            language: "de",
+            translate: false,
+            apiKey: "soniox-key",
+            prompt: nil,
+            regionID: "eu"
+        )
+
+        XCTAssertEqual(request.url?.absoluteString, "https://api.eu.soniox.com/v1/transcriptions")
+    }
+
+    func testCreateTranscriptionRequestAcceptsDynamicAsyncModel() throws {
+        let request = try SonioxPlugin.makeCreateTranscriptionRequest(
+            fileId: "file_123",
+            language: "de",
+            translate: false,
+            apiKey: "soniox-key",
+            prompt: nil,
+            modelID: "stt-async-v6",
+            regionID: "eu"
+        )
+
+        let body = try Self.jsonBody(from: request)
+        XCTAssertEqual(body["model"] as? String, "stt-async-v6")
+    }
+
+    func testTTSRequestUsesJapanRegionAndPCMOutput() throws {
+        let request = try SonioxPlugin.makeTTSRequest(
+            apiKey: "soniox-key",
+            text: "Hello",
+            voiceId: "Adrian",
+            language: "de-DE",
+            modelID: "tts-rt-v2",
+            regionID: "jp"
+        )
+
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.url?.absoluteString, "https://tts-rt.jp.soniox.com/tts")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer soniox-key")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+        XCTAssertEqual(request.timeoutInterval, 120)
+
+        let body = try Self.jsonBody(from: request)
+        XCTAssertEqual(body["model"] as? String, "tts-rt-v2")
+        XCTAssertEqual(body["language"] as? String, "de")
+        XCTAssertEqual(body["voice"] as? String, "Adrian")
+        XCTAssertEqual(body["audio_format"] as? String, "pcm_s16le")
+        XCTAssertEqual(body["text"] as? String, "Hello")
+        XCTAssertEqual(body["sample_rate"] as? Int, 24_000)
     }
 
     func testSourceProgressTranscriptionUsesAsyncV5RESTPathAndEmitsFinalProgress() async throws {
@@ -121,6 +237,152 @@ final class SonioxPluginTests: XCTestCase {
         let body = try Self.jsonBody(from: createRequest)
         XCTAssertEqual(body["model"] as? String, "stt-async-v5")
         XCTAssertEqual(body["language_hints"] as? [String], ["en", "de"])
+    }
+
+    func testSourceProgressTranscriptionUsesSelectedRegionalRESTPath() async throws {
+        let host = try PluginTestHostServices(
+            defaults: ["selectedRegion": "eu"],
+            secrets: ["api-key": "soniox-key"]
+        )
+        let plugin = SonioxPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"id":"file_123"}"#.utf8),
+                    Self.httpResponse(url: "https://api.eu.soniox.com/v1/files", statusCode: 201)
+                ),
+                .success(
+                    Data(#"{"id":"transcription_123"}"#.utf8),
+                    Self.httpResponse(url: "https://api.eu.soniox.com/v1/transcriptions", statusCode: 201)
+                ),
+                .success(
+                    Data(#"{"status":"completed"}"#.utf8),
+                    Self.httpResponse(url: "https://api.eu.soniox.com/v1/transcriptions/transcription_123", statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"text":"EU transcript"}"#.utf8),
+                    Self.httpResponse(url: "https://api.eu.soniox.com/v1/transcriptions/transcription_123/transcript", statusCode: 200)
+                ),
+            ])
+        }
+
+        let result = try await plugin.transcribe(
+            audio: AudioData(samples: [0], wavData: Data("wav".utf8), duration: 1),
+            languageSelection: PluginLanguageSelection(languageHints: ["en"]),
+            translate: false,
+            prompt: nil,
+            onProgress: { _ in true },
+            onSourceProgress: { _ in true }
+        )
+
+        XCTAssertEqual(result.text, "EU transcript")
+        let session = try XCTUnwrap(store.sessions.first)
+        XCTAssertEqual(
+            session.requestedRequests.map { $0.url?.absoluteString },
+            [
+                "https://api.eu.soniox.com/v1/files",
+                "https://api.eu.soniox.com/v1/transcriptions",
+                "https://api.eu.soniox.com/v1/transcriptions/transcription_123",
+                "https://api.eu.soniox.com/v1/transcriptions/transcription_123/transcript",
+            ]
+        )
+    }
+
+    func testValidateAPIKeyUsesSelectedRegion() async throws {
+        let host = try PluginTestHostServices(defaults: ["selectedRegion": "jp"])
+        let plugin = SonioxPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data("{}".utf8),
+                    Self.httpResponse(url: "https://api.jp.soniox.com/v1/files", statusCode: 200)
+                ),
+            ])
+        }
+
+        let isValid = await plugin.validateApiKey("soniox-key")
+
+        XCTAssertTrue(isValid)
+        let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
+        XCTAssertEqual(request.url?.absoluteString, "https://api.jp.soniox.com/v1/files")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer soniox-key")
+    }
+
+    func testAPIKeyValidationRequestUsesEURegion() throws {
+        let request = try SonioxPlugin.makeAPIKeyValidationRequest(
+            apiKey: "soniox-key",
+            regionID: "eu"
+        )
+
+        XCTAssertEqual(request.url?.absoluteString, "https://api.eu.soniox.com/v1/files")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer soniox-key")
+        XCTAssertEqual(request.timeoutInterval, 10)
+    }
+
+    func testModelCatalogRequestsUseSelectedRegion() throws {
+        let sttRequest = try SonioxPlugin.makeSTTModelsRequest(apiKey: "soniox-key", regionID: "eu")
+        let ttsRequest = try SonioxPlugin.makeTTSModelsRequest(apiKey: "soniox-key", regionID: "jp")
+
+        XCTAssertEqual(sttRequest.url?.absoluteString, "https://api.eu.soniox.com/v1/models")
+        XCTAssertEqual(ttsRequest.url?.absoluteString, "https://api.jp.soniox.com/v1/tts-models")
+        XCTAssertEqual(sttRequest.value(forHTTPHeaderField: "Authorization"), "Bearer soniox-key")
+        XCTAssertEqual(ttsRequest.value(forHTTPHeaderField: "Authorization"), "Bearer soniox-key")
+    }
+
+    func testParseTTSModelsExposesFetchedVoices() throws {
+        let data = Data(
+            #"""
+            {
+              "models": [
+                {
+                  "id": "tts-rt-v2",
+                  "aliased_model_id": null,
+                  "name": "TTS v2",
+                  "languages": [{ "code": "de", "name": "German" }],
+                  "voices": [{ "id": "NewVoice", "description": "Fresh", "gender": "female" }]
+                }
+              ]
+            }
+            """#.utf8
+        )
+        let host = try PluginTestHostServices(defaults: [
+            "fetchedTTSModels": try JSONEncoder().encode(SonioxPlugin.parseTTSModelsResponse(data)),
+        ])
+        let plugin = SonioxPlugin()
+
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.ttsModels.map(\.id), ["tts-rt-v2"])
+        XCTAssertEqual(plugin.availableVoices.map(\.id), ["NewVoice"])
+        XCTAssertEqual(plugin.selectedVoiceId, "NewVoice")
+    }
+
+    func testValidateAPIKeyReturnsFalseForUnauthorizedResponse() async throws {
+        let host = try PluginTestHostServices(defaults: ["selectedRegion": "eu"])
+        let plugin = SonioxPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"error_type":"unauthenticated"}"#.utf8),
+                    Self.httpResponse(url: "https://api.eu.soniox.com/v1/files", statusCode: 401)
+                ),
+            ])
+        }
+
+        let isValid = await plugin.validateApiKey("bad-key")
+
+        XCTAssertFalse(isValid)
+        let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
+        XCTAssertEqual(request.url?.absoluteString, "https://api.eu.soniox.com/v1/files")
     }
 
     func testSourceProgressUsesFinalOriginalTokenTiming() {

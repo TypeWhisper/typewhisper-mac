@@ -33,18 +33,66 @@
         }
       }
     },
-    "Invalid API Key": {
+    "Automatic (Latest)": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ungültiger API-Schlüssel"
+            "value": "Automatisch (neueste)"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "無効なAPIキー"
+            "value": "自動（最新）"
+          }
+        }
+      }
+    },
+    "Check": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prüfen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "確認"
+          }
+        }
+      }
+    },
+    "File transcription uses the latest async STT model automatically.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dateitranskription verwendet automatisch das neueste Async-STT-Modell."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ファイル文字起こしでは最新のAsync STTモデルが自動的に使用されます。"
+          }
+        }
+      }
+    },
+    "European Union": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Europäische Union"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "欧州連合"
           }
         }
       }
@@ -61,6 +109,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "ファイル文字起こしではSTT Async v5が自動的に使用されます。"
+          }
+        }
+      }
+    },
+    "Invalid API Key": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ungültiger API-Schlüssel"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無効なAPIキー"
+          }
+        }
+      }
+    },
+    "Japan": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Japan"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "日本"
           }
         }
       }
@@ -97,6 +177,70 @@
         }
       }
     },
+    "Refresh": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktualisieren"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更新"
+          }
+        }
+      }
+    },
+    "Refreshing models...": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelle werden aktualisiert..."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデルを更新中..."
+          }
+        }
+      }
+    },
+    "Region": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Region"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リージョン"
+          }
+        }
+      }
+    },
+    "Region: %@; Voice: %@; Soniox": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Region: %@; Stimme: %@; Soniox"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リージョン: %@; 音声: %@; Soniox"
+          }
+        }
+      }
+    },
     "Remove": {
       "localizations": {
         "de": {
@@ -125,6 +269,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "保存"
+          }
+        }
+      }
+    },
+    "Text-to-Speech Voice": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text-to-Speech-Stimme"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text-to-Speech音声"
+          }
+        }
+      }
+    },
+    "Text-to-Speech Model": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text-to-Speech-Modell"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text-to-Speechモデル"
+          }
+        }
+      }
+    },
+    "United States": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vereinigte Staaten"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "米国"
           }
         }
       }
