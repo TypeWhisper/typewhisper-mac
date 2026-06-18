@@ -308,28 +308,29 @@ struct MistralSettingsView: View {
     @State private var validationResult: Bool?
     @State private var selectedSTTModel: String = ""
     @State private var selectedLLMModel: String = ""
+    private let bundle = Bundle(for: MistralAIPlugin.self)
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Mistral AI")
+            Text("Mistral AI", bundle: bundle)
                 .font(.headline)
-            Text("Cloud API integration for Mistral LLMs and Voxtral STT.")
+            Text("Cloud API integration for Mistral LLMs and Voxtral STT.", bundle: bundle)
                 .font(.callout)
                 .foregroundColor(.secondary)
             
             Divider()
             
             VStack(alignment: .leading, spacing: 8) {
-                Text("API Key")
+                Text("API Key", bundle: bundle)
                     .font(.subheadline)
                     .fontWeight(.medium)
                 
                 HStack {
                     if showApiKey {
-                        TextField("e.g. LFztgP5WA...", text: $apiKeyInput)
+                        TextField(String(localized: "e.g. LFztgP5WA...", bundle: bundle), text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
                     } else {
-                        SecureField("e.g. LFztgP5WA...", text: $apiKeyInput)
+                        SecureField(String(localized: "e.g. LFztgP5WA...", bundle: bundle), text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
                     }
                     
@@ -339,7 +340,7 @@ struct MistralSettingsView: View {
                     .buttonStyle(.borderless)
                     
                     if !plugin.apiKey.isEmpty {
-                        Button("Remove") {
+                        Button(String(localized: "Remove", bundle: bundle)) {
                             apiKeyInput = ""
                             validationResult = nil
                             isValidating = false
@@ -349,7 +350,7 @@ struct MistralSettingsView: View {
                         .controlSize(.small)
                     }
                     
-                    Button("Save") {
+                    Button(String(localized: "Save", bundle: bundle)) {
                         validateAndSave()
                     }
                     .buttonStyle(.borderedProminent)
@@ -360,7 +361,7 @@ struct MistralSettingsView: View {
                 if isValidating {
                     HStack(spacing: 4) {
                         ProgressView().controlSize(.small)
-                        Text("Validating...")
+                        Text("Validating...", bundle: bundle)
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -368,7 +369,7 @@ struct MistralSettingsView: View {
                     HStack(spacing: 4) {
                         Image(systemName: result ? "checkmark.circle.fill" : "xmark.circle.fill")
                             .foregroundColor(result ? .green : .red)
-                        Text(result ? "Valid API Key" : "Invalid API Key")
+                        Text(result ? String(localized: "Valid API Key", bundle: bundle) : String(localized: "Invalid API Key", bundle: bundle))
                             .font(.caption)
                             .foregroundColor(result ? .green : .red)
                     }
@@ -379,12 +380,12 @@ struct MistralSettingsView: View {
             
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Transcription Model")
+                    Text("Transcription Model", bundle: bundle)
                         .font(.subheadline)
                         .fontWeight(.medium)
                     
                     Picker("", selection: $selectedSTTModel) {
-                        Text("Select a Model").tag("")
+                        Text("Select a Model", bundle: bundle).tag("")
                         ForEach(plugin.transcriptionModels, id: \.id) { model in
                             Text(model.displayName).tag(model.id)
                         }
@@ -397,12 +398,12 @@ struct MistralSettingsView: View {
                 }
                 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("LLM Model")
+                    Text("LLM Model", bundle: bundle)
                         .font(.subheadline)
                         .fontWeight(.medium)
                     
                     Picker("", selection: $selectedLLMModel) {
-                        Text("Select a Model").tag("")
+                        Text("Select a Model", bundle: bundle).tag("")
                         ForEach(plugin.supportedModels, id: \.id) { model in
                             Text(model.displayName).tag(model.id)
                         }
