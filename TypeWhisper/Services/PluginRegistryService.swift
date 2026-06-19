@@ -768,7 +768,7 @@ final class PluginRegistryService: ObservableObject {
 
     // MARK: - Uninstall
 
-    func uninstallPlugin(_ pluginId: String, deleteData: Bool = false) {
+    func uninstallPlugin(_ pluginId: String, deleteData: Bool = false) throws {
         guard let bundleURL = PluginManager.shared.bundleURL(for: pluginId) else { return }
 
         PluginManager.shared.unloadPlugin(pluginId)
@@ -782,7 +782,7 @@ final class PluginRegistryService: ObservableObject {
                 .appendingPathComponent("PluginData", isDirectory: true)
                 .appendingPathComponent(pluginId, isDirectory: true)
             try? FileManager.default.removeItem(at: dataDir)
-            try? KeychainService.deleteAll(withServicePrefix: "\(pluginId).")
+            try KeychainService.deleteAll(withServicePrefix: "\(pluginId).")
         }
 
         UserDefaults.standard.removeObject(forKey: "plugin.\(pluginId).enabled")

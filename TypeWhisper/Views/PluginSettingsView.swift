@@ -173,6 +173,7 @@ struct PluginSettingsView: View {
     @State private var pendingBoundaryUpgradePlugin: RegistryPlugin?
     @State private var pendingBoundaryUpgradeNotice: ExternalBundleNotice?
     @State private var installFromFileError: String?
+    @State private var uninstallError: String?
     @State private var includeCommunityPlugins = true
     @State private var selectedCapabilityFilters: Set<PluginCategory> = []
     @State private var searchText = ""
@@ -204,8 +205,12 @@ struct PluginSettingsView: View {
         }
         .alert(String(localized: "Uninstall Plugin"), isPresented: $showUninstallAlert, presenting: pluginToUninstall) { plugin in
             Button(String(localized: "Uninstall"), role: .destructive) {
-                registryService.uninstallPlugin(plugin.id, deleteData: true)
-                pluginToUninstall = nil
+                do {
+                    try registryService.uninstallPlugin(plugin.id, deleteData: true)
+                    pluginToUninstall = nil
+                } catch {
+                    uninstallError = error.localizedDescription
+                }
             }
             Button(String(localized: "Cancel"), role: .cancel) {
                 pluginToUninstall = nil
@@ -250,6 +255,16 @@ struct PluginSettingsView: View {
             Button(String(localized: "OK")) { installFromFileError = nil }
         } message: {
             if let error = installFromFileError {
+                Text(error)
+            }
+        }
+        .alert(String(localized: "Uninstall Failed"), isPresented: .init(
+            get: { uninstallError != nil },
+            set: { if !$0 { uninstallError = nil } }
+        )) {
+            Button(String(localized: "OK")) { uninstallError = nil }
+        } message: {
+            if let error = uninstallError {
                 Text(error)
             }
         }

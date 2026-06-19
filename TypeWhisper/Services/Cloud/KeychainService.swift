@@ -94,23 +94,23 @@ struct KeychainService: Sendable {
     ///   be removed from the Keychain.
     static func deleteAll(withServicePrefix prefix: String) throws {
         let fullServicePrefix = servicePrefix + prefix
-        
+
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecReturnAttributes as String: true,
             kSecMatchLimit as String: kSecMatchLimitAll
         ]
-        
+
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
-        
+
         guard status == errSecSuccess, let items = result as? [[String: Any]] else {
             if status == errSecItemNotFound {
                 return
             }
             throw KeychainError.deleteFailed(status)
         }
-        
+
         var failedStatus: OSStatus?
         for item in items {
             if let serviceName = item[kSecAttrService as String] as? String,
