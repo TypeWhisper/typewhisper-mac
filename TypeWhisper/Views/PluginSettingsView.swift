@@ -207,10 +207,10 @@ struct PluginSettingsView: View {
             Button(String(localized: "Uninstall"), role: .destructive) {
                 do {
                     try registryService.uninstallPlugin(plugin.id, deleteData: true)
-                    pluginToUninstall = nil
                 } catch {
                     uninstallError = error.localizedDescription
                 }
+                pluginToUninstall = nil
             }
             Button(String(localized: "Cancel"), role: .cancel) {
                 pluginToUninstall = nil
