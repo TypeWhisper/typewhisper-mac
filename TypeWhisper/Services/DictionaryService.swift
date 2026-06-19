@@ -26,6 +26,12 @@ enum DictionaryCorrectionMatchPolicy {
     case substring
 }
 
+struct LearnedDictionaryCorrection: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let original: String
+    let replacement: String
+}
+
 @MainActor
 final class DictionaryService: ObservableObject {
     private var modelContainer: ModelContainer?
@@ -484,21 +490,89 @@ final class DictionaryService: ObservableObject {
 
     /// Add a correction learned from history edits
     func learnCorrection(original: String, replacement: String) {
-        guard original.lowercased() != replacement.lowercased() else { return }
+        _ = learnCorrections([CorrectionSuggestion(original: original, replacement: replacement)])
+    }
 
-        if entries.contains(where: {
-            $0.type == .correction &&
-            $0.original.lowercased() == original.lowercased()
-        }) {
-            return
+    /// Batch add corrections learned from user edits. Existing corrections are never overwritten.
+    @discardableResult
+    func learnCorrections(_ suggestions: [CorrectionSuggestion]) -> [LearnedDictionaryCorrection] {
+        guard let context = modelContext, !suggestions.isEmpty else { return [] }
+
+        var existingOriginals = Set(
+            entries
+                .filter { $0.type == .correction }
+                .map { $0.original.lowercased() }
+        )
+        let now = Date()
+        var learned: [LearnedDictionaryCorrection] = []
+
+        for suggestion in suggestions {
+            let original = suggestion.original.trimmingCharacters(in: .whitespacesAndNewlines)
+            let replacement = suggestion.replacement.trimmingCharacters(in: .whitespacesAndNewlines)
+            let originalKey = original.lowercased()
+
+            guard !original.isEmpty,
+                  !replacement.isEmpty,
+                  originalKey != replacement.lowercased(),
+                  !existingOriginals.contains(originalKey) else {
+                continue
+            }
+
+            let entry = DictionaryEntry(
+                type: .correction,
+                original: original,
+                replacement: replacement,
+                caseSensitive: false,
+                createdAt: now,
+                updatedAt: now
+            )
+            context.insert(entry)
+            existingOriginals.insert(originalKey)
+            learned.append(LearnedDictionaryCorrection(
+                id: entry.id,
+                original: original,
+                replacement: replacement
+            ))
         }
 
-        addEntry(
-            type: .correction,
-            original: original,
-            replacement: replacement,
-            caseSensitive: false
-        )
+        guard !learned.isEmpty else { return [] }
+
+        do {
+            try context.save()
+            loadEntries()
+            return learned
+        } catch {
+            logger.error("Failed to learn corrections: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    func undoLearnedCorrections(_ learned: [LearnedDictionaryCorrection]) {
+        guard let context = modelContext, !learned.isEmpty else { return }
+
+        let learnedByID = Dictionary(uniqueKeysWithValues: learned.map { ($0.id, $0) })
+        let entriesToDelete = entries.filter { entry in
+            guard entry.type == .correction,
+                  let learned = learnedByID[entry.id] else {
+                return false
+            }
+
+            return entry.original == learned.original &&
+                (entry.replacement ?? "") == learned.replacement
+        }
+
+        guard !entriesToDelete.isEmpty else { return }
+
+        for entry in entriesToDelete {
+            context.delete(entry)
+        }
+
+        do {
+            try context.save()
+            loadEntries()
+        } catch {
+            logger.error("Failed to undo learned corrections: \(error.localizedDescription)")
+        }
     }
 
     func upsertAPICorrection(original: String, replacement: String, caseSensitive: Bool) throws {

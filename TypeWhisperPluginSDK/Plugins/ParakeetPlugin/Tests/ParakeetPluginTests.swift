@@ -142,6 +142,12 @@ final class ParakeetPluginTests: XCTestCase {
         XCTAssertNil(ParakeetPlugin.sourceProgress(fromFraction: 0.5, totalDuration: 0))
     }
 
+    func testSourceProgressObservationOnlyStartsForFluidAudioProgressRange() {
+        XCTAssertFalse(ParakeetPlugin.shouldObserveSourceProgress(sampleCount: 160_000))
+        XCTAssertFalse(ParakeetPlugin.shouldObserveSourceProgress(sampleCount: 240_000))
+        XCTAssertTrue(ParakeetPlugin.shouldObserveSourceProgress(sampleCount: 240_001))
+    }
+
     func testDictionaryTermsSupportReflectsStoredBoostingPreference() throws {
         let defaultHost = try PluginTestHostServices()
         let defaultPlugin = makePlugin()

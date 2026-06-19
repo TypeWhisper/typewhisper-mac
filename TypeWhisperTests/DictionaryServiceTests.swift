@@ -114,6 +114,41 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testBatchLearningSkipsDuplicatesAndUndoDeletesOnlyMatchingCreatedEntries() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "teh", replacement: "the")
+
+        let learned = service.learnCorrections([
+            CorrectionSuggestion(original: "teh", replacement: "the"),
+            CorrectionSuggestion(original: "langauge", replacement: "language"),
+            CorrectionSuggestion(original: "recieve", replacement: "receive"),
+            CorrectionSuggestion(original: "recieve", replacement: "receipt")
+        ])
+
+        XCTAssertEqual(learned.count, 2)
+        XCTAssertEqual(learned.map(\.original), ["langauge", "recieve"])
+        XCTAssertEqual(service.correctionsCount, 3)
+
+        let protectedEntry = try XCTUnwrap(service.corrections.first { $0.original == "langauge" })
+        service.updateEntry(
+            protectedEntry,
+            original: protectedEntry.original,
+            replacement: "languages",
+            caseSensitive: protectedEntry.caseSensitive
+        )
+
+        service.undoLearnedCorrections(learned)
+
+        XCTAssertEqual(service.correctionsCount, 2)
+        XCTAssertTrue(service.corrections.contains { $0.original == "teh" })
+        XCTAssertTrue(service.corrections.contains { $0.original == "langauge" && $0.replacement == "languages" })
+        XCTAssertFalse(service.corrections.contains { $0.original == "recieve" })
+    }
+
+    @MainActor
     func testEmptyCorrectionReplacementPersistsAndRemovesText() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

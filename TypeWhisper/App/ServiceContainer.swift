@@ -20,6 +20,7 @@ final class ServiceContainer: ObservableObject {
     let audioDuckingService: AudioDuckingService
     let mediaPlaybackService: MediaPlaybackService
     let dictionaryService: DictionaryService
+    let targetAppCorrectionLearningService: TargetAppCorrectionLearningService
     let snippetService: SnippetService
     let userDataSyncStore: TypeWhisperUserDataSyncStore
     let cloudFolderSyncController: CloudFolderSyncController
@@ -91,6 +92,11 @@ final class ServiceContainer: ObservableObject {
         audioDuckingService = AudioDuckingService()
         mediaPlaybackService = MediaPlaybackService()
         dictionaryService = DictionaryService()
+        targetAppCorrectionLearningService = TargetAppCorrectionLearningService(
+            textInsertionService: textInsertionService,
+            textDiffService: textDiffService,
+            dictionaryService: dictionaryService
+        )
         snippetService = SnippetService()
         userDataSyncStore = TypeWhisperUserDataSyncStore(
             dictionaryService: dictionaryService,
@@ -150,6 +156,8 @@ final class ServiceContainer: ObservableObject {
             translationService: translationService,
             audioDuckingService: audioDuckingService,
             dictionaryService: dictionaryService,
+            licenseService: licenseService,
+            targetAppCorrectionLearningService: targetAppCorrectionLearningService,
             snippetService: snippetService,
             soundService: soundService,
             audioDeviceService: audioDeviceService,

@@ -67,6 +67,7 @@ enum UserDefaultsKeys {
     static let activatedTermPackStates = "activatedTermPackStates"
     static let termPackRegistryLastUpdateCheck = "termPackRegistryLastUpdateCheck"
     static let selectedIndustryPreset = "selectedIndustryPreset"
+    static let targetAppCorrectionLearningEnabled = "targetAppCorrectionLearningEnabled"
 
     // MARK: - History
     static let historyEnabled = "historyEnabled"

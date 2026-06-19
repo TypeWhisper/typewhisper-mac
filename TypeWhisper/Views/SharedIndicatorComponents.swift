@@ -257,6 +257,8 @@ struct IndicatorActionFeedback: View {
     let isError: Bool
     let iconColor: Color?
     let contentPadding: CGFloat
+    var actionTitle: String? = nil
+    var onAction: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 8) {
@@ -268,11 +270,23 @@ struct IndicatorActionFeedback: View {
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.white.opacity(0.9))
                 .lineLimit(2)
+
+            if let actionTitle, let onAction {
+                Spacer(minLength: 8)
+                Button(actionTitle, action: onAction)
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.white.opacity(0.12), in: Capsule())
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 10)
         .padding(.horizontal, contentPadding)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: actionTitle == nil ? .combine : .contain)
         .accessibilityLabel(message)
     }
 }

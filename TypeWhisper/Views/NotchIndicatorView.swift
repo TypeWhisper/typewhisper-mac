@@ -267,7 +267,11 @@ struct NotchIndicatorView: View {
                 icon: presentation.actionFeedbackIcon,
                 isError: presentation.actionFeedbackIsError,
                 iconColor: nil,
-                contentPadding: contentPadding
+                contentPadding: contentPadding,
+                actionTitle: presentation.actionFeedbackUndoTitle,
+                onAction: presentation.actionFeedbackUndoTitle == nil ? nil : {
+                    viewModel.undoActionFeedback()
+                }
             )
         } else {
             Color.clear

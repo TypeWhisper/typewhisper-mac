@@ -222,7 +222,11 @@ struct OverlayIndicatorView: View {
                     icon: presentation.actionFeedbackIcon,
                     isError: presentation.actionFeedbackIsError,
                     iconColor: nil,
-                    contentPadding: contentPadding
+                    contentPadding: contentPadding,
+                    actionTitle: presentation.actionFeedbackUndoTitle,
+                    onAction: presentation.actionFeedbackUndoTitle == nil ? nil : {
+                        viewModel.undoActionFeedback()
+                    }
                 )
             }
         } else {
@@ -233,7 +237,11 @@ struct OverlayIndicatorView: View {
                     icon: presentation.actionFeedbackIcon,
                     isError: presentation.actionFeedbackIsError,
                     iconColor: nil,
-                    contentPadding: contentPadding
+                    contentPadding: contentPadding,
+                    actionTitle: presentation.actionFeedbackUndoTitle,
+                    onAction: presentation.actionFeedbackUndoTitle == nil ? nil : {
+                        viewModel.undoActionFeedback()
+                    }
                 )
                 Divider().background(Color.white.opacity(0.1))
             }

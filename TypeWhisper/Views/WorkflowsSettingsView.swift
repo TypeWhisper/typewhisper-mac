@@ -54,7 +54,7 @@ struct WorkflowsSettingsView: View {
     var body: some View {
         detailView
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .frame(minWidth: 760, minHeight: 480)
+            .frame(minWidth: 560, minHeight: 480)
     }
 
     @ViewBuilder
@@ -130,6 +130,7 @@ private struct MyWorkflowsPage: View {
                     }
                 }
                 .padding(16)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
         }
         .confirmationDialog(
@@ -171,7 +172,7 @@ private struct MyWorkflowsPage: View {
     }
 
     private var header: some View {
-        HStack(alignment: .top) {
+        HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(localizedAppText("Workflows", de: "Workflows"))
                     .font(.headline)
@@ -183,17 +184,23 @@ private struct MyWorkflowsPage: View {
                 )
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
-
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
 
             Button {
                 navigation.createWorkflow()
             } label: {
-                Label(localizedAppText("New Workflow", de: "Neuer Workflow"), systemImage: "plus")
+                ViewThatFits(in: .horizontal) {
+                    Label(localizedAppText("New Workflow", de: "Neuer Workflow"), systemImage: "plus")
+                    Image(systemName: "plus")
+                }
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
+            .fixedSize()
+            .help(localizedAppText("New Workflow", de: "Neuer Workflow"))
         }
         .padding(16)
         .background(.bar)
@@ -468,6 +475,7 @@ private struct MyWorkflowsPage: View {
         .background {
             workflowsGroupedSurface(cornerRadius: 16)
         }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     private func move(workflow: Workflow, by offset: Int) {
@@ -508,27 +516,7 @@ private struct WorkflowRow: View {
                 .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
 
             VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .center, spacing: 6) {
-                    Text(workflow.name)
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
-
-                    WorkflowBadge(
-                        title: workflow.template.definition.name,
-                        compact: true,
-                        tint: .accentColor.opacity(0.14),
-                        foreground: .accentColor
-                    )
-
-                    WorkflowBadge(
-                        title: workflow.isEnabled
-                            ? localizedAppText("Enabled", de: "Aktiv")
-                            : localizedAppText("Disabled", de: "Deaktiviert"),
-                        compact: true,
-                        tint: workflow.isEnabled ? .green.opacity(0.14) : .secondary.opacity(0.14),
-                        foreground: workflow.isEnabled ? .green : .secondary
-                    )
-                }
+                titleRow
 
                 Text(workflowReviewText(for: workflow))
                     .font(.caption)
@@ -536,14 +524,18 @@ private struct WorkflowRow: View {
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
 
-                HStack(spacing: 6) {
-                    WorkflowBadge(title: workflowTriggerSummary(for: workflow), compact: true)
+                FlowLayout(spacing: 6) {
+                    WorkflowBadge(
+                        title: workflowTriggerSummary(for: workflow),
+                        compact: true
+                    )
                     if !workflowTriggerDetail(for: workflow).isEmpty {
                         WorkflowBadge(
                             title: workflowTriggerDetail(for: workflow),
                             compact: true,
                             tint: .secondary.opacity(0.12),
-                            foreground: .secondary
+                            foreground: .secondary,
+                            maxTextWidth: 240
                         )
                     }
                     WorkflowBadge(
@@ -552,9 +544,10 @@ private struct WorkflowRow: View {
                         tint: .secondary.opacity(0.12),
                         foreground: .secondary
                     )
-                    Spacer(minLength: 0)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
 
             Spacer(minLength: 8)
 
@@ -590,6 +583,7 @@ private struct WorkflowRow: View {
                 .buttonStyle(.borderless)
             }
             .foregroundStyle(.secondary)
+            .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -633,6 +627,55 @@ private struct WorkflowRow: View {
         }
 
         return Color.clear
+    }
+
+    @ViewBuilder
+    private var titleRow: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 6) {
+                workflowTitle
+                workflowTemplateBadge
+                workflowStatusBadge
+                Spacer(minLength: 0)
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                workflowTitle
+                FlowLayout(spacing: 6) {
+                    workflowTemplateBadge
+                    workflowStatusBadge
+                }
+            }
+        }
+    }
+
+    private var workflowTitle: some View {
+        Text(workflow.name)
+            .font(.subheadline.weight(.semibold))
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .layoutPriority(1)
+    }
+
+    private var workflowTemplateBadge: some View {
+        WorkflowBadge(
+            title: workflow.template.definition.name,
+            compact: true,
+            tint: .accentColor.opacity(0.14),
+            foreground: .accentColor,
+            maxTextWidth: 180
+        )
+    }
+
+    private var workflowStatusBadge: some View {
+        WorkflowBadge(
+            title: workflow.isEnabled
+                ? localizedAppText("Enabled", de: "Aktiv")
+                : localizedAppText("Disabled", de: "Deaktiviert"),
+            compact: true,
+            tint: workflow.isEnabled ? .green.opacity(0.14) : .secondary.opacity(0.14),
+            foreground: workflow.isEnabled ? .green : .secondary
+        )
     }
 }
 
@@ -2054,14 +2097,30 @@ private struct WorkflowBadge: View {
     var compact: Bool = false
     var tint: Color = .secondary.opacity(0.12)
     var foreground: Color = .secondary
+    var maxTextWidth: CGFloat?
 
     var body: some View {
-        Text(title)
-            .font((compact ? Font.caption2 : Font.caption).weight(.semibold))
+        label
+            .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, compact ? 8 : 10)
             .padding(.vertical, compact ? 4 : 6)
             .background(tint, in: Capsule())
             .foregroundStyle(foreground)
+            .help(title)
+    }
+
+    @ViewBuilder
+    private var label: some View {
+        let text = Text(title)
+            .font((compact ? Font.caption2 : Font.caption).weight(.semibold))
+            .lineLimit(1)
+            .truncationMode(.tail)
+
+        if let maxTextWidth {
+            text.frame(maxWidth: maxTextWidth, alignment: .leading)
+        } else {
+            text
+        }
     }
 }
 

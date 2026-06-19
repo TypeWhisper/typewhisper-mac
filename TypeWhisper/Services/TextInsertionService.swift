@@ -292,6 +292,13 @@ final class TextInsertionService {
         }
     }
 
+    struct FocusedTextObservation: @unchecked Sendable {
+        let element: AXUIElement
+        let value: String
+        let selectedText: String?
+        let selectedRange: NSRange?
+    }
+
     func getSelectedText() -> String? {
         if let selectedTextOverride {
             return selectedTextOverride()
@@ -426,6 +433,37 @@ final class TextInsertionService {
             selectedText: state.selectedText,
             previousCharacter: previousCharacter,
             nextCharacter: nextCharacter
+        )
+    }
+
+    func captureFocusedTextObservation() -> FocusedTextObservation? {
+        guard let state = captureFocusedTextState(),
+              let value = state.value else {
+            return nil
+        }
+
+        return FocusedTextObservation(
+            element: state.element,
+            value: value,
+            selectedText: state.selectedText,
+            selectedRange: state.selectedRange
+        )
+    }
+
+    func recaptureFocusedTextObservation(
+        matching observation: FocusedTextObservation
+    ) -> FocusedTextObservation? {
+        guard let state = captureFocusedTextState(),
+              state.element == observation.element,
+              let value = state.value else {
+            return nil
+        }
+
+        return FocusedTextObservation(
+            element: state.element,
+            value: value,
+            selectedText: state.selectedText,
+            selectedRange: state.selectedRange
         )
     }
 

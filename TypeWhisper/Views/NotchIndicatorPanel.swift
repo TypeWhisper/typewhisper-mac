@@ -108,6 +108,13 @@ class NotchIndicatorPanel: NSPanel {
                 self?.updateVisibility(vm: vm, recorder: recorder)
             }
             .store(in: &cancellables)
+
+        vm.$actionFeedbackUndoTitle
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] undoTitle in
+                self?.ignoresMouseEvents = undoTitle == nil
+            }
+            .store(in: &cancellables)
     }
 
     func updateVisibility(

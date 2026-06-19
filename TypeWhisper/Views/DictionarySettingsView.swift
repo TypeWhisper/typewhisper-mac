@@ -20,84 +20,16 @@ struct DictionarySettingsView: View {
             if viewModel.entries.isEmpty && viewModel.filterTab != .termPacks {
                 emptyState
             } else {
-                // Header with filter and add button
-                HStack {
-                    Picker("", selection: $viewModel.filterTab) {
-                        Text(String(localized: "All")).tag(DictionaryViewModel.FilterTab.all)
-                        Text(String(localized: "Terms")).tag(DictionaryViewModel.FilterTab.terms)
-                        Text(String(localized: "Corrections")).tag(DictionaryViewModel.FilterTab.corrections)
-                        Text(String(localized: "Term Packs")).tag(DictionaryViewModel.FilterTab.termPacks)
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 340)
-
-                    Spacer()
-
-                    if viewModel.filterTab != .termPacks {
-                        Button {
-                            viewModel.startCreating(type: .correction)
-                        } label: {
-                            Label(String(localized: "Correction"), systemImage: "plus")
-                        }
-                        Button {
-                            viewModel.startCreating(type: .term)
-                        } label: {
-                            Label(String(localized: "Term"), systemImage: "plus")
-                        }
-                    }
-
-                    Menu {
-                        Button {
-                            viewModel.exportDictionary()
-                        } label: {
-                            Label(String(localized: "Export..."), systemImage: "square.and.arrow.up")
-                        }
-                        .disabled(viewModel.entries.isEmpty)
-
-                        Button {
-                            viewModel.importDictionary()
-                        } label: {
-                            Label(String(localized: "Import..."), systemImage: "square.and.arrow.down")
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                    }
-                    .menuStyle(.borderlessButton)
-                    .frame(width: 28)
-                }
-                .padding(.horizontal, 4)
-                .padding(.bottom, 4)
-
-                if viewModel.filterTab != .termPacks, !engineSupportRows.isEmpty {
-                    DictionaryEngineSupportSection(rows: engineSupportRows)
-                        .padding(.bottom, 8)
-                }
+                dictionaryHeader
 
                 if viewModel.filterTab == .termPacks {
                     termPacksView
-                } else if viewModel.filteredEntries.isEmpty {
-                    Spacer()
-                    VStack(spacing: 8) {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
-                            .font(.system(size: 32))
-                            .foregroundStyle(.secondary)
-                        Text(String(localized: "No entries for this filter"))
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
                 } else {
-                    ScrollView {
-                        LazyVStack(spacing: 8) {
-                            ForEach(viewModel.filteredEntries) { entry in
-                                DictionaryCardView(entry: entry, viewModel: viewModel)
-                            }
-                        }
-                        .padding(.horizontal, 2)
-                    }
+                    dictionaryEntriesView
                 }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .padding(.vertical, 8)
         .padding(.horizontal, 8)
         .sheet(isPresented: $viewModel.isEditing) {
@@ -118,6 +50,82 @@ struct DictionarySettingsView: View {
             Button(String(localized: "OK")) { viewModel.clearImportMessage() }
         } message: {
             Text(viewModel.importMessage ?? "")
+        }
+    }
+
+    private var dictionaryHeader: some View {
+        HStack {
+            Picker("", selection: $viewModel.filterTab) {
+                Text(String(localized: "All")).tag(DictionaryViewModel.FilterTab.all)
+                Text(String(localized: "Terms")).tag(DictionaryViewModel.FilterTab.terms)
+                Text(String(localized: "Corrections")).tag(DictionaryViewModel.FilterTab.corrections)
+                Text(String(localized: "Term Packs")).tag(DictionaryViewModel.FilterTab.termPacks)
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 340)
+
+            Spacer()
+
+            if viewModel.filterTab != .termPacks {
+                Button {
+                    viewModel.startCreating(type: .correction)
+                } label: {
+                    Label(String(localized: "Correction"), systemImage: "plus")
+                }
+                Button {
+                    viewModel.startCreating(type: .term)
+                } label: {
+                    Label(String(localized: "Term"), systemImage: "plus")
+                }
+            }
+
+            Menu {
+                Button {
+                    viewModel.exportDictionary()
+                } label: {
+                    Label(String(localized: "Export..."), systemImage: "square.and.arrow.up")
+                }
+                .disabled(viewModel.entries.isEmpty)
+
+                Button {
+                    viewModel.importDictionary()
+                } label: {
+                    Label(String(localized: "Import..."), systemImage: "square.and.arrow.down")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .menuStyle(.borderlessButton)
+            .frame(width: 28)
+        }
+        .padding(.horizontal, 4)
+        .padding(.bottom, 4)
+    }
+
+    private var dictionaryEntriesView: some View {
+        ScrollView {
+            LazyVStack(spacing: 8) {
+                if !engineSupportRows.isEmpty {
+                    DictionaryEngineSupportSection(rows: engineSupportRows)
+                }
+
+                if viewModel.filteredEntries.isEmpty {
+                    VStack(spacing: 8) {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                            .font(.system(size: 32))
+                            .foregroundStyle(.secondary)
+                        Text(String(localized: "No entries for this filter"))
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 48)
+                } else {
+                    ForEach(viewModel.filteredEntries) { entry in
+                        DictionaryCardView(entry: entry, viewModel: viewModel)
+                    }
+                }
+            }
+            .padding(.horizontal, 2)
         }
     }
 
