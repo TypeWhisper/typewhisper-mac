@@ -75,7 +75,13 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         guard !japaneseWords.isEmpty else { return text }
 
         let escapedWords = japaneseWords
-            .map(NSRegularExpression.escapedPattern(for:))
+            .map { word in
+                let escaped = NSRegularExpression.escapedPattern(for: word)
+                if word == "まあ" || word == "まぁ" {
+                    return escaped + #"(?!ま[あぁ])"#
+                }
+                return escaped
+            }
             .joined(separator: "|")
         let boundary = #"(^|[\s、。,.!?！？])"#
         let trailingSeparator = #"(?:[ \t]*[、,][ \t]*|[ \t]+)?"#

@@ -189,8 +189,32 @@ final class DictionaryServiceTests: XCTestCase {
         XCTAssertEqual(service.applyCorrections(to: "これは日本です。"), "これはJapanです。")
         XCTAssertEqual(service.applyCorrections(to: "東京へ行く。"), "Tokyoへ行く。")
         XCTAssertEqual(service.applyCorrections(to: "明日は東京へ行く。"), "明日はTokyoへ行く。")
+        XCTAssertEqual(service.applyCorrections(to: "日本から出発します。"), "Japanから出発します。")
+        XCTAssertEqual(service.applyCorrections(to: "日本まで送ってください。"), "Japanまで送ってください。")
         XCTAssertEqual(service.applyCorrections(to: "日本語です。"), "日本語です。")
         XCTAssertEqual(service.applyCorrections(to: "東京都です。"), "東京都です。")
+    }
+
+    @MainActor
+    func testShortJapaneseCorrectionsDoNotReplaceInsideWordsContainingParticles() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "だ", replacement: "です")
+
+        XCTAssertEqual(service.applyCorrections(to: "からだです。"), "からだです。")
+    }
+
+    @MainActor
+    func testSingleCharacterCorrectionsDoNotUseMultiCharacterParticleSuffixesInsideWords() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "ち", replacement: "地")
+
+        XCTAssertEqual(service.applyCorrections(to: "ちからです。"), "ちからです。")
     }
 
     @MainActor

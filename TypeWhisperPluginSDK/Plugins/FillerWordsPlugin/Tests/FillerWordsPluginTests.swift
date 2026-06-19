@@ -48,6 +48,14 @@ final class FillerWordsPluginTests: XCTestCase {
             FillerWordsPlugin.removeFillerWords(from: "あの人に確認してください。"),
             "あの人に確認してください。"
         )
+        XCTAssertEqual(
+            FillerWordsPlugin.removeFillerWords(from: "まあまあです。今日は、まあまあです。"),
+            "まあまあです。今日は、まあまあです。"
+        )
+        XCTAssertEqual(
+            FillerWordsPlugin.removeFillerWords(from: "まあまず確認してください。まあまた明日です。"),
+            "まず確認してください。また明日です。"
+        )
     }
 
     @MainActor

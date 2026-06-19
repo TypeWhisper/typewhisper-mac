@@ -476,7 +476,9 @@ final class DictionaryService: ObservableObject {
         }
 
         let startsAtBoundary = previous?.isWordLike != true || previous?.isJapaneseParticleBoundary == true
-        let endsAtBoundary = next?.isWordLike != true || next?.isJapaneseParticleBoundary == true
+        let endsAtBoundary = next?.isWordLike != true ||
+            next?.isJapaneseParticleBoundary == true ||
+            (original.count > 1 && String(text[range.upperBound...]).startsWithJapaneseParticleBoundary)
         return startsAtBoundary && endsAtBoundary
     }
 
@@ -679,6 +681,8 @@ private extension Character {
             CharacterSet.alphanumerics.contains(scalar) ||
             (0x3040...0x30FF).contains(Int(scalar.value)) ||
             (0x3400...0x9FFF).contains(Int(scalar.value)) ||
+            (0xF900...0xFAFF).contains(Int(scalar.value)) ||
+            (0x20000...0x323AF).contains(Int(scalar.value)) ||
             (0xFF66...0xFF9D).contains(Int(scalar.value))
         }
     }
@@ -704,6 +708,24 @@ private extension Character {
 }
 
 private extension String {
+    var startsWithJapaneseParticleBoundary: Bool {
+        [
+            "から",
+            "まで",
+            "より",
+            "には",
+            "では",
+            "にも",
+            "でも",
+            "とは",
+            "との",
+            "へは",
+            "への",
+            "だけ",
+            "など",
+        ].contains { hasPrefix($0) }
+    }
+
     var containsWordLikeCharacter: Bool {
         contains { $0.isWordLike }
     }
