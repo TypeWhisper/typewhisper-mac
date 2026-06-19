@@ -46,7 +46,7 @@ jobs:
             }
 
             const isBot = author.endsWith('[bot]');
-            const isInternal = ['OWNER', 'MEMBER', 'COLLABORATOR'].includes(association);
+            const isTrustedHuman = !isBot && ['OWNER', 'MEMBER', 'COLLABORATOR', 'CONTRIBUTOR'].includes(association);
             const isAllowlisted = defaultAllowlist.has(author);
 
             const upsertComment = async (body) => {
@@ -88,7 +88,7 @@ jobs:
               }
             };
 
-            if (isAllowlisted || isInternal) {
+            if (isAllowlisted || isTrustedHuman) {
               core.info(`PR Guard: allowing ${author} (${association})`);
               return;
             }
