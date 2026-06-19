@@ -57,6 +57,37 @@ struct KeychainService: Sendable {
             throw KeychainError.deleteFailed(status)
         }
     }
+
+    static func deleteAll(withServicePrefix prefix: String) throws {
+        let fullServicePrefix = servicePrefix + prefix
+        
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitAll
+        ]
+        
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        
+        guard status == errSecSuccess, let items = result as? [[String: Any]] else {
+            if status == errSecItemNotFound {
+                return
+            }
+            throw KeychainError.deleteFailed(status)
+        }
+        
+        for item in items {
+            if let serviceName = item[kSecAttrService as String] as? String,
+               serviceName.hasPrefix(fullServicePrefix) {
+                let deleteQuery: [String: Any] = [
+                    kSecClass as String: kSecClassGenericPassword,
+                    kSecAttrService as String: serviceName
+                ]
+                SecItemDelete(deleteQuery as CFDictionary)
+            }
+        }
+    }
 }
 
 enum KeychainError: LocalizedError {

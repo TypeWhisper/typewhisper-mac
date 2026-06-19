@@ -782,6 +782,7 @@ final class PluginRegistryService: ObservableObject {
                 .appendingPathComponent("PluginData", isDirectory: true)
                 .appendingPathComponent(pluginId, isDirectory: true)
             try? FileManager.default.removeItem(at: dataDir)
+            try? KeychainService.deleteAll(withServicePrefix: "\(pluginId).")
         }
 
         UserDefaults.standard.removeObject(forKey: "plugin.\(pluginId).enabled")
