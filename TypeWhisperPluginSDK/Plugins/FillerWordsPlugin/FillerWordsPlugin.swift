@@ -44,7 +44,17 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         let normalizedWords = normalizedWords(from: words)
         guard !normalizedWords.isEmpty else { return text }
 
-        let escapedWords = normalizedWords
+        var result = removeLatinFillerWords(from: text, words: normalizedWords)
+        result = removeJapaneseFillerWords(from: result, words: normalizedWords)
+
+        return result
+    }
+
+    private static func removeLatinFillerWords(from text: String, words: [String]) -> String {
+        let latinWords = words.filter { !$0.containsJapaneseScript }
+        guard !latinWords.isEmpty else { return text }
+
+        let escapedWords = latinWords
             .map(NSRegularExpression.escapedPattern(for:))
             .joined(separator: "|")
         let pattern = #"(?i)(?<![\p{L}\p{N}_])[,.!?]?[ \t]*(?:"# + escapedWords + #")(?![\p{L}\p{N}_])[ \t]*[,.!?]?"#
@@ -55,6 +65,28 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
 
         let range = NSRange(text.startIndex..<text.endIndex, in: text)
         let stripped = regex.stringByReplacingMatches(in: text, range: range, withTemplate: " ")
+        guard stripped != text else { return text }
+
+        return normalizeWhitespaceAfterRemoval(stripped, preservingPrefixFrom: text)
+    }
+
+    private static func removeJapaneseFillerWords(from text: String, words: [String]) -> String {
+        let japaneseWords = words.filter(\.containsJapaneseScript)
+        guard !japaneseWords.isEmpty else { return text }
+
+        let escapedWords = japaneseWords
+            .map(NSRegularExpression.escapedPattern(for:))
+            .joined(separator: "|")
+        let boundary = #"(^|[\s、。,.!?！？])"#
+        let trailingSeparator = #"(?:[ \t]*[、,][ \t]*|[ \t]+)?"#
+        let pattern = boundary + #"[ \t]*(?:"# + escapedWords + #")"# + trailingSeparator
+
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return text
+        }
+
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        let stripped = regex.stringByReplacingMatches(in: text, range: range, withTemplate: "$1")
         guard stripped != text else { return text }
 
         return normalizeWhitespaceAfterRemoval(stripped, preservingPrefixFrom: text)
@@ -72,7 +104,21 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         "um",
         "umm",
         "äh",
-        "ähm"
+        "ähm",
+        "えっと",
+        "えーっと",
+        "ええと",
+        "えーと",
+        "えと",
+        "なんか",
+        "まぁ",
+        "まあ",
+        "あのー",
+        "あのぉ",
+        "そのー",
+        "そのぉ",
+        "うーん",
+        "うーむ"
     ]
 
     static func normalizedWords(from text: String) -> [String] {
@@ -123,7 +169,7 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
 private final class FillerWordsSettingsStore: ObservableObject, @unchecked Sendable {
     private static let wordsKey = "words"
     private static let defaultsVersionKey = "wordsDefaultsVersion"
-    private static let currentDefaultsVersion = 2
+    private static let currentDefaultsVersion = 3
     private static let legacyDefaultFillerWords = [
         "ah",
         "ahh",
@@ -199,6 +245,19 @@ private final class FillerWordsSettingsStore: ObservableObject, @unchecked Senda
         host.setUserDefault(migratedWords, forKey: wordsKey)
         host.setUserDefault(currentDefaultsVersion, forKey: defaultsVersionKey)
         return migratedWords
+    }
+}
+
+private extension String {
+    var containsJapaneseScript: Bool {
+        unicodeScalars.contains { scalar in
+            switch scalar.value {
+            case 0x3040...0x309F, 0x30A0...0x30FF, 0x31F0...0x31FF, 0x3400...0x4DBF, 0x4E00...0x9FFF:
+                return true
+            default:
+                return false
+            }
+        }
     }
 }
 
