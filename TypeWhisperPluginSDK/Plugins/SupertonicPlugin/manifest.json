@@ -11,7 +11,8 @@
     "author": "TypeWhisper",
     "description": "Experimental local text-to-speech with Supertonic 3 ONNX models. Requires accepting the OpenRAIL-M model license before downloading model assets.",
     "descriptions": {
-        "de": "Experimentelles lokales Text-to-Speech mit Supertonic-3-ONNX-Modellen. Vor dem Download der Modellassets muss die OpenRAIL-M-Modelllizenz akzeptiert werden."
+        "de": "Experimentelles lokales Text-to-Speech mit Supertonic-3-ONNX-Modellen. Vor dem Download der Modellassets muss die OpenRAIL-M-Modelllizenz akzeptiert werden.",
+        "ja": "Supertonic 3 ONNXモデルによる実験的なローカル音声合成です。モデルアセットのダウンロード前にOpenRAIL-Mモデルライセンスへの同意が必要です。"
     },
     "category": "tts",
     "categories": [

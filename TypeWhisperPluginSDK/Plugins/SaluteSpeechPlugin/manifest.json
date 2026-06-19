@@ -12,5 +12,8 @@
     "iconSystemName": "waveform.badge.mic",
     "principalClass": "SaluteSpeechPlugin",
     "requiresAPIKey": true,
-    "detailsURL": "https://developers.sber.ru/docs/ru/salutespeech/quick-start/integration-individuals"
+    "detailsURL": "https://developers.sber.ru/docs/ru/salutespeech/quick-start/integration-individuals",
+    "descriptions": {
+        "ja": "Sber SaluteSpeech REST APIによるクラウド文字起こしです。SaluteSpeech Authorization Keyが必要です。"
+    }
 }

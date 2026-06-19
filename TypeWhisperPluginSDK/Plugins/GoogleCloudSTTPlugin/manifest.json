@@ -8,7 +8,8 @@
     "author": "TypeWhisper",
     "description": "Cloud transcription via Google Cloud Speech-to-Text using a service-account JSON key. Handles long recordings by chunking audio into multiple recognize requests.",
     "descriptions": {
-        "de": "Cloud-Transkription über Google Cloud Speech-to-Text mit einem Service-Account-JSON-Schlüssel. Zerlegt längere Aufnahmen automatisch in mehrere Recognize-Requests."
+        "de": "Cloud-Transkription über Google Cloud Speech-to-Text mit einem Service-Account-JSON-Schlüssel. Zerlegt längere Aufnahmen automatisch in mehrere Recognize-Requests.",
+        "ja": "サービスアカウントJSONキーを使うGoogle Cloud Speech-to-Textのクラウド文字起こしです。長時間録音は音声を分割して複数の認識リクエストで処理します。"
     },
     "category": "transcription",
     "iconSystemName": "globe.badge.chevron.backward",

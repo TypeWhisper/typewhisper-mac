@@ -11,7 +11,8 @@
     "author": "TypeWhisper",
     "description": "Local speech-to-text powered by WhisperKit. 8 model sizes, 99 languages, streaming support.",
     "descriptions": {
-        "de": "Lokale Spracherkennung mit WhisperKit. 8 Modellgrößen, 99 Sprachen, Streaming-Unterstützung."
+        "de": "Lokale Spracherkennung mit WhisperKit. 8 Modellgrößen, 99 Sprachen, Streaming-Unterstützung.",
+        "ja": "WhisperKitによるローカル音声認識です。8種類のモデルサイズ、99言語、ストリーミングに対応します。"
     },
     "category": "transcription",
     "capabilities": [

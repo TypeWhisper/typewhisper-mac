@@ -11,7 +11,7 @@ struct SpokenPunctuationSettingsSection: View {
     private let punctuationVerificationService = ServiceContainer.shared.punctuationVerificationService
 
     var body: some View {
-        Section("Spoken Punctuation") {
+        Section(String(localized: "Spoken Punctuation")) {
             if let context = activePunctuationContext,
                let resolved = resolvedPunctuationStrategy(for: context) {
                 VStack(alignment: .leading, spacing: 12) {
@@ -26,7 +26,7 @@ struct SpokenPunctuationSettingsSection: View {
                         }
                     } label: {
                         SettingsInfoLabel(
-                            title: "Strategy",
+                            title: String(localized: "Strategy"),
                             info: "\(context.summary)\n\n\(resolved.strategy.description)"
                         )
                     }
@@ -35,21 +35,21 @@ struct SpokenPunctuationSettingsSection: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    Button("Test Spoken Punctuation…") {
+                    Button(String(localized: "Test Spoken Punctuation…")) {
                         showPunctuationTestSheet = true
                     }
                     .buttonStyle(.bordered)
                 }
             } else if settings.selectedLanguage == nil {
-                Text("Set a spoken language to configure punctuation behavior.")
+                Text(String(localized: "Set a spoken language to configure punctuation behavior."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else if modelManager.selectedProviderId == nil {
-                Text("Select a transcription engine to configure punctuation behavior.")
+                Text(String(localized: "Select a transcription engine to configure punctuation behavior."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                Text("No punctuation profile is available for the current selection.")
+                Text(String(localized: "No punctuation profile is available for the current selection."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -160,21 +160,24 @@ private struct PunctuationVerificationSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Test Spoken Punctuation")
+            Text(String(localized: "Test Spoken Punctuation"))
                 .font(.headline)
 
-            Text("Use these phrases with \(context.summary) in any text field. If the native output already matches the expected result, keep Native. Otherwise use Fallback for this combination.")
+            Text(String(
+                format: String(localized: "Use these phrases with %@ in any text field. If the native output already matches the expected result, keep Native. Otherwise use Fallback for this combination."),
+                context.summary
+            ))
                 .foregroundStyle(.secondary)
 
             if scenarios.isEmpty {
-                Text("No guided phrases are available for this language yet.")
+                Text(String(localized: "No guided phrases are available for this language yet."))
                     .foregroundStyle(.secondary)
             } else {
                 List(scenarios, id: \.self) { scenario in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(scenario.spoken)
                             .font(.body.monospaced())
-                        Text("Expected: \(scenario.expected)")
+                        Text(String(format: String(localized: "Expected: %@"), scenario.expected))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -184,16 +187,16 @@ private struct PunctuationVerificationSheet: View {
             }
 
             HStack {
-                Button("Keep Automatic") {
+                Button(String(localized: "Keep Automatic")) {
                     dismiss()
                 }
                 Spacer()
-                Button("Use Fallback") {
+                Button(String(localized: "Use Fallback")) {
                     onDecision(.fallbackOnly, .userVerifiedBad)
                     dismiss()
                 }
                 .buttonStyle(.bordered)
-                Button("Native Works") {
+                Button(String(localized: "Native Works")) {
                     onDecision(.nativeOnly, .userVerifiedGood)
                     dismiss()
                 }

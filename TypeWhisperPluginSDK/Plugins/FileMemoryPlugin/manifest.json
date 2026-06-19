@@ -8,7 +8,8 @@
     "author": "TypeWhisper",
     "description": "Store memories as local JSON files with text-based search. Fully offline, no API key required.",
     "descriptions": {
-        "de": "Speichert Erinnerungen als lokale JSON-Dateien mit textbasierter Suche. Komplett offline, kein API-Key nötig."
+        "de": "Speichert Erinnerungen als lokale JSON-Dateien mit textbasierter Suche. Komplett offline, kein API-Key nötig.",
+        "ja": "メモリをローカルJSONファイルとして保存し、テキスト検索できます。完全オフラインで動作し、APIキーは不要です。"
     },
     "category": "memory",
     "iconSystemName": "doc.text",

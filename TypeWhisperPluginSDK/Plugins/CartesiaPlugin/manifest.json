@@ -8,10 +8,14 @@
     "author": "TypeWhisper",
     "description": "Cloud speech-to-text and text-to-speech via Cartesia APIs. Requires a Cartesia API key.",
     "descriptions": {
-        "de": "Cloud Speech-to-Text und Text-to-Speech über Cartesia APIs. Erfordert einen Cartesia API-Key."
+        "de": "Cloud Speech-to-Text und Text-to-Speech über Cartesia APIs. Erfordert einen Cartesia API-Key.",
+        "ja": "Cartesia APIによるクラウド音声認識と音声合成です。Cartesia APIキーが必要です。"
     },
     "category": "transcription",
-    "categories": ["transcription", "tts"],
+    "categories": [
+        "transcription",
+        "tts"
+    ],
     "hosting": "cloud",
     "iconSystemName": "waveform",
     "principalClass": "CartesiaPlugin",

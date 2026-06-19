@@ -11,7 +11,8 @@
     "author": "TypeWhisper",
     "description": "Local LLM powered by Google Gemma 4 on Apple Silicon via MLX. No API key required.",
     "descriptions": {
-        "de": "Lokales LLM mit Google Gemma 4 auf Apple Silicon via MLX. Kein API-Key erforderlich."
+        "de": "Lokales LLM mit Google Gemma 4 auf Apple Silicon via MLX. Kein API-Key erforderlich.",
+        "ja": "Apple Silicon上でMLX経由で動作するGoogle Gemma 4ローカルLLMです。APIキーは不要です。"
     },
     "category": "llm",
     "iconSystemName": "cpu",
