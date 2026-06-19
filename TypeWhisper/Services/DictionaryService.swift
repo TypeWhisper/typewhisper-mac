@@ -20,6 +20,12 @@ enum DictionaryServiceMutationError: LocalizedError {
     }
 }
 
+enum DictionaryCorrectionMatchPolicy {
+    case exact
+    case boundary
+    case substring
+}
+
 @MainActor
 final class DictionaryService: ObservableObject {
     private var modelContainer: ModelContainer?
@@ -383,15 +389,7 @@ final class DictionaryService: ObservableObject {
             guard let replacement = correction.replacement else { continue }
 
             let before = result
-            if correction.caseSensitive {
-                result = result.replacingOccurrences(of: correction.original, with: replacement)
-            } else {
-                result = result.replacingOccurrences(
-                    of: correction.original,
-                    with: replacement,
-                    options: .caseInsensitive
-                )
-            }
+            result = applyCorrection(correction, to: result, replacement: replacement)
 
             if result != before {
                 incrementUsageCount(for: correction)
@@ -399,6 +397,89 @@ final class DictionaryService: ObservableObject {
         }
 
         return result
+    }
+
+    private func applyCorrection(_ correction: DictionaryEntry, to text: String, replacement: String) -> String {
+        switch matchPolicy(for: correction) {
+        case .exact:
+            return textMatches(text, correction.original, caseSensitive: correction.caseSensitive) ? replacement : text
+        case .boundary:
+            return replacingBoundaryMatches(
+                of: correction.original,
+                in: text,
+                with: replacement,
+                caseSensitive: correction.caseSensitive
+            )
+        case .substring:
+            if correction.caseSensitive {
+                return text.replacingOccurrences(of: correction.original, with: replacement)
+            }
+            return text.replacingOccurrences(
+                of: correction.original,
+                with: replacement,
+                options: .caseInsensitive
+            )
+        }
+    }
+
+    private func matchPolicy(for correction: DictionaryEntry) -> DictionaryCorrectionMatchPolicy {
+        let original = correction.original.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !original.isEmpty else { return .exact }
+        return original.containsWordLikeCharacter ? .boundary : .substring
+    }
+
+    private func textMatches(_ text: String, _ original: String, caseSensitive: Bool) -> Bool {
+        if caseSensitive {
+            return text == original
+        }
+        return text.compare(original, options: [.caseInsensitive], locale: .current) == .orderedSame
+    }
+
+    private func replacingBoundaryMatches(
+        of original: String,
+        in text: String,
+        with replacement: String,
+        caseSensitive: Bool
+    ) -> String {
+        guard !original.isEmpty else { return text }
+
+        var result = ""
+        var searchStart = text.startIndex
+        let options: String.CompareOptions = caseSensitive ? [] : [.caseInsensitive]
+
+        while let range = text.range(of: original, options: options, range: searchStart..<text.endIndex, locale: .current) {
+            guard range.lowerBound < range.upperBound else { break }
+
+            if isBoundaryMatch(range, in: text, original: original) {
+                result += text[searchStart..<range.lowerBound]
+                result += replacement
+            } else {
+                result += text[searchStart..<range.upperBound]
+            }
+            searchStart = range.upperBound
+        }
+
+        result += text[searchStart..<text.endIndex]
+        return result
+    }
+
+    private func isBoundaryMatch(_ range: Range<String.Index>, in text: String, original: String) -> Bool {
+        let previous = range.lowerBound > text.startIndex ? text[text.index(before: range.lowerBound)] : nil
+        let next = range.upperBound < text.endIndex ? text[range.upperBound] : nil
+
+        if original.isAllKatakana {
+            return previous?.isKatakana != true && next?.isKatakana != true
+        }
+
+        if original.isAllLatinOrNumber {
+            return previous?.isLatinOrNumber != true && next?.isLatinOrNumber != true
+        }
+
+        let startsAtBoundary = previous?.isWordLike != true || previous?.isJapaneseParticleBoundary == true
+        let endsAtBoundary = next?.isWordLike != true ||
+            next?.isJapaneseParticleBoundary == true ||
+            (original.count > 1 && String(text[range.upperBound...]).startsWithJapaneseParticleBoundary)
+        return startsAtBoundary && endsAtBoundary
     }
 
     /// Add a correction learned from history edits
@@ -578,6 +659,86 @@ final class DictionaryService: ObservableObject {
             try context.save()
         } catch {
             logger.error("Failed to update usage count: \(error.localizedDescription)")
+        }
+    }
+}
+
+private extension Character {
+    var isKatakana: Bool {
+        unicodeScalars.allSatisfy { scalar in
+            (0x30A0...0x30FF).contains(Int(scalar.value)) ||
+            (0x31F0...0x31FF).contains(Int(scalar.value)) ||
+            (0xFF66...0xFF9D).contains(Int(scalar.value))
+        }
+    }
+
+    var isLatinOrNumber: Bool {
+        unicodeScalars.allSatisfy { CharacterSet.alphanumerics.contains($0) && $0.value < 0x3000 }
+    }
+
+    var isWordLike: Bool {
+        unicodeScalars.contains { scalar in
+            CharacterSet.alphanumerics.contains(scalar) ||
+            (0x3040...0x30FF).contains(Int(scalar.value)) ||
+            (0x3400...0x9FFF).contains(Int(scalar.value)) ||
+            (0xF900...0xFAFF).contains(Int(scalar.value)) ||
+            (0x20000...0x323AF).contains(Int(scalar.value)) ||
+            (0xFF66...0xFF9D).contains(Int(scalar.value))
+        }
+    }
+
+    var isJapaneseParticleBoundary: Bool {
+        guard unicodeScalars.count == 1, let scalar = unicodeScalars.first else { return false }
+        switch scalar.value {
+        case 0x3067, // で
+             0x306B, // に
+             0x306E, // の
+             0x306F, // は
+             0x3092, // を
+             0x304C, // が
+             0x3082, // も
+             0x3068, // と
+             0x3078, // へ
+             0x3088: // よ
+            return true
+        default:
+            return false
+        }
+    }
+}
+
+private extension String {
+    var startsWithJapaneseParticleBoundary: Bool {
+        [
+            "から",
+            "まで",
+            "より",
+            "には",
+            "では",
+            "にも",
+            "でも",
+            "とは",
+            "との",
+            "へは",
+            "への",
+            "だけ",
+            "など",
+        ].contains { hasPrefix($0) }
+    }
+
+    var containsWordLikeCharacter: Bool {
+        contains { $0.isWordLike }
+    }
+
+    var isAllKatakana: Bool {
+        !isEmpty && allSatisfy { character in
+            character.isKatakana || character.unicodeScalars.allSatisfy { CharacterSet.whitespacesAndNewlines.contains($0) }
+        }
+    }
+
+    var isAllLatinOrNumber: Bool {
+        !isEmpty && allSatisfy { character in
+            character.isLatinOrNumber || character.unicodeScalars.allSatisfy { CharacterSet.whitespacesAndNewlines.contains($0) }
         }
     }
 }

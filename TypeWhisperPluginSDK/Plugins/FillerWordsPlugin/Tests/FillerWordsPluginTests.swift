@@ -24,6 +24,40 @@ final class FillerWordsPluginTests: XCTestCase {
         XCTAssertEqual(result, "hello?")
     }
 
+    func testRemovesBuiltInJapaneseFillerWordsAtPhraseBoundaries() async throws {
+        let plugin = FillerWordsPlugin()
+
+        let result = try await plugin.process(
+            text: "えっと友達追加されたのは2月9日で、なんか様子を見たいです。まあ今日から開始してください。",
+            context: PostProcessingContext()
+        )
+
+        XCTAssertEqual(result, "友達追加されたのは2月9日で、様子を見たいです。今日から開始してください。")
+    }
+
+    func testPreservesMeaningfulJapaneseConnectorsAndDemonstratives() {
+        XCTAssertEqual(
+            FillerWordsPlugin.removeFillerWords(from: "あと最後に送信確認してください。"),
+            "あと最後に送信確認してください。"
+        )
+        XCTAssertEqual(
+            FillerWordsPlugin.removeFillerWords(from: "そのまま送信してください。"),
+            "そのまま送信してください。"
+        )
+        XCTAssertEqual(
+            FillerWordsPlugin.removeFillerWords(from: "あの人に確認してください。"),
+            "あの人に確認してください。"
+        )
+        XCTAssertEqual(
+            FillerWordsPlugin.removeFillerWords(from: "まあまあです。今日は、まあまあです。"),
+            "まあまあです。今日は、まあまあです。"
+        )
+        XCTAssertEqual(
+            FillerWordsPlugin.removeFillerWords(from: "まあまず確認してください。まあまた明日です。"),
+            "まず確認してください。また明日です。"
+        )
+    }
+
     @MainActor
     func testActivationSeedsPluginScopedDefaultWords() throws {
         let host = try PluginTestHostServices()
@@ -59,7 +93,8 @@ final class FillerWordsPluginTests: XCTestCase {
         let storedWords = host.userDefault(forKey: "words") as? String
         XCTAssertTrue(storedWords?.contains("basically") == true)
         XCTAssertTrue(storedWords?.contains("ähm") == true)
-        XCTAssertEqual(host.userDefault(forKey: "wordsDefaultsVersion") as? Int, 2)
+        XCTAssertTrue(storedWords?.contains("えっと") == true)
+        XCTAssertEqual(host.userDefault(forKey: "wordsDefaultsVersion") as? Int, 3)
     }
 
     func testProcessUsesPluginScopedCustomWords() async throws {
