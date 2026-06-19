@@ -904,6 +904,7 @@ final class DictationViewModel: ObservableObject {
         transcriptionTask?.cancel()
         transcriptionTask = nil
         cancelTargetAppCorrectionLearning()
+        clearPendingUndoActionFeedback()
         insertingResetTask?.cancel()
         insertingResetTask = nil
         clearCancelWarning()
@@ -1563,8 +1564,7 @@ final class DictationViewModel: ObservableObject {
         actionFeedbackMessage = nil
         actionFeedbackIcon = nil
         actionFeedbackIsError = false
-        actionFeedbackUndoTitle = nil
-        pendingLearnedCorrections = []
+        clearPendingUndoActionFeedback()
         actionDisplayDuration = 3.5
     }
 
@@ -1945,6 +1945,11 @@ final class DictationViewModel: ObservableObject {
         targetAppCorrectionLearningTask = nil
     }
 
+    private func clearPendingUndoActionFeedback() {
+        actionFeedbackUndoTitle = nil
+        pendingLearnedCorrections = []
+    }
+
     private func showLearnedCorrectionsFeedback(_ learned: [LearnedDictionaryCorrection]) {
         guard !learned.isEmpty else { return }
 
@@ -1993,9 +1998,10 @@ final class DictationViewModel: ObservableObject {
         actionFeedbackMessage = message
         actionFeedbackIcon = icon
         actionFeedbackIsError = isError
-        actionFeedbackUndoTitle = undoTitle
         if undoTitle == nil {
-            pendingLearnedCorrections = []
+            clearPendingUndoActionFeedback()
+        } else {
+            actionFeedbackUndoTitle = undoTitle
         }
         actionDisplayDuration = duration
         state = .inserting

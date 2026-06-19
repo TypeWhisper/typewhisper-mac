@@ -170,6 +170,23 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testBatchLearningAllowsEmptyReplacementCorrections() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+
+        let learned = service.learnCorrections([
+            CorrectionSuggestion(original: "filler", replacement: "")
+        ])
+
+        XCTAssertEqual(learned.count, 1)
+        XCTAssertEqual(learned.first?.original, "filler")
+        XCTAssertEqual(learned.first?.replacement, "")
+        XCTAssertEqual(service.applyCorrections(to: "drop filler text"), "drop  text")
+    }
+
+    @MainActor
     func testCorrectionsDoNotReplaceInsideLongerKatakanaWords() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

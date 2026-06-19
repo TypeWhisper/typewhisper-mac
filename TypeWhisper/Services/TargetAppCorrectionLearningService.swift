@@ -32,8 +32,14 @@ final class TargetAppCorrectionLearningService {
         guard !insertedText.isEmpty, !pollSchedule.isEmpty else { return [] }
 
         var finalObservation: TextInsertionService.FocusedTextObservation?
-        for delay in pollSchedule {
-            await sleep(delay)
+        var elapsed: Duration = .seconds(0)
+        for pollOffset in pollSchedule {
+            if pollOffset > elapsed {
+                await sleep(pollOffset - elapsed)
+                elapsed = pollOffset
+            } else {
+                await sleep(.seconds(0))
+            }
             guard !Task.isCancelled else { return [] }
             guard let observation = textInsertionService.recaptureFocusedTextObservation(matching: baseline) else {
                 return []

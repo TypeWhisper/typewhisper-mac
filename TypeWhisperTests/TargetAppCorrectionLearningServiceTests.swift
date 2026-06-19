@@ -43,6 +43,48 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
         XCTAssertEqual(dictionaryService.correctionsCount, 1)
     }
 
+    func testDefaultPollScheduleSleepsWithinTenSecondWindow() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let element = AXUIElementCreateSystemWide()
+        let textInsertionService = TextInsertionService()
+        textInsertionService.focusedTextElementOverride = { element }
+
+        var observations = [
+            "Please use teh word",
+            "Please use teh word",
+            "Please use the word"
+        ]
+        textInsertionService.focusedTextStateOverride = { _ in
+            let value = observations.removeFirst()
+            return (value: value, selectedText: nil, selectedRange: NSRange(location: value.count, length: 0))
+        }
+
+        var sleeps: [Duration] = []
+        let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
+        let service = TargetAppCorrectionLearningService(
+            textInsertionService: textInsertionService,
+            textDiffService: TextDiffService(),
+            dictionaryService: dictionaryService,
+            sleep: { duration in
+                sleeps.append(duration)
+            }
+        )
+        let baseline = TextInsertionService.FocusedTextObservation(
+            element: element,
+            value: "Please use teh word",
+            selectedText: nil,
+            selectedRange: NSRange(location: 19, length: 0)
+        )
+
+        let learned = await service.trackInsertion(insertedText: "teh", baseline: baseline)
+
+        XCTAssertEqual(sleeps, [.seconds(2), .seconds(3), .seconds(5)])
+        XCTAssertEqual(learned.first?.original, "teh")
+        XCTAssertEqual(learned.first?.replacement, "the")
+    }
+
     func testSkipsFocusElementChangesAndMissingTextState() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

@@ -101,7 +101,7 @@ struct MinimalIndicatorView: View {
                     dotPulse = false
                 }
             }
-            .accessibilityElement(children: .combine)
+            .accessibilityElement(children: presentation.actionFeedbackUndoTitle == nil ? .combine : .contain)
             .accessibilityLabel(accessibilityLabel)
         }
 

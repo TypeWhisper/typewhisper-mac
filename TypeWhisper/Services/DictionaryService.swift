@@ -512,7 +512,6 @@ final class DictionaryService: ObservableObject {
             let originalKey = original.lowercased()
 
             guard !original.isEmpty,
-                  !replacement.isEmpty,
                   originalKey != replacement.lowercased(),
                   !existingOriginals.contains(originalKey) else {
                 continue

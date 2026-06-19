@@ -154,7 +154,7 @@ struct OverlayIndicatorView: View {
             }
         }
         .animation(.easeInOut(duration: 1.0), value: dotPulse)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: presentation.actionFeedbackUndoTitle == nil ? .combine : .contain)
         .accessibilityLabel(accessibilityLabel)
     }
 
