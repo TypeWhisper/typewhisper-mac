@@ -358,7 +358,7 @@
       "author": "TypeWhisper",
       "description": "Connect to any OpenAI-compatible API server for transcription and LLM. Works with Ollama, LM Studio, vLLM, and more.",
       "descriptions": {
-        "de": "Verbindung zu jedem OpenAI-kompatiblen API-Server für Transkription und LLM. Funktioniert mit Ollama, LM Studio, vLLM und mehr."
+        "de": "Verbindung zu jedem OpenAI-kompatiblen API-Server f\u00fcr Transkription und LLM. Funktioniert mit Ollama, LM Studio, vLLM und mehr."
       },
       "category": "transcription",
       "downloadCount": 2204,
@@ -422,7 +422,7 @@
       "author": "TypeWhisper",
       "description": "Local Qwen3-ASR speech-to-text powered by MLX on Apple Silicon. 30 languages plus Chinese dialect coverage, no API key required.",
       "descriptions": {
-        "de": "Lokale Qwen3-ASR-Spracherkennung mit MLX auf Apple Silicon. 30 Sprachen plus chinesische Dialektabdeckung, kein API-Key nötig."
+        "de": "Lokale Qwen3-ASR-Spracherkennung mit MLX auf Apple Silicon. 30 Sprachen plus chinesische Dialektabdeckung, kein API-Key n\u00f6tig."
       },
       "category": "transcription",
       "downloadCount": 3119,
@@ -777,7 +777,7 @@
       "author": "TypeWhisper",
       "description": "LLM provider and cloud speech transcription via Google Gemini API. Requires API key.",
       "descriptions": {
-        "de": "LLM-Anbieter und Cloud-Spracherkennung über die Google Gemini API. Erfordert API-Key."
+        "de": "LLM-Anbieter und Cloud-Spracherkennung \u00fcber die Google Gemini API. Erfordert API-Key."
       },
       "category": "transcription",
       "downloadCount": 1325,
@@ -1142,7 +1142,7 @@
       "author": "TypeWhisper",
       "description": "Access OpenRouter speech-to-text models and 300+ LLMs from OpenAI, Anthropic, Meta, Google and more. Shows model pricing and account balance. Requires API key.",
       "descriptions": {
-        "de": "Zugriff auf OpenRouter-Spracherkennungsmodelle und über 300 LLMs von OpenAI, Anthropic, Meta, Google und mehr. Zeigt Modellpreise und Kontoguthaben. Erfordert API-Key."
+        "de": "Zugriff auf OpenRouter-Spracherkennungsmodelle und \u00fcber 300 LLMs von OpenAI, Anthropic, Meta, Google und mehr. Zeigt Modellpreise und Kontoguthaben. Erfordert API-Key."
       },
       "category": "transcription",
       "downloadCount": 644,
@@ -1307,7 +1307,7 @@
       "author": "TypeWhisper",
       "description": "Post-process transcribed text through custom shell scripts. Pass text via stdin, get results via stdout.",
       "descriptions": {
-        "de": "Transkribierten Text durch eigene Shell-Skripte nachbearbeiten. Text wird per stdin übergeben, Ergebnis per stdout zurückgegeben."
+        "de": "Transkribierten Text durch eigene Shell-Skripte nachbearbeiten. Text wird per stdin \u00fcbergeben, Ergebnis per stdout zur\u00fcckgegeben."
       },
       "category": "post-processor",
       "downloadCount": 679,
@@ -1349,7 +1349,7 @@
       "author": "TypeWhisper",
       "description": "Cloud speech-to-text and text-to-speech via Soniox APIs with regional endpoint support. Requires API key.",
       "descriptions": {
-        "de": "Cloud Speech-to-Text und Text-to-Speech über Soniox APIs mit regionaler Endpunkt-Auswahl. Erfordert API-Key."
+        "de": "Cloud Speech-to-Text und Text-to-Speech \u00fcber Soniox APIs mit regionaler Endpunkt-Auswahl. Erfordert API-Key."
       },
       "category": "transcription",
       "downloadCount": 123,
@@ -1759,7 +1759,7 @@
       "category": "transcription",
       "downloadCount": 37,
       "descriptions": {
-        "de": "Cloud-Transkription über die Reson8-Speech-to-Text-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key."
+        "de": "Cloud-Transkription \u00fcber die Reson8-Speech-to-Text-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key."
       },
       "iconSystemName": "waveform.badge.mic",
       "requiresAPIKey": true,
@@ -1807,7 +1807,7 @@
       "category": "transcription",
       "downloadCount": 10,
       "descriptions": {
-        "de": "Cloud Speech-to-Text und Text-to-Speech über Cartesia APIs. Erfordert einen Cartesia API-Key."
+        "de": "Cloud Speech-to-Text und Text-to-Speech \u00fcber Cartesia APIs. Erfordert einen Cartesia API-Key."
       },
       "categories": [
         "transcription",
@@ -1847,7 +1847,7 @@
       "category": "transcription",
       "downloadCount": 7,
       "descriptions": {
-        "de": "LLM-Anbieter und Cloud-Spracherkennung über die Mistral AI API. Erfordert API-Key."
+        "de": "LLM-Anbieter und Cloud-Spracherkennung \u00fcber die Mistral AI API. Erfordert API-Key."
       },
       "categories": [
         "transcription",
@@ -1875,6 +1875,34 @@
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-mistral-v1.0.0/MistralAIPlugin.zip",
           "minOSVersion": "14.0",
           "downloadCount": 4
+        }
+      ]
+    },
+    {
+      "id": "com.mempalace.memory",
+      "name": "MemPalace",
+      "author": "MemPalace",
+      "description": "Store and search memories in MemPalace Cloud or a self-hosted MemPalace instance. Memories are filed into a user-chosen wing and room, with shared knowledge-graph tunneling on the server.",
+      "category": "memory",
+      "downloadCount": 0,
+      "source": "community",
+      "descriptions": {
+        "de": "Speichert und durchsucht Erinnerungen in MemPalace Cloud oder einer selbstgehosteten MemPalace-Instanz. Memories werden in einen ausgewaehlten Wing und Room einsortiert, mit Knowledge-Graph-Tunneling auf dem Server."
+      },
+      "iconSystemName": "building.columns",
+      "requiresAPIKey": true,
+      "hosting": "cloud",
+      "releases": [
+        {
+          "version": "0.3.5",
+          "minHostVersion": "1.4.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 442771,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-mempalace-v0.3.5/MemPalacePlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
         }
       ]
     }
