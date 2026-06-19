@@ -1,5 +1,6 @@
 import Foundation
 @preconcurrency import AVFoundation
+import CoreAudio
 import ScreenCaptureKit
 import Combine
 import os
@@ -460,6 +461,8 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     var currentBufferOverride: (() -> [Float])?
 
     private var audioEngine: AVAudioEngine?
+    private let micDefaultInputController: AudioInputDeviceDefaultControlling = CoreAudioInputDeviceDefaultController()
+    private let micTransportResolver: AudioDeviceTransportResolving = CoreAudioDeviceTransportResolver()
     private let micFileLock = OSAllocatedUnfairLock<AVAudioFile?>(initialState: nil)
     private var scStream: SCStream?
     private var streamOutput: SystemAudioStreamOutput?
@@ -765,10 +768,14 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     private func startMicRecording(outputURL: URL) throws {
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
-        let inputFormat = inputNode.outputFormat(forBus: 0)
+        var inputFormat = inputNode.outputFormat(forBus: 0)
 
         guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
             throw RecorderError.engineStartFailed("No audio input available")
+        }
+
+        if try enableMicVoiceProcessingIfNeeded(on: inputNode, currentFormat: inputFormat) {
+            inputFormat = inputNode.outputFormat(forBus: 0)
         }
 
         // Write at native format to preserve quality
@@ -792,11 +799,15 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             interleaved: false
         )!
 
+        let tapFormat = Self.micTapFormat(for: inputFormat)
+        let converterInputFormat = tapFormat.channelCount == 1
+            ? tapFormat
+            : (AudioInputBufferNormalizer.monoFloatFormat(for: tapFormat) ?? tapFormat)
         let converter: AVAudioConverter?
-        if inputFormat.channelCount > 1 || inputFormat.commonFormat != .pcmFormatFloat32 {
-            converter = AVAudioConverter(from: inputFormat, to: monoFormat)
-        } else {
+        if Self.audioFormatsMatch(converterInputFormat, monoFormat) {
             converter = nil
+        } else {
+            converter = AVAudioConverter(from: converterInputFormat, to: monoFormat)
         }
 
         // 16kHz converter for transcription buffer
@@ -812,12 +823,13 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
         micFileLock.withLock { $0 = audioFile }
 
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: tapFormat) { [weak self] buffer, _ in
             guard let self else { return }
+            guard let micBuffer = Self.normalizedMicInputBuffer(buffer) else { return }
 
             let writeBuffer: AVAudioPCMBuffer
             if let converter {
-                let frameCount = AVAudioFrameCount(buffer.frameLength)
+                let frameCount = AVAudioFrameCount(micBuffer.frameLength)
                 guard let converted = AVAudioPCMBuffer(pcmFormat: monoFormat, frameCapacity: frameCount) else { return }
                 var error: NSError?
                 let consumed = OSAllocatedUnfairLock(initialState: false)
@@ -832,12 +844,12 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
                         return nil
                     }
                     outStatus.pointee = .haveData
-                    return buffer
+                    return micBuffer
                 }
                 guard error == nil, converted.frameLength > 0 else { return }
                 writeBuffer = converted
             } else {
-                writeBuffer = buffer
+                writeBuffer = micBuffer
             }
 
             // Calculate level
@@ -892,6 +904,66 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
         try engine.start()
         audioEngine = engine
+    }
+
+    private func enableMicVoiceProcessingIfNeeded(
+        on inputNode: AVAudioInputNode,
+        currentFormat: AVAudioFormat
+    ) throws -> Bool {
+        guard currentFormat.channelCount == 3,
+              defaultInputUsesBuiltInTransport() else {
+            return false
+        }
+
+        do {
+            try inputNode.setVoiceProcessingEnabled(true)
+            inputNode.isVoiceProcessingBypassed = false
+            inputNode.isVoiceProcessingAGCEnabled = true
+            inputNode.isVoiceProcessingInputMuted = false
+            logger.info("Recorder microphone enabled voice processing for 3-channel built-in default input")
+            return true
+        } catch {
+            logger.warning("Recorder microphone could not enable voice processing for 3-channel built-in default input: \(error.localizedDescription, privacy: .public)")
+            return false
+        }
+    }
+
+    private func defaultInputUsesBuiltInTransport() -> Bool {
+        guard let defaultInputDeviceID = micDefaultInputController.defaultInputDeviceID(),
+              let transportType = micTransportResolver.transportType(for: defaultInputDeviceID) else {
+            return false
+        }
+        return transportType == kAudioDeviceTransportTypeBuiltIn
+    }
+
+    private static func micTapFormat(for inputFormat: AVAudioFormat) -> AVAudioFormat {
+        if inputFormat.channelCount == 3 {
+            return inputFormat
+        }
+        if inputFormat.channelCount > 1,
+           let mono = AVAudioFormat(
+               commonFormat: .pcmFormatFloat32,
+               sampleRate: inputFormat.sampleRate,
+               channels: 1,
+               interleaved: false
+           ) {
+            return mono
+        }
+        return inputFormat
+    }
+
+    private static func normalizedMicInputBuffer(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+        guard buffer.format.channelCount > 1 else {
+            return buffer
+        }
+        return AudioInputBufferNormalizer.monoFloatBuffer(from: buffer)
+    }
+
+    private static func audioFormatsMatch(_ lhs: AVAudioFormat, _ rhs: AVAudioFormat) -> Bool {
+        lhs.sampleRate == rhs.sampleRate
+            && lhs.channelCount == rhs.channelCount
+            && lhs.commonFormat == rhs.commonFormat
+            && lhs.isInterleaved == rhs.isInterleaved
     }
 
     // MARK: - System Audio Recording

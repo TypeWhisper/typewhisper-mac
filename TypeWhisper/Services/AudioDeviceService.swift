@@ -2248,14 +2248,67 @@ enum AudioInputBufferNormalizer {
         }
 
         monoBuffer.frameLength = buffer.frameLength
+        let selectedChannel = strongestChannelIndex(
+            sourceChannels: sourceChannels,
+            frameCount: frameCount,
+            channelCount: channelCount,
+            isInterleaved: buffer.format.isInterleaved
+        )
+
         for frameIndex in 0..<frameCount {
-            var sum: Float = 0
-            for channelIndex in 0..<channelCount {
-                sum += sourceChannels[channelIndex][frameIndex]
-            }
-            monoChannel[frameIndex] = sum / Float(channelCount)
+            monoChannel[frameIndex] = sample(
+                sourceChannels: sourceChannels,
+                frameIndex: frameIndex,
+                channelIndex: selectedChannel,
+                channelCount: channelCount,
+                isInterleaved: buffer.format.isInterleaved
+            )
         }
         return monoBuffer
+    }
+
+    private static func strongestChannelIndex(
+        sourceChannels: UnsafePointer<UnsafeMutablePointer<Float>>,
+        frameCount: Int,
+        channelCount: Int,
+        isInterleaved: Bool
+    ) -> Int {
+        var bestChannel = 0
+        var bestEnergy: Float = -1
+
+        for channelIndex in 0..<channelCount {
+            var energy: Float = 0
+            for frameIndex in 0..<frameCount {
+                let value = sample(
+                    sourceChannels: sourceChannels,
+                    frameIndex: frameIndex,
+                    channelIndex: channelIndex,
+                    channelCount: channelCount,
+                    isInterleaved: isInterleaved
+                )
+                energy += value * value
+            }
+
+            if energy > bestEnergy {
+                bestEnergy = energy
+                bestChannel = channelIndex
+            }
+        }
+
+        return bestChannel
+    }
+
+    private static func sample(
+        sourceChannels: UnsafePointer<UnsafeMutablePointer<Float>>,
+        frameIndex: Int,
+        channelIndex: Int,
+        channelCount: Int,
+        isInterleaved: Bool
+    ) -> Float {
+        if isInterleaved {
+            return sourceChannels[0][frameIndex * channelCount + channelIndex]
+        }
+        return sourceChannels[channelIndex][frameIndex]
     }
 }
 
