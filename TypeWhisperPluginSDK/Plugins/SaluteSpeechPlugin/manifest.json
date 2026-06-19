@@ -14,6 +14,7 @@
     "requiresAPIKey": true,
     "detailsURL": "https://developers.sber.ru/docs/ru/salutespeech/quick-start/integration-individuals",
     "descriptions": {
+        "de": "Cloud-Transkription über die Sber SaluteSpeech REST API. Erfordert einen SaluteSpeech Authorization Key.",
         "ja": "Sber SaluteSpeech REST APIによるクラウド文字起こしです。SaluteSpeech Authorization Keyが必要です。"
     }
 }

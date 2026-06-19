@@ -21392,16 +21392,6 @@
         }
       }
     },
-    "Use these phrases with (context.summary) in any text field. If the native output already matches the expected result, keep Native. Otherwise use Fallback for this combination.": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "任意のテキスト入力欄で (context.summary) を使って、以下のフレーズを試してください。ネイティブ出力が期待結果と一致する場合は「ネイティブ」のままにします。一致しない場合は、この組み合わせで「フォールバック」を使用します。"
-          }
-        }
-      }
-    },
     "No guided phrases are available for this language yet.": {
       "localizations": {
         "ja": {
@@ -21418,16 +21408,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "期待結果: %@"
-          }
-        }
-      }
-    },
-    "Expected: (scenario.expected)": {
-      "localizations": {
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "期待結果: (scenario.expected)"
           }
         }
       }
