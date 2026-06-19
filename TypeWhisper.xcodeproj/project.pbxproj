@@ -113,6 +113,7 @@
 		6C1F7A8B9D2E4F5061728394 /* SoundServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D2E4F50617283946C1F7A8B /* SoundServiceTests.swift */; };
 		BB8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift */; };
 		76858B5B28A121356A5D9599 /* TextDiffServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05313C25F9E79BCFC02899F2 /* TextDiffServiceTests.swift */; };
+		AA7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift */; };
 		7DADCC6E1AEA99CA48F83F50 /* CLISupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD34FDF9D999D85DA1C35375 /* CLISupportTests.swift */; };
 		A40500000000000000000101 /* CLIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000104 /* CLIClient.swift */; };
 		7EC0EFA7DA6597CAEA640448 /* APIRouterAndHandlersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6D200DCDD6580F443C5CE0A /* APIRouterAndHandlersTests.swift */; };
@@ -158,6 +159,7 @@
 		AA00000000000000000060 /* TranscriptionRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000060 /* TranscriptionRecord.swift */; };
 		AA00000000000000000061 /* HistoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000061 /* HistoryService.swift */; };
 		AA00000000000000000062 /* TextDiffService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000062 /* TextDiffService.swift */; };
+		AA7080000000000000000001 /* TargetAppCorrectionLearningService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7080000000000000000001 /* TargetAppCorrectionLearningService.swift */; };
 		AA00000000000000000063 /* HistoryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000063 /* HistoryViewModel.swift */; };
 		AA00000000000000000064 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000064 /* HistoryView.swift */; };
 		AA00000000000000000065 /* Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000065 /* Profile.swift */; };
@@ -355,6 +357,14 @@
 		AA00000000000000000244 /* OpenAIVectorMemoryPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000232 /* OpenAIVectorMemoryPlugin.swift */; };
 		AA00000000000000000245 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000233 /* manifest.json */; };
 		AA00000000000000000246 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000033 /* TypeWhisperPluginSDK */; };
+		4D45504C414345000000000A /* MemPalaceConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D45504C4143450000000001 /* MemPalaceConfig.swift */; };
+		4D45504C414345000000000B /* MemPalaceMCPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D45504C4143450000000002 /* MemPalaceMCPClient.swift */; };
+		4D45504C414345000000000C /* MemPalacePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D45504C4143450000000003 /* MemPalacePlugin.swift */; };
+		4D45504C414345000000000D /* MemPalaceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D45504C4143450000000004 /* MemPalaceSettingsView.swift */; };
+		4D45504C414345000000000E /* OfflineQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D45504C4143450000000005 /* OfflineQueue.swift */; };
+		4D45504C414345000000000F /* SidecarStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D45504C4143450000000006 /* SidecarStore.swift */; };
+		4D45504C4143450000000010 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 4D45504C4143450000000007 /* manifest.json */; };
+		4D45504C4143450000000011 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 4D45504C4143450000000019 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000263 /* FireworksPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000251 /* FireworksPlugin.swift */; };
 		AA00000000000000000264 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000252 /* manifest.json */; };
 		AA00000000000000000265 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000253 /* Localizable.xcstrings */; };
@@ -599,6 +609,7 @@
 		BB00000000000000000060 /* TranscriptionRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionRecord.swift; sourceTree = "<group>"; };
 		BB00000000000000000061 /* HistoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryService.swift; sourceTree = "<group>"; };
 		BB00000000000000000062 /* TextDiffService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextDiffService.swift; sourceTree = "<group>"; };
+		BB7080000000000000000001 /* TargetAppCorrectionLearningService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TargetAppCorrectionLearningService.swift; sourceTree = "<group>"; };
 		BB00000000000000000063 /* HistoryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000064 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
 		BB00000000000000000065 /* Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Profile.swift; sourceTree = "<group>"; };
@@ -613,6 +624,7 @@
 		BB00000000000000000077 /* DictionaryEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryEntry.swift; sourceTree = "<group>"; };
 		BB00000000000000000078 /* TermPack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TermPack.swift; sourceTree = "<group>"; };
 		BB00000000000000000079 /* DictionaryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryService.swift; sourceTree = "<group>"; };
+		BB7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TargetAppCorrectionLearningServiceTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000080 /* Snippet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Snippet.swift; sourceTree = "<group>"; };
 		BB00000000000000000081 /* SnippetService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnippetService.swift; sourceTree = "<group>"; };
 		C1F000000000000000000002 /* UserDataSyncIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDataSyncIdentity.swift; sourceTree = "<group>"; };
@@ -804,6 +816,14 @@
 		BB00000000000000000232 /* OpenAIVectorMemoryPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIVectorMemoryPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000233 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000234 /* OpenAIVectorMemoryPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OpenAIVectorMemoryPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		4D45504C4143450000000001 /* MemPalaceConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemPalaceConfig.swift; sourceTree = "<group>"; };
+		4D45504C4143450000000002 /* MemPalaceMCPClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemPalaceMCPClient.swift; sourceTree = "<group>"; };
+		4D45504C4143450000000003 /* MemPalacePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemPalacePlugin.swift; sourceTree = "<group>"; };
+		4D45504C4143450000000004 /* MemPalaceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemPalaceSettingsView.swift; sourceTree = "<group>"; };
+		4D45504C4143450000000005 /* OfflineQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineQueue.swift; sourceTree = "<group>"; };
+		4D45504C4143450000000006 /* SidecarStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidecarStore.swift; sourceTree = "<group>"; };
+		4D45504C4143450000000007 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		4D45504C4143450000000008 /* MemPalacePlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MemPalacePlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000251 /* FireworksPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FireworksPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000252 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000253 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
@@ -1216,6 +1236,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		4D45504C4143450000000013 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4D45504C4143450000000011 /* TypeWhisperPluginSDK in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FF00000000000000000124 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -1370,6 +1398,7 @@
 				C10000000000000000000001 /* SystemTTSPlugin */,
 				D20200000000000000000001 /* SupertonicPlugin */,
 				CC00000000000000000036 /* OpenAIVectorMemoryPlugin */,
+				4D45504C4143450000000009 /* MemPalacePlugin */,
 				CC00000000000000000037 /* FireworksPlugin */,
 				CC00000000000000000038 /* CerebrasPlugin */,
 				CC00000000000000000039 /* ClaudePlugin */,
@@ -1460,6 +1489,7 @@
 				BB00000000000000000061 /* HistoryService.swift */,
 				B91F00000000000000000002 /* RecentTranscriptionStore.swift */,
 				BB00000000000000000062 /* TextDiffService.swift */,
+				BB7080000000000000000001 /* TargetAppCorrectionLearningService.swift */,
 				BB00000000000000000066 /* ProfileService.swift */,
 				BB00000000000000000357 /* WorkflowService.swift */,
 				BB00000000000000000360 /* WorkflowTextProcessingService.swift */,
@@ -2014,6 +2044,21 @@
 			path = TypeWhisperPluginSDK/Plugins/OpenAIVectorMemoryPlugin;
 			sourceTree = "<group>";
 		};
+		4D45504C4143450000000009 /* MemPalacePlugin */ = {
+			isa = PBXGroup;
+			children = (
+				4D45504C4143450000000001 /* MemPalaceConfig.swift */,
+				4D45504C4143450000000002 /* MemPalaceMCPClient.swift */,
+				4D45504C4143450000000003 /* MemPalacePlugin.swift */,
+				4D45504C4143450000000004 /* MemPalaceSettingsView.swift */,
+				4D45504C4143450000000005 /* OfflineQueue.swift */,
+				4D45504C4143450000000006 /* SidecarStore.swift */,
+				4D45504C4143450000000007 /* manifest.json */,
+			);
+			name = MemPalacePlugin;
+			path = TypeWhisperPluginSDK/Plugins/MemPalacePlugin;
+			sourceTree = "<group>";
+		};
 		CC00000000000000000037 /* FireworksPlugin */ = {
 			isa = PBXGroup;
 			children = (
@@ -2180,6 +2225,7 @@
 				B10000000000000000000003 /* SystemTTSPlugin.bundle */,
 				D20100000000000000000006 /* SupertonicPlugin.bundle */,
 				BB00000000000000000234 /* OpenAIVectorMemoryPlugin.bundle */,
+				4D45504C4143450000000008 /* MemPalacePlugin.bundle */,
 				BB00000000000000000254 /* FireworksPlugin.bundle */,
 				BB00000000000000000257 /* CerebrasPlugin.bundle */,
 				BB00000000000000000262 /* ClaudePlugin.bundle */,
@@ -2224,6 +2270,7 @@
 					5A6500000000000000000001 /* ModelManagerLiveSessionModelOverrideTests.swift */,
 					AA8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift */,
 				D63A42880A0BA4C84F36E873 /* DictionaryServiceTests.swift */,
+				BB7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift */,
 				A8D4F2B6E1C3097B5F8A4E62 /* DictionaryExporterTests.swift */,
 				8E39448D561C47B16EEF4C6B /* HTTPRequestParserTests.swift */,
 				3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */,
@@ -2937,6 +2984,26 @@
 			productReference = BB00000000000000000234 /* OpenAIVectorMemoryPlugin.bundle */;
 			productType = "com.apple.product-type.bundle";
 		};
+		4D45504C4143450000000015 /* MemPalacePlugin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4D45504C4143450000000018 /* Build configuration list for PBXNativeTarget "MemPalacePlugin" */;
+			buildPhases = (
+				4D45504C4143450000000012 /* Sources */,
+				4D45504C4143450000000013 /* Frameworks */,
+				4D45504C4143450000000014 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MemPalacePlugin;
+			packageProductDependencies = (
+				4D45504C4143450000000019 /* TypeWhisperPluginSDK */,
+			);
+			productName = MemPalacePlugin;
+			productReference = 4D45504C4143450000000008 /* MemPalacePlugin.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
 		DD00000000000000000025 /* FireworksPlugin */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = FF00000000000000000126 /* Build configuration list for PBXNativeTarget "FireworksPlugin" */;
@@ -3260,6 +3327,7 @@
 				D10000000000000000000001 /* SystemTTSPlugin */,
 				D20300000000000000000001 /* SupertonicPlugin */,
 				DD00000000000000000024 /* OpenAIVectorMemoryPlugin */,
+				4D45504C4143450000000015 /* MemPalacePlugin */,
 				DD00000000000000000025 /* FireworksPlugin */,
 				DD00000000000000000026 /* CerebrasPlugin */,
 				DD00000000000000000027 /* ClaudePlugin */,
@@ -3568,6 +3636,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		4D45504C4143450000000014 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4D45504C4143450000000010 /* manifest.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FF00000000000000000125 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -3706,6 +3782,7 @@
 					5A6500000000000000000002 /* ModelManagerLiveSessionModelOverrideTests.swift in Sources */,
 					BB8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift in Sources */,
 				B4CC04DF94001FF7220789BC /* DictionaryServiceTests.swift in Sources */,
+				AA7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift in Sources */,
 				C7A3E9F1D5B2084A6E9C3D71 /* DictionaryExporterTests.swift in Sources */,
 				F635B3F08018D57E0CB709BF /* HTTPRequestParserTests.swift in Sources */,
 				6A9D1EE0C163693B1A798779 /* HistoryServiceTests.swift in Sources */,
@@ -3823,6 +3900,7 @@
 				AA00000000000000000332 /* DictationRuntimeContext.swift in Sources */,
 				AA00000000000000000061 /* HistoryService.swift in Sources */,
 				AA00000000000000000062 /* TextDiffService.swift in Sources */,
+				AA7080000000000000000001 /* TargetAppCorrectionLearningService.swift in Sources */,
 				AA00000000000000000063 /* HistoryViewModel.swift in Sources */,
 				AA00000000000000000064 /* HistoryView.swift in Sources */,
 				AA00000000000000000065 /* Profile.swift in Sources */,
@@ -4172,6 +4250,19 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000244 /* OpenAIVectorMemoryPlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4D45504C4143450000000012 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4D45504C414345000000000A /* MemPalaceConfig.swift in Sources */,
+				4D45504C414345000000000B /* MemPalaceMCPClient.swift in Sources */,
+				4D45504C414345000000000C /* MemPalacePlugin.swift in Sources */,
+				4D45504C414345000000000D /* MemPalaceSettingsView.swift in Sources */,
+				4D45504C414345000000000E /* OfflineQueue.swift in Sources */,
+				4D45504C414345000000000F /* SidecarStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -6076,6 +6167,54 @@
 			};
 			name = Release;
 		};
+		4D45504C4143450000000016 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = MemPalace;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = MemPalacePlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mempalace.memory;
+				PRODUCT_NAME = MemPalacePlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
+		4D45504C4143450000000017 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = MemPalace;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = MemPalacePlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mempalace.memory;
+				PRODUCT_NAME = MemPalacePlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
 		XX00000000000000000101 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -6922,6 +7061,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		4D45504C4143450000000018 /* Build configuration list for PBXNativeTarget "MemPalacePlugin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4D45504C4143450000000016 /* Debug */,
+				4D45504C4143450000000017 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		FF00000000000000000126 /* Build configuration list for PBXNativeTarget "FireworksPlugin" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -7252,6 +7400,10 @@
 			productName = TypeWhisperPluginSDK;
 		};
 		PP00000000000000000033 /* TypeWhisperPluginSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TypeWhisperPluginSDK;
+		};
+		4D45504C4143450000000019 /* TypeWhisperPluginSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TypeWhisperPluginSDK;
 		};

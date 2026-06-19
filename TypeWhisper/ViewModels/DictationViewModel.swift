@@ -164,6 +164,7 @@ final class DictationViewModel: ObservableObject {
     @Published var actionFeedbackMessage: String?
     @Published var actionFeedbackIcon: String?
     @Published var actionFeedbackIsError: Bool = false
+    @Published var actionFeedbackUndoTitle: String?
     @Published var activeAppIcon: NSImage?
     private var actionDisplayDuration: TimeInterval = 3.5
 
@@ -203,6 +204,8 @@ final class DictationViewModel: ObservableObject {
     private let translationService: AnyObject? // TranslationService (macOS 15+)
     private let audioDuckingService: AudioDuckingService
     private let dictionaryService: DictionaryService
+    private let licenseService: LicenseService?
+    private let targetAppCorrectionLearningService: TargetAppCorrectionLearningService
     private let snippetService: SnippetService
     private let soundService: SoundService
     private let audioDeviceService: AudioDeviceService
@@ -228,6 +231,8 @@ final class DictationViewModel: ObservableObject {
     private let recentTranscriptionPaletteHandler: RecentTranscriptionPaletteHandler
     private let settingsHandler: DictationSettingsHandler
     private var transcriptionTask: Task<Void, Never>?
+    private var targetAppCorrectionLearningTask: Task<Void, Never>?
+    private var pendingLearnedCorrections: [LearnedDictionaryCorrection] = []
     private var errorResetTask: Task<Void, Never>?
     private var insertingResetTask: Task<Void, Never>?
     @Published private var cancelWarningTarget: CancelWarningTarget?
@@ -285,6 +290,8 @@ final class DictationViewModel: ObservableObject {
         translationService: AnyObject?,
         audioDuckingService: AudioDuckingService,
         dictionaryService: DictionaryService,
+        licenseService: LicenseService? = nil,
+        targetAppCorrectionLearningService: TargetAppCorrectionLearningService? = nil,
         snippetService: SnippetService,
         soundService: SoundService,
         audioDeviceService: AudioDeviceService,
@@ -311,6 +318,13 @@ final class DictationViewModel: ObservableObject {
         self.translationService = translationService
         self.audioDuckingService = audioDuckingService
         self.dictionaryService = dictionaryService
+        self.licenseService = licenseService
+        self.targetAppCorrectionLearningService = targetAppCorrectionLearningService
+            ?? TargetAppCorrectionLearningService(
+                textInsertionService: textInsertionService,
+                textDiffService: TextDiffService(),
+                dictionaryService: dictionaryService
+            )
         self.snippetService = snippetService
         self.soundService = soundService
         self.audioDeviceService = audioDeviceService
@@ -889,6 +903,8 @@ final class DictationViewModel: ObservableObject {
         }
         transcriptionTask?.cancel()
         transcriptionTask = nil
+        cancelTargetAppCorrectionLearning()
+        clearPendingUndoActionFeedback()
         insertingResetTask?.cancel()
         insertingResetTask = nil
         clearCancelWarning()
@@ -1127,6 +1143,11 @@ final class DictationViewModel: ObservableObject {
             )
         }
         return resolvedFormat
+    }
+
+    private var shouldTrackTargetAppCorrectionLearning: Bool {
+        (licenseService?.hasCommercialLicense ?? false) &&
+            UserDefaults.standard.bool(forKey: UserDefaultsKeys.targetAppCorrectionLearningEnabled)
     }
 
     private var effectiveNumberNormalizationOverride: Bool? {
@@ -1379,6 +1400,9 @@ final class DictationViewModel: ObservableObject {
                         insertionContext: insertionContext,
                         contextualInsertionEnabled: contextualInsertionEnabled
                     )
+                    let learningPreInsertionObservation = shouldTrackTargetAppCorrectionLearning && resolvedOutputFormat == nil
+                        ? textInsertionService.captureFocusedTextObservation()
+                        : nil
                     let insertionResult = try await textInsertionService.insertText(
                         insertionText,
                         preserveClipboard: preserveClipboard,
@@ -1390,6 +1414,13 @@ final class DictationViewModel: ObservableObject {
                             "Text insertion paste could not be verified; continuing with clipboard paste fallback. reason=\(reason.rawValue, privacy: .public), app=\(activeApp.bundleId ?? "nil", privacy: .public)"
                         )
                     }
+                    let learningBaselineObservation = learningPreInsertionObservation.flatMap {
+                        textInsertionService.recaptureFocusedTextObservation(matching: $0)
+                    }
+                    startTargetAppCorrectionLearningIfNeeded(
+                        insertedText: insertionText,
+                        baseline: learningBaselineObservation
+                    )
                     EventBus.shared.emit(.textInserted(TextInsertedPayload(
                         text: insertionText,
                         appName: activeApp.name,
@@ -1533,6 +1564,7 @@ final class DictationViewModel: ObservableObject {
         actionFeedbackMessage = nil
         actionFeedbackIcon = nil
         actionFeedbackIsError = false
+        clearPendingUndoActionFeedback()
         actionDisplayDuration = 3.5
     }
 
@@ -1883,10 +1915,94 @@ final class DictationViewModel: ObservableObject {
         recentTranscriptionPaletteHandler.triggerSelection(currentState: state)
     }
 
-    private func showNotchFeedback(message: String, icon: String, duration: TimeInterval = 2.5, isError: Bool = false, errorCategory: String = "general") {
+    private func startTargetAppCorrectionLearningIfNeeded(
+        insertedText: String,
+        baseline: TextInsertionService.FocusedTextObservation?
+    ) {
+        targetAppCorrectionLearningTask?.cancel()
+        targetAppCorrectionLearningTask = nil
+
+        guard shouldTrackTargetAppCorrectionLearning,
+              let baseline else {
+            return
+        }
+
+        targetAppCorrectionLearningTask = Task { @MainActor [weak self, baseline, insertedText] in
+            guard let self else { return }
+            let learned = await self.targetAppCorrectionLearningService.trackInsertion(
+                insertedText: insertedText,
+                baseline: baseline
+            )
+            guard !Task.isCancelled else { return }
+            self.targetAppCorrectionLearningTask = nil
+            guard !learned.isEmpty else { return }
+            self.showLearnedCorrectionsFeedback(learned)
+        }
+    }
+
+    private func cancelTargetAppCorrectionLearning() {
+        targetAppCorrectionLearningTask?.cancel()
+        targetAppCorrectionLearningTask = nil
+    }
+
+    private func clearPendingUndoActionFeedback() {
+        actionFeedbackUndoTitle = nil
+        pendingLearnedCorrections = []
+    }
+
+    private func showLearnedCorrectionsFeedback(_ learned: [LearnedDictionaryCorrection]) {
+        guard !learned.isEmpty else { return }
+
+        pendingLearnedCorrections = learned
+        let message: String
+        if learned.count == 1, let correction = learned.first {
+            message = String.localizedStringWithFormat(
+                String(localized: "Learned “%@” -> “%@”"),
+                correction.original,
+                correction.replacement
+            )
+        } else {
+            message = String.localizedStringWithFormat(
+                String(localized: "Learned %d corrections"),
+                learned.count
+            )
+        }
+
+        showNotchFeedback(
+            message: message,
+            icon: "wand.and.sparkles",
+            duration: 8.0,
+            undoTitle: String(localized: "Undo")
+        )
+    }
+
+    func undoActionFeedback() {
+        guard !pendingLearnedCorrections.isEmpty else { return }
+        dictionaryService.undoLearnedCorrections(pendingLearnedCorrections)
+        pendingLearnedCorrections = []
+        showNotchFeedback(
+            message: String(localized: "Correction learning undone"),
+            icon: "arrow.uturn.backward.circle.fill",
+            duration: 2.5
+        )
+    }
+
+    private func showNotchFeedback(
+        message: String,
+        icon: String,
+        duration: TimeInterval = 2.5,
+        isError: Bool = false,
+        errorCategory: String = "general",
+        undoTitle: String? = nil
+    ) {
         actionFeedbackMessage = message
         actionFeedbackIcon = icon
         actionFeedbackIsError = isError
+        if undoTitle == nil {
+            clearPendingUndoActionFeedback()
+        } else {
+            actionFeedbackUndoTitle = undoTitle
+        }
         actionDisplayDuration = duration
         state = .inserting
 

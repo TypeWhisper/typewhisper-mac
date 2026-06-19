@@ -65,6 +65,7 @@ struct IndicatorPresentationData {
     let actionFeedbackMessage: String?
     let actionFeedbackIcon: String?
     let actionFeedbackIsError: Bool
+    let actionFeedbackUndoTitle: String?
     let externalStreamingDisplayCount: Int
 
     var isRecorder: Bool {
@@ -97,6 +98,7 @@ struct IndicatorPresentationData {
                 actionFeedbackMessage: dictation.actionFeedbackMessage,
                 actionFeedbackIcon: dictation.actionFeedbackIcon,
                 actionFeedbackIsError: dictation.actionFeedbackIsError,
+                actionFeedbackUndoTitle: dictation.actionFeedbackUndoTitle,
                 externalStreamingDisplayCount: dictation.externalStreamingDisplayCount
             )
         case .recorder:
@@ -114,6 +116,7 @@ struct IndicatorPresentationData {
                 actionFeedbackMessage: nil,
                 actionFeedbackIcon: nil,
                 actionFeedbackIsError: false,
+                actionFeedbackUndoTitle: nil,
                 externalStreamingDisplayCount: dictation.externalStreamingDisplayCount
             )
         }

@@ -8,10 +8,14 @@
     "author": "TypeWhisper",
     "description": "Cloud transcription and LLM via Fireworks AI. Streaming transcription, fast inference, requires API key.",
     "descriptions": {
-        "de": "Cloud-Transkription und LLM über Fireworks AI. Streaming-Transkription, schnelle Inferenz, erfordert API-Key."
+        "de": "Cloud-Transkription und LLM über Fireworks AI. Streaming-Transkription, schnelle Inferenz, erfordert API-Key.",
+        "ja": "Fireworks AIによるクラウド文字起こしとLLMです。ストリーミング文字起こしと高速推論に対応し、APIキーが必要です。"
     },
     "category": "transcription",
-    "categories": ["transcription", "llm"],
+    "categories": [
+        "transcription",
+        "llm"
+    ],
     "iconSystemName": "flame.fill",
     "principalClass": "FireworksPlugin",
     "requiresAPIKey": true,

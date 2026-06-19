@@ -8,10 +8,15 @@
     "author": "TypeWhisper",
     "description": "Cloud transcription, OpenAI/ChatGPT prompts, and text-to-speech. Use an API key for STT/TTS or ChatGPT login for prompts.",
     "descriptions": {
-        "de": "Cloud-Transkription, OpenAI-/ChatGPT-Prompts und Text-to-Speech. STT/TTS brauchen einen API-Key, Prompts funktionieren auch per ChatGPT-Login."
+        "de": "Cloud-Transkription, OpenAI-/ChatGPT-Prompts und Text-to-Speech. STT/TTS brauchen einen API-Key, Prompts funktionieren auch per ChatGPT-Login.",
+        "ja": "クラウド文字起こし、OpenAI/ChatGPTプロンプト、音声合成に対応します。音声認識/音声合成にはAPIキー、プロンプトにはChatGPTログインを使用できます。"
     },
     "category": "transcription",
-    "categories": ["transcription", "llm", "tts"],
+    "categories": [
+        "transcription",
+        "llm",
+        "tts"
+    ],
     "hosting": "cloud",
     "iconSystemName": "brain",
     "iconURL": "https://www.typewhisper.com/brand-logos/openai/logo-light.svg",

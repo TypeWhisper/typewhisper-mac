@@ -8,7 +8,8 @@
     "author": "TypeWhisper",
     "description": "Cloud transcription via Gladia Solaria API with real-time WebSocket streaming.",
     "descriptions": {
-        "de": "Cloud-Transkription über die Gladia-Solaria-API mit Echtzeit-WebSocket-Streaming."
+        "de": "Cloud-Transkription über die Gladia-Solaria-API mit Echtzeit-WebSocket-Streaming.",
+        "ja": "Gladia Solaria APIによるクラウド文字起こしです。リアルタイムWebSocketストリーミングに対応します。"
     },
     "category": "transcription",
     "iconSystemName": "waveform.badge.mic",

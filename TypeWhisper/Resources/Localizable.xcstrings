@@ -5601,7 +5601,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "連携"
+            "value": "統合"
           }
         }
       }
@@ -7397,12 +7397,6 @@
             "state": "translated",
             "value": "Aus"
           }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "オフ"
-          }
         }
       }
     },
@@ -7457,18 +7451,11 @@
       }
     },
     "On": {
-      "extractionState": "stale",
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "An"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "オン"
+            "value": "Ein"
           }
         }
       }
@@ -9062,12 +9049,6 @@
             "state": "translated",
             "value": "Bereit"
           }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "準備完了"
-          }
         }
       }
     },
@@ -9362,7 +9343,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "レコーダーのファイルに文字起こしを保存します。以下の設定は通常のDictationではなくSystem Audio Recorderのみに適用されます。"
+            "value": "レコーダーのファイルに文字起こしを保存します。以下の設定は通常のディクテーションではなく、システムオーディオレコーダーのみに適用されます。"
           }
         }
       }
@@ -9495,7 +9476,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ライブテキストウィンドウを使用するには、Integrationsからライブテキストプラグインをインストールしてください。"
+            "value": "ライブテキストウィンドウを使用するには、統合からライブテキストプラグインをインストールしてください。"
           }
         }
       }
@@ -9682,19 +9663,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Recorder starten"
+            "value": "Aufnahme starten"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Start Recorder"
+            "value": "Start Recording"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "レコーダーを開始"
+            "value": "録音を開始"
           }
         }
       }
@@ -9704,19 +9685,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Recorder stoppen"
+            "value": "Aufnahme stoppen"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Stop Recorder"
+            "value": "Stop Recording"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "レコーダーを停止"
+            "value": "録音を停止"
           }
         }
       }
@@ -9726,19 +9707,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Startet oder stoppt den System Audio Recorder mit deinen gespeicherten Mikrofon- und Systemaudio-Einstellungen."
+            "value": "Startet oder stoppt den Recorder mit deinen gespeicherten Mikrofon- und Systemaudio-Einstellungen."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Start or stop the System Audio Recorder with your saved microphone and system audio settings."
+            "value": "Start or stop the Recorder with your saved microphone and system audio settings."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "保存されたマイクおよびシステムオーディオ設定でSystem Audio Recorderを開始または停止します。"
+            "value": "保存されたマイクおよびシステムオーディオ設定を使用して、Recorderを開始または停止します。"
           }
         }
       }
@@ -9748,19 +9729,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "System-Audio-Recorder-Kurzbefehl"
+            "value": "Recorder-Shortcut"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "System Audio Recorder shortcut"
+            "value": "Recorder shortcut"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "System Audio Recorderのショートカット"
+            "value": "Recorderのショートカット"
           }
         }
       }
@@ -9902,19 +9883,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Recorder-Transkriptionseinstellungen"
+            "value": "Transkription"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Recorder transcription settings"
+            "value": "Transcription"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "レコーダーの文字起こし設定"
+            "value": "音声認識"
           }
         }
       }
@@ -14511,12 +14492,6 @@
             "state": "translated",
             "value": "Kein Ordner ausgewählt"
           }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "選択されたフォルダなし"
-          }
         }
       }
     },
@@ -14635,13 +14610,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Wird synchronisiert"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "同期中"
+            "value": "Synchronisiert"
           }
         }
       }
@@ -17284,10 +17253,10 @@
     },
     "Active": {
       "localizations": {
-        "ja": {
+        "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "アクティブ"
+            "value": "Aktiv"
           }
         }
       }
@@ -17907,7 +17876,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "「インテグレーション」でプロバイダーを設定してください。"
+            "value": "「統合」でプロバイダーを設定してください。"
           }
         }
       }
@@ -19787,7 +19756,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "インテグレーションで管理"
+            "value": "統合で管理"
           }
         }
       }
@@ -20137,7 +20106,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ワークフローエンジンの上書きを使用する前に、「インテグレーション」で文字起こしエンジンをインストールしてください。"
+            "value": "ワークフローエンジンの上書きを使用する前に、「統合」で文字起こしエンジンをインストールしてください。"
           }
         }
       }
@@ -20277,7 +20246,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ワークフローの上書きを使用する前に、「インテグレーション」でLLMプロバイダをインストールしてください。"
+            "value": "ワークフローの上書きを使用する前に、「統合」でLLMプロバイダをインストールしてください。"
           }
         }
       }
@@ -20317,7 +20286,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "このプロバイダの準備がまだ完了していません。このワークフローで使用するには、先に「インテグレーション」でセットアップを完了してください。"
+            "value": "このプロバイダの準備がまだ完了していません。このワークフローで使用するには、先に「統合」でセットアップを完了してください。"
           }
         }
       }
@@ -20824,7 +20793,7 @@
     },
     "Dropbox": {
       "localizations": {
-        "ja": {
+        "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Dropbox"
@@ -20974,7 +20943,7 @@
     },
     "OneDrive": {
       "localizations": {
-        "ja": {
+        "de": {
           "stringUnit": {
             "state": "translated",
             "value": "OneDrive"
@@ -21218,6 +21187,518 @@
           "stringUnit": {
             "state": "translated",
             "value": "利用不可"
+          }
+        }
+      }
+    },
+    "Spoken Punctuation": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "読み上げ句読点"
+          }
+        }
+      }
+    },
+    "Strategy": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "処理方法"
+          }
+        }
+      }
+    },
+    "Native": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ネイティブ"
+          }
+        }
+      }
+    },
+    "Fallback": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォールバック"
+          }
+        }
+      }
+    },
+    "Use the engine output unchanged.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "エンジンの出力を変更せずに使用します。"
+          }
+        }
+      }
+    },
+    "Prefer native punctuation and only fix visible spoken commands.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "エンジン側の句読点処理を優先し、明らかに残った読み上げコマンドだけを修正します。"
+          }
+        }
+      }
+    },
+    "Always apply spoken punctuation fallback rules.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "読み上げ句読点のフォールバック規則を常に適用します。"
+          }
+        }
+      }
+    },
+    "Unverified": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未確認"
+          }
+        }
+      }
+    },
+    "Suggested default": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "推奨デフォルト"
+          }
+        }
+      }
+    },
+    "Verified: native works": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "確認済み: ネイティブで動作"
+          }
+        }
+      }
+    },
+    "Verified: fallback needed": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "確認済み: フォールバックが必要"
+          }
+        }
+      }
+    },
+    "Test Spoken Punctuation…": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "読み上げ句読点をテスト…"
+          }
+        }
+      }
+    },
+    "Test Spoken Punctuation": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "読み上げ句読点のテスト"
+          }
+        }
+      }
+    },
+    "Set a spoken language to configure punctuation behavior.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "句読点の動作を設定するには、話す言語を設定してください。"
+          }
+        }
+      }
+    },
+    "Select a transcription engine to configure punctuation behavior.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "句読点の動作を設定するには、文字起こしエンジンを選択してください。"
+          }
+        }
+      }
+    },
+    "No punctuation profile is available for the current selection.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在の選択に利用できる句読点プロファイルはありません。"
+          }
+        }
+      }
+    },
+    "Use these phrases with %@ in any text field. If the native output already matches the expected result, keep Native. Otherwise use Fallback for this combination.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "任意のテキスト入力欄で %@ を使って、以下のフレーズを試してください。ネイティブ出力が期待結果と一致する場合は「ネイティブ」のままにします。一致しない場合は、この組み合わせで「フォールバック」を使用します。"
+          }
+        }
+      }
+    },
+    "No guided phrases are available for this language yet.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この言語で使えるガイド付きフレーズはまだありません。"
+          }
+        }
+      }
+    },
+    "Expected: %@": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "期待結果: %@"
+          }
+        }
+      }
+    },
+    "Keep Automatic": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動のまま"
+          }
+        }
+      }
+    },
+    "Use Fallback": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォールバックを使用"
+          }
+        }
+      }
+    },
+    "Native Works": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ネイティブで動作"
+          }
+        }
+      }
+    },
+    "recorder.liveTranscription": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live-Transkription"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live Transcription"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ライブ音声認識"
+          }
+        }
+      }
+    },
+    "Buy or Enter License Key": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kaufen oder Lizenzschlüssel eingeben"
+          }
+        }
+      }
+    },
+    "Automatic Correction Learning": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisches Korrektur-Lernen"
+          }
+        }
+      }
+    },
+    "Correction learning undone": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Korrektur-Lernen rückgängig gemacht"
+          }
+        }
+      }
+    },
+    "Learn corrections from edits after insertion": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Korrekturen aus Bearbeitungen nach dem Einfügen lernen"
+          }
+        }
+      }
+    },
+    "Learned %d corrections": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d Korrekturen gelernt"
+          }
+        }
+      }
+    },
+    "Learned “%@” -> “%@”": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„%@“ -> „%@“ gelernt"
+          }
+        }
+      }
+    },
+    "TypeWhisper can watch the target text field briefly after direct dictation insertion and learn only confident corrections. Ambiguous edits are skipped.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TypeWhisper kann das Ziel-Textfeld kurz nach direktem Diktat-Einfügen beobachten und nur sichere Korrekturen lernen. Uneindeutige Bearbeitungen werden übersprungen."
+          }
+        }
+      }
+    },
+    "Undo": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rückgängig"
+          }
+        }
+      }
+    },
+    "TypeWhisper learns confident corrections after direct insertion, without asking for every edit.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TypeWhisper lernt sichere Korrekturen nach direktem Einfügen, ohne bei jeder Bearbeitung nachzufragen."
+          }
+        }
+      }
+    },
+    "Sync dictionaries and snippets through your own iCloud Drive, Dropbox, OneDrive, Syncthing, or custom folder.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Synchronisiere Wörterbücher und Snippets über dein eigenes iCloud Drive, Dropbox, OneDrive, Syncthing oder einen eigenen Ordner."
+          }
+        }
+      }
+    },
+    "TypeWhisper gets better with every workflow": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TypeWhisper wird mit jedem Workflow besser"
+          }
+        }
+      }
+    },
+    "Teach TypeWhisper your corrections and keep dictionaries and snippets in sync across Macs.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bringe TypeWhisper deine Korrekturen bei und halte Wörterbücher und Snippets auf deinen Macs synchron."
+          }
+        }
+      }
+    },
+    "Keep dictionaries and snippets available wherever your cloud folder syncs.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Halte Wörterbücher und Snippets überall verfügbar, wo dein Cloud-Ordner synchronisiert."
+          }
+        }
+      }
+    },
+    "Syncthing": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Syncthing"
+          }
+        }
+      }
+    },
+    "Custom folder": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eigener Ordner"
+          }
+        }
+      }
+    },
+    "Correction examples": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Korrekturbeispiele"
+          }
+        }
+      }
+    },
+    "Works with": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Funktioniert mit"
+          }
+        }
+      }
+    },
+    "A Commercial license unlocks both premium features.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eine kommerzielle Lizenz schaltet beide Premium-Funktionen frei."
+          }
+        }
+      }
+    },
+    "Premium Control Center": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Premium-Kontrollzentrum"
+          }
+        }
+      }
+    },
+    "Commercial license active. Manage correction learning and sync from one place.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kommerzielle Lizenz aktiv. Verwalte Korrekturlernen und Sync an einem Ort."
+          }
+        }
+      }
+    },
+    "Learning": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lernen"
+          }
+        }
+      }
+    },
+    "Learns after direct insertion": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lernt nach direktem Einfügen"
+          }
+        }
+      }
+    },
+    "Sync": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync"
+          }
+        }
+      }
+    },
+    "Corrections are learned only when edits are confident. Ambiguous changes are skipped.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Korrekturen werden nur gelernt, wenn Bearbeitungen eindeutig sind. Mehrdeutige Änderungen werden übersprungen."
+          }
+        }
+      }
+    },
+    "Not set up": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht eingerichtet"
+          }
+        }
+      }
+    },
+    "%d pending": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d ausstehend"
+          }
+        }
+      }
+    },
+    "Folder selected": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordner ausgewählt"
           }
         }
       }

@@ -10,7 +10,7 @@ struct MinimalIndicatorView: View {
     private let idleWidth: CGFloat = 42
     private let processingWidth: CGFloat = 76
     private let insertingWidth: CGFloat = 44
-    private let messageWidth: CGFloat = 320
+    private let messageWidth: CGFloat = 360
 
     private var presentation: IndicatorPresentationData {
         IndicatorPresentationData.make(dictation: viewModel, recorder: recorder)
@@ -101,7 +101,7 @@ struct MinimalIndicatorView: View {
                     dotPulse = false
                 }
             }
-            .accessibilityElement(children: .combine)
+            .accessibilityElement(children: presentation.actionFeedbackUndoTitle == nil ? .combine : .contain)
             .accessibilityLabel(accessibilityLabel)
         }
 
@@ -149,7 +149,11 @@ struct MinimalIndicatorView: View {
                 compactMessage(
                     text: message,
                     icon: presentation.actionFeedbackIcon ?? (presentation.actionFeedbackIsError ? "xmark.circle.fill" : "checkmark.circle.fill"),
-                    iconColor: presentation.actionFeedbackIsError ? .red : .green
+                    iconColor: presentation.actionFeedbackIsError ? .red : .green,
+                    actionTitle: presentation.actionFeedbackUndoTitle,
+                    onAction: presentation.actionFeedbackUndoTitle == nil ? nil : {
+                        viewModel.undoActionFeedback()
+                    }
                 )
             } else {
                 compactStatus
@@ -210,7 +214,13 @@ struct MinimalIndicatorView: View {
         }
     }
 
-    private func compactMessage(text: String, icon: String, iconColor: Color) -> some View {
+    private func compactMessage(
+        text: String,
+        icon: String,
+        iconColor: Color,
+        actionTitle: String? = nil,
+        onAction: (() -> Void)? = nil
+    ) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
                 .font(.system(size: 14))
@@ -222,6 +232,17 @@ struct MinimalIndicatorView: View {
                 .foregroundStyle(.white.opacity(0.92))
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let actionTitle, let onAction {
+                Button(actionTitle, action: onAction)
+                    .buttonStyle(.borderless)
+                    .controlSize(.small)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.white.opacity(0.12), in: Capsule())
+            }
         }
     }
 }

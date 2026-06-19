@@ -10,22 +10,22 @@ enum PunctuationStrategy: String, Codable, CaseIterable, Identifiable {
     var displayName: String {
         switch self {
         case .nativeOnly:
-            return "Native"
+            return String(localized: "Native")
         case .automatic:
-            return "Automatic"
+            return String(localized: "Automatic")
         case .fallbackOnly:
-            return "Fallback"
+            return String(localized: "Fallback")
         }
     }
 
     var description: String {
         switch self {
         case .nativeOnly:
-            return "Use the engine output unchanged."
+            return String(localized: "Use the engine output unchanged.")
         case .automatic:
-            return "Prefer native punctuation and only fix visible spoken commands."
+            return String(localized: "Prefer native punctuation and only fix visible spoken commands.")
         case .fallbackOnly:
-            return "Always apply spoken punctuation fallback rules."
+            return String(localized: "Always apply spoken punctuation fallback rules.")
         }
     }
 }
@@ -39,13 +39,13 @@ enum PunctuationVerificationState: String, Codable {
     var statusText: String {
         switch self {
         case .unknown:
-            return "Unverified"
+            return String(localized: "Unverified")
         case .vendorHint:
-            return "Suggested default"
+            return String(localized: "Suggested default")
         case .userVerifiedGood:
-            return "Verified: native works"
+            return String(localized: "Verified: native works")
         case .userVerifiedBad:
-            return "Verified: fallback needed"
+            return String(localized: "Verified: fallback needed")
         }
     }
 }

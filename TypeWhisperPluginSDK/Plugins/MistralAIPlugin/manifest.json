@@ -8,7 +8,8 @@
     "author": "MinerAle",
     "description": "LLM provider and cloud speech transcription via Mistral AI API. Requires API key.",
     "descriptions": {
-        "de": "LLM-Anbieter und Cloud-Spracherkennung über die Mistral AI API. Erfordert API-Key."
+        "de": "LLM-Anbieter und Cloud-Spracherkennung über die Mistral AI API. Erfordert API-Key.",
+        "ja": "Mistral AI APIによるLLMプロバイダーとクラウド音声文字起こしです。APIキーが必要です。"
     },
     "category": "transcription",
     "categories": [

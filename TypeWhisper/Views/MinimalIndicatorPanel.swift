@@ -2,6 +2,10 @@ import AppKit
 import SwiftUI
 import Combine
 
+private class MinimalFirstMouseHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
 /// Floating panel for the compact minimal indicator mode.
 class MinimalIndicatorPanel: NSPanel {
     private static let panelWidth: CGFloat = 420
@@ -33,7 +37,7 @@ class MinimalIndicatorPanel: NSPanel {
             displayMode: DictationViewModel.shared.notchIndicatorDisplay
         )
 
-        let hostingView = NSHostingView(rootView: MinimalIndicatorView())
+        let hostingView = MinimalFirstMouseHostingView(rootView: MinimalIndicatorView())
         hostingView.sizingOptions = []
         contentView = hostingView
     }
@@ -79,6 +83,13 @@ class MinimalIndicatorPanel: NSPanel {
             .sink { [weak self] _ in
                 guard let self, self.isVisible else { return }
                 self.show()
+            }
+            .store(in: &cancellables)
+
+        vm.$actionFeedbackUndoTitle
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] undoTitle in
+                self?.ignoresMouseEvents = undoTitle == nil
             }
             .store(in: &cancellables)
     }

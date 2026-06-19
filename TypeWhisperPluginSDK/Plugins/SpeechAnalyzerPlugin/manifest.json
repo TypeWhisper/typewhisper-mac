@@ -8,7 +8,8 @@
     "author": "TypeWhisper",
     "description": "On-device speech recognition using Apple's Speech framework. Requires macOS 26+, streaming support.",
     "descriptions": {
-        "de": "Gerätebasierte Spracherkennung mit Apples Speech-Framework. Erfordert macOS 26+, Streaming-Unterstützung."
+        "de": "Gerätebasierte Spracherkennung mit Apples Speech-Framework. Erfordert macOS 26+, Streaming-Unterstützung.",
+        "ja": "Apple Speechフレームワークを使うオンデバイス音声認識です。macOS 26以降が必要で、ストリーミングに対応します。"
     },
     "category": "transcription",
     "iconSystemName": "apple.logo",

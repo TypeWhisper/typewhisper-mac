@@ -531,7 +531,7 @@ enum QwenTranscriptGuard {
 
         let artifactPattern = #"(?i)[.!?;:]\s+oui[.!?]*$"#
         guard let artifactRange = trimmed.range(of: artifactPattern, options: .regularExpression) else {
-            return text
+            return removingBareTrailingOuiArtifact(from: trimmed) ?? text
         }
 
         let artifact = String(trimmed[artifactRange])
@@ -542,6 +542,22 @@ enum QwenTranscriptGuard {
         guard !prefix.isEmpty else { return text }
 
         return "\(prefix)\(punctuation)"
+    }
+
+    private static func removingBareTrailingOuiArtifact(from text: String) -> String? {
+        let artifactPattern = #"(?i)(?:,\s+|\s+)oui[.!?]*$"#
+        guard let artifactRange = text.range(of: artifactPattern, options: .regularExpression) else {
+            return nil
+        }
+
+        let prefix = text[..<artifactRange.lowerBound]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let prefixWords = words(in: String(prefix))
+        guard prefixWords.count >= 4, prefixWords.last != "que" else {
+            return nil
+        }
+
+        return String(prefix)
     }
 
     static func isLikelyLooped(_ text: String) -> Bool {

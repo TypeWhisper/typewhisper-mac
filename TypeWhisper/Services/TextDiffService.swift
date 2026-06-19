@@ -121,4 +121,69 @@ final class TextDiffService {
 
         return suggestions
     }
+
+    func extractHighConfidenceCorrections(
+        original: String,
+        edited: String,
+        maxSuggestions: Int = 3
+    ) -> [CorrectionSuggestion] {
+        let originalTokens = Self.wordTokens(in: original)
+        let editedTokens = Self.wordTokens(in: edited)
+
+        guard maxSuggestions > 0,
+              !originalTokens.isEmpty,
+              originalTokens.count == editedTokens.count else {
+            return []
+        }
+
+        var suggestions: [CorrectionSuggestion] = []
+        var seenOriginals = Set<String>()
+
+        for (originalToken, editedToken) in zip(originalTokens, editedTokens) where originalToken != editedToken {
+            let originalStripped = Self.strippedWordToken(originalToken)
+            let editedStripped = Self.strippedWordToken(editedToken)
+
+            guard !originalStripped.isEmpty, !editedStripped.isEmpty else {
+                return []
+            }
+
+            guard originalStripped.lowercased() != editedStripped.lowercased() else {
+                return []
+            }
+
+            guard !Self.isPunctuationOnly(originalToken),
+                  !Self.isPunctuationOnly(editedToken) else {
+                return []
+            }
+
+            let originalKey = originalStripped.lowercased()
+            guard !seenOriginals.contains(originalKey) else {
+                return []
+            }
+
+            seenOriginals.insert(originalKey)
+            suggestions.append(CorrectionSuggestion(
+                original: originalStripped,
+                replacement: editedStripped
+            ))
+
+            guard suggestions.count <= maxSuggestions else {
+                return []
+            }
+        }
+
+        return suggestions
+    }
+
+    private static func wordTokens(in text: String) -> [String] {
+        text.split(omittingEmptySubsequences: true, whereSeparator: \.isWhitespace).map(String.init)
+    }
+
+    private static func strippedWordToken(_ token: String) -> String {
+        token.trimmingCharacters(in: .punctuationCharacters)
+    }
+
+    private static func isPunctuationOnly(_ token: String) -> Bool {
+        !token.isEmpty && token.unicodeScalars.allSatisfy { CharacterSet.punctuationCharacters.contains($0) }
+    }
 }

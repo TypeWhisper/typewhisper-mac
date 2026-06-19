@@ -130,7 +130,7 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         )
     }
 
-    func testAudioInputBufferNormalizerDownmixesMultiChannelFloatBuffers() throws {
+    func testAudioInputBufferNormalizerSelectsStrongestNonInterleavedChannel() throws {
         let stereoFormat = try XCTUnwrap(AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: 96_000,
@@ -146,7 +146,7 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         stereoBuffer.floatChannelData?[0][1] = 0.5
         stereoBuffer.floatChannelData?[0][2] = -1
         stereoBuffer.floatChannelData?[1][0] = -1
-        stereoBuffer.floatChannelData?[1][1] = 0.5
+        stereoBuffer.floatChannelData?[1][1] = 2
         stereoBuffer.floatChannelData?[1][2] = 1
 
         let monoBuffer = try XCTUnwrap(AudioInputBufferNormalizer.monoFloatBuffer(from: stereoBuffer))
@@ -154,9 +154,39 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         XCTAssertEqual(monoBuffer.format.sampleRate, 96_000)
         XCTAssertEqual(monoBuffer.format.channelCount, 1)
         let monoChannel = try XCTUnwrap(monoBuffer.floatChannelData?[0])
-        XCTAssertEqual(monoChannel[0], 0, accuracy: Float(0.0001))
-        XCTAssertEqual(monoChannel[1], 0.5, accuracy: Float(0.0001))
-        XCTAssertEqual(monoChannel[2], 0, accuracy: Float(0.0001))
+        XCTAssertEqual(monoChannel[0], -1, accuracy: Float(0.0001))
+        XCTAssertEqual(monoChannel[1], 2, accuracy: Float(0.0001))
+        XCTAssertEqual(monoChannel[2], 1, accuracy: Float(0.0001))
+    }
+
+    func testAudioInputBufferNormalizerReadsInterleavedMultiChannelBuffers() throws {
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 44_100,
+            channels: 2,
+            interleaved: true
+        ))
+        let buffer = try XCTUnwrap(AVAudioPCMBuffer(
+            pcmFormat: format,
+            frameCapacity: 3
+        ))
+        buffer.frameLength = 3
+        let samples = try XCTUnwrap(buffer.floatChannelData?[0])
+        samples[0] = 0.01
+        samples[1] = 0.50
+        samples[2] = 0.01
+        samples[3] = -0.60
+        samples[4] = 0.01
+        samples[5] = 0.70
+
+        let monoBuffer = try XCTUnwrap(AudioInputBufferNormalizer.monoFloatBuffer(from: buffer))
+
+        XCTAssertEqual(monoBuffer.format.sampleRate, 44_100)
+        XCTAssertEqual(monoBuffer.format.channelCount, 1)
+        let monoChannel = try XCTUnwrap(monoBuffer.floatChannelData?[0])
+        XCTAssertEqual(monoChannel[0], 0.50, accuracy: Float(0.0001))
+        XCTAssertEqual(monoChannel[1], -0.60, accuracy: Float(0.0001))
+        XCTAssertEqual(monoChannel[2], 0.70, accuracy: Float(0.0001))
     }
 
     func testInputFormatStabilizerRejectsStaleDefaultFormatAfterBluetoothDeviceSwitch() {

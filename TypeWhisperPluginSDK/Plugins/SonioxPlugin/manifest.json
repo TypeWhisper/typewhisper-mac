@@ -8,10 +8,14 @@
     "author": "TypeWhisper",
     "description": "Cloud speech-to-text and text-to-speech via Soniox APIs with regional endpoint support. Requires API key.",
     "descriptions": {
-        "de": "Cloud Speech-to-Text und Text-to-Speech über Soniox APIs mit regionaler Endpunkt-Auswahl. Erfordert API-Key."
+        "de": "Cloud Speech-to-Text und Text-to-Speech über Soniox APIs mit regionaler Endpunkt-Auswahl. Erfordert API-Key.",
+        "ja": "Soniox APIによるクラウド音声認識と音声合成です。リージョン別エンドポイントに対応し、APIキーが必要です。"
     },
     "category": "transcription",
-    "categories": ["transcription", "tts"],
+    "categories": [
+        "transcription",
+        "tts"
+    ],
     "capabilities": [
         "source-footage-progress"
     ],

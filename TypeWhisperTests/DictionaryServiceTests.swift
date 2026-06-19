@@ -114,6 +114,41 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testBatchLearningSkipsDuplicatesAndUndoDeletesOnlyMatchingCreatedEntries() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "teh", replacement: "the")
+
+        let learned = service.learnCorrections([
+            CorrectionSuggestion(original: "teh", replacement: "the"),
+            CorrectionSuggestion(original: "langauge", replacement: "language"),
+            CorrectionSuggestion(original: "recieve", replacement: "receive"),
+            CorrectionSuggestion(original: "recieve", replacement: "receipt")
+        ])
+
+        XCTAssertEqual(learned.count, 2)
+        XCTAssertEqual(learned.map(\.original), ["langauge", "recieve"])
+        XCTAssertEqual(service.correctionsCount, 3)
+
+        let protectedEntry = try XCTUnwrap(service.corrections.first { $0.original == "langauge" })
+        service.updateEntry(
+            protectedEntry,
+            original: protectedEntry.original,
+            replacement: "languages",
+            caseSensitive: protectedEntry.caseSensitive
+        )
+
+        service.undoLearnedCorrections(learned)
+
+        XCTAssertEqual(service.correctionsCount, 2)
+        XCTAssertTrue(service.corrections.contains { $0.original == "teh" })
+        XCTAssertTrue(service.corrections.contains { $0.original == "langauge" && $0.replacement == "languages" })
+        XCTAssertFalse(service.corrections.contains { $0.original == "recieve" })
+    }
+
+    @MainActor
     func testEmptyCorrectionReplacementPersistsAndRemovesText() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -132,6 +167,106 @@ final class DictionaryServiceTests: XCTestCase {
         XCTAssertEqual(reloadedService.applyCorrections(to: "¿Como estas?"), "Como estas?")
         reloadedService.loadEntries()
         XCTAssertEqual(reloadedService.corrections.first?.usageCount, 2)
+    }
+
+    @MainActor
+    func testBatchLearningAllowsEmptyReplacementCorrections() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+
+        let learned = service.learnCorrections([
+            CorrectionSuggestion(original: "filler", replacement: "")
+        ])
+
+        XCTAssertEqual(learned.count, 1)
+        XCTAssertEqual(learned.first?.original, "filler")
+        XCTAssertEqual(learned.first?.replacement, "")
+        XCTAssertEqual(service.applyCorrections(to: "drop filler text"), "drop  text")
+    }
+
+    @MainActor
+    func testCorrectionsDoNotReplaceInsideLongerKatakanaWords() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "ライン", replacement: "LINE")
+        service.addEntry(type: .correction, original: "リフ", replacement: "LIFF")
+
+        XCTAssertEqual(service.applyCorrections(to: "具体的にはオンライン。"), "具体的にはオンライン。")
+        XCTAssertEqual(service.applyCorrections(to: "リファレンス。"), "リファレンス。")
+        XCTAssertEqual(service.applyCorrections(to: "ラインで送って。"), "LINEで送って。")
+    }
+
+    @MainActor
+    func testCorrectionsStillApplyForKnownJapaneseNameAndBrandTerms() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "恋ちゃん", replacement: "こいちゃん")
+        service.addEntry(type: .correction, original: "鯉フィット", replacement: "Koi-Fit")
+
+        XCTAssertEqual(service.applyCorrections(to: "恋ちゃんです。"), "こいちゃんです。")
+        XCTAssertEqual(service.applyCorrections(to: "今日は恋ちゃんです。"), "今日はこいちゃんです。")
+        XCTAssertEqual(service.applyCorrections(to: "鯉フィットの件です。"), "Koi-Fitの件です。")
+        XCTAssertEqual(service.applyCorrections(to: "今日は鯉フィットの件です。"), "今日はKoi-Fitの件です。")
+        XCTAssertEqual(service.applyCorrections(to: "鯉フィットネスではありません。"), "鯉フィットネスではありません。")
+    }
+
+    @MainActor
+    func testCorrectionsDoNotFoldJapaneseDakutenDifferences() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "ハン", replacement: "HAN")
+
+        XCTAssertEqual(service.applyCorrections(to: "ハンで始まる。"), "HANで始まる。")
+        XCTAssertEqual(service.applyCorrections(to: "バンで始まる。"), "バンで始まる。")
+    }
+
+    @MainActor
+    func testMixedJapaneseCorrectionsDoNotReplaceInsideCompoundWords() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "日本", replacement: "Japan")
+        service.addEntry(type: .correction, original: "東京", replacement: "Tokyo")
+
+        XCTAssertEqual(service.applyCorrections(to: "日本です。"), "Japanです。")
+        XCTAssertEqual(service.applyCorrections(to: "これは日本です。"), "これはJapanです。")
+        XCTAssertEqual(service.applyCorrections(to: "東京へ行く。"), "Tokyoへ行く。")
+        XCTAssertEqual(service.applyCorrections(to: "明日は東京へ行く。"), "明日はTokyoへ行く。")
+        XCTAssertEqual(service.applyCorrections(to: "日本から出発します。"), "Japanから出発します。")
+        XCTAssertEqual(service.applyCorrections(to: "日本まで送ってください。"), "Japanまで送ってください。")
+        XCTAssertEqual(service.applyCorrections(to: "日本語です。"), "日本語です。")
+        XCTAssertEqual(service.applyCorrections(to: "東京都です。"), "東京都です。")
+    }
+
+    @MainActor
+    func testShortJapaneseCorrectionsDoNotReplaceInsideWordsContainingParticles() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "だ", replacement: "です")
+
+        XCTAssertEqual(service.applyCorrections(to: "からだです。"), "からだです。")
+    }
+
+    @MainActor
+    func testSingleCharacterCorrectionsDoNotUseMultiCharacterParticleSuffixesInsideWords() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "ち", replacement: "地")
+
+        XCTAssertEqual(service.applyCorrections(to: "ちからです。"), "ちからです。")
     }
 
     @MainActor

@@ -69,6 +69,30 @@ final class Qwen3PluginTests: XCTestCase {
         )
     }
 
+    func testFrenchTrailingOuiArtifactIsRemovedAfterLongBarePhrase() {
+        XCTAssertEqual(
+            QwenTranscriptGuard.removingLikelyTrailingArtifact(
+                from: "Je vais envoyer le fichier oui",
+                languageName: "French"
+            ),
+            "Je vais envoyer le fichier"
+        )
+        XCTAssertEqual(
+            QwenTranscriptGuard.removingLikelyTrailingArtifact(
+                from: "Je vais envoyer le fichier, oui.",
+                languageName: "French"
+            ),
+            "Je vais envoyer le fichier"
+        )
+        XCTAssertEqual(
+            QwenTranscriptGuard.removingLikelyTrailingArtifact(
+                from: "Je vais envoyer le fichier Oui!",
+                languageName: "French"
+            ),
+            "Je vais envoyer le fichier"
+        )
+    }
+
     func testFrenchTrailingOuiGuardPreservesRealOuiUsages() {
         XCTAssertEqual(
             QwenTranscriptGuard.removingLikelyTrailingArtifact(from: "Oui.", languageName: "French"),
@@ -77,6 +101,14 @@ final class Qwen3PluginTests: XCTestCase {
         XCTAssertEqual(
             QwenTranscriptGuard.removingLikelyTrailingArtifact(from: "Je pense que oui.", languageName: "French"),
             "Je pense que oui."
+        )
+        XCTAssertEqual(
+            QwenTranscriptGuard.removingLikelyTrailingArtifact(from: "Je suis certain que oui.", languageName: "French"),
+            "Je suis certain que oui."
+        )
+        XCTAssertEqual(
+            QwenTranscriptGuard.removingLikelyTrailingArtifact(from: "Je confirme oui.", languageName: "French"),
+            "Je confirme oui."
         )
         XCTAssertEqual(
             QwenTranscriptGuard.removingLikelyTrailingArtifact(from: "I will send it. oui", languageName: "English"),

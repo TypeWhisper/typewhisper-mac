@@ -201,6 +201,14 @@ let package = Package(
             ]
         ),
         .target(
+            name: "MemPalacePlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/MemPalacePlugin",
+            resources: [
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
             name: "LiveTranscriptPlugin",
             dependencies: ["TypeWhisperPluginSDK"],
             path: "Plugins/LiveTranscriptPlugin",

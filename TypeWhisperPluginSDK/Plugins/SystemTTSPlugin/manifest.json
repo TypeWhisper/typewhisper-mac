@@ -8,7 +8,8 @@
     "author": "TypeWhisper",
     "description": "Text-to-speech via the built-in macOS AVSpeechSynthesizer voices for spoken feedback.",
     "descriptions": {
-        "de": "Text-zu-Sprache über die integrierten macOS-AVSpeechSynthesizer-Stimmen für gesprochenes Feedback."
+        "de": "Text-zu-Sprache über die integrierten macOS-AVSpeechSynthesizer-Stimmen für gesprochenes Feedback.",
+        "ja": "macOS標準のAVSpeechSynthesizer音声を使って、読み上げフィードバック用の音声合成を行います。"
     },
     "category": "tts",
     "iconSystemName": "speaker.wave.2.fill",

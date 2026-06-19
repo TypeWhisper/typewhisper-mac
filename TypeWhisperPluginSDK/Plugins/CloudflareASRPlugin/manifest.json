@@ -11,5 +11,9 @@
     "iconSystemName": "shield.lefthalf.filled",
     "iconURL": "https://www.typewhisper.com/brand-logos/cloudflare/logo.svg",
     "principalClass": "CloudflareASRPlugin",
-    "detailsURL": "https://www.typewhisper.com/addons/cloudflare-asr/"
+    "detailsURL": "https://www.typewhisper.com/addons/cloudflare-asr/",
+    "descriptions": {
+        "de": "OpenAI-kompatible Transkription über einen Cloudflare-Tunnel mit Service-Token-Authentifizierung. Zugangsdaten werden im macOS-Schlüsselbund gespeichert.",
+        "ja": "サービストークン認証付きのCloudflareトンネル経由でOpenAI互換の文字起こしを行います。認証情報はmacOSキーチェーンに保存されます。"
+    }
 }

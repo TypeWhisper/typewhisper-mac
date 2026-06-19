@@ -8,10 +8,14 @@
     "author": "TypeWhisper",
     "description": "LLM provider and cloud speech transcription via Google Gemini API. Requires API key.",
     "descriptions": {
-        "de": "LLM-Anbieter und Cloud-Spracherkennung über die Google Gemini API. Erfordert API-Key."
+        "de": "LLM-Anbieter und Cloud-Spracherkennung über die Google Gemini API. Erfordert API-Key.",
+        "ja": "Google Gemini APIによるLLMプロバイダーとクラウド音声文字起こしです。APIキーが必要です。"
     },
     "category": "transcription",
-    "categories": ["transcription", "llm"],
+    "categories": [
+        "transcription",
+        "llm"
+    ],
     "iconSystemName": "sparkles",
     "iconURL": "https://www.typewhisper.com/brand-logos/gemini/logo.svg",
     "principalClass": "GeminiPlugin",

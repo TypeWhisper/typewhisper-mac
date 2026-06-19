@@ -8,7 +8,8 @@
     "author": "TypeWhisper",
     "description": "Cloud transcription via Cohere Transcribe API. State-of-the-art accuracy across 14 languages. Requires API key.",
     "descriptions": {
-        "de": "Cloud-Transkription über die Cohere Transcribe API. Beste Genauigkeit für 14 Sprachen. Erfordert API-Key."
+        "de": "Cloud-Transkription über die Cohere Transcribe API. Beste Genauigkeit für 14 Sprachen. Erfordert API-Key.",
+        "ja": "Cohere Transcribe APIによるクラウド文字起こしです。14言語で高精度に対応し、APIキーが必要です。"
     },
     "category": "transcription",
     "iconSystemName": "waveform.badge.mic",

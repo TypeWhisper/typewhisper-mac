@@ -768,7 +768,7 @@ final class PluginRegistryService: ObservableObject {
 
     // MARK: - Uninstall
 
-    func uninstallPlugin(_ pluginId: String, deleteData: Bool = false) {
+    func uninstallPlugin(_ pluginId: String, deleteData: Bool = false) throws {
         guard let bundleURL = PluginManager.shared.bundleURL(for: pluginId) else { return }
 
         PluginManager.shared.unloadPlugin(pluginId)
@@ -777,15 +777,26 @@ final class PluginRegistryService: ObservableObject {
         logger.info("Removing installed plugin bundle at \(bundleURL.path, privacy: .public)")
         try? FileManager.default.removeItem(at: bundleURL)
 
+        var keychainError: Error?
         if deleteData {
             let dataDir = AppConstants.appSupportDirectory
                 .appendingPathComponent("PluginData", isDirectory: true)
                 .appendingPathComponent(pluginId, isDirectory: true)
             try? FileManager.default.removeItem(at: dataDir)
+            do {
+                try KeychainService.deleteAll(withServicePrefix: "\(pluginId).")
+            } catch {
+                logger.error("Keychain cleanup failed for \(pluginId): \(error.localizedDescription)")
+                keychainError = error
+            }
         }
 
         UserDefaults.standard.removeObject(forKey: "plugin.\(pluginId).enabled")
         logger.info("Uninstalled plugin: \(pluginId)")
+
+        if let error = keychainError {
+            throw error
+        }
     }
 
     // MARK: - Install from File
