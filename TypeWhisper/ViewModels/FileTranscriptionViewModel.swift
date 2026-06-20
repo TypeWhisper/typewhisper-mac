@@ -171,7 +171,7 @@ final class FileTranscriptionViewModel: ObservableObject {
         }
         self.engineReadinessChecker = engineReadinessChecker
         self.subtitleFileSaver = subtitleFileSaver ?? { content, format, suggestedName in
-            SubtitleExporter.saveToFile(content: content, format: format, suggestedName: suggestedName)
+            _ = SubtitleExporter.saveToFile(content: content, format: format, suggestedName: suggestedName)
         }
         self.subtitleFolderPicker = subtitleFolderPicker ?? {
             let panel = NSOpenPanel()
@@ -479,7 +479,7 @@ final class FileTranscriptionViewModel: ObservableObject {
         for export in exports {
             let name = export.item.url.deletingPathExtension().lastPathComponent
             let fileURL = folder.appendingPathComponent("\(name).\(format.fileExtension)")
-            try? export.content.write(to: fileURL, atomically: true, encoding: .utf8)
+            SubtitleExporter.writeContent(export.content, to: fileURL, suggestedName: name)
         }
     }
 
