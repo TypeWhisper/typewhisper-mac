@@ -28,8 +28,11 @@ struct ClipboardContentPayload {
         !additionalRepresentations.isEmpty
     }
 
-    func write(to pasteboard: NSPasteboard) {
-        guard !additionalRepresentations.isEmpty else {
+    func write(
+        to pasteboard: NSPasteboard,
+        markerTypes: [NSPasteboard.PasteboardType] = []
+    ) {
+        guard !additionalRepresentations.isEmpty || !markerTypes.isEmpty else {
             pasteboard.setString(plainText, forType: .string)
             return
         }
@@ -38,6 +41,9 @@ struct ClipboardContentPayload {
         item.setString(plainText, forType: .string)
         for representation in additionalRepresentations {
             item.setData(representation.data, forType: representation.type)
+        }
+        for markerType in markerTypes {
+            item.setData(Data(), forType: markerType)
         }
         pasteboard.writeObjects([item])
     }
