@@ -285,6 +285,126 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         try await waitForBatchToFinish(viewModel)
     }
 
+    func testExportAllSubtitlesSavesTextOnlyResultAsSingleSRTCue() throws {
+        let defaults = try makeDefaults()
+        let fileURL = makeTemporaryFile(named: "team-meeting.wav")
+        var savedContent: String?
+        var savedFormat: SubtitleFormat?
+        var savedSuggestedName: String?
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            defaults: defaults,
+            subtitleFileSaver: { content, format, suggestedName in
+                savedContent = content
+                savedFormat = format
+                savedSuggestedName = suggestedName
+            },
+            subtitleFolderPicker: {
+                XCTFail("Single-file export should use the save panel path")
+                return nil
+            }
+        )
+
+        viewModel.addFiles([fileURL])
+        viewModel.files[0].state = .done
+        viewModel.files[0].result = makeTranscriptionResult(
+            text: "  Full meeting transcript  ",
+            duration: 12.5,
+            segments: []
+        )
+
+        viewModel.exportAllSubtitles(format: .srt)
+
+        XCTAssertEqual(savedFormat, .srt)
+        XCTAssertEqual(savedSuggestedName, "team-meeting")
+        XCTAssertEqual(savedContent, "1\n00:00:00,000 --> 00:00:12,500\nFull meeting transcript")
+    }
+
+    func testExportAllSubtitlesWritesMultipleTextOnlyVTTFiles() throws {
+        let defaults = try makeDefaults()
+        let firstURL = makeTemporaryFile(named: "first-call.wav")
+        let secondURL = makeTemporaryFile(named: "second-call.wav")
+        let exportFolder = makeTemporaryDirectory()
+        var folderPickerCalls = 0
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            defaults: defaults,
+            subtitleFileSaver: { _, _, _ in
+                XCTFail("Multi-file export should use the folder export path")
+            },
+            subtitleFolderPicker: {
+                folderPickerCalls += 1
+                return exportFolder
+            }
+        )
+
+        viewModel.addFiles([firstURL, secondURL])
+        viewModel.files[0].state = .done
+        viewModel.files[0].result = makeTranscriptionResult(
+            text: "First transcript",
+            duration: 1,
+            segments: []
+        )
+        viewModel.files[1].state = .done
+        viewModel.files[1].result = makeTranscriptionResult(
+            text: "Second transcript",
+            duration: 2.25,
+            segments: []
+        )
+
+        viewModel.exportAllSubtitles(format: .vtt)
+
+        XCTAssertEqual(folderPickerCalls, 1)
+        let firstContent = try String(contentsOf: exportFolder.appendingPathComponent("first-call.vtt"))
+        let secondContent = try String(contentsOf: exportFolder.appendingPathComponent("second-call.vtt"))
+        XCTAssertEqual(firstContent, "WEBVTT\n\n1\n00:00:00.000 --> 00:00:01.000\nFirst transcript\n")
+        XCTAssertEqual(secondContent, "WEBVTT\n\n1\n00:00:00.000 --> 00:00:02.250\nSecond transcript\n")
+    }
+
+    func testExportSubtitlesPreservesTimestampedSegments() throws {
+        let defaults = try makeDefaults()
+        let fileURL = makeTemporaryFile(named: "captioned.wav")
+        var savedContent: String?
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            defaults: defaults,
+            subtitleFileSaver: { content, _, _ in
+                savedContent = content
+            }
+        )
+
+        viewModel.addFiles([fileURL])
+        viewModel.files[0].state = .done
+        viewModel.files[0].result = makeTranscriptionResult(
+            text: "Fallback text should not be used",
+            duration: 60,
+            segments: [
+                TranscriptionSegment(text: "First segment", start: 0.25, end: 1.5),
+                TranscriptionSegment(text: "Second segment", start: 1.5, end: 2.75)
+            ]
+        )
+        let item = try XCTUnwrap(viewModel.files.first)
+
+        viewModel.exportSubtitles(for: item, format: .vtt)
+
+        XCTAssertEqual(
+            savedContent,
+            "WEBVTT\n\n1\n00:00:00.250 --> 00:00:01.500\nFirst segment\n\n2\n00:00:01.500 --> 00:00:02.750\nSecond segment\n"
+        )
+    }
+
+    func testTextOnlySubtitleExportUsesOneSecondCueForInvalidDuration() {
+        let content = SubtitleExporter.exportContent(
+            for: makeTranscriptionResult(text: "No duration transcript", duration: .nan),
+            format: .srt
+        )
+
+        XCTAssertEqual(content, "1\n00:00:00,000 --> 00:00:01,000\nNo duration transcript")
+    }
+
     func testStableProgressPreviewIgnoresDisjointReplacementText() {
         let current = "Basically, Deepgram, Whisper, Speechmatics, and Assembly."
         let candidate = "use Whisper through OpenAI APIs. They are a Mac file size"
@@ -498,6 +618,21 @@ final class FileTranscriptionViewModelTests: XCTestCase {
             try? FileManager.default.removeItem(at: directory)
         }
         return directory
+    }
+
+    private func makeTranscriptionResult(
+        text: String,
+        duration: TimeInterval,
+        segments: [TranscriptionSegment] = []
+    ) -> TranscriptionResult {
+        TranscriptionResult(
+            text: text,
+            detectedLanguage: "en",
+            duration: duration,
+            processingTime: 0.1,
+            engineUsed: "test",
+            segments: segments
+        )
     }
 
     private func waitForBatchToFinish(_ viewModel: FileTranscriptionViewModel) async throws {

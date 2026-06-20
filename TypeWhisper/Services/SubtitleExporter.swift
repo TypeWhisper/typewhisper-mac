@@ -17,6 +17,18 @@ enum SubtitleFormat: String, CaseIterable {
 
 enum SubtitleExporter {
 
+    static func exportContent(for result: TranscriptionResult, format: SubtitleFormat) -> String? {
+        let segments = subtitleSegments(for: result)
+        guard !segments.isEmpty else { return nil }
+
+        switch format {
+        case .srt:
+            return exportSRT(segments: segments)
+        case .vtt:
+            return exportVTT(segments: segments)
+        }
+    }
+
     static func exportSRT(segments: [TranscriptionSegment]) -> String {
         segments.enumerated().map { index, segment in
             let start = formatSRTTime(segment.start)
@@ -51,6 +63,16 @@ enum SubtitleExporter {
     }
 
     // MARK: - Time Formatting
+
+    private static func subtitleSegments(for result: TranscriptionResult) -> [TranscriptionSegment] {
+        guard result.segments.isEmpty else { return result.segments }
+
+        let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return [] }
+
+        let endTime = result.duration.isFinite && result.duration > 0 ? result.duration : 1
+        return [TranscriptionSegment(text: text, start: 0, end: endTime)]
+    }
 
     private static func displayText(for segment: TranscriptionSegment) -> String {
         guard let speakerLabel = segment.speakerLabel?.trimmingCharacters(in: .whitespacesAndNewlines),
