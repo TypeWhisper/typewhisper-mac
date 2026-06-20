@@ -73,7 +73,7 @@ enum SubtitleExporter {
             return true
         } catch {
             subtitleExporterLogger.error(
-                "Failed to export subtitle '\(suggestedName, privacy: .public)' to \(url.path, privacy: .public): \(error.localizedDescription, privacy: .public)"
+                "Failed to export subtitle '\(suggestedName, privacy: .private(mask: .hash))' to \(url.path, privacy: .private(mask: .hash)): \(error.localizedDescription, privacy: .public)"
             )
             return false
         }
