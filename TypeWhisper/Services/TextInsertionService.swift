@@ -355,6 +355,10 @@ final class TextInsertionService {
             ) == .success else {
                 return nil
             }
+            guard let focusedElement,
+                  CFGetTypeID(focusedElement) == AXUIElementGetTypeID() else {
+                return nil
+            }
             element = focusedElement as! AXUIElement
         }
 

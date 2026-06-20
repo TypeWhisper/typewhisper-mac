@@ -800,6 +800,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                     workflowId: workflowId,
                     hotkey: wState.hotkey,
                     behavior: wState.behavior,
+                    event: event,
                     keyDown: keyDown,
                     keyUp: keyUp,
                     source: source
@@ -905,10 +906,15 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         workflowId: UUID,
         hotkey: UnifiedHotkey,
         behavior: WorkflowHotkeyBehavior,
+        event: NSEvent,
         keyDown: Bool,
         keyUp: Bool,
         source: HotkeyEventSource
     ) {
+        let isTextProcessingModifierRelease = behavior != .startDictation
+            && keyUp
+            && event.type == .flagsChanged
+            && hotkey.kind == .keyWithModifiers
         if keyDown, shouldDispatch(
             target: .workflow(workflowId),
             phase: .down,
@@ -919,7 +925,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                 logFallbackMatchIfNeeded(hotkey: hotkey, source: source)
             }
             handleWorkflowKeyDown(workflowId: workflowId, behavior: behavior)
-        } else if keyUp, shouldDispatch(
+        } else if keyUp, !isTextProcessingModifierRelease, shouldDispatch(
             target: .workflow(workflowId),
             phase: .up,
             hotkey: hotkey,
@@ -1418,6 +1424,18 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
     private func handleWorkflowKeyDown(workflowId: UUID, behavior: WorkflowHotkeyBehavior) {
         guard behavior == .startDictation else {
+            guard !isActive else {
+                isActive = false
+                activeSlotType = nil
+                activeGlobalHotkey = nil
+                activeProfileId = nil
+                activeWorkflowId = nil
+                currentMode = nil
+                keyDownTime = nil
+                pushToTalkInterruptionSignaled = false
+                onDictationStop?()
+                return
+            }
             activeWorkflowId = workflowId
             return
         }

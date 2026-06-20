@@ -8120,6 +8120,44 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testWorkflowHotkeyTextProcessingStopsActiveDictationWithoutStartingTextWorkflow() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        let dictationWorkflowId = UUID()
+        let textWorkflowId = UUID()
+        service.registerWorkflowHotkeys([
+            (id: dictationWorkflowId, hotkey: spaceHotkey(), behavior: .startDictation),
+            (id: textWorkflowId, hotkey: commandOptionAHotkey(), behavior: .processSelectedText),
+        ])
+
+        var startedWorkflowId: UUID?
+        var stopCount = 0
+        var textProcessingCount = 0
+        service.onWorkflowDictationStart = { workflowId, _ in startedWorkflowId = workflowId }
+        service.onDictationStop = { stopCount += 1 }
+        service.onWorkflowTextProcessing = { _ in textProcessingCount += 1 }
+
+        let dictationKeyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
+        let textWorkflowKeyDown = try makeKeyboardEvent(
+            keyCode: 0x00,
+            keyDown: true,
+            flags: [.maskCommand, .maskAlternate]
+        )
+
+        XCTAssertTrue(service.processEventForTesting(dictationKeyDown, source: .monitor))
+        XCTAssertEqual(startedWorkflowId, dictationWorkflowId)
+        XCTAssertEqual(service.currentMode, .pushToTalk)
+        XCTAssertEqual(service.activeWorkflowId, dictationWorkflowId)
+
+        XCTAssertTrue(service.processEventForTesting(textWorkflowKeyDown, source: .monitor))
+        XCTAssertEqual(stopCount, 1)
+        XCTAssertEqual(textProcessingCount, 0)
+        XCTAssertNil(service.currentMode)
+        XCTAssertNil(service.activeWorkflowId)
+    }
+
+    @MainActor
     func testWorkflowHotkeyTextProcessingIgnoresKeyUpWithoutActiveKeyDown() async throws {
         let service = HotkeyService()
         service.suspendMonitoring()
@@ -8139,6 +8177,52 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertFalse(service.processEventForTesting(keyUp, source: .monitor))
         try await Task.sleep(for: .milliseconds(20))
         XCTAssertEqual(callbackCount, 0)
+        XCTAssertNil(service.activeWorkflowId)
+    }
+
+    @MainActor
+    func testWorkflowHotkeyTextProcessingWaitsForPhysicalKeyUpAfterModifierRelease() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.workflowTextProcessingModifierPollInterval = 0.001
+        service.workflowTextProcessingModifierReleaseTimeout = 0.25
+        service.workflowTextProcessingPostReleaseDelay = 0.001
+        service.modifierFlagsStateProvider = { [] }
+
+        let workflowId = UUID()
+        service.registerWorkflowHotkeys([(
+            id: workflowId,
+            hotkey: commandOptionAHotkey(),
+            behavior: .processSelectedText
+        )])
+
+        var textWorkflowId: UUID?
+        let textProcessingCallback = expectation(description: "workflow text processing callback")
+        service.onWorkflowTextProcessing = {
+            textWorkflowId = $0
+            textProcessingCallback.fulfill()
+        }
+
+        let keyDown = try makeKeyboardEvent(
+            keyCode: 0x00,
+            keyDown: true,
+            flags: [.maskCommand, .maskAlternate]
+        )
+        let optionReleaseWhileKeyHeld = try makeFlagsChangedEvent(
+            keyCode: 0x3A,
+            modifierFlags: [.command]
+        )
+        let physicalKeyUp = try makeKeyboardEvent(keyCode: 0x00, keyDown: false, flags: [])
+
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertTrue(service.processEventForTesting(optionReleaseWhileKeyHeld, source: .monitor))
+        try await Task.sleep(for: .milliseconds(20))
+        XCTAssertNil(textWorkflowId)
+        XCTAssertEqual(service.activeWorkflowId, workflowId)
+
+        XCTAssertTrue(service.processEventForTesting(physicalKeyUp, source: .monitor))
+        await fulfillment(of: [textProcessingCallback], timeout: 1.0)
+        XCTAssertEqual(textWorkflowId, workflowId)
         XCTAssertNil(service.activeWorkflowId)
     }
 
