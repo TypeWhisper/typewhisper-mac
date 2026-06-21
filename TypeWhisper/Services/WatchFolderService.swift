@@ -1,6 +1,7 @@
 import Foundation
 import os
 import Combine
+import CryptoKit
 import TypeWhisperPluginSDK
 
 enum WatchFolderOutputFormat: String, CaseIterable {
@@ -479,7 +480,16 @@ final class WatchFolderService: ObservableObject {
 
         let fileSize = values?.fileSize ?? 0
         let modifiedAt = values?.contentModificationDate?.timeIntervalSince1970 ?? 0
+        
+        var checksum = "no-data"
+        if let fileHandle = try? FileHandle(forReadingFrom: url) {
+            if let data = try? fileHandle.read(upToCount: 8192) {
+                let hash = SHA256.hash(data: data)
+                checksum = hash.compactMap { String(format: "%02x", $0) }.joined()
+            }
+            try? fileHandle.close()
+        }
 
-        return "\(url.path)|\(fileSize)|\(modifiedAt)"
+        return "\(url.path)|\(fileSize)|\(modifiedAt)|\(checksum)"
     }
 }

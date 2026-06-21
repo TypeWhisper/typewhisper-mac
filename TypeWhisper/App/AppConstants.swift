@@ -1,4 +1,6 @@
 import Foundation
+import SwiftData
+import os.log
 
 enum AppConstants {
     enum ReleaseChannel: String, CaseIterable {
@@ -217,5 +219,44 @@ enum AppConstants {
                 url.host == callbackHost &&
                 url.path == callbackPath
         }
+    }
+}
+
+private let factoryLogger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "SwiftDataStoreFactory")
+
+@MainActor
+struct SwiftDataStoreFactory {
+    static func create(
+        for modelTypes: [any PersistentModel.Type],
+        storeName: String,
+        in directory: URL
+    ) throws -> (ModelContainer, ModelContext) {
+        let schema = Schema(modelTypes)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        let storeURL = directory.appendingPathComponent("\(storeName).store")
+        let config = ModelConfiguration(url: storeURL)
+
+        var container: ModelContainer
+        do {
+            container = try ModelContainer(for: schema, configurations: [config])
+        } catch {
+            factoryLogger.error("Incompatible schema for \(storeName) store. Resetting store.")
+            // Incompatible schema — delete old store and retry
+            for suffix in ["", "-wal", "-shm"] {
+                let url = directory.appendingPathComponent("\(storeName).store\(suffix)")
+                try? FileManager.default.removeItem(at: url)
+            }
+            do {
+                container = try ModelContainer(for: schema, configurations: [config])
+            } catch {
+                // If it still fails, there's a fundamental issue
+                fatalError("Failed to create \(storeName) ModelContainer after reset: \(error)")
+            }
+        }
+        
+        let context = ModelContext(container)
+        context.autosaveEnabled = true
+        return (container, context)
     }
 }

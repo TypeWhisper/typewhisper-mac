@@ -21,29 +21,14 @@ final class SnippetService: ObservableObject {
     }
 
     private func setupModelContainer(appSupportDirectory: URL) {
-        let schema = Schema([Snippet.self])
-        let storeDir = appSupportDirectory
-        try? FileManager.default.createDirectory(at: storeDir, withIntermediateDirectories: true)
-
-        let storeURL = storeDir.appendingPathComponent("snippets.store")
-        let config = ModelConfiguration(url: storeURL)
-
-        do {
-            modelContainer = try ModelContainer(for: schema, configurations: [config])
-        } catch {
-            // Incompatible schema — delete old store and retry
-            for suffix in ["", "-wal", "-shm"] {
-                let url = storeDir.appendingPathComponent("snippets.store\(suffix)")
-                try? FileManager.default.removeItem(at: url)
-            }
-            do {
-                modelContainer = try ModelContainer(for: schema, configurations: [config])
-            } catch {
-                fatalError("Failed to create snippets ModelContainer after reset: \(error)")
-            }
-        }
-        modelContext = ModelContext(modelContainer!)
-        modelContext?.autosaveEnabled = true
+        guard let (container, context) = try? SwiftDataStoreFactory.create(
+            for: [Snippet.self],
+            storeName: "snippets",
+            in: appSupportDirectory
+        ) else { return }
+        
+        modelContainer = container
+        modelContext = context
 
         loadSnippets()
     }
@@ -134,6 +119,7 @@ final class SnippetService: ObservableObject {
     /// Apply all enabled snippets to the given text
     func applySnippets(to text: String) -> String {
         var result = text
+        var needsSave = false
 
         for snippet in snippets where snippet.isEnabled {
             let searchTrigger = snippet.caseSensitive ? snippet.trigger : snippet.trigger.lowercased()
@@ -152,23 +138,20 @@ final class SnippetService: ObservableObject {
                     )
                 }
 
-                incrementUsageCount(for: snippet)
+                snippet.usageCount += 1
+                needsSave = true
+            }
+        }
+
+        if needsSave {
+            do {
+                try modelContext?.save()
+            } catch {
+                logger.error("Failed to update usage count: \(error.localizedDescription)")
             }
         }
 
         return result
-    }
-
-    private func incrementUsageCount(for snippet: Snippet) {
-        guard let context = modelContext else { return }
-
-        snippet.usageCount += 1
-
-        do {
-            try context.save()
-        } catch {
-            logger.error("Failed to update usage count: \(error.localizedDescription)")
-        }
     }
 
     func userDataSyncSnippets() -> [UserDataSyncSnippet] {

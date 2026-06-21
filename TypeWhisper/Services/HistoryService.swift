@@ -27,25 +27,17 @@ final class HistoryService: ObservableObject {
         try? FileManager.default.createDirectory(at: audioDir, withIntermediateDirectories: true)
         self.audioDirectory = audioDir
 
-        let storeURL = storeDir.appendingPathComponent("history.store")
-        let config = ModelConfiguration(url: storeURL)
-
         do {
-            modelContainer = try ModelContainer(for: schema, configurations: [config])
+            let (container, context) = try SwiftDataStoreFactory.create(
+                for: [TranscriptionRecord.self],
+                storeName: "history",
+                in: appSupportDirectory
+            )
+            modelContainer = container
+            modelContext = context
         } catch {
-            // Incompatible schema — delete old store and retry
-            for suffix in ["", "-wal", "-shm"] {
-                let url = storeDir.appendingPathComponent("history.store\(suffix)")
-                try? FileManager.default.removeItem(at: url)
-            }
-            do {
-                modelContainer = try ModelContainer(for: schema, configurations: [config])
-            } catch {
-                fatalError("Failed to create history ModelContainer after reset: \(error)")
-            }
+            fatalError("Failed to initialize history store: \(error)")
         }
-        modelContext = ModelContext(modelContainer)
-        modelContext.autosaveEnabled = true
 
         fetchRecords()
     }
@@ -94,7 +86,7 @@ final class HistoryService: ObservableObject {
             id: recordId,
             rawText: sanitizedRaw,
             finalText: sanitizedFinal,
-            appName: appName.flatMap { Self.sanitize($0).isEmpty ? nil : Self.sanitize($0) },
+            appName: appName.flatMap { let s = Self.sanitize($0); return s.isEmpty ? nil : s },
             appBundleIdentifier: appBundleIdentifier,
             appURL: appURL,
             durationSeconds: durationSeconds,
@@ -140,12 +132,17 @@ final class HistoryService: ObservableObject {
     }
 
     func clearAll() {
-        for record in records {
-            deleteAudioFile(for: record)
-            modelContext.delete(record)
+        do {
+            let allRecords = try modelContext.fetch(FetchDescriptor<TranscriptionRecord>())
+            for record in allRecords {
+                deleteAudioFile(for: record)
+                modelContext.delete(record)
+            }
+            save()
+            fetchRecords()
+        } catch {
+            logger.error("Failed to clear records: \(error.localizedDescription)")
         }
-        save()
-        fetchRecords()
     }
 
     func searchRecords(query: String) -> [TranscriptionRecord] {
@@ -194,6 +191,10 @@ final class HistoryService: ObservableObject {
     }
 
     private func migrateWordsCountIfNeeded() {
+        if UserDefaults.standard.bool(forKey: "HistoryServiceWordsCountMigrationCompleted") {
+            return
+        }
+
         var needsSave = false
         for record in records where record.wordsCount == 0 && !record.finalText.isEmpty {
             record.wordsCount = record.finalText.split(separator: " ").count
@@ -202,6 +203,7 @@ final class HistoryService: ObservableObject {
         if needsSave {
             save()
         }
+        UserDefaults.standard.set(true, forKey: "HistoryServiceWordsCountMigrationCompleted")
     }
 
     private func updateAggregates() {

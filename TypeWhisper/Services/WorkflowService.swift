@@ -93,26 +93,17 @@ final class WorkflowService: ObservableObject {
         let storeDir = appSupportDirectory
         try? FileManager.default.createDirectory(at: storeDir, withIntermediateDirectories: true)
 
-        let storeURL = storeDir.appendingPathComponent("workflows.store")
-        let config = ModelConfiguration(url: storeURL)
-
         do {
-            modelContainer = try ModelContainer(for: schema, configurations: [config])
+            let (container, context) = try SwiftDataStoreFactory.create(
+                for: [Workflow.self],
+                storeName: "workflows",
+                in: appSupportDirectory
+            )
+            modelContainer = container
+            modelContext = context
         } catch {
-            for suffix in ["", "-wal", "-shm"] {
-                let url = storeDir.appendingPathComponent("workflows.store\(suffix)")
-                try? FileManager.default.removeItem(at: url)
-            }
-
-            do {
-                modelContainer = try ModelContainer(for: schema, configurations: [config])
-            } catch {
-                fatalError("Failed to create workflows ModelContainer after reset: \(error)")
-            }
+            fatalError("Failed to initialize workflows store: \(error)")
         }
-
-        modelContext = ModelContext(modelContainer)
-        modelContext.autosaveEnabled = true
 
         fetchWorkflows()
     }

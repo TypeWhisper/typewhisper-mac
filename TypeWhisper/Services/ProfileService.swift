@@ -15,15 +15,15 @@ enum RuleMatchKind: String, Sendable {
     var label: String {
         switch self {
         case .appAndWebsite:
-            "App + Website"
+            localizedAppText("App + Website", de: "App + Website")
         case .websiteOnly:
-            "Nur Website"
+            localizedAppText("Website Only", de: "Nur Website")
         case .appOnly:
-            "Nur App"
+            localizedAppText("App Only", de: "Nur App")
         case .globalFallback:
-            "Globaler Fallback"
+            localizedAppText("Global Fallback", de: "Globaler Fallback")
         case .manualOverride:
-            "Manuell erzwungen"
+            localizedAppText("Manual Override", de: "Manuell erzwungen")
         }
     }
 }
@@ -48,25 +48,17 @@ final class ProfileService: ObservableObject {
         let storeDir = appSupportDirectory
         try? FileManager.default.createDirectory(at: storeDir, withIntermediateDirectories: true)
 
-        let storeURL = storeDir.appendingPathComponent("profiles.store")
-        let config = ModelConfiguration(url: storeURL)
-
         do {
-            modelContainer = try ModelContainer(for: schema, configurations: [config])
+            let (container, context) = try SwiftDataStoreFactory.create(
+                for: [Profile.self],
+                storeName: "profiles",
+                in: appSupportDirectory
+            )
+            modelContainer = container
+            modelContext = context
         } catch {
-            // Incompatible schema — delete old store and retry
-            for suffix in ["", "-wal", "-shm"] {
-                let url = storeDir.appendingPathComponent("profiles.store\(suffix)")
-                try? FileManager.default.removeItem(at: url)
-            }
-            do {
-                modelContainer = try ModelContainer(for: schema, configurations: [config])
-            } catch {
-                fatalError("Failed to create profiles ModelContainer after reset: \(error)")
-            }
+            fatalError("Failed to initialize profiles store: \(error)")
         }
-        modelContext = ModelContext(modelContainer)
-        modelContext.autosaveEnabled = true
 
         fetchProfiles()
     }

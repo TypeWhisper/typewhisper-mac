@@ -21,7 +21,7 @@ final class TranscriptionRecord {
     var preview: String { String(finalText.prefix(100)) }
 
     var wasPostProcessed: Bool {
-        rawText.trimmingCharacters(in: .whitespacesAndNewlines) != finalText
+        rawText.trimmingCharacters(in: .whitespacesAndNewlines) != finalText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
     var pipelineStepList: [String] {
         get {

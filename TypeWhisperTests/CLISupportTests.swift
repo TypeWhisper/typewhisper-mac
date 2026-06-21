@@ -562,10 +562,9 @@ final class CLISupportTests: XCTestCase {
         XCTAssertEqual(service.licenseTier, .enterprise)
         XCTAssertEqual(service.usageIntent, .enterprise)
         XCTAssertTrue(service.licenseIsLifetime)
-        XCTAssertEqual(
-            Self.loadKeychainValue(service: keychainServiceName, account: "polar-license"),
-            "TYPEWHISPER-ENT-123|activation-123"
-        )
+        let keychainValue = Self.loadKeychainValue(service: keychainServiceName, account: "polar-license") ?? ""
+        XCTAssertTrue(keychainValue.contains("\"key\":\"TYPEWHISPER-ENT-123\""))
+        XCTAssertTrue(keychainValue.contains("\"activationId\":\"activation-123\""))
         XCTAssertNil(Self.loadKeychainValue(service: keychainServiceName, account: "polar-supporter"))
     }
 
@@ -606,10 +605,9 @@ final class CLISupportTests: XCTestCase {
         XCTAssertEqual(service.supporterTier, .gold)
         XCTAssertEqual(service.licenseStatus, .unlicensed)
         XCTAssertNil(service.licenseTier)
-        XCTAssertEqual(
-            Self.loadKeychainValue(service: keychainServiceName, account: "polar-supporter"),
-            "TYPEWHISPER-SUP-999|activation-999"
-        )
+        let keychainValue = Self.loadKeychainValue(service: keychainServiceName, account: "polar-supporter") ?? ""
+        XCTAssertTrue(keychainValue.contains("\"key\":\"TYPEWHISPER-SUP-999\""))
+        XCTAssertTrue(keychainValue.contains("\"activationId\":\"activation-999\""))
         XCTAssertNil(Self.loadKeychainValue(service: keychainServiceName, account: "polar-license"))
     }
 

@@ -38,59 +38,26 @@ final class DictionaryService: ObservableObject {
     private var modelContext: ModelContext?
 
     @Published private(set) var entries: [DictionaryEntry] = []
-
-    var terms: [DictionaryEntry] {
-        entries.filter { $0.type == .term && $0.isEnabled }
-    }
-
-    var corrections: [DictionaryEntry] {
-        entries.filter { $0.type == .correction && $0.isEnabled }
-    }
-
-    var termsCount: Int {
-        entries.filter { $0.type == .term }.count
-    }
-
-    var correctionsCount: Int {
-        entries.filter { $0.type == .correction }.count
-    }
-
-    var enabledTermsCount: Int {
-        terms.count
-    }
-
-    var enabledCorrectionsCount: Int {
-        corrections.count
-    }
+    @Published private(set) var terms: [DictionaryEntry] = []
+    @Published private(set) var corrections: [DictionaryEntry] = []
+    @Published private(set) var termsCount: Int = 0
+    @Published private(set) var correctionsCount: Int = 0
+    @Published private(set) var enabledTermsCount: Int = 0
+    @Published private(set) var enabledCorrectionsCount: Int = 0
 
     init(appSupportDirectory: URL = AppConstants.appSupportDirectory) {
         setupModelContainer(appSupportDirectory: appSupportDirectory)
     }
 
     private func setupModelContainer(appSupportDirectory: URL) {
-        let schema = Schema([DictionaryEntry.self])
-        let storeDir = appSupportDirectory
-        try? FileManager.default.createDirectory(at: storeDir, withIntermediateDirectories: true)
-
-        let storeURL = storeDir.appendingPathComponent("dictionary.store")
-        let config = ModelConfiguration(url: storeURL)
-
-        do {
-            modelContainer = try ModelContainer(for: schema, configurations: [config])
-        } catch {
-            // Incompatible schema — delete old store and retry
-            for suffix in ["", "-wal", "-shm"] {
-                let url = storeDir.appendingPathComponent("dictionary.store\(suffix)")
-                try? FileManager.default.removeItem(at: url)
-            }
-            do {
-                modelContainer = try ModelContainer(for: schema, configurations: [config])
-            } catch {
-                fatalError("Failed to create dictionary ModelContainer after reset: \(error)")
-            }
-        }
-        modelContext = ModelContext(modelContainer!)
-        modelContext?.autosaveEnabled = true
+        guard let (container, context) = try? SwiftDataStoreFactory.create(
+            for: [DictionaryEntry.self],
+            storeName: "dictionary",
+            in: appSupportDirectory
+        ) else { return }
+        
+        modelContainer = container
+        modelContext = context
 
         loadEntries()
     }
@@ -106,6 +73,36 @@ final class DictionaryService: ObservableObject {
                 ]
             )
             entries = try context.fetch(descriptor)
+            
+            var newTerms: [DictionaryEntry] = []
+            var newCorrections: [DictionaryEntry] = []
+            var newTermsCount = 0
+            var newCorrectionsCount = 0
+            var newEnabledTermsCount = 0
+            var newEnabledCorrectionsCount = 0
+            
+            for entry in entries {
+                if entry.type == .term {
+                    newTermsCount += 1
+                    if entry.isEnabled {
+                        newTerms.append(entry)
+                        newEnabledTermsCount += 1
+                    }
+                } else if entry.type == .correction {
+                    newCorrectionsCount += 1
+                    if entry.isEnabled {
+                        newCorrections.append(entry)
+                        newEnabledCorrectionsCount += 1
+                    }
+                }
+            }
+            
+            terms = newTerms
+            corrections = newCorrections
+            termsCount = newTermsCount
+            correctionsCount = newCorrectionsCount
+            enabledTermsCount = newEnabledTermsCount
+            enabledCorrectionsCount = newEnabledCorrectionsCount
         } catch {
             logger.error("Failed to fetch entries: \(error.localizedDescription)")
         }
@@ -390,6 +387,7 @@ final class DictionaryService: ObservableObject {
     /// Apply all enabled corrections to the given text
     func applyCorrections(to text: String) -> String {
         var result = text
+        var needsSave = false
 
         for correction in corrections {
             guard let replacement = correction.replacement else { continue }
@@ -398,7 +396,16 @@ final class DictionaryService: ObservableObject {
             result = applyCorrection(correction, to: result, replacement: replacement)
 
             if result != before {
-                incrementUsageCount(for: correction)
+                correction.usageCount += 1
+                needsSave = true
+            }
+        }
+
+        if needsSave {
+            do {
+                try modelContext?.save()
+            } catch {
+                logger.error("Failed to update usage count: \(error.localizedDescription)")
             }
         }
 
@@ -723,17 +730,6 @@ final class DictionaryService: ObservableObject {
         context.delete(entry)
     }
 
-    private func incrementUsageCount(for entry: DictionaryEntry) {
-        guard let context = modelContext else { return }
-
-        entry.usageCount += 1
-
-        do {
-            try context.save()
-        } catch {
-            logger.error("Failed to update usage count: \(error.localizedDescription)")
-        }
-    }
 }
 
 private extension Character {
