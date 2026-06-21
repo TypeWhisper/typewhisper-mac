@@ -78,10 +78,10 @@ final class WatchFolderServiceTests: XCTestCase {
             audioFileService: AudioFileService(),
             modelManagerService: ModelManagerService()
         )
-        
+
         let fingerprint1 = try XCTUnwrap(service.fileFingerprint(for: file1URL))
         let fingerprint2 = try XCTUnwrap(service.fileFingerprint(for: file2URL))
-        
+
         // Assert that they are different now that we hash the whole file
         XCTAssertNotEqual(fingerprint1, fingerprint2)
     }

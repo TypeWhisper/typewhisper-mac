@@ -480,7 +480,7 @@ final class WatchFolderService: ObservableObject {
 
         let fileSize = values?.fileSize ?? 0
         let modifiedAt = values?.contentModificationDate?.timeIntervalSince1970 ?? 0
-        
+
         var checksum = "no-data"
         if let fileHandle = try? FileHandle(forReadingFrom: url) {
             var hasher = SHA256()
