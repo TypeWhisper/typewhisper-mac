@@ -113,6 +113,28 @@
         }
       }
     },
+    "Thinking Mode": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Denkmodus"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Thinking Mode"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "思考モード"
+          }
+        }
+      }
+    },
     "Model name": {
       "localizations": {
         "de": {

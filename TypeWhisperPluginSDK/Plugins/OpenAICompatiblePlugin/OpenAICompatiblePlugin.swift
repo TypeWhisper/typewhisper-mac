@@ -17,10 +17,24 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
     var llmTemperatureValue: Double
     var fetchedModels: [FetchedModel]
     var chatRequestTimeoutSeconds: TimeInterval?
+    var thinkingEnabled: Bool
 
     static let defaultChatRequestTimeout: TimeInterval = 30
     static let minChatRequestTimeout: TimeInterval = 5
     static let maxChatRequestTimeout: TimeInterval = 3600
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case baseURL
+        case selectedModelId
+        case selectedLLMModelId
+        case llmTemperatureModeRaw
+        case llmTemperatureValue
+        case fetchedModels
+        case chatRequestTimeoutSeconds
+        case thinkingEnabled
+    }
 
     init(
         id: String,
@@ -31,7 +45,8 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue,
         llmTemperatureValue: Double = 0.3,
         fetchedModels: [FetchedModel] = [],
-        chatRequestTimeoutSeconds: TimeInterval? = nil
+        chatRequestTimeoutSeconds: TimeInterval? = nil,
+        thinkingEnabled: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -42,6 +57,21 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         self.llmTemperatureValue = llmTemperatureValue
         self.fetchedModels = fetchedModels
         self.chatRequestTimeoutSeconds = chatRequestTimeoutSeconds
+        self.thinkingEnabled = thinkingEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        baseURL = try container.decode(String.self, forKey: .baseURL)
+        selectedModelId = try container.decode(String.self, forKey: .selectedModelId)
+        selectedLLMModelId = try container.decode(String.self, forKey: .selectedLLMModelId)
+        llmTemperatureModeRaw = try container.decode(String.self, forKey: .llmTemperatureModeRaw)
+        llmTemperatureValue = try container.decode(Double.self, forKey: .llmTemperatureValue)
+        fetchedModels = try container.decode([FetchedModel].self, forKey: .fetchedModels)
+        chatRequestTimeoutSeconds = try container.decodeIfPresent(TimeInterval.self, forKey: .chatRequestTimeoutSeconds)
+        thinkingEnabled = try container.decodeIfPresent(Bool.self, forKey: .thinkingEnabled) ?? false
     }
 
     var isDefault: Bool { id == Self.defaultId }
@@ -65,7 +95,8 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue,
         llmTemperatureValue: Double = 0.3,
         fetchedModels: [FetchedModel] = [],
-        chatRequestTimeoutSeconds: TimeInterval? = nil
+        chatRequestTimeoutSeconds: TimeInterval? = nil,
+        thinkingEnabled: Bool = false
     ) -> OpenAICompatibleProfile {
         OpenAICompatibleProfile(
             id: defaultId,
@@ -76,7 +107,8 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
             llmTemperatureModeRaw: llmTemperatureModeRaw,
             llmTemperatureValue: llmTemperatureValue,
             fetchedModels: fetchedModels,
-            chatRequestTimeoutSeconds: chatRequestTimeoutSeconds
+            chatRequestTimeoutSeconds: chatRequestTimeoutSeconds,
+            thinkingEnabled: thinkingEnabled
         )
     }
 }
@@ -242,6 +274,10 @@ final class OpenAICompatiblePlugin: NSObject,
         setLLMTemperatureValue(value, for: providerId)
     }
 
+    func setThinkingEnabled(_ enabled: Bool) {
+        setThinkingEnabled(enabled, for: providerId)
+    }
+
     // MARK: - Settings View
 
     var settingsView: AnyView? {
@@ -376,6 +412,12 @@ final class OpenAICompatiblePlugin: NSObject,
         }
     }
 
+    func setThinkingEnabled(_ enabled: Bool, for profileId: String) {
+        updateProfile(profileId) { profile in
+            profile.thinkingEnabled = enabled
+        }
+    }
+
     // MARK: - Profile Runtime
 
     func displayName(for profileId: String) -> String {
@@ -470,7 +512,8 @@ final class OpenAICompatiblePlugin: NSObject,
             systemPrompt: systemPrompt,
             userText: userText,
             temperature: providerTemperatureDirective(for: profileId).resolvedTemperature(applying: temperatureDirective),
-            requestTimeout: profile.resolvedChatRequestTimeout
+            requestTimeout: profile.resolvedChatRequestTimeout,
+            thinkingEnabled: profile.thinkingEnabled
         )
     }
 
@@ -834,6 +877,7 @@ private struct OpenAICompatibleSettingsView: View {
     @State private var manualLLMModel = ""
     @State private var llmTemperatureMode: PluginLLMTemperatureMode = .providerDefault
     @State private var llmTemperatureValue: Double = 0.3
+    @State private var thinkingEnabled = false
     @State private var chatTimeoutInput = ""
 
     private let bundle = pluginModuleBundle
@@ -936,6 +980,7 @@ private struct OpenAICompatibleSettingsView: View {
                     serverSection
                     modelSection
                     temperatureSection
+                    thinkingModeSection
                     timeoutSection
 
                     Text("API keys are stored securely in the Keychain", bundle: bundle)
@@ -1201,6 +1246,22 @@ private struct OpenAICompatibleSettingsView: View {
         }
     }
 
+    private var thinkingModeSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Divider()
+
+            Toggle(isOn: $thinkingEnabled) {
+                Text("Thinking Mode", bundle: bundle)
+                    .font(.headline)
+            }
+            .onChange(of: thinkingEnabled) {
+                guard let selectedProfile else { return }
+                plugin.setThinkingEnabled(thinkingEnabled, for: selectedProfile.id)
+                reloadProfiles(selecting: selectedProfile.id, preserveInputs: true)
+            }
+        }
+    }
+
     private var timeoutSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Divider()
@@ -1252,6 +1313,7 @@ private struct OpenAICompatibleSettingsView: View {
         manualLLMModel = profile.selectedLLMModelId
         llmTemperatureMode = PluginLLMTemperatureMode(rawValue: profile.llmTemperatureModeRaw) ?? .providerDefault
         llmTemperatureValue = profile.llmTemperatureValue
+        thinkingEnabled = profile.thinkingEnabled
         chatTimeoutInput = String(Int(profile.resolvedChatRequestTimeout))
         connectionResult = nil
     }
