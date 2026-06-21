@@ -71,6 +71,59 @@ final class OpenAIChatHelperTests: XCTestCase {
         XCTAssertEqual(requestBody["reasoning_effort"] as? String, "high")
     }
 
+    func testRequestBodyIncludesEnabledThinkingWhenRequested() throws {
+        let helper = PluginOpenAIChatHelper(baseURL: "https://example.com")
+
+        let requestBody = helper.requestBody(
+            model: "deepseek-v4-flash",
+            systemPrompt: "Fix grammar",
+            userText: "hello world",
+            maxOutputTokens: 4096,
+            maxOutputTokenParameter: "max_tokens",
+            reasoningEffort: nil,
+            temperature: 0.3,
+            thinkingEnabled: true
+        )
+
+        let thinking = try XCTUnwrap(requestBody["thinking"] as? [String: String])
+        XCTAssertEqual(thinking["type"], "enabled")
+    }
+
+    func testRequestBodyIncludesDisabledThinkingWhenRequested() throws {
+        let helper = PluginOpenAIChatHelper(baseURL: "https://example.com")
+
+        let requestBody = helper.requestBody(
+            model: "deepseek-v4-flash",
+            systemPrompt: "Fix grammar",
+            userText: "hello world",
+            maxOutputTokens: 4096,
+            maxOutputTokenParameter: "max_tokens",
+            reasoningEffort: nil,
+            temperature: 0.3,
+            thinkingEnabled: false
+        )
+
+        let thinking = try XCTUnwrap(requestBody["thinking"] as? [String: String])
+        XCTAssertEqual(thinking["type"], "disabled")
+    }
+
+    func testRequestBodyOmitsThinkingWhenUnset() {
+        let helper = PluginOpenAIChatHelper(baseURL: "https://example.com")
+
+        let requestBody = helper.requestBody(
+            model: "deepseek-v4-flash",
+            systemPrompt: "Fix grammar",
+            userText: "hello world",
+            maxOutputTokens: 4096,
+            maxOutputTokenParameter: "max_tokens",
+            reasoningEffort: nil,
+            temperature: 0.3,
+            thinkingEnabled: nil
+        )
+
+        XCTAssertNil(requestBody["thinking"])
+    }
+
     func testRequestBodyOmitsTemperatureWhenRequested() {
         let helper = PluginOpenAIChatHelper(baseURL: "https://example.com")
 

@@ -27,6 +27,8 @@ final class FileTranscriptionViewModel: ObservableObject {
         @escaping CancellationChecker
     ) async throws -> TranscriptionResult
     typealias EngineReadinessChecker = @MainActor (String?) -> Bool
+    typealias SubtitleFileSaver = @MainActor (String, SubtitleFormat, String) -> Void
+    typealias SubtitleFolderPicker = @MainActor () -> URL?
 
     nonisolated(unsafe) static var _shared: FileTranscriptionViewModel?
     static var shared: FileTranscriptionViewModel {
@@ -112,6 +114,8 @@ final class FileTranscriptionViewModel: ObservableObject {
     private let audioSamplesLoader: AudioSamplesLoader
     private let transcriptionRunner: TranscriptionRunner
     private let engineReadinessChecker: EngineReadinessChecker?
+    private let subtitleFileSaver: SubtitleFileSaver
+    private let subtitleFolderPicker: SubtitleFolderPicker
     private var cancellables = Set<AnyCancellable>()
     private var isInitialized = false
     private var activeBatchTask: Task<Void, Never>?
@@ -129,7 +133,9 @@ final class FileTranscriptionViewModel: ObservableObject {
         defaults: UserDefaults = .standard,
         audioSamplesLoader: AudioSamplesLoader? = nil,
         transcriptionRunner: TranscriptionRunner? = nil,
-        engineReadinessChecker: EngineReadinessChecker? = nil
+        engineReadinessChecker: EngineReadinessChecker? = nil,
+        subtitleFileSaver: SubtitleFileSaver? = nil,
+        subtitleFolderPicker: SubtitleFolderPicker? = nil
     ) {
         self.modelManager = modelManager
         self.audioFileService = audioFileService
@@ -164,6 +170,19 @@ final class FileTranscriptionViewModel: ObservableObject {
             )
         }
         self.engineReadinessChecker = engineReadinessChecker
+        self.subtitleFileSaver = subtitleFileSaver ?? { content, format, suggestedName in
+            _ = SubtitleExporter.saveToFile(content: content, format: format, suggestedName: suggestedName)
+        }
+        self.subtitleFolderPicker = subtitleFolderPicker ?? {
+            let panel = NSOpenPanel()
+            panel.canChooseFiles = false
+            panel.canChooseDirectories = true
+            panel.canCreateDirectories = true
+            panel.prompt = String(localized: "Export Here")
+
+            guard panel.runModal() == .OK else { return nil }
+            return panel.url
+        }
         self.languageSelection = LanguageSelection(
             storedValue: defaults.string(forKey: UserDefaultsKeys.fileTranscriptionLanguage),
             nilBehavior: .auto
@@ -429,49 +448,38 @@ final class FileTranscriptionViewModel: ObservableObject {
     }
 
     func exportSubtitles(for item: FileItem, format: SubtitleFormat) {
-        guard let result = item.result, !result.segments.isEmpty else { return }
-
-        let content: String
-        switch format {
-        case .srt: content = SubtitleExporter.exportSRT(segments: result.segments)
-        case .vtt: content = SubtitleExporter.exportVTT(segments: result.segments)
-        }
+        guard let result = item.result,
+              let content = SubtitleExporter.exportContent(for: result, format: format) else { return }
 
         let name = item.url.deletingPathExtension().lastPathComponent
-        SubtitleExporter.saveToFile(content: content, format: format, suggestedName: name)
+        subtitleFileSaver(content, format, name)
     }
 
     func exportAllSubtitles(format: SubtitleFormat) {
-        let completedFiles = files.filter { $0.state == .done && $0.result != nil }
-        guard !completedFiles.isEmpty else { return }
+        let exports: [(item: FileItem, content: String)] = files.compactMap { item in
+            guard item.state == .done,
+                  let result = item.result,
+                  let content = SubtitleExporter.exportContent(for: result, format: format) else {
+                return nil
+            }
+            return (item, content)
+        }
+        guard !exports.isEmpty else { return }
 
         // For single file, use save panel directly
-        if completedFiles.count == 1, let item = completedFiles.first {
-            exportSubtitles(for: item, format: format)
+        if exports.count == 1, let export = exports.first {
+            let name = export.item.url.deletingPathExtension().lastPathComponent
+            subtitleFileSaver(export.content, format, name)
             return
         }
 
         // For multiple files, choose a folder
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.canCreateDirectories = true
-        panel.prompt = String(localized: "Export Here")
+        guard let folder = subtitleFolderPicker() else { return }
 
-        guard panel.runModal() == .OK, let folder = panel.url else { return }
-
-        for item in completedFiles {
-            guard let result = item.result, !result.segments.isEmpty else { continue }
-
-            let content: String
-            switch format {
-            case .srt: content = SubtitleExporter.exportSRT(segments: result.segments)
-            case .vtt: content = SubtitleExporter.exportVTT(segments: result.segments)
-            }
-
-            let name = item.url.deletingPathExtension().lastPathComponent
+        for export in exports {
+            let name = export.item.url.deletingPathExtension().lastPathComponent
             let fileURL = folder.appendingPathComponent("\(name).\(format.fileExtension)")
-            try? content.write(to: fileURL, atomically: true, encoding: .utf8)
+            SubtitleExporter.writeContent(export.content, to: fileURL, suggestedName: name)
         }
     }
 

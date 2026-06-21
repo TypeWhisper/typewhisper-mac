@@ -21,6 +21,7 @@ final class PromptPaletteHandler {
         let activeApp: (name: String?, bundleId: String?, url: String?)
         let browserInfoTask: Task<(url: String?, title: String?), Never>?
         let selectionViaCopy: Bool
+        let deferredClipboardRestore: TextInsertionService.DeferredClipboardRestore?
     }
     private var paletteContext: PaletteContext?
 
@@ -32,7 +33,7 @@ final class PromptPaletteHandler {
     private let workflowTextProcessingService: WorkflowTextProcessingService
     private let soundService: SoundService
     private let accessibilityAnnouncementService: AccessibilityAnnouncementService
-    private let activateAndPasteOverride: (@MainActor (String?) async -> Bool)?
+    private let activateAppForInsertionOverride: (@MainActor (String?) async -> Bool)?
 
     var onShowNotchFeedback: ((String, String, TimeInterval, Bool, String?) -> Void)?
     var onShowError: ((String) -> Void)?
@@ -53,7 +54,7 @@ final class PromptPaletteHandler {
         soundService: SoundService,
         accessibilityAnnouncementService: AccessibilityAnnouncementService,
         promptPaletteController: any PromptPaletteControlling = PromptPaletteController(),
-        activateAndPasteOverride: (@MainActor (String?) async -> Bool)? = nil
+        activateAppForInsertionOverride: (@MainActor (String?) async -> Bool)? = nil
     ) {
         self.promptPaletteController = promptPaletteController
         self.textInsertionService = textInsertionService
@@ -68,7 +69,7 @@ final class PromptPaletteHandler {
             )
         self.soundService = soundService
         self.accessibilityAnnouncementService = accessibilityAnnouncementService
-        self.activateAndPasteOverride = activateAndPasteOverride
+        self.activateAppForInsertionOverride = activateAppForInsertionOverride
     }
 
     func hide() {
@@ -103,6 +104,7 @@ final class PromptPaletteHandler {
         resolveTextContext(
             activeApp: activeApp,
             browserInfoTask: browserInfoTask,
+            deferClipboardRestoreForCopyFallback: false,
             onUnavailable: { [weak self] in
                 guard let self else { return }
                 guard !recentEntries.isEmpty else {
@@ -143,6 +145,7 @@ final class PromptPaletteHandler {
         resolveTextContext(
             activeApp: activeApp,
             browserInfoTask: browserInfoTask,
+            deferClipboardRestoreForCopyFallback: getPreserveClipboard?() ?? false,
             onUnavailable: { [weak self] in
                 self?.showMissingTextFeedback(soundFeedbackEnabled: soundFeedbackEnabled)
             }
@@ -168,6 +171,7 @@ final class PromptPaletteHandler {
     private func resolveTextContext(
         activeApp: (name: String?, bundleId: String?, url: String?),
         browserInfoTask: Task<(url: String?, title: String?), Never>?,
+        deferClipboardRestoreForCopyFallback: Bool,
         onUnavailable: @escaping () -> Void,
         completion: @escaping (PaletteContext) -> Void
     ) {
@@ -179,12 +183,26 @@ final class PromptPaletteHandler {
                 focusedElement: nil,
                 activeApp: activeApp,
                 browserInfoTask: browserInfoTask,
-                selectionViaCopy: false
+                selectionViaCopy: false,
+                deferredClipboardRestore: nil
             ))
         } else {
             let tis = textInsertionService
             Task {
-                if let copied = await tis.getTextSelectionViaCopy() {
+                if deferClipboardRestoreForCopyFallback,
+                   let copied = await tis.getTextSelectionViaCopyPreservingClipboardForInsertion() {
+                    logger.info("[PromptPalette] Got selected text via Cmd+C: \(copied.text.prefix(80))")
+                    completion(PaletteContext(
+                        text: copied.text,
+                        selection: nil,
+                        focusedElement: nil,
+                        activeApp: activeApp,
+                        browserInfoTask: browserInfoTask,
+                        selectionViaCopy: true,
+                        deferredClipboardRestore: copied.deferredClipboardRestore
+                    ))
+                } else if !deferClipboardRestoreForCopyFallback,
+                          let copied = await tis.getTextSelectionViaCopy() {
                     logger.info("[PromptPalette] Got selected text via Cmd+C: \(copied.prefix(80))")
                     completion(PaletteContext(
                         text: copied,
@@ -192,7 +210,8 @@ final class PromptPaletteHandler {
                         focusedElement: nil,
                         activeApp: activeApp,
                         browserInfoTask: browserInfoTask,
-                        selectionViaCopy: true
+                        selectionViaCopy: true,
+                        deferredClipboardRestore: nil
                     ))
                 } else if let clipboard = NSPasteboard.general.string(forType: .string), !clipboard.isEmpty {
                     let focusedElement = tis.getFocusedTextElement()
@@ -203,7 +222,8 @@ final class PromptPaletteHandler {
                         focusedElement: focusedElement,
                         activeApp: activeApp,
                         browserInfoTask: browserInfoTask,
-                        selectionViaCopy: false
+                        selectionViaCopy: false,
+                        deferredClipboardRestore: nil
                     ))
                 } else {
                     logger.info("[PromptPalette] No text available")
@@ -284,6 +304,9 @@ final class PromptPaletteHandler {
 
         Task { [weak self] in
             guard let self else { return }
+            defer {
+                self.textInsertionService.restoreClipboardIfNeeded(ctx.deferredClipboardRestore)
+            }
             do {
                 let browserInfo = await ctx.browserInfoTask?.value
                 let resolvedUrl = browserInfo?.url ?? ctx.activeApp.url
@@ -330,37 +353,41 @@ final class PromptPaletteHandler {
                     return
                 }
 
-                // Save clipboard if preservation is enabled
                 let preserveClipboard = getPreserveClipboard?() ?? false
-                let savedClipboard = preserveClipboard ? textInsertionService.saveClipboard() : []
-
-                // Always put result on clipboard so the user can paste it
-                let pasteboard = NSPasteboard.general
-                pasteboard.clearContents()
-                if let formattedClipboardPayload = ClipboardContentFormatter.payload(
-                    for: result,
-                    outputFormat: resolvedOutputFormat
-                ) {
-                    formattedClipboardPayload.write(to: pasteboard)
-                } else {
-                    pasteboard.setString(result, forType: .string)
-                }
                 let requiresPasteboardInsertion = ClipboardContentFormatter.requiresPasteboardInsertion(
                     outputFormat: resolvedOutputFormat
                 )
 
                 let insertionOutcome: InsertionOutcome
                 if requiresPasteboardInsertion {
-                    insertionOutcome = await activateAndPaste(bundleId: ctx.activeApp.bundleId) ? .insertedViaPaste : .failed
+                    insertionOutcome = try await activateAndInsertText(
+                        result,
+                        bundleId: ctx.activeApp.bundleId,
+                        preserveClipboard: preserveClipboard,
+                        autoEnter: workflow.output.autoEnter,
+                        outputFormat: resolvedOutputFormat,
+                        deferredClipboardRestore: ctx.deferredClipboardRestore
+                    )
                 } else if let selection = ctx.selection {
                     insertionOutcome = await insertViaAXWithPasteFallback(
                         selection: selection,
                         result: result,
                         originalText: ctx.text,
-                        bundleId: ctx.activeApp.bundleId
+                        bundleId: ctx.activeApp.bundleId,
+                        preserveClipboard: preserveClipboard,
+                        autoEnter: workflow.output.autoEnter,
+                        outputFormat: resolvedOutputFormat,
+                        deferredClipboardRestore: ctx.deferredClipboardRestore
                     )
                 } else if ctx.selectionViaCopy {
-                    insertionOutcome = await activateAndPaste(bundleId: ctx.activeApp.bundleId) ? .insertedViaPaste : .failed
+                    insertionOutcome = try await activateAndInsertText(
+                        result,
+                        bundleId: ctx.activeApp.bundleId,
+                        preserveClipboard: preserveClipboard,
+                        autoEnter: workflow.output.autoEnter,
+                        outputFormat: resolvedOutputFormat,
+                        deferredClipboardRestore: ctx.deferredClipboardRestore
+                    )
                 } else if let element = ctx.focusedElement {
                     insertionOutcome = textInsertionService.insertTextAt(element: element, text: result)
                         ? .insertedViaAccessibility
@@ -369,17 +396,13 @@ final class PromptPaletteHandler {
                     insertionOutcome = .failed
                 }
 
-                // Restore clipboard unconditionally when preservation is enabled
-                if preserveClipboard {
-                    if insertionOutcome == .insertedViaPaste {
-                        try? await Task.sleep(for: .milliseconds(200))
-                    }
-                    textInsertionService.restoreClipboard(savedClipboard)
-                }
-
-                if workflow.output.autoEnter, insertionOutcome != .failed {
+                if workflow.output.autoEnter, insertionOutcome == .insertedViaAccessibility {
                     try? await Task.sleep(for: .milliseconds(50))
                     textInsertionService.simulateReturn()
+                }
+
+                if insertionOutcome == .failed && !preserveClipboard {
+                    copyWorkflowResultToClipboard(result, outputFormat: resolvedOutputFormat)
                 }
 
                 soundService.play(.transcriptionSuccess, enabled: soundFeedbackEnabled)
@@ -406,12 +429,29 @@ final class PromptPaletteHandler {
         }
     }
 
+    private func copyWorkflowResultToClipboard(_ result: String, outputFormat: String?) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        if let formattedClipboardPayload = ClipboardContentFormatter.payload(
+            for: result,
+            outputFormat: outputFormat
+        ) {
+            formattedClipboardPayload.write(to: pasteboard)
+        } else {
+            pasteboard.setString(result, forType: .string)
+        }
+    }
+
     /// Try AX replace, verify it worked, fall back to activate+paste if silently ignored (Electron apps).
     private func insertViaAXWithPasteFallback(
         selection: TextInsertionService.TextSelection,
         result: String,
         originalText: String,
-        bundleId: String?
+        bundleId: String?,
+        preserveClipboard: Bool,
+        autoEnter: Bool,
+        outputFormat: String?,
+        deferredClipboardRestore: TextInsertionService.DeferredClipboardRestore? = nil
     ) async -> InsertionOutcome {
         let replaced = textInsertionService.replaceSelectedText(in: selection, with: result)
         logger.info("[PromptPalette] replaceSelectedText reported: \(replaced)")
@@ -427,33 +467,72 @@ final class PromptPaletteHandler {
             }
         }
 
-        return await activateAndPaste(bundleId: bundleId) ? .insertedViaPaste : .failed
+        do {
+            return try await activateAndInsertText(
+                result,
+                bundleId: bundleId,
+                preserveClipboard: preserveClipboard,
+                autoEnter: autoEnter,
+                outputFormat: outputFormat,
+                deferredClipboardRestore: deferredClipboardRestore
+            )
+        } catch {
+            logger.error("[PromptPalette] Paste fallback failed: \(error.localizedDescription)")
+            return .failed
+        }
     }
 
-    /// Activate the source app and paste from clipboard. Result must already be on the clipboard.
-    private func activateAndPaste(bundleId: String?) async -> Bool {
-        if let activateAndPasteOverride {
-            return await activateAndPasteOverride(bundleId)
+    /// Activate the source app before delegating to the shared insertion service.
+    private func activateAndInsertText(
+        _ text: String,
+        bundleId: String?,
+        preserveClipboard: Bool,
+        autoEnter: Bool,
+        outputFormat: String?,
+        deferredClipboardRestore: TextInsertionService.DeferredClipboardRestore? = nil
+    ) async throws -> InsertionOutcome {
+        if let activateAppForInsertionOverride {
+            guard await activateAppForInsertionOverride(bundleId) else {
+                return .failed
+            }
+            _ = try await textInsertionService.insertText(
+                text,
+                preserveClipboard: preserveClipboard,
+                autoEnter: autoEnter,
+                outputFormat: outputFormat,
+                deferredClipboardRestore: deferredClipboardRestore
+            )
+            return .insertedViaPaste
         }
 
         guard let bundleId,
               let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).first else {
             logger.warning("[PromptPalette] No running app for bundleId: \(bundleId ?? "nil")")
-            return false
+            return .failed
         }
 
-        let activated = app.activate(from: NSRunningApplication.current)
-        logger.info("[PromptPalette] activate(from:) for \(bundleId): \(activated)")
-        try? await Task.sleep(for: .milliseconds(200))
+        let initialFrontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        if initialFrontmost == bundleId {
+            logger.info("[PromptPalette] Source app already frontmost for insertion: \(bundleId)")
+        } else {
+            let activated = app.activate(from: NSRunningApplication.current)
+            logger.info("[PromptPalette] activate(from:) for \(bundleId): \(activated)")
+            try? await Task.sleep(for: .milliseconds(200))
 
-        let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        guard frontmost == bundleId else {
-            logger.warning("[PromptPalette] Could not activate \(bundleId), frontmost: \(frontmost ?? "nil")")
-            return false
+            let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+            guard frontmost == bundleId else {
+                logger.warning("[PromptPalette] Could not activate \(bundleId), frontmost: \(frontmost ?? "nil")")
+                return .failed
+            }
         }
 
-        textInsertionService.pasteFromClipboard()
-        logger.info("[PromptPalette] Pasted into \(bundleId)")
-        return true
+        _ = try await textInsertionService.insertText(
+            text,
+            preserveClipboard: preserveClipboard,
+            autoEnter: autoEnter,
+            outputFormat: outputFormat,
+            deferredClipboardRestore: deferredClipboardRestore
+        )
+        return .insertedViaPaste
     }
 }

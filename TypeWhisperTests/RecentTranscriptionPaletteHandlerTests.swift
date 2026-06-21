@@ -301,12 +301,13 @@ final class PromptPaletteHandlerTests: XCTestCase {
             soundService: SoundService(),
             accessibilityAnnouncementService: AccessibilityAnnouncementService(),
             promptPaletteController: controller,
-            activateAndPasteOverride: { _ in
-                pasteCount += 1
-                textInsertionService.pasteFromClipboard()
+            activateAppForInsertionOverride: { _ in
                 return true
             }
         )
+        textInsertionService.pasteSimulatorOverride = {
+            pasteCount += 1
+        }
 
         handler.processWorkflowDirectly(
             workflow: workflow,

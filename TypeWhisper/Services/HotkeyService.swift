@@ -127,7 +127,7 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
 }
 
 /// Manages global hotkeys for dictation and standalone app actions.
-final class HotkeyService: ObservableObject {
+final class HotkeyService: ObservableObject, @unchecked Sendable {
     struct MenuShortcutDescriptor: Equatable, Sendable {
         let keyEquivalent: Character
         let modifiers: NSEvent.ModifierFlags
@@ -180,6 +180,12 @@ final class HotkeyService: ObservableObject {
     var onCancelPressed: (() -> Void)?
     var onPushToTalkInterruption: (() -> Void)?
     var discardPushToTalkRecordingOnExtraKeyPress = false
+    var modifierFlagsStateProvider: () -> NSEvent.ModifierFlags = {
+        NSEvent.ModifierFlags(rawValue: UInt(CGEventSource.flagsState(.combinedSessionState).rawValue))
+    }
+    var workflowTextProcessingModifierPollInterval: TimeInterval = 0.05
+    var workflowTextProcessingModifierReleaseTimeout: TimeInterval = 2.0
+    var workflowTextProcessingPostReleaseDelay: TimeInterval = 0.15
 
     private var keyDownTime: Date?
     private var isActive = false
@@ -794,6 +800,7 @@ final class HotkeyService: ObservableObject {
                     workflowId: workflowId,
                     hotkey: wState.hotkey,
                     behavior: wState.behavior,
+                    event: event,
                     keyDown: keyDown,
                     keyUp: keyUp,
                     source: source
@@ -899,10 +906,15 @@ final class HotkeyService: ObservableObject {
         workflowId: UUID,
         hotkey: UnifiedHotkey,
         behavior: WorkflowHotkeyBehavior,
+        event: NSEvent,
         keyDown: Bool,
         keyUp: Bool,
         source: HotkeyEventSource
     ) {
+        let isTextProcessingModifierRelease = behavior != .startDictation
+            && keyUp
+            && event.type == .flagsChanged
+            && hotkey.kind == .keyWithModifiers
         if keyDown, shouldDispatch(
             target: .workflow(workflowId),
             phase: .down,
@@ -913,7 +925,7 @@ final class HotkeyService: ObservableObject {
                 logFallbackMatchIfNeeded(hotkey: hotkey, source: source)
             }
             handleWorkflowKeyDown(workflowId: workflowId, behavior: behavior)
-        } else if keyUp, shouldDispatch(
+        } else if keyUp, !isTextProcessingModifierRelease, shouldDispatch(
             target: .workflow(workflowId),
             phase: .up,
             hotkey: hotkey,
@@ -1412,7 +1424,19 @@ final class HotkeyService: ObservableObject {
 
     private func handleWorkflowKeyDown(workflowId: UUID, behavior: WorkflowHotkeyBehavior) {
         guard behavior == .startDictation else {
-            onWorkflowTextProcessing?(workflowId)
+            guard !isActive else {
+                isActive = false
+                activeSlotType = nil
+                activeGlobalHotkey = nil
+                activeProfileId = nil
+                activeWorkflowId = nil
+                currentMode = nil
+                keyDownTime = nil
+                pushToTalkInterruptionSignaled = false
+                onDictationStop?()
+                return
+            }
+            activeWorkflowId = workflowId
             return
         }
 
@@ -1441,7 +1465,12 @@ final class HotkeyService: ObservableObject {
     }
 
     private func handleWorkflowKeyUp(workflowId: UUID, behavior: WorkflowHotkeyBehavior) {
-        guard behavior == .startDictation else { return }
+        guard behavior == .startDictation else {
+            guard activeWorkflowId == workflowId else { return }
+            activeWorkflowId = nil
+            dispatchWorkflowTextProcessingWhenInputSettles(workflowId: workflowId)
+            return
+        }
         guard isActive, activeWorkflowId == workflowId else { return }
 
         guard let downTime = keyDownTime else { return }
@@ -1458,6 +1487,43 @@ final class HotkeyService: ObservableObject {
             pushToTalkInterruptionSignaled = false
             onDictationStop?()
         }
+    }
+
+    private func dispatchWorkflowTextProcessingWhenInputSettles(
+        workflowId: UUID,
+        deadline: Date? = nil,
+        postReleaseDelayApplied: Bool = false
+    ) {
+        let deadline = deadline ?? Date().addingTimeInterval(workflowTextProcessingModifierReleaseTimeout)
+        guard workflowTextProcessingModifiersReleased() || Date() >= deadline else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + workflowTextProcessingModifierPollInterval) { [weak self] in
+                self?.dispatchWorkflowTextProcessingWhenInputSettles(
+                    workflowId: workflowId,
+                    deadline: deadline,
+                    postReleaseDelayApplied: false
+                )
+            }
+            return
+        }
+
+        if !postReleaseDelayApplied, Date() < deadline {
+            DispatchQueue.main.asyncAfter(deadline: .now() + workflowTextProcessingPostReleaseDelay) { [weak self] in
+                self?.dispatchWorkflowTextProcessingWhenInputSettles(
+                    workflowId: workflowId,
+                    deadline: deadline,
+                    postReleaseDelayApplied: true
+                )
+            }
+            return
+        }
+
+        onWorkflowTextProcessing?(workflowId)
+    }
+
+    private func workflowTextProcessingModifiersReleased() -> Bool {
+        let relevantMask: NSEvent.ModifierFlags = [.command, .option, .control, .shift, .function]
+        let currentFlags = modifierFlagsStateProvider().intersection(relevantMask)
+        return currentFlags.isEmpty
     }
 
     // MARK: - Display Name

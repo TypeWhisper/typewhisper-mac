@@ -690,6 +690,32 @@ public struct PluginOpenAIChatHelper: Sendable {
         temperature: Double?,
         requestTimeout: TimeInterval
     ) async throws -> String {
+        try await process(
+            apiKey: apiKey,
+            model: model,
+            systemPrompt: systemPrompt,
+            userText: userText,
+            maxOutputTokens: maxOutputTokens,
+            maxOutputTokenParameter: maxOutputTokenParameter,
+            reasoningEffort: reasoningEffort,
+            temperature: temperature,
+            requestTimeout: requestTimeout,
+            thinkingEnabled: nil
+        )
+    }
+
+    public func process(
+        apiKey: String,
+        model: String,
+        systemPrompt: String,
+        userText: String,
+        maxOutputTokens: Int? = 4096,
+        maxOutputTokenParameter: String = "max_tokens",
+        reasoningEffort: String? = nil,
+        temperature: Double?,
+        requestTimeout: TimeInterval,
+        thinkingEnabled: Bool?
+    ) async throws -> String {
         let endpoint = "\(baseURL)\(chatEndpoint)"
         guard let url = URL(string: endpoint) else {
             throw PluginChatError.apiError("Invalid URL: \(endpoint)")
@@ -702,7 +728,8 @@ public struct PluginOpenAIChatHelper: Sendable {
             maxOutputTokens: maxOutputTokens,
             maxOutputTokenParameter: maxOutputTokenParameter,
             reasoningEffort: reasoningEffort,
-            temperature: temperature
+            temperature: temperature,
+            thinkingEnabled: thinkingEnabled
         )
 
         var request = URLRequest(url: url)
@@ -856,6 +883,28 @@ public struct PluginOpenAIChatHelper: Sendable {
         reasoningEffort: String?,
         temperature: Double?
     ) -> [String: Any] {
+        requestBody(
+            model: model,
+            systemPrompt: systemPrompt,
+            userText: userText,
+            maxOutputTokens: maxOutputTokens,
+            maxOutputTokenParameter: maxOutputTokenParameter,
+            reasoningEffort: reasoningEffort,
+            temperature: temperature,
+            thinkingEnabled: nil
+        )
+    }
+
+    func requestBody(
+        model: String,
+        systemPrompt: String,
+        userText: String,
+        maxOutputTokens: Int?,
+        maxOutputTokenParameter: String,
+        reasoningEffort: String?,
+        temperature: Double?,
+        thinkingEnabled: Bool?
+    ) -> [String: Any] {
         var requestBody: [String: Any] = [
             "model": model,
             "messages": [
@@ -874,6 +923,12 @@ public struct PluginOpenAIChatHelper: Sendable {
 
         if let reasoningEffort, !reasoningEffort.isEmpty {
             requestBody["reasoning_effort"] = reasoningEffort
+        }
+
+        if let thinkingEnabled {
+            requestBody["thinking"] = [
+                "type": thinkingEnabled ? "enabled" : "disabled"
+            ]
         }
 
         return requestBody
