@@ -776,7 +776,14 @@ final class LicenseService: ObservableObject {
 
     private func saveLicenseToKeychain(key: String, activationId: String) {
         let payload = LicenseKeychainPayload(key: key, activationId: activationId)
-        let data = (try? JSONEncoder().encode(payload)) ?? Data()
+
+        let data: Data
+        do {
+            data = try JSONEncoder().encode(payload)
+        } catch {
+            logger.error("Failed to encode license keychain payload: \(error)")
+            return
+        }
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -847,7 +854,14 @@ final class LicenseService: ObservableObject {
 
     private func saveSupporterToKeychain(key: String, activationId: String) {
         let payload = LicenseKeychainPayload(key: key, activationId: activationId)
-        let data = (try? JSONEncoder().encode(payload)) ?? Data()
+
+        let data: Data
+        do {
+            data = try JSONEncoder().encode(payload)
+        } catch {
+            logger.error("Failed to encode supporter keychain payload: \(error)")
+            return
+        }
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,

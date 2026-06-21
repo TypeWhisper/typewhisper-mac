@@ -19,9 +19,7 @@ final class HistoryService: ObservableObject {
     private let audioDirectory: URL
 
     init(appSupportDirectory: URL = AppConstants.appSupportDirectory) {
-        let schema = Schema([TranscriptionRecord.self])
         let storeDir = appSupportDirectory
-        try? FileManager.default.createDirectory(at: storeDir, withIntermediateDirectories: true)
 
         let audioDir = storeDir.appendingPathComponent("audio", isDirectory: true)
         try? FileManager.default.createDirectory(at: audioDir, withIntermediateDirectories: true)

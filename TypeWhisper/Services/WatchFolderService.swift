@@ -474,7 +474,7 @@ final class WatchFolderService: ObservableObject {
         try? data.write(to: processedHistoryURL, options: .atomic)
     }
 
-    private func fileFingerprint(for url: URL) -> String? {
+    func fileFingerprint(for url: URL) -> String? {
         let resourceKeys: Set<URLResourceKey> = [.fileSizeKey, .contentModificationDateKey]
         let values = try? url.resourceValues(forKeys: resourceKeys)
 
@@ -483,10 +483,11 @@ final class WatchFolderService: ObservableObject {
         
         var checksum = "no-data"
         if let fileHandle = try? FileHandle(forReadingFrom: url) {
-            if let data = try? fileHandle.read(upToCount: 8192) {
-                let hash = SHA256.hash(data: data)
-                checksum = hash.compactMap { String(format: "%02x", $0) }.joined()
+            var hasher = SHA256()
+            while let data = try? fileHandle.read(upToCount: 8192), !data.isEmpty {
+                hasher.update(data: data)
             }
+            checksum = hasher.finalize().compactMap { String(format: "%02x", $0) }.joined()
             try? fileHandle.close()
         }
 

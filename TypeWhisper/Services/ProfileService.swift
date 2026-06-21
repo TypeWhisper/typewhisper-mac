@@ -44,9 +44,6 @@ final class ProfileService: ObservableObject {
     private let modelContext: ModelContext
 
     init(appSupportDirectory: URL = AppConstants.appSupportDirectory) {
-        let schema = Schema([Profile.self])
-        let storeDir = appSupportDirectory
-        try? FileManager.default.createDirectory(at: storeDir, withIntermediateDirectories: true)
 
         do {
             let (container, context) = try SwiftDataStoreFactory.create(

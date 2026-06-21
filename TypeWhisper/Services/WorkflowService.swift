@@ -89,9 +89,6 @@ final class WorkflowService: ObservableObject {
                 ?? Self.defaultShortTranscriptionMinimumWords
         )
 
-        let schema = Schema([Workflow.self])
-        let storeDir = appSupportDirectory
-        try? FileManager.default.createDirectory(at: storeDir, withIntermediateDirectories: true)
 
         do {
             let (container, context) = try SwiftDataStoreFactory.create(
