@@ -35,7 +35,11 @@ final class WatchFolderServiceTests: XCTestCase {
         let fingerprint1 = try XCTUnwrap(service.fileFingerprint(for: file1URL))
         let fingerprint2 = try XCTUnwrap(service.fileFingerprint(for: file2URL))
 
-        // Assert that they are different now that we hash the whole file
-        XCTAssertNotEqual(fingerprint1, fingerprint2)
+        func checksum(from fingerprint: String) throws -> String {
+            try XCTUnwrap(fingerprint.split(separator: "|").last.map(String.init))
+        }
+
+        // Assert checksum differs for files that only differ after the shared prefix
+        XCTAssertNotEqual(try checksum(from: fingerprint1), try checksum(from: fingerprint2))
     }
 }
