@@ -498,16 +498,16 @@ final class OpenAICompatiblePlugin: NSObject,
         temperatureDirective: PluginLLMTemperatureDirective,
         profileId: String
     ) async throws -> String {
-        guard let profile = profile(for: profileId),
-              let helper = makeChatHelper(for: profile) else {
+        guard let profile = profile(for: profileId), !profile.baseURL.isEmpty else {
             throw PluginChatError.notConfigured
         }
         let modelId = model ?? selectedLLMModelId(for: profileId) ?? ""
         guard !modelId.isEmpty else {
             throw PluginChatError.noModelSelected
         }
-        return try await helper.process(
+        return try await processChatCompletion(
             apiKey: apiKey(for: profileId) ?? "",
+            baseURL: profile.baseURL,
             model: modelId,
             systemPrompt: systemPrompt,
             userText: userText,
@@ -607,11 +607,6 @@ final class OpenAICompatiblePlugin: NSObject,
     private func makeTranscriptionHelper(for profile: OpenAICompatibleProfile) -> PluginOpenAITranscriptionHelper? {
         guard !profile.baseURL.isEmpty else { return nil }
         return PluginOpenAITranscriptionHelper(baseURL: profile.baseURL, responseFormat: "json")
-    }
-
-    private func makeChatHelper(for profile: OpenAICompatibleProfile) -> PluginOpenAIChatHelper? {
-        guard !profile.baseURL.isEmpty else { return nil }
-        return PluginOpenAIChatHelper(baseURL: profile.baseURL)
     }
 
     private func updateProfile(
@@ -738,6 +733,104 @@ final class OpenAICompatiblePlugin: NSObject,
         canonicalProfileId(for: profileId) == OpenAICompatibleProfile.defaultId
             ? "api-key"
             : "api-key.\(canonicalProfileId(for: profileId))"
+    }
+
+    private func processChatCompletion(
+        apiKey: String,
+        baseURL: String,
+        model: String,
+        systemPrompt: String,
+        userText: String,
+        temperature: Double?,
+        requestTimeout: TimeInterval,
+        thinkingEnabled: Bool
+    ) async throws -> String {
+        let endpoint = "\(baseURL)/v1/chat/completions"
+        guard let url = URL(string: endpoint) else {
+            throw PluginChatError.apiError("Invalid URL: \(endpoint)")
+        }
+
+        var requestBody: [String: Any] = [
+            "model": model,
+            "messages": [
+                ["role": "system", "content": systemPrompt],
+                ["role": "user", "content": userText],
+            ],
+            "max_tokens": 4096,
+            "thinking": [
+                "type": thinkingEnabled ? "enabled" : "disabled"
+            ],
+        ]
+        if let temperature {
+            requestBody["temperature"] = temperature
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = requestTimeout
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+
+        let (data, response) = try await PluginHTTPClient.data(for: request, resourceTimeout: requestTimeout)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw PluginChatError.networkError("Invalid response")
+        }
+
+        switch httpResponse.statusCode {
+        case 200:
+            break
+        case 401:
+            throw PluginChatError.invalidApiKey
+        case 429:
+            throw PluginChatError.rateLimited
+        default:
+            throw PluginChatError.apiError(Self.chatErrorMessage(from: data, statusCode: httpResponse.statusCode))
+        }
+
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let choices = json["choices"] as? [[String: Any]],
+              let first = choices.first,
+              let message = first["message"] as? [String: Any],
+              let content = message["content"] as? String else {
+            throw PluginChatError.apiError("Failed to parse response")
+        }
+
+        return content.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func chatErrorMessage(from data: Data, statusCode: Int) -> String {
+        let json = try? JSONSerialization.jsonObject(with: data)
+
+        let object: [String: Any]?
+        if let dictionary = json as? [String: Any] {
+            object = dictionary
+        } else if let array = json as? [Any],
+                  let first = array.first as? [String: Any] {
+            object = first
+        } else {
+            object = nil
+        }
+
+        if let object, let message = message(fromChatErrorObject: object) {
+            return message
+        }
+        return "HTTP \(statusCode)"
+    }
+
+    private static func message(fromChatErrorObject object: [String: Any]) -> String? {
+        if let detail = object["detail"] as? String, !detail.isEmpty {
+            return detail
+        }
+        if let error = object["error"] as? [String: Any],
+           let message = error["message"] as? String, !message.isEmpty {
+            return message
+        }
+        if let message = object["message"] as? String, !message.isEmpty {
+            return message
+        }
+        return nil
     }
 
     private static func normalizedBaseURL(_ url: String) -> String {

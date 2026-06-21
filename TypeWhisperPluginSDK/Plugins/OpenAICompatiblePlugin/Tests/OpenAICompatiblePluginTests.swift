@@ -318,6 +318,7 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         let defaultBody = try XCTUnwrap(requests[0].httpBody)
         let defaultJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: defaultBody) as? [String: Any])
         XCTAssertEqual(defaultJSON["model"] as? String, "default-chat")
+        XCTAssertEqual(defaultJSON["max_tokens"] as? Int, 4096)
         XCTAssertEqual(defaultJSON["temperature"] as? Double, 0.2)
         let defaultThinking = try XCTUnwrap(defaultJSON["thinking"] as? [String: String])
         XCTAssertEqual(defaultThinking["type"], "disabled")
@@ -325,9 +326,39 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         let inceptionBody = try XCTUnwrap(requests[1].httpBody)
         let inceptionJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: inceptionBody) as? [String: Any])
         XCTAssertEqual(inceptionJSON["model"] as? String, "inception-chat")
+        XCTAssertEqual(inceptionJSON["max_tokens"] as? Int, 4096)
         XCTAssertEqual(inceptionJSON["temperature"] as? Double, 0.9)
         let inceptionThinking = try XCTUnwrap(inceptionJSON["thinking"] as? [String: String])
         XCTAssertEqual(inceptionThinking["type"], "enabled")
+    }
+
+    func testProcessSurfacesOpenAICompatibleErrorMessage() async throws {
+        let host = try PluginTestHostServices(defaults: ["baseURL": "https://example.test"])
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        plugin.selectLLMModel("missing-model")
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"[{"error":{"message":"model not found"}}]"#.utf8),
+                    Self.httpResponse(url: "https://example.test/v1/chat/completions", statusCode: 404)
+                )
+            ])
+        }
+
+        do {
+            _ = try await plugin.process(systemPrompt: "Fix", userText: "hello", model: nil)
+            XCTFail("Expected apiError")
+        } catch let error as PluginChatError {
+            guard case .apiError(let message) = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertEqual(message, "model not found")
+        }
+
+        XCTAssertEqual(store.sessions[0].requestedPaths, ["/v1/chat/completions"])
     }
 
     func testSetChatRequestTimeoutIgnoresNonFiniteValues() throws {
