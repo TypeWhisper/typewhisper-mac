@@ -86,6 +86,9 @@ jobs:
             -project $PROJECT \
             -scheme $SCHEME
 
+      - name: Verify Instrumentation Check Script
+        run: bash scripts/check_release_binary_instrumentation.sh --self-test
+
       - name: Verify Release Build
         run: |
           set -o pipefail
@@ -201,6 +204,9 @@ jobs:
 
           echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
           echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> $GITHUB_ENV
+
+      - name: Verify Instrumentation Check Script
+        run: bash scripts/check_release_binary_instrumentation.sh --self-test
 
       - name: Build App
         run: |

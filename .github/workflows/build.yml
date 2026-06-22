@@ -42,6 +42,9 @@ jobs:
           done
           exit 1
 
+      - name: Verify Instrumentation Check Script
+        run: bash scripts/check_release_binary_instrumentation.sh --self-test
+
       - name: Build App
         run: |
           set -o pipefail
