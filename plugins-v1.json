@@ -1172,7 +1172,8 @@
       "author": "TypeWhisper",
       "description": "Access OpenRouter speech-to-text models and 300+ LLMs from OpenAI, Anthropic, Meta, Google and more. Shows model pricing and account balance. Requires API key.",
       "descriptions": {
-        "de": "Zugriff auf OpenRouter-Spracherkennungsmodelle und \u00fcber 300 LLMs von OpenAI, Anthropic, Meta, Google und mehr. Zeigt Modellpreise und Kontoguthaben. Erfordert API-Key."
+        "de": "Zugriff auf OpenRouter-Spracherkennungsmodelle und \u00fcber 300 LLMs von OpenAI, Anthropic, Meta, Google und mehr. Zeigt Modellpreise und Kontoguthaben. Erfordert API-Key.",
+        "ja": "OpenAI\u3001Anthropic\u3001Meta\u3001Google\u306a\u3069\u306eOpenRouter\u97f3\u58f0\u8a8d\u8b58\u30e2\u30c7\u30eb\u3068300\u4ee5\u4e0a\u306eLLM\u306b\u30a2\u30af\u30bb\u30b9\u3067\u304d\u307e\u3059\u3002\u30e2\u30c7\u30eb\u6599\u91d1\u3068\u30a2\u30ab\u30a6\u30f3\u30c8\u6b8b\u9ad8\u3092\u8868\u793a\u3057\u3001API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
       },
       "category": "transcription",
       "downloadCount": 650,
@@ -1182,6 +1183,14 @@
       "requiresAPIKey": true,
       "detailsURL": "https://www.typewhisper.com/addons/openrouter/",
       "releases": [
+        {
+          "version": "1.1.1",
+          "minHostVersion": "1.4.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 249906,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openrouter-v1.1.1/OpenRouterPlugin.zip",
+          "minOSVersion": "14.0"
+        },
         {
           "version": "1.1.0",
           "minHostVersion": "0.9.0",
