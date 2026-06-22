@@ -81,6 +81,78 @@ final class TargetAppCorrectionCommitObserver: TargetAppCorrectionCommitObservin
     }
 }
 
+private final class TargetAppCorrectionWakeCoordinator: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var sleepTask: Task<Void, Never>?
+    private var generation = 0
+
+    func wait(for duration: Duration) async {
+        guard duration > .seconds(0), !Task.isCancelled else { return }
+
+        await withTaskCancellationHandler(operation: {
+            await withCheckedContinuation { continuation in
+                guard !Task.isCancelled else {
+                    continuation.resume()
+                    return
+                }
+                let waitID = self.startWait(continuation)
+                let task = Task { [weak self] in
+                    try? await Task.sleep(for: duration)
+                    self?.resume(waitID: waitID)
+                }
+                self.storeSleepTask(task, waitID: waitID)
+            }
+        }, onCancel: {
+            resume()
+        })
+    }
+
+    func wake() {
+        resume()
+    }
+
+    private func startWait(_ continuation: CheckedContinuation<Void, Never>) -> Int {
+        lock.lock()
+        generation += 1
+        let waitID = generation
+        self.continuation = continuation
+        let oldTask = sleepTask
+        sleepTask = nil
+        lock.unlock()
+        oldTask?.cancel()
+        return waitID
+    }
+
+    private func storeSleepTask(_ task: Task<Void, Never>, waitID: Int) {
+        lock.lock()
+        guard waitID == generation, continuation != nil else {
+            lock.unlock()
+            task.cancel()
+            return
+        }
+        sleepTask = task
+        lock.unlock()
+    }
+
+    private func resume(waitID: Int? = nil) {
+        lock.lock()
+        if let waitID, waitID != generation {
+            lock.unlock()
+            return
+        }
+        generation += 1
+        let task = sleepTask
+        sleepTask = nil
+        let continuation = continuation
+        self.continuation = nil
+        lock.unlock()
+
+        task?.cancel()
+        continuation?.resume()
+    }
+}
+
 @MainActor
 final class TargetAppCorrectionLearningService {
     private static let defaultPollSchedule: [Duration] = (1...30).map { .seconds($0) }
@@ -120,8 +192,10 @@ final class TargetAppCorrectionLearningService {
         guard !insertedText.isEmpty, !pollSchedule.isEmpty else { return [] }
 
         var commitSignal: TargetAppCorrectionCommitSignal?
+        let wakeCoordinator = TargetAppCorrectionWakeCoordinator()
         let commitObserver = makeCommitObserver { signal in
             commitSignal = signal
+            wakeCoordinator.wake()
         }
         commitObserver.start()
         defer { commitObserver.stop() }
@@ -129,19 +203,29 @@ final class TargetAppCorrectionLearningService {
         var latestSuggestions: [CorrectionSuggestion] = []
         var elapsed: Duration = .seconds(0)
         for pollOffset in pollSchedule {
+            let waitDuration: Duration
             if pollOffset > elapsed {
-                await sleep(pollOffset - elapsed)
+                waitDuration = pollOffset - elapsed
                 elapsed = pollOffset
             } else {
-                await sleep(.seconds(0))
+                waitDuration = .seconds(0)
+            }
+            if commitSignal == nil {
+                if waitDuration > .seconds(0) {
+                    await wakeCoordinator.wait(for: waitDuration)
+                } else {
+                    await sleep(.seconds(0))
+                }
             }
             guard !Task.isCancelled else { return [] }
 
             guard let observation = textInsertionService.recaptureFocusedTextObservation(matching: baseline) else {
-                if textInsertionService.focusedTextElementMatches(baseline) {
+                switch textInsertionService.focusedTextElementMatch(baseline) {
+                case .same, .unavailable:
                     return []
+                case .different:
+                    return dictionaryService.learnCorrections(latestSuggestions)
                 }
-                return dictionaryService.learnCorrections(latestSuggestions)
             }
 
             let suggestions = highConfidenceCorrectionSuggestions(
@@ -151,6 +235,8 @@ final class TargetAppCorrectionLearningService {
             )
             if !suggestions.isEmpty {
                 latestSuggestions = suggestions
+            } else {
+                latestSuggestions = []
             }
 
             if commitSignal != nil {

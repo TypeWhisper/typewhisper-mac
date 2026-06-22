@@ -26,10 +26,7 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
             textInsertionService: textInsertionService,
             textDiffService: TextDiffService(),
             dictionaryService: dictionaryService,
-            pollSchedule: [.milliseconds(0)],
-            sleep: { _ in
-                commitEmitter.emit(.returnKey)
-            },
+            pollSchedule: [.seconds(5)],
             makeCommitObserver: commitObserver(capturing: commitEmitter)
         )
         let baseline = TextInsertionService.FocusedTextObservation(
@@ -39,7 +36,15 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
             selectedRange: NSRange(location: 19, length: 0)
         )
 
-        let learned = await service.trackInsertion(insertedText: "teh", baseline: baseline)
+        let task = Task { @MainActor in
+            await service.trackInsertion(insertedText: "teh", baseline: baseline)
+        }
+        for _ in 0..<1000 where !commitEmitter.isReady {
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+        XCTAssertTrue(commitEmitter.isReady)
+        commitEmitter.emit(.returnKey)
+        let learned = await task.value
 
         XCTAssertEqual(learned.count, 1)
         XCTAssertEqual(learned.first?.original, "teh")
@@ -169,6 +174,49 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
         XCTAssertEqual(dictionaryService.correctionsCount, 0)
     }
 
+    func testSkipsUnavailableFocusComparisonAfterCandidate() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let element = AXUIElementCreateSystemWide()
+        let textInsertionService = TextInsertionService()
+        var focusAvailable = true
+        textInsertionService.focusedTextElementOverride = {
+            focusAvailable ? element : nil
+        }
+
+        var captureCount = 0
+        textInsertionService.focusedTextStateOverride = { _ in
+            captureCount += 1
+            if captureCount == 1 {
+                let value = "Please use the word"
+                return (value: value, selectedText: nil, selectedRange: NSRange(location: value.count, length: 0))
+            }
+            focusAvailable = false
+            return nil
+        }
+
+        let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
+        let service = TargetAppCorrectionLearningService(
+            textInsertionService: textInsertionService,
+            textDiffService: TextDiffService(),
+            dictionaryService: dictionaryService,
+            pollSchedule: [.milliseconds(0), .milliseconds(0)],
+            makeCommitObserver: noopCommitObserver
+        )
+        let baseline = TextInsertionService.FocusedTextObservation(
+            element: element,
+            value: "Please use teh word",
+            selectedText: nil,
+            selectedRange: NSRange(location: 19, length: 0)
+        )
+
+        let learned = await service.trackInsertion(insertedText: "teh", baseline: baseline)
+
+        XCTAssertTrue(learned.isEmpty)
+        XCTAssertEqual(dictionaryService.correctionsCount, 0)
+    }
+
     func testSkipsFocusElementChangesAndMissingTextState() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -213,6 +261,53 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
 
         let missingStateLearned = await missingStateService.trackInsertion(insertedText: "teh", baseline: baseline)
         XCTAssertTrue(missingStateLearned.isEmpty)
+    }
+
+    func testClearsStaleSuggestionsWhenEditIsUndoneBeforeCommit() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let element = AXUIElementCreateSystemWide()
+        let textInsertionService = TextInsertionService()
+        textInsertionService.focusedTextElementOverride = { element }
+
+        var observations = [
+            "Please use the word",
+            "Please use teh word",
+            "Please use teh word"
+        ]
+        textInsertionService.focusedTextStateOverride = { _ in
+            let value = observations.removeFirst()
+            return (value: value, selectedText: nil, selectedRange: NSRange(location: value.count, length: 0))
+        }
+
+        let commitEmitter = CommitEmitterBox()
+        var sleepCount = 0
+        let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
+        let service = TargetAppCorrectionLearningService(
+            textInsertionService: textInsertionService,
+            textDiffService: TextDiffService(),
+            dictionaryService: dictionaryService,
+            pollSchedule: [.milliseconds(0), .milliseconds(0), .milliseconds(0)],
+            sleep: { _ in
+                sleepCount += 1
+                if sleepCount == 3 {
+                    commitEmitter.emit(.returnKey)
+                }
+            },
+            makeCommitObserver: commitObserver(capturing: commitEmitter)
+        )
+        let baseline = TextInsertionService.FocusedTextObservation(
+            element: element,
+            value: "Please use teh word",
+            selectedText: nil,
+            selectedRange: NSRange(location: 19, length: 0)
+        )
+
+        let learned = await service.trackInsertion(insertedText: "teh", baseline: baseline)
+
+        XCTAssertTrue(learned.isEmpty)
+        XCTAssertEqual(dictionaryService.correctionsCount, 0)
     }
 
     func testSkipsUnmappableLargeDuplicateCaseAndPunctuationOnlyEdits() async throws {
@@ -344,6 +439,7 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
             box.emit = { signal in
                 onCommit(signal)
             }
+            box.isReady = true
             return TestTargetAppCorrectionCommitObserver()
         }
     }
@@ -352,6 +448,7 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
 @MainActor
 private final class CommitEmitterBox {
     var emit: (TargetAppCorrectionCommitSignal) -> Void = { _ in }
+    var isReady = false
 }
 
 @MainActor
