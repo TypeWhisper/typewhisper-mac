@@ -511,6 +511,11 @@ final class TextInsertionService {
         )
     }
 
+    func focusedTextElementMatches(_ observation: FocusedTextObservation) -> Bool {
+        guard let focusedElement = getFocusedTextElement() else { return false }
+        return focusedElement == observation.element
+    }
+
     func canRestoreClipboard(afterPasteUsing state: PasteVerificationState) -> Bool {
         guard let initialState = state.focusedTextState,
               let currentState = captureFocusedTextState(for: initialState.element) else {

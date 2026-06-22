@@ -1,27 +1,115 @@
+import AppKit
 import Foundation
+
+enum TargetAppCorrectionCommitSignal: Equatable, Sendable {
+    case returnKey
+    case tabKey
+    case activeApplicationChanged
+}
+
+@MainActor
+protocol TargetAppCorrectionCommitObserving: AnyObject {
+    func start()
+    func stop()
+}
+
+@MainActor
+final class TargetAppCorrectionCommitObserver: TargetAppCorrectionCommitObserving {
+    private static let returnKeyCode: UInt16 = 0x24
+    private static let keypadEnterKeyCode: UInt16 = 0x4C
+    private static let tabKeyCode: UInt16 = 0x30
+
+    private let onCommit: @MainActor (TargetAppCorrectionCommitSignal) -> Void
+    private var globalKeyMonitor: Any?
+    private var localKeyMonitor: Any?
+    private var appActivationObserver: NSObjectProtocol?
+
+    init(onCommit: @escaping @MainActor (TargetAppCorrectionCommitSignal) -> Void) {
+        self.onCommit = onCommit
+    }
+
+    func start() {
+        stop()
+
+        globalKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            self?.handleKeyEvent(event)
+        }
+        localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            self?.handleKeyEvent(event)
+            return event
+        }
+        appActivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.onCommit(.activeApplicationChanged)
+            }
+        }
+    }
+
+    func stop() {
+        if let globalKeyMonitor {
+            NSEvent.removeMonitor(globalKeyMonitor)
+            self.globalKeyMonitor = nil
+        }
+        if let localKeyMonitor {
+            NSEvent.removeMonitor(localKeyMonitor)
+            self.localKeyMonitor = nil
+        }
+        if let appActivationObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(appActivationObserver)
+            self.appActivationObserver = nil
+        }
+    }
+
+    private func handleKeyEvent(_ event: NSEvent) {
+        guard let signal = Self.commitSignal(forKeyCode: event.keyCode) else { return }
+        onCommit(signal)
+    }
+
+    static func commitSignal(forKeyCode keyCode: UInt16) -> TargetAppCorrectionCommitSignal? {
+        switch keyCode {
+        case returnKeyCode, keypadEnterKeyCode:
+            return .returnKey
+        case tabKeyCode:
+            return .tabKey
+        default:
+            return nil
+        }
+    }
+}
 
 @MainActor
 final class TargetAppCorrectionLearningService {
+    private static let defaultPollSchedule: [Duration] = (1...30).map { .seconds($0) }
+
     private let textInsertionService: TextInsertionService
     private let textDiffService: TextDiffService
     private let dictionaryService: DictionaryService
     private let pollSchedule: [Duration]
     private let sleep: @MainActor (Duration) async -> Void
+    private let makeCommitObserver: (@escaping @MainActor (TargetAppCorrectionCommitSignal) -> Void) -> TargetAppCorrectionCommitObserving
 
     init(
         textInsertionService: TextInsertionService,
         textDiffService: TextDiffService,
         dictionaryService: DictionaryService,
-        pollSchedule: [Duration] = [.seconds(2), .seconds(5), .seconds(10)],
+        pollSchedule: [Duration]? = nil,
         sleep: @escaping @MainActor (Duration) async -> Void = { duration in
             try? await Task.sleep(for: duration)
+        },
+        makeCommitObserver: @escaping (@escaping @MainActor (TargetAppCorrectionCommitSignal) -> Void) -> TargetAppCorrectionCommitObserving = {
+            TargetAppCorrectionCommitObserver(onCommit: $0)
         }
     ) {
         self.textInsertionService = textInsertionService
         self.textDiffService = textDiffService
         self.dictionaryService = dictionaryService
-        self.pollSchedule = pollSchedule
+        self.pollSchedule = pollSchedule ?? Self.defaultPollSchedule
         self.sleep = sleep
+        self.makeCommitObserver = makeCommitObserver
     }
 
     func trackInsertion(
@@ -31,7 +119,14 @@ final class TargetAppCorrectionLearningService {
         let insertedText = insertedText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !insertedText.isEmpty, !pollSchedule.isEmpty else { return [] }
 
-        var finalObservation: TextInsertionService.FocusedTextObservation?
+        var commitSignal: TargetAppCorrectionCommitSignal?
+        let commitObserver = makeCommitObserver { signal in
+            commitSignal = signal
+        }
+        commitObserver.start()
+        defer { commitObserver.stop() }
+
+        var latestSuggestions: [CorrectionSuggestion] = []
         var elapsed: Duration = .seconds(0)
         for pollOffset in pollSchedule {
             if pollOffset > elapsed {
@@ -41,23 +136,29 @@ final class TargetAppCorrectionLearningService {
                 await sleep(.seconds(0))
             }
             guard !Task.isCancelled else { return [] }
+
             guard let observation = textInsertionService.recaptureFocusedTextObservation(matching: baseline) else {
-                return []
+                if textInsertionService.focusedTextElementMatches(baseline) {
+                    return []
+                }
+                return dictionaryService.learnCorrections(latestSuggestions)
             }
-            finalObservation = observation
+
+            let suggestions = highConfidenceCorrectionSuggestions(
+                insertedText: insertedText,
+                baselineText: baseline.value,
+                editedText: observation.value
+            )
+            if !suggestions.isEmpty {
+                latestSuggestions = suggestions
+            }
+
+            if commitSignal != nil {
+                return dictionaryService.learnCorrections(latestSuggestions)
+            }
         }
 
-        guard let finalObservation,
-              finalObservation.value != baseline.value else {
-            return []
-        }
-
-        let suggestions = highConfidenceCorrectionSuggestions(
-            insertedText: insertedText,
-            baselineText: baseline.value,
-            editedText: finalObservation.value
-        )
-        return dictionaryService.learnCorrections(suggestions)
+        return []
     }
 
     func highConfidenceCorrectionSuggestions(
