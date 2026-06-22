@@ -2265,6 +2265,15 @@ final class DictationLanguageResolverTests: XCTestCase {
         XCTAssertEqual(resolved, .exact("fr"))
     }
 
+    func testNoWorkflowUsesGlobalChineseLanguage() {
+        let resolved = DictationLanguageResolver.resolve(
+            workflow: nil,
+            globalLanguageSelection: .exact("zh")
+        )
+
+        XCTAssertEqual(resolved, .exact("zh"))
+    }
+
     func testWorkflowAutoOverridesGlobalLanguage() {
         let workflow = Workflow(
             name: "Auto Workflow",

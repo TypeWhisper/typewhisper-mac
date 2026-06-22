@@ -398,6 +398,7 @@ private struct SettingsSidebarBadge: View {
 
 struct RecordingSettingsView: View {
     @ObservedObject private var dictation = DictationViewModel.shared
+    @ObservedObject private var settings = SettingsViewModel.shared
     @ObservedObject private var audioDevice = ServiceContainer.shared.audioDeviceService
     @ObservedObject private var pluginManager = PluginManager.shared
     @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
@@ -435,6 +436,18 @@ struct RecordingSettingsView: View {
         Form {
             if needsPermissions {
                 PermissionsBanner(dictation: dictation)
+            }
+
+            Section(String(localized: "Spoken Language")) {
+                LanguageSelectionEditor(
+                    selection: $settings.languageSelection,
+                    availableLanguages: settings.availableLanguages,
+                    hintBehavior: LanguageSelectionHintBehavior(engine: settings.activeTranscriptionEngine)
+                )
+
+                Text(String(localized: "Controls push-to-talk dictation, workflows that inherit the global spoken language, and CLI/API defaults when they use app defaults. Recorder and Recovery have separate language settings."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section(String(localized: "Engine")) {

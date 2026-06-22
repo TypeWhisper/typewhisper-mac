@@ -93,7 +93,7 @@ struct GeneralSettingsView: View {
                     hintBehavior: LanguageSelectionHintBehavior(engine: settings.activeTranscriptionEngine)
                 )
 
-                Text(String(localized: "The language being spoken. Setting this explicitly improves accuracy."))
+                Text(String(localized: "Controls push-to-talk dictation, workflows that inherit the global spoken language, and CLI/API defaults when they use app defaults. Recorder and Recovery have separate language settings."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

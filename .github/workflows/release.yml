@@ -94,12 +94,16 @@ jobs:
             -configuration Release \
             -derivedDataPath verify-build \
             -destination 'generic/platform=macOS' \
+            ENABLE_CODE_COVERAGE=NO \
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO | tee verify-build.log
 
       - name: Check First-Party Warnings
         run: bash scripts/check_first_party_warnings.sh verify-build.log
+
+      - name: Check Release Binary Instrumentation
+        run: bash scripts/check_release_binary_instrumentation.sh verify-build/Build/Products/Release/TypeWhisper.app/Contents/MacOS/typewhisper-cli
 
   app-tests:
     needs: [prepare]
@@ -225,6 +229,7 @@ jobs:
             -configuration Release \
             -derivedDataPath build \
             -destination 'generic/platform=macOS' \
+            ENABLE_CODE_COVERAGE=NO \
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
@@ -234,6 +239,9 @@ jobs:
 
       - name: Check First-Party Warnings
         run: bash scripts/check_first_party_warnings.sh build.log
+
+      - name: Check Release Binary Instrumentation
+        run: bash scripts/check_release_binary_instrumentation.sh build/Build/Products/Release/TypeWhisper.app/Contents/MacOS/typewhisper-cli
 
       - name: Configure Release Channel
         run: |

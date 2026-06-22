@@ -11905,18 +11905,18 @@
         }
       }
     },
-    "The language being spoken. Setting this explicitly improves accuracy.": {
+    "Controls push-to-talk dictation, workflows that inherit the global spoken language, and CLI/API defaults when they use app defaults. Recorder and Recovery have separate language settings.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Die gesprochene Sprache. Explizites Festlegen verbessert die Genauigkeit."
+            "value": "Steuert Push-to-Talk-Diktat, Workflows, die die globale gesprochene Sprache übernehmen, und CLI/API-Standardwerte, wenn sie App-Standardwerte verwenden. Recorder und Wiederherstellung haben separate Spracheinstellungen."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "話している言語です。明示的に設定すると精度が向上します。"
+            "value": "プッシュ・トゥ・トークのディクテーション、グローバルの話す言語を継承するワークフロー、およびアプリのデフォルトを使用する場合のCLI/APIデフォルトを制御します。レコーダーとリカバリーには別の言語設定があります。"
           }
         }
       }

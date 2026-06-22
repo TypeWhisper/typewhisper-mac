@@ -4780,6 +4780,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual(LanguageSelection(storedValue: nil, nilBehavior: .inheritGlobal), .inheritGlobal)
         XCTAssertEqual(LanguageSelection(storedValue: "auto", nilBehavior: .auto), .auto)
         XCTAssertEqual(LanguageSelection(storedValue: "de", nilBehavior: .auto), .exact("de"))
+        XCTAssertEqual(LanguageSelection(storedValue: "zh", nilBehavior: .auto), .exact("zh"))
         XCTAssertEqual(
             LanguageSelection(storedValue: #"["de","en"]"#, nilBehavior: .auto),
             .hints(["de", "en"])

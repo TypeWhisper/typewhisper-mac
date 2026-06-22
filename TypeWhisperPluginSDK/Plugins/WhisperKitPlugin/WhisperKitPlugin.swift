@@ -227,19 +227,7 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
             throw PluginTranscriptionError.notConfigured
         }
 
-        var options = DecodingOptions(
-            verbose: false,
-            task: translate ? .translate : .transcribe,
-            language: language,
-            temperature: 0.0,
-            temperatureFallbackCount: 3,
-            usePrefillPrompt: true,
-            usePrefillCache: true,
-            detectLanguage: language == nil,
-            skipSpecialTokens: true,
-            withoutTimestamps: false,
-            chunkingStrategy: .vad
-        )
+        var options = Self.decodingOptions(language: language, translate: translate)
         let effectivePrompt = Self.conditioningPrompt(from: prompt)
         if let tokenizer = whisperKit.tokenizer,
            let promptTokens = Self.promptTokens(from: effectivePrompt, tokenizer: tokenizer) {
@@ -290,19 +278,7 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
             throw PluginTranscriptionError.notConfigured
         }
 
-        var options = DecodingOptions(
-            verbose: false,
-            task: translate ? .translate : .transcribe,
-            language: language,
-            temperature: 0.0,
-            temperatureFallbackCount: 3,
-            usePrefillPrompt: true,
-            usePrefillCache: true,
-            detectLanguage: language == nil,
-            skipSpecialTokens: true,
-            withoutTimestamps: false,
-            chunkingStrategy: .vad
-        )
+        var options = Self.decodingOptions(language: language, translate: translate)
         let effectivePrompt = Self.conditioningPrompt(from: prompt)
         if let tokenizer = whisperKit.tokenizer,
            let promptTokens = Self.promptTokens(from: effectivePrompt, tokenizer: tokenizer) {
@@ -341,6 +317,22 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         }
 
         return PluginTranscriptionResult(text: text, detectedLanguage: detectedLanguage, segments: segments)
+    }
+
+    static func decodingOptions(language: String?, translate: Bool) -> DecodingOptions {
+        DecodingOptions(
+            verbose: false,
+            task: translate ? .translate : .transcribe,
+            language: language,
+            temperature: 0.0,
+            temperatureFallbackCount: 3,
+            usePrefillPrompt: true,
+            usePrefillCache: true,
+            detectLanguage: language == nil,
+            skipSpecialTokens: true,
+            withoutTimestamps: false,
+            chunkingStrategy: .vad
+        )
     }
 
     static func sourceProgress(

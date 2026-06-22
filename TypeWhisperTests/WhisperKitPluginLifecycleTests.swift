@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+import WhisperKit
 import TypeWhisperPluginSDK
 @testable import TypeWhisper
 
@@ -48,6 +49,13 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
         XCTAssertEqual(model?.displayName, "Distil Large v3 Turbo")
         XCTAssertEqual(model?.sizeDescription, "~600 MB")
         XCTAssertEqual(model?.ramRequirement, "8 GB+")
+    }
+
+    func testExactChineseLanguageDisablesWhisperKitLanguageDetection() {
+        let options = WhisperKitPlugin.decodingOptions(language: "zh", translate: false)
+
+        XCTAssertEqual(options.language, "zh")
+        XCTAssertFalse(options.detectLanguage)
     }
 
     func testActivationPromotesPersistedLoadedModelToSelectedModelWhenSelectionMissing() async throws {
