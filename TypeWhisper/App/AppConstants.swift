@@ -254,7 +254,7 @@ struct SwiftDataStoreFactory {
                 fatalError("Failed to create \(storeName) ModelContainer after reset: \(error)")
             }
         }
-        
+
         let context = ModelContext(container)
         context.autosaveEnabled = true
         return (container, context)

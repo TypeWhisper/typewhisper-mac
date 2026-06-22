@@ -55,7 +55,7 @@ final class DictionaryService: ObservableObject {
             storeName: "dictionary",
             in: appSupportDirectory
         ) else { return }
-        
+
         modelContainer = container
         modelContext = context
 
@@ -73,14 +73,14 @@ final class DictionaryService: ObservableObject {
                 ]
             )
             entries = try context.fetch(descriptor)
-            
+
             var newTerms: [DictionaryEntry] = []
             var newCorrections: [DictionaryEntry] = []
             var newTermsCount = 0
             var newCorrectionsCount = 0
             var newEnabledTermsCount = 0
             var newEnabledCorrectionsCount = 0
-            
+
             for entry in entries {
                 if entry.type == .term {
                     newTermsCount += 1
@@ -96,7 +96,7 @@ final class DictionaryService: ObservableObject {
                     }
                 }
             }
-            
+
             terms = newTerms
             corrections = newCorrections
             termsCount = newTermsCount

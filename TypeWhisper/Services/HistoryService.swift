@@ -189,10 +189,6 @@ final class HistoryService: ObservableObject {
     }
 
     private func migrateWordsCountIfNeeded() {
-        if UserDefaults.standard.bool(forKey: "HistoryServiceWordsCountMigrationCompleted") {
-            return
-        }
-
         var needsSave = false
         for record in records where record.wordsCount == 0 && !record.finalText.isEmpty {
             record.wordsCount = record.finalText.split(separator: " ").count
@@ -201,7 +197,6 @@ final class HistoryService: ObservableObject {
         if needsSave {
             save()
         }
-        UserDefaults.standard.set(true, forKey: "HistoryServiceWordsCountMigrationCompleted")
     }
 
     private func updateAggregates() {

@@ -26,7 +26,7 @@ final class SnippetService: ObservableObject {
             storeName: "snippets",
             in: appSupportDirectory
         ) else { return }
-        
+
         modelContainer = container
         modelContext = context
 
