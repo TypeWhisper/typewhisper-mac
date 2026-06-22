@@ -101,6 +101,24 @@ final class SaluteSpeechPluginTests: XCTestCase {
         XCTAssertEqual(options["channels_count"] as? Int, 1)
     }
 
+    func testDownloadRequestUsesBearerTokenAndLongTimeout() throws {
+        let request = try SaluteSpeechPlugin.makeDownloadRequest(
+            responseFileId: "response-file",
+            token: "access-token"
+        )
+
+        XCTAssertEqual(request.httpMethod, "GET")
+        XCTAssertEqual(request.url?.scheme, "https")
+        XCTAssertEqual(request.url?.host, "smartspeech.sber.ru")
+        XCTAssertEqual(request.url?.path, "/rest/v1/data:download")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer access-token")
+        XCTAssertEqual(request.timeoutInterval, 600)
+
+        let components = try XCTUnwrap(URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
+        let query = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") })
+        XCTAssertEqual(query["response_file_id"], "response-file")
+    }
+
     func testParseTranscriptionResultPrefersNormalizedText() throws {
         let result = try SaluteSpeechPlugin.parseTranscriptionResult(
             Data(

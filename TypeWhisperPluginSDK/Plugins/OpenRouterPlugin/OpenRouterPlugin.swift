@@ -24,10 +24,7 @@ final class OpenRouterPlugin: NSObject,
     fileprivate var _fetchedLLMModels: [OpenRouterFetchedModel] = []
     fileprivate var _fetchedTranscriptionModels: [OpenRouterFetchedModel] = []
 
-    private let chatHelper = PluginOpenAIChatHelper(
-        baseURL: "https://openrouter.ai/api"
-    )
-
+    private static let chatRequestTimeout: TimeInterval = 30
     private static let transcriptionRequestTimeout: TimeInterval = 120
 
     private enum StorageKeys {
@@ -276,13 +273,17 @@ final class OpenRouterPlugin: NSObject,
             throw PluginChatError.notConfigured
         }
         let modelId = model ?? _selectedLLMModelId ?? supportedModels.first!.id
-        return try await chatHelper.process(
+        let request = try Self.makeChatRequest(
             apiKey: apiKey,
             model: modelId,
             systemPrompt: systemPrompt,
             userText: userText,
-            temperature: providerTemperatureDirective.resolvedTemperature(applying: temperatureDirective)
+            temperature: providerTemperatureDirective.resolvedTemperature(applying: temperatureDirective),
+            timeout: Self.chatRequestTimeout
         )
+        let (data, response) = try await PluginHTTPClient.data(for: request)
+        try Self.validateChatResponse(data: data, response: response)
+        return try Self.parseChatResponse(data)
     }
 
     func selectLLMModel(_ modelId: String) {
@@ -309,6 +310,68 @@ final class OpenRouterPlugin: NSObject,
         let clamped = min(max(value, 0.0), 2.0)
         _llmTemperatureValue = clamped
         host?.setUserDefault(clamped, forKey: Self.StorageKeys.llmTemperatureValue)
+    }
+
+    static func makeChatRequest(
+        apiKey: String,
+        model: String,
+        systemPrompt: String,
+        userText: String,
+        temperature: Double?,
+        timeout: TimeInterval
+    ) throws -> URLRequest {
+        guard let url = URL(string: "https://openrouter.ai/api/v1/chat/completions") else {
+            throw PluginChatError.apiError("Invalid OpenRouter chat URL.")
+        }
+
+        var body: [String: Any] = [
+            "model": model,
+            "messages": [
+                ["role": "system", "content": systemPrompt],
+                ["role": "user", "content": userText],
+            ],
+            "max_tokens": 4096,
+        ]
+        if let temperature {
+            body["temperature"] = temperature
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = timeout
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        return request
+    }
+
+    static func validateChatResponse(data: Data, response: URLResponse) throws {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw PluginChatError.networkError("Invalid response")
+        }
+
+        switch httpResponse.statusCode {
+        case 200:
+            return
+        case 401:
+            throw PluginChatError.invalidApiKey
+        case 429:
+            throw PluginChatError.rateLimited
+        default:
+            throw PluginChatError.apiError(Self.apiErrorMessage(from: data))
+        }
+    }
+
+    static func parseChatResponse(_ data: Data) throws -> String {
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let choices = json["choices"] as? [[String: Any]],
+              let first = choices.first,
+              let message = first["message"] as? [String: Any],
+              let content = message["content"] as? String else {
+            throw PluginChatError.apiError("Failed to parse response")
+        }
+
+        return content.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // MARK: - Settings View

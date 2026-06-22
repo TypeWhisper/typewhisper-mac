@@ -675,7 +675,7 @@ extension SaluteSpeechPlugin {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.timeoutInterval = 120
+        request.timeoutInterval = 600
         return request
     }
 
@@ -1019,10 +1019,7 @@ private extension SaluteSpeechPlugin {
             responseFileId: responseFileId,
             token: token
         )
-        let (downloadData, downloadResponse) = try await PluginHTTPClient.data(
-            for: downloadRequest,
-            resourceTimeout: 600
-        )
+        let (downloadData, downloadResponse) = try await PluginHTTPClient.data(for: downloadRequest)
         try Self.validateHTTPResponse(data: downloadData, response: downloadResponse)
         return try Self.parseTranscriptionResult(downloadData)
     }

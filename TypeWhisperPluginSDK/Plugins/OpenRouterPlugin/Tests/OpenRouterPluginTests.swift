@@ -63,6 +63,83 @@ final class OpenRouterPluginTests: XCTestCase {
         XCTAssertEqual(host.userDefault(forKey: "selectedLLMModel") as? String, "openai/gpt-4o")
     }
 
+    func testProcessSendsLocalChatRequestAndParsesText() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "openrouter-key"])
+        let plugin = OpenRouterPlugin()
+        plugin.activate(host: host)
+        plugin.setLLMTemperatureMode(.custom)
+        plugin.setLLMTemperatureValue(0.7)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"choices":[{"message":{"content":" hello from chat \n"}}]}"#.utf8),
+                    Self.httpResponse(url: "https://openrouter.ai/api/v1/chat/completions", statusCode: 200)
+                ),
+            ])
+        }
+
+        let result = try await plugin.process(
+            systemPrompt: "System prompt",
+            userText: "User text",
+            model: nil
+        )
+
+        XCTAssertEqual(result, "hello from chat")
+
+        let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.url?.absoluteString, "https://openrouter.ai/api/v1/chat/completions")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer openrouter-key")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+        XCTAssertEqual(request.timeoutInterval, 30)
+
+        let body = try Self.jsonBody(from: request)
+        XCTAssertEqual(body["model"] as? String, "openai/gpt-4o")
+        XCTAssertEqual(body["max_tokens"] as? Int, 4096)
+        XCTAssertEqual(body["temperature"] as? Double, 0.7)
+
+        let messages = try XCTUnwrap(body["messages"] as? [[String: String]])
+        XCTAssertEqual(messages, [
+            ["role": "system", "content": "System prompt"],
+            ["role": "user", "content": "User text"],
+        ])
+    }
+
+    func testChatHTTPErrorMapping() {
+        XCTAssertThrowsError(try OpenRouterPlugin.validateChatResponse(
+            data: Data(#"{"error":{"message":"bad key"}}"#.utf8),
+            response: Self.httpResponse(url: "https://openrouter.ai/api/v1/chat/completions", statusCode: 401)
+        )) { error in
+            guard let pluginError = error as? PluginChatError,
+                  case .invalidApiKey = pluginError else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+
+        XCTAssertThrowsError(try OpenRouterPlugin.validateChatResponse(
+            data: Data(#"{"error":{"message":"slow down"}}"#.utf8),
+            response: Self.httpResponse(url: "https://openrouter.ai/api/v1/chat/completions", statusCode: 429)
+        )) { error in
+            guard let pluginError = error as? PluginChatError,
+                  case .rateLimited = pluginError else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+
+        XCTAssertThrowsError(try OpenRouterPlugin.validateChatResponse(
+            data: Data(#"{"error":{"message":"server failed"}}"#.utf8),
+            response: Self.httpResponse(url: "https://openrouter.ai/api/v1/chat/completions", statusCode: 500)
+        )) { error in
+            guard let pluginError = error as? PluginChatError,
+                  case .apiError(let message) = pluginError else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertEqual(message, "server failed")
+        }
+    }
+
     func testLLMAndTranscriptionModelFetchesUseSeparateEndpointsAndCaches() async throws {
         let host = try PluginTestHostServices(secrets: ["api-key": "openrouter-key"])
         let plugin = OpenRouterPlugin()
