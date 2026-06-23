@@ -187,6 +187,20 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testLatinCorrectionsMatchWholeWordsOnly() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "rake", replacement: "RAKE")
+
+        XCTAssertEqual(service.applyCorrections(to: "rake"), "RAKE")
+        XCTAssertEqual(service.applyCorrections(to: "Rake"), "RAKE")
+        XCTAssertEqual(service.applyCorrections(to: "brake rakes"), "brake rakes")
+        XCTAssertEqual(service.applyCorrections(to: "Use rake, rake/brake, and (rake)."), "Use RAKE, RAKE/brake, and (RAKE).")
+    }
+
+    @MainActor
     func testCorrectionsDoNotReplaceInsideLongerKatakanaWords() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
