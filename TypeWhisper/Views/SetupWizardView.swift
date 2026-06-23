@@ -103,7 +103,8 @@ struct SetupWizardView: View {
     private func announceCurrentStep() {
         accessibilityAnnouncementService.announce(localizedAppText(
             "\(currentWizardStep.title). Step \(currentStep + 1) of \(SetupWizardStep.allCases.count). \(currentWizardStep.subtitle)",
-            de: "\(currentWizardStep.title). Schritt \(currentStep + 1) von \(SetupWizardStep.allCases.count). \(currentWizardStep.subtitle)"
+            de: "\(currentWizardStep.title). Schritt \(currentStep + 1) von \(SetupWizardStep.allCases.count). \(currentWizardStep.subtitle)",
+            ja: "\(currentWizardStep.title)。\(SetupWizardStep.allCases.count)ステップ中\(currentStep + 1)。\(currentWizardStep.subtitle)"
         ))
     }
 
@@ -169,7 +170,8 @@ struct SetupWizardView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(localizedAppText(
             "Step \(step.rawValue + 1) of \(SetupWizardStep.allCases.count), \(step.progressTitle)",
-            de: "Schritt \(step.rawValue + 1) von \(SetupWizardStep.allCases.count), \(step.progressTitle)"
+            de: "Schritt \(step.rawValue + 1) von \(SetupWizardStep.allCases.count), \(step.progressTitle)",
+            ja: "\(SetupWizardStep.allCases.count)ステップ中\(step.rawValue + 1)、\(step.progressTitle)"
         ))
         .accessibilityValue(progressAccessibilityStatus(for: step))
     }
@@ -645,7 +647,8 @@ struct SetupWizardView: View {
             return (
                 localizedAppText(
                     "Fn is already used by \(hotkeyModeTitle(for: slot)). Record another shortcut to continue.",
-                    de: "Fn wird bereits von \(hotkeyModeTitle(for: slot)) verwendet. Nimm einen anderen Shortcut auf, um fortzufahren."
+                    de: "Fn wird bereits von \(hotkeyModeTitle(for: slot)) verwendet. Nimm einen anderen Shortcut auf, um fortzufahren.",
+                    ja: "Fnはすでに\(hotkeyModeTitle(for: slot))で使用されています。続行するには別のショートカットを録音してください。"
                 ),
                 "exclamationmark.triangle.fill",
                 .orange
@@ -1624,57 +1627,19 @@ enum SetupWizardEngineSelection {
 }
 
 enum SetupWizardAppleSpeechFallback {
-    static let providerId = "speechAnalyzer"
-    static let manifestId = "com.typewhisper.speechanalyzer"
+    static let providerId = AppleSpeechModelSelection.providerId
+    static let manifestId = AppleSpeechModelSelection.manifestId
 
     static func preferredModelId(
         from models: [PluginModelInfo],
         localeIdentifier: String = Locale.current.identifier,
         languageCode: String? = Locale.current.language.languageCode?.identifier
     ) -> String? {
-        guard !models.isEmpty else { return nil }
-
-        for modelId in localeModelIds(for: localeIdentifier) {
-            if models.contains(where: { $0.id == modelId }) {
-                return modelId
-            }
-        }
-
-        if let languageCode {
-            let languageModelId = "speechanalyzer-\(languageCode)"
-            if models.contains(where: { $0.id == languageModelId }) {
-                return languageModelId
-            }
-
-            if let match = models.first(where: { modelLanguageCode(for: $0.id) == languageCode }) {
-                return match.id
-            }
-        }
-
-        return models.first?.id
-    }
-
-    private static func localeModelIds(for localeIdentifier: String) -> [String] {
-        uniqueModelIds([
-            localeIdentifier,
-            localeIdentifier.replacingOccurrences(of: "-", with: "_"),
-            localeIdentifier.replacingOccurrences(of: "_", with: "-")
-        ])
-        .map { "speechanalyzer-\($0)" }
-    }
-
-    private static func modelLanguageCode(for modelId: String) -> String? {
-        let prefix = "speechanalyzer-"
-        guard modelId.hasPrefix(prefix) else { return nil }
-        let localeIdentifier = String(modelId.dropFirst(prefix.count))
-        return Locale(identifier: localeIdentifier).language.languageCode?.identifier
-    }
-
-    private static func uniqueModelIds(_ values: [String]) -> [String] {
-        values.reduce(into: []) { result, value in
-            guard !value.isEmpty, !result.contains(value) else { return }
-            result.append(value)
-        }
+        AppleSpeechModelSelection.preferredModelId(
+            from: models,
+            localeIdentifier: localeIdentifier,
+            languageCode: languageCode
+        )
     }
 }
 

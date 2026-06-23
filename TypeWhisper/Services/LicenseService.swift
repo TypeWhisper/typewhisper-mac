@@ -769,8 +769,21 @@ final class LicenseService: ObservableObject {
         defaults.removeObject(forKey: UserDefaultsKeys.lastLicenseValidation)
     }
 
+    private struct LicenseKeychainPayload: Codable {
+        let key: String
+        let activationId: String
+    }
+
     private func saveLicenseToKeychain(key: String, activationId: String) {
-        let data = "\(key)|\(activationId)".data(using: .utf8)!
+        let payload = LicenseKeychainPayload(key: key, activationId: activationId)
+
+        let data: Data
+        do {
+            data = try JSONEncoder().encode(payload)
+        } catch {
+            logger.error("Failed to encode license keychain payload: \(error)")
+            return
+        }
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -795,14 +808,23 @@ final class LicenseService: ObservableObject {
 
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
-        guard status == errSecSuccess, let data = result as? Data,
-              let string = String(data: data, encoding: .utf8) else {
+        guard status == errSecSuccess, let data = result as? Data else {
             return nil
         }
 
-        let parts = string.split(separator: "|", maxSplits: 1)
-        guard parts.count == 2 else { return nil }
-        return (key: String(parts[0]), activationId: String(parts[1]))
+        if let payload = try? JSONDecoder().decode(LicenseKeychainPayload.self, from: data) {
+            return (key: payload.key, activationId: payload.activationId)
+        }
+
+        // Fallback for backwards compatibility with previous pipe-separated format
+        if let string = String(data: data, encoding: .utf8) {
+            let parts = string.split(separator: "|", maxSplits: 1)
+            if parts.count == 2 {
+                return (key: String(parts[0]), activationId: String(parts[1]))
+            }
+        }
+
+        return nil
     }
 
     private func removeLicenseFromKeychain() {
@@ -831,7 +853,15 @@ final class LicenseService: ObservableObject {
     // MARK: - Supporter Keychain
 
     private func saveSupporterToKeychain(key: String, activationId: String) {
-        let data = "\(key)|\(activationId)".data(using: .utf8)!
+        let payload = LicenseKeychainPayload(key: key, activationId: activationId)
+
+        let data: Data
+        do {
+            data = try JSONEncoder().encode(payload)
+        } catch {
+            logger.error("Failed to encode supporter keychain payload: \(error)")
+            return
+        }
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -856,14 +886,23 @@ final class LicenseService: ObservableObject {
 
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
-        guard status == errSecSuccess, let data = result as? Data,
-              let string = String(data: data, encoding: .utf8) else {
+        guard status == errSecSuccess, let data = result as? Data else {
             return nil
         }
 
-        let parts = string.split(separator: "|", maxSplits: 1)
-        guard parts.count == 2 else { return nil }
-        return (key: String(parts[0]), activationId: String(parts[1]))
+        if let payload = try? JSONDecoder().decode(LicenseKeychainPayload.self, from: data) {
+            return (key: payload.key, activationId: payload.activationId)
+        }
+
+        // Fallback for backwards compatibility with previous pipe-separated format
+        if let string = String(data: data, encoding: .utf8) {
+            let parts = string.split(separator: "|", maxSplits: 1)
+            if parts.count == 2 {
+                return (key: String(parts[0]), activationId: String(parts[1]))
+            }
+        }
+
+        return nil
     }
 
     private func removeSupporterFromKeychain() {

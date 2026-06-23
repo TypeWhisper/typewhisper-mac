@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import os
 
@@ -282,6 +283,13 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
     private static let defaultRequestTimeout: TimeInterval = 30
     static let minimumUploadDuration: TimeInterval = 1.0
     static let uploadSampleRate = 16000
+    private static let compressedUploadChunkFrames = 16_000 * 30
+
+    private struct UploadFile {
+        let data: Data
+        let filename: String
+        let contentType: String
+    }
 
     public init(baseURL: String, responseFormat: String = "verbose_json") {
         self.baseURL = baseURL
@@ -348,6 +356,43 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         )
     }
 
+    public func transcribeCompressedAudio(
+        audio: AudioData,
+        apiKey: String,
+        modelName: String,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        requestTimeout: TimeInterval,
+        responseFormat: String? = nil
+    ) async throws -> PluginTranscriptionResult {
+        let uploadAudio = normalizedAudioForUpload(audio)
+        let compressedData: Data
+        do {
+            compressedData = try Self.makeCompressedM4AData(from: uploadAudio.samples)
+        } catch {
+            throw PluginTranscriptionError.apiError(
+                "Failed to encode compressed upload: \(error.localizedDescription)"
+            )
+        }
+
+        return try await performTranscribe(
+            audio: uploadAudio,
+            apiKey: apiKey,
+            modelName: modelName,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            responseFormat: responseFormat,
+            requestTimeout: requestTimeout,
+            uploadFile: UploadFile(
+                data: compressedData,
+                filename: "audio.m4a",
+                contentType: "audio/mp4"
+            )
+        )
+    }
+
     private func performTranscribe(
         audio: AudioData,
         apiKey: String,
@@ -356,7 +401,8 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         translate: Bool,
         prompt: String?,
         responseFormat: String?,
-        requestTimeout: TimeInterval
+        requestTimeout: TimeInterval,
+        uploadFile: UploadFile? = nil
     ) async throws -> PluginTranscriptionResult {
         let endpoint: String
         if translate {
@@ -376,14 +422,19 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = requestTimeout
 
-        let uploadAudio = normalizedAudioForUpload(audio)
+        let uploadAudio = uploadFile == nil ? normalizedAudioForUpload(audio) : audio
+        let uploadFile = uploadFile ?? UploadFile(
+            data: uploadAudio.wavData,
+            filename: "audio.wav",
+            contentType: "audio/wav"
+        )
         var body = Data()
 
         // file field
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
-        body.append(uploadAudio.wavData)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(uploadFile.filename)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: \(uploadFile.contentType)\r\n\r\n".data(using: .utf8)!)
+        body.append(uploadFile.data)
         body.append("\r\n".data(using: .utf8)!)
 
         // model field
@@ -427,6 +478,58 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         }
 
         return try parseResponse(responseData)
+    }
+
+    private static func makeCompressedM4AData(from samples: [Float]) throws -> Data {
+        guard !samples.isEmpty else {
+            throw PluginTranscriptionError.apiError("Cannot encode empty audio upload")
+        }
+
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("typewhisper-upload-\(UUID().uuidString).m4a")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatMPEG4AAC,
+            AVSampleRateKey: Double(uploadSampleRate),
+            AVNumberOfChannelsKey: 1,
+        ]
+        guard let format = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: Double(uploadSampleRate),
+            channels: 1,
+            interleaved: false
+        ) else {
+            throw PluginTranscriptionError.apiError("Failed to create compressed upload format")
+        }
+
+        do {
+            let file = try AVAudioFile(
+                forWriting: url,
+                settings: settings,
+                commonFormat: .pcmFormatFloat32,
+                interleaved: false
+            )
+
+            var offset = 0
+            while offset < samples.count {
+                let count = min(compressedUploadChunkFrames, samples.count - offset)
+                guard let buffer = AVAudioPCMBuffer(
+                    pcmFormat: format,
+                    frameCapacity: AVAudioFrameCount(count)
+                ) else {
+                    throw PluginTranscriptionError.apiError("Failed to create compressed upload buffer")
+                }
+                buffer.frameLength = AVAudioFrameCount(count)
+                samples.withUnsafeBufferPointer { pointer in
+                    buffer.floatChannelData?[0].update(from: pointer.baseAddress! + offset, count: count)
+                }
+                try file.write(from: buffer)
+                offset += count
+            }
+        }
+
+        return try Data(contentsOf: url)
     }
 
     public func validateApiKey(_ apiKey: String) async -> Bool {
@@ -587,6 +690,32 @@ public struct PluginOpenAIChatHelper: Sendable {
         temperature: Double?,
         requestTimeout: TimeInterval
     ) async throws -> String {
+        try await process(
+            apiKey: apiKey,
+            model: model,
+            systemPrompt: systemPrompt,
+            userText: userText,
+            maxOutputTokens: maxOutputTokens,
+            maxOutputTokenParameter: maxOutputTokenParameter,
+            reasoningEffort: reasoningEffort,
+            temperature: temperature,
+            requestTimeout: requestTimeout,
+            thinkingEnabled: nil
+        )
+    }
+
+    public func process(
+        apiKey: String,
+        model: String,
+        systemPrompt: String,
+        userText: String,
+        maxOutputTokens: Int? = 4096,
+        maxOutputTokenParameter: String = "max_tokens",
+        reasoningEffort: String? = nil,
+        temperature: Double?,
+        requestTimeout: TimeInterval,
+        thinkingEnabled: Bool?
+    ) async throws -> String {
         let endpoint = "\(baseURL)\(chatEndpoint)"
         guard let url = URL(string: endpoint) else {
             throw PluginChatError.apiError("Invalid URL: \(endpoint)")
@@ -599,7 +728,8 @@ public struct PluginOpenAIChatHelper: Sendable {
             maxOutputTokens: maxOutputTokens,
             maxOutputTokenParameter: maxOutputTokenParameter,
             reasoningEffort: reasoningEffort,
-            temperature: temperature
+            temperature: temperature,
+            thinkingEnabled: thinkingEnabled
         )
 
         var request = URLRequest(url: url)
@@ -623,13 +753,7 @@ public struct PluginOpenAIChatHelper: Sendable {
         case 429:
             throw PluginChatError.rateLimited
         default:
-            var displayMessage = "HTTP \(httpResponse.statusCode)"
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let error = json["error"] as? [String: Any],
-               let message = error["message"] as? String {
-                displayMessage = message
-            }
-            throw PluginChatError.apiError(displayMessage)
+            throw PluginChatError.apiError(Self.errorMessage(from: data, statusCode: httpResponse.statusCode))
         }
 
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -707,6 +831,49 @@ public struct PluginOpenAIChatHelper: Sendable {
         )
     }
 
+    /// Extracts a human-readable error message from an OpenAI-compatible error body,
+    /// falling back to `HTTP <status>` when no message can be found.
+    ///
+    /// Most providers return `{"error": {"message": ...}}`, but some (notably
+    /// Google's Gemini OpenAI-compat endpoint) wrap the error in a top-level JSON
+    /// array: `[{"error": {"message": ...}}]`. Both shapes are handled here so the
+    /// descriptive message survives instead of being collapsed to `HTTP 404`.
+    static func errorMessage(from data: Data, statusCode: Int) -> String {
+        let json = try? JSONSerialization.jsonObject(with: data)
+
+        let object: [String: Any]?
+        if let dictionary = json as? [String: Any] {
+            object = dictionary
+        } else if let array = json as? [Any],
+                  let first = array.first as? [String: Any] {
+            object = first
+        } else {
+            object = nil
+        }
+
+        if let object, let message = message(fromErrorObject: object) {
+            return message
+        }
+        return "HTTP \(statusCode)"
+    }
+
+    /// Extracts a message from a single error object following the precedence used
+    /// across providers: top-level `detail`, then nested `error.message`, then a
+    /// top-level `message`.
+    private static func message(fromErrorObject object: [String: Any]) -> String? {
+        if let detail = object["detail"] as? String, !detail.isEmpty {
+            return detail
+        }
+        if let error = object["error"] as? [String: Any],
+           let message = error["message"] as? String, !message.isEmpty {
+            return message
+        }
+        if let message = object["message"] as? String, !message.isEmpty {
+            return message
+        }
+        return nil
+    }
+
     func requestBody(
         model: String,
         systemPrompt: String,
@@ -715,6 +882,28 @@ public struct PluginOpenAIChatHelper: Sendable {
         maxOutputTokenParameter: String,
         reasoningEffort: String?,
         temperature: Double?
+    ) -> [String: Any] {
+        requestBody(
+            model: model,
+            systemPrompt: systemPrompt,
+            userText: userText,
+            maxOutputTokens: maxOutputTokens,
+            maxOutputTokenParameter: maxOutputTokenParameter,
+            reasoningEffort: reasoningEffort,
+            temperature: temperature,
+            thinkingEnabled: nil
+        )
+    }
+
+    func requestBody(
+        model: String,
+        systemPrompt: String,
+        userText: String,
+        maxOutputTokens: Int?,
+        maxOutputTokenParameter: String,
+        reasoningEffort: String?,
+        temperature: Double?,
+        thinkingEnabled: Bool?
     ) -> [String: Any] {
         var requestBody: [String: Any] = [
             "model": model,
@@ -734,6 +923,12 @@ public struct PluginOpenAIChatHelper: Sendable {
 
         if let reasoningEffort, !reasoningEffort.isEmpty {
             requestBody["reasoning_effort"] = reasoningEffort
+        }
+
+        if let thinkingEnabled {
+            requestBody["thinking"] = [
+                "type": thinkingEnabled ? "enabled" : "disabled"
+            ]
         }
 
         return requestBody

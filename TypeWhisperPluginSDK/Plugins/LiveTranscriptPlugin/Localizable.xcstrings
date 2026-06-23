@@ -1,86 +1,134 @@
 {
-  "sourceLanguage" : "en",
-  "strings" : {
-    "Auto-open on recording" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Automatisch bei Aufnahme öffnen"
+  "sourceLanguage": "en",
+  "strings": {
+    "Auto-open on recording": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch bei Aufnahme öffnen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "録音時に自動で開く"
           }
         }
       }
     },
-    "New text" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Neuer Text"
+    "New text": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuer Text"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新しいテキスト"
           }
         }
       }
     },
-    "Font size" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Schriftgrösse"
+    "Font size": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schriftgrösse"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォントサイズ"
           }
         }
       }
     },
-    "Press a key combination..." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tastenkombination drücken..."
+    "Press a key combination...": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tastenkombination drücken..."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キーボードショートカットを押してください..."
           }
         }
       }
     },
-    "Record Shortcut" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Aufnehmen"
+    "Record Shortcut": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufnehmen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "録音"
           }
         }
       }
     },
-    "Show or hide the transcript window with a keyboard shortcut." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Transkript-Fenster mit einem Tastenkürzel ein- oder ausblenden."
+    "Show or hide the transcript window with a keyboard shortcut.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkript-Fenster mit einem Tastenkürzel ein- oder ausblenden."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キーボードショートカットでテキストウィンドウを表示または非表示にします。"
           }
         }
       }
     },
-    "Show the transcript window automatically when recording starts." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Transkript-Fenster automatisch bei Aufnahmestart anzeigen."
+    "Show the transcript window automatically when recording starts.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkript-Fenster automatisch bei Aufnahmestart anzeigen."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "録音開始時にテキストウィンドウを自動で表示します。"
           }
         }
       }
     },
-    "Toggle Shortcut" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tastenkürzel"
+    "Toggle Shortcut": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tastenkürzel"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キーボードショートカット"
           }
         }
       }
     }
   },
-  "version" : "1.0"
+  "version": "1.0"
 }

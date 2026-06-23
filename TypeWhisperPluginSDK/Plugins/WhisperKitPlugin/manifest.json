@@ -1,8 +1,8 @@
 {
     "id": "com.typewhisper.whisperkit",
     "name": "WhisperKit",
-    "version": "1.0.16",
-    "minHostVersion": "1.4.0",
+    "version": "1.1.0",
+    "minHostVersion": "1.5.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "supportedArchitectures": [
@@ -11,9 +11,13 @@
     "author": "TypeWhisper",
     "description": "Local speech-to-text powered by WhisperKit. 8 model sizes, 99 languages, streaming support.",
     "descriptions": {
-        "de": "Lokale Spracherkennung mit WhisperKit. 8 Modellgrößen, 99 Sprachen, Streaming-Unterstützung."
+        "de": "Lokale Spracherkennung mit WhisperKit. 8 Modellgrößen, 99 Sprachen, Streaming-Unterstützung.",
+        "ja": "WhisperKitによるローカル音声認識です。8種類のモデルサイズ、99言語、ストリーミングに対応します。"
     },
     "category": "transcription",
+    "capabilities": [
+        "source-footage-progress"
+    ],
     "iconSystemName": "waveform",
     "principalClass": "WhisperKitPlugin",
     "detailsURL": "https://www.typewhisper.com/addons/whisperkit/"

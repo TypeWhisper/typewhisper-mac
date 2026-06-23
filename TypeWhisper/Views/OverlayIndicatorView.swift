@@ -49,8 +49,8 @@ struct OverlayIndicatorView: View {
         presentation.state == .inserting && presentation.actionFeedbackMessage != nil
     }
 
-    private var hasRecordingCancelWarning: Bool {
-        presentation.state == .recording && presentation.recordingCancelWarningMessage != nil
+    private var hasCancelWarning: Bool {
+        presentation.cancelWarningMessage != nil
     }
 
     private var transcriptPreviewState: OverlayTranscriptPreviewState {
@@ -77,7 +77,7 @@ struct OverlayIndicatorView: View {
     }
 
     private var currentWidth: CGFloat {
-        if hasRecordingCancelWarning { return max(closedWidth, 340) }
+        if hasCancelWarning { return max(closedWidth, 340) }
         if transcriptBodyVisible { return max(closedWidth, 400) }
         if hasActionFeedback { return max(closedWidth, 340) }
         return closedWidth
@@ -154,7 +154,7 @@ struct OverlayIndicatorView: View {
             }
         }
         .animation(.easeInOut(duration: 1.0), value: dotPulse)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: presentation.actionFeedbackUndoTitle == nil ? .combine : .contain)
         .accessibilityLabel(accessibilityLabel)
     }
 
@@ -166,7 +166,7 @@ struct OverlayIndicatorView: View {
     }
 
     private var accessibilityLabel: String {
-        if let warning = presentation.recordingCancelWarningMessage, presentation.state == .recording {
+        if let warning = presentation.cancelWarningMessage {
             return warning
         }
 
@@ -195,9 +195,9 @@ struct OverlayIndicatorView: View {
 
     @ViewBuilder
     private var expandableContent: some View {
-        if hasRecordingCancelWarning {
+        if hasCancelWarning {
             IndicatorActionFeedback(
-                message: presentation.recordingCancelWarningMessage ?? "",
+                message: presentation.cancelWarningMessage ?? "",
                 icon: "exclamationmark.triangle.fill",
                 isError: false,
                 iconColor: .yellow,
@@ -222,7 +222,11 @@ struct OverlayIndicatorView: View {
                     icon: presentation.actionFeedbackIcon,
                     isError: presentation.actionFeedbackIsError,
                     iconColor: nil,
-                    contentPadding: contentPadding
+                    contentPadding: contentPadding,
+                    actionTitle: presentation.actionFeedbackUndoTitle,
+                    onAction: presentation.actionFeedbackUndoTitle == nil ? nil : {
+                        viewModel.undoActionFeedback()
+                    }
                 )
             }
         } else {
@@ -233,7 +237,11 @@ struct OverlayIndicatorView: View {
                     icon: presentation.actionFeedbackIcon,
                     isError: presentation.actionFeedbackIsError,
                     iconColor: nil,
-                    contentPadding: contentPadding
+                    contentPadding: contentPadding,
+                    actionTitle: presentation.actionFeedbackUndoTitle,
+                    onAction: presentation.actionFeedbackUndoTitle == nil ? nil : {
+                        viewModel.undoActionFeedback()
+                    }
                 )
                 Divider().background(Color.white.opacity(0.1))
             }

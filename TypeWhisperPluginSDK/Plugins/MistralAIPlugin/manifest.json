@@ -1,0 +1,24 @@
+{
+    "id": "com.minerale.mistralai",
+    "name": "Mistral AI",
+    "version": "1.0.1",
+    "minHostVersion": "1.5.0",
+    "sdkCompatibilityVersion": "v1",
+    "minOSVersion": "14.0",
+    "author": "MinerAle",
+    "description": "LLM provider and cloud speech transcription via Mistral AI API. Requires API key.",
+    "descriptions": {
+        "de": "LLM-Anbieter und Cloud-Spracherkennung über die Mistral AI API. Erfordert API-Key.",
+        "ja": "Mistral AI APIによるLLMプロバイダーとクラウド音声文字起こしです。APIキーが必要です。"
+    },
+    "category": "transcription",
+    "categories": [
+        "transcription",
+        "llm"
+    ],
+    "hosting": "cloud",
+    "iconURL": "https://www.typewhisper.com/brand-logos/mistral/logo.svg",
+    "principalClass": "MistralAIPlugin",
+    "requiresAPIKey": true,
+    "detailsURL": "https://www.typewhisper.com/addons/mistral/"
+}

@@ -429,6 +429,86 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(reloaded.defaultCloudModel, "gemma-4-large")
     }
 
+    func testWorkflowServiceDefaultsShortTranscriptionSkipSettings() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let suiteName = "WorkflowServiceTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults)
+
+        XCTAssertEqual(service.shortTranscriptionMinimumWords, 0)
+    }
+
+    func testWorkflowServicePersistsShortTranscriptionMinimumWords() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let suiteName = "WorkflowServiceTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults)
+        service.shortTranscriptionMinimumWords = 5
+
+        let reloaded = WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults)
+
+        XCTAssertEqual(reloaded.shortTranscriptionMinimumWords, 5)
+
+        reloaded.shortTranscriptionMinimumWords = 0
+        let disabledReload = WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults)
+
+        XCTAssertEqual(disabledReload.shortTranscriptionMinimumWords, 0)
+    }
+
+    func testWorkflowServiceClampsShortTranscriptionMinimumWords() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let suiteName = "WorkflowServiceTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults)
+
+        service.shortTranscriptionMinimumWords = -1
+        XCTAssertEqual(service.shortTranscriptionMinimumWords, 0)
+
+        service.shortTranscriptionMinimumWords = 99
+        XCTAssertEqual(service.shortTranscriptionMinimumWords, 10)
+
+        defaults.set(0, forKey: UserDefaultsKeys.workflowShortTranscriptionMinimumWords)
+        XCTAssertEqual(
+            WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults).shortTranscriptionMinimumWords,
+            0
+        )
+    }
+
+    func testWorkflowServiceShortTranscriptionSkipUsesThresholdBoundaries() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let suiteName = "WorkflowServiceTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults)
+        service.shortTranscriptionMinimumWords = 3
+
+        XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: ""))
+        XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "   "))
+        XCTAssertTrue(service.shouldSkipAIProcessingForShortDictation(text: "yes"))
+        XCTAssertTrue(service.shouldSkipAIProcessingForShortDictation(text: "thank you"))
+        XCTAssertTrue(service.shouldSkipAIProcessingForShortDictation(text: "thank\nyou!"))
+        XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "open new tab"))
+        XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "open.\nnew tab!"))
+
+        service.shortTranscriptionMinimumWords = 1
+        XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "yes"))
+
+        service.shortTranscriptionMinimumWords = 0
+        XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "yes"))
+        XCTAssertFalse(service.shouldSkipAIProcessingForShortDictation(text: "thank you"))
+    }
+
     func testWorkflowServiceResolvesWorkflowDefaultLLMUnlessWorkflowOverridesIt() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
         defer { TestSupport.remove(appSupportDirectory) }
@@ -980,9 +1060,103 @@ final class WorkflowServiceTests: XCTestCase {
         assertNoAllCapsWorkflowSafetyProse(prompt)
     }
 
+    func testAutoWorkflowSystemPromptRequestsRichTextForNativeRichTextApps() throws {
+        let workflow = Workflow(
+            name: "Auto Rich Notes",
+            template: .meetingNotes,
+            trigger: .manual(),
+            output: WorkflowOutput(format: "auto")
+        )
+        let resolvedFormat = WorkflowOutputFormatResolver.resolvedFormat(
+            storedFormat: workflow.output.format,
+            bundleIdentifier: "com.apple.iWork.Pages"
+        )
+
+        let prompt = try XCTUnwrap(workflow.systemPrompt(resolvedOutputFormat: resolvedFormat))
+
+        XCTAssertEqual(resolvedFormat, "rtf")
+        XCTAssertTrue(prompt.contains("Return Markdown-compatible text for rich-text conversion."))
+        XCTAssertFalse(prompt.contains("Return the result as auto."))
+        assertNoAllCapsWorkflowSafetyProse(prompt)
+    }
+
+    func testAutoWorkflowSystemPromptRequestsRichTextForGoogleDocsBrowserContext() throws {
+        let workflow = Workflow(
+            name: "Auto Browser Notes",
+            template: .meetingNotes,
+            trigger: .manual(),
+            output: WorkflowOutput(format: "auto")
+        )
+        let resolvedFormat = WorkflowOutputFormatResolver.resolvedFormat(
+            storedFormat: workflow.output.format,
+            bundleIdentifier: "com.google.Chrome",
+            url: "https://docs.google.com/document/d/abc/edit"
+        )
+
+        let prompt = try XCTUnwrap(workflow.systemPrompt(resolvedOutputFormat: resolvedFormat))
+
+        XCTAssertEqual(resolvedFormat, "rtf")
+        XCTAssertTrue(prompt.contains("Return Markdown-compatible text for rich-text conversion."))
+        XCTAssertFalse(prompt.contains("Return the result as auto."))
+        assertNoAllCapsWorkflowSafetyProse(prompt)
+    }
+
+    func testAutoWorkflowSystemPromptFallsBackToPlainTextForUnknownBrowserContext() throws {
+        let workflow = Workflow(
+            name: "Auto GitHub Notes",
+            template: .meetingNotes,
+            trigger: .manual(),
+            output: WorkflowOutput(format: "auto")
+        )
+        let resolvedFormat = WorkflowOutputFormatResolver.resolvedFormat(
+            storedFormat: workflow.output.format,
+            bundleIdentifier: "com.google.Chrome",
+            url: "https://github.com/TypeWhisper/typewhisper-mac/issues/701"
+        )
+
+        let prompt = try XCTUnwrap(workflow.systemPrompt(resolvedOutputFormat: resolvedFormat))
+
+        XCTAssertEqual(resolvedFormat, "plaintext")
+        XCTAssertTrue(prompt.contains("Return the result as plaintext."))
+        XCTAssertFalse(prompt.contains("Return Markdown-compatible text for rich-text conversion."))
+        XCTAssertFalse(prompt.contains("Return the result as auto."))
+        assertNoAllCapsWorkflowSafetyProse(prompt)
+    }
+
+    func testExplicitWorkflowOutputFormatWinsOverAutomaticResolution() {
+        XCTAssertEqual(
+            WorkflowOutputFormatResolver.resolvedFormat(
+                storedFormat: "rtf",
+                bundleIdentifier: "com.google.Chrome",
+                url: "https://github.com/TypeWhisper/typewhisper-mac/issues/701"
+            ),
+            "rtf"
+        )
+        XCTAssertEqual(
+            WorkflowOutputFormatResolver.resolvedFormat(
+                storedFormat: "markdown",
+                bundleIdentifier: "com.apple.iWork.Pages"
+            ),
+            "markdown"
+        )
+        XCTAssertEqual(
+            WorkflowOutputFormatResolver.resolvedFormat(
+                storedFormat: "plaintext",
+                bundleIdentifier: "com.apple.iWork.Pages"
+            ),
+            "plaintext"
+        )
+    }
+
     func testWorkflowOutputFormatPresetsExposeRTF() {
         XCTAssertTrue(WorkflowOutputFormatPreset.all.contains { preset in
             preset.title == "RTF" && preset.value == "rtf"
+        })
+    }
+
+    func testWorkflowOutputFormatPresetsExposeAutoDetect() {
+        XCTAssertTrue(WorkflowOutputFormatPreset.all.contains { preset in
+            preset.title == "Auto-Detect" && preset.value == "auto"
         })
     }
 
@@ -2089,6 +2263,15 @@ final class DictationLanguageResolverTests: XCTestCase {
         )
 
         XCTAssertEqual(resolved, .exact("fr"))
+    }
+
+    func testNoWorkflowUsesGlobalChineseLanguage() {
+        let resolved = DictationLanguageResolver.resolve(
+            workflow: nil,
+            globalLanguageSelection: .exact("zh")
+        )
+
+        XCTAssertEqual(resolved, .exact("zh"))
     }
 
     func testWorkflowAutoOverridesGlobalLanguage() {

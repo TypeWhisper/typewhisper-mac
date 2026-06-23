@@ -8,7 +8,8 @@
     "author": "TypeWhisper",
     "description": "LLM provider via Anthropic Claude API. Requires API key.",
     "descriptions": {
-        "de": "LLM-Anbieter über die Anthropic Claude API. Erfordert API-Key."
+        "de": "LLM-Anbieter über die Anthropic Claude API. Erfordert API-Key.",
+        "ja": "Anthropic Claude APIによるLLMプロバイダーです。APIキーが必要です。"
     },
     "category": "llm",
     "iconSystemName": "brain.head.profile",

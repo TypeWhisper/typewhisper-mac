@@ -43,6 +43,66 @@ let package = Package(
             ]
         ),
         .target(
+            name: "OpenRouterPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/OpenRouterPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
+            name: "GroqPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/GroqPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
+            name: "GeminiPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/GeminiPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
+            name: "CerebrasPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/CerebrasPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
+            name: "FireworksPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/FireworksPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
+            name: "ClaudePlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/ClaudePlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
             name: "Qwen3Plugin",
             dependencies: [
                 "TypeWhisperPluginSDK",
@@ -127,6 +187,7 @@ let package = Package(
             path: "Plugins/SupertonicPlugin",
             exclude: ["Tests"],
             resources: [
+                .process("Localizable.xcstrings"),
                 .process("manifest.json"),
             ]
         ),
@@ -140,9 +201,27 @@ let package = Package(
             ]
         ),
         .target(
+            name: "MemPalacePlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/MemPalacePlugin",
+            resources: [
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
             name: "LiveTranscriptPlugin",
             dependencies: ["TypeWhisperPluginSDK"],
             path: "Plugins/LiveTranscriptPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
+            name: "SonioxPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/SonioxPlugin",
             exclude: ["Tests"],
             resources: [
                 .process("Localizable.xcstrings"),
@@ -181,9 +260,38 @@ let package = Package(
             ]
         ),
         .target(
+            name: "SaluteSpeechPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/SaluteSpeechPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
+            name: "CartesiaPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/CartesiaPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
             name: "WebhookPlugin",
             dependencies: ["TypeWhisperPluginSDK"],
             path: "Plugins/WebhookPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
+            name: "MistralAIPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/MistralAIPlugin",
             exclude: ["Tests"],
             resources: [
                 .process("Localizable.xcstrings"),
@@ -213,6 +321,60 @@ let package = Package(
             path: "Plugins/OpenAIPlugin/Tests"
         ),
         .testTarget(
+            name: "OpenRouterPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "OpenRouterPlugin",
+            ],
+            path: "Plugins/OpenRouterPlugin/Tests"
+        ),
+        .testTarget(
+            name: "GroqPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "GroqPlugin",
+            ],
+            path: "Plugins/GroqPlugin/Tests"
+        ),
+        .testTarget(
+            name: "GeminiPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "GeminiPlugin",
+            ],
+            path: "Plugins/GeminiPlugin/Tests"
+        ),
+        .testTarget(
+            name: "CerebrasPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "CerebrasPlugin",
+            ],
+            path: "Plugins/CerebrasPlugin/Tests"
+        ),
+        .testTarget(
+            name: "FireworksPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "FireworksPlugin",
+            ],
+            path: "Plugins/FireworksPlugin/Tests"
+        ),
+        .testTarget(
+            name: "ClaudePluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "ClaudePlugin",
+            ],
+            path: "Plugins/ClaudePlugin/Tests"
+        ),
+        .testTarget(
             name: "Qwen3PluginTests",
             dependencies: [
                 "TypeWhisperPluginSDK",
@@ -229,6 +391,13 @@ let package = Package(
                 "ParakeetPlugin",
             ],
             path: "Plugins/ParakeetPlugin/Tests"
+        ),
+        .testTarget(
+            name: "SpeechAnalyzerPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+            ],
+            path: "Plugins/SpeechAnalyzerPlugin/Tests"
         ),
         .testTarget(
             name: "FillerWordsPluginTests",
@@ -302,6 +471,15 @@ let package = Package(
             path: "Plugins/LiveTranscriptPlugin/Tests"
         ),
         .testTarget(
+            name: "SonioxPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "SonioxPlugin",
+            ],
+            path: "Plugins/SonioxPlugin/Tests"
+        ),
+        .testTarget(
             name: "AssemblyAIPluginTests",
             dependencies: [
                 "TypeWhisperPluginSDK",
@@ -328,6 +506,24 @@ let package = Package(
             path: "Plugins/SmallestAIPlugin/Tests"
         ),
         .testTarget(
+            name: "SaluteSpeechPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "SaluteSpeechPlugin",
+            ],
+            path: "Plugins/SaluteSpeechPlugin/Tests"
+        ),
+        .testTarget(
+            name: "CartesiaPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "CartesiaPlugin",
+            ],
+            path: "Plugins/CartesiaPlugin/Tests"
+        ),
+        .testTarget(
             name: "WebhookPluginTests",
             dependencies: [
                 "TypeWhisperPluginSDK",
@@ -335,6 +531,15 @@ let package = Package(
                 "WebhookPlugin",
             ],
             path: "Plugins/WebhookPlugin/Tests"
+        ),
+        .testTarget(
+            name: "MistralAIPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "MistralAIPlugin",
+            ],
+            path: "Plugins/MistralAIPlugin/Tests"
         ),
     ]
 )

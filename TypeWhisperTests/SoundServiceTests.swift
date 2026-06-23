@@ -56,6 +56,19 @@ final class SoundServiceTests: XCTestCase {
         XCTAssertEqual(try TestSupport.localizedCatalogValue(for: "Off", language: "de"), "Aus")
     }
 
+    func testRecordingSpokenLanguageCopyIsLocalizedInCatalog() throws {
+        let copy = "Controls push-to-talk dictation, workflows that inherit the global spoken language, and CLI/API defaults when they use app defaults. Recorder and Recovery have separate language settings."
+
+        XCTAssertEqual(
+            try TestSupport.localizedCatalogValue(for: copy, preferredLanguages: ["en-US"]),
+            copy
+        )
+        XCTAssertEqual(
+            try TestSupport.localizedCatalogValue(for: copy, language: "de"),
+            "Steuert Push-to-Talk-Diktat, Workflows, die die globale gesprochene Sprache übernehmen, und CLI/API-Standardwerte, wenn sie App-Standardwerte verwenden. Recorder und Wiederherstellung haben separate Spracheinstellungen."
+        )
+    }
+
     @MainActor
     func testSoundResolutionCachesImportedCustomSounds() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()

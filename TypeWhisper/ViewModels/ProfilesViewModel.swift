@@ -14,8 +14,24 @@ func preferredAppLanguageCode() -> String {
     return Locale.current.language.languageCode?.identifier ?? "en"
 }
 
-func localizedAppText(_ english: String, de german: String) -> String {
-    preferredAppLanguageCode().hasPrefix("de") ? german : english
+func localizedAppText(_ english: String, de german: String, ja japanese: String? = nil) -> String {
+    let language = preferredAppLanguageCode()
+    if language.hasPrefix("de") {
+        return german
+    }
+
+    if language.hasPrefix("ja") {
+        if let japanese {
+            return japanese
+        }
+
+        let localized = Bundle.main.localizedString(forKey: english, value: nil, table: nil)
+        if localized != english {
+            return localized
+        }
+    }
+
+    return english
 }
 
 func localizedAppLanguageName(for code: String) -> String {
@@ -644,17 +660,20 @@ final class ProfilesViewModel: ObservableObject {
         case (true, true):
             return localizedAppText(
                 "\(appNames.joined(separator: orSeparator)) is active and \(domains.joined(separator: orSeparator)) is detected",
-                de: "\(appNames.joined(separator: orSeparator)) aktiv ist und \(domains.joined(separator: orSeparator)) erkannt wird"
+                de: "\(appNames.joined(separator: orSeparator)) aktiv ist und \(domains.joined(separator: orSeparator)) erkannt wird",
+                ja: "\(appNames.joined(separator: orSeparator)) がアクティブで、\(domains.joined(separator: orSeparator)) が検出されている"
             )
         case (true, false):
             return localizedAppText(
                 "\(appNames.joined(separator: orSeparator)) is active",
-                de: "\(appNames.joined(separator: orSeparator)) aktiv ist"
+                de: "\(appNames.joined(separator: orSeparator)) aktiv ist",
+                ja: "\(appNames.joined(separator: orSeparator)) がアクティブ"
             )
         case (false, true):
             return localizedAppText(
                 "\(domains.joined(separator: orSeparator)) is detected",
-                de: "\(domains.joined(separator: orSeparator)) erkannt wird"
+                de: "\(domains.joined(separator: orSeparator)) erkannt wird",
+                ja: "\(domains.joined(separator: orSeparator)) が検出されている"
             )
         case (false, false):
             return hasManualOverride
@@ -683,7 +702,7 @@ final class ProfilesViewModel: ObservableObject {
 
         if let promptActionId,
            let action = PromptActionsViewModel.shared.promptActions.first(where: { $0.id.uuidString == promptActionId }) {
-            parts.append(localizedAppText("the prompt “\(action.name)”", de: "den Prompt „\(action.name)“"))
+            parts.append(localizedAppText("the prompt “\(action.name)”", de: "den Prompt „\(action.name)“", ja: "プロンプト「\(action.name)」"))
         }
 
         let languageSelection = LanguageSelection(storedValue: inputLanguage, nilBehavior: .inheritGlobal)
@@ -694,13 +713,14 @@ final class ProfilesViewModel: ObservableObject {
             parts.append(localizedAppText("with auto-detect", de: "mit automatischer Erkennung"))
         case .exact(let code):
             let languageName = localizedAppLanguageName(for: code)
-            parts.append(localizedAppText("with \(languageName)", de: "mit \(languageName)"))
+            parts.append(localizedAppText("with \(languageName)", de: "mit \(languageName)", ja: "\(languageName)で"))
         case .hints(let codes):
             let languageList = localizedAppLanguageList(codes)
             parts.append(
                 localizedAppText(
                     "with auto-detect between \(languageList)",
-                    de: "mit automatischer Erkennung zwischen \(languageList)"
+                    de: "mit automatischer Erkennung zwischen \(languageList)",
+                    ja: "\(languageList)間の自動検出で"
                 )
             )
         }
@@ -709,14 +729,14 @@ final class ProfilesViewModel: ObservableObject {
             parts.append(localizedAppText("without translation", de: "ohne Übersetzung"))
         } else if let lang = translationTargetLanguage {
             let languageName = localizedAppLanguageName(for: lang)
-            parts.append(localizedAppText("with translation to \(languageName)", de: "mit Übersetzung nach \(languageName)"))
+            parts.append(localizedAppText("with translation to \(languageName)", de: "mit Übersetzung nach \(languageName)", ja: "\(languageName)への翻訳あり"))
         } else if translationEnabled == true {
             parts.append(localizedAppText("with translation", de: "mit Übersetzung"))
         }
 
         if let engine = engineOverride {
             let displayName = PluginManager.shared.transcriptionEngine(for: engine)?.providerDisplayName ?? engine
-            parts.append(localizedAppText("via \(displayName)", de: "über \(displayName)"))
+            parts.append(localizedAppText("via \(displayName)", de: "über \(displayName)", ja: "\(displayName)経由"))
         }
 
         if let outputFormat {
@@ -732,7 +752,7 @@ final class ProfilesViewModel: ObservableObject {
             case "code":
                 parts.append(localizedAppText("as Code", de: "als Code"))
             default:
-                parts.append(localizedAppText("with \(outputFormat)", de: "mit \(outputFormat)"))
+                parts.append(localizedAppText("with \(outputFormat)", de: "mit \(outputFormat)", ja: "\(outputFormat)形式"))
             }
         }
 
@@ -752,14 +772,16 @@ final class ProfilesViewModel: ObservableObject {
     func ruleNarrative(for profile: Profile) -> String {
         localizedAppText(
             "When \(ruleContextSummary(bundleIdentifiers: profile.bundleIdentifiers, urlPatterns: profile.urlPatterns, hasManualOverride: profile.hotkey != nil)), TypeWhisper uses \(ruleBehaviorSummary(inputLanguage: profile.inputLanguage, translationEnabled: profile.translationEnabled, translationTargetLanguage: profile.translationTargetLanguage, promptActionId: profile.promptActionId, engineOverride: profile.engineOverride, outputFormat: profile.outputFormat, inlineCommandsEnabled: profile.inlineCommandsEnabled, autoEnterEnabled: profile.autoEnterEnabled)).",
-            de: "Wenn \(ruleContextSummary(bundleIdentifiers: profile.bundleIdentifiers, urlPatterns: profile.urlPatterns, hasManualOverride: profile.hotkey != nil)), nutzt TypeWhisper \(ruleBehaviorSummary(inputLanguage: profile.inputLanguage, translationEnabled: profile.translationEnabled, translationTargetLanguage: profile.translationTargetLanguage, promptActionId: profile.promptActionId, engineOverride: profile.engineOverride, outputFormat: profile.outputFormat, inlineCommandsEnabled: profile.inlineCommandsEnabled, autoEnterEnabled: profile.autoEnterEnabled))."
+            de: "Wenn \(ruleContextSummary(bundleIdentifiers: profile.bundleIdentifiers, urlPatterns: profile.urlPatterns, hasManualOverride: profile.hotkey != nil)), nutzt TypeWhisper \(ruleBehaviorSummary(inputLanguage: profile.inputLanguage, translationEnabled: profile.translationEnabled, translationTargetLanguage: profile.translationTargetLanguage, promptActionId: profile.promptActionId, engineOverride: profile.engineOverride, outputFormat: profile.outputFormat, inlineCommandsEnabled: profile.inlineCommandsEnabled, autoEnterEnabled: profile.autoEnterEnabled)).",
+            ja: "\(ruleContextSummary(bundleIdentifiers: profile.bundleIdentifiers, urlPatterns: profile.urlPatterns, hasManualOverride: profile.hotkey != nil))のとき、TypeWhisperは\(ruleBehaviorSummary(inputLanguage: profile.inputLanguage, translationEnabled: profile.translationEnabled, translationTargetLanguage: profile.translationTargetLanguage, promptActionId: profile.promptActionId, engineOverride: profile.engineOverride, outputFormat: profile.outputFormat, inlineCommandsEnabled: profile.inlineCommandsEnabled, autoEnterEnabled: profile.autoEnterEnabled))を使用します。"
         )
     }
 
     var editorRuleNarrative: String {
         localizedAppText(
             "When \(ruleContextSummary(bundleIdentifiers: editorBundleIdentifiers, urlPatterns: editorUrlPatterns, hasManualOverride: editorHotkey != nil)), TypeWhisper uses \(ruleBehaviorSummary(inputLanguage: editorInputLanguage, translationEnabled: editorTranslationEnabled, translationTargetLanguage: editorTranslationTargetLanguage, promptActionId: editorPromptActionId, engineOverride: editorEngineOverride, outputFormat: editorOutputFormat, inlineCommandsEnabled: editorInlineCommandsEnabled, autoEnterEnabled: editorAutoEnterEnabled)).",
-            de: "Wenn \(ruleContextSummary(bundleIdentifiers: editorBundleIdentifiers, urlPatterns: editorUrlPatterns, hasManualOverride: editorHotkey != nil)), nutzt TypeWhisper \(ruleBehaviorSummary(inputLanguage: editorInputLanguage, translationEnabled: editorTranslationEnabled, translationTargetLanguage: editorTranslationTargetLanguage, promptActionId: editorPromptActionId, engineOverride: editorEngineOverride, outputFormat: editorOutputFormat, inlineCommandsEnabled: editorInlineCommandsEnabled, autoEnterEnabled: editorAutoEnterEnabled))."
+            de: "Wenn \(ruleContextSummary(bundleIdentifiers: editorBundleIdentifiers, urlPatterns: editorUrlPatterns, hasManualOverride: editorHotkey != nil)), nutzt TypeWhisper \(ruleBehaviorSummary(inputLanguage: editorInputLanguage, translationEnabled: editorTranslationEnabled, translationTargetLanguage: editorTranslationTargetLanguage, promptActionId: editorPromptActionId, engineOverride: editorEngineOverride, outputFormat: editorOutputFormat, inlineCommandsEnabled: editorInlineCommandsEnabled, autoEnterEnabled: editorAutoEnterEnabled)).",
+            ja: "\(ruleContextSummary(bundleIdentifiers: editorBundleIdentifiers, urlPatterns: editorUrlPatterns, hasManualOverride: editorHotkey != nil))のとき、TypeWhisperは\(ruleBehaviorSummary(inputLanguage: editorInputLanguage, translationEnabled: editorTranslationEnabled, translationTargetLanguage: editorTranslationTargetLanguage, promptActionId: editorPromptActionId, engineOverride: editorEngineOverride, outputFormat: editorOutputFormat, inlineCommandsEnabled: editorInlineCommandsEnabled, autoEnterEnabled: editorAutoEnterEnabled))を使用します。"
         )
     }
 
@@ -841,7 +863,8 @@ final class ProfilesViewModel: ObservableObject {
         }
         return localizedAppText(
             "Manual override: \(HotkeyService.displayName(for: hotkey))",
-            de: "Manuelle Übersteuerung: \(HotkeyService.displayName(for: hotkey))"
+            de: "Manuelle Übersteuerung: \(HotkeyService.displayName(for: hotkey))",
+            ja: "手動上書き: \(HotkeyService.displayName(for: hotkey))"
         )
     }
 
@@ -851,7 +874,8 @@ final class ProfilesViewModel: ObservableObject {
         }
         return localizedAppText(
             "Manual override: \(HotkeyService.displayName(for: editorHotkey))",
-            de: "Manuelle Übersteuerung: \(HotkeyService.displayName(for: editorHotkey))"
+            de: "Manuelle Übersteuerung: \(HotkeyService.displayName(for: editorHotkey))",
+            ja: "手動上書き: \(HotkeyService.displayName(for: editorHotkey))"
         )
     }
 

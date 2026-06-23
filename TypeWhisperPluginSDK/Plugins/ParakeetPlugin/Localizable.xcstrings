@@ -1,156 +1,358 @@
 {
-  "sourceLanguage" : "en",
-  "strings" : {
-    "CTC model (~100 MB) - downloads automatically on first use, or:" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "CTC-Modell (~100 MB) - wird automatisch beim ersten Gebrauch geladen, oder:"
+  "sourceLanguage": "en",
+  "strings": {
+    "CTC model (~100 MB) - downloads automatically on first use, or:": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CTC-Modell (~100 MB) - wird automatisch beim ersten Gebrauch geladen, oder:"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CTCモデル (~100 MB) - 最初に使用するときに自動で読み込まれます。または:"
           }
         }
       }
     },
-    "Download & Load" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Laden & Aktivieren"
+    "Download & Load": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laden & Aktivieren"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "読み込み & 有効化"
           }
         }
       }
     },
-    "Download Now" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Jetzt herunterladen"
+    "Download Now": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jetzt herunterladen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "今すぐダウンロード"
           }
         }
       }
     },
-    "Done" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Fertig"
+    "Done": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fertig"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完了"
           }
         }
       }
     },
-    "Downloading CTC model..." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "CTC-Modell wird heruntergeladen..."
+    "Downloading CTC model...": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CTC-Modell wird heruntergeladen..."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CTCモデルがダウンロード中..."
           }
         }
       }
     },
-    "Enable Vocabulary Boosting" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Vokabel-Boosting aktivieren"
+    "Enable Vocabulary Boosting": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vokabel-Boosting aktivieren"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "語彙ブーストを有効化"
           }
         }
       }
     },
-    "Improves recognition of custom terms from your Dictionary using a secondary CTC model." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verbessert die Erkennung von Fachbegriffen aus dem Wörterbuch mittels eines sekundären CTC-Modells."
+    "Improves recognition of custom terms from your Dictionary using a secondary CTC model.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbessert die Erkennung von Fachbegriffen aus dem Wörterbuch mittels eines sekundären CTC-Modells."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "辞書の専門用語の認識を、セカンダリCTCモデルにより向上させます。"
           }
         }
       }
     },
-    "Model Version" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Modellversion"
+    "Hugging Face Token": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Face Token"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Faceトークン"
           }
         }
       }
     },
-    "NVIDIA Parakeet TDT V2 - extremely fast on Apple Silicon. English only, highest recall. No API key required." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "NVIDIA Parakeet TDT V2 - extrem schnell auf Apple Silicon. Nur Englisch, höchster Recall. Kein API-Schlüssel nötig."
+    "Invalid Hugging Face Token": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ungültiger Hugging Face Token"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無効なHugging Faceトークン"
           }
         }
       }
     },
-    "NVIDIA Parakeet TDT - extremely fast on Apple Silicon. 25 European languages, no API key required." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "NVIDIA Parakeet TDT - extrem schnell auf Apple Silicon. 25 europäische Sprachen, kein API-Schlüssel nötig."
+    "Model Version": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modellversion"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデルバージョン"
           }
         }
       }
     },
-    "Ready - %lld terms loaded" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bereit - %lld Begriffe geladen"
+    "NVIDIA Parakeet TDT V2 - extremely fast on Apple Silicon. English only, highest recall. No API key required.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NVIDIA Parakeet TDT V2 - extrem schnell auf Apple Silicon. Nur Englisch, höchster Recall. Kein API-Schlüssel nötig."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NVIDIA Parakeet TDT V2 - Apple Siliconで非常に高速。英語のみ、最高のRecall。APIキー不要。"
           }
         }
       }
     },
-    "Ready - add terms in Dictionary settings" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bereit - Begriffe in Wörterbuch-Einstellungen hinzufügen"
+    "NVIDIA Parakeet TDT - extremely fast on Apple Silicon. 25 European languages, no API key required.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NVIDIA Parakeet TDT - extrem schnell auf Apple Silicon. 25 europäische Sprachen, kein API-Schlüssel nötig."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NVIDIA Parakeet TDT - Apple Siliconで非常に高速。25のヨーロッパ語、APIキー不要。"
           }
         }
       }
     },
-    "Retry" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Erneut versuchen"
+    "Optional. Increases download rate limits. Free at huggingface.co/settings/tokens": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Optional. Erhöht die Download-Rate-Limits. Kostenlos unter huggingface.co/settings/tokens"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "任意です。ダウンロードのレート制限を緩和できます。huggingface.co/settings/tokens で無料作成できます"
           }
         }
       }
     },
-    "Unload" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deaktivieren"
+    "Ready - %lld terms loaded": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bereit - %lld Begriffe geladen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "準備完了 - %lld語読み込まれました"
           }
         }
       }
     },
-    "Vocabulary Boosting" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Vokabel-Boosting"
+    "Ready - add terms in Dictionary settings": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bereit - Begriffe in Wörterbuch-Einstellungen hinzufügen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "準備完了 - 辞書設定で語を追加"
+          }
+        }
+      }
+    },
+    "Remove": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entfernen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "削除"
+          }
+        }
+      }
+    },
+    "Retry": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erneut versuchen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "再試行"
+          }
+        }
+      }
+    },
+    "Save": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speichern"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
+          }
+        }
+      }
+    },
+    "Unload": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deaktivieren"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無効化"
+          }
+        }
+      }
+    },
+    "Valid Hugging Face Token": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gültiger Hugging Face Token"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有効なHugging Faceトークン"
+          }
+        }
+      }
+    },
+    "Validating token...": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token wird geprüft..."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "トークンを検証中..."
+          }
+        }
+      }
+    },
+    "Vocabulary Boosting": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vokabel-Boosting"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "語彙ブースト"
           }
         }
       }
     }
   },
-  "version" : "1.0"
+  "version": "1.0"
 }

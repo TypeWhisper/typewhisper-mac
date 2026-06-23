@@ -2,55 +2,107 @@ import AppKit
 import SwiftUI
 
 @MainActor
+enum PromptPaletteEntry {
+    case workflow(Workflow)
+    case recentTranscription(RecentTranscriptionStore.Entry)
+}
+
+@MainActor
 protocol PromptPaletteControlling: AnyObject {
     var isVisible: Bool { get }
-    func show(workflows: [Workflow], sourceText: String, onSelect: @escaping (Workflow) -> Void)
+    func show(entries: [PromptPaletteEntry], sourceText: String?, onSelect: @escaping (PromptPaletteEntry) -> Void)
     func hide()
 }
 
 @MainActor
 final class PromptPaletteController: PromptPaletteControlling {
     private let paletteController: any SelectionPaletteControlling
+    private let relativeDateFormatter = RelativeDateTimeFormatter()
 
     init(paletteController: any SelectionPaletteControlling = SelectionPaletteController()) {
         self.paletteController = paletteController
+        relativeDateFormatter.unitsStyle = .short
     }
 
     var isVisible: Bool { paletteController.isVisible }
 
-    func show(workflows: [Workflow], sourceText: String, onSelect: @escaping (Workflow) -> Void) {
-        let enabledWorkflows = workflows.filter(\.isEnabled)
-        guard !enabledWorkflows.isEmpty else { return }
-
-        let items = enabledWorkflows.map {
-            SelectionPaletteItem(
-                id: $0.id,
-                title: $0.name,
-                subtitle: workflowPaletteSubtitle(for: $0),
-                iconSystemName: $0.definition.systemImage,
-                searchTokens: workflowPaletteSearchTokens(for: $0)
-            )
+    func show(entries: [PromptPaletteEntry], sourceText _: String?, onSelect: @escaping (PromptPaletteEntry) -> Void) {
+        let visibleEntries = entries.filter { entry in
+            switch entry {
+            case .workflow(let workflow):
+                return workflow.isEnabled
+            case .recentTranscription:
+                return true
+            }
         }
-        let workflowsByID = Dictionary(uniqueKeysWithValues: enabledWorkflows.map { ($0.id, $0) })
+        guard !visibleEntries.isEmpty else { return }
+
+        let itemPairs = visibleEntries.map { entry in
+            (paletteItem(for: entry), entry)
+        }
+        let entriesByID = Dictionary(uniqueKeysWithValues: itemPairs.map { ($0.0.id, $0.1) })
+        let containsRecentTranscriptions = visibleEntries.contains { entry in
+            if case .recentTranscription = entry {
+                return true
+            }
+            return false
+        }
 
         paletteController.show(
             configuration: SelectionPaletteConfiguration(
-                panelWidth: 380,
-                panelHeight: 344,
+                panelWidth: containsRecentTranscriptions ? 520 : 380,
+                panelHeight: containsRecentTranscriptions ? 380 : 344,
                 previewText: nil,
                 previewLineLimit: 3,
-                searchPrompt: localizedAppText("Search workflows...", de: "Workflows suchen..."),
-                emptyStateTitle: localizedAppText("No matching workflows", de: "Keine passenden Workflows")
+                titleLineLimit: containsRecentTranscriptions ? 2 : 1,
+                searchPrompt: searchPrompt(containsRecentTranscriptions: containsRecentTranscriptions),
+                emptyStateTitle: emptyStateTitle(containsRecentTranscriptions: containsRecentTranscriptions)
             ),
-            items: items
+            items: itemPairs.map { $0.0 }
         ) { item in
-            guard let workflow = workflowsByID[item.id] else { return }
-            onSelect(workflow)
+            guard let entry = entriesByID[item.id] else { return }
+            onSelect(entry)
         }
     }
 
     func hide() {
         paletteController.hide()
+    }
+
+    private func paletteItem(for entry: PromptPaletteEntry) -> SelectionPaletteItem {
+        switch entry {
+        case .workflow(let workflow):
+            SelectionPaletteItem(
+                id: UUID(),
+                title: workflow.name,
+                subtitle: workflowPaletteSubtitle(for: workflow),
+                iconSystemName: workflow.definition.systemImage,
+                searchTokens: workflowPaletteSearchTokens(for: workflow)
+            )
+        case .recentTranscription(let recentEntry):
+            SelectionPaletteItem(
+                id: UUID(),
+                title: recentEntry.finalText,
+                subtitle: recentTranscriptionSubtitle(for: recentEntry),
+                iconSystemName: "clock.arrow.circlepath",
+                searchTokens: recentTranscriptionSearchTokens(for: recentEntry)
+            )
+        }
+    }
+
+    private func searchPrompt(containsRecentTranscriptions: Bool) -> String {
+        containsRecentTranscriptions
+            ? localizedAppText(
+                "Search workflows and recent transcriptions...",
+                de: "Workflows und letzte Transkriptionen suchen..."
+            )
+            : localizedAppText("Search workflows...", de: "Workflows suchen...")
+    }
+
+    private func emptyStateTitle(containsRecentTranscriptions: Bool) -> String {
+        containsRecentTranscriptions
+            ? localizedAppText("No matching results", de: "Keine passenden Ergebnisse")
+            : localizedAppText("No matching workflows", de: "Keine passenden Workflows")
     }
 
     private func workflowPaletteSubtitle(for workflow: Workflow) -> String? {
@@ -123,5 +175,24 @@ final class PromptPaletteController: PromptPaletteControlling {
         return bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
             ?? bundle.object(forInfoDictionaryKey: kCFBundleNameKey as String) as? String
             ?? bundleIdentifier
+    }
+
+    private func recentTranscriptionSubtitle(for entry: RecentTranscriptionStore.Entry) -> String {
+        let relativeTimestamp = relativeDateFormatter.localizedString(for: entry.timestamp, relativeTo: Date())
+        let appName = entry.appName?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let appName, !appName.isEmpty {
+            return "\(appName) • \(relativeTimestamp)"
+        }
+        return relativeTimestamp
+    }
+
+    private func recentTranscriptionSearchTokens(for entry: RecentTranscriptionStore.Entry) -> [String] {
+        [
+            localizedAppText("Recent Transcription", de: "Letzte Transkription"),
+            localizedAppText("Recent Transcriptions", de: "Letzte Transkriptionen"),
+            entry.appName,
+            entry.appBundleIdentifier,
+        ].compactMap { $0 }
     }
 }

@@ -8,7 +8,8 @@
     "author": "TypeWhisper",
     "description": "Post-process transcribed text through custom shell scripts. Pass text via stdin, get results via stdout.",
     "descriptions": {
-        "de": "Transkribierten Text durch eigene Shell-Skripte nachbearbeiten. Text wird per stdin übergeben, Ergebnis per stdout zurückgegeben."
+        "de": "Transkribierten Text durch eigene Shell-Skripte nachbearbeiten. Text wird per stdin übergeben, Ergebnis per stdout zurückgegeben.",
+        "ja": "カスタムシェルスクリプトで文字起こしテキストを後処理します。stdinでテキストを渡し、stdoutから結果を受け取ります。"
     },
     "category": "post-processor",
     "iconSystemName": "terminal",

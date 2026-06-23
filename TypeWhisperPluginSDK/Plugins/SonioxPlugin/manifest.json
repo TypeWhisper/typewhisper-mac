@@ -1,16 +1,24 @@
 {
     "id": "com.typewhisper.soniox",
     "name": "Soniox",
-    "version": "1.0.0",
-    "minHostVersion": "0.12.0",
+    "version": "1.2.0",
+    "minHostVersion": "1.5.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
-    "description": "Cloud transcription via Soniox API with real-time WebSocket streaming and translation support. Requires API key.",
+    "description": "Cloud speech-to-text and text-to-speech via Soniox APIs with regional endpoint support. Requires API key.",
     "descriptions": {
-        "de": "Cloud-Transkription über die Soniox-API mit Echtzeit-WebSocket-Streaming und Übersetzungsunterstützung. Erfordert API-Key."
+        "de": "Cloud Speech-to-Text und Text-to-Speech über Soniox APIs mit regionaler Endpunkt-Auswahl. Erfordert API-Key.",
+        "ja": "Soniox APIによるクラウド音声認識と音声合成です。リージョン別エンドポイントに対応し、APIキーが必要です。"
     },
     "category": "transcription",
+    "categories": [
+        "transcription",
+        "tts"
+    ],
+    "capabilities": [
+        "source-footage-progress"
+    ],
     "iconSystemName": "waveform.badge.mic",
     "principalClass": "SonioxPlugin",
     "requiresAPIKey": true,

@@ -8,7 +8,8 @@
     "author": "TypeWhisper",
     "description": "Send transcribed or processed text to any webhook URL via HTTP POST.",
     "descriptions": {
-        "de": "Transkribierten oder verarbeiteten Text per HTTP POST an eine beliebige Webhook-URL senden."
+        "de": "Transkribierten oder verarbeiteten Text per HTTP POST an eine beliebige Webhook-URL senden.",
+        "ja": "文字起こし済みまたは処理済みのテキストをHTTP POSTで任意のWebhook URLへ送信します。"
     },
     "category": "post-processor",
     "iconSystemName": "arrow.up.forward.app",

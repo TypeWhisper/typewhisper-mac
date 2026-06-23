@@ -69,6 +69,20 @@ final class AppFormatterServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testBrowserAutoFormattingUsesURLDomainForGoogleMail() {
+        let service = AppFormatterService()
+
+        let output = service.format(
+            text: "hello <team>\n- launch",
+            bundleId: "com.google.Chrome",
+            url: "https://mail.google.com/mail/u/0/#inbox",
+            outputFormat: "auto"
+        )
+
+        XCTAssertEqual(output, "<p>hello &lt;team&gt;</p>\n<ul>\n<li>launch</li>\n</ul>")
+    }
+
+    @MainActor
     func testRTFFormattingLeavesMarkdownTextForClipboardConversion() {
         let service = AppFormatterService()
 
@@ -81,6 +95,38 @@ final class AppFormatterServiceTests: XCTestCase {
         XCTAssertEqual(output, "**Launch**\n- Budget")
     }
 
+    func testAutoFormatResolverMapsRichTextAndBrowserTargets() {
+        XCTAssertEqual(
+            WorkflowOutputFormatResolver.resolvedFormat(
+                storedFormat: "auto",
+                bundleIdentifier: "com.microsoft.Word"
+            ),
+            "rtf"
+        )
+        XCTAssertEqual(
+            WorkflowOutputFormatResolver.resolvedFormat(
+                storedFormat: "auto",
+                bundleIdentifier: "com.google.Chrome",
+                url: "https://docs.google.com/document/d/abc/edit"
+            ),
+            "rtf"
+        )
+        XCTAssertEqual(
+            WorkflowOutputFormatResolver.resolvedFormat(
+                storedFormat: "auto",
+                bundleIdentifier: "com.google.Chrome",
+                url: "https://github.com/TypeWhisper/typewhisper-mac"
+            ),
+            "plaintext"
+        )
+        XCTAssertNil(
+            WorkflowOutputFormatResolver.resolvedFormat(
+                storedFormat: nil,
+                bundleIdentifier: "com.microsoft.Word"
+            )
+        )
+    }
+
     @MainActor
     func testRegisterDefaultUserDefaultsIncludesAppFormattingFlag() {
         let defaults = UserDefaults(suiteName: #function)!
@@ -91,6 +137,7 @@ final class AppFormatterServiceTests: XCTestCase {
 
         AppDelegate.registerDefaultUserDefaults(defaults)
 
-        XCTAssertEqual(defaults.object(forKey: UserDefaultsKeys.appFormattingEnabled) as? Bool, false)
+        XCTAssertEqual(defaults.object(forKey: UserDefaultsKeys.appFormattingEnabled) as? Bool, true)
+        XCTAssertEqual(defaults.object(forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled) as? Bool, true)
     }
 }

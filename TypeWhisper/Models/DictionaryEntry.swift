@@ -30,6 +30,7 @@ final class DictionaryEntry {
     var isEnabled: Bool
     var ctcMinSimilarity: Float?
     var createdAt: Date
+    var updatedAt: Date?
     var usageCount: Int
 
     var type: DictionaryEntryType {
@@ -46,6 +47,7 @@ final class DictionaryEntry {
         isEnabled: Bool = true,
         ctcMinSimilarity: Float? = nil,
         createdAt: Date = Date(),
+        updatedAt: Date? = nil,
         usageCount: Int = 0
     ) {
         self.id = id
@@ -56,7 +58,12 @@ final class DictionaryEntry {
         self.isEnabled = isEnabled
         self.ctcMinSimilarity = type == .term ? ctcMinSimilarity : nil
         self.createdAt = createdAt
+        self.updatedAt = updatedAt ?? createdAt
         self.usageCount = usageCount
+    }
+
+    var effectiveUpdatedAt: Date {
+        updatedAt ?? createdAt
     }
 
     var displayText: String {

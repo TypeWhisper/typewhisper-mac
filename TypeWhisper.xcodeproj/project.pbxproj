@@ -17,14 +17,31 @@
 		204C804898EAE1127B62EC98 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E808D246301E36546EEB811F /* TestSupport.swift */; };
 		A1F000000000000000000102 /* PostUpdatePromptCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */; };
 		A1C3E59B7D1042F9A8C6E2B1 /* PromptActionTemperaturePersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D4F6A8C0E2143F9B7D5C1A /* PromptActionTemperaturePersistenceTests.swift */; };
+		FEEDFACE00000000000000A1 /* PromptProcessingModelResolutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEEDFACE00000000000000B1 /* PromptProcessingModelResolutionTests.swift */; };
 		24FFE19AC026C48AE32BCD7C /* AppFormatterServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5852D6767C5FA955B84C52 /* AppFormatterServiceTests.swift */; };
 		24FFE19AC026C48AE32BCD7D /* SpeechPunctuationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5852D6767C5FA955B84C53 /* SpeechPunctuationServiceTests.swift */; };
 		24FFE19AC026C48AE32BCD7E /* DictationPunctuationProfileStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5852D6767C5FA955B84C54 /* DictationPunctuationProfileStoreTests.swift */; };
 		24FFE19AC026C48AE32BCD7F /* PunctuationRulesLoaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5852D6767C5FA955B84C55 /* PunctuationRulesLoaderTests.swift */; };
 		24FFE19AC026C48AE32BCD80 /* PunctuationStrategyResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5852D6767C5FA955B84C56 /* PunctuationStrategyResolverTests.swift */; };
+		71F1DCAA4C8685360B145C0B /* NumberWordNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C5E4923A4F803921C03DEDE /* NumberWordNormalizer.swift */; };
+		9A645F000000000000000001 /* EnglishNumberWordParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A645F000000000000000101 /* EnglishNumberWordParser.swift */; };
+		9A645F000000000000000002 /* GermanNumberWordParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A645F000000000000000102 /* GermanNumberWordParser.swift */; };
+		9A645F000000000000000003 /* FrenchNumberWordParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A645F000000000000000103 /* FrenchNumberWordParser.swift */; };
+		9A645F000000000000000004 /* SpanishNumberWordParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A645F000000000000000104 /* SpanishNumberWordParser.swift */; };
+		9A645F000000000000000005 /* HanNumberWordParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A645F000000000000000105 /* HanNumberWordParser.swift */; };
+		9A645F000000000000000006 /* ChineseNumberWordParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A645F000000000000000106 /* ChineseNumberWordParser.swift */; };
+		9A645F000000000000000007 /* JapaneseNumberWordParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A645F000000000000000107 /* JapaneseNumberWordParser.swift */; };
+		9A645F000000000000000008 /* DutchNumberWordParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A645F000000000000000108 /* DutchNumberWordParser.swift */; };
+		B346BF6B189F3E7C6CBA1410 /* TranscriptionNormalizationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 206526FD5E41E23B077E3499 /* TranscriptionNormalizationService.swift */; };
+		540AE1FA22F41A63C78B89EC /* NumberWordNormalizerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50756E40757C6BC13C52ED74 /* NumberWordNormalizerTests.swift */; };
+		E8FB3269B522A8923134AD9A /* TranscriptionNormalizationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16CD1A34084E0761A8659612 /* TranscriptionNormalizationServiceTests.swift */; };
 		D4A100000000000000000001 /* RecorderTranscriptionBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4A100000000000000000002 /* RecorderTranscriptionBuffer.swift */; };
 		D4A100000000000000000003 /* RecorderTranscriptionBufferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4A100000000000000000004 /* RecorderTranscriptionBufferTests.swift */; };
 		F0A1B2C3D4E5F60718293A4B /* GeminiPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000141 /* GeminiPlugin.swift */; };
+		4D49535452414C0000000001 /* MistralAIPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D49535452414C0000000002 /* MistralAIPlugin.swift */; };
+		4D49535452414C0000000010 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 4D49535452414C0000000003 /* manifest.json */; };
+		4D49535452414C0000000011 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 4D49535452414C0000000004 /* Localizable.xcstrings */; };
+		4D49535452414C000000000B /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 4D49535452414C000000000C /* TypeWhisperPluginSDK */; };
 		A10000000000000000000001 /* SystemTTSPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000001 /* SystemTTSPlugin.swift */; };
 		A10000000000000000000002 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000002 /* manifest.json */; };
 		A10000000000000000000003 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000044 /* TypeWhisperPluginSDK */; };
@@ -33,6 +50,7 @@
 		D20000000000000000000003 /* SupertonicPlaybackSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20100000000000000000003 /* SupertonicPlaybackSession.swift */; };
 		D20000000000000000000004 /* SupertonicRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = D20100000000000000000004 /* SupertonicRuntime.swift */; };
 		D20000000000000000000005 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = D20100000000000000000005 /* manifest.json */; };
+		D20000000000000000000008 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = D20100000000000000000007 /* Localizable.xcstrings */; };
 		D20000000000000000000006 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = D20700000000000000000001 /* TypeWhisperPluginSDK */; };
 		D20000000000000000000007 /* onnxruntime in Frameworks */ = {isa = PBXBuildFile; productRef = D20700000000000000000002 /* onnxruntime */; };
 		A10000000000000000000005 /* SpeechFeedbackServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* SpeechFeedbackServiceTests.swift */; };
@@ -82,6 +100,8 @@
 			533A00000000000000000004 /* DictationRecoveryAudioStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 533A00000000000000000003 /* DictationRecoveryAudioStore.swift */; };
 			604D00000000000000000002 /* AudioRecorderViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 604D00000000000000000001 /* AudioRecorderViewModelTests.swift */; };
 			533B00000000000000000002 /* FileTranscriptionViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 533B00000000000000000001 /* FileTranscriptionViewModelTests.swift */; };
+			5A6490000000000000000002 /* ModelManagerAppleSpeechModelSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A6490000000000000000001 /* ModelManagerAppleSpeechModelSelectionTests.swift */; };
+			5A6500000000000000000002 /* ModelManagerLiveSessionModelOverrideTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A6500000000000000000001 /* ModelManagerLiveSessionModelOverrideTests.swift */; };
 			533C00000000000000000002 /* DictationRecoveryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 533C00000000000000000001 /* DictationRecoveryViewModel.swift */; };
 			533C00000000000000000004 /* DictationRecoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 533C00000000000000000003 /* DictationRecoveryView.swift */; };
 			6A9D1EE0C163693B1A798779 /* HistoryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */; };
@@ -93,6 +113,7 @@
 		6C1F7A8B9D2E4F5061728394 /* SoundServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D2E4F50617283946C1F7A8B /* SoundServiceTests.swift */; };
 		BB8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift */; };
 		76858B5B28A121356A5D9599 /* TextDiffServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05313C25F9E79BCFC02899F2 /* TextDiffServiceTests.swift */; };
+		AA7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift */; };
 		7DADCC6E1AEA99CA48F83F50 /* CLISupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD34FDF9D999D85DA1C35375 /* CLISupportTests.swift */; };
 		A40500000000000000000101 /* CLIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000104 /* CLIClient.swift */; };
 		7EC0EFA7DA6597CAEA640448 /* APIRouterAndHandlersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6D200DCDD6580F443C5CE0A /* APIRouterAndHandlersTests.swift */; };
@@ -138,6 +159,7 @@
 		AA00000000000000000060 /* TranscriptionRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000060 /* TranscriptionRecord.swift */; };
 		AA00000000000000000061 /* HistoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000061 /* HistoryService.swift */; };
 		AA00000000000000000062 /* TextDiffService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000062 /* TextDiffService.swift */; };
+		AA7080000000000000000001 /* TargetAppCorrectionLearningService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7080000000000000000001 /* TargetAppCorrectionLearningService.swift */; };
 		AA00000000000000000063 /* HistoryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000063 /* HistoryViewModel.swift */; };
 		AA00000000000000000064 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000064 /* HistoryView.swift */; };
 		AA00000000000000000065 /* Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000065 /* Profile.swift */; };
@@ -155,6 +177,13 @@
 		AA00000000000000000079 /* DictionaryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000079 /* DictionaryService.swift */; };
 		AA00000000000000000080 /* Snippet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000080 /* Snippet.swift */; };
 		AA00000000000000000081 /* SnippetService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000081 /* SnippetService.swift */; };
+		C1F000000000000000000011 /* UserDataSyncIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000002 /* UserDataSyncIdentity.swift */; };
+		C1F000000000000000000012 /* TypeWhisperUserDataSyncStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000003 /* TypeWhisperUserDataSyncStore.swift */; };
+		C1F000000000000000000013 /* CloudFolderSyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000004 /* CloudFolderSyncEngine.swift */; };
+		C1F000000000000000000014 /* CloudFolderSyncSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000005 /* CloudFolderSyncSettingsView.swift */; };
+		C1F000000000000000000015 /* CloudFolderSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000006 /* CloudFolderSyncTests.swift */; };
+		C1F000000000000000000016 /* UserDataSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000007 /* UserDataSync.swift */; };
+		C1F000000000000000000017 /* PremiumSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000008 /* PremiumSettingsView.swift */; };
 		AA00000000000000000082 /* DictionaryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000082 /* DictionaryViewModel.swift */; };
 		AA00000000000000000083 /* DictionarySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000083 /* DictionarySettingsView.swift */; };
 		AA00000000000000000084 /* SnippetsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000084 /* SnippetsViewModel.swift */; };
@@ -290,6 +319,13 @@
 		5A1100000000000000000003 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 5A1100000000000000000012 /* Localizable.xcstrings */; };
 		5A1100000000000000000004 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 5A1100000000000000000030 /* TypeWhisperPluginSDK */; };
 		5A1100000000000000000005 /* smallest.svg in Resources */ = {isa = PBXBuildFile; fileRef = 5A1100000000000000000014 /* smallest.svg */; };
+		5B2200000000000000000001 /* SaluteSpeechPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B2200000000000000000010 /* SaluteSpeechPlugin.swift */; };
+		5B2200000000000000000002 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 5B2200000000000000000011 /* manifest.json */; };
+		5B2200000000000000000003 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 5B2200000000000000000030 /* TypeWhisperPluginSDK */; };
+		CART00000000000000000001 /* CartesiaPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = CART00000000000000000010 /* CartesiaPlugin.swift */; };
+		CART00000000000000000002 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = CART00000000000000000011 /* manifest.json */; };
+		CART00000000000000000004 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = CART00000000000000000013 /* Localizable.xcstrings */; };
+		CART00000000000000000003 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = CART00000000000000000030 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000217 /* IndicatorPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000207 /* IndicatorPreviewView.swift */; };
 		AA00000000000000000218 /* ObsidianPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000208 /* ObsidianPlugin.swift */; };
 		AA00000000000000000219 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000209 /* manifest.json */; };
@@ -312,6 +348,7 @@
 		AA00000000000000000236 /* MLXAudioCore in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000030 /* MLXAudioCore */; };
 		AA00000000000000000237 /* CloudflareASRPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000225 /* CloudflareASRPlugin.swift */; };
 		AA00000000000000000238 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000226 /* manifest.json */; };
+		AA0000000000000000023A /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000022A /* Localizable.xcstrings */; };
 		AA00000000000000000239 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000031 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000240 /* MemoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000228 /* MemoryService.swift */; };
 		AA00000000000000000241 /* FileMemoryPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000229 /* FileMemoryPlugin.swift */; };
@@ -320,6 +357,14 @@
 		AA00000000000000000244 /* OpenAIVectorMemoryPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000232 /* OpenAIVectorMemoryPlugin.swift */; };
 		AA00000000000000000245 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000233 /* manifest.json */; };
 		AA00000000000000000246 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000033 /* TypeWhisperPluginSDK */; };
+		4D45504C414345000000000A /* MemPalaceConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D45504C4143450000000001 /* MemPalaceConfig.swift */; };
+		4D45504C414345000000000B /* MemPalaceMCPClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D45504C4143450000000002 /* MemPalaceMCPClient.swift */; };
+		4D45504C414345000000000C /* MemPalacePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D45504C4143450000000003 /* MemPalacePlugin.swift */; };
+		4D45504C414345000000000D /* MemPalaceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D45504C4143450000000004 /* MemPalaceSettingsView.swift */; };
+		4D45504C414345000000000E /* OfflineQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D45504C4143450000000005 /* OfflineQueue.swift */; };
+		4D45504C414345000000000F /* SidecarStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D45504C4143450000000006 /* SidecarStore.swift */; };
+		4D45504C4143450000000010 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 4D45504C4143450000000007 /* manifest.json */; };
+		4D45504C4143450000000011 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 4D45504C4143450000000019 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000263 /* FireworksPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000251 /* FireworksPlugin.swift */; };
 		AA00000000000000000264 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000252 /* manifest.json */; };
 		AA00000000000000000265 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000253 /* Localizable.xcstrings */; };
@@ -336,6 +381,7 @@
 		AA00000000000000000337 /* de.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000337 /* de.json */; };
 		AA00000000000000000338 /* en.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000338 /* en.json */; };
 		AA00000000000000000339 /* it.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000339 /* it.json */; };
+		AA00000000000000000341 /* ja.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000341 /* ja.json */; };
 		AA00000000000000000250 /* AudioRecorderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000238 /* AudioRecorderService.swift */; };
 		AA00000000000000000251 /* AudioRecorderViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000239 /* AudioRecorderViewModel.swift */; };
 		AA00000000000000000252 /* AudioRecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000240 /* AudioRecorderView.swift */; };
@@ -401,6 +447,7 @@
 		AA00000000000000000278 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000038 /* TypeWhisperPluginSDK */; };
 		BF1DFDDFBF91D87134DA57E7 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 1D584661B6B55F6329CB5FC4 /* manifest.json */; };
 		F1177F582D186041B081F9C5 /* GoogleCloudSTTPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01D368E23E2A0AB2390B34EA /* GoogleCloudSTTPlugin.swift */; };
+		F1177F582D186041B081F9C6 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 1D584661B6B55F6329CB5FC5 /* Localizable.xcstrings */; };
 		F774802B61AFC0DCA9E8E668 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 67BE633BCFA1507F72199015 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000300 /* LicenseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000286 /* LicenseService.swift */; };
 		AA00000000000000000301 /* LicenseSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000287 /* LicenseSettingsView.swift */; };
@@ -493,6 +540,8 @@
 			533A00000000000000000003 /* DictationRecoveryAudioStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationRecoveryAudioStore.swift; sourceTree = "<group>"; };
 			604D00000000000000000001 /* AudioRecorderViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AudioRecorderViewModelTests.swift; sourceTree = "<group>"; };
 			533B00000000000000000001 /* FileTranscriptionViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FileTranscriptionViewModelTests.swift; sourceTree = "<group>"; };
+			5A6490000000000000000001 /* ModelManagerAppleSpeechModelSelectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModelManagerAppleSpeechModelSelectionTests.swift; sourceTree = "<group>"; };
+			5A6500000000000000000001 /* ModelManagerLiveSessionModelOverrideTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModelManagerLiveSessionModelOverrideTests.swift; sourceTree = "<group>"; };
 			3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HistoryServiceTests.swift; sourceTree = "<group>"; };
 		B91F00000000000000000001 /* SelectionPalettePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionPalettePanel.swift; sourceTree = "<group>"; };
 		B91F00000000000000000002 /* RecentTranscriptionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentTranscriptionStore.swift; sourceTree = "<group>"; };
@@ -518,6 +567,7 @@
 		BB00000000000000000337 /* de.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = PunctuationRules/de.json; sourceTree = "<group>"; };
 		BB00000000000000000338 /* en.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = PunctuationRules/en.json; sourceTree = "<group>"; };
 		BB00000000000000000339 /* it.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = PunctuationRules/it.json; sourceTree = "<group>"; };
+		BB00000000000000000341 /* ja.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = PunctuationRules/ja.json; sourceTree = "<group>"; };
 		BB00000000000000000009 /* ModelManagerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManagerService.swift; sourceTree = "<group>"; };
 		BB00000000000000000010 /* AudioFileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioFileService.swift; sourceTree = "<group>"; };
 		BB00000000000000000012 /* FileTranscriptionViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileTranscriptionViewModel.swift; sourceTree = "<group>"; };
@@ -559,6 +609,7 @@
 		BB00000000000000000060 /* TranscriptionRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionRecord.swift; sourceTree = "<group>"; };
 		BB00000000000000000061 /* HistoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryService.swift; sourceTree = "<group>"; };
 		BB00000000000000000062 /* TextDiffService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextDiffService.swift; sourceTree = "<group>"; };
+		BB7080000000000000000001 /* TargetAppCorrectionLearningService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TargetAppCorrectionLearningService.swift; sourceTree = "<group>"; };
 		BB00000000000000000063 /* HistoryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000064 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
 		BB00000000000000000065 /* Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Profile.swift; sourceTree = "<group>"; };
@@ -573,8 +624,16 @@
 		BB00000000000000000077 /* DictionaryEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryEntry.swift; sourceTree = "<group>"; };
 		BB00000000000000000078 /* TermPack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TermPack.swift; sourceTree = "<group>"; };
 		BB00000000000000000079 /* DictionaryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryService.swift; sourceTree = "<group>"; };
+		BB7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TargetAppCorrectionLearningServiceTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000080 /* Snippet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Snippet.swift; sourceTree = "<group>"; };
 		BB00000000000000000081 /* SnippetService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnippetService.swift; sourceTree = "<group>"; };
+		C1F000000000000000000002 /* UserDataSyncIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDataSyncIdentity.swift; sourceTree = "<group>"; };
+		C1F000000000000000000003 /* TypeWhisperUserDataSyncStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypeWhisperUserDataSyncStore.swift; sourceTree = "<group>"; };
+		C1F000000000000000000004 /* CloudFolderSyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudFolderSyncEngine.swift; sourceTree = "<group>"; };
+		C1F000000000000000000005 /* CloudFolderSyncSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudFolderSyncSettingsView.swift; sourceTree = "<group>"; };
+		C1F000000000000000000006 /* CloudFolderSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudFolderSyncTests.swift; sourceTree = "<group>"; };
+		C1F000000000000000000007 /* UserDataSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDataSync.swift; sourceTree = "<group>"; };
+		C1F000000000000000000008 /* PremiumSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumSettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000082 /* DictionaryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000083 /* DictionarySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionarySettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000084 /* SnippetsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnippetsViewModel.swift; sourceTree = "<group>"; };
@@ -628,6 +687,10 @@
 		BB00000000000000000141 /* GeminiPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000142 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000143 /* GeminiPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GeminiPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		4D49535452414C0000000002 /* MistralAIPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MistralAIPlugin.swift; sourceTree = "<group>"; };
+		4D49535452414C0000000003 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		4D49535452414C0000000004 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		4D49535452414C0000000005 /* MistralAIPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MistralAIPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000144 /* LinearPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinearPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000145 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000146 /* LinearPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LinearPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -704,6 +767,13 @@
 		5A1100000000000000000012 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		5A1100000000000000000013 /* SmallestAIPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SmallestAIPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		5A1100000000000000000014 /* smallest.svg */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = smallest.svg; sourceTree = "<group>"; };
+		5B2200000000000000000010 /* SaluteSpeechPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaluteSpeechPlugin.swift; sourceTree = "<group>"; };
+		5B2200000000000000000011 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		5B2200000000000000000012 /* SaluteSpeechPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SaluteSpeechPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		CART00000000000000000010 /* CartesiaPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CartesiaPlugin.swift; sourceTree = "<group>"; };
+		CART00000000000000000011 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		CART00000000000000000012 /* CartesiaPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CartesiaPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		CART00000000000000000013 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		BB00000000000000000207 /* IndicatorPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndicatorPreviewView.swift; sourceTree = "<group>"; };
 		BB00000000000000000208 /* ObsidianPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObsidianPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000209 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
@@ -727,6 +797,7 @@
 		BB00000000000000000224 /* GranitePlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GranitePlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000225 /* CloudflareASRPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudflareASRPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000226 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		BB0000000000000000022A /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		BB00000000000000000227 /* CloudflareASRPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CloudflareASRPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000228 /* MemoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryService.swift; sourceTree = "<group>"; };
 		BB00000000000000000229 /* FileMemoryPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileMemoryPlugin.swift; sourceTree = "<group>"; };
@@ -740,16 +811,35 @@
 		D20100000000000000000003 /* SupertonicPlaybackSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupertonicPlaybackSession.swift; sourceTree = "<group>"; };
 		D20100000000000000000004 /* SupertonicRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupertonicRuntime.swift; sourceTree = "<group>"; };
 		D20100000000000000000005 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		D20100000000000000000007 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		D20100000000000000000006 /* SupertonicPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SupertonicPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000232 /* OpenAIVectorMemoryPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIVectorMemoryPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000233 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000234 /* OpenAIVectorMemoryPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OpenAIVectorMemoryPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		4D45504C4143450000000001 /* MemPalaceConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemPalaceConfig.swift; sourceTree = "<group>"; };
+		4D45504C4143450000000002 /* MemPalaceMCPClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemPalaceMCPClient.swift; sourceTree = "<group>"; };
+		4D45504C4143450000000003 /* MemPalacePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemPalacePlugin.swift; sourceTree = "<group>"; };
+		4D45504C4143450000000004 /* MemPalaceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemPalaceSettingsView.swift; sourceTree = "<group>"; };
+		4D45504C4143450000000005 /* OfflineQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineQueue.swift; sourceTree = "<group>"; };
+		4D45504C4143450000000006 /* SidecarStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidecarStore.swift; sourceTree = "<group>"; };
+		4D45504C4143450000000007 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		4D45504C4143450000000008 /* MemPalacePlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MemPalacePlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000251 /* FireworksPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FireworksPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000252 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000253 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		BB00000000000000000254 /* FireworksPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FireworksPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000235 /* AppFormatterService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppFormatterService.swift; sourceTree = "<group>"; };
 		BB00000000000000000236 /* SpeechPunctuationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechPunctuationService.swift; sourceTree = "<group>"; };
+		8C5E4923A4F803921C03DEDE /* NumberWordNormalizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NumberWordNormalizer.swift; sourceTree = "<group>"; };
+		9A645F000000000000000101 /* EnglishNumberWordParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnglishNumberWordParser.swift; sourceTree = "<group>"; };
+		9A645F000000000000000102 /* GermanNumberWordParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GermanNumberWordParser.swift; sourceTree = "<group>"; };
+		9A645F000000000000000103 /* FrenchNumberWordParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrenchNumberWordParser.swift; sourceTree = "<group>"; };
+		9A645F000000000000000104 /* SpanishNumberWordParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpanishNumberWordParser.swift; sourceTree = "<group>"; };
+		9A645F000000000000000105 /* HanNumberWordParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HanNumberWordParser.swift; sourceTree = "<group>"; };
+		9A645F000000000000000106 /* ChineseNumberWordParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChineseNumberWordParser.swift; sourceTree = "<group>"; };
+		9A645F000000000000000107 /* JapaneseNumberWordParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JapaneseNumberWordParser.swift; sourceTree = "<group>"; };
+		9A645F000000000000000108 /* DutchNumberWordParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DutchNumberWordParser.swift; sourceTree = "<group>"; };
+		206526FD5E41E23B077E3499 /* TranscriptionNormalizationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionNormalizationService.swift; sourceTree = "<group>"; };
 		D4A100000000000000000002 /* RecorderTranscriptionBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderTranscriptionBuffer.swift; sourceTree = "<group>"; };
 		BB00000000000000000238 /* AudioRecorderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderService.swift; sourceTree = "<group>"; };
 		BB00000000000000000239 /* AudioRecorderViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderViewModel.swift; sourceTree = "<group>"; };
@@ -764,8 +854,11 @@
 		BDF548E65340A17A3A16590B /* PluginManifestValidationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PluginManifestValidationTests.swift; sourceTree = "<group>"; };
 		BE6B6611B899F649B097A726 /* SnippetServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SnippetServiceTests.swift; sourceTree = "<group>"; };
 		B2D4F6A8C0E2143F9B7D5C1A /* PromptActionTemperaturePersistenceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptActionTemperaturePersistenceTests.swift; sourceTree = "<group>"; };
+		FEEDFACE00000000000000B1 /* PromptProcessingModelResolutionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptProcessingModelResolutionTests.swift; sourceTree = "<group>"; };
 		CE5852D6767C5FA955B84C52 /* AppFormatterServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppFormatterServiceTests.swift; sourceTree = "<group>"; };
 		CE5852D6767C5FA955B84C53 /* SpeechPunctuationServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeechPunctuationServiceTests.swift; sourceTree = "<group>"; };
+		50756E40757C6BC13C52ED74 /* NumberWordNormalizerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NumberWordNormalizerTests.swift; sourceTree = "<group>"; };
+		16CD1A34084E0761A8659612 /* TranscriptionNormalizationServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TranscriptionNormalizationServiceTests.swift; sourceTree = "<group>"; };
 		CE5852D6767C5FA955B84C54 /* DictationPunctuationProfileStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictationPunctuationProfileStoreTests.swift; sourceTree = "<group>"; };
 		CE5852D6767C5FA955B84C55 /* PunctuationRulesLoaderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PunctuationRulesLoaderTests.swift; sourceTree = "<group>"; };
 		CE5852D6767C5FA955B84C56 /* PunctuationStrategyResolverTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PunctuationStrategyResolverTests.swift; sourceTree = "<group>"; };
@@ -841,6 +934,7 @@
 		BB00000000000000000294 /* SpeechmaticsPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SpeechmaticsPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		01D368E23E2A0AB2390B34EA /* GoogleCloudSTTPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleCloudSTTPlugin.swift; sourceTree = "<group>"; };
 		1D584661B6B55F6329CB5FC4 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		1D584661B6B55F6329CB5FC5 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		5CA4DB761B06383B5B8CF082 /* GoogleCloudSTTPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GoogleCloudSTTPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000274 /* OpenRouterPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenRouterPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000275 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
@@ -923,6 +1017,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000143 /* TypeWhisperPluginSDK in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4D49535452414C000000000A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4D49535452414C000000000B /* TypeWhisperPluginSDK in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1027,6 +1129,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5B2200000000000000000051 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5B2200000000000000000003 /* TypeWhisperPluginSDK in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CART00000000000000000051 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CART00000000000000000003 /* TypeWhisperPluginSDK in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FF00000000000000000096 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -1115,6 +1233,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000246 /* TypeWhisperPluginSDK in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4D45504C4143450000000013 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4D45504C4143450000000011 /* TypeWhisperPluginSDK in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1247,6 +1373,7 @@
 				CC00000000000000000016 /* GroqPlugin */,
 				CC00000000000000000017 /* OpenAIPlugin */,
 				CC00000000000000000018 /* GeminiPlugin */,
+				4D49535452414C0000000006 /* MistralAIPlugin */,
 				CC00000000000000000019 /* LinearPlugin */,
 				CC00000000000000000020 /* Qwen3Plugin */,
 				CC00000000000000000021 /* WhisperKitPlugin */,
@@ -1258,6 +1385,8 @@
 				CC00000000000000000029 /* AssemblyAIPlugin */,
 				RESG00000000000000001 /* Reson8Plugin */,
 				5A1100000000000000000020 /* SmallestAIPlugin */,
+				5B2200000000000000000020 /* SaluteSpeechPlugin */,
+				CART00000000000000000020 /* CartesiaPlugin */,
 				CC00000000000000000030 /* ObsidianPlugin */,
 				CC00000000000000000031 /* ScriptPlugin */,
 				F18A00000000000000000020 /* FillerWordsPlugin */,
@@ -1269,6 +1398,7 @@
 				C10000000000000000000001 /* SystemTTSPlugin */,
 				D20200000000000000000001 /* SupertonicPlugin */,
 				CC00000000000000000036 /* OpenAIVectorMemoryPlugin */,
+				4D45504C4143450000000009 /* MemPalacePlugin */,
 				CC00000000000000000037 /* FireworksPlugin */,
 				CC00000000000000000038 /* CerebrasPlugin */,
 				CC00000000000000000039 /* ClaudePlugin */,
@@ -1359,6 +1489,7 @@
 				BB00000000000000000061 /* HistoryService.swift */,
 				B91F00000000000000000002 /* RecentTranscriptionStore.swift */,
 				BB00000000000000000062 /* TextDiffService.swift */,
+				BB7080000000000000000001 /* TargetAppCorrectionLearningService.swift */,
 				BB00000000000000000066 /* ProfileService.swift */,
 				BB00000000000000000357 /* WorkflowService.swift */,
 				BB00000000000000000360 /* WorkflowTextProcessingService.swift */,
@@ -1368,6 +1499,7 @@
 				BB00000000000000000079 /* DictionaryService.swift */,
 				BB00000000000000000271 /* DictionaryExporter.swift */,
 				BB00000000000000000081 /* SnippetService.swift */,
+				C1F000000000000000000001 /* Sync */,
 				BB00000000000000000086 /* SoundService.swift */,
 				BB00000000000000000102 /* AudioDeviceService.swift */,
 				BB00000000000000000320 /* AudioEngineRecoverySupport.swift */,
@@ -1382,6 +1514,9 @@
 				BB00000000000000000228 /* MemoryService.swift */,
 				BB00000000000000000235 /* AppFormatterService.swift */,
 				BB00000000000000000236 /* SpeechPunctuationService.swift */,
+				8C5E4923A4F803921C03DEDE /* NumberWordNormalizer.swift */,
+				9A645F000000000000000201 /* NumberNormalization */,
+				206526FD5E41E23B077E3499 /* TranscriptionNormalizationService.swift */,
 				BB00000000000000000333 /* DictationPunctuationProfileStore.swift */,
 				BB00000000000000000334 /* PunctuationRulesLoader.swift */,
 				BB00000000000000000335 /* PunctuationStrategyResolver.swift */,
@@ -1396,6 +1531,33 @@
 				D4A100000000000000000002 /* RecorderTranscriptionBuffer.swift */,
 			);
 			path = Services;
+			sourceTree = "<group>";
+		};
+		9A645F000000000000000201 /* NumberNormalization */ = {
+			isa = PBXGroup;
+			children = (
+				9A645F000000000000000106 /* ChineseNumberWordParser.swift */,
+				9A645F000000000000000108 /* DutchNumberWordParser.swift */,
+				9A645F000000000000000101 /* EnglishNumberWordParser.swift */,
+				9A645F000000000000000103 /* FrenchNumberWordParser.swift */,
+				9A645F000000000000000102 /* GermanNumberWordParser.swift */,
+				9A645F000000000000000105 /* HanNumberWordParser.swift */,
+				9A645F000000000000000107 /* JapaneseNumberWordParser.swift */,
+				9A645F000000000000000104 /* SpanishNumberWordParser.swift */,
+			);
+			path = NumberNormalization;
+			sourceTree = "<group>";
+		};
+		C1F000000000000000000001 /* Sync */ = {
+			isa = PBXGroup;
+			children = (
+				C1F000000000000000000007 /* UserDataSync.swift */,
+				C1F000000000000000000002 /* UserDataSyncIdentity.swift */,
+				C1F000000000000000000003 /* TypeWhisperUserDataSyncStore.swift */,
+				C1F000000000000000000004 /* CloudFolderSyncEngine.swift */,
+				C1F000000000000000000005 /* CloudFolderSyncSettingsView.swift */,
+			);
+			path = Sync;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000007 /* ViewModels */ = {
@@ -1437,6 +1599,7 @@
 				BB00000000000000000016 /* FileTranscriptionView.swift */,
 				533C00000000000000000003 /* DictationRecoveryView.swift */,
 				BB00000000000000000017 /* SettingsView.swift */,
+				C1F000000000000000000008 /* PremiumSettingsView.swift */,
 				BB00000000000000000359 /* WorkflowsSettingsView.swift */,
 				BB00000000000000000046 /* AdvancedSettingsView.swift */,
 				BB00000000000000000051 /* GeneralSettingsView.swift */,
@@ -1483,6 +1646,7 @@
 				BB00000000000000000337 /* de.json */,
 				BB00000000000000000338 /* en.json */,
 				BB00000000000000000339 /* it.json */,
+				BB00000000000000000341 /* ja.json */,
 				BB00000000000000000072 /* Assets.xcassets */,
 			);
 			path = Resources;
@@ -1581,6 +1745,17 @@
 			);
 			name = GeminiPlugin;
 			path = TypeWhisperPluginSDK/Plugins/GeminiPlugin;
+			sourceTree = "<group>";
+		};
+		4D49535452414C0000000006 /* MistralAIPlugin */ = {
+			isa = PBXGroup;
+			children = (
+				4D49535452414C0000000002 /* MistralAIPlugin.swift */,
+				4D49535452414C0000000003 /* manifest.json */,
+				4D49535452414C0000000004 /* Localizable.xcstrings */,
+			);
+			name = MistralAIPlugin;
+			path = TypeWhisperPluginSDK/Plugins/MistralAIPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000019 /* LinearPlugin */ = {
@@ -1729,6 +1904,27 @@
 			path = TypeWhisperPluginSDK/Plugins/SmallestAIPlugin;
 			sourceTree = "<group>";
 		};
+		5B2200000000000000000020 /* SaluteSpeechPlugin */ = {
+			isa = PBXGroup;
+			children = (
+				5B2200000000000000000010 /* SaluteSpeechPlugin.swift */,
+				5B2200000000000000000011 /* manifest.json */,
+			);
+			name = SaluteSpeechPlugin;
+			path = TypeWhisperPluginSDK/Plugins/SaluteSpeechPlugin;
+			sourceTree = "<group>";
+		};
+		CART00000000000000000020 /* CartesiaPlugin */ = {
+			isa = PBXGroup;
+			children = (
+				CART00000000000000000010 /* CartesiaPlugin.swift */,
+				CART00000000000000000011 /* manifest.json */,
+				CART00000000000000000013 /* Localizable.xcstrings */,
+			);
+			name = CartesiaPlugin;
+			path = TypeWhisperPluginSDK/Plugins/CartesiaPlugin;
+			sourceTree = "<group>";
+		};
 		CC00000000000000000030 /* ObsidianPlugin */ = {
 			isa = PBXGroup;
 			children = (
@@ -1798,6 +1994,7 @@
 			children = (
 				BB00000000000000000225 /* CloudflareASRPlugin.swift */,
 				BB00000000000000000226 /* manifest.json */,
+				BB0000000000000000022A /* Localizable.xcstrings */,
 			);
 			name = CloudflareASRPlugin;
 			path = TypeWhisperPluginSDK/Plugins/CloudflareASRPlugin;
@@ -1831,6 +2028,7 @@
 				D20100000000000000000003 /* SupertonicPlaybackSession.swift */,
 				D20100000000000000000004 /* SupertonicRuntime.swift */,
 				D20100000000000000000005 /* manifest.json */,
+				D20100000000000000000007 /* Localizable.xcstrings */,
 			);
 			name = SupertonicPlugin;
 			path = TypeWhisperPluginSDK/Plugins/SupertonicPlugin;
@@ -1844,6 +2042,21 @@
 			);
 			name = OpenAIVectorMemoryPlugin;
 			path = TypeWhisperPluginSDK/Plugins/OpenAIVectorMemoryPlugin;
+			sourceTree = "<group>";
+		};
+		4D45504C4143450000000009 /* MemPalacePlugin */ = {
+			isa = PBXGroup;
+			children = (
+				4D45504C4143450000000001 /* MemPalaceConfig.swift */,
+				4D45504C4143450000000002 /* MemPalaceMCPClient.swift */,
+				4D45504C4143450000000003 /* MemPalacePlugin.swift */,
+				4D45504C4143450000000004 /* MemPalaceSettingsView.swift */,
+				4D45504C4143450000000005 /* OfflineQueue.swift */,
+				4D45504C4143450000000006 /* SidecarStore.swift */,
+				4D45504C4143450000000007 /* manifest.json */,
+			);
+			name = MemPalacePlugin;
+			path = TypeWhisperPluginSDK/Plugins/MemPalacePlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000037 /* FireworksPlugin */ = {
@@ -1973,6 +2186,7 @@
 			children = (
 				01D368E23E2A0AB2390B34EA /* GoogleCloudSTTPlugin.swift */,
 				1D584661B6B55F6329CB5FC4 /* manifest.json */,
+				1D584661B6B55F6329CB5FC5 /* Localizable.xcstrings */,
 			);
 			name = GoogleCloudSTTPlugin;
 			path = TypeWhisperPluginSDK/Plugins/GoogleCloudSTTPlugin;
@@ -1987,6 +2201,7 @@
 				BB00000000000000000134 /* GroqPlugin.bundle */,
 				BB00000000000000000135 /* OpenAIPlugin.bundle */,
 				BB00000000000000000143 /* GeminiPlugin.bundle */,
+				4D49535452414C0000000005 /* MistralAIPlugin.bundle */,
 				BB00000000000000000146 /* LinearPlugin.bundle */,
 				BB00000000000000000149 /* Qwen3Plugin.bundle */,
 				BB00000000000000000153 /* WhisperKitPlugin.bundle */,
@@ -1997,6 +2212,8 @@
 				BB00000000000000000199 /* DeepgramPlugin.bundle */,
 				BB00000000000000000203 /* AssemblyAIPlugin.bundle */,
 				5A1100000000000000000013 /* SmallestAIPlugin.bundle */,
+				5B2200000000000000000012 /* SaluteSpeechPlugin.bundle */,
+				CART00000000000000000012 /* CartesiaPlugin.bundle */,
 				BB00000000000000000211 /* ObsidianPlugin.bundle */,
 				BB00000000000000000215 /* ScriptPlugin.bundle */,
 				F18A00000000000000000012 /* FillerWordsPlugin.bundle */,
@@ -2008,6 +2225,7 @@
 				B10000000000000000000003 /* SystemTTSPlugin.bundle */,
 				D20100000000000000000006 /* SupertonicPlugin.bundle */,
 				BB00000000000000000234 /* OpenAIVectorMemoryPlugin.bundle */,
+				4D45504C4143450000000008 /* MemPalacePlugin.bundle */,
 				BB00000000000000000254 /* FireworksPlugin.bundle */,
 				BB00000000000000000257 /* CerebrasPlugin.bundle */,
 				BB00000000000000000262 /* ClaudePlugin.bundle */,
@@ -2034,10 +2252,13 @@
 				3A4B5C6D7E8F901234567891 /* AudioEngineRecoverySupportTests.swift */,
 				CE5852D6767C5FA955B84C52 /* AppFormatterServiceTests.swift */,
 				CE5852D6767C5FA955B84C53 /* SpeechPunctuationServiceTests.swift */,
+				50756E40757C6BC13C52ED74 /* NumberWordNormalizerTests.swift */,
+				16CD1A34084E0761A8659612 /* TranscriptionNormalizationServiceTests.swift */,
 				CE5852D6767C5FA955B84C54 /* DictationPunctuationProfileStoreTests.swift */,
 				CE5852D6767C5FA955B84C55 /* PunctuationRulesLoaderTests.swift */,
 				CE5852D6767C5FA955B84C56 /* PunctuationStrategyResolverTests.swift */,
 				FD34FDF9D999D85DA1C35375 /* CLISupportTests.swift */,
+				C1F000000000000000000006 /* CloudFolderSyncTests.swift */,
 				2F4D6A8B0C1E3F5A7B9D2C4F /* DictationViewModelIndicatorSettingsTests.swift */,
 				2F4D6A8B0C1E3F5A7B9D2C51 /* IndicatorTranscriptPreviewSizingTests.swift */,
 					6A7B8C9D0E1F223344556679 /* FloatingPanelSpacePolicyTests.swift */,
@@ -2045,8 +2266,11 @@
 					604D00000000000000000001 /* AudioRecorderViewModelTests.swift */,
 					533A00000000000000000001 /* DictationRecoveryAudioStoreTests.swift */,
 					533B00000000000000000001 /* FileTranscriptionViewModelTests.swift */,
+					5A6490000000000000000001 /* ModelManagerAppleSpeechModelSelectionTests.swift */,
+					5A6500000000000000000001 /* ModelManagerLiveSessionModelOverrideTests.swift */,
 					AA8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift */,
 				D63A42880A0BA4C84F36E873 /* DictionaryServiceTests.swift */,
+				BB7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift */,
 				A8D4F2B6E1C3097B5F8A4E62 /* DictionaryExporterTests.swift */,
 				8E39448D561C47B16EEF4C6B /* HTTPRequestParserTests.swift */,
 				3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */,
@@ -2058,6 +2282,7 @@
 				91B4D7E2C5A809F1632E4B7D /* PluginRegistryServiceTests.swift */,
 				545000000000000000000001 /* SetupWizardRecommendationAvailabilityTests.swift */,
 				B2D4F6A8C0E2143F9B7D5C1A /* PromptActionTemperaturePersistenceTests.swift */,
+				FEEDFACE00000000000000B1 /* PromptProcessingModelResolutionTests.swift */,
 				2A7B3C4D5E6F708192A3B4C7 /* PromptActionsViewModelWizardTests.swift */,
 				2A7B3C4D5E6F708192A3B4C5 /* PromptWizardComposerTests.swift */,
 				2A7B3C4D5E6F708192A3B4C6 /* PromptWizardInferenceServiceTests.swift */,
@@ -2231,6 +2456,26 @@
 			);
 			productName = GeminiPlugin;
 			productReference = BB00000000000000000143 /* GeminiPlugin.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
+		4D49535452414C0000000007 /* MistralAIPlugin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4D49535452414C000000000F /* Build configuration list for PBXNativeTarget "MistralAIPlugin" */;
+			buildPhases = (
+				4D49535452414C0000000008 /* Sources */,
+				4D49535452414C000000000A /* Frameworks */,
+				4D49535452414C0000000009 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MistralAIPlugin;
+			packageProductDependencies = (
+				4D49535452414C000000000C /* TypeWhisperPluginSDK */,
+			);
+			productName = MistralAIPlugin;
+			productReference = 4D49535452414C0000000005 /* MistralAIPlugin.bundle */;
 			productType = "com.apple.product-type.bundle";
 		};
 		DD00000000000000000007 /* LinearPlugin */ = {
@@ -2476,6 +2721,46 @@
 			productReference = 5A1100000000000000000013 /* SmallestAIPlugin.bundle */;
 			productType = "com.apple.product-type.bundle";
 		};
+		5B2200000000000000000040 /* SaluteSpeechPlugin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5B2200000000000000000062 /* Build configuration list for PBXNativeTarget "SaluteSpeechPlugin" */;
+			buildPhases = (
+				5B2200000000000000000050 /* Sources */,
+				5B2200000000000000000051 /* Frameworks */,
+				5B2200000000000000000052 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SaluteSpeechPlugin;
+			packageProductDependencies = (
+				5B2200000000000000000030 /* TypeWhisperPluginSDK */,
+			);
+			productName = SaluteSpeechPlugin;
+			productReference = 5B2200000000000000000012 /* SaluteSpeechPlugin.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
+		CART00000000000000000040 /* CartesiaPlugin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CART00000000000000000062 /* Build configuration list for PBXNativeTarget "CartesiaPlugin" */;
+			buildPhases = (
+				CART00000000000000000050 /* Sources */,
+				CART00000000000000000051 /* Frameworks */,
+				CART00000000000000000052 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CartesiaPlugin;
+			packageProductDependencies = (
+				CART00000000000000000030 /* TypeWhisperPluginSDK */,
+			);
+			productName = CartesiaPlugin;
+			productReference = CART00000000000000000012 /* CartesiaPlugin.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
 		DD00000000000000000018 /* ObsidianPlugin */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = FF00000000000000000098 /* Build configuration list for PBXNativeTarget "ObsidianPlugin" */;
@@ -2697,6 +2982,26 @@
 			);
 			productName = OpenAIVectorMemoryPlugin;
 			productReference = BB00000000000000000234 /* OpenAIVectorMemoryPlugin.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
+		4D45504C4143450000000015 /* MemPalacePlugin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4D45504C4143450000000018 /* Build configuration list for PBXNativeTarget "MemPalacePlugin" */;
+			buildPhases = (
+				4D45504C4143450000000012 /* Sources */,
+				4D45504C4143450000000013 /* Frameworks */,
+				4D45504C4143450000000014 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MemPalacePlugin;
+			packageProductDependencies = (
+				4D45504C4143450000000019 /* TypeWhisperPluginSDK */,
+			);
+			productName = MemPalacePlugin;
+			productReference = 4D45504C4143450000000008 /* MemPalacePlugin.bundle */;
 			productType = "com.apple.product-type.bundle";
 		};
 		DD00000000000000000025 /* FireworksPlugin */ = {
@@ -2973,6 +3278,7 @@
 			knownRegions = (
 				en,
 				de,
+				ja,
 				Base,
 			);
 			mainGroup = CC00000000000000000001;
@@ -2997,6 +3303,7 @@
 				DD00000000000000000004 /* GroqPlugin */,
 				DD00000000000000000005 /* OpenAIPlugin */,
 				DD00000000000000000006 /* GeminiPlugin */,
+				4D49535452414C0000000007 /* MistralAIPlugin */,
 				DD00000000000000000007 /* LinearPlugin */,
 				DD00000000000000000009 /* Qwen3Plugin */,
 				DD00000000000000000010 /* WhisperKitPlugin */,
@@ -3007,6 +3314,8 @@
 				DD00000000000000000016 /* DeepgramPlugin */,
 				DD00000000000000000017 /* AssemblyAIPlugin */,
 				5A1100000000000000000040 /* SmallestAIPlugin */,
+				5B2200000000000000000040 /* SaluteSpeechPlugin */,
+				CART00000000000000000040 /* CartesiaPlugin */,
 				DD00000000000000000018 /* ObsidianPlugin */,
 				DD00000000000000000019 /* ScriptPlugin */,
 				F18A00000000000000000030 /* FillerWordsPlugin */,
@@ -3018,6 +3327,7 @@
 				D10000000000000000000001 /* SystemTTSPlugin */,
 				D20300000000000000000001 /* SupertonicPlugin */,
 				DD00000000000000000024 /* OpenAIVectorMemoryPlugin */,
+				4D45504C4143450000000015 /* MemPalacePlugin */,
 				DD00000000000000000025 /* FireworksPlugin */,
 				DD00000000000000000026 /* CerebrasPlugin */,
 				DD00000000000000000027 /* ClaudePlugin */,
@@ -3053,6 +3363,7 @@
 				AA00000000000000000337 /* de.json in Resources */,
 				AA00000000000000000338 /* en.json in Resources */,
 				AA00000000000000000339 /* it.json in Resources */,
+				AA00000000000000000341 /* ja.json in Resources */,
 				AA00000000000000000072 /* Assets.xcassets in Resources */,
 				AA00000000000000000087 /* recording_start.wav in Resources */,
 				AA00000000000000000088 /* transcription_success.wav in Resources */,
@@ -3094,6 +3405,15 @@
 			files = (
 				AA00000000000000000142 /* manifest.json in Resources */,
 				AA00000000000000000175 /* Localizable.xcstrings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4D49535452414C0000000009 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4D49535452414C0000000010 /* manifest.json in Resources */,
+				4D49535452414C0000000011 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -3205,6 +3525,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5B2200000000000000000052 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5B2200000000000000000002 /* manifest.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CART00000000000000000052 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CART00000000000000000002 /* manifest.json in Resources */,
+				CART00000000000000000004 /* Localizable.xcstrings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FF00000000000000000097 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -3262,6 +3599,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000238 /* manifest.json in Resources */,
+				AA0000000000000000023A /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -3286,6 +3624,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D20000000000000000000005 /* manifest.json in Resources */,
+				D20000000000000000000008 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -3294,6 +3633,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000245 /* manifest.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4D45504C4143450000000014 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4D45504C4143450000000010 /* manifest.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -3356,6 +3703,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				BF1DFDDFBF91D87134DA57E7 /* manifest.json in Resources */,
+				F1177F582D186041B081F9C6 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -3414,10 +3762,13 @@
 				7EC0EFA7DA6597CAEA640448 /* APIRouterAndHandlersTests.swift in Sources */,
 				24FFE19AC026C48AE32BCD7C /* AppFormatterServiceTests.swift in Sources */,
 				24FFE19AC026C48AE32BCD7D /* SpeechPunctuationServiceTests.swift in Sources */,
+				540AE1FA22F41A63C78B89EC /* NumberWordNormalizerTests.swift in Sources */,
+				E8FB3269B522A8923134AD9A /* TranscriptionNormalizationServiceTests.swift in Sources */,
 				24FFE19AC026C48AE32BCD7E /* DictationPunctuationProfileStoreTests.swift in Sources */,
 				24FFE19AC026C48AE32BCD7F /* PunctuationRulesLoaderTests.swift in Sources */,
 				24FFE19AC026C48AE32BCD80 /* PunctuationStrategyResolverTests.swift in Sources */,
 				7DADCC6E1AEA99CA48F83F50 /* CLISupportTests.swift in Sources */,
+				C1F000000000000000000015 /* CloudFolderSyncTests.swift in Sources */,
 				A40500000000000000000101 /* CLIClient.swift in Sources */,
 				2F4D6A8B0C1E3F5A7B9D2C4E /* DictationViewModelIndicatorSettingsTests.swift in Sources */,
 				2F4D6A8B0C1E3F5A7B9D2C50 /* IndicatorTranscriptPreviewSizingTests.swift in Sources */,
@@ -3427,8 +3778,11 @@
 					604D00000000000000000002 /* AudioRecorderViewModelTests.swift in Sources */,
 					533A00000000000000000002 /* DictationRecoveryAudioStoreTests.swift in Sources */,
 					533B00000000000000000002 /* FileTranscriptionViewModelTests.swift in Sources */,
+					5A6490000000000000000002 /* ModelManagerAppleSpeechModelSelectionTests.swift in Sources */,
+					5A6500000000000000000002 /* ModelManagerLiveSessionModelOverrideTests.swift in Sources */,
 					BB8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift in Sources */,
 				B4CC04DF94001FF7220789BC /* DictionaryServiceTests.swift in Sources */,
+				AA7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift in Sources */,
 				C7A3E9F1D5B2084A6E9C3D71 /* DictionaryExporterTests.swift in Sources */,
 				F635B3F08018D57E0CB709BF /* HTTPRequestParserTests.swift in Sources */,
 				6A9D1EE0C163693B1A798779 /* HistoryServiceTests.swift in Sources */,
@@ -3453,6 +3807,7 @@
 				91B4D7E2C5A809F1632E4B7C /* PluginRegistryServiceTests.swift in Sources */,
 				545000000000000000000002 /* SetupWizardRecommendationAvailabilityTests.swift in Sources */,
 				A1C3E59B7D1042F9A8C6E2B1 /* PromptActionTemperaturePersistenceTests.swift in Sources */,
+				FEEDFACE00000000000000A1 /* PromptProcessingModelResolutionTests.swift in Sources */,
 				1F7A2C3D4E5B60718293A4C7 /* PromptActionsViewModelWizardTests.swift in Sources */,
 				1F7A2C3D4E5B60718293A4C5 /* PromptWizardComposerTests.swift in Sources */,
 				1F7A2C3D4E5B60718293A4C6 /* PromptWizardInferenceServiceTests.swift in Sources */,
@@ -3545,6 +3900,7 @@
 				AA00000000000000000332 /* DictationRuntimeContext.swift in Sources */,
 				AA00000000000000000061 /* HistoryService.swift in Sources */,
 				AA00000000000000000062 /* TextDiffService.swift in Sources */,
+				AA7080000000000000000001 /* TargetAppCorrectionLearningService.swift in Sources */,
 				AA00000000000000000063 /* HistoryViewModel.swift in Sources */,
 				AA00000000000000000064 /* HistoryView.swift in Sources */,
 				AA00000000000000000065 /* Profile.swift in Sources */,
@@ -3564,6 +3920,12 @@
 				AA00000000000000000079 /* DictionaryService.swift in Sources */,
 				AA00000000000000000080 /* Snippet.swift in Sources */,
 				AA00000000000000000081 /* SnippetService.swift in Sources */,
+				C1F000000000000000000011 /* UserDataSyncIdentity.swift in Sources */,
+				C1F000000000000000000012 /* TypeWhisperUserDataSyncStore.swift in Sources */,
+				C1F000000000000000000013 /* CloudFolderSyncEngine.swift in Sources */,
+				C1F000000000000000000014 /* CloudFolderSyncSettingsView.swift in Sources */,
+				C1F000000000000000000016 /* UserDataSync.swift in Sources */,
+				C1F000000000000000000017 /* PremiumSettingsView.swift in Sources */,
 				AA00000000000000000082 /* DictionaryViewModel.swift in Sources */,
 				AA00000000000000000083 /* DictionarySettingsView.swift in Sources */,
 				AA00000000000000000084 /* SnippetsViewModel.swift in Sources */,
@@ -3612,6 +3974,16 @@
 				AA00000000000000000240 /* MemoryService.swift in Sources */,
 				AA00000000000000000247 /* AppFormatterService.swift in Sources */,
 				AA00000000000000000248 /* SpeechPunctuationService.swift in Sources */,
+				71F1DCAA4C8685360B145C0B /* NumberWordNormalizer.swift in Sources */,
+				9A645F000000000000000001 /* EnglishNumberWordParser.swift in Sources */,
+				9A645F000000000000000002 /* GermanNumberWordParser.swift in Sources */,
+				9A645F000000000000000003 /* FrenchNumberWordParser.swift in Sources */,
+				9A645F000000000000000004 /* SpanishNumberWordParser.swift in Sources */,
+				9A645F000000000000000005 /* HanNumberWordParser.swift in Sources */,
+				9A645F000000000000000006 /* ChineseNumberWordParser.swift in Sources */,
+				9A645F000000000000000007 /* JapaneseNumberWordParser.swift in Sources */,
+				9A645F000000000000000008 /* DutchNumberWordParser.swift in Sources */,
+				B346BF6B189F3E7C6CBA1410 /* TranscriptionNormalizationService.swift in Sources */,
 				AA00000000000000000333 /* DictationPunctuationProfileStore.swift in Sources */,
 				AA00000000000000000334 /* PunctuationRulesLoader.swift in Sources */,
 				AA00000000000000000335 /* PunctuationStrategyResolver.swift in Sources */,
@@ -3680,6 +4052,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000141 /* GeminiPlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4D49535452414C0000000008 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4D49535452414C0000000001 /* MistralAIPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -3785,6 +4165,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5B2200000000000000000050 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5B2200000000000000000001 /* SaluteSpeechPlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CART00000000000000000050 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CART00000000000000000001 /* CartesiaPlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FF00000000000000000095 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -3854,6 +4250,19 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000244 /* OpenAIVectorMemoryPlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4D45504C4143450000000012 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4D45504C414345000000000A /* MemPalaceConfig.swift in Sources */,
+				4D45504C414345000000000B /* MemPalaceMCPClient.swift in Sources */,
+				4D45504C414345000000000C /* MemPalacePlugin.swift in Sources */,
+				4D45504C414345000000000D /* MemPalaceSettingsView.swift in Sources */,
+				4D45504C414345000000000E /* OfflineQueue.swift in Sources */,
+				4D45504C414345000000000F /* SidecarStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -4468,6 +4877,52 @@
 			};
 			name = Release;
 		};
+		4D49535452414C000000000D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Mistral AI";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = MistralAIPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.minerale.mistralai;
+				PRODUCT_NAME = MistralAIPlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
+		4D49535452414C000000000E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Mistral AI";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = MistralAIPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.minerale.mistralai;
+				PRODUCT_NAME = MistralAIPlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
 		XX00000000000000000029 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -5028,6 +5483,152 @@
 			};
 			name = Release;
 		};
+		5B2200000000000000000060 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/TypeWhisperPluginSDK/build/$(CONFIGURATION)/PackageFrameworks",
+				);
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Sber SaluteSpeech";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = SaluteSpeechPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+					/usr/lib/swift,
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.sber-salutespeech";
+				PRODUCT_NAME = SaluteSpeechPlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_INCLUDE_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/TypeWhisperPluginSDK/build/$(CONFIGURATION)",
+				);
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
+		5B2200000000000000000061 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/TypeWhisperPluginSDK/build/$(CONFIGURATION)/PackageFrameworks",
+				);
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Sber SaluteSpeech";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = SaluteSpeechPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+					/usr/lib/swift,
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.sber-salutespeech";
+				PRODUCT_NAME = SaluteSpeechPlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_INCLUDE_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/TypeWhisperPluginSDK/build/$(CONFIGURATION)",
+				);
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
+		CART00000000000000000060 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/TypeWhisperPluginSDK/build/$(CONFIGURATION)/PackageFrameworks",
+				);
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Cartesia;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = CartesiaPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+					/usr/lib/swift,
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.cartesia";
+				PRODUCT_NAME = CartesiaPlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_INCLUDE_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/TypeWhisperPluginSDK/build/$(CONFIGURATION)",
+				);
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
+		CART00000000000000000061 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/TypeWhisperPluginSDK/build/$(CONFIGURATION)/PackageFrameworks",
+				);
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Cartesia;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = CartesiaPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+					/usr/lib/swift,
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.cartesia";
+				PRODUCT_NAME = CartesiaPlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_INCLUDE_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/TypeWhisperPluginSDK/build/$(CONFIGURATION)",
+				);
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
 		XX00000000000000000073 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -5558,6 +6159,54 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.memory.openai-vector";
 				PRODUCT_NAME = OpenAIVectorMemoryPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
+		4D45504C4143450000000016 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = MemPalace;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = MemPalacePlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mempalace.memory;
+				PRODUCT_NAME = MemPalacePlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
+		4D45504C4143450000000017 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = MemPalace;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = MemPalacePlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.mempalace.memory;
+				PRODUCT_NAME = MemPalacePlugin;
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -6178,6 +6827,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		4D49535452414C000000000F /* Build configuration list for PBXNativeTarget "MistralAIPlugin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4D49535452414C000000000D /* Debug */,
+				4D49535452414C000000000E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		FF00000000000000000053 /* Build configuration list for PBXNativeTarget "LinearPlugin" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -6286,6 +6944,24 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		5B2200000000000000000062 /* Build configuration list for PBXNativeTarget "SaluteSpeechPlugin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5B2200000000000000000060 /* Debug */,
+				5B2200000000000000000061 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CART00000000000000000062 /* Build configuration list for PBXNativeTarget "CartesiaPlugin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CART00000000000000000060 /* Debug */,
+				CART00000000000000000061 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		FF00000000000000000098 /* Build configuration list for PBXNativeTarget "ObsidianPlugin" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -6381,6 +7057,15 @@
 			buildConfigurations = (
 				XX00000000000000000097 /* Debug */,
 				XX00000000000000000098 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		4D45504C4143450000000018 /* Build configuration list for PBXNativeTarget "MemPalacePlugin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4D45504C4143450000000016 /* Debug */,
+				4D45504C4143450000000017 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -6664,6 +7349,16 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = TypeWhisperPluginSDK;
 		};
+		5B2200000000000000000030 /* TypeWhisperPluginSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = RR00000000000000000005 /* XCLocalSwiftPackageReference "TypeWhisperPluginSDK" */;
+			productName = TypeWhisperPluginSDK;
+		};
+		CART00000000000000000030 /* TypeWhisperPluginSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = RR00000000000000000005 /* XCLocalSwiftPackageReference "TypeWhisperPluginSDK" */;
+			productName = TypeWhisperPluginSDK;
+		};
 		PP00000000000000000025 /* TypeWhisperPluginSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TypeWhisperPluginSDK;
@@ -6705,6 +7400,10 @@
 			productName = TypeWhisperPluginSDK;
 		};
 		PP00000000000000000033 /* TypeWhisperPluginSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TypeWhisperPluginSDK;
+		};
+		4D45504C4143450000000019 /* TypeWhisperPluginSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TypeWhisperPluginSDK;
 		};
@@ -6750,6 +7449,10 @@
 			productName = TypeWhisperPluginSDK;
 		};
 		PP00000000000000000044 /* TypeWhisperPluginSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TypeWhisperPluginSDK;
+		};
+		4D49535452414C000000000C /* TypeWhisperPluginSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TypeWhisperPluginSDK;
 		};

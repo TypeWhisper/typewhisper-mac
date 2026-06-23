@@ -54,7 +54,7 @@ final class SpeechPunctuationService {
         in text: String
     ) -> String {
         guard let regex = try? NSRegularExpression(
-            pattern: wholePhrasePattern(for: phrase),
+            pattern: wholePhrasePattern(for: phrase, category: category),
             options: [.caseInsensitive]
         ) else {
             return text
@@ -89,7 +89,7 @@ final class SpeechPunctuationService {
         return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func wholePhrasePattern(for phrase: String) -> String {
+    private func wholePhrasePattern(for phrase: String, category: PunctuationRuleCategory) -> String {
         let escapedWords = phrase
             .split(whereSeparator: \.isWhitespace)
             .map { NSRegularExpression.escapedPattern(for: String($0)) }
@@ -101,6 +101,8 @@ final class SpeechPunctuationService {
         let openingTokens = CharacterSet(charactersIn: "([{")
         let closingTokens = CharacterSet(charactersIn: ")]}")
         let inlineTokens = CharacterSet(charactersIn: ",.:;?!")
+        let unspacedTokens = CharacterSet(charactersIn: "、。？！：；（）［］｛｝「」『』【】〈〉《》")
+        let unspacedOpeningTokens = CharacterSet(charactersIn: "（［｛「『【〈《")
 
         var result = ""
         var index = text.startIndex
@@ -111,9 +113,27 @@ final class SpeechPunctuationService {
             if character.isWhitespace {
                 let nextIndex = text.index(after: index)
                 let nextCharacter = nextIndex < text.endIndex ? text[nextIndex] : nil
+                let followingNonWhitespace = nextNonWhitespaceCharacter(in: text, after: index)
 
                 if let previous = result.last,
                    behavior(for: previous, opening: openingTokens, closing: closingTokens, inline: inlineTokens) == .opening {
+                    index = nextIndex
+                    continue
+                }
+
+                if let previous = result.last,
+                   isMember(previous, of: unspacedTokens),
+                   shouldRemoveSpaceAfterUnspacedToken(
+                    previous,
+                    next: followingNonWhitespace,
+                    openingTokens: unspacedOpeningTokens
+                   ) {
+                    index = nextIndex
+                    continue
+                }
+
+                if let followingNonWhitespace,
+                   isMember(followingNonWhitespace, of: unspacedTokens) {
                     index = nextIndex
                     continue
                 }
@@ -153,6 +173,46 @@ final class SpeechPunctuationService {
         return result
     }
 
+    private func isMember(_ character: Character, of characterSet: CharacterSet) -> Bool {
+        character.unicodeScalars.allSatisfy { characterSet.contains($0) }
+    }
+
+    private func shouldRemoveSpaceAfterUnspacedToken(
+        _ previous: Character,
+        next: Character?,
+        openingTokens: CharacterSet
+    ) -> Bool {
+        if isMember(previous, of: openingTokens) {
+            return true
+        }
+
+        guard let next else {
+            return true
+        }
+
+        return isUnspacedScript(next)
+    }
+
+    private func isUnspacedScript(_ character: Character) -> Bool {
+        character.unicodeScalars.allSatisfy { scalar in
+            switch scalar.value {
+            case 0x3040...0x30FF, // Hiragana and Katakana
+                 0x3400...0x9FFF, // CJK ideographs
+                 0x20000...0x2A6DF, // CJK extension B
+                 0x2A700...0x2B73F, // CJK extension C
+                 0x2B740...0x2B81F, // CJK extension D
+                 0x2B820...0x2CEAF, // CJK extension E-F
+                 0x2CEB0...0x2EBEF, // CJK extension F-I
+                 0x30000...0x323AF, // CJK extension G-H
+                 0xF900...0xFAFF, // CJK compatibility ideographs
+                 0xFF00...0xFFEF: // Halfwidth and fullwidth forms
+                return true
+            default:
+                return false
+            }
+        }
+    }
+
     private func shouldSuppressDuplicateReplacement(
         in text: String,
         range: Range<String.Index>,
@@ -165,8 +225,30 @@ final class SpeechPunctuationService {
             return false
         }
 
-        return previousNonWhitespaceCharacter(in: text, before: range.lowerBound) == replacementCharacter
-            || nextNonWhitespaceCharacter(in: text, after: range.upperBound) == replacementCharacter
+        return isDuplicatePunctuation(
+            previousNonWhitespaceCharacter(in: text, before: range.lowerBound),
+            replacement: replacementCharacter
+        ) || isDuplicatePunctuation(
+            nextNonWhitespaceCharacter(in: text, after: range.upperBound),
+            replacement: replacementCharacter
+        )
+    }
+
+    private func isDuplicatePunctuation(_ candidate: Character?, replacement: Character) -> Bool {
+        guard let candidate else { return false }
+        return canonicalPunctuationCharacter(candidate) == canonicalPunctuationCharacter(replacement)
+    }
+
+    private func canonicalPunctuationCharacter(_ character: Character) -> Character {
+        switch character {
+        case "。": "."
+        case "、": ","
+        case "？": "?"
+        case "！": "!"
+        case "：": ":"
+        case "；": ";"
+        default: character
+        }
     }
 
     private func previousNonWhitespaceCharacter(

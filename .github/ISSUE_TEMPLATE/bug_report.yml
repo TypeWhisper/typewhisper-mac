@@ -45,6 +45,6 @@ body:
   - type: textarea
     id: logs
     attributes:
-      label: Logs
-      description: Paste any relevant log output (Console.app, filter by "TypeWhisper").
+      label: Diagnostics / Logs
+      description: Export and attach a privacy-safe JSON report from Settings > Advanced > Support Diagnostics > Export Diagnostics or Error Log > Export Diagnostics if possible. The report does not include API keys, audio, or transcription history. You can also paste any relevant log output from Console.app filtered by "TypeWhisper".
       render: shell

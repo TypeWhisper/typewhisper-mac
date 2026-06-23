@@ -8,7 +8,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(Qwen3Plugin)
-final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, @unchecked Sendable {
+final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, @unchecked Sendable {
     static let pluginId = "com.typewhisper.qwen3"
     static let pluginName = "Qwen3 ASR"
 
@@ -129,8 +129,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     }
 
     var supportsTranslation: Bool { false }
-    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
-    var dictionaryTermsBudget: DictionaryTermsBudget { DictionaryTermsBudget(maxTotalChars: 10_000) }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .unsupported }
 
     func transcribe(
         audio: AudioData,
@@ -532,7 +531,7 @@ enum QwenTranscriptGuard {
 
         let artifactPattern = #"(?i)[.!?;:]\s+oui[.!?]*$"#
         guard let artifactRange = trimmed.range(of: artifactPattern, options: .regularExpression) else {
-            return text
+            return removingBareTrailingOuiArtifact(from: trimmed) ?? text
         }
 
         let artifact = String(trimmed[artifactRange])
@@ -543,6 +542,22 @@ enum QwenTranscriptGuard {
         guard !prefix.isEmpty else { return text }
 
         return "\(prefix)\(punctuation)"
+    }
+
+    private static func removingBareTrailingOuiArtifact(from text: String) -> String? {
+        let artifactPattern = #"(?i)(?:,\s+|\s+)oui[.!?]*$"#
+        guard let artifactRange = text.range(of: artifactPattern, options: .regularExpression) else {
+            return nil
+        }
+
+        let prefix = text[..<artifactRange.lowerBound]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let prefixWords = words(in: String(prefix))
+        guard prefixWords.count >= 4, prefixWords.last != "que" else {
+            return nil
+        }
+
+        return String(prefix)
     }
 
     static func isLikelyLooped(_ text: String) -> Bool {

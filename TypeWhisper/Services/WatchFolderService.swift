@@ -1,6 +1,7 @@
 import Foundation
 import os
 import Combine
+import CryptoKit
 import TypeWhisperPluginSDK
 
 enum WatchFolderOutputFormat: String, CaseIterable {
@@ -473,13 +474,23 @@ final class WatchFolderService: ObservableObject {
         try? data.write(to: processedHistoryURL, options: .atomic)
     }
 
-    private func fileFingerprint(for url: URL) -> String? {
+    func fileFingerprint(for url: URL) -> String? {
         let resourceKeys: Set<URLResourceKey> = [.fileSizeKey, .contentModificationDateKey]
         let values = try? url.resourceValues(forKeys: resourceKeys)
 
         let fileSize = values?.fileSize ?? 0
         let modifiedAt = values?.contentModificationDate?.timeIntervalSince1970 ?? 0
 
-        return "\(url.path)|\(fileSize)|\(modifiedAt)"
+        var checksum = "no-data"
+        if let fileHandle = try? FileHandle(forReadingFrom: url) {
+            var hasher = SHA256()
+            while let data = try? fileHandle.read(upToCount: 8192), !data.isEmpty {
+                hasher.update(data: data)
+            }
+            checksum = hasher.finalize().compactMap { String(format: "%02x", $0) }.joined()
+            try? fileHandle.close()
+        }
+
+        return "\(url.path)|\(fileSize)|\(modifiedAt)|\(checksum)"
     }
 }

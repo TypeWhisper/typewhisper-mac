@@ -17,10 +17,24 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
     var llmTemperatureValue: Double
     var fetchedModels: [FetchedModel]
     var chatRequestTimeoutSeconds: TimeInterval?
+    var thinkingEnabled: Bool
 
     static let defaultChatRequestTimeout: TimeInterval = 30
     static let minChatRequestTimeout: TimeInterval = 5
     static let maxChatRequestTimeout: TimeInterval = 3600
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case baseURL
+        case selectedModelId
+        case selectedLLMModelId
+        case llmTemperatureModeRaw
+        case llmTemperatureValue
+        case fetchedModels
+        case chatRequestTimeoutSeconds
+        case thinkingEnabled
+    }
 
     init(
         id: String,
@@ -31,7 +45,8 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue,
         llmTemperatureValue: Double = 0.3,
         fetchedModels: [FetchedModel] = [],
-        chatRequestTimeoutSeconds: TimeInterval? = nil
+        chatRequestTimeoutSeconds: TimeInterval? = nil,
+        thinkingEnabled: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -42,6 +57,21 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         self.llmTemperatureValue = llmTemperatureValue
         self.fetchedModels = fetchedModels
         self.chatRequestTimeoutSeconds = chatRequestTimeoutSeconds
+        self.thinkingEnabled = thinkingEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        baseURL = try container.decode(String.self, forKey: .baseURL)
+        selectedModelId = try container.decode(String.self, forKey: .selectedModelId)
+        selectedLLMModelId = try container.decode(String.self, forKey: .selectedLLMModelId)
+        llmTemperatureModeRaw = try container.decode(String.self, forKey: .llmTemperatureModeRaw)
+        llmTemperatureValue = try container.decode(Double.self, forKey: .llmTemperatureValue)
+        fetchedModels = try container.decode([FetchedModel].self, forKey: .fetchedModels)
+        chatRequestTimeoutSeconds = try container.decodeIfPresent(TimeInterval.self, forKey: .chatRequestTimeoutSeconds)
+        thinkingEnabled = try container.decodeIfPresent(Bool.self, forKey: .thinkingEnabled) ?? false
     }
 
     var isDefault: Bool { id == Self.defaultId }
@@ -65,7 +95,8 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue,
         llmTemperatureValue: Double = 0.3,
         fetchedModels: [FetchedModel] = [],
-        chatRequestTimeoutSeconds: TimeInterval? = nil
+        chatRequestTimeoutSeconds: TimeInterval? = nil,
+        thinkingEnabled: Bool = false
     ) -> OpenAICompatibleProfile {
         OpenAICompatibleProfile(
             id: defaultId,
@@ -76,7 +107,8 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
             llmTemperatureModeRaw: llmTemperatureModeRaw,
             llmTemperatureValue: llmTemperatureValue,
             fetchedModels: fetchedModels,
-            chatRequestTimeoutSeconds: chatRequestTimeoutSeconds
+            chatRequestTimeoutSeconds: chatRequestTimeoutSeconds,
+            thinkingEnabled: thinkingEnabled
         )
     }
 }
@@ -242,6 +274,10 @@ final class OpenAICompatiblePlugin: NSObject,
         setLLMTemperatureValue(value, for: providerId)
     }
 
+    func setThinkingEnabled(_ enabled: Bool) {
+        setThinkingEnabled(enabled, for: providerId)
+    }
+
     // MARK: - Settings View
 
     var settingsView: AnyView? {
@@ -376,6 +412,12 @@ final class OpenAICompatiblePlugin: NSObject,
         }
     }
 
+    func setThinkingEnabled(_ enabled: Bool, for profileId: String) {
+        updateProfile(profileId) { profile in
+            profile.thinkingEnabled = enabled
+        }
+    }
+
     // MARK: - Profile Runtime
 
     func displayName(for profileId: String) -> String {
@@ -456,21 +498,22 @@ final class OpenAICompatiblePlugin: NSObject,
         temperatureDirective: PluginLLMTemperatureDirective,
         profileId: String
     ) async throws -> String {
-        guard let profile = profile(for: profileId),
-              let helper = makeChatHelper(for: profile) else {
+        guard let profile = profile(for: profileId), !profile.baseURL.isEmpty else {
             throw PluginChatError.notConfigured
         }
         let modelId = model ?? selectedLLMModelId(for: profileId) ?? ""
         guard !modelId.isEmpty else {
             throw PluginChatError.noModelSelected
         }
-        return try await helper.process(
+        return try await processChatCompletion(
             apiKey: apiKey(for: profileId) ?? "",
+            baseURL: profile.baseURL,
             model: modelId,
             systemPrompt: systemPrompt,
             userText: userText,
             temperature: providerTemperatureDirective(for: profileId).resolvedTemperature(applying: temperatureDirective),
-            requestTimeout: profile.resolvedChatRequestTimeout
+            requestTimeout: profile.resolvedChatRequestTimeout,
+            thinkingEnabled: profile.thinkingEnabled
         )
     }
 
@@ -564,11 +607,6 @@ final class OpenAICompatiblePlugin: NSObject,
     private func makeTranscriptionHelper(for profile: OpenAICompatibleProfile) -> PluginOpenAITranscriptionHelper? {
         guard !profile.baseURL.isEmpty else { return nil }
         return PluginOpenAITranscriptionHelper(baseURL: profile.baseURL, responseFormat: "json")
-    }
-
-    private func makeChatHelper(for profile: OpenAICompatibleProfile) -> PluginOpenAIChatHelper? {
-        guard !profile.baseURL.isEmpty else { return nil }
-        return PluginOpenAIChatHelper(baseURL: profile.baseURL)
     }
 
     private func updateProfile(
@@ -695,6 +733,104 @@ final class OpenAICompatiblePlugin: NSObject,
         canonicalProfileId(for: profileId) == OpenAICompatibleProfile.defaultId
             ? "api-key"
             : "api-key.\(canonicalProfileId(for: profileId))"
+    }
+
+    private func processChatCompletion(
+        apiKey: String,
+        baseURL: String,
+        model: String,
+        systemPrompt: String,
+        userText: String,
+        temperature: Double?,
+        requestTimeout: TimeInterval,
+        thinkingEnabled: Bool
+    ) async throws -> String {
+        let endpoint = "\(baseURL)/v1/chat/completions"
+        guard let url = URL(string: endpoint) else {
+            throw PluginChatError.apiError("Invalid URL: \(endpoint)")
+        }
+
+        var requestBody: [String: Any] = [
+            "model": model,
+            "messages": [
+                ["role": "system", "content": systemPrompt],
+                ["role": "user", "content": userText],
+            ],
+            "max_tokens": 4096,
+            "thinking": [
+                "type": thinkingEnabled ? "enabled" : "disabled"
+            ],
+        ]
+        if let temperature {
+            requestBody["temperature"] = temperature
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = requestTimeout
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+
+        let (data, response) = try await PluginHTTPClient.data(for: request, resourceTimeout: requestTimeout)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw PluginChatError.networkError("Invalid response")
+        }
+
+        switch httpResponse.statusCode {
+        case 200:
+            break
+        case 401:
+            throw PluginChatError.invalidApiKey
+        case 429:
+            throw PluginChatError.rateLimited
+        default:
+            throw PluginChatError.apiError(Self.chatErrorMessage(from: data, statusCode: httpResponse.statusCode))
+        }
+
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let choices = json["choices"] as? [[String: Any]],
+              let first = choices.first,
+              let message = first["message"] as? [String: Any],
+              let content = message["content"] as? String else {
+            throw PluginChatError.apiError("Failed to parse response")
+        }
+
+        return content.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func chatErrorMessage(from data: Data, statusCode: Int) -> String {
+        let json = try? JSONSerialization.jsonObject(with: data)
+
+        let object: [String: Any]?
+        if let dictionary = json as? [String: Any] {
+            object = dictionary
+        } else if let array = json as? [Any],
+                  let first = array.first as? [String: Any] {
+            object = first
+        } else {
+            object = nil
+        }
+
+        if let object, let message = message(fromChatErrorObject: object) {
+            return message
+        }
+        return "HTTP \(statusCode)"
+    }
+
+    private static func message(fromChatErrorObject object: [String: Any]) -> String? {
+        if let detail = object["detail"] as? String, !detail.isEmpty {
+            return detail
+        }
+        if let error = object["error"] as? [String: Any],
+           let message = error["message"] as? String, !message.isEmpty {
+            return message
+        }
+        if let message = object["message"] as? String, !message.isEmpty {
+            return message
+        }
+        return nil
     }
 
     private static func normalizedBaseURL(_ url: String) -> String {
@@ -834,6 +970,7 @@ private struct OpenAICompatibleSettingsView: View {
     @State private var manualLLMModel = ""
     @State private var llmTemperatureMode: PluginLLMTemperatureMode = .providerDefault
     @State private var llmTemperatureValue: Double = 0.3
+    @State private var thinkingEnabled = false
     @State private var chatTimeoutInput = ""
 
     private let bundle = pluginModuleBundle
@@ -936,6 +1073,7 @@ private struct OpenAICompatibleSettingsView: View {
                     serverSection
                     modelSection
                     temperatureSection
+                    thinkingModeSection
                     timeoutSection
 
                     Text("API keys are stored securely in the Keychain", bundle: bundle)
@@ -1201,6 +1339,22 @@ private struct OpenAICompatibleSettingsView: View {
         }
     }
 
+    private var thinkingModeSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Divider()
+
+            Toggle(isOn: $thinkingEnabled) {
+                Text("Thinking Mode", bundle: bundle)
+                    .font(.headline)
+            }
+            .onChange(of: thinkingEnabled) {
+                guard let selectedProfile else { return }
+                plugin.setThinkingEnabled(thinkingEnabled, for: selectedProfile.id)
+                reloadProfiles(selecting: selectedProfile.id, preserveInputs: true)
+            }
+        }
+    }
+
     private var timeoutSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Divider()
@@ -1252,6 +1406,7 @@ private struct OpenAICompatibleSettingsView: View {
         manualLLMModel = profile.selectedLLMModelId
         llmTemperatureMode = PluginLLMTemperatureMode(rawValue: profile.llmTemperatureModeRaw) ?? .providerDefault
         llmTemperatureValue = profile.llmTemperatureValue
+        thinkingEnabled = profile.thinkingEnabled
         chatTimeoutInput = String(Int(profile.resolvedChatRequestTimeout))
         connectionResult = nil
     }

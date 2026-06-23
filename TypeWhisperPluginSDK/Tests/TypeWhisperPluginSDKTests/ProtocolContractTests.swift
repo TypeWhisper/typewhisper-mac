@@ -1,6 +1,19 @@
 import Foundation
+import os
 import XCTest
 @testable import TypeWhisperPluginSDK
+
+private final class SourceProgressRecorder: @unchecked Sendable {
+    private let progress = OSAllocatedUnfairLock<PluginTranscriptionSourceProgress?>(initialState: nil)
+
+    func record(_ value: PluginTranscriptionSourceProgress) {
+        progress.withLock { $0 = value }
+    }
+
+    var recordedProgress: PluginTranscriptionSourceProgress? {
+        progress.withLock { $0 }
+    }
+}
 
 private final class MockEventBus: EventBusProtocol, @unchecked Sendable {
     private(set) var handlers: [UUID: @Sendable (TypeWhisperEvent) async -> Void] = [:]
@@ -259,6 +272,51 @@ private final class MockStructuredTranscriptionPlugin: NSObject, StructuredTrans
                 )
             ]
         )
+    }
+}
+
+@objc(MockSourceProgressTranscriptionPlugin)
+private final class MockSourceProgressTranscriptionPlugin: NSObject, SourceProgressTranscriptionEnginePlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.source-progress"
+    static let pluginName = "Mock Source Progress"
+
+    required override init() {}
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    var providerId: String { "mock-source-progress" }
+    var providerDisplayName: String { "Mock Source Progress" }
+    var isConfigured: Bool { true }
+    var transcriptionModels: [PluginModelInfo] { [] }
+    var selectedModelId: String? { nil }
+    func selectModel(_ modelId: String) {}
+    var supportsTranslation: Bool { false }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "legacy", detectedLanguage: language)
+    }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool,
+        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        _ = onSourceProgress(PluginTranscriptionSourceProgress(
+            processedDuration: 1.5,
+            totalDuration: audio.duration,
+            previewText: "partial"
+        ))
+        _ = onProgress("partial")
+        return PluginTranscriptionResult(text: "done", detectedLanguage: language)
     }
 }
 
@@ -523,6 +581,38 @@ final class ProtocolContractTests: XCTestCase {
         XCTAssertEqual(result.segments.first?.text, "Hello")
         XCTAssertEqual(result.segments.first?.speakerLabel, "Speaker A")
         XCTAssertEqual(result.segments.first?.speakerConfidence, 0.91)
+    }
+
+    func testSourceProgressProtocolIsOptionalAndCarriesDurations() async throws {
+        let legacyPlugin = MockTranscriptionPlugin()
+        let sourceProgressPlugin = MockSourceProgressTranscriptionPlugin()
+        let erasedSourceProgressPlugin: Any = sourceProgressPlugin
+        let recorder = SourceProgressRecorder()
+
+        XCTAssertFalse(legacyPlugin is any SourceProgressTranscriptionEnginePlugin)
+        XCTAssertTrue(erasedSourceProgressPlugin is any SourceProgressTranscriptionEnginePlugin)
+
+        let result = try await sourceProgressPlugin.transcribe(
+            audio: AudioData(samples: [0.1], wavData: Data([0x00]), duration: 3),
+            language: "en",
+            translate: false,
+            prompt: nil,
+            onProgress: { text in
+                XCTAssertEqual(text, "partial")
+                return true
+            },
+            onSourceProgress: { progress in
+                recorder.record(progress)
+                return true
+            }
+        )
+
+        let reportedProgress = recorder.recordedProgress
+        XCTAssertEqual(result.text, "done")
+        XCTAssertEqual(reportedProgress?.processedDuration, 1.5)
+        XCTAssertEqual(reportedProgress?.totalDuration, 3)
+        XCTAssertEqual(reportedProgress?.previewText, "partial")
+        XCTAssertEqual(reportedProgress?.fractionCompleted, 0.5)
     }
 
     func testFileJobAutomationContextCarriesWatchFolderExportMetadata() throws {

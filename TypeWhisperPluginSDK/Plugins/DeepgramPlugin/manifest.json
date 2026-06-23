@@ -8,7 +8,8 @@
     "author": "TypeWhisper",
     "description": "Cloud transcription via Deepgram API with real-time WebSocket streaming. Requires API key.",
     "descriptions": {
-        "de": "Cloud-Transkription über die Deepgram-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key."
+        "de": "Cloud-Transkription über die Deepgram-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key.",
+        "ja": "Deepgram APIによるクラウド文字起こしです。リアルタイムWebSocketストリーミングに対応し、APIキーが必要です。"
     },
     "category": "transcription",
     "iconSystemName": "waveform.badge.mic",

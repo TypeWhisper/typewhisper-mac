@@ -109,6 +109,10 @@ private struct GoogleWordInfo: Decodable {
 private struct GoogleCredentialValidationResult {
     let isValid: Bool
     let message: String
+
+    func localizedMessage(bundle: Bundle) -> String {
+        String(localized: String.LocalizationValue(message), bundle: bundle)
+    }
 }
 
 @objc(GoogleCloudSTTPlugin)
@@ -785,6 +789,7 @@ final class GoogleCloudSTTPlugin: NSObject, TranscriptionEnginePlugin, Dictionar
 
 private struct GoogleCloudSTTSettingsView: View {
     let plugin: GoogleCloudSTTPlugin
+    private let bundle = pluginModuleBundle
 
     @State private var serviceAccountInput = ""
     @State private var isValidating = false
@@ -799,7 +804,7 @@ private struct GoogleCloudSTTSettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Service Account JSON")
+                Text("Service Account JSON", bundle: bundle)
                     .font(.headline)
 
                 TextEditor(text: $serviceAccountInput)
@@ -810,25 +815,27 @@ private struct GoogleCloudSTTSettingsView: View {
                             .stroke(.quaternary, lineWidth: 1)
                     }
 
-                Text("Google Speech-to-Text does not accept simple API keys. Paste a Google Cloud service-account JSON key here. Credentials are stored in the macOS Keychain.")
+                Text("Google Speech-to-Text does not accept simple API keys. Paste a Google Cloud service-account JSON key here. Credentials are stored in the macOS Keychain.", bundle: bundle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
                 if plugin.isConfigured && trimmedServiceAccountInput.isEmpty {
-                    Text("Stored credentials are active. Paste a new JSON key above to replace them.")
+                    Text("Stored credentials are active. Paste a new JSON key above to replace them.", bundle: bundle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
                 HStack(spacing: 8) {
-                    Button(plugin.isConfigured ? "Replace Credentials" : "Save Credentials") {
+                    Button(plugin.isConfigured
+                        ? String(localized: "Replace Credentials", bundle: bundle)
+                        : String(localized: "Save Credentials", bundle: bundle)) {
                         saveCredentials()
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .disabled(trimmedServiceAccountInput.isEmpty)
 
-                    Button("Test Stored Credentials") {
+                    Button(String(localized: "Test Stored Credentials", bundle: bundle)) {
                         testStoredCredentials()
                     }
                     .buttonStyle(.bordered)
@@ -836,7 +843,7 @@ private struct GoogleCloudSTTSettingsView: View {
                     .disabled(!plugin.isConfigured || isValidating)
 
                     if plugin.isConfigured {
-                        Button("Remove") {
+                        Button(String(localized: "Remove", bundle: bundle)) {
                             serviceAccountInput = ""
                             validationResult = nil
                             plugin.removeServiceAccountJSON()
@@ -850,7 +857,7 @@ private struct GoogleCloudSTTSettingsView: View {
                 if isValidating {
                     HStack(spacing: 4) {
                         ProgressView().controlSize(.small)
-                        Text("Validating...")
+                        Text("Validating...", bundle: bundle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -858,7 +865,7 @@ private struct GoogleCloudSTTSettingsView: View {
                     HStack(spacing: 4) {
                         Image(systemName: validationResult.isValid ? "checkmark.circle.fill" : "xmark.circle.fill")
                             .foregroundStyle(validationResult.isValid ? .green : .red)
-                        Text(validationResult.message)
+                        Text(validationResult.localizedMessage(bundle: bundle))
                             .font(.caption)
                             .foregroundStyle(validationResult.isValid ? .green : .red)
                     }
@@ -868,10 +875,10 @@ private struct GoogleCloudSTTSettingsView: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("Model")
+                Text("Model", bundle: bundle)
                     .font(.headline)
 
-                Picker("Model", selection: $selectedModel) {
+                Picker(String(localized: "Model", bundle: bundle), selection: $selectedModel) {
                     ForEach(plugin.transcriptionModels, id: \.id) { model in
                         Text(model.displayName).tag(model.id)
                     }
@@ -881,13 +888,13 @@ private struct GoogleCloudSTTSettingsView: View {
                     plugin.selectModel(selectedModel)
                 }
 
-                Text("Use `default` or `command_and_search` for the broadest language coverage. The newer `latest_*` models can be more restrictive depending on language support.")
+                Text("Use `default` or `command_and_search` for the broadest language coverage. The newer `latest_*` models can be more restrictive depending on language support.", bundle: bundle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("Default Language")
+                Text("Default Language", bundle: bundle)
                     .font(.headline)
 
                 TextField("e.g. gu-IN, kn-IN, pa-Guru-IN, en-US", text: $defaultLanguageCode)
@@ -897,7 +904,7 @@ private struct GoogleCloudSTTSettingsView: View {
                         plugin.setDefaultLanguageCode(defaultLanguageCode)
                     }
 
-                Text("If TypeWhisper already passes a spoken language, that value wins. Otherwise this BCP-47 code is used for Google recognition requests.")
+                Text("If TypeWhisper already passes a spoken language, that value wins. Otherwise this BCP-47 code is used for Google recognition requests.", bundle: bundle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -938,3 +945,11 @@ private struct GoogleCloudSTTSettingsView: View {
         }
     }
 }
+
+private let pluginModuleBundle: Bundle = {
+#if SWIFT_PACKAGE
+    Bundle.module
+#else
+    Bundle(for: GoogleCloudSTTPlugin.self)
+#endif
+}()

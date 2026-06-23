@@ -1,6 +1,7 @@
 import Foundation
 @preconcurrency import AVFoundation
 import AudioToolbox
+import CoreAudio
 import AppKit
 import Combine
 import os
@@ -196,6 +197,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private let bluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing
     private let inputReadinessChecker: AudioInputReadinessChecking
     private let inputCaptureFactory: AudioInputCaptureFactory
+    private let defaultInputController: AudioInputDeviceDefaultControlling
+    private let inputTransportResolver: AudioDeviceTransportResolving
     private let initialInputTapSeenLock = OSAllocatedUnfairLock(initialState: false)
     private var _lastStopGraceCaptureApplied = false
     private var recordingRequestUptimeNanoseconds: UInt64?
@@ -211,6 +214,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         bluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing = CoreAudioBluetoothInputRouteStabilizer(),
         inputReadinessChecker: AudioInputReadinessChecking = BluetoothInputReadinessChecker(),
         inputCaptureFactory: AudioInputCaptureFactory = CoreAudioHALInputCaptureFactory(),
+        defaultInputController: AudioInputDeviceDefaultControlling = CoreAudioInputDeviceDefaultController(),
+        inputTransportResolver: AudioDeviceTransportResolving = CoreAudioDeviceTransportResolver(),
         recoveryAudioStore: DictationRecoveryAudioStore = DictationRecoveryAudioStore()
     ) {
         self.outputVolumeGuard = outputVolumeGuard
@@ -218,6 +223,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         self.bluetoothInputRouteStabilizer = bluetoothInputRouteStabilizer
         self.inputReadinessChecker = inputReadinessChecker
         self.inputCaptureFactory = inputCaptureFactory
+        self.defaultInputController = defaultInputController
+        self.inputTransportResolver = inputTransportResolver
         self.recoveryAudioStore = recoveryAudioStore
         let recoveryURLs = recoveryAudioStore.recoveryURLs
         self.recoverableRecordingURLs = recoveryURLs
@@ -301,7 +308,10 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     /// Focusrite Scarlett) to mono. By requesting a mono tap format, AVAudioEngine
     /// performs the channel downmix internally — which handles arbitrary layouts
     /// correctly — and the converter only needs to resample.
-    private static func monoTapFormat(for inputFormat: AVAudioFormat) -> AVAudioFormat {
+    private static func tapFormat(for inputFormat: AVAudioFormat) -> AVAudioFormat {
+        if inputFormat.channelCount == 3 {
+            return inputFormat
+        }
         if inputFormat.channelCount > 1,
            let mono = AVAudioFormat(
                commonFormat: .pcmFormatFloat32,
@@ -728,7 +738,19 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
 
         let inputNode = engine.inputNode
-        let inputFormat = try settledInputFormat(for: inputNode, preferredDeviceID: inputRoute.engineDeviceID, label: label)
+        var inputFormat = try settledInputFormat(for: inputNode, preferredDeviceID: inputRoute.engineDeviceID, label: label)
+        if try enableVoiceProcessingIfNeeded(
+            on: inputNode,
+            inputRoute: inputRoute,
+            currentFormat: inputFormat,
+            label: label
+        ) {
+            inputFormat = try settledInputFormat(
+                for: inputNode,
+                preferredDeviceID: inputRoute.engineDeviceID,
+                label: "\(label)-voice-processing"
+            )
+        }
         logger.info("\(label, privacy: .public) input format: sampleRate=\(inputFormat.sampleRate), channels=\(inputFormat.channelCount)")
 
         try validateRecordingInputFormat(inputFormat, preferredDeviceID: inputRoute.engineDeviceID)
@@ -745,9 +767,12 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let currentInputFormat = try settledInputFormat(for: inputNode, preferredDeviceID: inputRoute.engineDeviceID, label: "\(label)-tap")
         try validateTapInstallationPreconditions(expected: inputFormat, current: currentInputFormat)
 
-        let tapFormat = Self.monoTapFormat(for: currentInputFormat)
+        let tapFormat = Self.tapFormat(for: currentInputFormat)
+        let converterInputFormat = tapFormat.channelCount == 1
+            ? tapFormat
+            : (AudioInputBufferNormalizer.monoFloatFormat(for: tapFormat) ?? tapFormat)
 
-        guard let converter = AVAudioConverter(from: tapFormat, to: targetFormat) else {
+        guard let converter = AVAudioConverter(from: converterInputFormat, to: targetFormat) else {
             throw AudioRecordingError.engineStartFailed("Cannot create audio converter")
         }
 
@@ -756,8 +781,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         do {
             _ = try ObjCExceptionCatcher.catching {
                 inputNode.installTap(onBus: 0, bufferSize: Self.captureTapFrames, format: tapFormat) { [weak self] buffer, _ in
-                    self?.markInitialInputTapSeenIfNeeded(buffer)
-                    self?.processAudioBuffer(buffer, converter: converter, targetFormat: targetFormat)
+                    guard let normalizedBuffer = Self.normalizedInputBuffer(buffer) else {
+                        return
+                    }
+                    self?.markInitialInputTapSeenIfNeeded(normalizedBuffer)
+                    self?.processAudioBuffer(normalizedBuffer, converter: converter, targetFormat: targetFormat)
                 }
             }
         } catch {
@@ -938,6 +966,47 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private func markInitialInputTapSeenIfNeeded(_ buffer: AVAudioPCMBuffer) {
         guard AudioInputSignal.containsSignal(buffer) else { return }
         initialInputTapSeenLock.withLock { $0 = true }
+    }
+
+    private func enableVoiceProcessingIfNeeded(
+        on inputNode: AVAudioInputNode,
+        inputRoute: (selectedDeviceID: AudioDeviceID?, engineDeviceID: AudioDeviceID?),
+        currentFormat: AVAudioFormat,
+        label: String
+    ) throws -> Bool {
+        guard inputRoute.selectedDeviceID == nil,
+              inputRoute.engineDeviceID == nil,
+              currentFormat.channelCount == 3,
+              defaultInputUsesBuiltInTransport() else {
+            return false
+        }
+
+        do {
+            try inputNode.setVoiceProcessingEnabled(true)
+            inputNode.isVoiceProcessingBypassed = false
+            inputNode.isVoiceProcessingAGCEnabled = true
+            inputNode.isVoiceProcessingInputMuted = false
+            logger.info("\(label, privacy: .public) enabled voice processing for 3-channel built-in default input")
+            return true
+        } catch {
+            logger.warning("\(label, privacy: .public) could not enable voice processing for 3-channel built-in default input: \(error.localizedDescription, privacy: .public)")
+            return false
+        }
+    }
+
+    private func defaultInputUsesBuiltInTransport() -> Bool {
+        guard let defaultInputDeviceID = defaultInputController.defaultInputDeviceID(),
+              let transportType = inputTransportResolver.transportType(for: defaultInputDeviceID) else {
+            return false
+        }
+        return transportType == kAudioDeviceTransportTypeBuiltIn
+    }
+
+    private static func normalizedInputBuffer(_ buffer: AVAudioPCMBuffer) -> AVAudioPCMBuffer? {
+        guard buffer.format.channelCount > 1 else {
+            return buffer
+        }
+        return AudioInputBufferNormalizer.monoFloatBuffer(from: buffer)
     }
 
     private func processAudioBuffer(

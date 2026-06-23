@@ -20,65 +20,44 @@ enum DictionaryServiceMutationError: LocalizedError {
     }
 }
 
+enum DictionaryCorrectionMatchPolicy {
+    case exact
+    case boundary
+    case substring
+}
+
+struct LearnedDictionaryCorrection: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let original: String
+    let replacement: String
+}
+
 @MainActor
 final class DictionaryService: ObservableObject {
     private var modelContainer: ModelContainer?
     private var modelContext: ModelContext?
 
     @Published private(set) var entries: [DictionaryEntry] = []
-
-    var terms: [DictionaryEntry] {
-        entries.filter { $0.type == .term && $0.isEnabled }
-    }
-
-    var corrections: [DictionaryEntry] {
-        entries.filter { $0.type == .correction && $0.isEnabled }
-    }
-
-    var termsCount: Int {
-        entries.filter { $0.type == .term }.count
-    }
-
-    var correctionsCount: Int {
-        entries.filter { $0.type == .correction }.count
-    }
-
-    var enabledTermsCount: Int {
-        terms.count
-    }
-
-    var enabledCorrectionsCount: Int {
-        corrections.count
-    }
+    @Published private(set) var terms: [DictionaryEntry] = []
+    @Published private(set) var corrections: [DictionaryEntry] = []
+    @Published private(set) var termsCount: Int = 0
+    @Published private(set) var correctionsCount: Int = 0
+    @Published private(set) var enabledTermsCount: Int = 0
+    @Published private(set) var enabledCorrectionsCount: Int = 0
 
     init(appSupportDirectory: URL = AppConstants.appSupportDirectory) {
         setupModelContainer(appSupportDirectory: appSupportDirectory)
     }
 
     private func setupModelContainer(appSupportDirectory: URL) {
-        let schema = Schema([DictionaryEntry.self])
-        let storeDir = appSupportDirectory
-        try? FileManager.default.createDirectory(at: storeDir, withIntermediateDirectories: true)
+        guard let (container, context) = try? SwiftDataStoreFactory.create(
+            for: [DictionaryEntry.self],
+            storeName: "dictionary",
+            in: appSupportDirectory
+        ) else { return }
 
-        let storeURL = storeDir.appendingPathComponent("dictionary.store")
-        let config = ModelConfiguration(url: storeURL)
-
-        do {
-            modelContainer = try ModelContainer(for: schema, configurations: [config])
-        } catch {
-            // Incompatible schema — delete old store and retry
-            for suffix in ["", "-wal", "-shm"] {
-                let url = storeDir.appendingPathComponent("dictionary.store\(suffix)")
-                try? FileManager.default.removeItem(at: url)
-            }
-            do {
-                modelContainer = try ModelContainer(for: schema, configurations: [config])
-            } catch {
-                fatalError("Failed to create dictionary ModelContainer after reset: \(error)")
-            }
-        }
-        modelContext = ModelContext(modelContainer!)
-        modelContext?.autosaveEnabled = true
+        modelContainer = container
+        modelContext = context
 
         loadEntries()
     }
@@ -94,6 +73,36 @@ final class DictionaryService: ObservableObject {
                 ]
             )
             entries = try context.fetch(descriptor)
+
+            var newTerms: [DictionaryEntry] = []
+            var newCorrections: [DictionaryEntry] = []
+            var newTermsCount = 0
+            var newCorrectionsCount = 0
+            var newEnabledTermsCount = 0
+            var newEnabledCorrectionsCount = 0
+
+            for entry in entries {
+                if entry.type == .term {
+                    newTermsCount += 1
+                    if entry.isEnabled {
+                        newTerms.append(entry)
+                        newEnabledTermsCount += 1
+                    }
+                } else if entry.type == .correction {
+                    newCorrectionsCount += 1
+                    if entry.isEnabled {
+                        newCorrections.append(entry)
+                        newEnabledCorrectionsCount += 1
+                    }
+                }
+            }
+
+            terms = newTerms
+            corrections = newCorrections
+            termsCount = newTermsCount
+            correctionsCount = newCorrectionsCount
+            enabledTermsCount = newEnabledTermsCount
+            enabledCorrectionsCount = newEnabledCorrectionsCount
         } catch {
             logger.error("Failed to fetch entries: \(error.localizedDescription)")
         }
@@ -113,12 +122,15 @@ final class DictionaryService: ObservableObject {
             return
         }
 
+        let now = Date()
         let entry = DictionaryEntry(
             type: type,
             original: original,
             replacement: replacement,
             caseSensitive: caseSensitive,
-            ctcMinSimilarity: Self.normalizedCtcMinSimilarity(type == .term ? ctcMinSimilarity : nil)
+            ctcMinSimilarity: Self.normalizedCtcMinSimilarity(type == .term ? ctcMinSimilarity : nil),
+            createdAt: now,
+            updatedAt: now
         )
 
         context.insert(entry)
@@ -144,6 +156,7 @@ final class DictionaryService: ObservableObject {
         entry.replacement = replacement
         entry.caseSensitive = caseSensitive
         entry.ctcMinSimilarity = Self.normalizedCtcMinSimilarity(entry.type == .term ? ctcMinSimilarity : nil)
+        entry.updatedAt = Date()
 
         do {
             try context.save()
@@ -170,6 +183,7 @@ final class DictionaryService: ObservableObject {
         guard let context = modelContext else { return }
 
         entry.isEnabled.toggle()
+        entry.updatedAt = Date()
 
         do {
             try context.save()
@@ -196,13 +210,16 @@ final class DictionaryService: ObservableObject {
         for item in items {
             let key = "\(item.type.rawValue):\(item.original.lowercased())"
             guard !existingOriginals.contains(key) else { continue }
+            let now = Date()
 
             let entry = DictionaryEntry(
                 type: item.type,
                 original: item.original,
                 replacement: item.replacement,
                 caseSensitive: item.caseSensitive,
-                ctcMinSimilarity: Self.normalizedCtcMinSimilarity(item.type == .term ? item.ctcMinSimilarity : nil)
+                ctcMinSimilarity: Self.normalizedCtcMinSimilarity(item.type == .term ? item.ctcMinSimilarity : nil),
+                createdAt: now,
+                updatedAt: now
             )
             context.insert(entry)
         }
@@ -232,6 +249,7 @@ final class DictionaryService: ObservableObject {
         for item in items {
             let key = "\(item.type.rawValue):\(item.original.lowercased())"
             guard !existingOriginals.contains(key) else { continue }
+            let now = Date()
 
             let entry = DictionaryEntry(
                 type: item.type,
@@ -239,7 +257,9 @@ final class DictionaryService: ObservableObject {
                 replacement: item.replacement,
                 caseSensitive: item.caseSensitive,
                 isEnabled: item.isEnabled,
-                ctcMinSimilarity: Self.normalizedCtcMinSimilarity(item.type == .term ? item.ctcMinSimilarity : nil)
+                ctcMinSimilarity: Self.normalizedCtcMinSimilarity(item.type == .term ? item.ctcMinSimilarity : nil),
+                createdAt: now,
+                updatedAt: now
             )
             context.insert(entry)
             existingOriginals.insert(key)
@@ -306,6 +326,7 @@ final class DictionaryService: ObservableObject {
             if let desiredTerm = normalizedByKey[key] {
                 entry.original = desiredTerm
                 entry.isEnabled = true
+                entry.updatedAt = Date()
             } else if replaceExisting {
                 context.delete(entry)
             }
@@ -316,7 +337,8 @@ final class DictionaryService: ObservableObject {
         })
 
         for term in normalized where !existingKeys.contains(term.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)) {
-            context.insert(DictionaryEntry(type: .term, original: term, replacement: nil, caseSensitive: false, isEnabled: true))
+            let now = Date()
+            context.insert(DictionaryEntry(type: .term, original: term, replacement: nil, caseSensitive: false, isEnabled: true, createdAt: now, updatedAt: now))
         }
 
         if replaceExisting || !desiredKeys.isEmpty {
@@ -353,6 +375,7 @@ final class DictionaryService: ObservableObject {
                 entry.original = desiredTerm.text
                 entry.isEnabled = true
                 entry.ctcMinSimilarity = desiredTerm.ctcMinSimilarity
+                entry.updatedAt = Date()
             } else if replaceExisting {
                 context.delete(entry)
             }
@@ -363,13 +386,16 @@ final class DictionaryService: ObservableObject {
         })
 
         for term in normalized where !existingKeys.contains(term.text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)) {
+            let now = Date()
             context.insert(DictionaryEntry(
                 type: .term,
                 original: term.text,
                 replacement: nil,
                 caseSensitive: false,
                 isEnabled: true,
-                ctcMinSimilarity: term.ctcMinSimilarity
+                ctcMinSimilarity: term.ctcMinSimilarity,
+                createdAt: now,
+                updatedAt: now
             ))
         }
 
@@ -433,8 +459,15 @@ final class DictionaryService: ObservableObject {
         guard !terms.isEmpty else { return nil }
 
         guard let providerId,
-              let plugin = PluginManager.shared?.transcriptionEngine(for: providerId),
-              let budget = (plugin as? any DictionaryTermsBudgetProviding)?.dictionaryTermsBudget else {
+              let plugin = PluginManager.shared?.transcriptionEngine(for: providerId) else {
+            return PluginDictionaryTerms.prompt(from: terms)
+        }
+
+        if (plugin as? any DictionaryTermsCapabilityProviding)?.dictionaryTermsSupport == .unsupported {
+            return nil
+        }
+
+        guard let budget = (plugin as? any DictionaryTermsBudgetProviding)?.dictionaryTermsBudget else {
             return PluginDictionaryTerms.prompt(from: terms)
         }
 
@@ -460,46 +493,198 @@ final class DictionaryService: ObservableObject {
     /// Apply all enabled corrections to the given text
     func applyCorrections(to text: String) -> String {
         var result = text
+        var needsSave = false
 
         for correction in corrections {
             guard let replacement = correction.replacement else { continue }
 
             let before = result
-            if correction.caseSensitive {
-                result = result.replacingOccurrences(of: correction.original, with: replacement)
-            } else {
-                result = result.replacingOccurrences(
-                    of: correction.original,
-                    with: replacement,
-                    options: .caseInsensitive
-                )
-            }
+            result = applyCorrection(correction, to: result, replacement: replacement)
 
             if result != before {
-                incrementUsageCount(for: correction)
+                correction.usageCount += 1
+                needsSave = true
+            }
+        }
+
+        if needsSave {
+            do {
+                try modelContext?.save()
+            } catch {
+                logger.error("Failed to update usage count: \(error.localizedDescription)")
             }
         }
 
         return result
     }
 
-    /// Add a correction learned from history edits
-    func learnCorrection(original: String, replacement: String) {
-        guard original.lowercased() != replacement.lowercased() else { return }
+    private func applyCorrection(_ correction: DictionaryEntry, to text: String, replacement: String) -> String {
+        switch matchPolicy(for: correction) {
+        case .exact:
+            return textMatches(text, correction.original, caseSensitive: correction.caseSensitive) ? replacement : text
+        case .boundary:
+            return replacingBoundaryMatches(
+                of: correction.original,
+                in: text,
+                with: replacement,
+                caseSensitive: correction.caseSensitive
+            )
+        case .substring:
+            if correction.caseSensitive {
+                return text.replacingOccurrences(of: correction.original, with: replacement)
+            }
+            return text.replacingOccurrences(
+                of: correction.original,
+                with: replacement,
+                options: .caseInsensitive
+            )
+        }
+    }
 
-        if entries.contains(where: {
-            $0.type == .correction &&
-            $0.original.lowercased() == original.lowercased()
-        }) {
-            return
+    private func matchPolicy(for correction: DictionaryEntry) -> DictionaryCorrectionMatchPolicy {
+        let original = correction.original.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !original.isEmpty else { return .exact }
+        return original.containsWordLikeCharacter ? .boundary : .substring
+    }
+
+    private func textMatches(_ text: String, _ original: String, caseSensitive: Bool) -> Bool {
+        if caseSensitive {
+            return text == original
+        }
+        return text.compare(original, options: [.caseInsensitive], locale: .current) == .orderedSame
+    }
+
+    private func replacingBoundaryMatches(
+        of original: String,
+        in text: String,
+        with replacement: String,
+        caseSensitive: Bool
+    ) -> String {
+        guard !original.isEmpty else { return text }
+
+        var result = ""
+        var searchStart = text.startIndex
+        let options: String.CompareOptions = caseSensitive ? [] : [.caseInsensitive]
+
+        while let range = text.range(of: original, options: options, range: searchStart..<text.endIndex, locale: .current) {
+            guard range.lowerBound < range.upperBound else { break }
+
+            if isBoundaryMatch(range, in: text, original: original) {
+                result += text[searchStart..<range.lowerBound]
+                result += replacement
+            } else {
+                result += text[searchStart..<range.upperBound]
+            }
+            searchStart = range.upperBound
         }
 
-        addEntry(
-            type: .correction,
-            original: original,
-            replacement: replacement,
-            caseSensitive: false
+        result += text[searchStart..<text.endIndex]
+        return result
+    }
+
+    private func isBoundaryMatch(_ range: Range<String.Index>, in text: String, original: String) -> Bool {
+        let previous = range.lowerBound > text.startIndex ? text[text.index(before: range.lowerBound)] : nil
+        let next = range.upperBound < text.endIndex ? text[range.upperBound] : nil
+
+        if original.isAllKatakana {
+            return previous?.isKatakana != true && next?.isKatakana != true
+        }
+
+        if original.isAllLatinOrNumber {
+            return previous?.isLatinOrNumber != true && next?.isLatinOrNumber != true
+        }
+
+        let startsAtBoundary = previous?.isWordLike != true || previous?.isJapaneseParticleBoundary == true
+        let endsAtBoundary = next?.isWordLike != true ||
+            next?.isJapaneseParticleBoundary == true ||
+            (original.count > 1 && String(text[range.upperBound...]).startsWithJapaneseParticleBoundary)
+        return startsAtBoundary && endsAtBoundary
+    }
+
+    /// Add a correction learned from history edits
+    func learnCorrection(original: String, replacement: String) {
+        _ = learnCorrections([CorrectionSuggestion(original: original, replacement: replacement)])
+    }
+
+    /// Batch add corrections learned from user edits. Existing corrections are never overwritten.
+    @discardableResult
+    func learnCorrections(_ suggestions: [CorrectionSuggestion]) -> [LearnedDictionaryCorrection] {
+        guard let context = modelContext, !suggestions.isEmpty else { return [] }
+
+        var existingOriginals = Set(
+            entries
+                .filter { $0.type == .correction }
+                .map { $0.original.lowercased() }
         )
+        let now = Date()
+        var learned: [LearnedDictionaryCorrection] = []
+
+        for suggestion in suggestions {
+            let original = suggestion.original.trimmingCharacters(in: .whitespacesAndNewlines)
+            let replacement = suggestion.replacement.trimmingCharacters(in: .whitespacesAndNewlines)
+            let originalKey = original.lowercased()
+
+            guard !original.isEmpty,
+                  originalKey != replacement.lowercased(),
+                  !existingOriginals.contains(originalKey) else {
+                continue
+            }
+
+            let entry = DictionaryEntry(
+                type: .correction,
+                original: original,
+                replacement: replacement,
+                caseSensitive: false,
+                createdAt: now,
+                updatedAt: now
+            )
+            context.insert(entry)
+            existingOriginals.insert(originalKey)
+            learned.append(LearnedDictionaryCorrection(
+                id: entry.id,
+                original: original,
+                replacement: replacement
+            ))
+        }
+
+        guard !learned.isEmpty else { return [] }
+
+        do {
+            try context.save()
+            loadEntries()
+            return learned
+        } catch {
+            logger.error("Failed to learn corrections: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    func undoLearnedCorrections(_ learned: [LearnedDictionaryCorrection]) {
+        guard let context = modelContext, !learned.isEmpty else { return }
+
+        let learnedByID = Dictionary(uniqueKeysWithValues: learned.map { ($0.id, $0) })
+        let entriesToDelete = entries.filter { entry in
+            guard entry.type == .correction,
+                  let learned = learnedByID[entry.id] else {
+                return false
+            }
+
+            return entry.original == learned.original &&
+                (entry.replacement ?? "") == learned.replacement
+        }
+
+        guard !entriesToDelete.isEmpty else { return }
+
+        for entry in entriesToDelete {
+            context.delete(entry)
+        }
+
+        do {
+            try context.save()
+            loadEntries()
+        } catch {
+            logger.error("Failed to undo learned corrections: \(error.localizedDescription)")
+        }
     }
 
     func upsertAPICorrection(original: String, replacement: String, caseSensitive: Bool) throws {
@@ -515,13 +700,17 @@ final class DictionaryService: ObservableObject {
             entry.replacement = replacement
             entry.caseSensitive = caseSensitive
             entry.isEnabled = true
+            entry.updatedAt = Date()
         } else {
+            let now = Date()
             let entry = DictionaryEntry(
                 type: .correction,
                 original: original,
                 replacement: replacement,
                 caseSensitive: caseSensitive,
-                isEnabled: true
+                isEnabled: true,
+                createdAt: now,
+                updatedAt: now
             )
             context.insert(entry)
         }
@@ -559,20 +748,177 @@ final class DictionaryService: ObservableObject {
         }
     }
 
-    private func incrementUsageCount(for entry: DictionaryEntry) {
-        guard let context = modelContext else { return }
+    func userDataSyncEntries(
+        excludingTermItemIDs: Set<String> = [],
+        excludingCorrectionItemIDs: Set<String> = []
+    ) -> [UserDataSyncDictionaryEntry] {
+        entries.compactMap { entry in
+            let itemID = UserDataSyncIdentity.dictionaryItemID(entryType: entry.type, original: entry.original)
+            if entry.type == .term, excludingTermItemIDs.contains(itemID) {
+                return nil
+            }
+            if entry.type == .correction, excludingCorrectionItemIDs.contains(itemID) {
+                return nil
+            }
 
-        entry.usageCount += 1
+            return UserDataSyncDictionaryEntry(
+                entryType: UserDataSyncDictionaryEntryType(entry.type),
+                original: entry.original,
+                replacement: entry.type == .correction ? (entry.replacement ?? "") : nil,
+                caseSensitive: entry.caseSensitive,
+                isEnabled: entry.isEnabled,
+                createdAt: entry.createdAt,
+                updatedAt: entry.effectiveUpdatedAt
+            )
+        }
+    }
+
+    func applyUserDataSyncMutations(_ mutations: [UserDataSyncMutation]) throws {
+        guard let context = modelContext else {
+            throw DictionaryServiceMutationError.unavailable
+        }
+        guard !mutations.isEmpty else { return }
+
+        for mutation in mutations {
+            switch mutation {
+            case .upsertDictionary(let synced):
+                upsertSyncedDictionaryEntry(synced, context: context)
+            case .deleteDictionary(let itemID):
+                deleteSyncedDictionaryEntry(itemID: itemID, context: context)
+            case .upsertSnippet, .deleteSnippet:
+                continue
+            }
+        }
 
         do {
             try context.save()
+            loadEntries()
         } catch {
-            logger.error("Failed to update usage count: \(error.localizedDescription)")
+            logger.error("Failed to apply dictionary sync mutations: \(error.localizedDescription)")
+            throw DictionaryServiceMutationError.saveFailed(error)
         }
+    }
+
+    private func upsertSyncedDictionaryEntry(_ synced: UserDataSyncDictionaryEntry, context: ModelContext) {
+        let targetType = DictionaryEntryType(synced.entryType)
+        let targetID = UserDataSyncIdentity.dictionaryItemID(entryType: synced.entryType, original: synced.original)
+        let replacement = targetType == .correction ? (synced.replacement ?? "") : nil
+
+        if let entry = entries.first(where: {
+            $0.type == targetType &&
+            UserDataSyncIdentity.dictionaryItemID(entryType: $0.type, original: $0.original) == targetID
+        }) {
+            entry.original = synced.original
+            entry.replacement = replacement
+            entry.caseSensitive = synced.caseSensitive
+            entry.isEnabled = synced.isEnabled
+            entry.updatedAt = synced.updatedAt
+            return
+        }
+
+        context.insert(DictionaryEntry(
+            type: targetType,
+            original: synced.original,
+            replacement: replacement,
+            caseSensitive: synced.caseSensitive,
+            isEnabled: synced.isEnabled,
+            createdAt: synced.createdAt,
+            updatedAt: synced.updatedAt
+        ))
+    }
+
+    private func deleteSyncedDictionaryEntry(itemID: String, context: ModelContext) {
+        guard let entry = entries.first(where: {
+            UserDataSyncIdentity.dictionaryItemID(entryType: $0.type, original: $0.original) == itemID
+        }) else {
+            return
+        }
+        context.delete(entry)
     }
 
     private static func normalizedCtcMinSimilarity(_ value: Float?) -> Float? {
         guard let value, value.isFinite else { return nil }
-        return min(max(value, 0), 1)
+        return Swift.min(Swift.max(value, 0), 1)
+    }
+
+}
+
+private extension Character {
+    var isKatakana: Bool {
+        unicodeScalars.allSatisfy { scalar in
+            (0x30A0...0x30FF).contains(Int(scalar.value)) ||
+            (0x31F0...0x31FF).contains(Int(scalar.value)) ||
+            (0xFF66...0xFF9D).contains(Int(scalar.value))
+        }
+    }
+
+    var isLatinOrNumber: Bool {
+        unicodeScalars.allSatisfy { CharacterSet.alphanumerics.contains($0) && $0.value < 0x3000 }
+    }
+
+    var isWordLike: Bool {
+        unicodeScalars.contains { scalar in
+            CharacterSet.alphanumerics.contains(scalar) ||
+            (0x3040...0x30FF).contains(Int(scalar.value)) ||
+            (0x3400...0x9FFF).contains(Int(scalar.value)) ||
+            (0xF900...0xFAFF).contains(Int(scalar.value)) ||
+            (0x20000...0x323AF).contains(Int(scalar.value)) ||
+            (0xFF66...0xFF9D).contains(Int(scalar.value))
+        }
+    }
+
+    var isJapaneseParticleBoundary: Bool {
+        guard unicodeScalars.count == 1, let scalar = unicodeScalars.first else { return false }
+        switch scalar.value {
+        case 0x3067, // で
+             0x306B, // に
+             0x306E, // の
+             0x306F, // は
+             0x3092, // を
+             0x304C, // が
+             0x3082, // も
+             0x3068, // と
+             0x3078, // へ
+             0x3088: // よ
+            return true
+        default:
+            return false
+        }
+    }
+}
+
+private extension String {
+    var startsWithJapaneseParticleBoundary: Bool {
+        [
+            "から",
+            "まで",
+            "より",
+            "には",
+            "では",
+            "にも",
+            "でも",
+            "とは",
+            "との",
+            "へは",
+            "への",
+            "だけ",
+            "など",
+        ].contains { hasPrefix($0) }
+    }
+
+    var containsWordLikeCharacter: Bool {
+        contains { $0.isWordLike }
+    }
+
+    var isAllKatakana: Bool {
+        !isEmpty && allSatisfy { character in
+            character.isKatakana || character.unicodeScalars.allSatisfy { CharacterSet.whitespacesAndNewlines.contains($0) }
+        }
+    }
+
+    var isAllLatinOrNumber: Bool {
+        !isEmpty && allSatisfy { character in
+            character.isLatinOrNumber || character.unicodeScalars.allSatisfy { CharacterSet.whitespacesAndNewlines.contains($0) }
+        }
     }
 }

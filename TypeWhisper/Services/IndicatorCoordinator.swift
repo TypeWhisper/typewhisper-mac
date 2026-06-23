@@ -60,11 +60,12 @@ struct IndicatorPresentationData {
     let activeRuleName: String?
     let activeAppIcon: NSImage?
     let isRecordingInputReady: Bool
-    let recordingCancelWarningMessage: String?
+    let cancelWarningMessage: String?
     let processingPhase: String?
     let actionFeedbackMessage: String?
     let actionFeedbackIcon: String?
     let actionFeedbackIsError: Bool
+    let actionFeedbackUndoTitle: String?
     let externalStreamingDisplayCount: Int
 
     var isRecorder: Bool {
@@ -92,11 +93,12 @@ struct IndicatorPresentationData {
                 activeRuleName: dictation.activeRuleName,
                 activeAppIcon: dictation.activeAppIcon,
                 isRecordingInputReady: dictation.isRecordingInputReady,
-                recordingCancelWarningMessage: dictation.recordingCancelWarningMessage,
+                cancelWarningMessage: dictation.cancelWarningMessage,
                 processingPhase: dictation.processingPhase,
                 actionFeedbackMessage: dictation.actionFeedbackMessage,
                 actionFeedbackIcon: dictation.actionFeedbackIcon,
                 actionFeedbackIsError: dictation.actionFeedbackIsError,
+                actionFeedbackUndoTitle: dictation.actionFeedbackUndoTitle,
                 externalStreamingDisplayCount: dictation.externalStreamingDisplayCount
             )
         case .recorder:
@@ -109,11 +111,12 @@ struct IndicatorPresentationData {
                 activeRuleName: nil,
                 activeAppIcon: nil,
                 isRecordingInputReady: true,
-                recordingCancelWarningMessage: nil,
+                cancelWarningMessage: nil,
                 processingPhase: nil,
                 actionFeedbackMessage: nil,
                 actionFeedbackIcon: nil,
                 actionFeedbackIsError: false,
+                actionFeedbackUndoTitle: nil,
                 externalStreamingDisplayCount: dictation.externalStreamingDisplayCount
             )
         }
@@ -233,7 +236,51 @@ final class IndicatorCoordinator {
     }
 }
 
+private enum SafariBundleIdentifiers {
+    private static let identifiers: Set<String> = [
+        "com.apple.Safari",
+        "com.apple.SafariTechnologyPreview",
+    ]
+
+    static func contains(_ bundleIdentifier: String?) -> Bool {
+        guard let bundleIdentifier else { return false }
+        return identifiers.contains(bundleIdentifier)
+    }
+}
+
 enum IndicatorWindowFrameLookup {
+    @MainActor
+    static func safariWindowFrames(intersecting screenFrame: CGRect) -> [CGRect] {
+        guard let windowList = CGWindowListCopyWindowInfo(
+            [.optionOnScreenOnly, .excludeDesktopElements],
+            kCGNullWindowID
+        ) as? [[String: Any]] else {
+            return []
+        }
+
+        let screenFrame = screenFrame.standardized
+        return windowList.compactMap { windowInfo in
+            guard let rawBounds = windowInfo[kCGWindowBounds as String],
+                  let ownerPID = windowInfo[kCGWindowOwnerPID as String] as? pid_t,
+                  let application = NSRunningApplication(processIdentifier: ownerPID),
+                  isSafariWindowOwner(application.bundleIdentifier) else {
+                return nil
+            }
+
+            let boundsDictionary = rawBounds as! CFDictionary
+            guard let bounds = CGRect(dictionaryRepresentation: boundsDictionary),
+                  !bounds.isEmpty,
+                  bounds.standardized.intersects(screenFrame) else {
+                return nil
+            }
+
+            let alpha = windowInfo[kCGWindowAlpha as String] as? Double ?? 1
+            guard alpha > 0 else { return nil }
+
+            return bounds
+        }
+    }
+
     nonisolated static func frontmostWindowFrame(for processIdentifier: pid_t) -> CGRect? {
         guard let windowList = CGWindowListCopyWindowInfo(
             [.optionOnScreenOnly, .excludeDesktopElements],
@@ -365,6 +412,10 @@ enum IndicatorWindowFrameLookup {
         }
         return focusedWindow
     }
+
+    private static func isSafariWindowOwner(_ bundleIdentifier: String?) -> Bool {
+        SafariBundleIdentifiers.contains(bundleIdentifier)
+    }
 }
 
 /// Where an indicator panel renders relative to the display's notch safe area.
@@ -386,6 +437,7 @@ enum IndicatorFullscreenSuppressionPolicy {
     private static let minimumHorizontalCoverage: CGFloat = 0.5
     private static let minimumVerticalCoverage: CGFloat = 0.5
     private static let minimumFullscreenDimensionCoverage: CGFloat = 0.98
+    private static let safariFullscreenEdgeTolerance: CGFloat = 4
     @MainActor private static var lastSuppression: IndicatorFullscreenSuppressionDiagnostics?
 
     @MainActor
@@ -403,35 +455,33 @@ enum IndicatorFullscreenSuppressionPolicy {
         focusedWindowFrameProvider: () -> CGRect? = IndicatorWindowFrameLookup.focusedWindowFrame,
         focusedWindowFullscreenProvider: () -> Bool? = IndicatorWindowFrameLookup.focusedWindowIsFullscreen,
         windowFrameProvider: (pid_t) -> CGRect? = IndicatorWindowFrameLookup.frontmostWindowFrame(for:),
+        safariWindowFramesProvider: @MainActor (CGRect) -> [CGRect] = IndicatorWindowFrameLookup.safariWindowFrames(intersecting:),
         appBundleIdentifier: String? = Bundle.main.bundleIdentifier
     ) -> Bool {
-        guard placement == .notchStrip else {
-            return false
+        let application = frontmostApplicationProvider()
+        let windowFrame: CGRect?
+        if let focusedWindowFrame = focusedWindowFrameProvider() {
+            windowFrame = focusedWindowFrame
+        } else if let application {
+            windowFrame = windowFrameProvider(application.processIdentifier)
+        } else {
+            windowFrame = nil
         }
-
-        guard let application = frontmostApplicationProvider() else {
-            return false
-        }
-
-        guard application.processIdentifier != NSRunningApplication.current.processIdentifier else {
-            return false
-        }
-
-        let windowFrame = focusedWindowFrameProvider()
-            ?? windowFrameProvider(application.processIdentifier)
         let focusedWindowIsFullscreen = focusedWindowFullscreenProvider()
+        let safariWindowFrames = safariWindowFramesProvider(screen.frame)
 
         let shouldSuppress = shouldSuppressIndicator(
             screenFrame: screen.frame,
             safeAreaTopInset: screen.safeAreaInsets.top,
             windowFrame: windowFrame,
             focusedWindowIsFullscreen: focusedWindowIsFullscreen,
-            frontmostBundleIdentifier: application.bundleIdentifier,
+            frontmostBundleIdentifier: application?.bundleIdentifier,
             appBundleIdentifier: appBundleIdentifier,
-            placement: placement
+            placement: placement,
+            safariWindowFrames: safariWindowFrames
         )
 
-        if shouldSuppress {
+        if shouldSuppress, let application {
             recordSuppression(
                 screenFrame: screen.frame,
                 safeAreaTopInset: screen.safeAreaInsets.top,
@@ -451,22 +501,51 @@ enum IndicatorFullscreenSuppressionPolicy {
         focusedWindowIsFullscreen: Bool? = nil,
         frontmostBundleIdentifier: String?,
         appBundleIdentifier: String?,
-        placement: IndicatorPlacement = .notchStrip
+        placement: IndicatorPlacement = .notchStrip,
+        safariWindowFrames: [CGRect] = []
     ) -> Bool {
-        guard placement == .notchStrip else {
+        guard safeAreaTopInset > 0, !screenFrame.isEmpty else {
             return false
         }
 
-        guard safeAreaTopInset > 0,
-              let candidateWindowFrame = windowFrame,
-              !screenFrame.isEmpty,
+        let screenFrame = screenFrame.standardized
+
+        if safariWindowFrames.contains(where: {
+            isSafariFullscreenLikeWindow(
+                screenFrame: screenFrame,
+                safeAreaTopInset: safeAreaTopInset,
+                windowFrame: $0.standardized
+            )
+        }) {
+            return true
+        }
+
+        guard let candidateWindowFrame = windowFrame,
               !candidateWindowFrame.isEmpty,
               !isTypeWhisperBundleIdentifier(frontmostBundleIdentifier, appBundleIdentifier: appBundleIdentifier) else {
             return false
         }
 
-        let screenFrame = screenFrame.standardized
+        guard placement == .notchStrip || isSafariBundleIdentifier(frontmostBundleIdentifier) else {
+            return false
+        }
+
         let windowFrame = candidateWindowFrame.standardized
+
+        // Safari's hidden fullscreen toolbar can be triggered by auxiliary panels
+        // even when the indicator renders away from the notch strip.
+        if isSafariBundleIdentifier(frontmostBundleIdentifier),
+           isSafariFullscreenLikeWindow(
+                screenFrame: screenFrame,
+                safeAreaTopInset: safeAreaTopInset,
+                windowFrame: windowFrame
+           ) {
+            return true
+        }
+
+        guard placement == .notchStrip else {
+            return false
+        }
 
         if let focusedWindowIsFullscreen {
             guard focusedWindowIsFullscreen else { return false }
@@ -474,6 +553,52 @@ enum IndicatorFullscreenSuppressionPolicy {
             return false
         }
 
+        return windowSubstantiallyOverlapsNotchStrip(
+            screenFrame: screenFrame,
+            safeAreaTopInset: safeAreaTopInset,
+            windowFrame: windowFrame
+        )
+    }
+
+    private static func isFullscreenLikeWindow(screenFrame: CGRect, windowFrame: CGRect) -> Bool {
+        guard screenFrame.width > 0, screenFrame.height > 0 else { return false }
+
+        let widthCoverage = min(windowFrame.width / screenFrame.width, 1)
+        let heightCoverage = min(windowFrame.height / screenFrame.height, 1)
+
+        return widthCoverage >= minimumFullscreenDimensionCoverage
+            && heightCoverage >= minimumFullscreenDimensionCoverage
+    }
+
+    private static func isSafariFullscreenLikeWindow(
+        screenFrame: CGRect,
+        safeAreaTopInset: CGFloat,
+        windowFrame: CGRect
+    ) -> Bool {
+        if isFullscreenLikeWindow(screenFrame: screenFrame, windowFrame: windowFrame) {
+            return true
+        }
+
+        let contentHeight = screenFrame.height - safeAreaTopInset
+        guard contentHeight > 0 else { return false }
+
+        let widthCoverage = min(windowFrame.width / screenFrame.width, 1)
+        let contentHeightCoverage = min(windowFrame.height / contentHeight, 1)
+        // CGWindowList uses top-left-origin bounds, so maxY is the visual bottom edge.
+        let fillsToScreenBottom = abs(windowFrame.maxY - screenFrame.maxY) <= safariFullscreenEdgeTolerance
+        let visualTopStartsBelowNotch = abs(windowFrame.minY - (screenFrame.minY + safeAreaTopInset)) <= safariFullscreenEdgeTolerance
+
+        return widthCoverage >= minimumFullscreenDimensionCoverage
+            && contentHeightCoverage >= minimumFullscreenDimensionCoverage
+            && fillsToScreenBottom
+            && visualTopStartsBelowNotch
+    }
+
+    private static func windowSubstantiallyOverlapsNotchStrip(
+        screenFrame: CGRect,
+        safeAreaTopInset: CGFloat,
+        windowFrame: CGRect
+    ) -> Bool {
         let notchStripHeight = min(safeAreaTopInset, screenFrame.height)
         let notchStrip = CGRect(
             x: screenFrame.minX,
@@ -494,16 +619,6 @@ enum IndicatorFullscreenSuppressionPolicy {
             && verticalCoverage >= minimumVerticalCoverage
     }
 
-    private static func isFullscreenLikeWindow(screenFrame: CGRect, windowFrame: CGRect) -> Bool {
-        guard screenFrame.width > 0, screenFrame.height > 0 else { return false }
-
-        let widthCoverage = min(windowFrame.width / screenFrame.width, 1)
-        let heightCoverage = min(windowFrame.height / screenFrame.height, 1)
-
-        return widthCoverage >= minimumFullscreenDimensionCoverage
-            && heightCoverage >= minimumFullscreenDimensionCoverage
-    }
-
     private static func isTypeWhisperBundleIdentifier(
         _ bundleIdentifier: String?,
         appBundleIdentifier: String?
@@ -515,6 +630,10 @@ enum IndicatorFullscreenSuppressionPolicy {
 
         return bundleIdentifier == "com.typewhisper.mac"
             || bundleIdentifier == "com.typewhisper.mac.dev"
+    }
+
+    private static func isSafariBundleIdentifier(_ bundleIdentifier: String?) -> Bool {
+        SafariBundleIdentifiers.contains(bundleIdentifier)
     }
 
     @MainActor

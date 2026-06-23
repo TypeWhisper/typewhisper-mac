@@ -171,7 +171,8 @@ struct PromptActionsSettingsView: View {
 
                             ModelPickerView(
                                 models: processingService.modelsForProvider(processingService.selectedProviderId),
-                                selection: $processingService.selectedCloudModel
+                                selection: $processingService.selectedCloudModel,
+                                fallbackModelId: processingService.defaultModelId(for: processingService.selectedProviderId)
                             )
                             .frame(maxWidth: 320, alignment: .leading)
 
@@ -377,6 +378,9 @@ private func promptProviderFixedModelName(for providerId: String) -> String? {
 struct ModelPickerView: View {
     let models: [PluginModelInfo]
     @Binding var selection: String
+    /// Provider-recommended model to preselect when the current selection is
+    /// empty or invalid; falls back to the first listed model when absent.
+    var fallbackModelId: String? = nil
     @State private var searchText = ""
 
     private var filteredModels: [PluginModelInfo] {
@@ -395,6 +399,12 @@ struct ModelPickerView: View {
                     .controlSize(.small)
             }
             Picker(String(localized: "Model"), selection: $selection) {
+                if let defaultModel = models.first(where: { $0.id == effectiveFallbackId }) {
+                    Text(localizedAppText(
+                        "Default (\(defaultModel.displayName))",
+                        de: "Standard (\(defaultModel.displayName))"
+                    )).tag("")
+                }
                 ForEach(filteredModels, id: \.id) { model in
                     Text(model.displayName).tag(model.id)
                 }
@@ -408,10 +418,22 @@ struct ModelPickerView: View {
         }
     }
 
+    /// The model runtime resolution will use when no explicit selection
+    /// exists: the provider default when listed, otherwise the first model.
+    private var effectiveFallbackId: String? {
+        fallbackModelId.flatMap { id in
+            models.contains(where: { $0.id == id }) ? id : nil
+        } ?? models.first?.id
+    }
+
     private func ensureValidSelection() {
-        if selection.isEmpty || !models.contains(where: { $0.id == selection }) {
-            selection = models.first?.id ?? ""
-        }
+        // An empty selection is the deliberate "use the provider default"
+        // state (shown as the Default row) — leave it untouched so a
+        // transient hint is never auto-promoted into a stored user choice.
+        // Only self-heal a non-empty selection that is no longer listed.
+        guard !selection.isEmpty,
+              !models.contains(where: { $0.id == selection }) else { return }
+        selection = effectiveFallbackId ?? ""
     }
 }
 
@@ -546,7 +568,8 @@ private struct PromptActionRow: View {
         if let providerType = action.providerType {
             return localizedAppText(
                 "Provider: \(processingService.displayName(for: providerType))",
-                de: "Provider: \(processingService.displayName(for: providerType))"
+                de: "Provider: \(processingService.displayName(for: providerType))",
+                ja: "プロバイダー: \(processingService.displayName(for: providerType))"
             )
         }
 
@@ -561,7 +584,8 @@ private struct PromptActionRow: View {
 
         return localizedAppText(
             "Target: \(plugin.actionName)",
-            de: "Ziel: \(plugin.actionName)"
+            de: "Ziel: \(plugin.actionName)",
+            ja: "対象: \(plugin.actionName)"
         )
     }
 
@@ -745,7 +769,8 @@ private struct PromptWizardSheet: View {
                 promptWizardInfoChip(
                     localizedAppText(
                         "Step \(currentStepNumber) of \(totalSteps)",
-                        de: "Schritt \(currentStepNumber) von \(totalSteps)"
+                        de: "Schritt \(currentStepNumber) von \(totalSteps)",
+                        ja: "\(totalSteps)ステップ中\(currentStepNumber)"
                     ),
                     tint: .accentColor
                 )
@@ -759,7 +784,8 @@ private struct PromptWizardSheet: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(localizedAppText(
                     "Step \(currentStepNumber) of \(totalSteps)",
-                    de: "Schritt \(currentStepNumber) von \(totalSteps)"
+                    de: "Schritt \(currentStepNumber) von \(totalSteps)",
+                    ja: "\(totalSteps)ステップ中\(currentStepNumber)"
                 ))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
@@ -1444,7 +1470,8 @@ private struct PromptWizardResponseStep: View {
                 } else {
                     Text(localizedAppText(
                         "Uses the global default provider: \(processingService.displayName(for: processingService.selectedProviderId)).",
-                        de: "Verwendet den globalen Standard-Provider: \(processingService.displayName(for: processingService.selectedProviderId))."
+                        de: "Verwendet den globalen Standard-Provider: \(processingService.displayName(for: processingService.selectedProviderId)).",
+                        ja: "グローバル既定プロバイダーを使用: \(processingService.displayName(for: processingService.selectedProviderId))。"
                     ))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -1529,7 +1556,8 @@ private struct PromptWizardResponseStep: View {
         case .custom:
             items.append(localizedAppText(
                 "Temp \(formattedTemperature)",
-                de: "Temp \(formattedTemperature)"
+                de: "Temp \(formattedTemperature)",
+                ja: "温度 \(formattedTemperature)"
             ))
         }
 

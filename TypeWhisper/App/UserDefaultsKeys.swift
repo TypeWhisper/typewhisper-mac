@@ -67,6 +67,7 @@ enum UserDefaultsKeys {
     static let activatedTermPackStates = "activatedTermPackStates"
     static let termPackRegistryLastUpdateCheck = "termPackRegistryLastUpdateCheck"
     static let selectedIndustryPreset = "selectedIndustryPreset"
+    static let targetAppCorrectionLearningEnabled = "targetAppCorrectionLearningEnabled"
 
     // MARK: - History
     static let historyEnabled = "historyEnabled"
@@ -95,6 +96,7 @@ enum UserDefaultsKeys {
 
     // MARK: - Formatting
     static let appFormattingEnabled = "appFormattingEnabled"
+    static let transcriptionNumberNormalizationEnabled = "transcriptionNumberNormalizationEnabled"
     static let dictationPunctuationProfiles = "dictationPunctuationProfiles"
 
     // MARK: - Accessibility
@@ -110,6 +112,7 @@ enum UserDefaultsKeys {
     static let recorderSystemAudioEnabled = "recorderSystemAudioEnabled"
     static let recorderOutputFormat = "recorderOutputFormat"
     static let recorderTranscriptionEnabled = "recorderTranscriptionEnabled"
+    static let recorderLivePreviewEnabled = "recorderLivePreviewEnabled"
     static let recorderTranscriptionEngine = "recorderTranscriptionEngine"
     static let recorderTranscriptionModel = "recorderTranscriptionModel"
     static let recorderMicDuckingMode = "recorderMicDuckingMode"
@@ -138,6 +141,7 @@ enum UserDefaultsKeys {
     // MARK: - Workflows
     static let workflowDefaultLLMProviderId = "workflowDefaultLLMProviderId"
     static let workflowDefaultLLMCloudModel = "workflowDefaultLLMCloudModel"
+    static let workflowShortTranscriptionMinimumWords = "workflowShortTranscriptionMinimumWords"
 
     // MARK: - Licensing
     static let usageIntent = "usageIntent"

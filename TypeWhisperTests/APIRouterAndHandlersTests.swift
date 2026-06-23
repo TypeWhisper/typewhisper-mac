@@ -276,6 +276,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         private static let promptLock = NSLock()
         nonisolated(unsafe) private static var _lastPrompt: String?
         nonisolated(unsafe) private static var _lastLanguageSelection = PluginLanguageSelection()
+        nonisolated(unsafe) private static var _responseText = "transcribed"
 
         static var lastPrompt: String? {
             promptLock.withLock { _lastPrompt }
@@ -289,6 +290,13 @@ final class APIRouterAndHandlersTests: XCTestCase {
             promptLock.withLock {
                 _lastPrompt = nil
                 _lastLanguageSelection = PluginLanguageSelection()
+                _responseText = "transcribed"
+            }
+        }
+
+        static func setResponseText(_ text: String) {
+            promptLock.withLock {
+                _responseText = text
             }
         }
 
@@ -313,7 +321,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
                 Self._lastPrompt = prompt
                 Self._lastLanguageSelection = PluginLanguageSelection(requestedLanguage: language)
             }
-            return PluginTranscriptionResult(text: "transcribed", detectedLanguage: language)
+            return PluginTranscriptionResult(text: Self.promptLock.withLock { Self._responseText }, detectedLanguage: language)
         }
 
         func transcribe(
@@ -327,7 +335,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
                 Self._lastLanguageSelection = languageSelection
             }
             return PluginTranscriptionResult(
-                text: "transcribed",
+                text: Self.promptLock.withLock { Self._responseText },
                 detectedLanguage: languageSelection.requestedLanguage ?? languageSelection.languageHints.first
             )
         }
@@ -776,17 +784,29 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
     #if !APPSTORE
     private final class FakeMediaPlaybackController: MediaPlaybackControlling {
-        var returnedSnapshot: (isPlaying: Bool, bundleIdentifier: String?) = (false, nil)
-        var onGetPlaybackSnapshot: ((@escaping (_ isPlaying: Bool, _ bundleIdentifier: String?) -> Void) -> Void)?
+        var returnedSnapshot: MediaPlaybackSnapshot? = FakeMediaPlaybackController.snapshot(
+            isPlaying: false,
+            playbackRate: nil,
+            bundleIdentifier: nil
+        )
+        var snapshotQueue: [MediaPlaybackSnapshot?] = []
+        var onGetPlaybackSnapshot: ((@escaping (_ snapshot: MediaPlaybackSnapshot?) -> Void) -> Void)?
         private(set) var pauseCalls = 0
         private(set) var playCalls = 0
+        private(set) var togglePlayPauseCalls = 0
 
-        func getPlaybackSnapshot(_ onReceive: @escaping (_ isPlaying: Bool, _ bundleIdentifier: String?) -> Void) {
+        func getPlaybackSnapshot(_ onReceive: @escaping (_ snapshot: MediaPlaybackSnapshot?) -> Void) {
             if let onGetPlaybackSnapshot {
                 onGetPlaybackSnapshot(onReceive)
                 return
             }
-            onReceive(returnedSnapshot.isPlaying, returnedSnapshot.bundleIdentifier)
+
+            if !snapshotQueue.isEmpty {
+                onReceive(snapshotQueue.removeFirst())
+                return
+            }
+
+            onReceive(returnedSnapshot)
         }
 
         func play() {
@@ -795,6 +815,25 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         func pause() {
             pauseCalls += 1
+        }
+
+        func togglePlayPause() {
+            togglePlayPauseCalls += 1
+        }
+
+        static func snapshot(
+            isPlaying: Bool?,
+            playbackRate: Double?,
+            bundleIdentifier: String? = "com.apple.Music",
+            trackIdentifier: String? = nil
+        ) -> MediaPlaybackSnapshot {
+            let resolvedTrackIdentifier = bundleIdentifier == nil ? nil : (trackIdentifier ?? "Song||Artist||Album")
+            return MediaPlaybackSnapshot(
+                isApplicationPlaying: isPlaying,
+                playbackRate: playbackRate,
+                bundleIdentifier: bundleIdentifier,
+                trackIdentifier: resolvedTrackIdentifier
+            )
         }
     }
 
@@ -808,11 +847,15 @@ final class APIRouterAndHandlersTests: XCTestCase {
             actions.append(action)
         }
 
+        func runNextAction() {
+            guard !actions.isEmpty else { return }
+            let action = actions.removeFirst()
+            action()
+        }
+
         func runPendingActions() {
-            let pendingActions = actions
-            actions.removeAll()
-            for action in pendingActions {
-                action()
+            while !actions.isEmpty {
+                runNextAction()
             }
         }
     }
@@ -1310,6 +1353,297 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual(MockTranscriptionPlugin.lastPrompt, "TypeWhisper, WhisperKit")
     }
 
+    func testTranscribeEndpointNormalizesNumbersByDefault() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        defer { MockTranscriptionPlugin.reset() }
+        MockTranscriptionPlugin.setResponseText("two")
+        context = await MainActor.run {
+            Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+        }
+
+        let router = try XCTUnwrap(context?.router)
+        let wavData = WavEncoder.encode(Array(repeating: Float(0), count: 1600))
+
+        let response = try Self.jsonObject(await router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: ["content-type": "audio/wav", "x-language": "en"],
+                body: wavData
+            )
+        ))
+
+        XCTAssertEqual(response["text"] as? String, "2")
+    }
+
+    func testTranscribeEndpointNormalizeNumbersFalsePreservesRawText() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        defer { MockTranscriptionPlugin.reset() }
+        MockTranscriptionPlugin.setResponseText("two")
+        context = await MainActor.run {
+            Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+        }
+
+        let router = try XCTUnwrap(context?.router)
+        let wavData = WavEncoder.encode(Array(repeating: Float(0), count: 1600))
+
+        let response = try Self.jsonObject(await router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: [
+                    "content-type": "audio/wav",
+                    "x-language": "en",
+                    "x-normalize-numbers": "false",
+                ],
+                body: wavData
+            )
+        ))
+
+        XCTAssertEqual(response["text"] as? String, "two")
+    }
+
+    func testTranscribeEndpointAppliesDictionaryCorrectionsByDefault() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        defer { MockTranscriptionPlugin.reset() }
+        MockTranscriptionPlugin.setResponseText("teh TypeWhisper")
+        context = await MainActor.run {
+            Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+        }
+        let apiContext = try XCTUnwrap(context)
+        try await MainActor.run {
+            try apiContext.dictionaryService.upsertAPICorrection(
+                original: "teh",
+                replacement: "the",
+                caseSensitive: false
+            )
+        }
+
+        let response = try Self.jsonObject(await apiContext.router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: ["content-type": "audio/wav", "x-language": "en"],
+                body: WavEncoder.encode(Array(repeating: Float(0), count: 1600))
+            )
+        ))
+
+        XCTAssertEqual(response["text"] as? String, "the TypeWhisper")
+        let usageCount = await MainActor.run {
+            apiContext.dictionaryService.corrections.first?.usageCount
+        }
+        XCTAssertEqual(usageCount, 1)
+    }
+
+    func testTranscribeEndpointApplyCorrectionsFalsePreservesRawText() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        defer { MockTranscriptionPlugin.reset() }
+        MockTranscriptionPlugin.setResponseText("teh TypeWhisper")
+        context = await MainActor.run {
+            Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+        }
+        let apiContext = try XCTUnwrap(context)
+        try await MainActor.run {
+            try apiContext.dictionaryService.upsertAPICorrection(
+                original: "teh",
+                replacement: "the",
+                caseSensitive: false
+            )
+        }
+
+        let wavData = WavEncoder.encode(Array(repeating: Float(0), count: 1600))
+        let rawResponse = try Self.jsonObject(await apiContext.router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: [
+                    "content-type": "audio/wav",
+                    "x-language": "en",
+                    "x-apply-corrections": "false",
+                ],
+                body: wavData
+            )
+        ))
+
+        XCTAssertEqual(rawResponse["text"] as? String, "teh TypeWhisper")
+
+        let boundary = "Boundary-\(UUID().uuidString)"
+        let multipartResponse = try Self.jsonObject(await apiContext.router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: ["content-type": "multipart/form-data; boundary=\(boundary)"],
+                body: Self.multipartTranscribeBody(
+                    wavData: wavData,
+                    boundary: boundary,
+                    fields: [("apply_corrections", "false")]
+                )
+            )
+        ))
+
+        XCTAssertEqual(multipartResponse["text"] as? String, "teh TypeWhisper")
+        let usageCount = await MainActor.run {
+            apiContext.dictionaryService.corrections.first?.usageCount
+        }
+        XCTAssertEqual(usageCount, 0)
+    }
+
+    func testTranscribeEndpointRejectsInvalidApplyCorrectionsValues() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        context = await MainActor.run {
+            Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+        }
+        let router = try XCTUnwrap(context?.router)
+        let wavData = WavEncoder.encode(Array(repeating: Float(0), count: 1600))
+
+        let rawResponse = await router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: [
+                    "content-type": "audio/wav",
+                    "x-apply-corrections": "maybe",
+                ],
+                body: wavData
+            )
+        )
+        let rawJSON = try Self.jsonObject(rawResponse)
+
+        XCTAssertEqual(rawResponse.status, 400)
+        XCTAssertEqual((rawJSON["error"] as? [String: Any])?["message"] as? String, "Invalid 'x-apply-corrections' value")
+
+        let boundary = "Boundary-\(UUID().uuidString)"
+        let multipartResponse = await router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: ["content-type": "multipart/form-data; boundary=\(boundary)"],
+                body: Self.multipartTranscribeBody(
+                    wavData: wavData,
+                    boundary: boundary,
+                    fields: [("apply_corrections", "maybe")]
+                )
+            )
+        )
+        let multipartJSON = try Self.jsonObject(multipartResponse)
+
+        XCTAssertEqual(multipartResponse.status, 400)
+        XCTAssertEqual((multipartJSON["error"] as? [String: Any])?["message"] as? String, "Invalid 'apply_corrections' value")
+    }
+
+    func testTranscribeEndpointRejectsInvalidNormalizeNumbersHeader() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        context = await MainActor.run {
+            Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+        }
+
+        let router = try XCTUnwrap(context?.router)
+        let response = await router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: [
+                    "content-type": "audio/wav",
+                    "x-normalize-numbers": "maybe",
+                ],
+                body: WavEncoder.encode(Array(repeating: Float(0), count: 1600))
+            )
+        )
+        let json = try Self.jsonObject(response)
+
+        XCTAssertEqual(response.status, 400)
+        XCTAssertEqual((json["error"] as? [String: Any])?["message"] as? String, "Invalid 'x-normalize-numbers' value")
+    }
+
+    func testTranscribeEndpointRejectsInvalidMultipartNormalizeNumbers() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        context = await MainActor.run {
+            Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+        }
+
+        let router = try XCTUnwrap(context?.router)
+        let boundary = "Boundary-\(UUID().uuidString)"
+        let wavData = WavEncoder.encode(Array(repeating: Float(0), count: 1600))
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"test.wav\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
+        body.append(wavData)
+        body.append("\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"normalize_numbers\"\r\n\r\n".data(using: .utf8)!)
+        body.append("maybe\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+
+        let response = await router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: ["content-type": "multipart/form-data; boundary=\(boundary)"],
+                body: body
+            )
+        )
+        let json = try Self.jsonObject(response)
+
+        XCTAssertEqual(response.status, 400)
+        XCTAssertEqual((json["error"] as? [String: Any])?["message"] as? String, "Invalid 'normalize_numbers' value")
+    }
+
     func testTranscribeEndpointUsesOverrideEngineBudgetForDictionaryPrompt() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var context: APIContext?
@@ -1535,6 +1869,134 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual(response["text"] as? String, "transcribed")
         XCTAssertEqual(MockTranscriptionPlugin.lastLanguageSelection.languageHints, [])
         XCTAssertNil(MockTranscriptionPlugin.lastLanguageSelection.requestedLanguage)
+    }
+
+    func testTranscribeLocalFileEndpointAppliesDictionaryCorrectionsByDefault() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let audioDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+            TestSupport.remove(audioDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        defer { MockTranscriptionPlugin.reset() }
+        MockTranscriptionPlugin.setResponseText("teh TypeWhisper")
+        context = await MainActor.run {
+            Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+        }
+        let apiContext = try XCTUnwrap(context)
+        try await MainActor.run {
+            try apiContext.dictionaryService.upsertAPICorrection(
+                original: "teh",
+                replacement: "the",
+                caseSensitive: false
+            )
+        }
+
+        let fileURL = audioDirectory.appendingPathComponent("corrected.wav")
+        try WavEncoder.encode(Array(repeating: Float(0), count: 1600)).write(to: fileURL)
+
+        let response = try Self.jsonObject(await apiContext.router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe/local-file",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: try JSONSerialization.data(withJSONObject: ["path": fileURL.path])
+            )
+        ))
+
+        XCTAssertEqual(response["text"] as? String, "the TypeWhisper")
+        let usageCount = await MainActor.run {
+            apiContext.dictionaryService.corrections.first?.usageCount
+        }
+        XCTAssertEqual(usageCount, 1)
+    }
+
+    func testTranscribeLocalFileEndpointApplyCorrectionsFalsePreservesRawText() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let audioDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+            TestSupport.remove(audioDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        defer { MockTranscriptionPlugin.reset() }
+        MockTranscriptionPlugin.setResponseText("teh TypeWhisper")
+        context = await MainActor.run {
+            Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+        }
+        let apiContext = try XCTUnwrap(context)
+        try await MainActor.run {
+            try apiContext.dictionaryService.upsertAPICorrection(
+                original: "teh",
+                replacement: "the",
+                caseSensitive: false
+            )
+        }
+
+        let fileURL = audioDirectory.appendingPathComponent("raw.wav")
+        try WavEncoder.encode(Array(repeating: Float(0), count: 1600)).write(to: fileURL)
+
+        let response = try Self.jsonObject(await apiContext.router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe/local-file",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: try JSONSerialization.data(withJSONObject: [
+                    "path": fileURL.path,
+                    "apply_corrections": false,
+                ])
+            )
+        ))
+
+        XCTAssertEqual(response["text"] as? String, "teh TypeWhisper")
+        let usageCount = await MainActor.run {
+            apiContext.dictionaryService.corrections.first?.usageCount
+        }
+        XCTAssertEqual(usageCount, 0)
+    }
+
+    func testTranscribeLocalFileEndpointRejectsInvalidApplyCorrectionsValue() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let audioDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+            TestSupport.remove(audioDirectory)
+        }
+
+        context = await MainActor.run {
+            Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+        }
+        let fileURL = audioDirectory.appendingPathComponent("invalid-corrections.wav")
+        try WavEncoder.encode(Array(repeating: Float(0), count: 1600)).write(to: fileURL)
+
+        let router = try XCTUnwrap(context?.router)
+        let response = await router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe/local-file",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: try JSONSerialization.data(withJSONObject: [
+                    "path": fileURL.path,
+                    "apply_corrections": "maybe",
+                ])
+            )
+        )
+        let json = try Self.jsonObject(response)
+
+        XCTAssertEqual(response.status, 400)
+        XCTAssertEqual((json["error"] as? [String: Any])?["message"] as? String, "Invalid 'apply_corrections' value")
     }
 
     func testTranscribeLocalFileEndpointUsesLanguageHintsAndEngineModelOverrides() async throws {
@@ -2324,11 +2786,59 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    func testCaptureInsertionContextIncludesCharactersAroundSelectionRange() throws {
+        let service = TextInsertionService()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.focusedTextElementOverride = { element }
+        service.focusedTextStateOverride = { _ in
+            (value: "coffeemachine", selectedText: nil, selectedRange: NSRange(location: 6, length: 0))
+        }
+
+        let context = try XCTUnwrap(service.captureInsertionContext())
+
+        XCTAssertEqual(context.value, "coffeemachine")
+        XCTAssertEqual(context.selectedRange, NSRange(location: 6, length: 0))
+        XCTAssertNil(context.selectedText)
+        XCTAssertEqual(context.previousCharacter, "e")
+        XCTAssertEqual(context.nextCharacter, "m")
+    }
+
+    @MainActor
+    func testCaptureInsertionContextReturnsNilWhenFocusedTextStateIsIncomplete() {
+        let service = TextInsertionService()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.focusedTextElementOverride = { element }
+        service.focusedTextStateOverride = { _ in
+            (value: "coffee", selectedText: nil, selectedRange: nil)
+        }
+
+        XCTAssertNil(service.captureInsertionContext())
+    }
+
+    @MainActor
+    func testGetTextSelectionDerivesSelectedTextFromFocusedValueAndRange() {
+        let service = TextInsertionService()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.focusedTextElementOverride = { element }
+        service.focusedTextStateOverride = { _ in
+            (value: "Before selected after", selectedText: nil, selectedRange: NSRange(location: 7, length: 8))
+        }
+
+        let selection = service.getTextSelection()
+
+        XCTAssertEqual(selection?.text, "selected")
+    }
+
+    @MainActor
     func testSyntheticPasteReturnsUnverifiedWhenFocusedTextStateIsUnavailable() async throws {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard.withUniqueName()
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { nil }
 
         var pasteCount = 0
         service.pasteSimulatorOverride = {
@@ -2348,6 +2858,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let pasteboard = NSPasteboard.withUniqueName()
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { nil }
         service.defaultPasteFallbackRestoreDelay = .milliseconds(80)
 
         let pasteStarted = expectation(description: "synthetic paste started")
@@ -2374,6 +2885,77 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    func testDeferredCopySelectionRestoresOriginalClipboardAfterVerifiedPaste() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("Pages", "com.apple.iWork.Pages", nil) }
+        service.verifiedRestoreGraceDelay = .milliseconds(1)
+
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+        service.copySimulatorOverride = {
+            pasteboard.clearContents()
+            pasteboard.setString("Selected source", forType: .string)
+        }
+
+        let copiedSelectionResult = await service.getTextSelectionViaCopyPreservingClipboardForInsertion()
+        let copiedSelection = try XCTUnwrap(copiedSelectionResult)
+        XCTAssertEqual(copiedSelection.text, "Selected source")
+        XCTAssertEqual(pasteboard.string(forType: .string), "Selected source")
+
+        var pasteCount = 0
+        service.pasteSimulatorOverride = {
+            pasteCount += 1
+        }
+        service.focusedTextStateOverride = { _ in
+            if pasteCount == 0 {
+                return (value: "Selected source", selectedText: "Selected source", selectedRange: NSRange(location: 0, length: 15))
+            }
+            return (value: "Processed result", selectedText: nil, selectedRange: NSRange(location: 16, length: 0))
+        }
+
+        let result = try await service.insertText(
+            "**Processed result**",
+            preserveClipboard: true,
+            outputFormat: "rtf",
+            deferredClipboardRestore: copiedSelection.deferredClipboardRestore
+        )
+
+        XCTAssertEqual(result, .pasted(verification: .verified))
+        XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
+    func testCopySelectionRetriesWhenFirstCopyAttemptDoesNotUpdatePasteboard() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        service.pasteboardProvider = { pasteboard }
+        service.copySelectionRetryDelay = .milliseconds(1)
+        service.copySelectionReadSettleDelay = .milliseconds(1)
+
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+
+        var copyAttempts = 0
+        service.copySimulatorOverride = {
+            copyAttempts += 1
+            guard copyAttempts == 2 else { return }
+            pasteboard.clearContents()
+            pasteboard.setString("Selected source", forType: .string)
+        }
+
+        let copiedSelection = await service.getTextSelectionViaCopy()
+
+        XCTAssertEqual(copiedSelection, "Selected source")
+        XCTAssertEqual(copyAttempts, 2)
+        XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
     func testTerminalBundleForcesSyntheticPasteInsteadOfDirectAccessibilityInsertion() async throws {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard.withUniqueName()
@@ -2382,6 +2964,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         service.pasteboardProvider = { pasteboard }
         service.focusedTextElementOverride = { element }
         service.captureActiveAppOverride = { ("iTerm2", "com.googlecode.iterm2", nil) }
+        service.terminalPasteFallbackRestoreDelay = .milliseconds(1)
 
         var pasteCount = 0
         service.pasteSimulatorOverride = {
@@ -2407,6 +2990,92 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         XCTAssertFalse(didAttemptDirectAXInsertion)
         XCTAssertEqual(pasteCount, 1)
+        XCTAssertEqual(result, .pasted(verification: .verified))
+        XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
+    func testVerifiedTerminalPasteKeepsGeneratedTextUntilTerminalRestoreDelay() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("Terminal", "com.apple.Terminal", nil) }
+        service.terminalPasteFallbackRestoreDelay = .milliseconds(80)
+        service.verifiedRestoreGraceDelay = .milliseconds(1)
+
+        let pasteStarted = expectation(description: "terminal synthetic paste started")
+        var pasteCount = 0
+        service.pasteSimulatorOverride = {
+            pasteCount += 1
+            pasteStarted.fulfill()
+        }
+        service.focusedTextStateOverride = { _ in
+            if pasteCount == 0 {
+                return (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+            }
+            return (value: "Hello", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
+        }
+
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+
+        let insertionTask = Task {
+            try await service.insertText("Hello", preserveClipboard: true)
+        }
+
+        await fulfillment(of: [pasteStarted], timeout: 1.0)
+        XCTAssertEqual(pasteboard.string(forType: .string), "Hello")
+
+        try await Task.sleep(for: .milliseconds(20))
+        XCTAssertEqual(pasteboard.string(forType: .string), "Hello")
+
+        let result = try await insertionTask.value
+        XCTAssertEqual(result, .pasted(verification: .verified))
+        XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
+    func testVerifiedNonTerminalSyntheticPasteUsesGraceDelayBeforeClipboardRestore() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        service.defaultPasteFallbackRestoreDelay = .milliseconds(1)
+        service.verifiedRestoreGraceDelay = .milliseconds(80)
+
+        let pasteStarted = expectation(description: "non-terminal synthetic paste started")
+        var pasteCount = 0
+        service.pasteSimulatorOverride = {
+            pasteCount += 1
+            pasteStarted.fulfill()
+        }
+        service.focusedTextStateOverride = { _ in
+            if pasteCount == 0 {
+                return (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+            }
+            return (value: "Hello", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
+        }
+
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+
+        let insertionTask = Task {
+            try await service.insertText("**Hello**", preserveClipboard: true, outputFormat: "rtf")
+        }
+
+        await fulfillment(of: [pasteStarted], timeout: 1.0)
+        XCTAssertEqual(pasteboard.string(forType: .string), "Hello")
+
+        try await Task.sleep(for: .milliseconds(20))
+        XCTAssertEqual(pasteboard.string(forType: .string), "Hello")
+
+        let result = try await insertionTask.value
         XCTAssertEqual(result, .pasted(verification: .verified))
         XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
     }
@@ -2670,8 +3339,10 @@ final class APIRouterAndHandlersTests: XCTestCase {
         }
 
         var didSimulatePaste = false
+        var pasteboardTypesAtPaste: [NSPasteboard.PasteboardType] = []
         service.pasteSimulatorOverride = {
             didSimulatePaste = true
+            pasteboardTypesAtPaste = pasteboard.pasteboardItems?.first?.types ?? []
         }
 
         pasteboard.clearContents()
@@ -2681,6 +3352,9 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         XCTAssertNil(insertedText)
         XCTAssertTrue(didSimulatePaste)
+        XCTAssertTrue(pasteboardTypesAtPaste.contains(.init("org.nspasteboard.TransientType")))
+        XCTAssertTrue(pasteboardTypesAtPaste.contains(.init("org.nspasteboard.AutoGeneratedType")))
+        XCTAssertTrue(pasteboardTypesAtPaste.contains(.init("com.typewhisper.SpeechTranscription")))
         XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
     }
 
@@ -2919,7 +3593,9 @@ final class APIRouterAndHandlersTests: XCTestCase {
     func testDictationDirectInsertionAddsTrailingSpaceWithoutMutatingStoredTranscription() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let historyEnabledKey = UserDefaultsKeys.historyEnabled
+        let preserveClipboardKey = UserDefaultsKeys.preserveClipboard
         let originalHistoryEnabled = UserDefaults.standard.object(forKey: historyEnabledKey)
+        let originalPreserveClipboard = UserDefaults.standard.object(forKey: preserveClipboardKey)
         var dictationContext: DictationContext?
         defer {
             dictationContext = nil
@@ -2928,13 +3604,20 @@ final class APIRouterAndHandlersTests: XCTestCase {
             } else {
                 UserDefaults.standard.removeObject(forKey: historyEnabledKey)
             }
+            if let originalPreserveClipboard {
+                UserDefaults.standard.set(originalPreserveClipboard, forKey: preserveClipboardKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: preserveClipboardKey)
+            }
             TestSupport.remove(appSupportDirectory)
         }
 
         UserDefaults.standard.set(true, forKey: historyEnabledKey)
+        UserDefaults.standard.set(false, forKey: preserveClipboardKey)
 
         dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
         let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.preserveClipboard = false
         let pasteboard = NSPasteboard.withUniqueName()
         context.textInsertionService.pasteboardProvider = { pasteboard }
         context.textInsertionService.captureActiveAppOverride = {
@@ -2969,6 +3652,84 @@ final class APIRouterAndHandlersTests: XCTestCase {
             context.recentTranscriptionStore.latestEntry(historyRecords: context.historyService.records)?.finalText,
             "transcribed"
         )
+    }
+
+    @MainActor
+    func testDictationDirectInsertionUsesContextWhenAppAwareFormattingIsEnabled() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let historyEnabledKey = UserDefaultsKeys.historyEnabled
+        let preserveClipboardKey = UserDefaultsKeys.preserveClipboard
+        let appFormattingKey = UserDefaultsKeys.appFormattingEnabled
+        let originalHistoryEnabled = UserDefaults.standard.object(forKey: historyEnabledKey)
+        let originalPreserveClipboard = UserDefaults.standard.object(forKey: preserveClipboardKey)
+        let originalAppFormatting = UserDefaults.standard.object(forKey: appFormattingKey)
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            MockTranscriptionPlugin.reset()
+            if let originalHistoryEnabled {
+                UserDefaults.standard.set(originalHistoryEnabled, forKey: historyEnabledKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: historyEnabledKey)
+            }
+            if let originalPreserveClipboard {
+                UserDefaults.standard.set(originalPreserveClipboard, forKey: preserveClipboardKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: preserveClipboardKey)
+            }
+            if let originalAppFormatting {
+                UserDefaults.standard.set(originalAppFormatting, forKey: appFormattingKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: appFormattingKey)
+            }
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        UserDefaults.standard.set(true, forKey: historyEnabledKey)
+        UserDefaults.standard.set(false, forKey: preserveClipboardKey)
+        UserDefaults.standard.set(true, forKey: appFormattingKey)
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("Strong.")
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.preserveClipboard = false
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.captureActiveAppOverride = {
+            ("Notes", "com.apple.Notes", nil)
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.focusedTextElementOverride = { element }
+        context.textInsertionService.focusedTextStateOverride = { _ in
+            (value: "coffeemachine", selectedText: nil, selectedRange: NSRange(location: 6, length: 0))
+        }
+        context.textInsertionService.pasteVerificationAttempts = 0
+        context.textInsertionService.pasteSimulatorOverride = {}
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        _ = context.dictationViewModel.apiStopRecording()
+
+        for _ in 0..<40 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .completed {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+
+        let session = try XCTUnwrap(context.dictationViewModel.apiDictationSession(id: sessionID))
+        XCTAssertEqual(session.status, .completed)
+        XCTAssertEqual(pasteboard.string(forType: .string), " strong ")
+        XCTAssertEqual(session.transcription?.text, "Strong.")
+        XCTAssertEqual(context.historyService.records.first?.finalText, "Strong.")
     }
 
     @MainActor
@@ -3445,10 +4206,10 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
     #if !APPSTORE
     @MainActor
-    func testMediaPlaybackServicePausesAndResumesFromOneShotTrackInfo() {
+    func testMediaPlaybackServicePausesAndResumesFromConfirmedTrackInfo() {
         let controller = FakeMediaPlaybackController()
         let scheduler = TestMediaPlaybackResumeScheduler()
-        controller.returnedSnapshot = (true, "com.apple.Music")
+        controller.returnedSnapshot = FakeMediaPlaybackController.snapshot(isPlaying: true, playbackRate: 1)
         let service = MediaPlaybackService(
             startListening: false,
             resumeDelay: 0.6,
@@ -3456,21 +4217,34 @@ final class APIRouterAndHandlersTests: XCTestCase {
         ) { controller }
 
         service.pauseIfPlaying()
+
+        XCTAssertEqual(controller.pauseCalls, 0)
+        XCTAssertEqual(scheduler.scheduledDelays, [0.15])
+
+        scheduler.runNextAction()
+
+        XCTAssertEqual(controller.pauseCalls, 1)
+
         service.resumeIfWePaused()
 
         XCTAssertEqual(controller.pauseCalls, 1)
         XCTAssertEqual(controller.playCalls, 0)
-        XCTAssertEqual(scheduler.scheduledDelays, [0.6])
+        XCTAssertEqual(scheduler.scheduledDelays, [0.15, 0.6])
 
-        scheduler.runPendingActions()
+        scheduler.runNextAction()
 
         XCTAssertEqual(controller.playCalls, 1)
+        XCTAssertEqual(scheduler.scheduledDelays, [0.15, 0.6, 0.25])
+
+        scheduler.runNextAction()
+
+        XCTAssertEqual(controller.togglePlayPauseCalls, 0)
     }
 
     @MainActor
     func testMediaPlaybackServiceSkipsPauseWhenPlaybackIsAlreadyStopped() {
         let controller = FakeMediaPlaybackController()
-        controller.returnedSnapshot = (false, nil)
+        controller.returnedSnapshot = FakeMediaPlaybackController.snapshot(isPlaying: false, playbackRate: nil, bundleIdentifier: nil)
         let service = MediaPlaybackService(startListening: false) { controller }
 
         service.pauseIfPlaying()
@@ -3481,10 +4255,225 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    func testMediaPlaybackServiceSkipsPauseForSpotifyPausedSnapshot() {
+        let controller = FakeMediaPlaybackController()
+        let scheduler = TestMediaPlaybackResumeScheduler()
+        controller.returnedSnapshot = FakeMediaPlaybackController.snapshot(
+            isPlaying: false,
+            playbackRate: nil,
+            bundleIdentifier: "com.spotify.client",
+            trackIdentifier: "Wildberry Lillet||Nina Chuba||Glas"
+        )
+        let service = MediaPlaybackService(
+            startListening: false,
+            resumeDelay: 0.6,
+            resumeScheduler: scheduler.schedule(after:action:)
+        ) { controller }
+
+        service.pauseIfPlaying()
+        service.resumeIfWePaused()
+        scheduler.runPendingActions()
+
+        XCTAssertEqual(controller.pauseCalls, 0)
+        XCTAssertEqual(controller.playCalls, 0)
+        XCTAssertTrue(scheduler.scheduledDelays.isEmpty)
+    }
+
+    @MainActor
+    func testMediaPlaybackServicePausesAndResumesForSpotifyPlayingSnapshot() {
+        let controller = FakeMediaPlaybackController()
+        let scheduler = TestMediaPlaybackResumeScheduler()
+        controller.returnedSnapshot = FakeMediaPlaybackController.snapshot(
+            isPlaying: true,
+            playbackRate: 1,
+            bundleIdentifier: "com.spotify.client",
+            trackIdentifier: "Wildberry Lillet||Nina Chuba||Glas"
+        )
+        let service = MediaPlaybackService(
+            startListening: false,
+            resumeDelay: 0.6,
+            resumeScheduler: scheduler.schedule(after:action:)
+        ) { controller }
+
+        service.pauseIfPlaying()
+        scheduler.runNextAction()
+        service.resumeIfWePaused()
+        scheduler.runNextAction()
+
+        XCTAssertEqual(controller.pauseCalls, 1)
+        XCTAssertEqual(controller.playCalls, 1)
+        XCTAssertEqual(scheduler.scheduledDelays, [0.15, 0.6, 0.25])
+
+        scheduler.runNextAction()
+
+        XCTAssertEqual(controller.togglePlayPauseCalls, 0)
+    }
+
+    @MainActor
+    func testMediaPlaybackServiceFallsBackToToggleWhenResumePlayDoesNotRestartConfirmedMedia() {
+        let controller = FakeMediaPlaybackController()
+        let scheduler = TestMediaPlaybackResumeScheduler()
+        controller.snapshotQueue = [
+            FakeMediaPlaybackController.snapshot(
+                isPlaying: true,
+                playbackRate: 1,
+                bundleIdentifier: "com.spotify.client",
+                trackIdentifier: "Wildberry Lillet||Nina Chuba||Glas"
+            ),
+            FakeMediaPlaybackController.snapshot(
+                isPlaying: true,
+                playbackRate: 1,
+                bundleIdentifier: "com.spotify.client",
+                trackIdentifier: "Wildberry Lillet||Nina Chuba||Glas"
+            ),
+            FakeMediaPlaybackController.snapshot(
+                isPlaying: false,
+                playbackRate: nil,
+                bundleIdentifier: "com.spotify.client",
+                trackIdentifier: "Wildberry Lillet||Nina Chuba||Glas"
+            )
+        ]
+        let service = MediaPlaybackService(
+            startListening: false,
+            resumeDelay: 0.6,
+            resumeScheduler: scheduler.schedule(after:action:)
+        ) { controller }
+
+        service.pauseIfPlaying()
+        scheduler.runNextAction()
+        service.resumeIfWePaused()
+        scheduler.runNextAction()
+        scheduler.runNextAction()
+
+        XCTAssertEqual(controller.pauseCalls, 1)
+        XCTAssertEqual(controller.playCalls, 1)
+        XCTAssertEqual(controller.togglePlayPauseCalls, 1)
+        XCTAssertEqual(scheduler.scheduledDelays, [0.15, 0.6, 0.25])
+
+        service.resumeIfWePaused()
+        scheduler.runPendingActions()
+
+        XCTAssertEqual(controller.playCalls, 1)
+        XCTAssertEqual(controller.togglePlayPauseCalls, 1)
+    }
+
+    @MainActor
+    func testMediaPlaybackServiceSkipsTransientStalePlaybackStateWhenConfirmReportsPaused() {
+        let controller = FakeMediaPlaybackController()
+        let scheduler = TestMediaPlaybackResumeScheduler()
+        controller.snapshotQueue = [
+            FakeMediaPlaybackController.snapshot(
+                isPlaying: true,
+                playbackRate: 1,
+                bundleIdentifier: "com.spotify.client",
+                trackIdentifier: "Wildberry Lillet||Nina Chuba||Glas"
+            ),
+            FakeMediaPlaybackController.snapshot(
+                isPlaying: false,
+                playbackRate: nil,
+                bundleIdentifier: "com.spotify.client",
+                trackIdentifier: "Wildberry Lillet||Nina Chuba||Glas"
+            )
+        ]
+        let service = MediaPlaybackService(
+            startListening: false,
+            resumeDelay: 0.6,
+            resumeScheduler: scheduler.schedule(after:action:)
+        ) { controller }
+
+        service.pauseIfPlaying()
+        scheduler.runNextAction()
+        service.resumeIfWePaused()
+        scheduler.runPendingActions()
+
+        XCTAssertEqual(controller.pauseCalls, 0)
+        XCTAssertEqual(controller.playCalls, 0)
+    }
+
+    @MainActor
+    func testMediaPlaybackServiceSkipsPauseWhenPlaybackRateIsActiveButApplicationIsNotPlaying() {
+        let controller = FakeMediaPlaybackController()
+        let scheduler = TestMediaPlaybackResumeScheduler()
+        controller.returnedSnapshot = FakeMediaPlaybackController.snapshot(isPlaying: false, playbackRate: 1)
+        let service = MediaPlaybackService(
+            startListening: false,
+            resumeDelay: 0.6,
+            resumeScheduler: scheduler.schedule(after:action:)
+        ) { controller }
+
+        service.pauseIfPlaying()
+        service.resumeIfWePaused()
+        scheduler.runPendingActions()
+
+        XCTAssertEqual(controller.pauseCalls, 0)
+        XCTAssertEqual(controller.playCalls, 0)
+        XCTAssertTrue(scheduler.scheduledDelays.isEmpty)
+    }
+
+    @MainActor
+    func testMediaPlaybackServiceSkipsPauseWhenPlaybackRateIsZero() {
+        let controller = FakeMediaPlaybackController()
+        let scheduler = TestMediaPlaybackResumeScheduler()
+        controller.returnedSnapshot = FakeMediaPlaybackController.snapshot(isPlaying: true, playbackRate: 0)
+        let service = MediaPlaybackService(
+            startListening: false,
+            resumeDelay: 0.6,
+            resumeScheduler: scheduler.schedule(after:action:)
+        ) { controller }
+
+        service.pauseIfPlaying()
+        service.resumeIfWePaused()
+        scheduler.runPendingActions()
+
+        XCTAssertEqual(controller.pauseCalls, 0)
+        XCTAssertEqual(controller.playCalls, 0)
+        XCTAssertTrue(scheduler.scheduledDelays.isEmpty)
+    }
+
+    @MainActor
+    func testMediaPlaybackServicePausesWhenApplicationIsPlayingAndPlaybackRateIsMissing() {
+        let controller = FakeMediaPlaybackController()
+        let scheduler = TestMediaPlaybackResumeScheduler()
+        controller.returnedSnapshot = FakeMediaPlaybackController.snapshot(isPlaying: true, playbackRate: nil)
+        let service = MediaPlaybackService(
+            startListening: false,
+            resumeDelay: 0.6,
+            resumeScheduler: scheduler.schedule(after:action:)
+        ) { controller }
+
+        service.pauseIfPlaying()
+        scheduler.runNextAction()
+
+        XCTAssertEqual(controller.pauseCalls, 1)
+    }
+
+    @MainActor
+    func testMediaPlaybackServiceStopBeforePauseConfirmInvalidatesPendingPause() {
+        let controller = FakeMediaPlaybackController()
+        let scheduler = TestMediaPlaybackResumeScheduler()
+        controller.snapshotQueue = [
+            FakeMediaPlaybackController.snapshot(isPlaying: true, playbackRate: 1),
+            FakeMediaPlaybackController.snapshot(isPlaying: true, playbackRate: 1)
+        ]
+        let service = MediaPlaybackService(
+            startListening: false,
+            resumeDelay: 0.6,
+            resumeScheduler: scheduler.schedule(after:action:)
+        ) { controller }
+
+        service.pauseIfPlaying()
+        service.resumeIfWePaused()
+        scheduler.runPendingActions()
+
+        XCTAssertEqual(controller.pauseCalls, 0)
+        XCTAssertEqual(controller.playCalls, 0)
+    }
+
+    @MainActor
     func testMediaPlaybackServiceIgnoresStalePauseProbeAfterResume() {
         let controller = FakeMediaPlaybackController()
         let scheduler = TestMediaPlaybackResumeScheduler()
-        var deferredCallback: ((_ isPlaying: Bool, _ bundleIdentifier: String?) -> Void)?
+        var deferredCallback: ((_ snapshot: MediaPlaybackSnapshot?) -> Void)?
         controller.onGetPlaybackSnapshot = { callback in
             deferredCallback = callback
         }
@@ -3496,7 +4485,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         service.pauseIfPlaying()
         service.resumeIfWePaused()
-        deferredCallback?(true, "com.apple.Music")
+        deferredCallback?(FakeMediaPlaybackController.snapshot(isPlaying: true, playbackRate: 1))
 
         XCTAssertEqual(controller.pauseCalls, 0)
         XCTAssertEqual(controller.playCalls, 0)
@@ -3511,7 +4500,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
     func testMediaPlaybackServiceCancelsPendingResumeWhenRecordingRestartsBeforeDelayElapses() {
         let controller = FakeMediaPlaybackController()
         let scheduler = TestMediaPlaybackResumeScheduler()
-        controller.returnedSnapshot = (true, "com.apple.Music")
+        controller.returnedSnapshot = FakeMediaPlaybackController.snapshot(isPlaying: true, playbackRate: 1)
         let service = MediaPlaybackService(
             startListening: false,
             resumeDelay: 0.6,
@@ -3519,6 +4508,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         ) { controller }
 
         service.pauseIfPlaying()
+        scheduler.runNextAction()
         service.resumeIfWePaused()
         service.pauseIfPlaying()
 
@@ -3537,7 +4527,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
     func testMediaPlaybackServiceCoalescesDuplicateResumeRequestsIntoSinglePlay() {
         let controller = FakeMediaPlaybackController()
         let scheduler = TestMediaPlaybackResumeScheduler()
-        controller.returnedSnapshot = (true, "com.apple.Music")
+        controller.returnedSnapshot = FakeMediaPlaybackController.snapshot(isPlaying: true, playbackRate: 1)
         let service = MediaPlaybackService(
             startListening: false,
             resumeDelay: 0.6,
@@ -3545,6 +4535,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         ) { controller }
 
         service.pauseIfPlaying()
+        scheduler.runNextAction()
         service.resumeIfWePaused()
         service.resumeIfWePaused()
 
@@ -3847,6 +4838,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual(LanguageSelection(storedValue: nil, nilBehavior: .inheritGlobal), .inheritGlobal)
         XCTAssertEqual(LanguageSelection(storedValue: "auto", nilBehavior: .auto), .auto)
         XCTAssertEqual(LanguageSelection(storedValue: "de", nilBehavior: .auto), .exact("de"))
+        XCTAssertEqual(LanguageSelection(storedValue: "zh", nilBehavior: .auto), .exact("zh"))
         XCTAssertEqual(
             LanguageSelection(storedValue: #"["de","en"]"#, nilBehavior: .auto),
             .hints(["de", "en"])
@@ -4383,6 +5375,33 @@ final class APIRouterAndHandlersTests: XCTestCase {
         } else {
             UserDefaults.standard.removeObject(forKey: key)
         }
+    }
+
+    private static func multipartTranscribeBody(
+        wavData: Data,
+        boundary: String,
+        fields: [(name: String, value: String)] = []
+    ) -> Data {
+        var body = Data()
+
+        func append(_ string: String) {
+            body.append(Data(string.utf8))
+        }
+
+        append("--\(boundary)\r\n")
+        append("Content-Disposition: form-data; name=\"file\"; filename=\"test.wav\"\r\n")
+        append("Content-Type: audio/wav\r\n\r\n")
+        body.append(wavData)
+        append("\r\n")
+
+        for field in fields {
+            append("--\(boundary)\r\n")
+            append("Content-Disposition: form-data; name=\"\(field.name)\"\r\n\r\n")
+            append("\(field.value)\r\n")
+        }
+
+        append("--\(boundary)--\r\n")
+        return body
     }
 
     private static func jsonObject(_ response: HTTPResponse) throws -> [String: Any] {
@@ -5314,7 +6333,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
-    func testGeminiPluginActivationIgnoresLegacyCacheAndRepairsInvalidSelection() throws {
+    func testGeminiPluginActivationIgnoresLegacyCacheAndDoesNotExposeInvalidSelection() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
 
@@ -5333,8 +6352,12 @@ final class APIRouterAndHandlersTests: XCTestCase {
         plugin.activate(host: host)
 
         XCTAssertEqual(plugin.supportedModels.map(\.id), ["gemini-flash-latest", "gemini-pro-latest", "gemini-flash-lite-latest"])
-        XCTAssertEqual(plugin.selectedLLMModelId, "gemini-flash-latest")
-        XCTAssertEqual(host.userDefault(forKey: "selectedLLMModel") as? String, "gemini-flash-latest")
+        XCTAssertNil(host.userDefault(forKey: "fetchedLLMModels"), "legacy cache key must be cleared")
+        // A stored selection that is not in the current model list is neither
+        // exposed as a selection nor rewritten to a fallback; it stays
+        // persisted so it can re-validate once models are fetched again.
+        XCTAssertNil(plugin.selectedLLMModelId)
+        XCTAssertEqual(host.userDefault(forKey: "selectedLLMModel") as? String, "gemini-1.5-pro")
     }
 
     @MainActor
@@ -5896,7 +6919,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         XCTAssertEqual(context.dictationViewModel.state, .recording)
         XCTAssertEqual(
-            context.dictationViewModel.recordingCancelWarningMessage,
+            context.dictationViewModel.cancelWarningMessage,
             try TestSupport.localizedCatalogValueForCurrentLocale(for: "Press Esc again to cancel recording")
         )
         XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
@@ -5919,7 +6942,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         context.dictationViewModel.handleCancelHotkey()
 
         XCTAssertEqual(context.dictationViewModel.state, .inserting)
-        XCTAssertNil(context.dictationViewModel.recordingCancelWarningMessage)
+        XCTAssertNil(context.dictationViewModel.cancelWarningMessage)
         XCTAssertEqual(
             context.dictationViewModel.actionFeedbackMessage,
             try TestSupport.localizedCatalogValueForCurrentLocale(for: "Cancelled")
@@ -5970,7 +6993,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
-    func testHandleCancelHotkey_processingStillCancelsImmediately() throws {
+    func testHandleCancelHotkey_processingRequiresSecondEscapeToCancel() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?
         defer {
@@ -5984,8 +7007,17 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         context.dictationViewModel.handleCancelHotkey()
 
+        XCTAssertEqual(context.dictationViewModel.state, .processing)
+        XCTAssertEqual(
+            context.dictationViewModel.cancelWarningMessage,
+            try TestSupport.localizedCatalogValueForCurrentLocale(for: "Press Esc again to cancel transcription")
+        )
+        XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
+
+        context.dictationViewModel.handleCancelHotkey()
+
         XCTAssertEqual(context.dictationViewModel.state, .inserting)
-        XCTAssertNil(context.dictationViewModel.recordingCancelWarningMessage)
+        XCTAssertNil(context.dictationViewModel.cancelWarningMessage)
         XCTAssertEqual(
             context.dictationViewModel.actionFeedbackMessage,
             try TestSupport.localizedCatalogValueForCurrentLocale(for: "Cancelled")
@@ -6054,7 +7086,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         context.dictationViewModel.handleCancelHotkey()
         context.dictationViewModel.state = .processing
 
-        XCTAssertNil(context.dictationViewModel.recordingCancelWarningMessage)
+        XCTAssertNil(context.dictationViewModel.cancelWarningMessage)
     }
 }
 
@@ -6095,6 +7127,26 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         }
 
         let escape = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [])
+
+        XCTAssertFalse(service.processEventForTesting(escape, source: .monitor))
+        XCTAssertEqual(cancelCount, 1)
+    }
+
+    @MainActor
+    func testEscapeKeyDedupesFollowingEventTapDispatch() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        var cancelCount = 0
+        service.onCancelPressed = {
+            cancelCount += 1
+        }
+
+        let escape = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [])
+
+        XCTAssertFalse(service.processEventForTesting(escape, source: .eventTap))
+        await Task.yield()
+        XCTAssertEqual(cancelCount, 1)
 
         XCTAssertFalse(service.processEventForTesting(escape, source: .monitor))
         XCTAssertEqual(cancelCount, 1)
@@ -7090,30 +8142,214 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
-    func testWorkflowHotkeyTextProcessingCallbackDoesNotStartDictation() throws {
+    func testWorkflowHotkeyTextProcessingCallbackDoesNotStartDictation() async throws {
         let service = HotkeyService()
         service.suspendMonitoring()
+        service.workflowTextProcessingModifierPollInterval = 0.001
+        service.workflowTextProcessingModifierReleaseTimeout = 0.25
+        service.workflowTextProcessingPostReleaseDelay = 0.001
+        service.modifierFlagsStateProvider = { [] }
 
         let workflowId = UUID()
         service.registerWorkflowHotkeys([(id: workflowId, hotkey: spaceHotkey(), behavior: .processSelectedText)])
 
         var textWorkflowId: UUID?
         var startedWorkflowId: UUID?
-        service.onWorkflowTextProcessing = { textWorkflowId = $0 }
+        let textProcessingCallback = expectation(description: "workflow text processing callback")
+        service.onWorkflowTextProcessing = {
+            textWorkflowId = $0
+            textProcessingCallback.fulfill()
+        }
         service.onWorkflowDictationStart = { workflowId, _ in startedWorkflowId = workflowId }
 
         let keyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
         let keyUp = try makeKeyboardEvent(keyCode: 0x31, keyDown: false)
 
         XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
-        XCTAssertEqual(textWorkflowId, workflowId)
+        XCTAssertNil(textWorkflowId)
         XCTAssertNil(startedWorkflowId)
         XCTAssertNil(service.currentMode)
-        XCTAssertNil(service.activeWorkflowId)
+        XCTAssertEqual(service.activeWorkflowId, workflowId)
 
         XCTAssertTrue(service.processEventForTesting(keyUp, source: .monitor))
+        await fulfillment(of: [textProcessingCallback], timeout: 1.0)
+        XCTAssertEqual(textWorkflowId, workflowId)
         XCTAssertNil(service.currentMode)
         XCTAssertNil(service.activeWorkflowId)
+    }
+
+    @MainActor
+    func testWorkflowHotkeyTextProcessingStopsActiveDictationWithoutStartingTextWorkflow() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        let dictationWorkflowId = UUID()
+        let textWorkflowId = UUID()
+        service.registerWorkflowHotkeys([
+            (id: dictationWorkflowId, hotkey: spaceHotkey(), behavior: .startDictation),
+            (id: textWorkflowId, hotkey: commandOptionAHotkey(), behavior: .processSelectedText),
+        ])
+
+        var startedWorkflowId: UUID?
+        var stopCount = 0
+        var textProcessingCount = 0
+        service.onWorkflowDictationStart = { workflowId, _ in startedWorkflowId = workflowId }
+        service.onDictationStop = { stopCount += 1 }
+        service.onWorkflowTextProcessing = { _ in textProcessingCount += 1 }
+
+        let dictationKeyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
+        let textWorkflowKeyDown = try makeKeyboardEvent(
+            keyCode: 0x00,
+            keyDown: true,
+            flags: [.maskCommand, .maskAlternate]
+        )
+
+        XCTAssertTrue(service.processEventForTesting(dictationKeyDown, source: .monitor))
+        XCTAssertEqual(startedWorkflowId, dictationWorkflowId)
+        XCTAssertEqual(service.currentMode, .pushToTalk)
+        XCTAssertEqual(service.activeWorkflowId, dictationWorkflowId)
+
+        XCTAssertTrue(service.processEventForTesting(textWorkflowKeyDown, source: .monitor))
+        XCTAssertEqual(stopCount, 1)
+        XCTAssertEqual(textProcessingCount, 0)
+        XCTAssertNil(service.currentMode)
+        XCTAssertNil(service.activeWorkflowId)
+    }
+
+    @MainActor
+    func testWorkflowHotkeyTextProcessingIgnoresKeyUpWithoutActiveKeyDown() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.workflowTextProcessingModifierPollInterval = 0.001
+        service.workflowTextProcessingModifierReleaseTimeout = 0.05
+        service.workflowTextProcessingPostReleaseDelay = 0.001
+        service.modifierFlagsStateProvider = { [] }
+
+        let workflowId = UUID()
+        service.registerWorkflowHotkeys([(id: workflowId, hotkey: spaceHotkey(), behavior: .processSelectedText)])
+
+        var callbackCount = 0
+        service.onWorkflowTextProcessing = { _ in callbackCount += 1 }
+
+        let keyUp = try makeKeyboardEvent(keyCode: 0x31, keyDown: false)
+
+        XCTAssertFalse(service.processEventForTesting(keyUp, source: .monitor))
+        try await Task.sleep(for: .milliseconds(20))
+        XCTAssertEqual(callbackCount, 0)
+        XCTAssertNil(service.activeWorkflowId)
+    }
+
+    @MainActor
+    func testWorkflowHotkeyTextProcessingWaitsForPhysicalKeyUpAfterModifierRelease() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.workflowTextProcessingModifierPollInterval = 0.001
+        service.workflowTextProcessingModifierReleaseTimeout = 0.25
+        service.workflowTextProcessingPostReleaseDelay = 0.001
+        service.modifierFlagsStateProvider = { [] }
+
+        let workflowId = UUID()
+        service.registerWorkflowHotkeys([(
+            id: workflowId,
+            hotkey: commandOptionAHotkey(),
+            behavior: .processSelectedText
+        )])
+
+        var textWorkflowId: UUID?
+        let textProcessingCallback = expectation(description: "workflow text processing callback")
+        service.onWorkflowTextProcessing = {
+            textWorkflowId = $0
+            textProcessingCallback.fulfill()
+        }
+
+        let keyDown = try makeKeyboardEvent(
+            keyCode: 0x00,
+            keyDown: true,
+            flags: [.maskCommand, .maskAlternate]
+        )
+        let optionReleaseWhileKeyHeld = try makeFlagsChangedEvent(
+            keyCode: 0x3A,
+            modifierFlags: [.command]
+        )
+        let physicalKeyUp = try makeKeyboardEvent(keyCode: 0x00, keyDown: false, flags: [])
+
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertTrue(service.processEventForTesting(optionReleaseWhileKeyHeld, source: .monitor))
+        try await Task.sleep(for: .milliseconds(20))
+        XCTAssertNil(textWorkflowId)
+        XCTAssertEqual(service.activeWorkflowId, workflowId)
+
+        XCTAssertTrue(service.processEventForTesting(physicalKeyUp, source: .monitor))
+        await fulfillment(of: [textProcessingCallback], timeout: 1.0)
+        XCTAssertEqual(textWorkflowId, workflowId)
+        XCTAssertNil(service.activeWorkflowId)
+    }
+
+    @MainActor
+    func testWorkflowHotkeyTextProcessingWaitsForShortcutModifiersToRelease() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.workflowTextProcessingModifierPollInterval = 0.001
+        service.workflowTextProcessingModifierReleaseTimeout = 0.25
+        service.workflowTextProcessingPostReleaseDelay = 0.001
+
+        let workflowId = UUID()
+        service.registerWorkflowHotkeys([(id: workflowId, hotkey: spaceHotkey(), behavior: .processSelectedText)])
+
+        var currentFlags = NSEvent.ModifierFlags([.control, .option, .shift, .command])
+        service.modifierFlagsStateProvider = { currentFlags }
+
+        let callbackAfterRelease = expectation(description: "workflow callback waits for modifier release")
+        var textWorkflowId: UUID?
+        service.onWorkflowTextProcessing = {
+            textWorkflowId = $0
+            callbackAfterRelease.fulfill()
+        }
+
+        let keyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
+        let keyUp = try makeKeyboardEvent(keyCode: 0x31, keyDown: false)
+
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertTrue(service.processEventForTesting(keyUp, source: .monitor))
+        XCTAssertNil(textWorkflowId)
+
+        currentFlags = []
+        await fulfillment(of: [callbackAfterRelease], timeout: 1.0)
+        XCTAssertEqual(textWorkflowId, workflowId)
+    }
+
+    @MainActor
+    func testWorkflowHotkeyTextProcessingWaitsForStrayModifiersAfterBareKeyHotkey() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.workflowTextProcessingModifierPollInterval = 0.001
+        service.workflowTextProcessingModifierReleaseTimeout = 0.25
+        service.workflowTextProcessingPostReleaseDelay = 0.001
+
+        let workflowId = UUID()
+        let bareSpaceHotkey = UnifiedHotkey(keyCode: 0x31, modifierFlags: 0, isFn: false)
+        service.registerWorkflowHotkeys([(id: workflowId, hotkey: bareSpaceHotkey, behavior: .processSelectedText)])
+
+        var currentFlags = NSEvent.ModifierFlags([.control, .option, .shift, .command])
+        service.modifierFlagsStateProvider = { currentFlags }
+
+        let callbackAfterRelease = expectation(description: "workflow callback waits for stray modifier release")
+        var textWorkflowId: UUID?
+        service.onWorkflowTextProcessing = {
+            textWorkflowId = $0
+            callbackAfterRelease.fulfill()
+        }
+
+        let keyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true, flags: [])
+        let keyUp = try makeKeyboardEvent(keyCode: 0x31, keyDown: false, flags: [])
+
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertTrue(service.processEventForTesting(keyUp, source: .monitor))
+        XCTAssertNil(textWorkflowId)
+
+        currentFlags = []
+        await fulfillment(of: [callbackAfterRelease], timeout: 1.0)
+        XCTAssertEqual(textWorkflowId, workflowId)
     }
 
     @MainActor

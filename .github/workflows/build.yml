@@ -42,6 +42,9 @@ jobs:
           done
           exit 1
 
+      - name: Verify Instrumentation Check Script
+        run: bash scripts/check_release_binary_instrumentation.sh --self-test
+
       - name: Build App
         run: |
           set -o pipefail
@@ -50,12 +53,16 @@ jobs:
             -configuration Release \
             -derivedDataPath build \
             -destination 'generic/platform=macOS' \
+            ENABLE_CODE_COVERAGE=NO \
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO | tee build.log
 
       - name: Check First-Party Warnings
         run: bash scripts/check_first_party_warnings.sh build.log
+
+      - name: Check Release Binary Instrumentation
+        run: bash scripts/check_release_binary_instrumentation.sh build/Build/Products/Release/TypeWhisper.app/Contents/MacOS/typewhisper-cli
 
       - name: Install dmgbuild
         run: |

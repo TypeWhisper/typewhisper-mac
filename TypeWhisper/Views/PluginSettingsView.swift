@@ -173,6 +173,7 @@ struct PluginSettingsView: View {
     @State private var pendingBoundaryUpgradePlugin: RegistryPlugin?
     @State private var pendingBoundaryUpgradeNotice: ExternalBundleNotice?
     @State private var installFromFileError: String?
+    @State private var uninstallError: String?
     @State private var includeCommunityPlugins = true
     @State private var selectedCapabilityFilters: Set<PluginCategory> = []
     @State private var searchText = ""
@@ -204,7 +205,11 @@ struct PluginSettingsView: View {
         }
         .alert(String(localized: "Uninstall Plugin"), isPresented: $showUninstallAlert, presenting: pluginToUninstall) { plugin in
             Button(String(localized: "Uninstall"), role: .destructive) {
-                registryService.uninstallPlugin(plugin.id, deleteData: true)
+                do {
+                    try registryService.uninstallPlugin(plugin.id, deleteData: true)
+                } catch {
+                    uninstallError = error.localizedDescription
+                }
                 pluginToUninstall = nil
             }
             Button(String(localized: "Cancel"), role: .cancel) {
@@ -250,6 +255,16 @@ struct PluginSettingsView: View {
             Button(String(localized: "OK")) { installFromFileError = nil }
         } message: {
             if let error = installFromFileError {
+                Text(error)
+            }
+        }
+        .alert(String(localized: "Uninstall Failed"), isPresented: .init(
+            get: { uninstallError != nil },
+            set: { if !$0 { uninstallError = nil } }
+        )) {
+            Button(String(localized: "OK")) { uninstallError = nil }
+        } message: {
+            if let error = uninstallError {
                 Text(error)
             }
         }
@@ -304,12 +319,14 @@ struct PluginSettingsView: View {
         if updates > 0 {
             return localizedAppText(
                 "\(installed) installed · \(updates) updates · \(available) available",
-                de: "\(installed) installiert · \(updates) Updates · \(available) verfügbar"
+                de: "\(installed) installiert · \(updates) Updates · \(available) verfügbar",
+                ja: "\(installed)件インストール済み · \(updates)件の更新 · \(available)件利用可能"
             )
         }
         return localizedAppText(
             "\(installed) installed · \(available) available",
-            de: "\(installed) installiert · \(available) verfügbar"
+            de: "\(installed) installiert · \(available) verfügbar",
+            ja: "\(installed)件インストール済み · \(available)件利用可能"
         )
     }
 
@@ -425,9 +442,9 @@ struct PluginSettingsView: View {
         let count = integrationTabCount(for: tab)
         switch tab {
         case .installed:
-            return localizedAppText("\(count) installed", de: "\(count) installiert")
+            return localizedAppText("\(count) installed", de: "\(count) installiert", ja: "\(count)件インストール済み")
         case .discover:
-            return localizedAppText("\(count) available", de: "\(count) verfügbar")
+            return localizedAppText("\(count) available", de: "\(count) verfügbar", ja: "\(count)件利用可能")
         }
     }
 
@@ -939,7 +956,7 @@ struct PluginSettingsView: View {
             return category.badgeTitle
         }
 
-        return localizedAppText("\(selected.count) functions", de: "\(selected.count) Funktionen")
+        return localizedAppText("\(selected.count) functions", de: "\(selected.count) Funktionen", ja: "\(selected.count)件の機能")
     }
 
     private func toggleCapabilityFilter(_ category: PluginCategory) {
@@ -1120,6 +1137,7 @@ struct PluginSettingsView: View {
 
 private let typeWhisperAddonSlugsByPluginID: [String: String] = [
     "com.typewhisper.assemblyai": "assemblyai",
+    "com.typewhisper.cartesia": "cartesia",
     "com.typewhisper.cerebras": "cerebras",
     "com.typewhisper.claude": "claude",
     "com.typewhisper.cloudflare-asr": "cloudflare-asr",
@@ -1229,9 +1247,9 @@ private struct HostingSummaryInline: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Label(localizedAppText("\(localCount) Local", de: "\(localCount) lokal"), systemImage: "desktopcomputer")
+            Label(localizedAppText("\(localCount) Local", de: "\(localCount) lokal", ja: "\(localCount)件ローカル"), systemImage: "desktopcomputer")
                 .foregroundStyle(.green)
-            Label("\(cloudCount) Cloud", systemImage: "cloud")
+            Label(localizedAppText("\(cloudCount) Cloud", de: "\(cloudCount) Cloud", ja: "\(cloudCount)件クラウド"), systemImage: "cloud")
                 .foregroundStyle(.cyan)
         }
         .font(.caption.weight(.medium))
@@ -1630,7 +1648,7 @@ private struct InstalledPluginRow: View {
                         .menuStyle(.borderlessButton)
                         .fixedSize()
                         .help(localizedAppText("More Actions", de: "Weitere Aktionen"))
-                        .accessibilityLabel(localizedAppText("More Actions for \(plugin.manifest.name)", de: "Weitere Aktionen für \(plugin.manifest.name)"))
+                        .accessibilityLabel(localizedAppText("More Actions for \(plugin.manifest.name)", de: "Weitere Aktionen für \(plugin.manifest.name)", ja: "\(plugin.manifest.name)のその他の操作"))
                     }
                 }
             }
@@ -1943,7 +1961,7 @@ private struct AvailablePluginRow: View {
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                    .accessibilityLabel(localizedAppText("Open details for \(plugin.name)", de: "Details für \(plugin.name) öffnen"))
+                    .accessibilityLabel(localizedAppText("Open details for \(plugin.name)", de: "Details für \(plugin.name) öffnen", ja: "\(plugin.name)の詳細を開く"))
                 }
             }
         }

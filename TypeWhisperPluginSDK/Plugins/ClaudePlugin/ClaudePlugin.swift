@@ -5,7 +5,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(ClaudePlugin)
-final class ClaudePlugin: NSObject, LLMProviderPlugin, @unchecked Sendable {
+final class ClaudePlugin: NSObject, LLMProviderPlugin, LLMModelSelectable, @unchecked Sendable {
     static let pluginId = "com.typewhisper.claude"
     static let pluginName = "Claude"
 
@@ -23,7 +23,6 @@ final class ClaudePlugin: NSObject, LLMProviderPlugin, @unchecked Sendable {
         self.host = host
         _apiKey = host.loadSecret(key: "api-key")
         _selectedLLMModelId = host.userDefault(forKey: "selectedLLMModel") as? String
-            ?? supportedModels.first?.id
         _llmTemperatureModeRaw = host.userDefault(forKey: "llmTemperatureMode") as? String
             ?? PluginLLMTemperatureMode.providerDefault.rawValue
         _llmTemperatureValue = host.userDefault(forKey: "llmTemperatureValue") as? Double
@@ -86,6 +85,7 @@ final class ClaudePlugin: NSObject, LLMProviderPlugin, @unchecked Sendable {
     }
 
     var selectedLLMModelId: String? { _selectedLLMModelId }
+    @objc var preferredModelId: String? { _selectedLLMModelId }
     var llmTemperatureMode: PluginLLMTemperatureMode {
         PluginLLMTemperatureMode(rawValue: _llmTemperatureModeRaw) ?? .providerDefault
     }

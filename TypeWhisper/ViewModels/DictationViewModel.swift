@@ -91,7 +91,14 @@ final class DictationViewModel: ObservableObject {
         case error(String)
     }
 
-    @Published var state: State = .idle
+    private enum CancelWarningTarget {
+        case recording
+        case processing
+    }
+
+    @Published var state: State = .idle {
+        didSet { clearCancelWarningIfStateNoLongerMatches() }
+    }
     @Published var audioLevel: Float = 0
     @Published var recordingDuration: TimeInterval = 0
     @Published var hotkeyMode: HotkeyService.HotkeyMode?
@@ -157,6 +164,7 @@ final class DictationViewModel: ObservableObject {
     @Published var actionFeedbackMessage: String?
     @Published var actionFeedbackIcon: String?
     @Published var actionFeedbackIsError: Bool = false
+    @Published var actionFeedbackUndoTitle: String?
     @Published var activeAppIcon: NSImage?
     private var actionDisplayDuration: TimeInterval = 3.5
 
@@ -196,6 +204,8 @@ final class DictationViewModel: ObservableObject {
     private let translationService: AnyObject? // TranslationService (macOS 15+)
     private let audioDuckingService: AudioDuckingService
     private let dictionaryService: DictionaryService
+    private let licenseService: LicenseService?
+    private let targetAppCorrectionLearningService: TargetAppCorrectionLearningService
     private let snippetService: SnippetService
     private let soundService: SoundService
     private let audioDeviceService: AudioDeviceService
@@ -221,9 +231,11 @@ final class DictationViewModel: ObservableObject {
     private let recentTranscriptionPaletteHandler: RecentTranscriptionPaletteHandler
     private let settingsHandler: DictationSettingsHandler
     private var transcriptionTask: Task<Void, Never>?
+    private var targetAppCorrectionLearningTask: Task<Void, Never>?
+    private var pendingLearnedCorrections: [LearnedDictionaryCorrection] = []
     private var errorResetTask: Task<Void, Never>?
     private var insertingResetTask: Task<Void, Never>?
-    @Published private(set) var recordingCancelWarningActive: Bool = false
+    @Published private var cancelWarningTarget: CancelWarningTarget?
     private var urlResolutionTask: Task<Void, Never>?
     private var metadataCaptureTask: Task<Void, Never>?
     var pasteboardProvider: () -> NSPasteboard = { .general }
@@ -238,6 +250,7 @@ final class DictationViewModel: ObservableObject {
         let languageSelection: LanguageSelection
         let task: TranscriptionTask
         let cloudModelOverride: String?
+        let normalizeNumbers: Bool?
     }
     private var lastStreamingParams: StreamingParamsSnapshot?
     private var isStopInFlight = false
@@ -253,9 +266,15 @@ final class DictationViewModel: ObservableObject {
     private var dictationSessionOrder: [UUID] = []
     private let maxTrackedDictationSessions = 100
 
-    var recordingCancelWarningMessage: String? {
-        guard state == .recording, recordingCancelWarningActive else { return nil }
-        return String(localized: "Press Esc again to cancel recording")
+    var cancelWarningMessage: String? {
+        switch (state, cancelWarningTarget) {
+        case (.recording, .recording):
+            return String(localized: "Press Esc again to cancel recording")
+        case (.processing, .processing):
+            return String(localized: "Press Esc again to cancel transcription")
+        default:
+            return nil
+        }
     }
 
     init(
@@ -271,6 +290,8 @@ final class DictationViewModel: ObservableObject {
         translationService: AnyObject?,
         audioDuckingService: AudioDuckingService,
         dictionaryService: DictionaryService,
+        licenseService: LicenseService? = nil,
+        targetAppCorrectionLearningService: TargetAppCorrectionLearningService? = nil,
         snippetService: SnippetService,
         soundService: SoundService,
         audioDeviceService: AudioDeviceService,
@@ -297,6 +318,13 @@ final class DictationViewModel: ObservableObject {
         self.translationService = translationService
         self.audioDuckingService = audioDuckingService
         self.dictionaryService = dictionaryService
+        self.licenseService = licenseService
+        self.targetAppCorrectionLearningService = targetAppCorrectionLearningService
+            ?? TargetAppCorrectionLearningService(
+                textInsertionService: textInsertionService,
+                textDiffService: TextDiffService(),
+                dictionaryService: dictionaryService
+            )
         self.snippetService = snippetService
         self.soundService = soundService
         self.audioDeviceService = audioDeviceService
@@ -337,6 +365,8 @@ final class DictationViewModel: ObservableObject {
         self.promptPaletteHandler = PromptPaletteHandler(
             textInsertionService: textInsertionService,
             workflowService: workflowService,
+            historyService: historyService,
+            recentTranscriptionStore: recentTranscriptionStore,
             promptProcessingService: promptProcessingService,
             workflowTextProcessingService: self.workflowTextProcessingService,
             soundService: soundService,
@@ -806,27 +836,42 @@ final class DictationViewModel: ObservableObject {
     }
 
     func handleCancelHotkey() {
-        switch state {
-        case .recording:
-            if recordingCancelWarningActive {
-                recordingCancelWarningActive = false
-                cancelCurrentOperation()
-            } else {
-                recordingCancelWarningActive = true
-            }
-        case .processing:
+        guard let target = cancelWarningTargetForCurrentState() else { return }
+
+        if cancelWarningTarget == target {
+            clearCancelWarning()
             cancelCurrentOperation()
-        default:
-            break
+        } else {
+            cancelWarningTarget = target
         }
     }
 
-    private func clearRecordingCancelWarning() {
-        recordingCancelWarningActive = false
+    private func cancelWarningTargetForCurrentState() -> CancelWarningTarget? {
+        switch state {
+        case .recording:
+            return .recording
+        case .processing:
+            return .processing
+        default:
+            return nil
+        }
+    }
+
+    private func clearCancelWarningIfStateNoLongerMatches() {
+        guard let cancelWarningTarget,
+              cancelWarningTargetForCurrentState() != cancelWarningTarget else {
+            return
+        }
+        self.cancelWarningTarget = nil
+    }
+
+    private func clearCancelWarning() {
+        cancelWarningTarget = nil
     }
 
     private func cancelCurrentOperation() {
         let cancelledMessage = String(localized: "Cancelled")
+        clearCancelWarning()
 
         switch state {
         case .recording:
@@ -858,9 +903,11 @@ final class DictationViewModel: ObservableObject {
         }
         transcriptionTask?.cancel()
         transcriptionTask = nil
+        cancelTargetAppCorrectionLearning()
+        clearPendingUndoActionFeedback()
         insertingResetTask?.cancel()
         insertingResetTask = nil
-        clearRecordingCancelWarning()
+        clearCancelWarning()
         pendingPushToTalkDiscardMessage = nil
         metadataCaptureTask?.cancel()
         metadataCaptureTask = nil
@@ -1081,6 +1128,32 @@ final class DictationViewModel: ObservableObject {
         matchedWorkflow?.output.format
     }
 
+    private func resolvedEffectiveOutputFormat(
+        for activeApp: (name: String?, bundleId: String?, url: String?)
+    ) -> String? {
+        let storedFormat = effectiveOutputFormat
+        let resolvedFormat = WorkflowOutputFormatResolver.resolvedFormat(
+            storedFormat: storedFormat,
+            bundleIdentifier: activeApp.bundleId,
+            url: activeApp.url
+        )
+        if storedFormat != nil {
+            logger.info(
+                "Workflow output format resolved: stored=\(storedFormat ?? "nil", privacy: .public), resolved=\(resolvedFormat ?? "nil", privacy: .public), bundle=\(activeApp.bundleId ?? "nil", privacy: .public), url=\(activeApp.url ?? "nil", privacy: .public)"
+            )
+        }
+        return resolvedFormat
+    }
+
+    private var shouldTrackTargetAppCorrectionLearning: Bool {
+        (licenseService?.hasCommercialLicense ?? false) &&
+            UserDefaults.standard.bool(forKey: UserDefaultsKeys.targetAppCorrectionLearningEnabled)
+    }
+
+    private var effectiveNumberNormalizationOverride: Bool? {
+        matchedWorkflow?.output.numberNormalizationMode.overrideValue
+    }
+
     private var effectiveActionPluginId: String? {
         matchedWorkflow?.output.targetActionPluginId
     }
@@ -1094,7 +1167,7 @@ final class DictationViewModel: ObservableObject {
 
     private func stopDictation() {
         guard state == .recording, !isStopInFlight else { return }
-        clearRecordingCancelWarning()
+        clearCancelWarning()
         isStopInFlight = true
         Task {
             await finalizeStopDictation()
@@ -1206,8 +1279,10 @@ final class DictationViewModel: ObservableObject {
                 await urlResolutionTask?.value
 
                 let activeApp = capturedActiveApp ?? textInsertionService.captureActiveApp()
+                let resolvedOutputFormat = self.resolvedEffectiveOutputFormat(for: activeApp)
                 let languageSelection = effectiveLanguageSelection
                 let language = languageSelection.requestedLanguage
+                let languageCandidates = languageSelection.selectedCodes
                 let task = effectiveTask
                 let engineOverride = effectiveEngineOverrideId
                 let cloudModelOverride = effectiveCloudModelOverride
@@ -1226,7 +1301,8 @@ final class DictationViewModel: ObservableObject {
                         engineOverrideId: engineOverride,
                         cloudModelOverride: cloudModelOverride,
                         prompt: termsPrompt,
-                        dictionaryTermHints: termHints
+                        dictionaryTermHints: termHints,
+                        normalizeNumbers: effectiveNumberNormalizationOverride
                     )
                 }
 
@@ -1253,7 +1329,8 @@ final class DictationViewModel: ObservableObject {
                 let llmHandler = buildLLMHandler(
                     translationTarget: translationTarget,
                     detectedLanguage: result.detectedLanguage,
-                    configuredLanguage: language
+                    configuredLanguage: language,
+                    resolvedOutputFormat: resolvedOutputFormat
                 )
 
                 guard !Task.isCancelled else { return }
@@ -1285,12 +1362,14 @@ final class DictationViewModel: ObservableObject {
                         cloudModelOverride: cloudModelOverride
                     ),
                     configuredLanguage: language,
+                    configuredLanguageCandidates: languageCandidates,
                     detectedLanguage: result.detectedLanguage
                 )
                 let ppResult = try await postProcessingPipeline.process(
                     text: text, context: ppContext, dictationContext: dictationContext, llmHandler: llmHandler,
-                    outputFormat: self.effectiveOutputFormat,
-                    llmStepName: llmStepName
+                    outputFormat: resolvedOutputFormat,
+                    llmStepName: llmStepName,
+                    normalizeNumbers: self.effectiveNumberNormalizationOverride
                 )
                 text = ppResult.text
                 let transcriptionID = sessionID ?? UUID()
@@ -1313,18 +1392,36 @@ final class DictationViewModel: ObservableObject {
                         activeApp: activeApp, language: language, originalText: result.text
                     )
                 } else {
-                    let insertionText = DictationInsertionTextFormatter.textForInsertion(text)
+                    let contextualInsertionEnabled = DictationInsertionTextFormatter.contextualInsertionEnabled()
+                    let insertionContext = contextualInsertionEnabled
+                        ? textInsertionService.captureInsertionContext()
+                        : nil
+                    let insertionText = DictationInsertionTextFormatter.textForInsertion(
+                        text,
+                        insertionContext: insertionContext,
+                        contextualInsertionEnabled: contextualInsertionEnabled
+                    )
+                    let learningPreInsertionObservation = shouldTrackTargetAppCorrectionLearning && resolvedOutputFormat == nil
+                        ? textInsertionService.captureFocusedTextObservation()
+                        : nil
                     let insertionResult = try await textInsertionService.insertText(
                         insertionText,
                         preserveClipboard: preserveClipboard,
                         autoEnter: self.effectiveAutoEnterEnabled,
-                        outputFormat: self.effectiveOutputFormat
+                        outputFormat: resolvedOutputFormat
                     )
                     if case .pasted(.unverified(let reason)) = insertionResult {
-                        logger.warning(
+                        logger.info(
                             "Text insertion paste could not be verified; continuing with clipboard paste fallback. reason=\(reason.rawValue, privacy: .public), app=\(activeApp.bundleId ?? "nil", privacy: .public)"
                         )
                     }
+                    let learningBaselineObservation = learningPreInsertionObservation.flatMap {
+                        textInsertionService.recaptureFocusedTextObservation(matching: $0)
+                    }
+                    startTargetAppCorrectionLearningIfNeeded(
+                        insertedText: insertionText,
+                        baseline: learningBaselineObservation
+                    )
                     EventBus.shared.emit(.textInserted(TextInsertedPayload(
                         text: insertionText,
                         appName: activeApp.name,
@@ -1456,7 +1553,7 @@ final class DictationViewModel: ObservableObject {
         activeDictationSessionID = nil
         pendingPushToTalkDiscardMessage = nil
         clearRecordingStartCueState()
-        clearRecordingCancelWarning()
+        clearCancelWarning()
         state = .idle
         partialText = ""
         recordingStartTime = nil
@@ -1468,6 +1565,7 @@ final class DictationViewModel: ObservableObject {
         actionFeedbackMessage = nil
         actionFeedbackIcon = nil
         actionFeedbackIsError = false
+        clearPendingUndoActionFeedback()
         actionDisplayDuration = 3.5
     }
 
@@ -1509,7 +1607,8 @@ final class DictationViewModel: ObservableObject {
             providerId: modelManager.selectedProviderId,
             languageSelection: effectiveLanguageSelection,
             task: effectiveTask,
-            cloudModelOverride: effectiveCloudModelOverride
+            cloudModelOverride: effectiveCloudModelOverride,
+            normalizeNumbers: effectiveNumberNormalizationOverride
         )
         lastStreamingParams = allowLiveTranscription ? params : nil
         let dictionaryProviderId = params.engineOverrideId ?? params.providerId
@@ -1521,6 +1620,7 @@ final class DictationViewModel: ObservableObject {
             languageSelection: params.languageSelection,
             task: params.task,
             cloudModelOverride: params.cloudModelOverride,
+            normalizeNumbers: params.normalizeNumbers,
             allowLiveTranscription: allowLiveTranscription,
             stateCheck: { [weak self] in self?.state == .recording }
         )
@@ -1539,7 +1639,8 @@ final class DictationViewModel: ObservableObject {
             providerId: modelManager.selectedProviderId,
             languageSelection: effectiveLanguageSelection,
             task: effectiveTask,
-            cloudModelOverride: effectiveCloudModelOverride
+            cloudModelOverride: effectiveCloudModelOverride,
+            normalizeNumbers: effectiveNumberNormalizationOverride
         )
         guard newParams != previous else { return }
         logger.info("Streaming params changed after URL resolution, restarting live session")
@@ -1568,47 +1669,55 @@ final class DictationViewModel: ObservableObject {
             if let domain = match.matchedDomain {
                 base = localizedAppText(
                     "This workflow applies because \(appDescriptor) was detected together with \(domain).",
-                    de: "Dieser Workflow greift, weil \(appDescriptor) zusammen mit \(domain) erkannt wurde."
+                    de: "Dieser Workflow greift, weil \(appDescriptor) zusammen mit \(domain) erkannt wurde.",
+                    ja: "\(appDescriptor) と \(domain) が一緒に検出されたため、このワークフローが適用されます。"
                 )
             } else {
                 base = localizedAppText(
                     "This workflow applies because the app and website were detected together.",
-                    de: "Dieser Workflow greift, weil App und Website zusammen erkannt wurden."
+                    de: "Dieser Workflow greift, weil App und Website zusammen erkannt wurden.",
+                    ja: "アプリとWebサイトが一緒に検出されたため、このワークフローが適用されます。"
                 )
             }
         case .website:
             if let domain = match.matchedDomain {
                 base = localizedAppText(
                     "This workflow applies because \(domain) was detected.",
-                    de: "Dieser Workflow greift, weil \(domain) erkannt wurde."
+                    de: "Dieser Workflow greift, weil \(domain) erkannt wurde.",
+                    ja: "\(domain) が検出されたため、このワークフローが適用されます。"
                 )
             } else {
                 base = localizedAppText(
                     "This workflow applies because the current website was detected.",
-                    de: "Dieser Workflow greift, weil die aktuelle Website erkannt wurde."
+                    de: "Dieser Workflow greift, weil die aktuelle Website erkannt wurde.",
+                    ja: "現在のWebサイトが検出されたため、このワークフローが適用されます。"
                 )
             }
         case .app:
             base = localizedAppText(
                 "This workflow applies because \(appDescriptor) was detected.",
-                de: "Dieser Workflow greift, weil \(appDescriptor) erkannt wurde."
+                de: "Dieser Workflow greift, weil \(appDescriptor) erkannt wurde.",
+                ja: "\(appDescriptor) が検出されたため、このワークフローが適用されます。"
             )
         case .globalFallback:
             base = localizedAppText(
                 "This workflow applies because no more specific workflow matched.",
-                de: "Dieser Workflow greift, weil kein spezifischerer Workflow gepasst hat."
+                de: "Dieser Workflow greift, weil kein spezifischerer Workflow gepasst hat.",
+                ja: "より具体的なワークフローに一致しなかったため、このワークフローが適用されます。"
             )
         case .manualOverride:
             base = localizedAppText(
                 "This workflow was manually triggered via its keyboard shortcut.",
-                de: "Dieser Workflow wurde manuell ueber seine Tastenkombination ausgeloest."
+                de: "Dieser Workflow wurde manuell ueber seine Tastenkombination ausgeloest.",
+                ja: "このワークフローはキーボードショートカットで手動実行されました。"
             )
         }
 
         guard match.wonBySortOrder else { return base }
         return base + localizedAppText(
             " Among multiple matching workflows, the one higher in the list wins here.",
-            de: " Unter mehreren passenden Workflows gewinnt hier der weiter oben stehende Eintrag."
+            de: " Unter mehreren passenden Workflows gewinnt hier der weiter oben stehende Eintrag.",
+            ja: " 複数の一致するワークフローがある場合は、一覧で上位のものが優先されます。"
         )
     }
 
@@ -1619,12 +1728,14 @@ final class DictationViewModel: ObservableObject {
     private func buildLLMHandler(
         translationTarget: String?,
         detectedLanguage: String?,
-        configuredLanguage: String?
+        configuredLanguage: String?,
+        resolvedOutputFormat: String?
     ) -> ((String) async throws -> String)? {
         if let workflowHandler = buildWorkflowTextProcessingHandler(
             translationTarget: translationTarget,
             detectedLanguage: detectedLanguage,
-            configuredLanguage: configuredLanguage
+            configuredLanguage: configuredLanguage,
+            resolvedOutputFormat: resolvedOutputFormat
         ) {
             return workflowHandler
         }
@@ -1665,27 +1776,36 @@ final class DictationViewModel: ObservableObject {
     private func buildWorkflowTextProcessingHandler(
         translationTarget: String?,
         detectedLanguage: String?,
-        configuredLanguage: String?
+        configuredLanguage: String?,
+        resolvedOutputFormat: String?
     ) -> ((String) async throws -> String)? {
         guard let workflow = matchedWorkflow else { return nil }
 
         let workflowProcessor = workflowTextProcessingService
+        let workflowService = workflowService
         guard workflowProcessor.canProcess(
             workflow: workflow,
             fallbackTranslationTarget: translationTarget,
             detectedLanguage: detectedLanguage,
-            configuredLanguage: configuredLanguage
+            configuredLanguage: configuredLanguage,
+            resolvedOutputFormat: resolvedOutputFormat
         ) else {
             return nil
         }
 
         return { text in
-            try await workflowProcessor.process(
+            if workflowService.shouldSkipAIProcessingForShortDictation(text: text) {
+                logger.info("Skipping workflow AI processing for short dictation")
+                return text
+            }
+
+            return try await workflowProcessor.process(
                 workflow: workflow,
                 text: text,
                 fallbackTranslationTarget: translationTarget,
                 detectedLanguage: detectedLanguage,
-                configuredLanguage: configuredLanguage
+                configuredLanguage: configuredLanguage,
+                resolvedOutputFormat: resolvedOutputFormat
             )
         }
     }
@@ -1796,10 +1916,94 @@ final class DictationViewModel: ObservableObject {
         recentTranscriptionPaletteHandler.triggerSelection(currentState: state)
     }
 
-    private func showNotchFeedback(message: String, icon: String, duration: TimeInterval = 2.5, isError: Bool = false, errorCategory: String = "general") {
+    private func startTargetAppCorrectionLearningIfNeeded(
+        insertedText: String,
+        baseline: TextInsertionService.FocusedTextObservation?
+    ) {
+        targetAppCorrectionLearningTask?.cancel()
+        targetAppCorrectionLearningTask = nil
+
+        guard shouldTrackTargetAppCorrectionLearning,
+              let baseline else {
+            return
+        }
+
+        targetAppCorrectionLearningTask = Task { @MainActor [weak self, baseline, insertedText] in
+            guard let self else { return }
+            let learned = await self.targetAppCorrectionLearningService.trackInsertion(
+                insertedText: insertedText,
+                baseline: baseline
+            )
+            guard !Task.isCancelled else { return }
+            self.targetAppCorrectionLearningTask = nil
+            guard !learned.isEmpty else { return }
+            self.showLearnedCorrectionsFeedback(learned)
+        }
+    }
+
+    private func cancelTargetAppCorrectionLearning() {
+        targetAppCorrectionLearningTask?.cancel()
+        targetAppCorrectionLearningTask = nil
+    }
+
+    private func clearPendingUndoActionFeedback() {
+        actionFeedbackUndoTitle = nil
+        pendingLearnedCorrections = []
+    }
+
+    private func showLearnedCorrectionsFeedback(_ learned: [LearnedDictionaryCorrection]) {
+        guard !learned.isEmpty else { return }
+
+        pendingLearnedCorrections = learned
+        let message: String
+        if learned.count == 1, let correction = learned.first {
+            message = String.localizedStringWithFormat(
+                String(localized: "Learned “%@” -> “%@”"),
+                correction.original,
+                correction.replacement
+            )
+        } else {
+            message = String.localizedStringWithFormat(
+                String(localized: "Learned %d corrections"),
+                learned.count
+            )
+        }
+
+        showNotchFeedback(
+            message: message,
+            icon: "wand.and.sparkles",
+            duration: 8.0,
+            undoTitle: String(localized: "Undo")
+        )
+    }
+
+    func undoActionFeedback() {
+        guard !pendingLearnedCorrections.isEmpty else { return }
+        dictionaryService.undoLearnedCorrections(pendingLearnedCorrections)
+        pendingLearnedCorrections = []
+        showNotchFeedback(
+            message: String(localized: "Correction learning undone"),
+            icon: "arrow.uturn.backward.circle.fill",
+            duration: 2.5
+        )
+    }
+
+    private func showNotchFeedback(
+        message: String,
+        icon: String,
+        duration: TimeInterval = 2.5,
+        isError: Bool = false,
+        errorCategory: String = "general",
+        undoTitle: String? = nil
+    ) {
         actionFeedbackMessage = message
         actionFeedbackIcon = icon
         actionFeedbackIsError = isError
+        if undoTitle == nil {
+            clearPendingUndoActionFeedback()
+        } else {
+            actionFeedbackUndoTitle = undoTitle
+        }
         actionDisplayDuration = duration
         state = .inserting
 
@@ -1864,10 +2068,247 @@ func hasConfirmedTranscriptionResultText(_ result: TranscriptionResult?) -> Bool
 }
 
 enum DictationInsertionTextFormatter {
-    static func textForInsertion(_ text: String) -> String {
+    static func contextualInsertionEnabled(defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: UserDefaultsKeys.appFormattingEnabled)
+    }
+
+    static func textForInsertion(
+        _ text: String,
+        insertionContext: TextInsertionService.InsertionContext? = nil,
+        contextualInsertionEnabled: Bool = true
+    ) -> String {
+        guard contextualInsertionEnabled, let insertionContext else {
+            return textWithTrailingSpaceIfNeeded(text)
+        }
+
+        let boundaries = insertionBoundaries(for: insertionContext)
+        var result = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if isHighConfidenceMidSentenceInsertion(boundaries) {
+            result = lowercasingFirstWordIfSafe(result)
+        }
+        if shouldStripFinalPeriod(boundaries) {
+            result = strippingSingleFinalPeriod(result)
+        }
+
+        if let previous = boundaries.previousCharacter,
+           let first = result.first,
+           shouldInsertSpace(between: previous, and: first) {
+            result = " " + result
+        }
+
+        if let next = boundaries.nextCharacter {
+            if let last = result.last,
+               shouldInsertSpace(between: last, and: next) {
+                result += " "
+            }
+        } else {
+            result = textWithTrailingSpaceIfNeeded(result)
+        }
+
+        return result
+    }
+
+    private static func textWithTrailingSpaceIfNeeded(_ text: String) -> String {
         guard let lastScalar = text.unicodeScalars.last else { return text }
         guard !CharacterSet.whitespacesAndNewlines.contains(lastScalar) else { return text }
         return text + " "
+    }
+
+    private struct InsertionBoundaries {
+        let previousCharacter: Character?
+        let nextCharacter: Character?
+        let previousNonWhitespaceCharacter: Character?
+        let nextNonWhitespaceCharacter: Character?
+    }
+
+    private static func insertionBoundaries(
+        for context: TextInsertionService.InsertionContext
+    ) -> InsertionBoundaries {
+        guard let selectedRange = Range(context.selectedRange, in: context.value) else {
+            return InsertionBoundaries(
+                previousCharacter: context.previousCharacter,
+                nextCharacter: context.nextCharacter,
+                previousNonWhitespaceCharacter: nonWhitespaceCharacter(context.previousCharacter),
+                nextNonWhitespaceCharacter: nonWhitespaceCharacter(context.nextCharacter)
+            )
+        }
+
+        let previousCharacter = selectedRange.lowerBound > context.value.startIndex
+            ? context.value[context.value.index(before: selectedRange.lowerBound)]
+            : nil
+        let nextCharacter = selectedRange.upperBound < context.value.endIndex
+            ? context.value[selectedRange.upperBound]
+            : nil
+
+        return InsertionBoundaries(
+            previousCharacter: previousCharacter,
+            nextCharacter: nextCharacter,
+            previousNonWhitespaceCharacter: previousNonWhitespaceCharacter(
+                before: selectedRange.lowerBound,
+                in: context.value
+            ),
+            nextNonWhitespaceCharacter: nextNonWhitespaceCharacter(
+                after: selectedRange.upperBound,
+                in: context.value
+            )
+        )
+    }
+
+    private static func previousNonWhitespaceCharacter(
+        before index: String.Index,
+        in value: String
+    ) -> Character? {
+        var currentIndex = index
+        while currentIndex > value.startIndex {
+            let previousIndex = value.index(before: currentIndex)
+            let character = value[previousIndex]
+            if !isWhitespace(character) {
+                return character
+            }
+            currentIndex = previousIndex
+        }
+        return nil
+    }
+
+    private static func nextNonWhitespaceCharacter(
+        after index: String.Index,
+        in value: String
+    ) -> Character? {
+        var currentIndex = index
+        while currentIndex < value.endIndex {
+            let character = value[currentIndex]
+            if !isWhitespace(character) {
+                return character
+            }
+            currentIndex = value.index(after: currentIndex)
+        }
+        return nil
+    }
+
+    private static func nonWhitespaceCharacter(_ character: Character?) -> Character? {
+        guard let character, !isWhitespace(character) else { return nil }
+        return character
+    }
+
+    private static func isHighConfidenceMidSentenceInsertion(
+        _ boundaries: InsertionBoundaries
+    ) -> Bool {
+        guard let previous = boundaries.previousNonWhitespaceCharacter else { return false }
+        return isWordLike(previous)
+    }
+
+    private static func shouldStripFinalPeriod(_ boundaries: InsertionBoundaries) -> Bool {
+        guard isHighConfidenceMidSentenceInsertion(boundaries),
+              let next = boundaries.nextNonWhitespaceCharacter else {
+            return false
+        }
+        return isWordLike(next) || closingPunctuation.contains(next)
+    }
+
+    private static func lowercasingFirstWordIfSafe(_ text: String) -> String {
+        var result = text
+        guard let wordRange = firstWordRange(in: result),
+              shouldLowercaseFirstWord(String(result[wordRange])) else {
+            return result
+        }
+
+        let firstIndex = wordRange.lowerBound
+        let nextIndex = result.index(after: firstIndex)
+        result.replaceSubrange(firstIndex..<nextIndex, with: String(result[firstIndex]).lowercased())
+        return result
+    }
+
+    private static func firstWordRange(in text: String) -> Range<String.Index>? {
+        var start = text.startIndex
+        while start < text.endIndex, isWhitespace(text[start]) {
+            start = text.index(after: start)
+        }
+        guard start < text.endIndex, isWordLike(text[start]) else {
+            return nil
+        }
+
+        var end = text.index(after: start)
+        while end < text.endIndex, isWordLike(text[end]) {
+            end = text.index(after: end)
+        }
+        return start..<end
+    }
+
+    private static func shouldLowercaseFirstWord(_ word: String) -> Bool {
+        guard word.count > 1,
+              let first = word.first,
+              isUppercaseLetter(first) else {
+            return false
+        }
+
+        let remainder = word.dropFirst()
+        guard remainder.contains(where: isLowercaseLetter) else {
+            return false
+        }
+        return !remainder.contains(where: isUppercaseLetter)
+    }
+
+    private static func strippingSingleFinalPeriod(_ text: String) -> String {
+        var result = text
+        var currentIndex = result.endIndex
+
+        while currentIndex > result.startIndex {
+            let previousIndex = result.index(before: currentIndex)
+            if isWhitespace(result[previousIndex]) {
+                currentIndex = previousIndex
+                continue
+            }
+
+            guard result[previousIndex] == "." else {
+                return result
+            }
+            if previousIndex > result.startIndex {
+                let beforePeriod = result.index(before: previousIndex)
+                guard result[beforePeriod] != "." else {
+                    return result
+                }
+            }
+            result.removeSubrange(previousIndex..<currentIndex)
+            return result
+        }
+
+        return result
+    }
+
+    private static func shouldInsertSpace(between left: Character, and right: Character) -> Bool {
+        if isWhitespace(left) || isWhitespace(right) {
+            return false
+        }
+        if closingPunctuation.contains(right) || openingPunctuation.contains(left) {
+            return false
+        }
+        if isWordLike(left) && isWordLike(right) {
+            return true
+        }
+        if isWordLike(right) && punctuationThatTakesFollowingSpace.contains(left) {
+            return true
+        }
+        return false
+    }
+
+    private static let openingPunctuation: Set<Character> = ["(", "[", "{", "\"", "'", "“", "‘"]
+    private static let closingPunctuation: Set<Character> = [".", ",", "!", "?", ";", ":", ")", "]", "}", "\"", "'", "”", "’"]
+    private static let punctuationThatTakesFollowingSpace: Set<Character> = [".", ",", "!", "?", ";", ":", ")", "]", "}", "\"", "'", "”", "’"]
+
+    private static func isWordLike(_ character: Character) -> Bool {
+        character.unicodeScalars.contains { CharacterSet.alphanumerics.contains($0) }
+    }
+
+    private static func isWhitespace(_ character: Character) -> Bool {
+        character.unicodeScalars.allSatisfy { CharacterSet.whitespacesAndNewlines.contains($0) }
+    }
+
+    private static func isUppercaseLetter(_ character: Character) -> Bool {
+        character.unicodeScalars.contains { CharacterSet.uppercaseLetters.contains($0) }
+    }
+
+    private static func isLowercaseLetter(_ character: Character) -> Bool {
+        character.unicodeScalars.contains { CharacterSet.lowercaseLetters.contains($0) }
     }
 }
 

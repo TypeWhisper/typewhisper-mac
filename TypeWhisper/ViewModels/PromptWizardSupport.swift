@@ -495,13 +495,20 @@ enum PromptWizardComposer {
     }
 
     static func languageNameForDisplay(_ code: String) -> String {
-        switch code.lowercased() {
+        let normalizedCode = code
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "_", with: "-")
+        let primaryCode = normalizedCode.split(separator: "-").first.map(String.init) ?? normalizedCode
+
+        switch primaryCode.lowercased() {
         case "en", "english":
             return "English"
         case "de", "german":
             return "German"
+        case "ja", "japanese":
+            return localizedAppText("Japanese", de: "Japanisch", ja: "日本語")
         default:
-            return code
+            return Locale.current.localizedString(forLanguageCode: primaryCode) ?? code
         }
     }
 
@@ -623,12 +630,14 @@ enum PromptWizardNameSuggester {
             case .direct(let targetLanguage):
                 return localizedAppText(
                     "Translate to \(displayName(for: targetLanguage))",
-                    de: "Nach \(displayName(for: targetLanguage)) übersetzen"
+                    de: "Nach \(displayName(for: targetLanguage)) übersetzen",
+                    ja: "\(displayName(for: targetLanguage))へ翻訳"
                 )
             case .alternatingPair(let primaryLanguage, let secondaryLanguage):
                 return localizedAppText(
                     "Translate \(displayName(for: primaryLanguage)) / \(displayName(for: secondaryLanguage))",
-                    de: "\(displayName(for: primaryLanguage)) / \(displayName(for: secondaryLanguage)) übersetzen"
+                    de: "\(displayName(for: primaryLanguage)) / \(displayName(for: secondaryLanguage)) übersetzen",
+                    ja: "\(displayName(for: primaryLanguage)) / \(displayName(for: secondaryLanguage))を翻訳"
                 )
             case nil:
                 return localizedAppText("Translate", de: "Übersetzen")

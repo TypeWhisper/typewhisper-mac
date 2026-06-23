@@ -38,6 +38,7 @@ xcodebuild -project "$PROJECT_DIR/$PROJECT" \
   -configuration Release \
   -derivedDataPath "$BUILD_DIR" \
   -destination 'platform=macOS,arch=arm64' \
+  ENABLE_CODE_COVERAGE=NO \
   CODE_SIGN_IDENTITY="-" \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGNING_ALLOWED=NO | tee "$BUILD_DIR/build.log"
@@ -50,6 +51,8 @@ if [ ! -d "$APP_PATH" ]; then
   echo "ERROR: App not found at $APP_PATH"
   exit 1
 fi
+
+bash "$PROJECT_DIR/scripts/check_release_binary_instrumentation.sh" "$APP_PATH/Contents/MacOS/typewhisper-cli"
 
 echo "--- App built at $APP_PATH ---"
 

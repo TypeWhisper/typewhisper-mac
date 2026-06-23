@@ -107,7 +107,41 @@ final class CLISupportTests: XCTestCase {
         XCTAssertEqual(body["task"] as? String, "transcribe")
         XCTAssertEqual(body["engine"] as? String, "mock")
         XCTAssertEqual(body["model"] as? String, "tiny")
+        XCTAssertNil(body["apply_corrections"])
         XCTAssertFalse(String(data: bodyData, encoding: .utf8)?.contains("distinctive-video-bytes") == true)
+    }
+
+    func testCLIClientTranscribeLocalFileSendsApplyCorrectionsFalseWhenRequested() async throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let fileURL = directory.appendingPathComponent("raw.wav")
+        try Data("audio-bytes".utf8).write(to: fileURL)
+
+        let recorder = RequestRecorder()
+        let client = CLIClient(
+            port: 9876,
+            transport: { request in
+                recorder.record(request)
+                let body = #"{"text":"ok","language":null,"duration":1,"processing_time":0.1,"engine":"mock","model":"tiny"}"#
+                return (Data(body.utf8), Self.httpResponse(url: request.url!, statusCode: 200))
+            }
+        )
+
+        _ = try await client.transcribe(
+            fileURL: fileURL,
+            language: nil,
+            languageHints: [],
+            task: "transcribe",
+            targetLanguage: nil,
+            applyCorrections: false
+        )
+
+        let request = try XCTUnwrap(recorder.recordedRequest)
+        XCTAssertEqual(request.url?.path, "/v1/transcribe/local-file")
+        let bodyData = try XCTUnwrap(request.httpBody)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        XCTAssertEqual(body["path"] as? String, fileURL.path)
+        XCTAssertEqual(body["apply_corrections"] as? Bool, false)
     }
 
     func testCLIClientSendsBearerTokenWhenConfigured() async throws {
@@ -160,6 +194,37 @@ final class CLISupportTests: XCTestCase {
         let bodyText = String(data: try XCTUnwrap(request.httpBody), encoding: .utf8)
         XCTAssertTrue(bodyText?.contains("stdin-audio-bytes") == true)
         XCTAssertTrue(bodyText?.contains("name=\"language\"") == true)
+        XCTAssertFalse(bodyText?.contains("name=\"apply_corrections\"") == true)
+    }
+
+    func testCLIClientTranscribeStdinSendsApplyCorrectionsFalseWhenRequested() async throws {
+        let recorder = RequestRecorder()
+        let client = CLIClient(
+            port: 9876,
+            transport: { request in
+                recorder.record(request)
+                let body = #"{"text":"ok","language":null,"duration":1,"processing_time":0.1,"engine":"mock","model":"tiny"}"#
+                return (Data(body.utf8), Self.httpResponse(url: request.url!, statusCode: 200))
+            },
+            stdinReader: {
+                Data("stdin-audio-bytes".utf8)
+            }
+        )
+
+        _ = try await client.transcribe(
+            fileURL: nil,
+            language: nil,
+            languageHints: [],
+            task: "transcribe",
+            targetLanguage: nil,
+            applyCorrections: false
+        )
+
+        let request = try XCTUnwrap(recorder.recordedRequest)
+        XCTAssertEqual(request.url?.path, "/v1/transcribe")
+        let bodyText = String(data: try XCTUnwrap(request.httpBody), encoding: .utf8)
+        XCTAssertTrue(bodyText?.contains("name=\"apply_corrections\"") == true)
+        XCTAssertTrue(bodyText?.contains("\r\nfalse\r\n") == true)
     }
 
     @MainActor
@@ -497,10 +562,9 @@ final class CLISupportTests: XCTestCase {
         XCTAssertEqual(service.licenseTier, .enterprise)
         XCTAssertEqual(service.usageIntent, .enterprise)
         XCTAssertTrue(service.licenseIsLifetime)
-        XCTAssertEqual(
-            Self.loadKeychainValue(service: keychainServiceName, account: "polar-license"),
-            "TYPEWHISPER-ENT-123|activation-123"
-        )
+        let keychainValue = Self.loadKeychainValue(service: keychainServiceName, account: "polar-license") ?? ""
+        XCTAssertTrue(keychainValue.contains("\"key\":\"TYPEWHISPER-ENT-123\""))
+        XCTAssertTrue(keychainValue.contains("\"activationId\":\"activation-123\""))
         XCTAssertNil(Self.loadKeychainValue(service: keychainServiceName, account: "polar-supporter"))
     }
 
@@ -541,10 +605,9 @@ final class CLISupportTests: XCTestCase {
         XCTAssertEqual(service.supporterTier, .gold)
         XCTAssertEqual(service.licenseStatus, .unlicensed)
         XCTAssertNil(service.licenseTier)
-        XCTAssertEqual(
-            Self.loadKeychainValue(service: keychainServiceName, account: "polar-supporter"),
-            "TYPEWHISPER-SUP-999|activation-999"
-        )
+        let keychainValue = Self.loadKeychainValue(service: keychainServiceName, account: "polar-supporter") ?? ""
+        XCTAssertTrue(keychainValue.contains("\"key\":\"TYPEWHISPER-SUP-999\""))
+        XCTAssertTrue(keychainValue.contains("\"activationId\":\"activation-999\""))
         XCTAssertNil(Self.loadKeychainValue(service: keychainServiceName, account: "polar-license"))
     }
 

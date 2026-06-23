@@ -1,0 +1,79 @@
+name: Workflow Issue
+description: Report a bug with workflow matching, triggers, hotkeys, prompts, or output behavior
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Problem Description
+      description: What went wrong with the workflow?
+    validations:
+      required: true
+  - type: textarea
+    id: affected-workflow
+    attributes:
+      label: Affected Workflow Behavior
+      description: Describe the workflow setup, including the template, relevant app or website matching rules, hotkeys, prompt behavior, output settings, or action plugin involved.
+    validations:
+      required: true
+  - type: dropdown
+    id: trigger-type
+    attributes:
+      label: Trigger Type
+      description: How is the workflow triggered?
+      options:
+        - App match
+        - Website match
+        - App + website match
+        - Workflow hotkey
+        - Global fallback
+        - Manual workflow palette
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this workflow issue?
+      placeholder: |
+        1. Open TypeWhisper
+        2. Configure or select the workflow ...
+        3. Trigger it by ...
+        4. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect the workflow to do?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What happened instead?
+    validations:
+      required: true
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS Version
+      placeholder: "e.g. macOS 15.3 Sequoia"
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: TypeWhisper Version
+      placeholder: "e.g. 0.10.0"
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics / Logs
+      description: Export and attach a privacy-safe JSON report from Settings > Advanced > Support Diagnostics > Export Diagnostics or Error Log > Export Diagnostics if possible. The report includes workflow metadata such as enabled workflow counts, trigger types, provider/model IDs, and output settings, but does not include API keys, audio, or transcription history. You can also paste any relevant log output from Console.app filtered by "TypeWhisper".
+      render: shell

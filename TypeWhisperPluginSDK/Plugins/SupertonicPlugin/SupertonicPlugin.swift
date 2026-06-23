@@ -300,6 +300,7 @@ final class SupertonicPlugin: NSObject, TTSProviderPlugin, PluginSettingsActivit
 
 private struct SupertonicSettingsView: View {
     let plugin: SupertonicPlugin
+    private let bundle = pluginModuleBundle
 
     @State private var acceptedLicense = false
     @State private var selectedVoiceId = "M1"
@@ -316,10 +317,10 @@ private struct SupertonicSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Supertonic (Experimental)")
+            Text("Supertonic (Experimental)", bundle: bundle)
                 .font(.headline)
 
-            Text("Local text-to-speech powered by Supertonic 3 ONNX models. Model assets are downloaded only after you accept the model license.")
+            Text("Local text-to-speech powered by Supertonic 3 ONNX models. Model assets are downloaded only after you accept the model license.", bundle: bundle)
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
@@ -351,19 +352,19 @@ private struct SupertonicSettingsView: View {
 
     private var licenseSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Model License")
+            Text("Model License", bundle: bundle)
                 .font(.subheadline)
                 .fontWeight(.medium)
 
-            Text("Supertonic 3 model assets are licensed under OpenRAIL-M and include use restrictions. Review the full license before downloading the model.")
+            Text("Supertonic 3 model assets are licensed under OpenRAIL-M and include use restrictions. Review the full license before downloading the model.", bundle: bundle)
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Link("Open Supertonic 3 OpenRAIL-M license", destination: SupertonicModelLicense.url)
+            Link(String(localized: "Open Supertonic 3 OpenRAIL-M license", bundle: bundle), destination: SupertonicModelLicense.url)
                 .font(.caption)
 
             Toggle(isOn: $acceptedLicense) {
-                Text("I have read and accept the Supertonic 3 model license terms")
+                Text("I have read and accept the Supertonic 3 model license terms", bundle: bundle)
             }
             .onChange(of: acceptedLicense) { _, newValue in
                 if newValue {
@@ -375,17 +376,17 @@ private struct SupertonicSettingsView: View {
 
     private var modelSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Model")
+            Text("Model", bundle: bundle)
                 .font(.subheadline)
                 .fontWeight(.medium)
 
             switch modelState {
             case .ready:
                 HStack {
-                    Label("Ready", systemImage: "checkmark.circle.fill")
+                    Label(String(localized: "Ready", bundle: bundle), systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                     Spacer()
-                    Button("Delete cached model") {
+                    Button(String(localized: "Delete cached model", bundle: bundle)) {
                         try? plugin.deleteCachedModel()
                         refreshFromPlugin()
                     }
@@ -421,7 +422,7 @@ private struct SupertonicSettingsView: View {
                 }
             }
         } label: {
-            Label("Download & Load", systemImage: "arrow.down.circle")
+            Label(String(localized: "Download & Load", bundle: bundle), systemImage: "arrow.down.circle")
         }
         .buttonStyle(.borderedProminent)
         .disabled(!acceptedLicense || isDownloading || modelState == .downloading)
@@ -429,11 +430,11 @@ private struct SupertonicSettingsView: View {
 
     private var voiceSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Voice")
+            Text("Voice", bundle: bundle)
                 .font(.subheadline)
                 .fontWeight(.medium)
 
-            Picker("Voice", selection: $selectedVoiceId) {
+            Picker(String(localized: "Voice", bundle: bundle), selection: $selectedVoiceId) {
                 ForEach(plugin.availableVoices, id: \.id) { voice in
                     Text(voice.displayName).tag(voice.id)
                 }
@@ -443,7 +444,7 @@ private struct SupertonicSettingsView: View {
             }
 
             HStack {
-                Text("Speed")
+                Text("Speed", bundle: bundle)
                 Spacer()
                 Text(speed, format: .number.precision(.fractionLength(2)))
                     .monospacedDigit()
@@ -456,9 +457,9 @@ private struct SupertonicSettingsView: View {
                     plugin.setSpeed(newValue)
                 }
 
-            Picker("Quality", selection: $quality) {
+            Picker(String(localized: "Quality", bundle: bundle), selection: $quality) {
                 ForEach(SupertonicQuality.allCases, id: \.self) { quality in
-                    Text(quality.displayName).tag(quality)
+                    Text(String(localized: String.LocalizationValue(quality.displayName), bundle: bundle)).tag(quality)
                 }
             }
             .onChange(of: quality) { _, newValue in
@@ -469,11 +470,11 @@ private struct SupertonicSettingsView: View {
 
     private var tokenSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Hugging Face Token")
+            Text("Hugging Face Token", bundle: bundle)
                 .font(.subheadline)
                 .fontWeight(.medium)
 
-            Text("Optional. It can increase download rate limits for the model download.")
+            Text("Optional. It can increase download rate limits for the model download.", bundle: bundle)
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -481,14 +482,14 @@ private struct SupertonicSettingsView: View {
                 SecureField("hf_...", text: $hfTokenInput)
                     .textFieldStyle(.roundedBorder)
 
-                Button("Save") {
+                Button(String(localized: "Save", bundle: bundle)) {
                     validateAndSaveHuggingFaceToken()
                 }
                 .controlSize(.small)
                 .disabled(hfTokenInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isValidatingToken)
 
                 if plugin.huggingFaceToken != nil {
-                    Button("Remove") {
+                    Button(String(localized: "Remove", bundle: bundle)) {
                         hfTokenInput = ""
                         tokenValidationResult = nil
                         plugin.clearHuggingFaceToken()
@@ -502,7 +503,9 @@ private struct SupertonicSettingsView: View {
                     .controlSize(.small)
             } else if let tokenValidationResult {
                 Label(
-                    tokenValidationResult ? "Valid Hugging Face token" : "Invalid Hugging Face token",
+                    tokenValidationResult
+                        ? String(localized: "Valid Hugging Face token", bundle: bundle)
+                        : String(localized: "Invalid Hugging Face token", bundle: bundle),
                     systemImage: tokenValidationResult ? "checkmark.circle.fill" : "xmark.circle.fill"
                 )
                 .font(.caption)
@@ -543,3 +546,11 @@ private struct SupertonicSettingsView: View {
         progress = plugin.modelDownloadProgress
     }
 }
+
+private let pluginModuleBundle: Bundle = {
+#if SWIFT_PACKAGE
+    Bundle.module
+#else
+    Bundle(for: SupertonicPlugin.self)
+#endif
+}()

@@ -194,9 +194,7 @@ final class HistoryViewModel: ObservableObject {
 
         let suggestions = textDiffService.extractCorrections(original: originalText, edited: newText)
         if !suggestions.isEmpty {
-            for suggestion in suggestions {
-                dictionaryService.learnCorrection(original: suggestion.original, replacement: suggestion.replacement)
-            }
+            dictionaryService.learnCorrections(suggestions)
             correctionSuggestions = suggestions
             showCorrectionBanner = true
 

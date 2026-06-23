@@ -4,7 +4,7 @@ import TypeWhisperPluginSDK
 
 enum SettingsTab: Hashable {
     case home, general, recording, hotkeys, recorder
-    case dictationRecovery, fileTranscription, history, dictionary, snippets, workflows, profiles, prompts, integrations, advanced, license, about
+    case dictationRecovery, fileTranscription, history, dictionary, snippets, workflows, profiles, prompts, premium, integrations, advanced, license, about
 }
 
 private struct SettingsDestination: Identifiable, Hashable {
@@ -58,6 +58,12 @@ struct SettingsView: View {
                 tab: .workflows,
                 title: localizedAppText("Workflows", de: "Workflows"),
                 systemImage: "point.3.connected.trianglepath.dotted",
+                badge: nil
+            ),
+            SettingsDestination(
+                tab: .premium,
+                title: localizedAppText("Premium", de: "Premium"),
+                systemImage: "sparkles",
                 badge: nil
             ),
             SettingsDestination(
@@ -172,6 +178,8 @@ struct SettingsView: View {
             WorkflowsSettingsView()
         case .prompts:
             WorkflowsSettingsView()
+        case .premium:
+            PremiumSettingsView()
         case .integrations:
             PluginSettingsView()
         case .advanced:
@@ -272,7 +280,8 @@ private func settingsDestinationSections(_ destinations: [SettingsDestination]) 
         settingsDestination(destinations, .history),
         settingsDestination(destinations, .dictionary),
         settingsDestination(destinations, .snippets),
-        settingsDestination(destinations, .workflows)
+        settingsDestination(destinations, .workflows),
+        settingsDestination(destinations, .premium)
     ]
 
     workspaceDestinations.append(settingsDestination(destinations, .integrations))
@@ -389,6 +398,7 @@ private struct SettingsSidebarBadge: View {
 
 struct RecordingSettingsView: View {
     @ObservedObject private var dictation = DictationViewModel.shared
+    @ObservedObject private var settings = SettingsViewModel.shared
     @ObservedObject private var audioDevice = ServiceContainer.shared.audioDeviceService
     @ObservedObject private var pluginManager = PluginManager.shared
     @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
@@ -426,6 +436,18 @@ struct RecordingSettingsView: View {
         Form {
             if needsPermissions {
                 PermissionsBanner(dictation: dictation)
+            }
+
+            Section(String(localized: "Spoken Language")) {
+                LanguageSelectionEditor(
+                    selection: $settings.languageSelection,
+                    availableLanguages: settings.availableLanguages,
+                    hintBehavior: LanguageSelectionHintBehavior(engine: settings.activeTranscriptionEngine)
+                )
+
+                Text(String(localized: "Controls push-to-talk dictation, workflows that inherit the global spoken language, and CLI/API defaults when they use app defaults. Recorder and Recovery have separate language settings."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section(String(localized: "Engine")) {
@@ -575,7 +597,16 @@ struct RecordingSettingsView: View {
                     set: { UserDefaults.standard.set($0, forKey: UserDefaultsKeys.appFormattingEnabled) }
                 ))
 
-                Text(String(localized: "Automatically format transcribed text based on the target app. Configure the output format per workflow."))
+                Text(String(localized: "When enabled, TypeWhisper uses target-app rules and available cursor context for smarter insertion. Workflow output format settings still choose the inserted format for each workflow."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Toggle(String(localized: "Normalize spoken numbers to digits"), isOn: Binding(
+                    get: { TranscriptionNormalizationService.numberNormalizationEnabled() },
+                    set: { UserDefaults.standard.set($0, forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled) }
+                ))
+
+                Text(String(localized: "Converts spoken numbers in supported languages into digits before insertion and export."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

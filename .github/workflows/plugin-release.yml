@@ -85,6 +85,7 @@ jobs:
             webhook) TARGET="WebhookPlugin" ;;
             groq) TARGET="GroqPlugin" ;;
             openai) TARGET="OpenAIPlugin" ;;
+            mistral) TARGET="MistralAIPlugin" ;;
             gemini) TARGET="GeminiPlugin" ;;
             whisperkit) TARGET="WhisperKitPlugin" ;;
             parakeet) TARGET="ParakeetPlugin" ;;
@@ -95,6 +96,7 @@ jobs:
             deepgram) TARGET="DeepgramPlugin" ;;
             assemblyai) TARGET="AssemblyAIPlugin" ;;
             smallest-pulse) TARGET="SmallestAIPlugin" ;;
+            cartesia) TARGET="CartesiaPlugin" ;;
             obsidian) TARGET="ObsidianPlugin" ;;
             script) TARGET="ScriptPlugin" ;;
             file-job-script) TARGET="FileJobScriptPlugin" ;;
@@ -102,6 +104,7 @@ jobs:
             granite) TARGET="GranitePlugin" ;;
             cloudflare-asr) TARGET="CloudflareASRPlugin" ;;
             file-memory) TARGET="FileMemoryPlugin" ;;
+            mempalace) TARGET="MemPalacePlugin" ;;
             openai-vector-memory) TARGET="OpenAIVectorMemoryPlugin" ;;
             fireworks) TARGET="FireworksPlugin" ;;
             gladia) TARGET="GladiaPlugin" ;;
@@ -111,6 +114,7 @@ jobs:
             cerebras) TARGET="CerebrasPlugin" ;;
             openrouter) TARGET="OpenRouterPlugin" ;;
             soniox) TARGET="SonioxPlugin" ;;
+            sber-salutespeech) TARGET="SaluteSpeechPlugin" ;;
             reson8) TARGET="Reson8Plugin" ;;
             cohere) TARGET="CoherePlugin" ;;
             speechmatics) TARGET="SpeechmaticsPlugin" ;;
@@ -260,7 +264,8 @@ jobs:
           gh release create "$TAG" "$ASSET" \
             --target "$GITHUB_SHA" \
             --title "${TARGET} v${PLUGIN_VERSION}" \
-            --notes ""
+            --notes "" \
+            --latest=false
 
       - name: Update Plugin Registry
         env:

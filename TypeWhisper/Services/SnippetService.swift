@@ -21,29 +21,14 @@ final class SnippetService: ObservableObject {
     }
 
     private func setupModelContainer(appSupportDirectory: URL) {
-        let schema = Schema([Snippet.self])
-        let storeDir = appSupportDirectory
-        try? FileManager.default.createDirectory(at: storeDir, withIntermediateDirectories: true)
+        guard let (container, context) = try? SwiftDataStoreFactory.create(
+            for: [Snippet.self],
+            storeName: "snippets",
+            in: appSupportDirectory
+        ) else { return }
 
-        let storeURL = storeDir.appendingPathComponent("snippets.store")
-        let config = ModelConfiguration(url: storeURL)
-
-        do {
-            modelContainer = try ModelContainer(for: schema, configurations: [config])
-        } catch {
-            // Incompatible schema — delete old store and retry
-            for suffix in ["", "-wal", "-shm"] {
-                let url = storeDir.appendingPathComponent("snippets.store\(suffix)")
-                try? FileManager.default.removeItem(at: url)
-            }
-            do {
-                modelContainer = try ModelContainer(for: schema, configurations: [config])
-            } catch {
-                fatalError("Failed to create snippets ModelContainer after reset: \(error)")
-            }
-        }
-        modelContext = ModelContext(modelContainer!)
-        modelContext?.autosaveEnabled = true
+        modelContainer = container
+        modelContext = context
 
         loadSnippets()
     }
@@ -69,10 +54,13 @@ final class SnippetService: ObservableObject {
             return
         }
 
+        let now = Date()
         let snippet = Snippet(
             trigger: trigger,
             replacement: replacement,
-            caseSensitive: caseSensitive
+            caseSensitive: caseSensitive,
+            createdAt: now,
+            updatedAt: now
         )
 
         context.insert(snippet)
@@ -91,6 +79,7 @@ final class SnippetService: ObservableObject {
         snippet.trigger = trigger
         snippet.replacement = replacement
         snippet.caseSensitive = caseSensitive
+        snippet.updatedAt = Date()
 
         do {
             try context.save()
@@ -117,6 +106,7 @@ final class SnippetService: ObservableObject {
         guard let context = modelContext else { return }
 
         snippet.isEnabled.toggle()
+        snippet.updatedAt = Date()
 
         do {
             try context.save()
@@ -129,6 +119,7 @@ final class SnippetService: ObservableObject {
     /// Apply all enabled snippets to the given text
     func applySnippets(to text: String) -> String {
         var result = text
+        var needsSave = false
 
         for snippet in snippets where snippet.isEnabled {
             let searchTrigger = snippet.caseSensitive ? snippet.trigger : snippet.trigger.lowercased()
@@ -147,22 +138,88 @@ final class SnippetService: ObservableObject {
                     )
                 }
 
-                incrementUsageCount(for: snippet)
+                snippet.usageCount += 1
+                needsSave = true
+            }
+        }
+
+        if needsSave {
+            do {
+                try modelContext?.save()
+            } catch {
+                logger.error("Failed to update usage count: \(error.localizedDescription)")
             }
         }
 
         return result
     }
 
-    private func incrementUsageCount(for snippet: Snippet) {
-        guard let context = modelContext else { return }
+    func userDataSyncSnippets() -> [UserDataSyncSnippet] {
+        snippets.map { snippet in
+            UserDataSyncSnippet(
+                trigger: snippet.trigger,
+                replacement: snippet.replacement,
+                caseSensitive: snippet.caseSensitive,
+                isEnabled: snippet.isEnabled,
+                createdAt: snippet.createdAt,
+                updatedAt: snippet.effectiveUpdatedAt
+            )
+        }
+    }
 
-        snippet.usageCount += 1
+    func applyUserDataSyncMutations(_ mutations: [UserDataSyncMutation]) throws {
+        guard let context = modelContext else { return }
+        guard !mutations.isEmpty else { return }
+
+        for mutation in mutations {
+            switch mutation {
+            case .upsertSnippet(let synced):
+                upsertSyncedSnippet(synced, context: context)
+            case .deleteSnippet(let itemID):
+                deleteSyncedSnippet(itemID: itemID, context: context)
+            case .upsertDictionary, .deleteDictionary:
+                continue
+            }
+        }
 
         do {
             try context.save()
+            loadSnippets()
         } catch {
-            logger.error("Failed to update usage count: \(error.localizedDescription)")
+            logger.error("Failed to apply snippet sync mutations: \(error.localizedDescription)")
+            throw error
         }
+    }
+
+    private func upsertSyncedSnippet(_ synced: UserDataSyncSnippet, context: ModelContext) {
+        let targetID = UserDataSyncIdentity.snippetItemID(trigger: synced.trigger)
+        if let snippet = snippets.first(where: {
+            UserDataSyncIdentity.snippetItemID(trigger: $0.trigger) == targetID
+        }) {
+            snippet.trigger = synced.trigger
+            snippet.replacement = synced.replacement
+            snippet.caseSensitive = synced.caseSensitive
+            snippet.isEnabled = synced.isEnabled
+            snippet.updatedAt = synced.updatedAt
+            return
+        }
+
+        context.insert(Snippet(
+            trigger: synced.trigger,
+            replacement: synced.replacement,
+            caseSensitive: synced.caseSensitive,
+            isEnabled: synced.isEnabled,
+            createdAt: synced.createdAt,
+            updatedAt: synced.updatedAt
+        ))
+    }
+
+    private func deleteSyncedSnippet(itemID: String, context: ModelContext) {
+        guard let snippet = snippets.first(where: {
+            UserDataSyncIdentity.snippetItemID(trigger: $0.trigger) == itemID
+        }) else {
+            return
+        }
+        context.delete(snippet)
     }
 }

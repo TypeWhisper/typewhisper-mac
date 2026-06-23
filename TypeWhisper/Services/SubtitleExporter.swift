@@ -1,5 +1,8 @@
 import AppKit
+import os
 import UniformTypeIdentifiers
+
+private let subtitleExporterLogger = Logger(subsystem: AppConstants.loggerSubsystem, category: "SubtitleExporter")
 
 enum SubtitleFormat: String, CaseIterable {
     case srt
@@ -16,6 +19,18 @@ enum SubtitleFormat: String, CaseIterable {
 }
 
 enum SubtitleExporter {
+
+    static func exportContent(for result: TranscriptionResult, format: SubtitleFormat) -> String? {
+        let segments = subtitleSegments(for: result)
+        guard !segments.isEmpty else { return nil }
+
+        switch format {
+        case .srt:
+            return exportSRT(segments: segments)
+        case .vtt:
+            return exportVTT(segments: segments)
+        }
+    }
 
     static func exportSRT(segments: [TranscriptionSegment]) -> String {
         segments.enumerated().map { index, segment in
@@ -39,18 +54,42 @@ enum SubtitleExporter {
     }
 
     @MainActor
-    static func saveToFile(content: String, format: SubtitleFormat, suggestedName: String) {
+    @discardableResult
+    static func saveToFile(content: String, format: SubtitleFormat, suggestedName: String) -> Bool {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [format.utType]
         panel.nameFieldStringValue = "\(suggestedName).\(format.fileExtension)"
         panel.canCreateDirectories = true
 
-        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard panel.runModal() == .OK, let url = panel.url else { return false }
 
-        try? content.write(to: url, atomically: true, encoding: .utf8)
+        return writeContent(content, to: url, suggestedName: suggestedName)
+    }
+
+    @discardableResult
+    static func writeContent(_ content: String, to url: URL, suggestedName: String) -> Bool {
+        do {
+            try content.write(to: url, atomically: true, encoding: .utf8)
+            return true
+        } catch {
+            subtitleExporterLogger.error(
+                "Failed to export subtitle '\(suggestedName, privacy: .private(mask: .hash))' to \(url.path, privacy: .private(mask: .hash)): \(error.localizedDescription, privacy: .public)"
+            )
+            return false
+        }
     }
 
     // MARK: - Time Formatting
+
+    private static func subtitleSegments(for result: TranscriptionResult) -> [TranscriptionSegment] {
+        guard result.segments.isEmpty else { return result.segments }
+
+        let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return [] }
+
+        let endTime = result.duration.isFinite && result.duration > 0 ? result.duration : 1
+        return [TranscriptionSegment(text: text, start: 0, end: endTime)]
+    }
 
     private static func displayText(for segment: TranscriptionSegment) -> String {
         guard let speakerLabel = segment.speakerLabel?.trimmingCharacters(in: .whitespacesAndNewlines),

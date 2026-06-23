@@ -8,7 +8,8 @@
     "author": "TypeWhisper",
     "description": "Create Linear issues from transcribed or processed text. Requires a Linear API key.",
     "descriptions": {
-        "de": "Linear-Issues aus transkribiertem oder verarbeitetem Text erstellen. Erfordert einen Linear-API-Key."
+        "de": "Linear-Issues aus transkribiertem oder verarbeitetem Text erstellen. Erfordert einen Linear-API-Key.",
+        "ja": "文字起こし済みまたは処理済みのテキストからLinearのIssueを作成します。Linear APIキーが必要です。"
     },
     "category": "action",
     "iconSystemName": "list.bullet.rectangle",

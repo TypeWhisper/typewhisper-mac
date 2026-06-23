@@ -8,10 +8,15 @@
     "author": "TypeWhisper",
     "description": "Cloud LLM, speech-to-text, and text-to-speech via xAI Grok APIs. Requires an xAI API key.",
     "descriptions": {
-        "de": "Cloud-LLM, Speech-to-Text und Text-to-Speech über xAI-Grok-APIs. Erfordert einen xAI API-Key."
+        "de": "Cloud-LLM, Speech-to-Text und Text-to-Speech über xAI-Grok-APIs. Erfordert einen xAI API-Key.",
+        "ja": "xAI Grok APIによるクラウドLLM、音声認識、音声合成です。xAI APIキーが必要です。"
     },
     "category": "transcription",
-    "categories": ["transcription", "llm", "tts"],
+    "categories": [
+        "transcription",
+        "llm",
+        "tts"
+    ],
     "hosting": "cloud",
     "iconSystemName": "sparkles",
     "iconURL": "https://www.typewhisper.com/brand-logos/xai/logo-light.svg",

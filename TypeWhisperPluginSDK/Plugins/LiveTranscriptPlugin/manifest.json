@@ -8,7 +8,8 @@
     "author": "TypeWhisper",
     "description": "Show a floating live transcript window during recording.",
     "descriptions": {
-        "de": "Zeigt ein schwebendes Live-Transkript-Fenster während der Aufnahme."
+        "de": "Zeigt ein schwebendes Live-Transkript-Fenster während der Aufnahme.",
+        "ja": "録音中にフローティングのライブ文字起こしウィンドウを表示します。"
     },
     "category": "utility",
     "iconSystemName": "text.bubble",

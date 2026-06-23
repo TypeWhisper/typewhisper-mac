@@ -34,11 +34,11 @@ final class Qwen3PluginTests: XCTestCase {
         XCTAssertEqual(Qwen3Plugin.resolveLanguageName("tl"), "Filipino")
     }
 
-    func testContextFormatterAddsAntiHallucinationInstructionAndDictionaryTerms() {
-        let context = Qwen3Plugin.contextBiasString(from: " TypeWhisper, MLX, TypeWhisper ")
+    func testContextFormatterIncludesExplicitPromptContext() {
+        let context = Qwen3Plugin.contextBiasString(from: " Use TypeWhisper and MLX spelling. ")
 
         XCTAssertTrue(context.contains(Qwen3ContextBiasFormatter.baseInstruction))
-        XCTAssertTrue(context.contains("Technical terms: TypeWhisper, MLX."))
+        XCTAssertTrue(context.contains("Use TypeWhisper and MLX spelling."))
     }
 
     func testContextFormatterIncludesBaseInstructionWithoutDictionaryTerms() {
@@ -46,6 +46,10 @@ final class Qwen3PluginTests: XCTestCase {
             Qwen3Plugin.contextBiasString(from: nil),
             Qwen3ContextBiasFormatter.baseInstruction
         )
+    }
+
+    func testDictionaryTermsAreNotAdvertisedForQwen3Prompting() {
+        XCTAssertEqual(Qwen3Plugin().dictionaryTermsSupport, .unsupported)
     }
 
     func testFrenchTrailingOuiArtifactIsRemovedOnlyAfterSentencePunctuation() {
@@ -65,6 +69,30 @@ final class Qwen3PluginTests: XCTestCase {
         )
     }
 
+    func testFrenchTrailingOuiArtifactIsRemovedAfterLongBarePhrase() {
+        XCTAssertEqual(
+            QwenTranscriptGuard.removingLikelyTrailingArtifact(
+                from: "Je vais envoyer le fichier oui",
+                languageName: "French"
+            ),
+            "Je vais envoyer le fichier"
+        )
+        XCTAssertEqual(
+            QwenTranscriptGuard.removingLikelyTrailingArtifact(
+                from: "Je vais envoyer le fichier, oui.",
+                languageName: "French"
+            ),
+            "Je vais envoyer le fichier"
+        )
+        XCTAssertEqual(
+            QwenTranscriptGuard.removingLikelyTrailingArtifact(
+                from: "Je vais envoyer le fichier Oui!",
+                languageName: "French"
+            ),
+            "Je vais envoyer le fichier"
+        )
+    }
+
     func testFrenchTrailingOuiGuardPreservesRealOuiUsages() {
         XCTAssertEqual(
             QwenTranscriptGuard.removingLikelyTrailingArtifact(from: "Oui.", languageName: "French"),
@@ -73,6 +101,14 @@ final class Qwen3PluginTests: XCTestCase {
         XCTAssertEqual(
             QwenTranscriptGuard.removingLikelyTrailingArtifact(from: "Je pense que oui.", languageName: "French"),
             "Je pense que oui."
+        )
+        XCTAssertEqual(
+            QwenTranscriptGuard.removingLikelyTrailingArtifact(from: "Je suis certain que oui.", languageName: "French"),
+            "Je suis certain que oui."
+        )
+        XCTAssertEqual(
+            QwenTranscriptGuard.removingLikelyTrailingArtifact(from: "Je confirme oui.", languageName: "French"),
+            "Je confirme oui."
         )
         XCTAssertEqual(
             QwenTranscriptGuard.removingLikelyTrailingArtifact(from: "I will send it. oui", languageName: "English"),

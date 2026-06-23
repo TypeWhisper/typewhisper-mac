@@ -242,4 +242,228 @@ final class DictationInsertionTextFormatterTests: XCTestCase {
     func testLeavesEmptyTextUntouched() {
         XCTAssertEqual(DictationInsertionTextFormatter.textForInsertion(""), "")
     }
+
+    func testDisabledContextualInsertionKeepsTrailingSpaceOnlyBehavior() {
+        let context = TextInsertionService.InsertionContext(
+            value: "coffeemachine",
+            selectedRange: NSRange(location: 6, length: 0),
+            selectedText: nil,
+            previousCharacter: "e",
+            nextCharacter: "m"
+        )
+
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion(
+                "Strong.",
+                insertionContext: context,
+                contextualInsertionEnabled: false
+            ),
+            "Strong. "
+        )
+    }
+
+    func testMissingContextKeepsTrailingSpaceOnlyBehavior() {
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion("Strong."),
+            "Strong. "
+        )
+    }
+
+    func testSmartInsertionAddsMissingLeadingAndTrailingSpacesBetweenWords() {
+        let context = TextInsertionService.InsertionContext(
+            value: "coffeemachine",
+            selectedRange: NSRange(location: 6, length: 0),
+            selectedText: nil,
+            previousCharacter: "e",
+            nextCharacter: "m"
+        )
+
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion("strong", insertionContext: context),
+            " strong "
+        )
+    }
+
+    func testSmartInsertionAvoidsDuplicateLeadingSpace() {
+        let context = TextInsertionService.InsertionContext(
+            value: "coffee machine",
+            selectedRange: NSRange(location: 7, length: 0),
+            selectedText: nil,
+            previousCharacter: " ",
+            nextCharacter: "m"
+        )
+
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion("strong", insertionContext: context),
+            "strong "
+        )
+    }
+
+    func testSmartInsertionDoesNotAddSpaceBeforePunctuation() {
+        let context = TextInsertionService.InsertionContext(
+            value: "Hello,",
+            selectedRange: NSRange(location: 5, length: 0),
+            selectedText: nil,
+            previousCharacter: "o",
+            nextCharacter: ","
+        )
+
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion("friend", insertionContext: context),
+            " friend"
+        )
+    }
+
+    func testSmartInsertionStripsFinalPeriodBeforeExistingComma() {
+        let context = TextInsertionService.InsertionContext(
+            value: "start, I will begin",
+            selectedRange: NSRange(location: 5, length: 0),
+            selectedText: nil,
+            previousCharacter: "t",
+            nextCharacter: ","
+        )
+
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion(
+                "Dictation in the middle of a sentence before the comma.",
+                insertionContext: context
+            ),
+            " dictation in the middle of a sentence before the comma"
+        )
+    }
+
+    func testSmartInsertionStripsFinalPeriodBeforeExistingPeriod() {
+        let context = TextInsertionService.InsertionContext(
+            value: "dictating.",
+            selectedRange: NSRange(location: 9, length: 0),
+            selectedText: nil,
+            previousCharacter: "g",
+            nextCharacter: "."
+        )
+
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion("my first sentence.", insertionContext: context),
+            " my first sentence"
+        )
+    }
+
+    func testSmartInsertionDoesNotLowercaseAfterSentenceEndingPunctuation() {
+        let context = TextInsertionService.InsertionContext(
+            value: "Done.Next",
+            selectedRange: NSRange(location: 5, length: 0),
+            selectedText: nil,
+            previousCharacter: ".",
+            nextCharacter: "N"
+        )
+
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion("Another item", insertionContext: context),
+            " Another item "
+        )
+    }
+
+    func testSmartInsertionLowercasesTitlecaseFirstWordInMidSentence() {
+        let context = TextInsertionService.InsertionContext(
+            value: "The presentation will bemachine",
+            selectedRange: NSRange(location: 24, length: 0),
+            selectedText: nil,
+            previousCharacter: "e",
+            nextCharacter: "m"
+        )
+
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion("Presented tomorrow", insertionContext: context),
+            " presented tomorrow "
+        )
+    }
+
+    func testSmartInsertionLowercasesAndStripsPeriodAfterExistingWordSeparatedBySpace() {
+        let context = TextInsertionService.InsertionContext(
+            value: "will begin",
+            selectedRange: NSRange(location: 5, length: 0),
+            selectedText: nil,
+            previousCharacter: " ",
+            nextCharacter: "b"
+        )
+
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion("Immediately.", insertionContext: context),
+            "immediately "
+        )
+    }
+
+    func testSmartInsertionTrimsDictatedBoundaryWhitespaceBeforePunctuation() {
+        let context = TextInsertionService.InsertionContext(
+            value: "dictating.",
+            selectedRange: NSRange(location: 9, length: 0),
+            selectedText: nil,
+            previousCharacter: "g",
+            nextCharacter: "."
+        )
+
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion(" my first sentence ", insertionContext: context),
+            " my first sentence"
+        )
+    }
+
+    func testSmartInsertionPreservesAllCapsFirstWord() {
+        let context = TextInsertionService.InsertionContext(
+            value: "we use",
+            selectedRange: NSRange(location: 6, length: 0),
+            selectedText: nil,
+            previousCharacter: "e",
+            nextCharacter: nil
+        )
+
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion("NASA tools.", insertionContext: context),
+            " NASA tools. "
+        )
+    }
+
+    func testSmartInsertionPreservesCamelCaseFirstWord() {
+        let context = TextInsertionService.InsertionContext(
+            value: "about",
+            selectedRange: NSRange(location: 5, length: 0),
+            selectedText: nil,
+            previousCharacter: "t",
+            nextCharacter: nil
+        )
+
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion("TypeWhisper", insertionContext: context),
+            " TypeWhisper "
+        )
+    }
+
+    func testSmartInsertionStripsSingleFinalPeriodBeforeExistingWord() {
+        let context = TextInsertionService.InsertionContext(
+            value: "coffeemachine",
+            selectedRange: NSRange(location: 6, length: 0),
+            selectedText: nil,
+            previousCharacter: "e",
+            nextCharacter: "m"
+        )
+
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion("Strong.", insertionContext: context),
+            " strong "
+        )
+    }
+
+    func testSmartInsertionPreservesQuestionPunctuation() {
+        let context = TextInsertionService.InsertionContext(
+            value: "coffeemachine",
+            selectedRange: NSRange(location: 6, length: 0),
+            selectedText: nil,
+            previousCharacter: "e",
+            nextCharacter: "m"
+        )
+
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion("Really?", insertionContext: context),
+            " really? "
+        )
+    }
 }

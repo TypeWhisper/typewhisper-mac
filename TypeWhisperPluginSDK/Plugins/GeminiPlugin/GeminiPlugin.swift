@@ -5,13 +5,22 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(GeminiPlugin)
-final class GeminiPlugin: NSObject, LLMProviderPlugin, @unchecked Sendable {
+final class GeminiPlugin: NSObject,
+    LLMProviderPlugin,
+    LLMModelSelectable,
+    TranscriptionEnginePlugin,
+    DictionaryTermsCapabilityProviding,
+    @unchecked Sendable
+{
     static let pluginId = "com.typewhisper.gemini"
     static let pluginName = "Gemini"
     private static let cachedLLMModelsKey = "fetchedLLMModels.v2"
     private static let legacyCachedLLMModelsKey = "fetchedLLMModels"
     private static let selectedLLMModelKey = "selectedLLMModel"
+    private static let selectedTranscriptionModelKey = "selectedModel"
     private static let compatibleModelsEndpoint = "https://generativelanguage.googleapis.com/v1beta/openai/models"
+    private static let generateContentAPIBase = "https://generativelanguage.googleapis.com/v1beta/models"
+    private static let transcriptionRequestTimeout: TimeInterval = 60
     private static let modelIdPrefix = "models/"
     private static let excludedCompatibleModelTokens = [
         "embedding",
@@ -27,6 +36,7 @@ final class GeminiPlugin: NSObject, LLMProviderPlugin, @unchecked Sendable {
     fileprivate var host: HostServices?
     fileprivate var _apiKey: String?
     fileprivate var _selectedLLMModelId: String?
+    fileprivate var _selectedTranscriptionModelId: String?
     fileprivate var _llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue
     fileprivate var _llmTemperatureValue: Double = 0.3
     fileprivate var _fetchedLLMModels: [GeminiFetchedModel] = []
@@ -48,11 +58,14 @@ final class GeminiPlugin: NSObject, LLMProviderPlugin, @unchecked Sendable {
             _fetchedLLMModels = models
         }
         host.setUserDefault(nil, forKey: Self.legacyCachedLLMModelsKey)
-        _selectedLLMModelId = host.userDefault(forKey: Self.selectedLLMModelKey) as? String
         _llmTemperatureModeRaw = host.userDefault(forKey: "llmTemperatureMode") as? String
             ?? PluginLLMTemperatureMode.providerDefault.rawValue
         _llmTemperatureValue = host.userDefault(forKey: "llmTemperatureValue") as? Double
             ?? 0.3
+        _selectedTranscriptionModelId = Self.resolvedTranscriptionModelId(
+            host.userDefault(forKey: Self.selectedTranscriptionModelKey) as? String,
+            host: host
+        )
         normalizeSelectedModel()
         refreshCompatibleModelsIfNeeded()
     }
@@ -75,6 +88,17 @@ final class GeminiPlugin: NSObject, LLMProviderPlugin, @unchecked Sendable {
         PluginModelInfo(id: "gemini-pro-latest", displayName: "Gemini Pro Latest"),
         PluginModelInfo(id: "gemini-flash-lite-latest", displayName: "Gemini Flash-Lite Latest"),
     ]
+
+    /// Transient default when the user has not selected a model. Prefers the
+    /// curated auto-updating alias over `supportedModels.first`, which for
+    /// fetched models is the alphabetically-oldest (and possibly retired)
+    /// model, e.g. `gemini-2.0-flash`.
+    private static let curatedDefaultModelId = "gemini-flash-latest"
+
+    fileprivate var defaultLLMModelId: String? {
+        let models = supportedModels
+        return models.first(where: { $0.id == Self.curatedDefaultModelId })?.id ?? models.first?.id
+    }
 
     var supportedModels: [PluginModelInfo] {
         if !_fetchedLLMModels.isEmpty {
@@ -101,7 +125,9 @@ final class GeminiPlugin: NSObject, LLMProviderPlugin, @unchecked Sendable {
         guard let apiKey = _apiKey, !apiKey.isEmpty else {
             throw PluginChatError.notConfigured
         }
-        let modelId = model ?? _selectedLLMModelId ?? supportedModels.first!.id
+        guard let modelId = model ?? _selectedLLMModelId ?? defaultLLMModelId else {
+            throw PluginChatError.notConfigured
+        }
         return try await chatHelper.process(
             apiKey: apiKey,
             model: modelId,
@@ -117,6 +143,8 @@ final class GeminiPlugin: NSObject, LLMProviderPlugin, @unchecked Sendable {
     }
 
     var selectedLLMModelId: String? { _selectedLLMModelId }
+    @objc var preferredModelId: String? { _selectedLLMModelId }
+    @objc var defaultModelId: String? { defaultLLMModelId }
     var llmTemperatureMode: PluginLLMTemperatureMode {
         PluginLLMTemperatureMode(rawValue: _llmTemperatureModeRaw) ?? .providerDefault
     }
@@ -134,6 +162,244 @@ final class GeminiPlugin: NSObject, LLMProviderPlugin, @unchecked Sendable {
         let clamped = min(max(value, 0.0), 2.0)
         _llmTemperatureValue = clamped
         host?.setUserDefault(clamped, forKey: "llmTemperatureValue")
+    }
+
+    // MARK: - TranscriptionEnginePlugin
+
+    var providerId: String { "gemini" }
+    var providerDisplayName: String { "Gemini" }
+
+    var isConfigured: Bool { isAvailable }
+
+    private static let defaultTranscriptionModels: [PluginModelInfo] = [
+        PluginModelInfo(id: "gemini-flash-lite-latest", displayName: "Gemini Flash-Lite Latest"),
+        PluginModelInfo(id: "gemini-flash-latest", displayName: "Gemini Flash Latest"),
+        PluginModelInfo(id: "gemini-3.1-flash-lite", displayName: "Gemini 3.1 Flash-Lite"),
+        PluginModelInfo(id: "gemini-3.5-flash", displayName: "Gemini 3.5 Flash"),
+        PluginModelInfo(id: "gemini-2.5-flash-lite", displayName: "Gemini 2.5 Flash-Lite"),
+        PluginModelInfo(id: "gemini-2.5-flash", displayName: "Gemini 2.5 Flash"),
+    ]
+
+    private static var defaultTranscriptionModelId: String {
+        defaultTranscriptionModels[0].id
+    }
+
+    var transcriptionModels: [PluginModelInfo] { Self.defaultTranscriptionModels }
+
+    var selectedModelId: String? {
+        _selectedTranscriptionModelId ?? Self.defaultTranscriptionModelId
+    }
+
+    func selectModel(_ modelId: String) {
+        _selectedTranscriptionModelId = modelId
+        host?.setUserDefault(modelId, forKey: Self.selectedTranscriptionModelKey)
+    }
+
+    var supportsTranslation: Bool { false }
+    var supportsStreaming: Bool { false }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
+
+    var supportedLanguages: [String] {
+        [
+            "ar", "cs", "da", "de", "el", "en", "es", "fi", "fr", "he",
+            "hi", "hu", "id", "it", "ja", "ko", "nl", "no", "pl", "pt",
+            "ro", "ru", "sv", "th", "tr", "uk", "vi", "zh",
+        ]
+    }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        guard !translate else {
+            throw PluginTranscriptionError.apiError("Gemini speech transcription does not support translation yet.")
+        }
+        guard let apiKey = _apiKey, !apiKey.isEmpty else {
+            throw PluginTranscriptionError.notConfigured
+        }
+        guard let modelId = selectedModelId?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !modelId.isEmpty else {
+            throw PluginTranscriptionError.noModelSelected
+        }
+
+        let request = try Self.makeTranscriptionRequest(
+            audio: audio,
+            apiKey: apiKey,
+            modelId: modelId,
+            language: language,
+            prompt: prompt,
+            timeout: Self.transcriptionRequestTimeout
+        )
+        let (data, response) = try await PluginHTTPClient.data(for: request)
+        try Self.validateTranscriptionResponse(data: data, response: response)
+        let text = try Self.parseTranscriptionResponse(data)
+        return PluginTranscriptionResult(text: text, detectedLanguage: language)
+    }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        let result = try await transcribe(
+            audio: audio,
+            language: language,
+            translate: translate,
+            prompt: prompt
+        )
+        _ = onProgress(result.text)
+        return result
+    }
+
+    static func makeTranscriptionRequest(
+        audio: AudioData,
+        apiKey: String,
+        modelId: String,
+        language: String?,
+        prompt: String?,
+        timeout: TimeInterval
+    ) throws -> URLRequest {
+        guard let url = URL(string: "\(generateContentAPIBase)/\(modelId):generateContent") else {
+            throw PluginTranscriptionError.apiError("Invalid Gemini transcription URL.")
+        }
+
+        let renderedPrompt = transcriptionPrompt(dictionaryPrompt: prompt, language: language)
+        let body: [String: Any] = [
+            "contents": [[
+                "role": "user",
+                "parts": [
+                    ["text": renderedPrompt],
+                    [
+                        "inlineData": [
+                            "mimeType": "audio/wav",
+                            "data": audio.wavData.base64EncodedString(),
+                        ],
+                    ],
+                ],
+            ]],
+            "generationConfig": generationConfig(for: modelId),
+        ]
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue(apiKey, forHTTPHeaderField: "x-goog-api-key")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = timeout
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        return request
+    }
+
+    static func validateTranscriptionResponse(data: Data, response: URLResponse) throws {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw PluginTranscriptionError.networkError("Invalid Gemini response.")
+        }
+
+        switch httpResponse.statusCode {
+        case 200:
+            return
+        case 401, 403:
+            throw PluginTranscriptionError.invalidApiKey
+        case 413:
+            throw PluginTranscriptionError.fileTooLarge
+        case 429:
+            throw PluginTranscriptionError.rateLimited
+        default:
+            throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(transcriptionErrorMessage(from: data))")
+        }
+    }
+
+    static func parseTranscriptionResponse(_ data: Data) throws -> String {
+        struct GeminiPart: Decodable {
+            let text: String?
+        }
+        struct GeminiContent: Decodable {
+            let parts: [GeminiPart]?
+        }
+        struct GeminiCandidate: Decodable {
+            let content: GeminiContent?
+        }
+        struct GeminiResponse: Decodable {
+            let candidates: [GeminiCandidate]?
+        }
+
+        do {
+            let decoded = try JSONDecoder().decode(GeminiResponse.self, from: data)
+            let text = decoded.candidates?.first?.content?.parts?
+                .compactMap(\.text)
+                .joined(separator: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let text, !text.isEmpty else {
+                throw PluginTranscriptionError.apiError("Empty response from Gemini.")
+            }
+            return text
+        } catch let error as PluginTranscriptionError {
+            throw error
+        } catch {
+            throw PluginTranscriptionError.apiError("Failed to parse Gemini response: \(error.localizedDescription)")
+        }
+    }
+
+    static func transcriptionPrompt(dictionaryPrompt: String?, language: String?) -> String {
+        var sections = [
+            """
+            Transcribe the attached audio for technical dictation. Preserve proper nouns, model names, framework names, identifiers, CLI flags, version numbers, punctuation, and casing exactly when they are spoken. Use digits for numbers in technical contexts. Output only the transcription.
+            """,
+        ]
+
+        let terms = PluginDictionaryTerms.terms(fromPrompt: dictionaryPrompt)
+        if let termPrompt = PluginDictionaryTerms.prompt(from: terms, maxLength: 4_000) {
+            sections.append("User dictionary terms: \(termPrompt)")
+        }
+
+        if let language = language?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !language.isEmpty {
+            sections.append("Language hint: \(language)")
+        }
+
+        return sections.joined(separator: "\n\n")
+    }
+
+    private static func generationConfig(for modelId: String) -> [String: Any] {
+        var config: [String: Any] = [
+            "temperature": 0.2,
+            "maxOutputTokens": 2048,
+            "responseMimeType": "text/plain",
+        ]
+
+        if modelId.hasPrefix("gemini-3") {
+            config["thinkingConfig"] = ["thinkingLevel": "MINIMAL"]
+        } else if modelId.hasPrefix("gemini-2.5") {
+            config["thinkingConfig"] = ["thinkingBudget": 0]
+        }
+
+        return config
+    }
+
+    private static func transcriptionErrorMessage(from data: Data) -> String {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let error = json["error"] as? [String: Any],
+              let message = error["message"] as? String,
+              !message.isEmpty else {
+            return "Gemini transcription request failed."
+        }
+        return message
+    }
+
+    private static func resolvedTranscriptionModelId(_ storedModelId: String?, host: HostServices) -> String {
+        let trimmedModelId = storedModelId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let supportedIds = Set(defaultTranscriptionModels.map(\.id))
+        let modelId = trimmedModelId.flatMap { supportedIds.contains($0) ? $0 : nil }
+            ?? defaultTranscriptionModelId
+
+        if modelId != storedModelId {
+            host.setUserDefault(modelId, forKey: selectedTranscriptionModelKey)
+        }
+
+        return modelId
     }
 
     // MARK: - Settings View
@@ -236,22 +502,19 @@ final class GeminiPlugin: NSObject, LLMProviderPlugin, @unchecked Sendable {
         return !excludedCompatibleModelTokens.contains { id.contains($0) }
     }
 
+    /// Validates the persisted selection against the current model list.
+    /// `_selectedLLMModelId` (and thus `preferredModelId`) only ever holds an
+    /// explicit, still-valid user selection — a fallback is never seeded into
+    /// it or persisted, so the host cannot mistake the alphabetically-oldest
+    /// fetched model for a deliberate choice. The stored value is kept even
+    /// while invalid so it re-validates if the model reappears after a fetch.
     private func normalizeSelectedModel() {
+        let storedModelId = host?.userDefault(forKey: Self.selectedLLMModelKey) as? String
         let supportedIds = Set(supportedModels.map(\.id))
-        guard !supportedIds.isEmpty else {
+        if let storedModelId, supportedIds.contains(storedModelId) {
+            _selectedLLMModelId = storedModelId
+        } else {
             _selectedLLMModelId = nil
-            return
-        }
-
-        if let selectedModelId = _selectedLLMModelId,
-           supportedIds.contains(selectedModelId) {
-            return
-        }
-
-        let fallbackModelId = supportedModels.first?.id
-        _selectedLLMModelId = fallbackModelId
-        if let fallbackModelId {
-            host?.setUserDefault(fallbackModelId, forKey: Self.selectedLLMModelKey)
         }
     }
 
@@ -449,7 +712,7 @@ private struct GeminiSettingsView: View {
             if let key = plugin._apiKey, !key.isEmpty {
                 apiKeyInput = key
             }
-            selectedModel = plugin.selectedLLMModelId ?? plugin.supportedModels.first?.id ?? ""
+            selectedModel = plugin.selectedLLMModelId ?? plugin.defaultLLMModelId ?? ""
             llmTemperatureMode = plugin.llmTemperatureMode
             llmTemperatureValue = plugin.llmTemperatureValue
             fetchedLLMModels = plugin._fetchedLLMModels
@@ -496,9 +759,9 @@ private struct GeminiSettingsView: View {
                     fetchedLLMModels = models
                     plugin.setFetchedLLMModels(models)
                     if !models.contains(where: { $0.id == selectedModel }),
-                       let first = models.first {
-                        selectedModel = first.id
-                        plugin.selectLLMModel(first.id)
+                       let fallback = plugin.defaultLLMModelId {
+                        selectedModel = fallback
+                        plugin.selectLLMModel(fallback)
                     }
                 }
             }

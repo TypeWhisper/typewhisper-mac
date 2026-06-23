@@ -93,6 +93,7 @@ struct RegistryPlugin: Codable, Identifiable {
     let description: String
     let category: String
     let categories: [String]
+    let capabilities: [String]
     let size: Int64
     let downloadURL: String
     let iconSystemName: String?
@@ -125,6 +126,10 @@ struct RegistryPlugin: Codable, Identifiable {
         hosting ?? PluginHosting.fallback(requiresAPIKey: requiresAPIKey)
     }
 
+    func supportsCapability(_ capability: PluginCapability) -> Bool {
+        capabilities.contains(capability.rawValue)
+    }
+
     init(
         id: String,
         source: PluginDistributionSource,
@@ -138,6 +143,7 @@ struct RegistryPlugin: Codable, Identifiable {
         description: String,
         category: String,
         categories: [String],
+        capabilities: [String] = [],
         size: Int64,
         downloadURL: String,
         iconSystemName: String?,
@@ -162,6 +168,7 @@ struct RegistryPlugin: Codable, Identifiable {
         self.description = description
         self.category = category
         self.categories = categories
+        self.capabilities = capabilities
         self.size = size
         self.downloadURL = downloadURL
         self.iconSystemName = iconSystemName
@@ -182,6 +189,7 @@ struct RegistryPluginRelease: Decodable, Equatable {
     let sdkCompatibilityVersion: String?
     let minOSVersion: String?
     let supportedArchitectures: [String]?
+    let capabilities: [String]?
     let size: Int64
     let downloadURL: String
     let publishedAt: String?
@@ -216,6 +224,7 @@ struct RegistryPluginEntry: Decodable {
     let description: String
     let category: String
     let categories: [String]
+    let capabilities: [String]
     let iconSystemName: String?
     let requiresAPIKey: Bool?
     let hosting: PluginHosting?
@@ -235,6 +244,7 @@ struct RegistryPluginEntry: Decodable {
         case description
         case category
         case categories
+        case capabilities
         case iconSystemName
         case requiresAPIKey
         case hosting
@@ -268,6 +278,9 @@ struct RegistryPluginEntry: Decodable {
             categories: try container.decodeIfPresent([String].self, forKey: .categories)
         )
         category = categories.first ?? PluginCategory.utility.rawValue
+        capabilities = PluginManifest.normalizedCapabilityIdentifiers(
+            try container.decodeIfPresent([String].self, forKey: .capabilities)
+        )
         iconSystemName = try container.decodeIfPresent(String.self, forKey: .iconSystemName)
         requiresAPIKey = try container.decodeIfPresent(Bool.self, forKey: .requiresAPIKey)
         hosting = try container.decodeIfPresent(PluginHosting.self, forKey: .hosting)
@@ -340,6 +353,9 @@ struct RegistryPluginEntry: Decodable {
             description: description,
             category: category,
             categories: categories,
+            capabilities: compatibleRelease.capabilities.map {
+                PluginManifest.normalizedCapabilityIdentifiers($0)
+            } ?? capabilities,
             size: compatibleRelease.size,
             downloadURL: compatibleRelease.downloadURL,
             iconSystemName: iconSystemName,
@@ -752,7 +768,7 @@ final class PluginRegistryService: ObservableObject {
 
     // MARK: - Uninstall
 
-    func uninstallPlugin(_ pluginId: String, deleteData: Bool = false) {
+    func uninstallPlugin(_ pluginId: String, deleteData: Bool = false) throws {
         guard let bundleURL = PluginManager.shared.bundleURL(for: pluginId) else { return }
 
         PluginManager.shared.unloadPlugin(pluginId)
@@ -761,15 +777,26 @@ final class PluginRegistryService: ObservableObject {
         logger.info("Removing installed plugin bundle at \(bundleURL.path, privacy: .public)")
         try? FileManager.default.removeItem(at: bundleURL)
 
+        var keychainError: Error?
         if deleteData {
             let dataDir = AppConstants.appSupportDirectory
                 .appendingPathComponent("PluginData", isDirectory: true)
                 .appendingPathComponent(pluginId, isDirectory: true)
             try? FileManager.default.removeItem(at: dataDir)
+            do {
+                try KeychainService.deleteAll(withServicePrefix: "\(pluginId).")
+            } catch {
+                logger.error("Keychain cleanup failed for \(pluginId): \(error.localizedDescription)")
+                keychainError = error
+            }
         }
 
         UserDefaults.standard.removeObject(forKey: "plugin.\(pluginId).enabled")
         logger.info("Uninstalled plugin: \(pluginId)")
+
+        if let error = keychainError {
+            throw error
+        }
     }
 
     // MARK: - Install from File

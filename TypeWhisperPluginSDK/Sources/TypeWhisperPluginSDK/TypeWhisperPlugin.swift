@@ -213,7 +213,14 @@ public protocol LLMProviderSetupStatusProviding {
 /// Optional protocol for LLM plugins that expose their selected model.
 /// Kept separate from LLMProviderPlugin to preserve binary compatibility with existing plugins.
 @objc public protocol LLMModelSelectable {
+    /// The model the user explicitly selected, or nil when no deliberate
+    /// selection exists. Hosts may treat this as a persistable preference.
     @objc optional var preferredModelId: String? { get }
+    /// The model the provider recommends when no explicit selection exists.
+    /// A transient fallback hint, not a user choice: hosts should prefer it
+    /// over picking from `supportedModels` themselves (whose ordering may put
+    /// a retired model first), but must not surface it as a user preference.
+    @objc optional var defaultModelId: String? { get }
 }
 
 // MARK: - Post-Processor Plugin
@@ -463,6 +470,31 @@ public struct PluginTranscriptionResult: Sendable {
         self.text = text
         self.detectedLanguage = detectedLanguage
         self.segments = segments
+    }
+}
+
+public struct PluginTranscriptionSourceProgress: Sendable, Equatable {
+    public let processedDuration: TimeInterval
+    public let totalDuration: TimeInterval
+    public let previewText: String?
+
+    public init(
+        processedDuration: TimeInterval,
+        totalDuration: TimeInterval,
+        previewText: String? = nil
+    ) {
+        self.processedDuration = processedDuration
+        self.totalDuration = totalDuration
+        self.previewText = previewText
+    }
+
+    public var fractionCompleted: Double? {
+        guard processedDuration.isFinite,
+              totalDuration.isFinite,
+              totalDuration > 0 else {
+            return nil
+        }
+        return min(max(processedDuration / totalDuration, 0), 1)
     }
 }
 
@@ -752,6 +784,124 @@ public protocol TranscriptPreviewFallbackPolicyProviding: TranscriptionEnginePlu
 
 public extension TranscriptPreviewFallbackPolicyProviding {
     var allowsTranscriptPreviewFallback: Bool { true }
+}
+
+public protocol SourceProgressTranscriptionEnginePlugin: TranscriptionEnginePlugin {
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool,
+        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
+    ) async throws -> PluginTranscriptionResult
+}
+
+public protocol DictionaryTermHintSourceProgressTranscriptionEnginePlugin:
+    DictionaryTermHintTranscriptionEnginePlugin,
+    SourceProgressTranscriptionEnginePlugin
+{
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        onProgress: @Sendable @escaping (String) -> Bool,
+        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
+    ) async throws -> PluginTranscriptionResult
+}
+
+public extension DictionaryTermHintSourceProgressTranscriptionEnginePlugin {
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint]
+    ) async throws -> PluginTranscriptionResult {
+        try await transcribe(
+            audio: audio,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            dictionaryTermHints: dictionaryTermHints,
+            onProgress: { _ in true },
+            onSourceProgress: { _ in true }
+        )
+    }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        try await transcribe(
+            audio: audio,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            dictionaryTermHints: dictionaryTermHints,
+            onProgress: onProgress,
+            onSourceProgress: { _ in true }
+        )
+    }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool,
+        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        try await transcribe(
+            audio: audio,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            dictionaryTermHints: [],
+            onProgress: onProgress,
+            onSourceProgress: onSourceProgress
+        )
+    }
+}
+
+public protocol SourceProgressLanguageHintTranscriptionEnginePlugin:
+    SourceProgressTranscriptionEnginePlugin,
+    LanguageHintTranscriptionEnginePlugin
+{
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool,
+        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
+    ) async throws -> PluginTranscriptionResult
+}
+
+public extension SourceProgressLanguageHintTranscriptionEnginePlugin {
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool,
+        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        try await transcribe(
+            audio: audio,
+            language: languageSelection.requestedLanguage,
+            translate: translate,
+            prompt: prompt,
+            onProgress: onProgress,
+            onSourceProgress: onSourceProgress
+        )
+    }
 }
 
 public extension TranscriptionEnginePlugin {

@@ -8,10 +8,14 @@
     "author": "TypeWhisper",
     "description": "Connect to any OpenAI-compatible API server for transcription and LLM. Works with Ollama, LM Studio, vLLM, and more.",
     "descriptions": {
-        "de": "Verbindung zu jedem OpenAI-kompatiblen API-Server für Transkription und LLM. Funktioniert mit Ollama, LM Studio, vLLM und mehr."
+        "de": "Verbindung zu jedem OpenAI-kompatiblen API-Server für Transkription und LLM. Funktioniert mit Ollama, LM Studio, vLLM und mehr.",
+        "ja": "文字起こしとLLM用に任意のOpenAI互換APIサーバーへ接続します。Ollama、LM Studio、vLLMなどで動作します。"
     },
     "category": "transcription",
-    "categories": ["transcription", "llm"],
+    "categories": [
+        "transcription",
+        "llm"
+    ],
     "iconSystemName": "server.rack",
     "principalClass": "OpenAICompatiblePlugin",
     "detailsURL": "https://www.typewhisper.com/addons/openai-compatible/"

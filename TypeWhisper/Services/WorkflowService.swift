@@ -41,6 +41,9 @@ struct WorkflowMatchResult {
 
 @MainActor
 final class WorkflowService: ObservableObject {
+    static let defaultShortTranscriptionMinimumWords = 0
+    static let shortTranscriptionMinimumWordsRange = 0...10
+
     @Published private(set) var workflows: [Workflow] = []
     @Published var defaultProviderId: String {
         didSet {
@@ -53,6 +56,16 @@ final class WorkflowService: ObservableObject {
     @Published var defaultCloudModel: String {
         didSet {
             userDefaults.set(defaultCloudModel, forKey: UserDefaultsKeys.workflowDefaultLLMCloudModel)
+        }
+    }
+    @Published var shortTranscriptionMinimumWords: Int {
+        didSet {
+            let clamped = Self.clampedShortTranscriptionMinimumWords(shortTranscriptionMinimumWords)
+            guard clamped == shortTranscriptionMinimumWords else {
+                shortTranscriptionMinimumWords = clamped
+                return
+            }
+            userDefaults.set(clamped, forKey: UserDefaultsKeys.workflowShortTranscriptionMinimumWords)
         }
     }
 
@@ -71,33 +84,39 @@ final class WorkflowService: ObservableObject {
         self.defaultCloudModel = userDefaults.string(forKey: UserDefaultsKeys.workflowDefaultLLMCloudModel)
             ?? userDefaults.string(forKey: "llmCloudModel")
             ?? ""
+        self.shortTranscriptionMinimumWords = Self.clampedShortTranscriptionMinimumWords(
+            userDefaults.object(forKey: UserDefaultsKeys.workflowShortTranscriptionMinimumWords) as? Int
+                ?? Self.defaultShortTranscriptionMinimumWords
+        )
 
-        let schema = Schema([Workflow.self])
-        let storeDir = appSupportDirectory
-        try? FileManager.default.createDirectory(at: storeDir, withIntermediateDirectories: true)
-
-        let storeURL = storeDir.appendingPathComponent("workflows.store")
-        let config = ModelConfiguration(url: storeURL)
 
         do {
-            modelContainer = try ModelContainer(for: schema, configurations: [config])
+            let (container, context) = try SwiftDataStoreFactory.create(
+                for: [Workflow.self],
+                storeName: "workflows",
+                in: appSupportDirectory
+            )
+            modelContainer = container
+            modelContext = context
         } catch {
-            for suffix in ["", "-wal", "-shm"] {
-                let url = storeDir.appendingPathComponent("workflows.store\(suffix)")
-                try? FileManager.default.removeItem(at: url)
-            }
-
-            do {
-                modelContainer = try ModelContainer(for: schema, configurations: [config])
-            } catch {
-                fatalError("Failed to create workflows ModelContainer after reset: \(error)")
-            }
+            fatalError("Failed to initialize workflows store: \(error)")
         }
 
-        modelContext = ModelContext(modelContainer)
-        modelContext.autosaveEnabled = true
-
         fetchWorkflows()
+    }
+
+    static func clampedShortTranscriptionMinimumWords(_ value: Int) -> Int {
+        min(max(value, shortTranscriptionMinimumWordsRange.lowerBound), shortTranscriptionMinimumWordsRange.upperBound)
+    }
+
+    func shouldSkipAIProcessingForShortDictation(text: String) -> Bool {
+        guard shortTranscriptionMinimumWords > 0 else { return false }
+
+        let wordCount = text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(whereSeparator: \.isWhitespace)
+            .count
+        return wordCount > 0 && wordCount < shortTranscriptionMinimumWords
     }
 
     @discardableResult

@@ -442,7 +442,8 @@ struct LicenseSettingsView: View {
 
                 Text(localizedAppText(
                     "Connect Discord to claim your \(supporterTierDisplayName(tier)) supporter status in the community server.",
-                    de: "Verbinde Discord, um deinen \(supporterTierDisplayName(tier))-Supporter-Status im Community-Server zu bestätigen."
+                    de: "Verbinde Discord, um deinen \(supporterTierDisplayName(tier))-Supporter-Status im Community-Server zu bestätigen.",
+                    ja: "Discordを連携して、コミュニティサーバーで\(supporterTierDisplayName(tier))サポーターステータスを受け取ります。"
                 ))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -473,7 +474,7 @@ struct LicenseSettingsView: View {
                     .foregroundStyle(.green)
 
                 if let username = supporterDiscord.claimStatus.discordUsername {
-                    Text(localizedAppText("Linked account: \(username)", de: "Verknüpftes Konto: \(username)"))
+                    Text(localizedAppText("Linked account: \(username)", de: "Verknüpftes Konto: \(username)", ja: "連携済みアカウント: \(username)"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -481,7 +482,8 @@ struct LicenseSettingsView: View {
                 if !supporterDiscord.claimStatus.linkedRoles.isEmpty {
                     Text(localizedAppText(
                         "Active roles: \(supporterDiscord.claimStatus.linkedRoles.joined(separator: ", "))",
-                        de: "Aktive Rollen: \(supporterDiscord.claimStatus.linkedRoles.joined(separator: ", "))"
+                        de: "Aktive Rollen: \(supporterDiscord.claimStatus.linkedRoles.joined(separator: ", "))",
+                        ja: "有効なロール: \(supporterDiscord.claimStatus.linkedRoles.joined(separator: ", "))"
                     ))
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -802,22 +804,26 @@ struct LicenseSettingsView: View {
         switch entitlement {
         case .commercial(let tier, let isLifetime):
             let lifetimeSuffix = isLifetime
-                ? localizedAppText(" (Lifetime)", de: " (Dauerlizenz)")
+                ? localizedAppText(" (Lifetime)", de: " (Dauerlizenz)", ja: "（永久ライセンス）")
                 : ""
             return localizedAppText(
                 "Detected commercial key: \(businessTierDisplayName(tier))\(lifetimeSuffix).",
-                de: "Kommerzieller Schlüssel erkannt: \(businessTierDisplayName(tier))\(lifetimeSuffix)."
+                de: "Kommerzieller Schlüssel erkannt: \(businessTierDisplayName(tier))\(lifetimeSuffix).",
+                ja: "商用キーを検出しました: \(businessTierDisplayName(tier))\(lifetimeSuffix)。"
             )
         case .supporter(let tier):
             return localizedAppText(
                 "Detected supporter key: \(supporterTierDisplayName(tier)).",
-                de: "Supporter-Schlüssel erkannt: \(supporterTierDisplayName(tier))."
+                de: "Supporter-Schlüssel erkannt: \(supporterTierDisplayName(tier)).",
+                ja: "サポーターキーを検出しました: \(supporterTierDisplayName(tier))。"
             )
         }
     }
 
     private func activeTierLabel(for tier: LicenseTier) -> String {
-        let lifetimeSuffix = license.licenseIsLifetime ? localizedAppText(", Lifetime", de: ", Dauerlizenz") : ""
+        let lifetimeSuffix = license.licenseIsLifetime
+            ? localizedAppText(", Lifetime", de: ", Dauerlizenz", ja: "、永久ライセンス")
+            : ""
         return "(\(businessTierDisplayName(tier))\(lifetimeSuffix))"
     }
 
@@ -885,17 +891,17 @@ struct LicenseSettingsView: View {
 
     private func businessTierDisplayName(_ tier: LicenseTier) -> String {
         switch tier {
-        case .individual: return localizedAppText("Individual", de: "Einzelnutzer")
-        case .team: return localizedAppText("Team", de: "Team")
-        case .enterprise: return localizedAppText("Enterprise", de: "Unternehmensplan")
+        case .individual: return localizedAppText("Individual", de: "Einzelnutzer", ja: "個人")
+        case .team: return localizedAppText("Team", de: "Team", ja: "チーム")
+        case .enterprise: return localizedAppText("Enterprise", de: "Unternehmensplan", ja: "エンタープライズ")
         }
     }
 
     private func supporterTierDisplayName(_ tier: SupporterTier) -> String {
         switch tier {
-        case .bronze: return localizedAppText("Bronze", de: "Bronze")
-        case .silver: return localizedAppText("Silver", de: "Silber")
-        case .gold: return localizedAppText("Gold", de: "Gold")
+        case .bronze: return localizedAppText("Bronze", de: "Bronze", ja: "ブロンズ")
+        case .silver: return localizedAppText("Silver", de: "Silber", ja: "シルバー")
+        case .gold: return localizedAppText("Gold", de: "Gold", ja: "ゴールド")
         }
     }
 

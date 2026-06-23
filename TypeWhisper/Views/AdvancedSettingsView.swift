@@ -6,6 +6,7 @@ struct AdvancedSettingsView: View {
     @ObservedObject private var memoryService = ServiceContainer.shared.memoryService
     @ObservedObject private var promptProcessingService = ServiceContainer.shared.promptProcessingService
     @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
+    @ObservedObject private var workflowService = ServiceContainer.shared.workflowService
     @ObservedObject private var dictation = DictationViewModel.shared
     @ObservedObject private var speechFeedbackService = ServiceContainer.shared.speechFeedbackService
     @ObservedObject private var pluginManager = PluginManager.shared
@@ -25,39 +26,43 @@ struct AdvancedSettingsView: View {
         Form {
             // MARK: - Support Diagnostics
             Section(localizedAppText("Support Diagnostics", de: "Support-Diagnose")) {
-                Button {
-                    exportDiagnostics()
-                } label: {
-                    Label(
-                        localizedAppText("Export Diagnostics", de: "Diagnose exportieren"),
-                        systemImage: "square.and.arrow.up"
-                    )
-                }
+                HStack {
+                    Button {
+                        exportDiagnostics()
+                    } label: {
+                        Label(
+                            localizedAppText("Export Diagnostics", de: "Diagnose exportieren"),
+                            systemImage: "square.and.arrow.up"
+                        )
+                    }
 
-                Text(localizedAppText(
-                    "Creates a JSON support report with app, system, permission, plugin, settings and audio device diagnostics.",
-                    de: "Erstellt einen JSON-Supportbericht mit App-, System-, Berechtigungs-, Plugin-, Einstellungs- und Audiogeräte-Diagnose."
-                ))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                    SettingsInfoButton(text: localizedAppText(
+                        "Creates a JSON support report with app, system, permission, plugin, settings and audio device diagnostics.",
+                        de: "Erstellt einen JSON-Supportbericht mit App-, System-, Berechtigungs-, Plugin-, Einstellungs- und Audiogeräte-Diagnose."
+                    ))
+                }
             }
 
             // MARK: - Memory
             Section(String(localized: "Memory")) {
-                Toggle(String(localized: "Enable Memory"), isOn: $memoryService.isEnabled)
-                Text(String(localized: "Automatically extracts facts, preferences and patterns from your transcriptions using an LLM. Memories are injected into prompt context."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Toggle(isOn: $memoryService.isEnabled) {
+                    SettingsInfoLabel(
+                        title: String(localized: "Enable Memory"),
+                        info: String(localized: "Automatically extracts facts, preferences and patterns from your transcriptions using an LLM. Memories are injected into prompt context.")
+                    )
+                }
 
                 if memoryService.isEnabled {
-                    Picker(String(localized: "Capture From"), selection: $memoryService.captureScope) {
+                    Picker(selection: $memoryService.captureScope) {
                         ForEach(MemoryCaptureScope.allCases) { scope in
                             Text(scope.localizedTitle).tag(scope)
                         }
+                    } label: {
+                        SettingsInfoLabel(
+                            title: String(localized: "Capture From"),
+                            info: memoryService.captureScope.localizedDescription
+                        )
                     }
-                    Text(memoryService.captureScope.localizedDescription)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
 
                     Picker(String(localized: "Extraction Provider"), selection: $memoryService.extractionProviderId) {
                         Text(String(localized: "None")).tag("")
@@ -80,15 +85,15 @@ struct AdvancedSettingsView: View {
 
                     Stepper(value: $memoryService.minimumTextLength, in: 10...200, step: 10) {
                         HStack {
-                            Text(String(localized: "Min. text length"))
+                            SettingsInfoLabel(
+                                title: String(localized: "Min. text length"),
+                                info: String(localized: "Transcriptions shorter than this are skipped for memory extraction.")
+                            )
                             Spacer()
                             Text("\(memoryService.minimumTextLength)")
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    Text(String(localized: "Transcriptions shorter than this are skipped for memory extraction."))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
 
                     DisclosureGroup(String(localized: "Extraction Prompt")) {
                         TextEditor(text: $memoryService.extractionPrompt)
@@ -143,7 +148,7 @@ struct AdvancedSettingsView: View {
 
             // MARK: - Recording
             Section(String(localized: "Recording")) {
-                Picker(String(localized: "Auto-unload model"), selection: Binding(
+                Picker(selection: Binding(
                     get: { modelManager.autoUnloadSeconds },
                     set: { modelManager.autoUnloadSeconds = $0 }
                 )) {
@@ -155,39 +160,77 @@ struct AdvancedSettingsView: View {
                     Text(String(localized: "After 10 minutes")).tag(600)
                     Text(String(localized: "After 30 minutes")).tag(1800)
                     Text(String(localized: "After 1 hour")).tag(3600)
+                } label: {
+                    SettingsInfoLabel(
+                        title: String(localized: "Auto-unload model"),
+                        info: String(localized: "Automatically unloads local models from memory after inactivity. It reloads when needed. Does not affect cloud engines.")
+                    )
                 }
 
-                Text(String(localized: "Automatically unloads local models from memory after inactivity. It reloads when needed. Does not affect cloud engines."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Toggle(isOn: $dictation.transcribeShortQuietClipsAggressively) {
+                    SettingsInfoLabel(
+                        title: String(localized: "Transcribe short / quiet clips more aggressively"),
+                        info: String(localized: "Still discards accidental ultra-short taps, but keeps more very short or quiet recordings instead of classifying them as no speech.")
+                    )
+                }
 
-                Toggle(
-                    String(localized: "Transcribe short / quiet clips more aggressively"),
-                    isOn: $dictation.transcribeShortQuietClipsAggressively
-                )
+                Toggle(isOn: $dictation.microphoneBoostEnabled) {
+                    SettingsInfoLabel(
+                        title: localizedAppText("Whisper Mode (AGC)", de: "Whisper-Modus (AGC)"),
+                        info: localizedAppText(
+                            "Automatically raises quiet microphone input before transcription. Useful for low-gain microphones, but very noisy rooms may sound louder too.",
+                            de: "Hebt leise Mikrofoneingaben vor der Transkription automatisch an. Hilft bei Mikrofonen mit niedrigem Pegel, kann in lauten Räumen aber auch Störgeräusche verstärken."
+                        )
+                    )
+                }
 
-                Text(String(localized: "Still discards accidental ultra-short taps, but keeps more very short or quiet recordings instead of classifying them as no speech."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                LabeledContent {
+                    HStack(spacing: 8) {
+                        if workflowService.shortTranscriptionMinimumWords > 0 {
+                            Text(localizedAppText("under", de: "unter"))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
 
-                Toggle(
-                    localizedAppText("Whisper Mode (AGC)", de: "Whisper-Modus (AGC)"),
-                    isOn: $dictation.microphoneBoostEnabled
-                )
+                        TextField(
+                            "",
+                            value: $workflowService.shortTranscriptionMinimumWords,
+                            format: .number
+                        )
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 44)
+                        .multilineTextAlignment(.trailing)
+                        .accessibilityLabel(localizedAppText("Minimum words", de: "Mindestanzahl Wörter"))
 
-                Text(localizedAppText(
-                    "Automatically raises quiet microphone input before transcription. Useful for low-gain microphones, but very noisy rooms may sound louder too.",
-                    de: "Hebt leise Mikrofoneingaben vor der Transkription automatisch an. Hilft bei Mikrofonen mit niedrigem Pegel, kann in lauten Räumen aber auch Störgeräusche verstärken."
-                ))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                        Text(workflowService.shortTranscriptionMinimumWords == 0
+                             ? localizedAppText("Off", de: "Aus")
+                             : localizedAppText("words", de: "Wörtern"))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                    }
+                    .fixedSize(horizontal: true, vertical: false)
+                } label: {
+                    SettingsInfoLabel(
+                        title: localizedAppText(
+                            "Skip AI post-processing",
+                            de: "KI-Nachbearbeitung überspringen"
+                        ),
+                        info: localizedAppText(
+                            "For short dictations, the matched workflow still controls output and actions, but the AI enhancement step is skipped. Values are limited to 0-10 words; 0 disables the skip.",
+                            de: "Bei kurzen Diktaten steuert der erkannte Workflow weiterhin Ausgabe und Aktionen, aber die KI-Nachbearbeitung wird übersprungen. Werte sind auf 0-10 Wörter begrenzt; 0 deaktiviert das Überspringen."
+                        )
+                    )
+                }
 
                 if speechFeedbackService.hasAvailableProviders {
-                    Toggle(String(localized: "Spoken feedback"), isOn: $dictation.spokenFeedbackEnabled)
-
-                    Text(String(localized: "Reads back the final transcribed text after each dictation using the selected speech provider. Recording, error, and prompt announcements are only spoken through VoiceOver accessibility announcements."))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Toggle(isOn: $dictation.spokenFeedbackEnabled) {
+                        SettingsInfoLabel(
+                            title: String(localized: "Spoken feedback"),
+                            info: String(localized: "Reads back the final transcribed text after each dictation using the selected speech provider. Recording, error, and prompt announcements are only spoken through VoiceOver accessibility announcements.")
+                        )
+                    }
 
                     if dictation.spokenFeedbackEnabled {
                         let providerSelection = Binding(
@@ -222,33 +265,44 @@ struct AdvancedSettingsView: View {
 
             // MARK: - History
             Section(String(localized: "History")) {
-                Toggle(String(localized: "Save history"), isOn: $historyEnabled)
-                Text(String(localized: "Saves transcriptions to the history tab."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Toggle(isOn: $historyEnabled) {
+                    SettingsInfoLabel(
+                        title: String(localized: "Save history"),
+                        info: String(localized: "Saves transcriptions to the history tab.")
+                    )
+                }
 
                 if historyEnabled {
-                    Toggle(String(localized: "Save audio with transcriptions"), isOn: $saveAudioWithHistory)
-                    Text(String(localized: "Stores a WAV recording alongside each transcription. Uses approximately 1 MB per 30 seconds."))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Toggle(isOn: $saveAudioWithHistory) {
+                        SettingsInfoLabel(
+                            title: String(localized: "Save audio with transcriptions"),
+                            info: String(localized: "Stores a WAV recording alongside each transcription. Uses approximately 1 MB per 30 seconds.")
+                        )
+                    }
 
-                    Picker(String(localized: "Auto-delete after"), selection: $historyRetentionDays) {
+                    Picker(selection: $historyRetentionDays) {
                         Text(String(localized: "Unlimited")).tag(0)
                         Text(String(localized: "30 days")).tag(30)
                         Text(String(localized: "60 days")).tag(60)
                         Text(String(localized: "90 days")).tag(90)
                         Text(String(localized: "180 days")).tag(180)
+                    } label: {
+                        SettingsInfoLabel(
+                            title: String(localized: "Auto-delete after"),
+                            info: String(localized: "Older entries are automatically removed at app launch.")
+                        )
                     }
-                    Text(String(localized: "Older entries are automatically removed at app launch."))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
             }
 
             // MARK: - API Server
             Section(String(localized: "API Server")) {
-                Toggle(String(localized: "Enable API Server"), isOn: $viewModel.isEnabled)
+                Toggle(isOn: $viewModel.isEnabled) {
+                    SettingsInfoLabel(
+                        title: String(localized: "Enable API Server"),
+                        info: String(localized: "Advanced automation interface for local tools. Disabled by default and bound to 127.0.0.1 only.")
+                    )
+                }
                     .onChange(of: viewModel.isEnabled) { _, enabled in
                         if enabled {
                             viewModel.startServer()
@@ -257,15 +311,12 @@ struct AdvancedSettingsView: View {
                         }
                     }
 
-                Text(String(localized: "Advanced automation interface for local tools. Disabled by default and bound to 127.0.0.1 only."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Toggle(String(localized: "Require API Token"), isOn: $viewModel.requiresAuthentication)
-
-                Text(String(localized: "Off by default for compatibility with existing local integrations. New clients can use api-discovery.json or send the bearer token."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Toggle(isOn: $viewModel.requiresAuthentication) {
+                    SettingsInfoLabel(
+                        title: String(localized: "Require API Token"),
+                        info: String(localized: "Off by default for compatibility with existing local integrations. New clients can use api-discovery.json or send the bearer token.")
+                    )
+                }
 
                 if viewModel.isEnabled {
                     HStack {
@@ -311,14 +362,14 @@ struct AdvancedSettingsView: View {
                         uninstallCLI()
                     }
                 } else {
-                    Button(String(localized: "Install Command Line Tool")) {
-                        installCLI()
+                    HStack {
+                        Button(String(localized: "Install Command Line Tool")) {
+                            installCLI()
+                        }
+
+                        SettingsInfoButton(text: String(localized: "Requires the API server to be running. The CLI tool connects to TypeWhisper's API for fast transcription without model cold starts."))
                     }
                 }
-
-                Text(String(localized: "Requires the API server to be running. The CLI tool connects to TypeWhisper's API for fast transcription without model cold starts."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
             // MARK: - Usage Examples
@@ -345,28 +396,22 @@ struct AdvancedSettingsView: View {
                             .font(.headline)
 
                         if raycastInstalled {
-                            Text(String(localized: "Start dictation, search history and switch profiles directly from Raycast."))
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text(String(localized: "TypeWhisper works with Raycast. Start dictation and more directly from your launcher."))
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                        }
+                            HStack {
+                                Button(String(localized: "Open in Raycast")) {
+                                    NSWorkspace.shared.open(URL(string: "raycast://extensions/SeoFood/typewhisper")!)
+                                }
 
-                        if raycastInstalled {
-                            Button(String(localized: "Open in Raycast")) {
-                                NSWorkspace.shared.open(URL(string: "raycast://extensions/SeoFood/typewhisper")!)
+                                SettingsInfoButton(text: String(localized: "Start dictation, search history and switch profiles directly from Raycast. Requires the API server to be running."))
                             }
                         } else {
-                            Button(String(localized: "Learn More")) {
-                                NSWorkspace.shared.open(URL(string: "https://www.raycast.com/SeoFood/typewhisper")!)
+                            HStack {
+                                Button(String(localized: "Learn More")) {
+                                    NSWorkspace.shared.open(URL(string: "https://www.raycast.com/SeoFood/typewhisper")!)
+                                }
+
+                                SettingsInfoButton(text: String(localized: "TypeWhisper works with Raycast. Start dictation and more directly from your launcher. Requires the API server to be running."))
                             }
                         }
-
-                        Text(String(localized: "Requires the API server to be running."))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -528,6 +573,45 @@ struct AdvancedSettingsView: View {
             dictation.spokenFeedbackEnabled = false
         } else {
             _ = speechFeedbackService.disableIfNoProvidersAvailable()
+        }
+    }
+}
+
+struct SettingsInfoLabel: View {
+    let title: String
+    let info: String
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(title)
+            SettingsInfoButton(text: info)
+        }
+    }
+}
+
+struct SettingsInfoButton: View {
+    let text: String
+
+    @State private var isPresented = false
+
+    var body: some View {
+        Button {
+            isPresented.toggle()
+        } label: {
+            Image(systemName: "info.circle")
+                .imageScale(.small)
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.borderless)
+        .help(text)
+        .accessibilityLabel(String(localized: "More information"))
+        .popover(isPresented: $isPresented, arrowEdge: .trailing) {
+            Text(text)
+                .font(.callout)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(12)
+                .frame(width: 300, alignment: .leading)
         }
     }
 }
