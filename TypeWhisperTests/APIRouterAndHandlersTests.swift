@@ -1201,7 +1201,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         XCTAssertEqual(response.status, 400)
         let error = try Self.jsonObject(response)
-        XCTAssertEqual(error["error"] as? String, "Use either 'terms' or 'term_entries', not both")
+        XCTAssertEqual((error["error"] as? [String: Any])?["message"] as? String, "Use either 'terms' or 'term_entries', not both")
     }
 
     func testDictionaryCorrectionsEndpointsListUpsertDeleteAndValidateInput() async throws {
