@@ -1174,6 +1174,36 @@ final class APIRouterAndHandlersTests: XCTestCase {
         ])
     }
 
+    func testDictionaryTermsEndpointRejectsAmbiguousPayloadFormats() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: appSupportDirectory) }
+        let router = try XCTUnwrap(context?.router)
+        let body = try JSONSerialization.data(withJSONObject: [
+            "terms": ["Caivex"],
+            "term_entries": [
+                ["term": "Reson8", "ctc_min_similarity": 0.65],
+            ],
+        ])
+
+        let response = await router.route(HTTPRequest(
+            method: "PUT",
+            path: "/v1/dictionary/terms",
+            queryParams: [:],
+            headers: ["content-type": "application/json"],
+            body: body
+        ))
+
+        XCTAssertEqual(response.status, 400)
+        let error = try Self.jsonObject(response)
+        XCTAssertEqual(error["error"] as? String, "Use either 'terms' or 'term_entries', not both")
+    }
+
     func testDictionaryCorrectionsEndpointsListUpsertDeleteAndValidateInput() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var context: APIContext?

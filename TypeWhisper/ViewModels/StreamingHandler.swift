@@ -134,6 +134,7 @@ final class StreamingHandler: @unchecked Sendable {
                 engineOverrideId: engineOverrideId,
                 cloudModelOverride: cloudModelOverride,
                 prompt: streamPrompt,
+                dictionaryTermHints: dictionaryTermHints,
                 onProgress: { [weak self] text in
                     guard let self else { return false }
                     _ = self.processPreviewUpdate(

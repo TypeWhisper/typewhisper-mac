@@ -840,6 +840,9 @@ final class APIHandlers: @unchecked Sendable {
         guard payload.terms != nil || payload.termEntries != nil else {
             return .error(status: 400, message: "Missing 'terms' or 'term_entries'")
         }
+        guard payload.terms == nil || payload.termEntries == nil else {
+            return .error(status: 400, message: "Use either 'terms' or 'term_entries', not both")
+        }
 
         do {
             return try await MainActor.run {

@@ -767,6 +767,19 @@ public protocol DictionaryTermHintTranscriptionEnginePlugin: TranscriptionEngine
     ) async throws -> PluginTranscriptionResult
 }
 
+public protocol StructuredDictionaryTermHintTranscriptionEnginePlugin:
+    StructuredTranscriptionEnginePlugin,
+    DictionaryTermHintTranscriptionEnginePlugin
+{
+    func transcribeStructured(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint]
+    ) async throws -> PluginStructuredTranscriptionResult
+}
+
 public protocol DictionaryTermsBudgetProviding: TranscriptionEnginePlugin {
     var dictionaryTermsBudget: DictionaryTermsBudget { get }
 }
@@ -870,6 +883,42 @@ public extension DictionaryTermHintSourceProgressTranscriptionEnginePlugin {
     }
 }
 
+public protocol LanguageHintDictionaryTermHintTranscriptionEnginePlugin:
+    LanguageHintTranscriptionEnginePlugin,
+    DictionaryTermHintTranscriptionEnginePlugin
+{
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint]
+    ) async throws -> PluginTranscriptionResult
+
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult
+}
+
+public protocol StructuredLanguageHintDictionaryTermHintTranscriptionEnginePlugin:
+    StructuredLanguageHintTranscriptionEnginePlugin,
+    StructuredDictionaryTermHintTranscriptionEnginePlugin,
+    LanguageHintDictionaryTermHintTranscriptionEnginePlugin
+{
+    func transcribeStructured(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint]
+    ) async throws -> PluginStructuredTranscriptionResult
+}
+
 public protocol SourceProgressLanguageHintTranscriptionEnginePlugin:
     SourceProgressTranscriptionEnginePlugin,
     LanguageHintTranscriptionEnginePlugin
@@ -882,6 +931,43 @@ public protocol SourceProgressLanguageHintTranscriptionEnginePlugin:
         onProgress: @Sendable @escaping (String) -> Bool,
         onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
     ) async throws -> PluginTranscriptionResult
+}
+
+public protocol LanguageHintDictionaryTermHintSourceProgressTranscriptionEnginePlugin:
+    SourceProgressLanguageHintTranscriptionEnginePlugin,
+    DictionaryTermHintSourceProgressTranscriptionEnginePlugin,
+    LanguageHintDictionaryTermHintTranscriptionEnginePlugin
+{
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        onProgress: @Sendable @escaping (String) -> Bool,
+        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
+    ) async throws -> PluginTranscriptionResult
+}
+
+public extension LanguageHintDictionaryTermHintSourceProgressTranscriptionEnginePlugin {
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool,
+        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        try await transcribe(
+            audio: audio,
+            languageSelection: languageSelection,
+            translate: translate,
+            prompt: prompt,
+            dictionaryTermHints: [],
+            onProgress: onProgress,
+            onSourceProgress: onSourceProgress
+        )
+    }
 }
 
 public extension SourceProgressLanguageHintTranscriptionEnginePlugin {
@@ -967,6 +1053,29 @@ public protocol LiveLanguageHintTranscriptionCapablePlugin: LiveTranscriptionCap
     ) async throws -> any LiveTranscriptionSession
 }
 
+public protocol LiveDictionaryTermHintTranscriptionCapablePlugin: LiveTranscriptionCapablePlugin {
+    func createLiveTranscriptionSession(
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession
+}
+
+public protocol LiveLanguageHintDictionaryTermHintTranscriptionCapablePlugin:
+    LiveLanguageHintTranscriptionCapablePlugin,
+    LiveDictionaryTermHintTranscriptionCapablePlugin
+{
+    func createLiveTranscriptionSession(
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession
+}
+
 public extension LanguageHintTranscriptionEnginePlugin {
     func transcribe(
         audio: AudioData,
@@ -984,6 +1093,27 @@ public extension LanguageHintTranscriptionEnginePlugin {
     }
 }
 
+public extension LanguageHintDictionaryTermHintTranscriptionEnginePlugin {
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        let result = try await transcribe(
+            audio: audio,
+            languageSelection: languageSelection,
+            translate: translate,
+            prompt: prompt,
+            dictionaryTermHints: dictionaryTermHints
+        )
+        let _ = onProgress(result.text)
+        return result
+    }
+}
+
 public extension DictionaryTermHintTranscriptionEnginePlugin {
     func transcribe(
         audio: AudioData,
@@ -993,13 +1123,15 @@ public extension DictionaryTermHintTranscriptionEnginePlugin {
         dictionaryTermHints: [PluginDictionaryTermHint],
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
-        try await transcribe(
+        let result = try await transcribe(
             audio: audio,
             language: language,
             translate: translate,
             prompt: prompt,
             dictionaryTermHints: dictionaryTermHints
         )
+        let _ = onProgress(result.text)
+        return result
     }
 }
 

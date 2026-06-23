@@ -59,6 +59,25 @@ final class ModelManagerLiveSessionModelOverrideTests: XCTestCase {
         XCTAssertEqual(plugin.selectedModelId, "alpha")
     }
 
+    func testLiveSessionForwardsDictionaryTermHints() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = LiveModelOverrideTranscriptionPlugin()
+        let modelManager = installLivePlugin(plugin, appSupportDirectory: appSupportDirectory)
+        let hints = [PluginDictionaryTermHint(text: "Caivex", ctcMinSimilarity: 0.65)]
+
+        let sessionHandle = try await modelManager.createLiveTranscriptionSession(
+            languageSelection: .exact("en"),
+            task: .transcribe,
+            dictionaryTermHints: hints,
+            onProgress: { _ in true }
+        )
+
+        XCTAssertNotNil(sessionHandle)
+        XCTAssertEqual(plugin.receivedDictionaryHints, hints)
+    }
+
     func testBatchTranscriptionForwardsSourceProgressFromOptionalProtocol() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -129,11 +148,78 @@ final class ModelManagerLiveSessionModelOverrideTests: XCTestCase {
         XCTAssertEqual(progress.previewText, "combined partial")
     }
 
-    func testBatchTranscriptionPreservesLanguageHintsForSourceProgressPluginWithoutSourceHintSupport() async throws {
+    func testBatchTranscriptionForwardsLanguageAndDictionaryHintsWhenCombinedProtocolIsAvailable() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
 
         let plugin = SourceProgressModelManagerPlugin()
+        let modelManager = installBatchPlugin(plugin, appSupportDirectory: appSupportDirectory)
+        let recorder = ModelManagerSourceProgressRecorder()
+        let hints = [
+            PluginDictionaryTermHint(text: "Caivex", ctcMinSimilarity: 0.65),
+            PluginDictionaryTermHint(text: "Reson8"),
+        ]
+
+        let result = try await modelManager.transcribe(
+            audioSamples: [Float](repeating: 0, count: 16_000),
+            languageSelection: .hints(["de", "en"]),
+            task: .transcribe,
+            prompt: "Prompt Terms",
+            dictionaryTermHints: hints,
+            onProgress: { text in
+                XCTAssertEqual(text, "combined hint partial")
+                return true
+            },
+            onSourceProgress: { progress in
+                recorder.record(progress)
+                return true
+            }
+        )
+
+        let progress = try XCTUnwrap(recorder.recordedProgress)
+        XCTAssertEqual(result.text, "combined hint done")
+        XCTAssertEqual(result.detectedLanguage, "de")
+        XCTAssertTrue(plugin.usedCombinedLanguageDictionarySourceProgressTranscribe)
+        XCTAssertFalse(plugin.usedLanguageHintStreamingTranscribe)
+        XCTAssertFalse(plugin.usedSourceProgressTranscribe)
+        XCTAssertEqual(plugin.receivedLanguageHints, ["de", "en"])
+        XCTAssertEqual(plugin.receivedDictionaryHints, hints)
+        XCTAssertEqual(progress.processedDuration, 2.5)
+        XCTAssertEqual(progress.totalDuration, 4)
+        XCTAssertEqual(progress.previewText, "combined hint partial")
+    }
+
+    func testBatchTranscriptionPreservesStructuredSegmentsForDictionaryHints() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = StructuredDictionaryHintModelManagerPlugin()
+        let modelManager = installBatchPlugin(plugin, appSupportDirectory: appSupportDirectory)
+        let hints = [PluginDictionaryTermHint(text: "Caivex", ctcMinSimilarity: 0.65)]
+
+        let result = try await modelManager.transcribe(
+            audioSamples: [Float](repeating: 0, count: 16_000),
+            languageSelection: .exact("en"),
+            task: .transcribe,
+            dictionaryTermHints: hints
+        )
+
+        let segment = try XCTUnwrap(result.segments.first)
+        XCTAssertEqual(result.text, "Speaker A: Caivex")
+        XCTAssertEqual(segment.text, "Caivex")
+        XCTAssertEqual(segment.start, 0.25)
+        XCTAssertEqual(segment.end, 1.5)
+        XCTAssertEqual(segment.speakerLabel, "Speaker A")
+        XCTAssertEqual(segment.speakerConfidence, 0.91)
+        XCTAssertEqual(plugin.receivedDictionaryHints, hints)
+        XCTAssertTrue(plugin.usedStructuredDictionaryHintTranscribe)
+    }
+
+    func testBatchTranscriptionPreservesLanguageHintsForSourceProgressPluginWithoutSourceHintSupport() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = SourceProgressWithoutLanguageSourceHintModelManagerPlugin()
         let modelManager = installBatchPlugin(plugin, appSupportDirectory: appSupportDirectory)
 
         let result = try await modelManager.transcribe(
@@ -248,7 +334,86 @@ private final class ModelManagerSourceProgressRecorder: @unchecked Sendable {
     }
 }
 
-private final class SourceProgressModelManagerPlugin: NSObject, DictionaryTermHintSourceProgressTranscriptionEnginePlugin, LanguageHintTranscriptionEnginePlugin, @unchecked Sendable {
+private final class SourceProgressWithoutLanguageSourceHintModelManagerPlugin: NSObject, DictionaryTermHintSourceProgressTranscriptionEnginePlugin, LanguageHintTranscriptionEnginePlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.source-progress-without-language-source-hint"
+    static let pluginName = "Source Progress Without Language Source Hint Mock"
+
+    private(set) var usedLanguageHintStreamingTranscribe = false
+    private(set) var usedSourceProgressTranscribe = false
+    private(set) var receivedLanguageHints: [String] = []
+
+    var providerId: String { "mock-source-progress-without-language-source-hint" }
+    var providerDisplayName: String { Self.pluginName }
+    var isConfigured: Bool { true }
+    var selectedModelId: String? { nil }
+    var transcriptionModels: [PluginModelInfo] { [] }
+    var supportsTranslation: Bool { false }
+    var supportsStreaming: Bool { true }
+    var supportedLanguages: [String] { ["de", "en"] }
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+    func selectModel(_ modelId: String) {}
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "legacy source done", detectedLanguage: language)
+    }
+
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        receivedLanguageHints = languageSelection.languageHints
+        return PluginTranscriptionResult(
+            text: "hint source done",
+            detectedLanguage: languageSelection.languageHints.first
+        )
+    }
+
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        usedLanguageHintStreamingTranscribe = true
+        receivedLanguageHints = languageSelection.languageHints
+        _ = onProgress("legacy partial")
+        return PluginTranscriptionResult(
+            text: "hint source done",
+            detectedLanguage: languageSelection.languageHints.first
+        )
+    }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        onProgress: @Sendable @escaping (String) -> Bool,
+        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        usedSourceProgressTranscribe = true
+        _ = onProgress("source partial")
+        _ = onSourceProgress(PluginTranscriptionSourceProgress(
+            processedDuration: 1.5,
+            totalDuration: 4,
+            previewText: "source partial"
+        ))
+        return PluginTranscriptionResult(text: "source done", detectedLanguage: language)
+    }
+}
+
+private final class SourceProgressModelManagerPlugin: NSObject, LanguageHintDictionaryTermHintSourceProgressTranscriptionEnginePlugin, @unchecked Sendable {
     static let pluginId = "com.typewhisper.mock.source-progress-model-manager"
     static let pluginName = "Source Progress Model Manager Mock"
 
@@ -257,6 +422,7 @@ private final class SourceProgressModelManagerPlugin: NSObject, DictionaryTermHi
     private(set) var usedLanguageHintStreamingTranscribe = false
     private(set) var usedSourceProgressTranscribe = false
     private(set) var usedCombinedSourceProgressTranscribe = false
+    private(set) var usedCombinedLanguageDictionarySourceProgressTranscribe = false
     private(set) var receivedLanguageHints: [String] = []
     private(set) var receivedDictionaryHints: [PluginDictionaryTermHint] = []
 
@@ -344,6 +510,21 @@ private final class SourceProgressModelManagerPlugin: NSObject, DictionaryTermHi
 
     func transcribe(
         audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint]
+    ) async throws -> PluginTranscriptionResult {
+        receivedLanguageHints = languageSelection.languageHints
+        receivedDictionaryHints = dictionaryTermHints
+        return PluginTranscriptionResult(
+            text: "combined hint done",
+            detectedLanguage: languageSelection.languageHints.first ?? languageSelection.requestedLanguage
+        )
+    }
+
+    func transcribe(
+        audio: AudioData,
         language: String?,
         translate: Bool,
         prompt: String?,
@@ -360,6 +541,105 @@ private final class SourceProgressModelManagerPlugin: NSObject, DictionaryTermHi
             previewText: "combined partial"
         ))
         return PluginTranscriptionResult(text: "combined done", detectedLanguage: language)
+    }
+
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        onProgress: @Sendable @escaping (String) -> Bool,
+        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        usedCombinedLanguageDictionarySourceProgressTranscribe = true
+        receivedLanguageHints = languageSelection.languageHints
+        receivedDictionaryHints = dictionaryTermHints
+        _ = onProgress("combined hint partial")
+        _ = onSourceProgress(PluginTranscriptionSourceProgress(
+            processedDuration: 2.5,
+            totalDuration: 4,
+            previewText: "combined hint partial"
+        ))
+        return PluginTranscriptionResult(
+            text: "combined hint done",
+            detectedLanguage: languageSelection.languageHints.first ?? languageSelection.requestedLanguage
+        )
+    }
+}
+
+private final class StructuredDictionaryHintModelManagerPlugin: NSObject, StructuredDictionaryTermHintTranscriptionEnginePlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.structured-dictionary-hints"
+    static let pluginName = "Structured Dictionary Hints Model Manager Mock"
+
+    private(set) var receivedDictionaryHints: [PluginDictionaryTermHint] = []
+    private(set) var usedStructuredDictionaryHintTranscribe = false
+
+    var providerId: String { "mock-structured-dictionary-hints" }
+    var providerDisplayName: String { Self.pluginName }
+    var isConfigured: Bool { true }
+    var selectedModelId: String? { nil }
+    var transcriptionModels: [PluginModelInfo] { [] }
+    var supportsTranslation: Bool { false }
+    var supportedLanguages: [String] { ["en"] }
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+    func selectModel(_ modelId: String) {}
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        XCTFail("Legacy transcription should not be used when structured dictionary hints are available")
+        return PluginTranscriptionResult(text: "", detectedLanguage: language)
+    }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint]
+    ) async throws -> PluginTranscriptionResult {
+        XCTFail("Unstructured dictionary hint transcription should not be used when structured hints are available")
+        return PluginTranscriptionResult(text: "", detectedLanguage: language)
+    }
+
+    func transcribeStructured(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginStructuredTranscriptionResult {
+        XCTFail("Plain structured transcription should not be used when structured dictionary hints are available")
+        return PluginStructuredTranscriptionResult(text: "", detectedLanguage: language)
+    }
+
+    func transcribeStructured(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint]
+    ) async throws -> PluginStructuredTranscriptionResult {
+        receivedDictionaryHints = dictionaryTermHints
+        usedStructuredDictionaryHintTranscribe = true
+        return PluginStructuredTranscriptionResult(
+            text: "Speaker A: Caivex",
+            detectedLanguage: language,
+            segments: [
+                PluginStructuredTranscriptionSegment(
+                    text: "Caivex",
+                    start: 0.25,
+                    end: 1.5,
+                    speakerLabel: "Speaker A",
+                    speakerConfidence: 0.91
+                )
+            ]
+        )
     }
 }
 
@@ -406,7 +686,7 @@ private final class LegacyModelManagerTranscriptionPlugin: NSObject, Transcripti
     }
 }
 
-private final class LiveModelOverrideTranscriptionPlugin: NSObject, TranscriptionModelCatalogProviding, LiveTranscriptionCapablePlugin, @unchecked Sendable {
+private final class LiveModelOverrideTranscriptionPlugin: NSObject, TranscriptionModelCatalogProviding, LiveDictionaryTermHintTranscriptionCapablePlugin, @unchecked Sendable {
     static var pluginId: String { "com.typewhisper.mock.live-model-override" }
     static var pluginName: String { "Mock Live Model Override" }
 
@@ -415,6 +695,7 @@ private final class LiveModelOverrideTranscriptionPlugin: NSObject, Transcriptio
         PluginModelInfo(id: "beta", displayName: "Beta")
     ]
     private var currentModelId: String? = "alpha"
+    private(set) var receivedDictionaryHints: [PluginDictionaryTermHint] = []
 
     var providerId: String { "mock-live-model-override" }
     var providerDisplayName: String { Self.pluginName }
@@ -450,6 +731,17 @@ private final class LiveModelOverrideTranscriptionPlugin: NSObject, Transcriptio
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> any LiveTranscriptionSession {
         LiveModelOverrideSession(modelId: currentModelId)
+    }
+
+    func createLiveTranscriptionSession(
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        receivedDictionaryHints = dictionaryTermHints
+        return LiveModelOverrideSession(modelId: currentModelId)
     }
 }
 
