@@ -7279,6 +7279,37 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testEventTapPushToTalkStartStopDedupesFollowingMonitorDispatches() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(controlSpaceHotkey(), for: .pushToTalk)
+
+        var startCount = 0
+        var stopCount = 0
+        service.onDictationStart = { _ in startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+
+        let keyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true, flags: [.maskControl])
+        let keyUp = try makeKeyboardEvent(keyCode: 0x31, keyDown: false, flags: [.maskControl])
+
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .eventTap))
+        await Task.yield()
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(stopCount, 0)
+
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+
+        XCTAssertTrue(service.processEventForTesting(keyUp, source: .eventTap))
+        await Task.yield()
+        XCTAssertEqual(stopCount, 1)
+
+        XCTAssertFalse(service.processEventForTesting(keyUp, source: .monitor))
+        XCTAssertEqual(stopCount, 1)
+    }
+
+    @MainActor
     func testSuppressingEventTapMaskOnlyIncludesMouseEventsWhenRequested() {
         let keyboardOnlyMask = HotkeyService.suppressingEventTapMaskForTesting(includeMouse: false)
 
@@ -7295,6 +7326,11 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertNotEqual(mouseAwareMask & eventMask(for: .flagsChanged), 0)
         XCTAssertNotEqual(mouseAwareMask & eventMask(for: .otherMouseDown), 0)
         XCTAssertNotEqual(mouseAwareMask & eventMask(for: .otherMouseUp), 0)
+    }
+
+    @MainActor
+    func testHotkeyEventTapIsHeadInserted() {
+        XCTAssertEqual(HotkeyService.eventTapPlacementForTesting(), .headInsertEventTap)
     }
 
     @MainActor
@@ -8628,6 +8664,48 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testReplacingPushToTalkHotkeyPersistsPluralAndLegacyDefaults() throws {
+        try withCleanHotkeyDefaults {
+            let defaults = UserDefaults.standard
+            let oldHotkey = controlSpaceHotkey()
+            let newHotkey = commandOptionAHotkey()
+
+            let service = HotkeyService()
+            service.suspendMonitoring()
+            service.updateHotkey(oldHotkey, for: .pushToTalk)
+            service.replaceHotkey(oldHotkey, with: newHotkey, for: .pushToTalk)
+            service.suspendMonitoring()
+
+            let pluralData = try XCTUnwrap(defaults.data(forKey: HotkeySlotType.pushToTalk.hotkeysDefaultsKey))
+            XCTAssertEqual(try JSONDecoder().decode([UnifiedHotkey].self, from: pluralData), [newHotkey])
+
+            let legacyData = try XCTUnwrap(defaults.data(forKey: HotkeySlotType.pushToTalk.defaultsKey))
+            XCTAssertEqual(try JSONDecoder().decode(UnifiedHotkey.self, from: legacyData), newHotkey)
+
+            let restoredService = HotkeyService()
+            restoredService.loadHotkeysForTesting()
+            restoredService.suspendMonitoring()
+            XCTAssertEqual(restoredService.hotkeys(for: .pushToTalk), [newHotkey])
+
+            var startCount = 0
+            var stopCount = 0
+            restoredService.onDictationStart = { _ in startCount += 1 }
+            restoredService.onDictationStop = { stopCount += 1 }
+
+            let oldKeyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true, flags: [.maskControl])
+            XCTAssertFalse(restoredService.processEventForTesting(oldKeyDown, source: .eventTap))
+            XCTAssertEqual(startCount, 0)
+
+            let newKeyDown = try makeKeyboardEvent(keyCode: 0x00, keyDown: true, flags: [.maskCommand, .maskAlternate])
+            let newKeyUp = try makeKeyboardEvent(keyCode: 0x00, keyDown: false, flags: [.maskCommand, .maskAlternate])
+            XCTAssertTrue(restoredService.processEventForTesting(newKeyDown, source: .eventTap))
+            XCTAssertTrue(restoredService.processEventForTesting(newKeyUp, source: .eventTap))
+            XCTAssertEqual(startCount, 1)
+            XCTAssertEqual(stopCount, 1)
+        }
+    }
+
+    @MainActor
     func testClearingGlobalSlotRemovesPluralAndLegacyPersistence() throws {
         try withCleanHotkeyDefaults {
             let defaults = UserDefaults.standard
@@ -8724,6 +8802,15 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         UnifiedHotkey(
             keyCode: 0x31,
             modifierFlags: NSEvent.ModifierFlags([.option, .command]).rawValue,
+            isFn: false
+        )
+    }
+
+    @MainActor
+    private func controlSpaceHotkey() -> UnifiedHotkey {
+        UnifiedHotkey(
+            keyCode: 0x31,
+            modifierFlags: NSEvent.ModifierFlags.control.rawValue,
             isFn: false
         )
     }

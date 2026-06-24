@@ -221,6 +221,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     private static let escapeHotkey = UnifiedHotkey(keyCode: escapeKeyCode, modifierFlags: 0, isFn: false)
     private static let capsLockKeyCode: UInt16 = 0x39
     private static let capsLockSuppressionWindow: TimeInterval = 0.25
+    private nonisolated static let hotkeyEventTapPlacement: CGEventTapPlacement = .headInsertEventTap
 
     nonisolated static func requestTimestamp() -> UInt64 {
         DispatchTime.now().uptimeNanoseconds
@@ -539,7 +540,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
         // Try CGEventTap first - it can suppress hotkey events from reaching other apps
         if setupEventTap(includeMouse: needsSuppressingMouseEventTap) {
-            logger.info("Using tail-appended CGEventTap for hotkey monitoring with NSEvent compatibility fallback")
+            logger.info("Using head-inserted CGEventTap for hotkey monitoring with NSEvent compatibility fallback")
             installEventMonitors(includeMouse: includeMouse)
             return
         }
@@ -660,7 +661,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
-            place: .tailAppendEventTap,
+            place: Self.hotkeyEventTapPlacement,
             options: .defaultTap,
             eventsOfInterest: Self.suppressingEventTapMask(includeMouse: includeMouse),
             callback: callback,
@@ -1072,6 +1073,10 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
     static func suppressingEventTapMaskForTesting(includeMouse: Bool = false) -> CGEventMask {
         suppressingEventTapMask(includeMouse: includeMouse)
+    }
+
+    static func eventTapPlacementForTesting() -> CGEventTapPlacement {
+        hotkeyEventTapPlacement
     }
 #endif
 
