@@ -611,13 +611,22 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             NSEvent.removeMonitor(monitor)
             localMonitor = nil
         }
-        if let tap = eventTap {
-            CGEvent.tapEnable(tap: tap, enable: false)
-            eventTap = nil
-        }
         if let source = runLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+            // Invalidate the source so it is fully unregistered, not just removed
+            // from the main run loop.
+            CFRunLoopSourceInvalidate(source)
             runLoopSource = nil
+        }
+        if let tap = eventTap {
+            CGEvent.tapEnable(tap: tap, enable: false)
+            // Disabling a tap leaves its Mach port registered with the system, so
+            // each setup/teardown cycle (settings changes, recorder open/close,
+            // wake) would otherwise leak a stale session-level flagsChanged filter
+            // tap. Those linger in the modifier-event path and can break the
+            // system's double-tap-modifier detection (e.g. Apple Dictation).
+            CFMachPortInvalidate(tap)
+            eventTap = nil
         }
         recentEventTapDispatches.removeAll()
         capsLockOriginSuppressionUntil = nil
