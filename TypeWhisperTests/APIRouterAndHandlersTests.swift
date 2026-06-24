@@ -7146,6 +7146,25 @@ final class AudioRecordingServiceInputAvailabilityTests: XCTestCase {
 }
 
 final class HotkeyServiceCompatibilityTests: XCTestCase {
+    private var originalDictationHotkeysPausedDefault: Any?
+
+    override func setUp() {
+        super.setUp()
+        originalDictationHotkeysPausedDefault = UserDefaults.standard.object(forKey: UserDefaultsKeys.dictationHotkeysPaused)
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.dictationHotkeysPaused)
+    }
+
+    override func tearDown() {
+        let key = UserDefaultsKeys.dictationHotkeysPaused
+        if let originalDictationHotkeysPausedDefault {
+            UserDefaults.standard.set(originalDictationHotkeysPausedDefault, forKey: key)
+        } else {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+        originalDictationHotkeysPausedDefault = nil
+        super.tearDown()
+    }
+
     @MainActor
     func testEscapeKeyStillInvokesCancelHandlerWithoutSuppression() throws {
         let service = HotkeyService()
@@ -7197,6 +7216,45 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         let keyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
         XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
         XCTAssertEqual(startCount, 1)
+    }
+
+    @MainActor
+    func testPausedDictationHotkeysIgnoreGlobalDictationSlots() throws {
+        try withCleanDictationHotkeysPausedDefault {
+            let service = HotkeyService()
+            service.suspendMonitoring()
+            service.dictationHotkeysPaused = true
+
+            service.setHotkeyForTesting(spaceHotkey(), for: .toggle)
+            service.setHotkeyForTesting(commandOptionAHotkey(), for: .hybrid)
+            service.setHotkeyForTesting(controlShiftComboHotkey(), for: .pushToTalk)
+
+            var startCount = 0
+            service.onDictationStart = { _ in startCount += 1 }
+
+            let toggleDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
+            let hybridDown = try makeKeyboardEvent(keyCode: 0x00, keyDown: true, flags: [.maskCommand, .maskAlternate])
+            let pushToTalkDown = try makeFlagsChangedEvent(keyCode: 0x38, modifierFlags: [.control, .shift])
+
+            XCTAssertFalse(service.processEventForTesting(toggleDown, source: .monitor))
+            XCTAssertFalse(service.processEventForTesting(hybridDown, source: .monitor))
+            XCTAssertFalse(service.processEventForTesting(pushToTalkDown, source: .monitor))
+            XCTAssertEqual(startCount, 0)
+            XCTAssertNil(service.currentMode)
+        }
+    }
+
+    @MainActor
+    func testPausedDictationHotkeysPersistAcrossServiceInstances() throws {
+        try withCleanDictationHotkeysPausedDefault {
+            let service = HotkeyService()
+            XCTAssertFalse(service.dictationHotkeysPaused)
+
+            service.dictationHotkeysPaused = true
+
+            let restoredService = HotkeyService()
+            XCTAssertTrue(restoredService.dictationHotkeysPaused)
+        }
     }
 
     @MainActor
@@ -8034,6 +8092,29 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testPausedDictationHotkeysKeepRecorderToggleActive() throws {
+        try withCleanDictationHotkeysPausedDefault {
+            let service = HotkeyService()
+            service.suspendMonitoring()
+            service.dictationHotkeysPaused = true
+
+            service.setHotkeyForTesting(commandOptionAHotkey(), for: .recorderToggle)
+
+            var callbackCount = 0
+            var startCount = 0
+            service.onRecorderToggle = { callbackCount += 1 }
+            service.onDictationStart = { _ in startCount += 1 }
+
+            let keyDown = try makeKeyboardEvent(keyCode: 0x00, keyDown: true, flags: [.maskCommand, .maskAlternate])
+
+            XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+            XCTAssertEqual(callbackCount, 1)
+            XCTAssertEqual(startCount, 0)
+            XCTAssertNil(service.currentMode)
+        }
+    }
+
+    @MainActor
     func testRecorderToggleHotkeyDoesNotStopActiveDictation() throws {
         let service = HotkeyService()
         service.suspendMonitoring()
@@ -8172,6 +8253,28 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testPausedDictationHotkeysIgnoreWorkflowDictationHotkey() throws {
+        try withCleanDictationHotkeysPausedDefault {
+            let service = HotkeyService()
+            service.suspendMonitoring()
+            service.dictationHotkeysPaused = true
+
+            let workflowId = UUID()
+            service.registerWorkflowHotkeys([(id: workflowId, hotkey: spaceHotkey(), behavior: .startDictation)])
+
+            var startedWorkflowId: UUID?
+            service.onWorkflowDictationStart = { workflowId, _ in startedWorkflowId = workflowId }
+
+            let keyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
+
+            XCTAssertFalse(service.processEventForTesting(keyDown, source: .monitor))
+            XCTAssertNil(startedWorkflowId)
+            XCTAssertNil(service.currentMode)
+            XCTAssertNil(service.activeWorkflowId)
+        }
+    }
+
+    @MainActor
     func testWorkflowHotkeyTextProcessingCallbackDoesNotStartDictation() async throws {
         let service = HotkeyService()
         service.suspendMonitoring()
@@ -8204,6 +8307,52 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertTrue(service.processEventForTesting(keyUp, source: .monitor))
         await fulfillment(of: [textProcessingCallback], timeout: 1.0)
         XCTAssertEqual(textWorkflowId, workflowId)
+        XCTAssertNil(service.currentMode)
+        XCTAssertNil(service.activeWorkflowId)
+    }
+
+    @MainActor
+    func testPausedDictationHotkeysKeepWorkflowTextProcessingActive() async throws {
+        let defaults = UserDefaults.standard
+        let key = UserDefaultsKeys.dictationHotkeysPaused
+        let original = defaults.object(forKey: key)
+        defaults.removeObject(forKey: key)
+        defer {
+            if let original {
+                defaults.set(original, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+        }
+
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.dictationHotkeysPaused = true
+        service.workflowTextProcessingModifierPollInterval = 0.001
+        service.workflowTextProcessingModifierReleaseTimeout = 0.25
+        service.workflowTextProcessingPostReleaseDelay = 0.001
+        service.modifierFlagsStateProvider = { [] }
+
+        let workflowId = UUID()
+        service.registerWorkflowHotkeys([(id: workflowId, hotkey: spaceHotkey(), behavior: .processSelectedText)])
+
+        var textWorkflowId: UUID?
+        var startedWorkflowId: UUID?
+        let textProcessingCallback = expectation(description: "workflow text processing callback")
+        service.onWorkflowTextProcessing = {
+            textWorkflowId = $0
+            textProcessingCallback.fulfill()
+        }
+        service.onWorkflowDictationStart = { workflowId, _ in startedWorkflowId = workflowId }
+
+        let keyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
+        let keyUp = try makeKeyboardEvent(keyCode: 0x31, keyDown: false)
+
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertTrue(service.processEventForTesting(keyUp, source: .monitor))
+        await fulfillment(of: [textProcessingCallback], timeout: 1.0)
+        XCTAssertEqual(textWorkflowId, workflowId)
+        XCTAssertNil(startedWorkflowId)
         XCTAssertNil(service.currentMode)
         XCTAssertNil(service.activeWorkflowId)
     }
@@ -8539,6 +8688,22 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
                 } else {
                     defaults.removeObject(forKey: key)
                 }
+            }
+        }
+
+        try body()
+    }
+
+    private func withCleanDictationHotkeysPausedDefault(_ body: () throws -> Void) throws {
+        let defaults = UserDefaults.standard
+        let key = UserDefaultsKeys.dictationHotkeysPaused
+        let original = defaults.object(forKey: key)
+        defaults.removeObject(forKey: key)
+        defer {
+            if let original {
+                defaults.set(original, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
             }
         }
 

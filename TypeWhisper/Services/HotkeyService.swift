@@ -126,6 +126,17 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
     }
 }
 
+private extension HotkeySlotType {
+    var startsDictation: Bool {
+        switch self {
+        case .hybrid, .pushToTalk, .toggle:
+            true
+        case .promptPalette, .recentTranscriptions, .copyLastTranscription, .recorderToggle:
+            false
+        }
+    }
+}
+
 /// Manages global hotkeys for dictation and standalone app actions.
 final class HotkeyService: ObservableObject, @unchecked Sendable {
     struct MenuShortcutDescriptor: Equatable, Sendable {
@@ -167,6 +178,14 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     }
 
     @Published private(set) var currentMode: HotkeyMode?
+    @Published var dictationHotkeysPaused: Bool = UserDefaults.standard.bool(forKey: UserDefaultsKeys.dictationHotkeysPaused) {
+        didSet {
+            UserDefaults.standard.set(dictationHotkeysPaused, forKey: UserDefaultsKeys.dictationHotkeysPaused)
+            if dictationHotkeysPaused {
+                resetPausedDictationHotkeyState()
+            }
+        }
+    }
 
     var onDictationStart: ((UInt64) -> Void)?
     var onDictationStop: (() -> Void)?
@@ -385,6 +404,28 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         currentMode = nil
         keyDownTime = nil
         pushToTalkInterruptionSignaled = false
+    }
+
+    private func resetPausedDictationHotkeyState() {
+        for slotType in HotkeySlotType.allCases where slotType.startsDictation {
+            guard var states = slots[slotType] else { continue }
+            for index in states.indices {
+                states[index].resetTransientState()
+            }
+            slots[slotType] = states
+        }
+
+        for profileId in Array(profileSlots.keys) {
+            profileSlots[profileId]?.resetTransientState()
+        }
+
+        for workflowId in Array(workflowSlots.keys) {
+            guard var states = workflowSlots[workflowId] else { continue }
+            for index in states.indices where states[index].behavior == .startDictation {
+                states[index].resetTransientState()
+            }
+            workflowSlots[workflowId] = states
+        }
     }
 
     // MARK: - Profile Hotkeys
@@ -699,6 +740,11 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             for index in states.indices {
                 var state = states[index]
                 guard let hotkey = state.hotkey else { continue }
+                if dictationHotkeysPaused, slotType.startsDictation {
+                    state.resetTransientState()
+                    states[index] = state
+                    continue
+                }
                 let fnTriggerMode: FnTriggerMode = slotType == .toggle ? .releaseOnly : .pressThenRelease
                 if shouldSuppressForCapsLockOrigin(event, hotkey: hotkey, keyWasDown: state.keyWasDown) {
                     state.resetTransientState()
@@ -727,6 +773,11 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         // Profile slots
         for profileId in Array(profileSlots.keys) {
             guard var pState = profileSlots[profileId] else { continue }
+            if dictationHotkeysPaused {
+                pState.resetTransientState()
+                profileSlots[profileId] = pState
+                continue
+            }
             if shouldSuppressForCapsLockOrigin(event, hotkey: pState.hotkey, keyWasDown: pState.keyWasDown) {
                 pState.resetTransientState()
                 profileSlots[profileId] = pState
@@ -766,6 +817,11 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             guard var states = workflowSlots[workflowId] else { continue }
             for index in states.indices {
                 var wState = states[index]
+                if dictationHotkeysPaused, wState.behavior == .startDictation {
+                    wState.resetTransientState()
+                    states[index] = wState
+                    continue
+                }
                 if shouldSuppressForCapsLockOrigin(event, hotkey: wState.hotkey, keyWasDown: wState.keyWasDown) {
                     wState.resetTransientState()
                     states[index] = wState

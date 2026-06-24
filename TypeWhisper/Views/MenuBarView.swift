@@ -13,6 +13,7 @@ private final class MenuBarState: ObservableObject {
     @Published var hasRecoverableRecording: Bool
     @Published var recorderState: AudioRecorderViewModel.RecorderState
     @Published var canToggleRecorder: Bool
+    @Published var dictationHotkeysPaused: Bool
     @Published var recentTranscriptionsMenuShortcut: HotkeyService.MenuShortcutDescriptor?
     @Published var copyLastTranscriptionMenuShortcut: HotkeyService.MenuShortcutDescriptor?
     @Published var recorderToggleMenuShortcut: HotkeyService.MenuShortcutDescriptor?
@@ -26,6 +27,7 @@ private final class MenuBarState: ObservableObject {
         let historyService = ServiceContainer.shared.historyService
         let recentTranscriptionStore = ServiceContainer.shared.recentTranscriptionStore
         let recorder = AudioRecorderViewModel.shared
+        let hotkeyService = ServiceContainer.shared.hotkeyService
 
         // Set initial values immediately
         self.isModelReady = modelManager.isModelReady
@@ -35,6 +37,7 @@ private final class MenuBarState: ObservableObject {
         self.hasRecoverableRecording = audioRecordingService.latestRecoveryRecordingURL != nil
         self.recorderState = recorder.state
         self.canToggleRecorder = recorder.canToggleRecording
+        self.dictationHotkeysPaused = hotkeyService.dictationHotkeysPaused
         self.recentTranscriptionsMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .recentTranscriptions)
         self.copyLastTranscriptionMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .copyLastTranscription)
         self.recorderToggleMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .recorderToggle)
@@ -107,10 +110,26 @@ private final class MenuBarState: ObservableObject {
                 self?.refreshMenuShortcuts()
             }
             .store(in: &cancellables)
+
+        hotkeyService.$dictationHotkeysPaused
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] paused in
+                self?.dictationHotkeysPaused = paused
+                self?.update(state: dictation.state)
+            }
+            .store(in: &cancellables)
     }
 
     private func update(state: DictationViewModel.State) {
         let modelManager = ServiceContainer.shared.modelManagerService
+        if dictationHotkeysPaused, state == .idle {
+            statusText = String(localized: "Dictation hotkeys paused")
+            statusImage = "pause.circle.fill"
+            isModelReady = modelManager.isModelReady
+            return
+        }
+
         switch state {
         case .recording:
             statusText = String(localized: "Recording...")
@@ -171,6 +190,7 @@ enum MenuBarMenuItem: Hashable {
     case history
     case errorLog
     case toggleRecorder
+    case toggleDictationHotkeysPause
     case transcribeFile
     case recoverLastRecording
     case recentTranscriptions
@@ -214,8 +234,8 @@ enum MenuBarMenuSection: String, CaseIterable, Hashable {
             [.toggleRecorder]
         case .transcription:
             hasRecoverableRecording
-                ? [.transcribeFile, .recoverLastRecording, .recentTranscriptions, .copyLastTranscription, .readBackLastTranscription]
-                : [.transcribeFile, .recentTranscriptions, .copyLastTranscription, .readBackLastTranscription]
+                ? [.toggleDictationHotkeysPause, .transcribeFile, .recoverLastRecording, .recentTranscriptions, .copyLastTranscription, .readBackLastTranscription]
+                : [.toggleDictationHotkeysPause, .transcribeFile, .recentTranscriptions, .copyLastTranscription, .readBackLastTranscription]
         case .updates:
             [.checkForUpdates]
         }
@@ -293,6 +313,13 @@ struct MenuBarView: View {
             .keyboardShortcut(keyboardShortcut(from: status.recorderToggleMenuShortcut))
             .disabled(!status.canToggleRecorder)
 
+        case .toggleDictationHotkeysPause:
+            Button {
+                ServiceContainer.shared.hotkeyService.dictationHotkeysPaused.toggle()
+            } label: {
+                Label(dictationHotkeysPauseTitle, systemImage: dictationHotkeysPauseSystemImage)
+            }
+
         case .transcribeFile:
             Button {
                 openManagedWindow("settings")
@@ -366,6 +393,16 @@ struct MenuBarView: View {
         case .finalizing:
             "arrow.triangle.2.circlepath"
         }
+    }
+
+    private var dictationHotkeysPauseTitle: String {
+        status.dictationHotkeysPaused
+            ? String(localized: "Resume Dictation Hotkeys")
+            : String(localized: "Pause Dictation Hotkeys")
+    }
+
+    private var dictationHotkeysPauseSystemImage: String {
+        status.dictationHotkeysPaused ? "play.circle" : "pause.circle"
     }
 
     private func keyboardShortcut(
