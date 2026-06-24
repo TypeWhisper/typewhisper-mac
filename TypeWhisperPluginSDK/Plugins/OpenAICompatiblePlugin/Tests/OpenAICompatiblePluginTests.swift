@@ -273,7 +273,7 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         let inception = plugin.addProfile(named: "Inception")
         plugin.setBaseURL("https://inception.test", for: inception.id)
         plugin.setApiKey("inception-token", for: inception.id)
-        plugin.selectLLMModel("inception-chat", for: inception.id)
+        plugin.selectLLMModel("gpt-5.5", for: inception.id)
         plugin.setLLMTemperatureMode(.custom, for: inception.id)
         plugin.setLLMTemperatureValue(0.9, for: inception.id)
         plugin.setThinkingEnabled(true, for: inception.id)
@@ -325,11 +325,20 @@ final class OpenAICompatiblePluginTests: XCTestCase {
 
         let inceptionBody = try XCTUnwrap(requests[1].httpBody)
         let inceptionJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: inceptionBody) as? [String: Any])
-        XCTAssertEqual(inceptionJSON["model"] as? String, "inception-chat")
-        XCTAssertEqual(inceptionJSON["max_tokens"] as? Int, 4096)
+        XCTAssertEqual(inceptionJSON["model"] as? String, "gpt-5.5")
+        XCTAssertEqual(inceptionJSON["max_completion_tokens"] as? Int, 4096)
+        XCTAssertNil(inceptionJSON["max_tokens"])
         XCTAssertEqual(inceptionJSON["temperature"] as? Double, 0.9)
         let inceptionThinking = try XCTUnwrap(inceptionJSON["thinking"] as? [String: String])
         XCTAssertEqual(inceptionThinking["type"], "enabled")
+    }
+
+    func testOutputTokenParameterUsesMaxCompletionTokensForReasoningFamilies() {
+        XCTAssertEqual(OpenAICompatiblePlugin.outputTokenParameter(for: "gpt-5.5"), "max_completion_tokens")
+        XCTAssertEqual(OpenAICompatiblePlugin.outputTokenParameter(for: "o1-preview"), "max_completion_tokens")
+        XCTAssertEqual(OpenAICompatiblePlugin.outputTokenParameter(for: "o3-mini"), "max_completion_tokens")
+        XCTAssertEqual(OpenAICompatiblePlugin.outputTokenParameter(for: "o4-mini"), "max_completion_tokens")
+        XCTAssertEqual(OpenAICompatiblePlugin.outputTokenParameter(for: "gpt-4o"), "max_tokens")
     }
 
     func testProcessSurfacesOpenAICompatibleErrorMessage() async throws {

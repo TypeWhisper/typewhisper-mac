@@ -735,6 +735,17 @@ final class OpenAICompatiblePlugin: NSObject,
             : "api-key.\(canonicalProfileId(for: profileId))"
     }
 
+    nonisolated static func outputTokenParameter(for modelID: String) -> String {
+        let lowered = modelID.lowercased()
+        if lowered.hasPrefix("gpt-5")
+            || lowered.hasPrefix("o1")
+            || lowered.hasPrefix("o3")
+            || lowered.hasPrefix("o4") {
+            return "max_completion_tokens"
+        }
+        return "max_tokens"
+    }
+
     private func processChatCompletion(
         apiKey: String,
         baseURL: String,
@@ -756,11 +767,11 @@ final class OpenAICompatiblePlugin: NSObject,
                 ["role": "system", "content": systemPrompt],
                 ["role": "user", "content": userText],
             ],
-            "max_tokens": 4096,
             "thinking": [
                 "type": thinkingEnabled ? "enabled" : "disabled"
             ],
         ]
+        requestBody[Self.outputTokenParameter(for: model)] = 4096
         if let temperature {
             requestBody["temperature"] = temperature
         }
