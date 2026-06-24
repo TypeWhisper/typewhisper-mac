@@ -15,6 +15,7 @@ enum UserDefaultsKeys {
     static let indicatorTranscriptPreviewFontSizeOffset = "indicatorTranscriptPreviewFontSizeOffset"
     static let preserveClipboard = "preserveClipboard"
     static let mediaPauseEnabled = "mediaPauseEnabled"
+    static let dictationHotkeysPaused = "dictationHotkeysPaused"
     static let transcribeShortQuietClipsAggressively = "transcribeShortQuietClipsAggressively"
     static let microphoneBoostEnabled = "microphoneBoostEnabled"
 

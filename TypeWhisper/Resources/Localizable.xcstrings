@@ -3517,6 +3517,22 @@
         }
       }
     },
+    "Dictation hotkeys paused": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diktat-Hotkeys pausiert"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ディクテーションのホットキーは一時停止中"
+          }
+        }
+      }
+    },
     "Dictionary": {
       "localizations": {
         "de": {
@@ -7826,6 +7842,22 @@
         }
       }
     },
+    "Pause Dictation Hotkeys": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diktat-Hotkeys pausieren"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ディクテーションのホットキーを一時停止"
+          }
+        }
+      }
+    },
     "Pay-what-you-want starting at the listed price. Click a tier to open the checkout page.": {
       "localizations": {
         "de": {
@@ -10321,6 +10353,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "貼り付け後、クリップボードを復元します。このオプションがない場合、音声入力後クリップボードには文字起こしのテキストが含まれます。"
+          }
+        }
+      }
+    },
+    "Resume Dictation Hotkeys": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diktat-Hotkeys fortsetzen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ディクテーションのホットキーを再開"
           }
         }
       }
