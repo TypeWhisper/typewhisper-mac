@@ -273,7 +273,7 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         let inception = plugin.addProfile(named: "Inception")
         plugin.setBaseURL("https://inception.test", for: inception.id)
         plugin.setApiKey("inception-token", for: inception.id)
-        plugin.selectLLMModel("gpt-5.5", for: inception.id)
+        plugin.selectLLMModel("inception-chat", for: inception.id)
         plugin.setLLMTemperatureMode(.custom, for: inception.id)
         plugin.setLLMTemperatureValue(0.9, for: inception.id)
         plugin.setThinkingEnabled(true, for: inception.id)
@@ -325,20 +325,92 @@ final class OpenAICompatiblePluginTests: XCTestCase {
 
         let inceptionBody = try XCTUnwrap(requests[1].httpBody)
         let inceptionJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: inceptionBody) as? [String: Any])
-        XCTAssertEqual(inceptionJSON["model"] as? String, "gpt-5.5")
-        XCTAssertEqual(inceptionJSON["max_completion_tokens"] as? Int, 4096)
-        XCTAssertNil(inceptionJSON["max_tokens"])
+        XCTAssertEqual(inceptionJSON["model"] as? String, "inception-chat")
+        XCTAssertEqual(inceptionJSON["max_tokens"] as? Int, 4096)
+        XCTAssertNil(inceptionJSON["max_completion_tokens"])
         XCTAssertEqual(inceptionJSON["temperature"] as? Double, 0.9)
         let inceptionThinking = try XCTUnwrap(inceptionJSON["thinking"] as? [String: String])
         XCTAssertEqual(inceptionThinking["type"], "enabled")
     }
 
-    func testOutputTokenParameterUsesMaxCompletionTokensForReasoningFamilies() {
-        XCTAssertEqual(OpenAICompatiblePlugin.outputTokenParameter(for: "gpt-5.5"), "max_completion_tokens")
-        XCTAssertEqual(OpenAICompatiblePlugin.outputTokenParameter(for: "o1-preview"), "max_completion_tokens")
-        XCTAssertEqual(OpenAICompatiblePlugin.outputTokenParameter(for: "o3-mini"), "max_completion_tokens")
-        XCTAssertEqual(OpenAICompatiblePlugin.outputTokenParameter(for: "o4-mini"), "max_completion_tokens")
-        XCTAssertEqual(OpenAICompatiblePlugin.outputTokenParameter(for: "gpt-4o"), "max_tokens")
+    func testProcessRetriesWithMaxCompletionTokensWhenProviderRequestsIt() async throws {
+        let host = try PluginTestHostServices(
+            defaults: [
+                "baseURL": "https://example.test",
+                "selectedLLMModel": "future-chat",
+            ],
+            secrets: ["api-key": "secret-token"]
+        )
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        plugin.setLLMTemperatureMode(.custom)
+        plugin.setLLMTemperatureValue(0.4)
+        plugin.setThinkingEnabled(true)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(
+                        #"{"error":{"message":"Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead."}}"#.utf8
+                    ),
+                    Self.httpResponse(url: "https://example.test/v1/chat/completions", statusCode: 400)
+                ),
+                .success(
+                    Data(#"{"choices":[{"message":{"content":"processed"}}]}"#.utf8),
+                    Self.httpResponse(url: "https://example.test/v1/chat/completions", statusCode: 200)
+                ),
+            ])
+        }
+
+        let result = try await plugin.process(
+            systemPrompt: "Fix",
+            userText: "hello",
+            model: nil,
+            temperatureDirective: .inheritProviderSetting
+        )
+
+        XCTAssertEqual(result, "processed")
+        let requests = store.sessions[0].requestedRequests
+        XCTAssertEqual(requests.count, 2)
+
+        let firstBody = try XCTUnwrap(requests[0].httpBody)
+        let firstJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: firstBody) as? [String: Any])
+        XCTAssertEqual(firstJSON["model"] as? String, "future-chat")
+        XCTAssertEqual(firstJSON["max_tokens"] as? Int, 4096)
+        XCTAssertNil(firstJSON["max_completion_tokens"])
+
+        let retryBody = try XCTUnwrap(requests[1].httpBody)
+        let retryJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: retryBody) as? [String: Any])
+        XCTAssertEqual(retryJSON["model"] as? String, "future-chat")
+        XCTAssertEqual(retryJSON["max_completion_tokens"] as? Int, 4096)
+        XCTAssertNil(retryJSON["max_tokens"])
+        XCTAssertEqual(retryJSON["temperature"] as? Double, 0.4)
+        let retryThinking = try XCTUnwrap(retryJSON["thinking"] as? [String: String])
+        XCTAssertEqual(retryThinking["type"], "enabled")
+    }
+
+    func testFallbackOutputTokenParameterRequiresBothParameterNames() {
+        XCTAssertEqual(
+            OpenAICompatiblePlugin.fallbackOutputTokenParameter(
+                after: .maxTokens,
+                errorMessage: "Unsupported parameter: 'max_tokens'. Use 'max_completion_tokens' instead."
+            ),
+            .maxCompletionTokens
+        )
+        XCTAssertEqual(
+            OpenAICompatiblePlugin.fallbackOutputTokenParameter(
+                after: .maxCompletionTokens,
+                errorMessage: "Unsupported parameter: 'max_completion_tokens'. Use 'max_tokens' instead."
+            ),
+            .maxTokens
+        )
+        XCTAssertNil(
+            OpenAICompatiblePlugin.fallbackOutputTokenParameter(
+                after: .maxTokens,
+                errorMessage: "model not found"
+            )
+        )
     }
 
     func testProcessSurfacesOpenAICompatibleErrorMessage() async throws {
