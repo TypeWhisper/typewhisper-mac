@@ -14,6 +14,25 @@ struct ActivatedTermPackState: Codable {
     let requiresCommercialLicense: Bool?
 }
 
+private func dictionaryReplacementDisplayText(_ replacement: String) -> String {
+    replacement.isEmpty ? "\"\"" : replacement
+}
+
+struct DictionaryEntryRow: Identifiable, Equatable {
+    let id: UUID
+    let type: DictionaryEntryType
+    let original: String
+    let replacement: String?
+    let caseSensitive: Bool
+    let isEnabled: Bool
+    let termBoostingLabel: String
+    let formattedCtcMinSimilarity: String
+
+    var replacementDisplayText: String? {
+        replacement.map(dictionaryReplacementDisplayText)
+    }
+}
+
 // MARK: - Dictionary ViewModel
 
 @MainActor
@@ -93,6 +112,10 @@ class DictionaryViewModel: ObservableObject {
         case .termPacks:
             return []
         }
+    }
+
+    var filteredEntryRows: [DictionaryEntryRow] {
+        filteredEntries.map(row)
     }
 
     var termsCount: Int { dictionaryService.termsCount }
@@ -201,6 +224,11 @@ class DictionaryViewModel: ObservableObject {
         setTermBoostingEditor(to: entry.type == .term ? entry.ctcMinSimilarity : nil)
     }
 
+    func startEditingEntry(id: UUID) {
+        guard let entry = entry(withID: id) else { return }
+        startEditing(entry)
+    }
+
     func cancelEditing() {
         isEditing = false
         isCreatingNew = false
@@ -246,7 +274,17 @@ class DictionaryViewModel: ObservableObject {
         dictionaryService.deleteEntry(entry)
     }
 
+    func deleteEntry(id: UUID) {
+        guard let entry = entry(withID: id) else { return }
+        dictionaryService.deleteEntry(entry)
+    }
+
     func toggleEntry(_ entry: DictionaryEntry) {
+        dictionaryService.toggleEntry(entry)
+    }
+
+    func toggleEntry(id: UUID) {
+        guard let entry = entry(withID: id) else { return }
         dictionaryService.toggleEntry(entry)
     }
 
@@ -265,6 +303,23 @@ class DictionaryViewModel: ObservableObject {
     func formattedCtcMinSimilarity(_ threshold: Float?) -> String {
         guard let threshold else { return "" }
         return String(format: "%.2f", Double(threshold))
+    }
+
+    private func row(for entry: DictionaryEntry) -> DictionaryEntryRow {
+        DictionaryEntryRow(
+            id: entry.id,
+            type: entry.type,
+            original: entry.original,
+            replacement: entry.replacement,
+            caseSensitive: entry.caseSensitive,
+            isEnabled: entry.isEnabled,
+            termBoostingLabel: termBoostingLabel(for: entry.ctcMinSimilarity),
+            formattedCtcMinSimilarity: formattedCtcMinSimilarity(entry.ctcMinSimilarity)
+        )
+    }
+
+    private func entry(withID id: UUID) -> DictionaryEntry? {
+        entries.first { $0.id == id }
     }
 
     private func resetTermBoostingEditor() {

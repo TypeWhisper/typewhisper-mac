@@ -468,6 +468,81 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testDictionaryEntryRowsSnapshotLargeFilteredListsWithStableIDs() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        let terms = (1...120).map {
+            (
+                type: DictionaryEntryType.term,
+                original: String(format: "Term-%03d", $0),
+                replacement: nil as String?,
+                caseSensitive: true,
+                ctcMinSimilarity: nil as Float?
+            )
+        }
+        let corrections = (1...120).map {
+            (
+                type: DictionaryEntryType.correction,
+                original: String(format: "Wrong-%03d", $0),
+                replacement: String(format: "Correct-%03d", $0) as String?,
+                caseSensitive: false,
+                ctcMinSimilarity: nil as Float?
+            )
+        }
+        service.addEntries(terms + corrections + [
+            (
+                type: DictionaryEntryType.correction,
+                original: "empty-replacement",
+                replacement: "" as String?,
+                caseSensitive: true,
+                ctcMinSimilarity: nil as Float?
+            )
+        ])
+
+        let viewModel = DictionaryViewModel(dictionaryService: service)
+        viewModel.filterTab = .corrections
+        let correctionRows = viewModel.filteredEntryRows
+
+        XCTAssertEqual(correctionRows.count, 121)
+        XCTAssertTrue(correctionRows.allSatisfy { $0.type == .correction })
+        XCTAssertEqual(correctionRows.first { $0.original == "empty-replacement" }?.replacementDisplayText, "\"\"")
+
+        let correctionIDs = correctionRows.map(\.id)
+        viewModel.filterTab = .all
+        let allCorrectionIDs = viewModel.filteredEntryRows
+            .filter { $0.type == .correction }
+            .map(\.id)
+        XCTAssertEqual(allCorrectionIDs, correctionIDs)
+    }
+
+    @MainActor
+    func testDictionaryEntryIDActionsEditToggleAndDeleteMatchingEntry() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "teh", replacement: "the", caseSensitive: true)
+        let viewModel = DictionaryViewModel(dictionaryService: service)
+        let row = try XCTUnwrap(viewModel.filteredEntryRows.first)
+
+        viewModel.toggleEntry(id: row.id)
+        XCTAssertFalse(try XCTUnwrap(service.entries.first { $0.id == row.id }).isEnabled)
+
+        viewModel.startEditingEntry(id: row.id)
+        XCTAssertTrue(viewModel.isEditing)
+        XCTAssertFalse(viewModel.isCreatingNew)
+        XCTAssertEqual(viewModel.editType, .correction)
+        XCTAssertEqual(viewModel.editOriginal, "teh")
+        XCTAssertEqual(viewModel.editReplacement, "the")
+        XCTAssertTrue(viewModel.editCaseSensitive)
+
+        viewModel.deleteEntry(id: row.id)
+        XCTAssertFalse(service.entries.contains { $0.id == row.id })
+    }
+
+    @MainActor
     func testTermPackActivationPreservesManualEntriesAndDeactivationRemovesOnlyPackEntries() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

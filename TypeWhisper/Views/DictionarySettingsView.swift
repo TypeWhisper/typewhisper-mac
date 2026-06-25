@@ -109,7 +109,7 @@ struct DictionarySettingsView: View {
                     DictionaryEngineSupportSection(rows: engineSupportRows)
                 }
 
-                if viewModel.filteredEntries.isEmpty {
+                if viewModel.filteredEntryRows.isEmpty {
                     VStack(spacing: 8) {
                         Image(systemName: "line.3.horizontal.decrease.circle")
                             .font(.system(size: 32))
@@ -120,8 +120,13 @@ struct DictionarySettingsView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 48)
                 } else {
-                    ForEach(viewModel.filteredEntries) { entry in
-                        DictionaryCardView(entry: entry, viewModel: viewModel)
+                    ForEach(viewModel.filteredEntryRows) { row in
+                        DictionaryCardView(
+                            row: row,
+                            toggleEntry: { viewModel.toggleEntry(id: row.id) },
+                            editEntry: { viewModel.startEditingEntry(id: row.id) },
+                            deleteEntry: { viewModel.deleteEntry(id: row.id) }
+                        )
                     }
                 }
             }
@@ -524,23 +529,24 @@ private struct TermPackCardView: View {
 // MARK: - Dictionary Card
 
 private struct DictionaryCardView: View {
-    let entry: DictionaryEntry
-    @ObservedObject var viewModel: DictionaryViewModel
-    @State private var isHovering = false
+    let row: DictionaryEntryRow
+    let toggleEntry: () -> Void
+    let editEntry: () -> Void
+    let deleteEntry: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
-            Text(entry.type.displayName)
+            Text(row.type.displayName)
                 .font(.caption)
                 .fontWeight(.medium)
-                .foregroundStyle(entry.type == .correction ? Color.orange : Color.accentColor)
+                .foregroundStyle(row.type == .correction ? Color.orange : Color.accentColor)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background((entry.type == .correction ? Color.orange : Color.accentColor).opacity(0.12))
+                .background((row.type == .correction ? Color.orange : Color.accentColor).opacity(0.12))
                 .clipShape(RoundedRectangle(cornerRadius: 5))
 
-            if entry.type == .correction, let replacement = entry.replacement {
-                Text(entry.original)
+            if row.type == .correction, let replacement = row.replacementDisplayText {
+                Text(row.original)
                     .font(.callout)
                     .strikethrough()
                     .foregroundStyle(.secondary)
@@ -549,21 +555,21 @@ private struct DictionaryCardView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
 
-                Text(dictionaryReplacementDisplayText(replacement))
+                Text(replacement)
                     .font(.callout)
                     .fontWeight(.medium)
             } else {
-                Text(entry.original)
+                Text(row.original)
                     .font(.callout)
                     .fontWeight(.medium)
 
                 DictionaryBoostingBadge(
-                    label: viewModel.termBoostingLabel(for: entry.ctcMinSimilarity),
-                    value: viewModel.formattedCtcMinSimilarity(entry.ctcMinSimilarity)
+                    label: row.termBoostingLabel,
+                    value: row.formattedCtcMinSimilarity
                 )
             }
 
-            if entry.caseSensitive {
+            if row.caseSensitive {
                 Text("Aa")
                     .font(.caption2)
                     .padding(.horizontal, 5)
@@ -576,12 +582,12 @@ private struct DictionaryCardView: View {
             Spacer()
 
             Toggle("", isOn: Binding(
-                get: { entry.isEnabled },
-                set: { _ in viewModel.toggleEntry(entry) }
+                get: { row.isEnabled },
+                set: { _ in toggleEntry() }
             ))
             .toggleStyle(.switch)
             .labelsHidden()
-            .accessibilityLabel(String(localized: "Enable \(entry.original)"))
+            .accessibilityLabel(String(localized: "Enable \(row.original)"))
             .onTapGesture {}
         }
         .padding(.horizontal, 10)
@@ -592,23 +598,20 @@ private struct DictionaryCardView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(isHovering ? Color.accentColor.opacity(0.3) : Color.primary.opacity(0.06), lineWidth: 1)
+                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
         )
         .contentShape(Rectangle())
-        .onHover { hovering in
-            isHovering = hovering
-        }
         .onTapGesture {
-            viewModel.startEditing(entry)
+            editEntry()
         }
         .accessibilityElement(children: .combine)
         .contextMenu {
             Button(String(localized: "Edit")) {
-                viewModel.startEditing(entry)
+                editEntry()
             }
             Divider()
             Button(String(localized: "Delete"), role: .destructive) {
-                viewModel.deleteEntry(entry)
+                deleteEntry()
             }
         }
     }
