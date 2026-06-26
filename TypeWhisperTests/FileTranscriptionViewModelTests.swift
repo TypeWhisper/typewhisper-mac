@@ -602,6 +602,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
 
     func testAutomaticRecoveryFallbackRejectsCancellation() {
         XCTAssertFalse(AutomaticRecoveryFallbackErrorPolicy.shouldAttempt(after: CancellationError()))
+        XCTAssertFalse(AutomaticRecoveryFallbackErrorPolicy.shouldAttempt(after: URLError(.cancelled)))
         XCTAssertFalse(
             AutomaticRecoveryFallbackErrorPolicy.shouldAttempt(
                 after: PluginTranscriptionError.rateLimited,

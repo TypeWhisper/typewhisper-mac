@@ -101,8 +101,8 @@ enum AutomaticRecoveryFallbackErrorPolicy {
             }
         }
 
-        if error is URLError {
-            return true
+        if let urlError = error as? URLError {
+            return urlError.code != .cancelled
         }
 
         return false
