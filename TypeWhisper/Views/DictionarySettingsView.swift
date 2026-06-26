@@ -123,7 +123,7 @@ struct DictionarySettingsView: View {
                     ForEach(viewModel.filteredEntryRows) { row in
                         DictionaryCardView(
                             row: row,
-                            toggleEntry: { viewModel.toggleEntry(id: row.id) },
+                            setEntryEnabled: { viewModel.setEntryEnabled(id: row.id, enabled: $0) },
                             editEntry: { viewModel.startEditingEntry(id: row.id) },
                             deleteEntry: { viewModel.deleteEntry(id: row.id) }
                         )
@@ -530,7 +530,7 @@ private struct TermPackCardView: View {
 
 private struct DictionaryCardView: View {
     let row: DictionaryEntryRow
-    let toggleEntry: () -> Void
+    let setEntryEnabled: (Bool) -> Void
     let editEntry: () -> Void
     let deleteEntry: () -> Void
 
@@ -583,7 +583,7 @@ private struct DictionaryCardView: View {
 
             Toggle("", isOn: Binding(
                 get: { row.isEnabled },
-                set: { _ in toggleEntry() }
+                set: { setEntryEnabled($0) }
             ))
             .toggleStyle(.switch)
             .labelsHidden()

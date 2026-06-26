@@ -518,7 +518,7 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
-    func testDictionaryEntryIDActionsEditToggleAndDeleteMatchingEntry() throws {
+    func testDictionaryEntryIDActionsEditSetEnabledToggleAndDeleteMatchingEntry() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
 
@@ -527,6 +527,12 @@ final class DictionaryServiceTests: XCTestCase {
         let viewModel = DictionaryViewModel(dictionaryService: service)
         let row = try XCTUnwrap(viewModel.filteredEntryRows.first)
 
+        viewModel.setEntryEnabled(id: row.id, enabled: false)
+        XCTAssertFalse(try XCTUnwrap(service.entries.first { $0.id == row.id }).isEnabled)
+        viewModel.setEntryEnabled(id: row.id, enabled: false)
+        XCTAssertFalse(try XCTUnwrap(service.entries.first { $0.id == row.id }).isEnabled)
+        viewModel.setEntryEnabled(id: row.id, enabled: true)
+        XCTAssertTrue(try XCTUnwrap(service.entries.first { $0.id == row.id }).isEnabled)
         viewModel.toggleEntry(id: row.id)
         XCTAssertFalse(try XCTUnwrap(service.entries.first { $0.id == row.id }).isEnabled)
 

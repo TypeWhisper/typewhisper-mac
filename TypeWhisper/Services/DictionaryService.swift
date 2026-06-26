@@ -193,6 +193,21 @@ final class DictionaryService: ObservableObject {
         }
     }
 
+    func setEntryEnabled(_ entry: DictionaryEntry, enabled: Bool) {
+        guard let context = modelContext else { return }
+        guard entry.isEnabled != enabled else { return }
+
+        entry.isEnabled = enabled
+        entry.updatedAt = Date()
+
+        do {
+            try context.save()
+            loadEntries()
+        } catch {
+            logger.error("Failed to set entry enabled state: \(error.localizedDescription)")
+        }
+    }
+
     /// Batch add multiple entries with a single save+reload
     func addEntries(_ items: [(type: DictionaryEntryType, original: String, replacement: String?, caseSensitive: Bool)]) {
         addEntries(items.map {

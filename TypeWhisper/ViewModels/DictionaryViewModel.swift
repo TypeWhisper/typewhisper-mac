@@ -288,6 +288,11 @@ class DictionaryViewModel: ObservableObject {
         dictionaryService.toggleEntry(entry)
     }
 
+    func setEntryEnabled(id: UUID, enabled: Bool) {
+        guard let entry = entry(withID: id) else { return }
+        dictionaryService.setEntryEnabled(entry, enabled: enabled)
+    }
+
     func clearError() {
         error = nil
     }
