@@ -197,6 +197,8 @@ final class DictionaryService: ObservableObject {
         guard let context = modelContext else { return }
         guard entry.isEnabled != enabled else { return }
 
+        let previousEnabled = entry.isEnabled
+        let previousUpdatedAt = entry.updatedAt
         entry.isEnabled = enabled
         entry.updatedAt = Date()
 
@@ -204,6 +206,8 @@ final class DictionaryService: ObservableObject {
             try context.save()
             loadEntries()
         } catch {
+            entry.isEnabled = previousEnabled
+            entry.updatedAt = previousUpdatedAt
             logger.error("Failed to set entry enabled state: \(error.localizedDescription)")
         }
     }
