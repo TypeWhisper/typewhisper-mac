@@ -73,6 +73,39 @@ enum DictationTranscriptionOverrideResolver {
 /// Orchestrates the dictation flow: recording → transcription → text insertion.
 @MainActor
 final class DictationViewModel: ObservableObject {
+    typealias RecoveryFallbackConfigurationProvider = @MainActor (
+        _ primaryEngineId: String?,
+        _ task: TranscriptionTask
+    ) -> DictationRecoveryFallbackConfiguration?
+    typealias RecoveryFallbackRunner = @MainActor (
+        _ samples: [Float],
+        _ languageSelection: LanguageSelection,
+        _ task: TranscriptionTask,
+        _ configuration: DictationRecoveryFallbackConfiguration,
+        _ prompt: String?,
+        _ dictionaryTermHints: [PluginDictionaryTermHint],
+        _ normalizeNumbers: Bool?
+    ) async throws -> TranscriptionResult
+
+    private struct FinalTranscriptionOutput {
+        let result: TranscriptionResult
+        let modelId: String?
+        let modelDisplayName: String?
+        let usedRecoveryFallback: Bool
+    }
+
+    private struct AutomaticRecoveryFallbackFailure: LocalizedError {
+        let primaryDescription: String
+        let fallbackDescription: String
+
+        var errorDescription: String? {
+            localizedAppText(
+                "Primary transcription failed: \(primaryDescription). Recovery fallback failed: \(fallbackDescription)",
+                de: "Primäre Transkription fehlgeschlagen: \(primaryDescription). Recovery-Fallback fehlgeschlagen: \(fallbackDescription)"
+            )
+        }
+    }
+
     nonisolated(unsafe) static var _shared: DictationViewModel?
     static var shared: DictationViewModel {
         guard let instance = _shared else {
@@ -217,6 +250,8 @@ final class DictationViewModel: ObservableObject {
     private let errorLogService: ErrorLogService
     private let mediaPlaybackService: MediaPlaybackService
     private let postProcessingPipeline: PostProcessingPipeline
+    private let recoveryFallbackConfigurationProvider: RecoveryFallbackConfigurationProvider
+    private let recoveryFallbackRunner: RecoveryFallbackRunner
     private var matchedWorkflow: Workflow?
     private var activeWorkflowMatch: WorkflowMatchResult?
     private var forcedWorkflowId: UUID?
@@ -304,7 +339,9 @@ final class DictationViewModel: ObservableObject {
         speechFeedbackService: SpeechFeedbackService,
         accessibilityAnnouncementService: AccessibilityAnnouncementService,
         errorLogService: ErrorLogService,
-        mediaPlaybackService: MediaPlaybackService
+        mediaPlaybackService: MediaPlaybackService,
+        recoveryFallbackConfigurationProvider: RecoveryFallbackConfigurationProvider? = nil,
+        recoveryFallbackRunner: RecoveryFallbackRunner? = nil
     ) {
         self.audioRecordingService = audioRecordingService
         self.textInsertionService = textInsertionService
@@ -340,6 +377,19 @@ final class DictationViewModel: ObservableObject {
         self.accessibilityAnnouncementService = accessibilityAnnouncementService
         self.errorLogService = errorLogService
         self.mediaPlaybackService = mediaPlaybackService
+        self.recoveryFallbackConfigurationProvider = recoveryFallbackConfigurationProvider ?? { _, _ in nil }
+        self.recoveryFallbackRunner = recoveryFallbackRunner ?? { [modelManager] samples, languageSelection, task, configuration, prompt, dictionaryTermHints, normalizeNumbers in
+            try await modelManager.transcribe(
+                audioSamples: samples,
+                languageSelection: languageSelection,
+                task: task,
+                engineOverrideId: configuration.engineId,
+                cloudModelOverride: configuration.modelId,
+                prompt: prompt,
+                dictionaryTermHints: dictionaryTermHints,
+                normalizeNumbers: normalizeNumbers
+            )
+        }
         self.postProcessingPipeline = PostProcessingPipeline(
             snippetService: snippetService,
             dictionaryService: dictionaryService,
@@ -1287,24 +1337,37 @@ final class DictationViewModel: ObservableObject {
                 let engineOverride = effectiveEngineOverrideId
                 let cloudModelOverride = effectiveCloudModelOverride
                 let translationTarget = effectiveTranslationTarget
-                let dictionaryProviderId = engineOverride ?? modelManager.selectedProviderId
+                let primaryEngineId = engineOverride ?? modelManager.selectedProviderId
+                let dictionaryProviderId = primaryEngineId
                 let termsPrompt = dictionaryService.getTermsForPrompt(providerId: dictionaryProviderId)
                 let termHints = dictionaryService.getTermHints(providerId: dictionaryProviderId)
 
-                let result = if let liveSessionResult {
-                    liveSessionResult
+                let transcription = if let liveSessionResult {
+                    FinalTranscriptionOutput(
+                        result: liveSessionResult,
+                        modelId: modelManager.resolvedModelId(
+                            engineOverrideId: engineOverride,
+                            cloudModelOverride: cloudModelOverride
+                        ),
+                        modelDisplayName: modelManager.resolvedModelDisplayName(
+                            engineOverrideId: engineOverride,
+                            cloudModelOverride: cloudModelOverride
+                        ),
+                        usedRecoveryFallback: false
+                    )
                 } else {
-                    try await modelManager.transcribe(
+                    try await transcribeFinalAudio(
                         audioSamples: samples,
                         languageSelection: languageSelection,
                         task: task,
-                        engineOverrideId: engineOverride,
-                        cloudModelOverride: cloudModelOverride,
+                        primaryEngineId: primaryEngineId,
+                        primaryCloudModelOverride: cloudModelOverride,
                         prompt: termsPrompt,
                         dictionaryTermHints: termHints,
                         normalizeNumbers: effectiveNumberNormalizationOverride
                     )
                 }
+                let result = transcription.result
 
                 // Bail out if a new recording started while we were transcribing
                 guard !Task.isCancelled else { return }
@@ -1357,10 +1420,7 @@ final class DictationViewModel: ObservableObject {
                 )
                 let dictationContext = DictationRuntimeContext(
                     engineId: result.engineUsed,
-                    modelId: modelManager.resolvedModelId(
-                        engineOverrideId: engineOverride,
-                        cloudModelOverride: cloudModelOverride
-                    ),
+                    modelId: transcription.modelId,
                     configuredLanguage: language,
                     configuredLanguageCandidates: languageCandidates,
                     detectedLanguage: result.detectedLanguage
@@ -1429,10 +1489,11 @@ final class DictationViewModel: ObservableObject {
                     )))
                 }
 
-                let modelDisplayName = modelManager.resolvedModelDisplayName(
-                    engineOverrideId: engineOverride,
-                    cloudModelOverride: cloudModelOverride
-                )
+                let modelDisplayName = transcription.modelDisplayName
+                var pipelineSteps = ppResult.appliedSteps
+                if transcription.usedRecoveryFallback {
+                    pipelineSteps.append(localizedAppText("Recovery fallback", de: "Recovery-Fallback"))
+                }
 
                 if UserDefaults.standard.object(forKey: UserDefaultsKeys.historyEnabled) as? Bool ?? true {
                     historyService.addRecord(
@@ -1447,7 +1508,7 @@ final class DictationViewModel: ObservableObject {
                         engineUsed: result.engineUsed,
                         modelUsed: modelDisplayName,
                         audioSamples: audioSamplesForHistory,
-                        pipelineSteps: ppResult.appliedSteps.isEmpty ? nil : ppResult.appliedSteps
+                        pipelineSteps: pipelineSteps.isEmpty ? nil : pipelineSteps
                     )
                 }
 
@@ -1516,6 +1577,132 @@ final class DictationViewModel: ObservableObject {
             }
             self.transcriptionTask = nil
         }
+    }
+
+    private func transcribeFinalAudio(
+        audioSamples: [Float],
+        languageSelection: LanguageSelection,
+        task: TranscriptionTask,
+        primaryEngineId: String?,
+        primaryCloudModelOverride: String?,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        normalizeNumbers: Bool?
+    ) async throws -> FinalTranscriptionOutput {
+        do {
+            let result = try await modelManager.transcribe(
+                audioSamples: audioSamples,
+                languageSelection: languageSelection,
+                task: task,
+                engineOverrideId: primaryEngineId,
+                cloudModelOverride: primaryCloudModelOverride,
+                prompt: prompt,
+                dictionaryTermHints: dictionaryTermHints,
+                normalizeNumbers: normalizeNumbers
+            )
+            return finalTranscriptionOutput(
+                result: result,
+                engineId: primaryEngineId,
+                modelId: primaryCloudModelOverride,
+                usedRecoveryFallback: false
+            )
+        } catch {
+            let primaryError = error
+            guard shouldAttemptAutomaticRecoveryFallback(after: primaryError),
+                  let configuration = recoveryFallbackConfigurationProvider(primaryEngineId, task) else {
+                throw primaryError
+            }
+
+            logger.warning(
+                "Primary transcription failed; retrying with recovery fallback engine \(configuration.engineId, privacy: .public): \(primaryError.localizedDescription, privacy: .public)"
+            )
+
+            do {
+                let fallbackResult = try await recoveryFallbackRunner(
+                    audioSamples,
+                    languageSelection,
+                    task,
+                    configuration,
+                    prompt,
+                    dictionaryTermHints,
+                    normalizeNumbers
+                )
+                logger.info(
+                    "Recovery fallback transcription succeeded with engine \(configuration.engineId, privacy: .public)"
+                )
+                return finalTranscriptionOutput(
+                    result: fallbackResult,
+                    engineId: configuration.engineId,
+                    modelId: configuration.modelId,
+                    usedRecoveryFallback: true
+                )
+            } catch {
+                logger.error(
+                    "Recovery fallback transcription failed with engine \(configuration.engineId, privacy: .public): \(error.localizedDescription, privacy: .public)"
+                )
+                throw AutomaticRecoveryFallbackFailure(
+                    primaryDescription: primaryError.localizedDescription,
+                    fallbackDescription: error.localizedDescription
+                )
+            }
+        }
+    }
+
+    private func finalTranscriptionOutput(
+        result: TranscriptionResult,
+        engineId: String?,
+        modelId: String?,
+        usedRecoveryFallback: Bool
+    ) -> FinalTranscriptionOutput {
+        FinalTranscriptionOutput(
+            result: result,
+            modelId: modelManager.resolvedModelId(
+                engineOverrideId: engineId,
+                cloudModelOverride: modelId
+            ),
+            modelDisplayName: modelManager.resolvedModelDisplayName(
+                engineOverrideId: engineId,
+                cloudModelOverride: modelId
+            ),
+            usedRecoveryFallback: usedRecoveryFallback
+        )
+    }
+
+    private func shouldAttemptAutomaticRecoveryFallback(after error: Error) -> Bool {
+        guard !(error is CancellationError), !Task.isCancelled else { return false }
+
+        if let pluginError = error as? PluginTranscriptionError {
+            switch pluginError {
+            case .fileTooLarge:
+                return false
+            case .notConfigured,
+                 .noModelSelected,
+                 .invalidApiKey,
+                 .rateLimited,
+                 .apiError(_),
+                 .networkError(_):
+                return true
+            }
+        }
+
+        if let transcriptionError = error as? TranscriptionEngineError {
+            switch transcriptionError {
+            case .unsupportedTask(_):
+                return false
+            case .modelNotLoaded,
+                 .appleSpeechModelNotLoaded,
+                 .transcriptionFailed(_),
+                 .modelLoadFailed(_),
+                 .modelDownloadFailed(_):
+                return true
+            }
+        }
+
+        if error is URLError {
+            return true
+        }
+
+        return true
     }
 
     func requestMicPermission() { settingsHandler.requestMicPermission() }

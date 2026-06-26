@@ -1,6 +1,6 @@
 import Foundation
-import XCTest
 import TypeWhisperPluginSDK
+import XCTest
 @testable import TypeWhisper
 
 @MainActor
@@ -582,10 +582,49 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: newerRecoveryURL.path))
     }
 
-    func testRecoverySettingsTabFallsBackWhenRecoveryIsUnavailable() {
-        XCTAssertEqual(SettingsView.availableTab(.dictationRecovery, hasRecoveryContent: false), .recording)
+    func testRecoverySettingsTabRemainsAvailableWithoutRecoveryContent() {
+        XCTAssertEqual(SettingsView.availableTab(.dictationRecovery, hasRecoveryContent: false), .dictationRecovery)
         XCTAssertEqual(SettingsView.availableTab(.dictationRecovery, hasRecoveryContent: true), .dictationRecovery)
         XCTAssertEqual(SettingsView.availableTab(.fileTranscription, hasRecoveryContent: false), .fileTranscription)
+    }
+
+    func testRecoveryAutomaticFallbackRequiresCommercialOrSupporterAccess() throws {
+        setupPluginManager()
+        let defaults = try makeDefaults()
+        let license = LicenseService(defaults: defaults)
+        let viewModel = makeRecoveryViewModel(defaults: defaults, licenseService: license)
+
+        viewModel.selectedEngine = "backup"
+        viewModel.selectedModel = "backup-large"
+        viewModel.automaticFallbackEnabled = true
+
+        XCTAssertNil(viewModel.automaticFallbackConfiguration(excluding: "primary", task: .transcribe))
+
+        license.licenseStatus = .active
+        license.licenseTier = .individual
+
+        XCTAssertEqual(
+            viewModel.automaticFallbackConfiguration(excluding: "primary", task: .transcribe),
+            DictationRecoveryFallbackConfiguration(engineId: "backup", modelId: "backup-large")
+        )
+    }
+
+    func testRecoveryAutomaticFallbackAllowsSupporterAccessAndRejectsPrimaryEngine() throws {
+        setupPluginManager()
+        let defaults = try makeDefaults()
+        let license = LicenseService(defaults: defaults)
+        let viewModel = makeRecoveryViewModel(defaults: defaults, licenseService: license)
+
+        license.supporterStatus = .active
+        license.supporterTier = .bronze
+        viewModel.selectedEngine = "backup"
+        viewModel.automaticFallbackEnabled = true
+
+        XCTAssertNil(viewModel.automaticFallbackConfiguration(excluding: "backup", task: .transcribe))
+        XCTAssertEqual(
+            viewModel.automaticFallbackConfiguration(excluding: "primary", task: .transcribe),
+            DictationRecoveryFallbackConfiguration(engineId: "backup", modelId: nil)
+        )
     }
 
     private func makeDefaults() throws -> UserDefaults {
@@ -633,6 +672,49 @@ final class FileTranscriptionViewModelTests: XCTestCase {
             engineUsed: "test",
             segments: segments
         )
+    }
+
+    private func makeRecoveryViewModel(
+        defaults: UserDefaults,
+        licenseService: LicenseService
+    ) -> DictationRecoveryViewModel {
+        let directory = makeTemporaryDirectory()
+        let audioRecordingService = AudioRecordingService(
+            recoveryAudioStore: DictationRecoveryAudioStore(directory: directory)
+        )
+        return DictationRecoveryViewModel(
+            audioRecordingService: audioRecordingService,
+            modelManager: ModelManagerService(),
+            historyService: HistoryService(appSupportDirectory: makeTemporaryDirectory()),
+            audioFileService: AudioFileService(),
+            licenseService: licenseService,
+            defaults: defaults
+        )
+    }
+
+    private func setupPluginManager() {
+        let previousPluginManager = PluginManager.shared
+        addTeardownBlock {
+            PluginManager.shared = previousPluginManager
+        }
+
+        let appSupportDirectory = makeTemporaryDirectory()
+        let pluginManager = PluginManager(appSupportDirectory: appSupportDirectory)
+        pluginManager.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.backup",
+                    name: "Backup",
+                    version: "1.0.0",
+                    principalClass: "RecoveryFallbackMockTranscriptionPlugin"
+                ),
+                instance: RecoveryFallbackMockTranscriptionPlugin(),
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+        PluginManager.shared = pluginManager
     }
 
     private func waitForBatchToFinish(_ viewModel: FileTranscriptionViewModel) async throws {
@@ -715,5 +797,49 @@ private final class FileTranscriptionAppleSpeechCatalogPlugin: NSObject, Transcr
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
         throw PluginTranscriptionError.notConfigured
+    }
+}
+
+private final class RecoveryFallbackMockTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+    static var pluginId: String { "com.typewhisper.mock.backup" }
+    static var pluginName: String { "Backup" }
+
+    let providerId = "backup"
+    let providerDisplayName = "Backup"
+    var isConfigured: Bool { true }
+    var transcriptionModels: [PluginModelInfo] {
+        [
+            PluginModelInfo(id: "backup-large", displayName: "Backup Large"),
+            PluginModelInfo(id: "backup-small", displayName: "Backup Small")
+        ]
+    }
+    private(set) var selectedModelId: String? = "backup-large"
+    var supportsTranslation: Bool { true }
+    var supportsStreaming: Bool { false }
+    var supportedLanguages: [String] { ["de", "en"] }
+
+    required override init() {
+        super.init()
+    }
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+    func selectModel(_ modelId: String) {
+        selectedModelId = modelId
+    }
+
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "backup transcript", detectedLanguage: language)
+    }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        _ = onProgress("backup transcript")
+        return PluginTranscriptionResult(text: "backup transcript", detectedLanguage: language)
     }
 }

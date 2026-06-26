@@ -42,14 +42,12 @@ struct SettingsView: View {
                 systemImage: "waveform.circle",
                 badge: nil
             ),
-            dictationRecovery.hasRecoveryContent
-                ? SettingsDestination(
-                    tab: .dictationRecovery,
-                    title: localizedAppText("Recovery", de: "Wiederherstellung"),
-                    systemImage: "waveform",
-                    badge: nil
-                )
-                : nil,
+            SettingsDestination(
+                tab: .dictationRecovery,
+                title: localizedAppText("Recovery", de: "Wiederherstellung"),
+                systemImage: "waveform",
+                badge: nil
+            ),
             SettingsDestination(tab: .fileTranscription, title: String(localized: "File Transcription"), systemImage: "doc.text", badge: nil),
             SettingsDestination(tab: .history, title: String(localized: "History"), systemImage: "clock.arrow.circlepath", badge: nil),
             SettingsDestination(tab: .dictionary, title: String(localized: "Dictionary"), systemImage: "book.closed", badge: nil),
@@ -135,8 +133,8 @@ struct SettingsView: View {
         }
     }
 
-    static func availableTab(_ tab: SettingsTab, hasRecoveryContent: Bool) -> SettingsTab {
-        tab == .dictationRecovery && !hasRecoveryContent ? .recording : tab
+    static func availableTab(_ tab: SettingsTab, hasRecoveryContent _: Bool) -> SettingsTab {
+        tab
     }
 
     private func navigateToFileTranscriptionIfNeeded() {
