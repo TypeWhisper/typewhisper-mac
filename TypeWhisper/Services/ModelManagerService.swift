@@ -36,6 +36,28 @@ extension TranscriptionEnginePlugin {
     }
 }
 
+enum ModelAutoUnloadPolicy {
+    static let defaultSeconds = 600
+
+    static func effectiveSeconds(defaults: UserDefaults = .standard) -> Int {
+        guard defaults.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds) != nil else {
+            return defaultSeconds
+        }
+        return defaults.integer(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+    }
+
+    static func policyName(seconds: Int) -> String {
+        switch seconds {
+        case 0:
+            return "never"
+        case -1:
+            return "immediate"
+        default:
+            return "afterSeconds"
+        }
+    }
+}
+
 @MainActor
 final class ModelManagerService: ObservableObject {
     struct LiveTranscriptionSessionHandle: Sendable {
@@ -71,7 +93,7 @@ final class ModelManagerService: ObservableObject {
     private let modelKey = UserDefaultsKeys.selectedModelId
 
     init() {
-        self.autoUnloadSeconds = UserDefaults.standard.integer(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        self.autoUnloadSeconds = ModelAutoUnloadPolicy.effectiveSeconds()
         self.selectedProviderId = UserDefaults.standard.string(forKey: providerKey)
     }
 
@@ -157,6 +179,7 @@ final class ModelManagerService: ObservableObject {
             .sink { [weak self] _ in
                 guard let self else { return }
                 self.restoreProviderSelection()
+                self.scheduleAutoUnloadIfNeeded()
                 self.objectWillChange.send()
             }
             .store(in: &cancellables)
@@ -715,16 +738,45 @@ final class ModelManagerService: ObservableObject {
     // MARK: - Auto-Unload
 
     func scheduleAutoUnloadIfNeeded() {
-        guard let providerId = selectedProviderId,
-              let plugin = PluginManager.shared.transcriptionEngine(for: providerId),
-              plugin.isConfigured else { return }
+        var scheduledKeys = Set<ObjectIdentifier>()
 
-        scheduleAutoUnloadIfNeeded(for: plugin)
+        for plugin in PluginManager.shared.transcriptionEngines where plugin.isConfigured {
+            scheduleAutoUnloadIfNeeded(for: plugin, scheduledKeys: &scheduledKeys)
+        }
+
+        for plugin in PluginManager.shared.llmProviders
+            where plugin.isAvailable && Self.shouldAutoUnloadLocalLLMProvider(plugin) {
+            scheduleAutoUnloadIfNeeded(for: plugin, scheduledKeys: &scheduledKeys)
+        }
     }
 
     func scheduleAutoUnloadIfNeeded(for plugin: any TypeWhisperPlugin) {
         guard let nsPlugin = plugin as? NSObject else { return }
+        var scheduledKeys = Set<ObjectIdentifier>()
+        scheduleAutoUnloadIfNeeded(for: nsPlugin, scheduledKeys: &scheduledKeys)
+    }
+
+    private static func shouldAutoUnloadLocalLLMProvider(_ plugin: any LLMProviderPlugin) -> Bool {
+        guard let setupStatus = plugin as? any LLMProviderSetupStatusProviding else {
+            return false
+        }
+        return !setupStatus.requiresExternalCredentials
+    }
+
+    private func scheduleAutoUnloadIfNeeded(
+        for plugin: any TypeWhisperPlugin,
+        scheduledKeys: inout Set<ObjectIdentifier>
+    ) {
+        guard let nsPlugin = plugin as? NSObject else { return }
+        scheduleAutoUnloadIfNeeded(for: nsPlugin, scheduledKeys: &scheduledKeys)
+    }
+
+    private func scheduleAutoUnloadIfNeeded(
+        for nsPlugin: NSObject,
+        scheduledKeys: inout Set<ObjectIdentifier>
+    ) {
         let key = ObjectIdentifier(nsPlugin)
+        guard scheduledKeys.insert(key).inserted else { return }
 
         autoUnloadTasks[key]?.cancel()
         autoUnloadTasks[key] = nil

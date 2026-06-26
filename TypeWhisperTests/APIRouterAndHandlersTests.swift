@@ -6281,6 +6281,150 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    func testModelAutoUnloadDefaultsToTenMinutesWhenUnset() throws {
+        let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        defer {
+            if let originalAutoUnload {
+                UserDefaults.standard.set(originalAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            }
+        }
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+
+        let modelManager = ModelManagerService()
+
+        XCTAssertEqual(ModelAutoUnloadPolicy.effectiveSeconds(), 600)
+        XCTAssertEqual(modelManager.autoUnloadSeconds, 600)
+        XCTAssertEqual(ModelAutoUnloadPolicy.policyName(seconds: modelManager.autoUnloadSeconds), "afterSeconds")
+    }
+
+    @MainActor
+    func testModelAutoUnloadKeepsExplicitNever() throws {
+        let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        defer {
+            if let originalAutoUnload {
+                UserDefaults.standard.set(originalAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            }
+        }
+        UserDefaults.standard.set(0, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+
+        let modelManager = ModelManagerService()
+
+        XCTAssertEqual(ModelAutoUnloadPolicy.effectiveSeconds(), 0)
+        XCTAssertEqual(modelManager.autoUnloadSeconds, 0)
+        XCTAssertEqual(ModelAutoUnloadPolicy.policyName(seconds: modelManager.autoUnloadSeconds), "never")
+    }
+
+    @MainActor
+    func testModelManagerAutoUnloadsAvailableLocalLLMWithoutPromptProcessing() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        defer {
+            if let originalAutoUnload {
+                UserDefaults.standard.set(originalAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            }
+        }
+        UserDefaults.standard.set(-1, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockLLMProviderPlugin()
+        plugin.configuredProviderName = "Gemma 4 (MLX)"
+        plugin.requiresExternalCredentials = false
+
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.local-llm",
+                    name: "Mock Local LLM",
+                    version: "1.0.0",
+                    principalClass: "APIRouterMockLLMProviderPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.scheduleAutoUnloadIfNeeded()
+
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(plugin.autoUnloadCount, 1)
+    }
+
+    @MainActor
+    func testModelManagerSkipsRemoteAndUnavailableLLMProviders() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        defer {
+            if let originalAutoUnload {
+                UserDefaults.standard.set(originalAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            }
+        }
+        UserDefaults.standard.set(-1, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let remotePlugin = MockLLMProviderPlugin()
+        remotePlugin.configuredProviderName = "Gemini"
+        remotePlugin.requiresExternalCredentials = true
+
+        let unavailableLocalPlugin = MockLLMProviderPlugin()
+        unavailableLocalPlugin.configuredProviderName = "Gemma 4 (MLX)"
+        unavailableLocalPlugin.requiresExternalCredentials = false
+        unavailableLocalPlugin.available = false
+
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.remote-llm",
+                    name: "Mock Remote LLM",
+                    version: "1.0.0",
+                    principalClass: "APIRouterMockLLMProviderPlugin"
+                ),
+                instance: remotePlugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            ),
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.unavailable-local-llm",
+                    name: "Mock Unavailable Local LLM",
+                    version: "1.0.0",
+                    principalClass: "APIRouterMockLLMProviderPlugin"
+                ),
+                instance: unavailableLocalPlugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            ),
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.scheduleAutoUnloadIfNeeded()
+
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(remotePlugin.autoUnloadCount, 0)
+        XCTAssertEqual(unavailableLocalPlugin.autoUnloadCount, 0)
+    }
+
+    @MainActor
     func testPromptProcessingSkipsHighPriorityActivityForRemoteProviders() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

@@ -422,7 +422,7 @@ final class ErrorLogService: ObservableObject {
         let defaults = UserDefaults.standard
         let pluginManager = PluginManager.shared ?? container.pluginManager
         let outputSnapshot = CoreAudioOutputVolumeController().defaultOutputSnapshot()
-        let modelAutoUnloadSeconds = defaults.integer(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        let modelAutoUnloadSeconds = ModelAutoUnloadPolicy.effectiveSeconds(defaults: defaults)
         let indicatorStyle = DictationViewModel.loadIndicatorStyle(defaults: defaults)
         let indicatorPreviewEnabled = DictationViewModel.loadIndicatorTranscriptPreviewEnabled(defaults: defaults)
         let indicatorPreviewOffset = DictationViewModel.loadIndicatorTranscriptPreviewFontSizeOffset(defaults: defaults)
@@ -571,7 +571,7 @@ final class ErrorLogService: ObservableObject {
                 memoryCaptureScope: MemoryCaptureScope.load(from: defaults).rawValue,
                 appFormattingEnabled: defaults.bool(forKey: UserDefaultsKeys.appFormattingEnabled),
                 modelAutoUnloadSeconds: modelAutoUnloadSeconds,
-                modelAutoUnloadPolicy: Self.modelAutoUnloadPolicy(seconds: modelAutoUnloadSeconds),
+                modelAutoUnloadPolicy: ModelAutoUnloadPolicy.policyName(seconds: modelAutoUnloadSeconds),
                 indicatorStyle: indicatorStyle.rawValue,
                 indicatorSupportsTranscriptPreview: indicatorStyle.supportsTranscriptPreview,
                 indicatorTranscriptPreviewEnabled: indicatorPreviewEnabled,
@@ -655,17 +655,6 @@ final class ErrorLogService: ObservableObject {
     private static func trimmedOrNil(_ value: String?) -> String? {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed?.isEmpty == false ? trimmed : nil
-    }
-
-    private static func modelAutoUnloadPolicy(seconds: Int) -> String {
-        switch seconds {
-        case 0:
-            return "never"
-        case -1:
-            return "immediate"
-        default:
-            return "afterSeconds"
-        }
     }
 
     private func loadEntries() {
