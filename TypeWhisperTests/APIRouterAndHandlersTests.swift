@@ -157,6 +157,44 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    private func waitForAutoUnloadCount(
+        _ plugin: MockLLMProviderPlugin,
+        toBecome expected: Int,
+        timeout: Duration = .seconds(2),
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        while ContinuousClock.now < deadline {
+            if plugin.autoUnloadCount == expected {
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(plugin.autoUnloadCount, expected, file: file, line: line)
+    }
+
+    @MainActor
+    private func assertAutoUnloadCount(
+        _ plugin: MockLLMProviderPlugin,
+        remains expected: Int,
+        duration: Duration = .milliseconds(500),
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        let deadline = ContinuousClock.now.advanced(by: duration)
+        while ContinuousClock.now < deadline {
+            let actual = plugin.autoUnloadCount
+            if actual != expected {
+                XCTFail("Expected autoUnloadCount to remain \(expected), got \(actual)", file: file, line: line)
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(plugin.autoUnloadCount, expected, file: file, line: line)
+    }
+
+    @MainActor
     private final class MemoryRetrieverSpy: MemoryRetrieving {
         private(set) var requestedTexts: [String] = []
         var context = """
@@ -6172,8 +6210,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         )
 
         XCTAssertEqual(result, "processed")
-        try await Task.sleep(for: .milliseconds(150))
-        XCTAssertEqual(plugin.autoUnloadCount, 1)
+        await waitForAutoUnloadCount(plugin, toBecome: 1)
     }
 
     @MainActor
@@ -6224,8 +6261,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         )
 
         XCTAssertEqual(result, "processed")
-        try await Task.sleep(for: .milliseconds(150))
-        XCTAssertEqual(plugin.autoUnloadCount, 0)
+        await assertAutoUnloadCount(plugin, remains: 0)
     }
 
     @MainActor
@@ -6276,8 +6312,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         )
 
         XCTAssertEqual(result, "processed")
-        try await Task.sleep(for: .milliseconds(150))
-        XCTAssertEqual(plugin.autoUnloadCount, 0)
+        await assertAutoUnloadCount(plugin, remains: 0)
     }
 
     @MainActor
@@ -6358,8 +6393,53 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let modelManager = ModelManagerService()
         modelManager.scheduleAutoUnloadIfNeeded()
 
-        try await Task.sleep(for: .milliseconds(150))
-        XCTAssertEqual(plugin.autoUnloadCount, 1)
+        await waitForAutoUnloadCount(plugin, toBecome: 1)
+    }
+
+    @MainActor
+    func testModelManagerCancelsAutoUnloadWhenLocalLLMBecomesUnavailable() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        defer {
+            if let originalAutoUnload {
+                UserDefaults.standard.set(originalAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            }
+        }
+        UserDefaults.standard.set(-1, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockLLMProviderPlugin()
+        plugin.configuredProviderName = "Gemma 4 (MLX)"
+        plugin.requiresExternalCredentials = false
+
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.local-llm",
+                    name: "Mock Local LLM",
+                    version: "1.0.0",
+                    principalClass: "APIRouterMockLLMProviderPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.scheduleAutoUnloadIfNeeded()
+
+        plugin.available = false
+        modelManager.scheduleAutoUnloadIfNeeded()
+
+        await assertAutoUnloadCount(plugin, remains: 0)
     }
 
     @MainActor
@@ -6419,9 +6499,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let modelManager = ModelManagerService()
         modelManager.scheduleAutoUnloadIfNeeded()
 
-        try await Task.sleep(for: .milliseconds(150))
-        XCTAssertEqual(remotePlugin.autoUnloadCount, 0)
-        XCTAssertEqual(unavailableLocalPlugin.autoUnloadCount, 0)
+        await assertAutoUnloadCount(remotePlugin, remains: 0)
+        await assertAutoUnloadCount(unavailableLocalPlugin, remains: 0)
     }
 
     @MainActor

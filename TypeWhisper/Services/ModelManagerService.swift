@@ -748,6 +748,13 @@ final class ModelManagerService: ObservableObject {
             where plugin.isAvailable && Self.shouldAutoUnloadLocalLLMProvider(plugin) {
             scheduleAutoUnloadIfNeeded(for: plugin, scheduledKeys: &scheduledKeys)
         }
+
+        let existingKeys = Set(autoUnloadTasks.keys).union(autoUnloadTargets.keys)
+        for key in existingKeys.subtracting(scheduledKeys) {
+            autoUnloadTasks[key]?.cancel()
+            autoUnloadTasks[key] = nil
+            autoUnloadTargets[key] = nil
+        }
     }
 
     func scheduleAutoUnloadIfNeeded(for plugin: any TypeWhisperPlugin) {
