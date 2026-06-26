@@ -99,16 +99,9 @@ struct SettingsView: View {
         .frame(minWidth: 950, idealWidth: 1050, minHeight: 550, idealHeight: 600)
         .onAppear {
             navigateToFileTranscriptionIfNeeded()
-            navigateAwayFromMissingRecoveryIfNeeded()
         }
         .onChange(of: fileTranscription.showFilePickerFromMenu) { _, _ in
             navigateToFileTranscriptionIfNeeded()
-        }
-        .onChange(of: dictationRecovery.hasRecovery) { _, _ in
-            navigateAwayFromMissingRecoveryIfNeeded()
-        }
-        .onChange(of: dictationRecovery.lastSavedHistoryRecordID) { _, _ in
-            navigateAwayFromMissingRecoveryIfNeeded()
         }
         .onChange(of: homeViewModel.navigateToHistory) { _, navigate in
             if navigate {
@@ -128,12 +121,12 @@ struct SettingsView: View {
                 selectedTab = .workflows
                 WorkflowsNavigationCoordinator.shared.showMine()
             default:
-                selectedTab = Self.availableTab(request.tab, hasRecoveryContent: dictationRecovery.hasRecoveryContent)
+                selectedTab = Self.availableTab(request.tab)
             }
         }
     }
 
-    static func availableTab(_ tab: SettingsTab, hasRecoveryContent _: Bool) -> SettingsTab {
+    static func availableTab(_ tab: SettingsTab) -> SettingsTab {
         tab
     }
 
@@ -141,10 +134,6 @@ struct SettingsView: View {
         if fileTranscription.showFilePickerFromMenu {
             selectedTab = .fileTranscription
         }
-    }
-
-    private func navigateAwayFromMissingRecoveryIfNeeded() {
-        selectedTab = Self.availableTab(selectedTab, hasRecoveryContent: dictationRecovery.hasRecoveryContent)
     }
 
     @ViewBuilder

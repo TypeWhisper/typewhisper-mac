@@ -70,6 +70,45 @@ enum DictationTranscriptionOverrideResolver {
     }
 }
 
+enum AutomaticRecoveryFallbackErrorPolicy {
+    static func shouldAttempt(after error: Error, taskIsCancelled: Bool = Task.isCancelled) -> Bool {
+        guard !(error is CancellationError), !taskIsCancelled else { return false }
+
+        if let pluginError = error as? PluginTranscriptionError {
+            switch pluginError {
+            case .fileTooLarge:
+                return false
+            case .notConfigured,
+                 .noModelSelected,
+                 .invalidApiKey,
+                 .rateLimited,
+                 .apiError(_),
+                 .networkError(_):
+                return true
+            }
+        }
+
+        if let transcriptionError = error as? TranscriptionEngineError {
+            switch transcriptionError {
+            case .unsupportedTask(_):
+                return false
+            case .modelNotLoaded,
+                 .appleSpeechModelNotLoaded,
+                 .transcriptionFailed(_),
+                 .modelLoadFailed(_),
+                 .modelDownloadFailed(_):
+                return true
+            }
+        }
+
+        if error is URLError {
+            return true
+        }
+
+        return false
+    }
+}
+
 /// Orchestrates the dictation flow: recording → transcription → text insertion.
 @MainActor
 final class DictationViewModel: ObservableObject {
@@ -1616,6 +1655,8 @@ final class DictationViewModel: ObservableObject {
             logger.warning(
                 "Primary transcription failed; retrying with recovery fallback engine \(configuration.engineId, privacy: .public): \(primaryError.localizedDescription, privacy: .public)"
             )
+            let fallbackPrompt = dictionaryService.getTermsForPrompt(providerId: configuration.engineId)
+            let fallbackDictionaryTermHints = dictionaryService.getTermHints(providerId: configuration.engineId)
 
             do {
                 let fallbackResult = try await recoveryFallbackRunner(
@@ -1623,8 +1664,8 @@ final class DictationViewModel: ObservableObject {
                     languageSelection,
                     task,
                     configuration,
-                    prompt,
-                    dictionaryTermHints,
+                    fallbackPrompt,
+                    fallbackDictionaryTermHints,
                     normalizeNumbers
                 )
                 logger.info(
@@ -1669,40 +1710,7 @@ final class DictationViewModel: ObservableObject {
     }
 
     private func shouldAttemptAutomaticRecoveryFallback(after error: Error) -> Bool {
-        guard !(error is CancellationError), !Task.isCancelled else { return false }
-
-        if let pluginError = error as? PluginTranscriptionError {
-            switch pluginError {
-            case .fileTooLarge:
-                return false
-            case .notConfigured,
-                 .noModelSelected,
-                 .invalidApiKey,
-                 .rateLimited,
-                 .apiError(_),
-                 .networkError(_):
-                return true
-            }
-        }
-
-        if let transcriptionError = error as? TranscriptionEngineError {
-            switch transcriptionError {
-            case .unsupportedTask(_):
-                return false
-            case .modelNotLoaded,
-                 .appleSpeechModelNotLoaded,
-                 .transcriptionFailed(_),
-                 .modelLoadFailed(_),
-                 .modelDownloadFailed(_):
-                return true
-            }
-        }
-
-        if error is URLError {
-            return true
-        }
-
-        return true
+        AutomaticRecoveryFallbackErrorPolicy.shouldAttempt(after: error)
     }
 
     func requestMicPermission() { settingsHandler.requestMicPermission() }

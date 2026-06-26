@@ -583,9 +583,31 @@ final class FileTranscriptionViewModelTests: XCTestCase {
     }
 
     func testRecoverySettingsTabRemainsAvailableWithoutRecoveryContent() {
-        XCTAssertEqual(SettingsView.availableTab(.dictationRecovery, hasRecoveryContent: false), .dictationRecovery)
-        XCTAssertEqual(SettingsView.availableTab(.dictationRecovery, hasRecoveryContent: true), .dictationRecovery)
-        XCTAssertEqual(SettingsView.availableTab(.fileTranscription, hasRecoveryContent: false), .fileTranscription)
+        XCTAssertEqual(SettingsView.availableTab(.dictationRecovery), .dictationRecovery)
+        XCTAssertEqual(SettingsView.availableTab(.fileTranscription), .fileTranscription)
+    }
+
+    func testAutomaticRecoveryFallbackAllowsKnownRecoverableErrors() {
+        XCTAssertTrue(AutomaticRecoveryFallbackErrorPolicy.shouldAttempt(after: PluginTranscriptionError.rateLimited))
+        XCTAssertTrue(AutomaticRecoveryFallbackErrorPolicy.shouldAttempt(after: PluginTranscriptionError.networkError("offline")))
+        XCTAssertTrue(AutomaticRecoveryFallbackErrorPolicy.shouldAttempt(after: TranscriptionEngineError.modelNotLoaded))
+        XCTAssertTrue(AutomaticRecoveryFallbackErrorPolicy.shouldAttempt(after: URLError(.timedOut)))
+    }
+
+    func testAutomaticRecoveryFallbackRejectsKnownNonRecoverableAndUnknownErrors() {
+        XCTAssertFalse(AutomaticRecoveryFallbackErrorPolicy.shouldAttempt(after: PluginTranscriptionError.fileTooLarge))
+        XCTAssertFalse(AutomaticRecoveryFallbackErrorPolicy.shouldAttempt(after: TranscriptionEngineError.unsupportedTask("translate")))
+        XCTAssertFalse(AutomaticRecoveryFallbackErrorPolicy.shouldAttempt(after: UnknownTranscriptionError()))
+    }
+
+    func testAutomaticRecoveryFallbackRejectsCancellation() {
+        XCTAssertFalse(AutomaticRecoveryFallbackErrorPolicy.shouldAttempt(after: CancellationError()))
+        XCTAssertFalse(
+            AutomaticRecoveryFallbackErrorPolicy.shouldAttempt(
+                after: PluginTranscriptionError.rateLimited,
+                taskIsCancelled: true
+            )
+        )
     }
 
     func testRecoveryAutomaticFallbackRequiresCommercialOrSupporterAccess() throws {
@@ -769,6 +791,8 @@ private actor AsyncGate {
         return isOpen
     }
 }
+
+private struct UnknownTranscriptionError: Error {}
 
 private final class FileTranscriptionAppleSpeechCatalogPlugin: NSObject, TranscriptionModelCatalogProviding, @unchecked Sendable {
     static let pluginId = AppleSpeechModelSelection.manifestId
