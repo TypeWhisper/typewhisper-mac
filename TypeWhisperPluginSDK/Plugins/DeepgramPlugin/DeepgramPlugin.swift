@@ -475,34 +475,34 @@ final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
         queryItems.append(contentsOf: Self.dictionaryQueryItems(prompt: prompt, modelId: modelId))
         components.queryItems = queryItems
 
-        let uploadFile = try PluginAudioUploadEncoder.compressedM4AUpload(from: audio)
+        return try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
+            var request = URLRequest(url: components.url!)
+            request.httpMethod = "POST"
+            request.setValue(authHeaderValue(apiKey: apiKey), forHTTPHeaderField: effectiveAuthHeader)
+            request.setValue(uploadFile.contentType, forHTTPHeaderField: "Content-Type")
+            request.httpBody = uploadFile.data
+            request.timeoutInterval = 60
 
-        var request = URLRequest(url: components.url!)
-        request.httpMethod = "POST"
-        request.setValue(authHeaderValue(apiKey: apiKey), forHTTPHeaderField: effectiveAuthHeader)
-        request.setValue(uploadFile.contentType, forHTTPHeaderField: "Content-Type")
-        request.httpBody = uploadFile.data
-        request.timeoutInterval = 60
+            let (data, response) = try await PluginHTTPClient.data(for: request)
 
-        let (data, response) = try await PluginHTTPClient.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw PluginTranscriptionError.apiError("No HTTP response")
+            }
 
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw PluginTranscriptionError.apiError("No HTTP response")
+            switch httpResponse.statusCode {
+            case 200: break
+            case 401: throw PluginTranscriptionError.invalidApiKey
+            case 429: throw PluginTranscriptionError.rateLimited
+            default:
+                let body = String(data: data, encoding: .utf8) ?? ""
+                throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(body)")
+            }
+
+            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            let transcript = Self.extractTranscript(from: json)
+
+            return PluginTranscriptionResult(text: transcript, detectedLanguage: language)
         }
-
-        switch httpResponse.statusCode {
-        case 200: break
-        case 401: throw PluginTranscriptionError.invalidApiKey
-        case 429: throw PluginTranscriptionError.rateLimited
-        default:
-            let body = String(data: data, encoding: .utf8) ?? ""
-            throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(body)")
-        }
-
-        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        let transcript = Self.extractTranscript(from: json)
-
-        return PluginTranscriptionResult(text: transcript, detectedLanguage: language)
     }
 
     // MARK: - WebSocket Implementation (Raw RFC 6455)

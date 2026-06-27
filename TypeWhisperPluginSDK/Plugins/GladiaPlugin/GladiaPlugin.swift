@@ -255,10 +255,9 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
         apiKey: String,
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
-        let audioURL = try await uploadAudio(
-            try PluginAudioUploadEncoder.compressedM4AUpload(from: audio),
-            apiKey: apiKey
-        )
+        let audioURL = try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
+            try await uploadAudio(uploadFile, apiKey: apiKey)
+        }
         let resultURL = try await submitPreRecorded(
             audioURL: audioURL,
             language: language,

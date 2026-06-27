@@ -132,6 +132,59 @@ final class AssemblyAIPluginTests: XCTestCase {
         XCTAssertNotEqual(uploadBody, audio.wavData)
     }
 
+    func testRESTTranscriptionRetriesUploadWithWavWhenM4ARejected() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "assembly-key"])
+        let plugin = AssemblyAIPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"error":{"message":"could not process file - is it a valid media file?"}}"#.utf8),
+                    Self.httpResponse(url: "https://api.assemblyai.com/v2/upload", statusCode: 400)
+                ),
+                .success(
+                    Data(#"{"upload_url":"https://cdn.example.test/audio.wav"}"#.utf8),
+                    Self.httpResponse(url: "https://api.assemblyai.com/v2/upload", statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"id":"transcript_123"}"#.utf8),
+                    Self.httpResponse(url: "https://api.assemblyai.com/v2/transcript", statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"status":"completed","text":"hello wav","language_code":"de"}"#.utf8),
+                    Self.httpResponse(url: "https://api.assemblyai.com/v2/transcript/transcript_123", statusCode: 200)
+                ),
+            ])
+        }
+
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        let audio = AudioData(samples: samples, wavData: PluginWavEncoder.encode(samples), duration: 1.0)
+        let result = try await plugin.transcribe(audio: audio, language: "de", translate: false, prompt: "TypeWhisper")
+
+        XCTAssertEqual(result.text, "hello wav")
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(requests.map { $0.url?.path }, [
+            "/v2/upload",
+            "/v2/upload",
+            "/v2/transcript",
+            "/v2/transcript/transcript_123",
+        ])
+
+        let firstUploadBody = try XCTUnwrap(requests[0].httpBody)
+        XCTAssertTrue(String(decoding: firstUploadBody.prefix(64), as: UTF8.self).contains("ftyp"))
+        let retryUploadBody = try XCTUnwrap(requests[1].httpBody)
+        XCTAssertEqual(retryUploadBody, audio.wavData)
+
+        let submitBody = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: try XCTUnwrap(requests[2].httpBody)) as? [String: Any]
+        )
+        XCTAssertEqual(submitBody["audio_url"] as? String, "https://cdn.example.test/audio.wav")
+        XCTAssertEqual(submitBody["language_code"] as? String, "de")
+        XCTAssertEqual(submitBody["keyterms_prompt"] as? [String], ["TypeWhisper"])
+    }
+
     private static func httpResponse(url: String, statusCode: Int) -> HTTPURLResponse {
         HTTPURLResponse(
             url: URL(string: url)!,

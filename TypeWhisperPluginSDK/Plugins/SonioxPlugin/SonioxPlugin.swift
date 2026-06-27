@@ -996,10 +996,9 @@ final class SonioxPlugin: NSObject,
         apiKey: String,
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
-        let fileId = try await uploadFile(
-            uploadFile: try PluginAudioUploadEncoder.compressedM4AUpload(from: audio),
-            apiKey: apiKey
-        )
+        let fileId = try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { upload in
+            try await uploadFile(uploadFile: upload, apiKey: apiKey)
+        }
         let transcriptionId = try await createTranscription(
             fileId: fileId,
             language: language,

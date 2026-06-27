@@ -399,21 +399,21 @@ final class CartesiaPlugin: NSObject,
             languageHints: languageHints,
             configuredLanguage: _transcriptionLanguage
         )
-        let uploadFile = (try? PluginAudioUploadEncoder.compressedM4AUpload(from: audio))
-            ?? PluginAudioUploadEncoder.wavUpload(from: audio)
-        let request = try Self.makeTranscriptionRequest(
-            uploadFile: uploadFile,
-            apiKey: apiKey,
-            modelId: Self.sttModelId,
-            language: resolvedLanguage
-        )
+        return try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
+            let request = try Self.makeTranscriptionRequest(
+                uploadFile: uploadFile,
+                apiKey: apiKey,
+                modelId: Self.sttModelId,
+                language: resolvedLanguage
+            )
 
-        let (data, response) = try await PluginHTTPClient.data(for: request)
-        try Self.validateHTTPResponse(data: data, response: response)
-        return try Self.parseTranscriptionResponse(
-            data,
-            fallbackLanguage: resolvedLanguage
-        )
+            let (data, response) = try await PluginHTTPClient.data(for: request)
+            try Self.validateHTTPResponse(data: data, response: response)
+            return try Self.parseTranscriptionResponse(
+                data,
+                fallbackLanguage: resolvedLanguage
+            )
+        }
     }
 
     // MARK: - TTSProviderPlugin
@@ -779,11 +779,11 @@ extension CartesiaPlugin {
     private static func errorMessage(from data: Data, statusCode: Int) -> String {
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             if let message = json["message"] as? String {
-                return message
+                return "HTTP \(statusCode): \(message)"
             }
             if let error = json["error"] as? [String: Any],
                let message = error["message"] as? String {
-                return message
+                return "HTTP \(statusCode): \(message)"
             }
         }
         if let body = String(data: data, encoding: .utf8), !body.isEmpty {

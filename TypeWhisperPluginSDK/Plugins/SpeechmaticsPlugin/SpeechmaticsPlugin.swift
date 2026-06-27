@@ -182,13 +182,15 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryT
         apiKey: String,
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
-        let jobId = try await submitJob(
-            uploadFile: try PluginAudioUploadEncoder.compressedM4AUpload(from: audio),
-            language: language,
-            modelId: modelId,
-            apiKey: apiKey,
-            prompt: prompt
-        )
+        let jobId = try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
+            try await submitJob(
+                uploadFile: uploadFile,
+                language: language,
+                modelId: modelId,
+                apiKey: apiKey,
+                prompt: prompt
+            )
+        }
         return try await pollJob(jobId: jobId, apiKey: apiKey)
     }
 

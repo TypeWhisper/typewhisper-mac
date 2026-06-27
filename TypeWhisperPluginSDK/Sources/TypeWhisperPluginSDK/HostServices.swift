@@ -262,7 +262,25 @@ public struct PluginAudioUploadFile: Sendable, Equatable {
 
 public enum PluginAudioUploadEncoder {
     public static let sampleRate = 16_000
+    public static let minimumUploadDuration: TimeInterval = 1.0
     private static let compressedUploadChunkFrames = 16_000 * 30
+
+    public static func normalizedAudioForUpload(_ audio: AudioData) -> AudioData {
+        guard audio.duration < minimumUploadDuration else { return audio }
+
+        let paddedSamples = PluginAudioUtils.paddedSamples(
+            audio.samples,
+            minimumDuration: minimumUploadDuration,
+            sampleRate: sampleRate
+        )
+        guard paddedSamples.count != audio.samples.count else { return audio }
+
+        return AudioData(
+            samples: paddedSamples,
+            wavData: PluginWavEncoder.encode(paddedSamples, sampleRate: sampleRate),
+            duration: Double(paddedSamples.count) / Double(sampleRate)
+        )
+    }
 
     public static func wavUpload(from audio: AudioData) -> PluginAudioUploadFile {
         PluginAudioUploadFile(
@@ -293,6 +311,28 @@ public enum PluginAudioUploadEncoder {
             contentType: "audio/mp4",
             format: "m4a"
         )
+    }
+
+    public static func withCompressedM4AUploadWavFallback<Result>(
+        from audio: AudioData,
+        operation: (PluginAudioUploadFile) async throws -> Result
+    ) async throws -> Result {
+        let uploadAudio = normalizedAudioForUpload(audio)
+        let preferredUpload: PluginAudioUploadFile
+        do {
+            preferredUpload = try compressedM4AUpload(from: uploadAudio)
+        } catch {
+            return try await operation(wavUpload(from: uploadAudio))
+        }
+
+        do {
+            return try await operation(preferredUpload)
+        } catch {
+            guard shouldRetryWithWavUpload(error: error) else {
+                throw error
+            }
+            return try await operation(wavUpload(from: uploadAudio))
+        }
     }
 
     public static func shouldRetryWithWavUpload(statusCode: Int, responseData: Data) -> Bool {

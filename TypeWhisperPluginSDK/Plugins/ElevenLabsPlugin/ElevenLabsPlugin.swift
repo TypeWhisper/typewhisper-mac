@@ -193,53 +193,53 @@ final class ElevenLabsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
             throw PluginTranscriptionError.apiError("Invalid ElevenLabs REST URL")
         }
 
-        let boundary = UUID().uuidString
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue(apiKey, forHTTPHeaderField: "xi-api-key")
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 120
+        return try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
+            let boundary = UUID().uuidString
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue(apiKey, forHTTPHeaderField: "xi-api-key")
+            request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+            request.timeoutInterval = 120
 
-        let uploadFile = try PluginAudioUploadEncoder.compressedM4AUpload(from: audio)
-
-        var body = Data()
-        body.appendMultipartFile(
-            boundary: boundary,
-            name: "file",
-            filename: uploadFile.filename,
-            contentType: uploadFile.contentType,
-            data: uploadFile.data
-        )
-        body.appendMultipartField(boundary: boundary, name: "model_id", value: modelId)
-        if let language, !language.isEmpty {
-            body.appendMultipartField(boundary: boundary, name: "language_code", value: language)
-        }
-        if modelId == "scribe_v2" {
-            for term in PluginDictionaryTerms.terms(fromPrompt: prompt) {
-                body.appendMultipartField(boundary: boundary, name: "keyterms", value: term)
+            var body = Data()
+            body.appendMultipartFile(
+                boundary: boundary,
+                name: "file",
+                filename: uploadFile.filename,
+                contentType: uploadFile.contentType,
+                data: uploadFile.data
+            )
+            body.appendMultipartField(boundary: boundary, name: "model_id", value: modelId)
+            if let language, !language.isEmpty {
+                body.appendMultipartField(boundary: boundary, name: "language_code", value: language)
             }
-        }
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-        request.httpBody = body
+            if modelId == "scribe_v2" {
+                for term in PluginDictionaryTerms.terms(fromPrompt: prompt) {
+                    body.appendMultipartField(boundary: boundary, name: "keyterms", value: term)
+                }
+            }
+            body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+            request.httpBody = body
 
-        let (data, response) = try await PluginHTTPClient.data(for: request)
+            let (data, response) = try await PluginHTTPClient.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw PluginTranscriptionError.apiError("No HTTP response")
-        }
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw PluginTranscriptionError.apiError("No HTTP response")
+            }
 
-        switch httpResponse.statusCode {
-        case 200:
-            return try Self.parseRESTResponse(data, fallbackLanguage: language)
-        case 401:
-            throw PluginTranscriptionError.invalidApiKey
-        case 413:
-            throw PluginTranscriptionError.fileTooLarge
-        case 429:
-            throw PluginTranscriptionError.rateLimited
-        default:
-            let body = String(data: data, encoding: .utf8) ?? ""
-            throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(body)")
+            switch httpResponse.statusCode {
+            case 200:
+                return try Self.parseRESTResponse(data, fallbackLanguage: language)
+            case 401:
+                throw PluginTranscriptionError.invalidApiKey
+            case 413:
+                throw PluginTranscriptionError.fileTooLarge
+            case 429:
+                throw PluginTranscriptionError.rateLimited
+            default:
+                let body = String(data: data, encoding: .utf8) ?? ""
+                throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(body)")
+            }
         }
     }
 

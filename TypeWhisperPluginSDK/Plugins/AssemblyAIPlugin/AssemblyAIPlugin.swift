@@ -187,10 +187,9 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
         prompt: String?,
         speakerDiarizationEnabled: Bool
     ) async throws -> PluginStructuredTranscriptionResult {
-        let uploadURL = try await uploadAudio(
-            uploadFile: try PluginAudioUploadEncoder.compressedM4AUpload(from: audio),
-            apiKey: apiKey
-        )
+        let uploadURL = try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
+            try await uploadAudio(uploadFile: uploadFile, apiKey: apiKey)
+        }
         let transcriptId = try await submitTranscription(
             audioURL: uploadURL,
             modelId: modelId,

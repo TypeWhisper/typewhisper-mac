@@ -273,6 +273,74 @@ final class SonioxPluginTests: XCTestCase {
         XCTAssertEqual(body["language_hints"] as? [String], ["en", "de"])
     }
 
+    func testSourceProgressTranscriptionRetriesUploadWithWavWhenM4ARejected() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "soniox-key"])
+        let plugin = SonioxPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"error":{"message":"could not process file - is it a valid media file?"}}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/files", statusCode: 400)
+                ),
+                .success(
+                    Data(#"{"id":"file_123"}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/files", statusCode: 201)
+                ),
+                .success(
+                    Data(#"{"id":"transcription_123"}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/transcriptions", statusCode: 201)
+                ),
+                .success(
+                    Data(#"{"status":"completed"}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/transcriptions/transcription_123", statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"text":"WAV retry transcript"}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/transcriptions/transcription_123/transcript", statusCode: 200)
+                ),
+            ])
+        }
+
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        let audio = AudioData(samples: samples, wavData: PluginWavEncoder.encode(samples), duration: 1.0)
+        let result = try await plugin.transcribe(
+            audio: audio,
+            languageSelection: PluginLanguageSelection(languageHints: ["en", "de"]),
+            translate: false,
+            prompt: "TypeWhisper",
+            onProgress: { _ in true },
+            onSourceProgress: { _ in true }
+        )
+
+        XCTAssertEqual(result.text, "WAV retry transcript")
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(requests.map { $0.url?.path }, [
+            "/v1/files",
+            "/v1/files",
+            "/v1/transcriptions",
+            "/v1/transcriptions/transcription_123",
+            "/v1/transcriptions/transcription_123/transcript",
+        ])
+
+        let firstUploadBody = String(decoding: try XCTUnwrap(requests[0].httpBody), as: UTF8.self)
+        XCTAssertTrue(firstUploadBody.contains(#"filename="audio.m4a""#))
+        XCTAssertTrue(firstUploadBody.contains("Content-Type: audio/mp4"))
+
+        let retryUploadBody = String(decoding: try XCTUnwrap(requests[1].httpBody), as: UTF8.self)
+        XCTAssertTrue(retryUploadBody.contains(#"filename="audio.wav""#))
+        XCTAssertTrue(retryUploadBody.contains("Content-Type: audio/wav"))
+
+        let createBody = try Self.jsonBody(from: requests[2])
+        XCTAssertEqual(createBody["file_id"] as? String, "file_123")
+        XCTAssertEqual(createBody["model"] as? String, "stt-async-v5")
+        XCTAssertEqual(createBody["language_hints"] as? [String], ["en", "de"])
+        let context = try XCTUnwrap(createBody["context"] as? [String: Any])
+        XCTAssertEqual(context["terms"] as? [String], ["TypeWhisper"])
+    }
+
     func testSourceProgressTranscriptionUsesSelectedRegionalRESTPath() async throws {
         let host = try PluginTestHostServices(
             defaults: ["selectedRegion": "eu"],
