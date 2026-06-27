@@ -214,13 +214,21 @@ struct Gemma4SettingsView: View {
 
             Spacer()
 
+            let isDownloaded = plugin.isModelDownloaded(modelDef)
+            let hasCachedModelFiles = plugin.hasCachedModelFiles(modelDef)
+
             if case .downloading = modelState, selectedModelId == modelDef.id {
                 HStack(spacing: 8) {
-                    ProgressView(value: downloadProgress)
-                        .frame(width: 80)
-                    Text("\(Int(downloadProgress * 100))%")
-                        .font(.caption)
-                        .monospacedDigit()
+                    if plugin.hasVisibleDownloadProgress {
+                        ProgressView(value: downloadProgress)
+                            .frame(width: 80)
+                        Text("\(Int(downloadProgress * 100))%")
+                            .font(.caption)
+                            .monospacedDigit()
+                    } else {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
                     Button(String(localized: "Cancel", bundle: bundle)) {
                         cancelCurrentLoad()
                     }
@@ -242,7 +250,13 @@ struct Gemma4SettingsView: View {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
                     Button(String(localized: "Unload", bundle: bundle)) {
-                        resetCachedModel(modelDef)
+                        unloadCurrentModel()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+
+                    Button(String(localized: "Remove", bundle: bundle), role: .destructive) {
+                        removeDownloadedModel(modelDef)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
@@ -253,6 +267,26 @@ struct Gemma4SettingsView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+            } else if isDownloaded || hasCachedModelFiles {
+                HStack(spacing: 8) {
+                    Button(
+                        isDownloaded
+                            ? String(localized: "Load", bundle: bundle)
+                            : String(localized: "Download & Load", bundle: bundle)
+                    ) {
+                        startLoading(modelDef)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(modelState == .downloading || modelState == .loading)
+
+                    Button(String(localized: "Remove", bundle: bundle), role: .destructive) {
+                        removeDownloadedModel(modelDef)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(modelState == .downloading || modelState == .loading)
+                }
             } else if let experimentalWarning = modelDef.experimentalWarning {
                 VStack(alignment: .trailing, spacing: 6) {
                     Text("Experimental", bundle: bundle)
@@ -287,7 +321,7 @@ struct Gemma4SettingsView: View {
     private func isRecoverableCachedModelError(for modelDef: Gemma4ModelDef) -> Bool {
         if case .error = modelState,
            selectedModelId == modelDef.id,
-           plugin.isModelDownloaded(modelDef) {
+           plugin.hasCachedModelFiles(modelDef) {
             return true
         }
         return false
@@ -300,6 +334,38 @@ struct Gemma4SettingsView: View {
         plugin.resetCachedModel(modelDef)
         modelState = plugin.modelState
         downloadProgress = plugin.currentDownloadProgress
+    }
+
+    private func unloadCurrentModel() {
+        loadTask?.cancel()
+        loadTask = nil
+        isPolling = false
+        plugin.unloadModel()
+        modelState = plugin.modelState
+        downloadProgress = plugin.currentDownloadProgress
+    }
+
+    private func removeDownloadedModel(_ modelDef: Gemma4ModelDef) {
+        loadTask?.cancel()
+        loadTask = nil
+        isPolling = false
+        Task {
+            do {
+                try await plugin.deleteDownloadedModel(modelDef.id)
+                await MainActor.run {
+                    if selectedModelId == modelDef.id {
+                        selectedModelId = plugin.selectedLLMModelId ?? Gemma4Plugin.availableModels.first?.id ?? ""
+                    }
+                    modelState = plugin.modelState
+                    downloadProgress = plugin.currentDownloadProgress
+                }
+            } catch {
+                await MainActor.run {
+                    modelState = .error(error.localizedDescription)
+                    downloadProgress = plugin.currentDownloadProgress
+                }
+            }
+        }
     }
 
     private func startLoading(_ modelDef: Gemma4ModelDef) {

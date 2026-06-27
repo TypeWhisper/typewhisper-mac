@@ -105,7 +105,6 @@ final class PluginManifestValidationTests: XCTestCase {
 
     func testDownloadedModelManagingPluginReleasesRequireHost14() throws {
         let manifestPaths = [
-            "TypeWhisperPluginSDK/Plugins/Gemma4Plugin/manifest.json",
             "TypeWhisperPluginSDK/Plugins/Qwen3Plugin/manifest.json",
             "TypeWhisperPluginSDK/Plugins/VoxtralPlugin/manifest.json",
             "TypeWhisperPluginSDK/Plugins/GranitePlugin/manifest.json",
@@ -118,6 +117,14 @@ final class PluginManifestValidationTests: XCTestCase {
             let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
             XCTAssertEqual(manifest.minHostVersion, "1.4.0", relativePath)
         }
+    }
+
+    func testGemma4PluginReleaseRequiresHost15() throws {
+        let manifestURL = TestSupport.repoRoot.appendingPathComponent("TypeWhisperPluginSDK/Plugins/Gemma4Plugin/manifest.json")
+        let data = try Data(contentsOf: manifestURL)
+        let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
+
+        XCTAssertEqual(manifest.minHostVersion, "1.5.0")
     }
 
     func testOpenAIPluginManifestDeclaresCloudHostingWithoutAPIKeyRequirement() throws {
@@ -532,6 +539,26 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         XCTAssertEqual(plugin.modelState, .notLoaded)
     }
 
+    func testGemma4RestoreClearsStaleLoadedModelWhenDownloadsAreDisabled() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let model = try XCTUnwrap(Gemma4Plugin.modelDefinition(for: "gemma-4-e2b-it-4bit"))
+        let modelDirectory = gemmaModelDirectory(appSupportDirectory: appSupportDirectory, model: model)
+        try writePartialGemmaCache(at: modelDirectory)
+        let host = MockHostServices(
+            pluginDataDirectory: appSupportDirectory,
+            defaults: ["loadedModel": model.id]
+        )
+        let plugin = Gemma4Plugin()
+        plugin.activate(host: host)
+
+        await plugin.restoreLoadedModel(allowDownloads: false)
+
+        XCTAssertNil(host.userDefault(forKey: "loadedModel"))
+        XCTAssertEqual(plugin.modelState, .notLoaded)
+    }
+
     func testGemma4CancelModelLoadResetsProgressAndState() throws {
         let plugin = Gemma4Plugin()
         let model = try XCTUnwrap(Gemma4Plugin.modelDefinition(for: "gemma-4-e2b-it-4bit"))
@@ -542,6 +569,137 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         XCTAssertEqual(plugin.modelState, .notLoaded)
         XCTAssertEqual(plugin.currentDownloadProgress, 0)
         XCTAssertEqual(plugin.selectedLLMModelId, model.id)
+    }
+
+    func testGemma4DownloadActivityIsIndeterminateUntilVisibleProgress() throws {
+        let plugin = Gemma4Plugin()
+        let model = try XCTUnwrap(Gemma4Plugin.modelDefinition(for: "gemma-4-e2b-it-4bit"))
+
+        plugin.beginModelLoad(for: model, isAlreadyDownloaded: false)
+
+        let activity = try XCTUnwrap(plugin.currentSettingsActivity)
+        XCTAssertEqual(activity.message, "Downloading model")
+        XCTAssertNil(activity.progress)
+        XCTAssertFalse(plugin.hasVisibleDownloadProgress)
+    }
+
+    func testGemma4DownloadActivityReportsVisibleProgress() throws {
+        let plugin = Gemma4Plugin()
+        let generation = plugin.startModelLoadTimeoutForTesting(modelName: "Gemma 4 E2B")
+
+        plugin.recordModelLoadProgressForTesting(fraction: 0.5, generation: generation)
+
+        let activity = try XCTUnwrap(plugin.currentSettingsActivity)
+        XCTAssertEqual(activity.message, "Downloading model")
+        XCTAssertEqual(activity.progress ?? 0, 0.39, accuracy: 0.001)
+        XCTAssertTrue(plugin.hasVisibleDownloadProgress)
+    }
+
+    func testGemma4PartialCacheIsNotTreatedAsDownloaded() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let host = MockHostServices(pluginDataDirectory: appSupportDirectory)
+        let plugin = Gemma4Plugin()
+        let model = try XCTUnwrap(Gemma4Plugin.modelDefinition(for: "gemma-4-e2b-it-4bit"))
+        let modelDirectory = gemmaModelDirectory(appSupportDirectory: appSupportDirectory, model: model)
+        try writePartialGemmaCache(at: modelDirectory)
+
+        plugin.activate(host: host)
+
+        XCTAssertTrue(plugin.hasCachedModelFiles(model))
+        XCTAssertFalse(plugin.isModelDownloaded(model))
+        XCTAssertFalse(plugin.downloadedModels.contains { $0.id == model.id })
+    }
+
+    func testGemma4HubCacheOnlyIsNotDownloadedButCanBeRemoved() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let host = MockHostServices(pluginDataDirectory: appSupportDirectory)
+        let plugin = Gemma4Plugin()
+        let model = try XCTUnwrap(Gemma4Plugin.modelDefinition(for: "gemma-4-e2b-it-4bit"))
+        let hubCacheDirectory = gemmaHubCacheDirectory(appSupportDirectory: appSupportDirectory, model: model)
+        try writeHubGemmaCache(at: hubCacheDirectory)
+
+        plugin.activate(host: host)
+
+        XCTAssertTrue(plugin.hasCachedModelFiles(model))
+        XCTAssertFalse(plugin.isModelDownloaded(model))
+        XCTAssertFalse(plugin.downloadedModels.contains { $0.id == model.id })
+
+        try await plugin.deleteDownloadedModel(model.id)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: hubCacheDirectory.path))
+        XCTAssertFalse(plugin.hasCachedModelFiles(model))
+    }
+
+    func testGemma4ValidMinimalCacheIsTreatedAsDownloaded() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let host = MockHostServices(pluginDataDirectory: appSupportDirectory)
+        let plugin = Gemma4Plugin()
+        let model = try XCTUnwrap(Gemma4Plugin.modelDefinition(for: "gemma-4-e4b-it-4bit"))
+        let modelDirectory = gemmaModelDirectory(appSupportDirectory: appSupportDirectory, model: model)
+        try writeUsableGemmaCache(at: modelDirectory)
+
+        plugin.activate(host: host)
+
+        XCTAssertTrue(plugin.hasCachedModelFiles(model))
+        XCTAssertTrue(plugin.isModelDownloaded(model))
+        XCTAssertEqual(plugin.downloadedModels.map(\.id), [model.id])
+    }
+
+    func testGemma4ModelLoadTimeoutSetsErrorAndResetsProgress() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let host = MockHostServices(pluginDataDirectory: appSupportDirectory)
+        let plugin = Gemma4Plugin()
+        plugin.activate(host: host)
+        plugin.setModelLoadTimeoutForTesting(.milliseconds(20))
+
+        plugin.startModelLoadTimeoutForTesting(modelName: "Gemma 4 E4B")
+        try await waitUntil("Gemma 4 timeout error") {
+            if case .error = plugin.modelState {
+                return true
+            }
+            return false
+        }
+
+        guard case .error(let message) = plugin.modelState else {
+            return XCTFail("Expected Gemma 4 load timeout to set an error state")
+        }
+        XCTAssertTrue(message.contains("Gemma 4 E4B"))
+        XCTAssertEqual(plugin.currentDownloadProgress, 0)
+        XCTAssertNil(host.userDefault(forKey: "loadedModel"))
+        XCTAssertGreaterThanOrEqual(host.capabilitiesChangedCount, 1)
+    }
+
+    func testGemma4LateProgressFromInvalidatedLoadIsIgnored() throws {
+        let plugin = Gemma4Plugin()
+        let generation = plugin.startModelLoadTimeoutForTesting(modelName: "Gemma 4 E4B")
+
+        plugin.invalidateModelLoadForTesting()
+        plugin.recordModelLoadProgressForTesting(fraction: 1.0, generation: generation)
+
+        XCTAssertEqual(plugin.currentDownloadProgress, 0)
+        XCTAssertEqual(plugin.modelState, .downloading)
+    }
+
+    func testGemma4CancelInvalidatesPendingTimeout() async throws {
+        let plugin = Gemma4Plugin()
+        let model = try XCTUnwrap(Gemma4Plugin.modelDefinition(for: "gemma-4-e2b-it-4bit"))
+
+        plugin.setModelLoadTimeoutForTesting(.milliseconds(20))
+        let generation = plugin.startModelLoadTimeoutForTesting(modelName: model.displayName)
+        plugin.cancelModelLoad()
+        try await Task.sleep(for: .milliseconds(40))
+
+        XCTAssertFalse(plugin.isCurrentModelLoadForTesting(generation))
+        XCTAssertEqual(plugin.modelState, .notLoaded)
+        XCTAssertEqual(plugin.currentDownloadProgress, 0)
     }
 
     func testGemma4UnsupportedModelTypeErrorsUseFriendlyMessage() throws {
@@ -614,21 +772,49 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         let modelDirectory = appSupportDirectory
             .appendingPathComponent("models", isDirectory: true)
             .appendingPathComponent(model.repoId, isDirectory: true)
-        try FileManager.default.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
-        try Data("partial".utf8).write(to: modelDirectory.appendingPathComponent("model.safetensors"))
+        let hubCacheDirectory = gemmaHubCacheDirectory(appSupportDirectory: appSupportDirectory, model: model)
+        let hubLockDirectory = gemmaHubLockDirectory(appSupportDirectory: appSupportDirectory, model: model)
+        try writeUsableGemmaCache(at: modelDirectory)
+        try writeHubGemmaCache(at: hubCacheDirectory)
+        try FileManager.default.createDirectory(at: hubLockDirectory, withIntermediateDirectories: true)
 
         plugin.activate(host: host)
-        try await Task.sleep(nanoseconds: 10_000_000)
         host.setUserDefault(model.id, forKey: "loadedModel")
         plugin.beginModelLoad(for: model, isAlreadyDownloaded: true)
 
         plugin.resetCachedModel(model)
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: modelDirectory.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: hubCacheDirectory.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: hubLockDirectory.path))
         XCTAssertNil(host.userDefault(forKey: "loadedModel"))
         XCTAssertEqual(plugin.modelState, .notLoaded)
         XCTAssertEqual(plugin.currentDownloadProgress, 0)
         XCTAssertGreaterThanOrEqual(host.capabilitiesChangedCount, 2)
+    }
+
+    func testGemma4UnloadModelPreservesDownloadedCache() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let host = MockHostServices(pluginDataDirectory: appSupportDirectory)
+        let plugin = Gemma4Plugin()
+        let model = try XCTUnwrap(Gemma4Plugin.modelDefinition(for: "gemma-4-e2b-it-4bit"))
+        let modelDirectory = gemmaModelDirectory(appSupportDirectory: appSupportDirectory, model: model)
+        try writeUsableGemmaCache(at: modelDirectory)
+
+        plugin.activate(host: host)
+        try await Task.sleep(nanoseconds: 10_000_000)
+        host.setUserDefault(model.id, forKey: "loadedModel")
+        plugin.beginModelLoad(for: model, isAlreadyDownloaded: true)
+
+        plugin.unloadModel()
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: modelDirectory.path))
+        XCTAssertTrue(plugin.isModelDownloaded(model))
+        XCTAssertNil(host.userDefault(forKey: "loadedModel"))
+        XCTAssertEqual(plugin.modelState, .notLoaded)
+        XCTAssertEqual(plugin.currentDownloadProgress, 0)
     }
 
     func testGemma4DeleteDownloadedModelClearsSelectionAndCache() async throws {
@@ -641,11 +827,12 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
             defaults: ["selectedLLMModel": model.id]
         )
         let plugin = Gemma4Plugin()
-        let modelDirectory = appSupportDirectory
-            .appendingPathComponent("models", isDirectory: true)
-            .appendingPathComponent(model.repoId, isDirectory: true)
-        try FileManager.default.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
-        try Data("partial".utf8).write(to: modelDirectory.appendingPathComponent("model.safetensors"))
+        let modelDirectory = gemmaModelDirectory(appSupportDirectory: appSupportDirectory, model: model)
+        let hubCacheDirectory = gemmaHubCacheDirectory(appSupportDirectory: appSupportDirectory, model: model)
+        let hubLockDirectory = gemmaHubLockDirectory(appSupportDirectory: appSupportDirectory, model: model)
+        try writeUsableGemmaCache(at: modelDirectory)
+        try writeHubGemmaCache(at: hubCacheDirectory)
+        try FileManager.default.createDirectory(at: hubLockDirectory, withIntermediateDirectories: true)
 
         plugin.activate(host: host)
         try await Task.sleep(nanoseconds: 10_000_000)
@@ -656,10 +843,71 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         try await plugin.deleteDownloadedModel(model.id)
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: modelDirectory.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: hubCacheDirectory.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: hubLockDirectory.path))
         XCTAssertNil(plugin.selectedLLMModelId)
         XCTAssertNil(host.userDefault(forKey: "selectedLLMModel"))
         XCTAssertNil(host.userDefault(forKey: "loadedModel"))
         XCTAssertGreaterThanOrEqual(host.capabilitiesChangedCount, 1)
+    }
+
+    private struct WaitUntilTimeout: Error {}
+
+    private func waitUntil(
+        _ description: String,
+        timeout: Duration = .seconds(1),
+        pollInterval: Duration = .milliseconds(5),
+        condition: @escaping () -> Bool
+    ) async throws {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+
+        while !condition() {
+            guard clock.now < deadline else {
+                XCTFail("Timed out waiting for \(description)")
+                throw WaitUntilTimeout()
+            }
+            try await Task.sleep(for: pollInterval)
+        }
+    }
+
+    private func gemmaModelDirectory(appSupportDirectory: URL, model: Gemma4ModelDef) -> URL {
+        appSupportDirectory
+            .appendingPathComponent("models", isDirectory: true)
+            .appendingPathComponent(model.repoId, isDirectory: true)
+    }
+
+    private func gemmaHubCacheDirectory(appSupportDirectory: URL, model: Gemma4ModelDef) -> URL {
+        appSupportDirectory
+            .appendingPathComponent("models", isDirectory: true)
+            .appendingPathComponent("models--" + model.repoId.replacingOccurrences(of: "/", with: "--"), isDirectory: true)
+    }
+
+    private func gemmaHubLockDirectory(appSupportDirectory: URL, model: Gemma4ModelDef) -> URL {
+        appSupportDirectory
+            .appendingPathComponent("models", isDirectory: true)
+            .appendingPathComponent(".locks", isDirectory: true)
+            .appendingPathComponent("models--" + model.repoId.replacingOccurrences(of: "/", with: "--"), isDirectory: true)
+    }
+
+    private func writePartialGemmaCache(at modelDirectory: URL) throws {
+        try FileManager.default.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
+        try Data("partial".utf8).write(to: modelDirectory.appendingPathComponent("model.safetensors"))
+    }
+
+    private func writeUsableGemmaCache(at modelDirectory: URL) throws {
+        try FileManager.default.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: modelDirectory.appendingPathComponent("config.json"))
+        try Data("{}".utf8).write(to: modelDirectory.appendingPathComponent("tokenizer.json"))
+        try Data("weights".utf8).write(to: modelDirectory.appendingPathComponent("model.safetensors"))
+    }
+
+    private func writeHubGemmaCache(at cacheDirectory: URL) throws {
+        let snapshotDirectory = cacheDirectory
+            .appendingPathComponent("snapshots", isDirectory: true)
+            .appendingPathComponent("revision", isDirectory: true)
+        try FileManager.default.createDirectory(at: snapshotDirectory, withIntermediateDirectories: true)
+        try Data("hub weights".utf8).write(to: snapshotDirectory.appendingPathComponent("model.safetensors"))
     }
 
     func testGemma4ValidatesHuggingFaceTokenAgainstWhoAmIEndpoint() async throws {
