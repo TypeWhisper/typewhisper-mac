@@ -2,6 +2,11 @@ import Combine
 import Foundation
 import TypeWhisperPluginSDK
 
+struct DictationRecoveryFallbackConfiguration: Equatable, Sendable {
+    let engineId: String
+    let modelId: String?
+}
+
 @MainActor
 final class DictationRecoveryViewModel: ObservableObject {
     typealias AudioSamplesLoader = @MainActor (URL) async throws -> [Float]
@@ -66,10 +71,16 @@ final class DictationRecoveryViewModel: ObservableObject {
     @Published var selectedModel: String? {
         didSet { defaults.set(selectedModel, forKey: UserDefaultsKeys.dictationRecoveryModel) }
     }
+    @Published var automaticFallbackEnabled: Bool {
+        didSet {
+            defaults.set(automaticFallbackEnabled, forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled)
+        }
+    }
 
     private let audioRecordingService: AudioRecordingService
     private let modelManager: ModelManagerService
     private let historyService: HistoryService
+    private let licenseService: LicenseService?
     private let audioSamplesLoader: AudioSamplesLoader
     private let transcriptionRunner: TranscriptionRunner
     private let engineReadinessChecker: EngineReadinessChecker?
@@ -82,6 +93,7 @@ final class DictationRecoveryViewModel: ObservableObject {
         modelManager: ModelManagerService,
         historyService: HistoryService,
         audioFileService: AudioFileService,
+        licenseService: LicenseService? = nil,
         defaults: UserDefaults = .standard,
         audioSamplesLoader: AudioSamplesLoader? = nil,
         transcriptionRunner: TranscriptionRunner? = nil,
@@ -90,6 +102,7 @@ final class DictationRecoveryViewModel: ObservableObject {
         self.audioRecordingService = audioRecordingService
         self.modelManager = modelManager
         self.historyService = historyService
+        self.licenseService = licenseService
         self.defaults = defaults
         self.audioSamplesLoader = audioSamplesLoader ?? { [audioFileService] url in
             try await audioFileService.loadAudioSamples(from: url)
@@ -113,12 +126,20 @@ final class DictationRecoveryViewModel: ObservableObject {
         )
         self.selectedEngine = defaults.string(forKey: UserDefaultsKeys.dictationRecoveryEngine)
         self.selectedModel = defaults.string(forKey: UserDefaultsKeys.dictationRecoveryModel)
+        self.automaticFallbackEnabled = defaults.bool(forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled)
         self.isInitialized = true
 
         audioRecordingService.$recoverableRecordingURLs
             .receive(on: DispatchQueue.main)
             .sink { [weak self] urls in
                 self?.updateRecoveryURLs(urls)
+            }
+            .store(in: &cancellables)
+
+        licenseService?.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
             }
             .store(in: &cancellables)
 
@@ -185,6 +206,18 @@ final class DictationRecoveryViewModel: ObservableObject {
         resolvedEngine?.supportedLanguages.sorted() ?? []
     }
 
+    var canUseAutomaticFallback: Bool {
+        licenseService?.canUseProTranscriptionFallback ?? false
+    }
+
+    var automaticFallbackUnavailableMessage: String? {
+        guard !canUseAutomaticFallback else { return nil }
+        return localizedAppText(
+            "Automatic fallback requires a commercial license or active supporter status.",
+            de: "Automatischer Fallback benötigt eine kommerzielle Lizenz oder aktiven Supporter-Status."
+        )
+    }
+
     func observePluginManager() {
         guard let pluginManager = PluginManager.shared else { return }
         pluginManager.objectWillChange
@@ -198,6 +231,28 @@ final class DictationRecoveryViewModel: ObservableObject {
 
     func canUseForTranscription(_ engine: TranscriptionEnginePlugin) -> Bool {
         modelManager.canUseForTranscription(engine)
+    }
+
+    func automaticFallbackConfiguration(
+        excluding primaryEngineId: String?,
+        task: TranscriptionTask
+    ) -> DictationRecoveryFallbackConfiguration? {
+        guard automaticFallbackEnabled, canUseAutomaticFallback else { return nil }
+        guard let selectedEngine, !selectedEngine.isEmpty else { return nil }
+        guard selectedEngine != primaryEngineId else { return nil }
+        guard let engine = resolvedEngine else { return nil }
+        guard modelManager.canUseForTranscription(engine), engine.isConfigured else { return nil }
+        guard task != .translate || engine.supportsTranslation else { return nil }
+
+        if let selectedModel {
+            let modelIds = Set((engine.modelCatalog + engine.transcriptionModels).map(\.id))
+            guard modelIds.contains(selectedModel) else { return nil }
+        }
+
+        return DictationRecoveryFallbackConfiguration(
+            engineId: selectedEngine,
+            modelId: selectedModel
+        )
     }
 
     func transcribe() {

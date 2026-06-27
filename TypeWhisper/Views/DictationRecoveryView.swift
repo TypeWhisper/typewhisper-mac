@@ -6,18 +6,7 @@ struct DictationRecoveryView: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Group {
-            if viewModel.hasRecoveryContent {
-                recoveryForm
-            } else {
-                ContentUnavailableView {
-                    Label(
-                        localizedAppText("No Recording to Recover", de: "Keine Aufnahme zur Wiederherstellung"),
-                        systemImage: "waveform"
-                    )
-                }
-            }
-        }
+        recoveryForm
         .frame(minWidth: 500, minHeight: 400)
     }
 
@@ -68,33 +57,43 @@ struct DictationRecoveryView: View {
                         recoveryRow(recovery)
                     }
                 }
+            } else if !viewModel.hasRecoveryContent {
+                Section {
+                    Label(
+                        localizedAppText("No Recording to Recover", de: "Keine Aufnahme zur Wiederherstellung"),
+                        systemImage: "waveform"
+                    )
+                    .foregroundStyle(.secondary)
+                }
+            }
 
-                Section(String(localized: "Transcription")) {
-                    Picker(String(localized: "Engine"), selection: $viewModel.selectedEngine) {
-                        Text(String(localized: "Default Engine")).tag(nil as String?)
-                        Divider()
-                        ForEach(viewModel.availableEngines, id: \.providerId) { engine in
-                            enginePickerLabel(for: engine)
-                                .tag(engine.providerId as String?)
-                                .disabled(!viewModel.canUseForTranscription(engine))
-                        }
+            Section(String(localized: "Transcription")) {
+                Picker(String(localized: "Engine"), selection: $viewModel.selectedEngine) {
+                    Text(String(localized: "Default Engine")).tag(nil as String?)
+                    Divider()
+                    ForEach(viewModel.availableEngines, id: \.providerId) { engine in
+                        enginePickerLabel(for: engine)
+                            .tag(engine.providerId as String?)
+                            .disabled(!viewModel.canUseForTranscription(engine))
                     }
-                    .disabled(viewModel.isProcessing)
+                }
+                .disabled(viewModel.isProcessing)
 
-                    if let engine = viewModel.resolvedEngine {
-                        let models = engine.transcriptionModels
-                        if models.count > 1 {
-                            Picker(String(localized: "Model"), selection: $viewModel.selectedModel) {
-                                Text(String(localized: "watchFolder.model.default")).tag(nil as String?)
-                                Divider()
-                                ForEach(models, id: \.id) { model in
-                                    Text(model.displayName).tag(model.id as String?)
-                                }
+                if let engine = viewModel.resolvedEngine {
+                    let models = engine.transcriptionModels
+                    if models.count > 1 {
+                        Picker(String(localized: "Model"), selection: $viewModel.selectedModel) {
+                            Text(String(localized: "watchFolder.model.default")).tag(nil as String?)
+                            Divider()
+                            ForEach(models, id: \.id) { model in
+                                Text(model.displayName).tag(model.id as String?)
                             }
-                            .disabled(viewModel.isProcessing)
                         }
+                        .disabled(viewModel.isProcessing)
                     }
+                }
 
+                if viewModel.hasRecovery {
                     if viewModel.supportsTranslation {
                         Picker(String(localized: "Task"), selection: $viewModel.selectedTask) {
                             ForEach(TranscriptionTask.allCases) { task in
@@ -111,7 +110,25 @@ struct DictationRecoveryView: View {
                     )
                     .disabled(viewModel.isProcessing)
                 }
+            }
 
+            Section(localizedAppText("Automatic Fallback", de: "Automatischer Fallback")) {
+                Toggle(isOn: $viewModel.automaticFallbackEnabled) {
+                    Label(
+                        localizedAppText("Retry failed dictations with this engine", de: "Fehlgeschlagene Diktate mit dieser Engine erneut versuchen"),
+                        systemImage: "arrow.triangle.2.circlepath"
+                    )
+                }
+                .disabled(viewModel.isProcessing || !viewModel.canUseAutomaticFallback)
+
+                if let message = viewModel.automaticFallbackUnavailableMessage {
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if viewModel.hasRecovery {
                 Section {
                     HStack {
                         Spacer()

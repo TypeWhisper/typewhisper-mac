@@ -42,14 +42,12 @@ struct SettingsView: View {
                 systemImage: "waveform.circle",
                 badge: nil
             ),
-            dictationRecovery.hasRecoveryContent
-                ? SettingsDestination(
-                    tab: .dictationRecovery,
-                    title: localizedAppText("Recovery", de: "Wiederherstellung"),
-                    systemImage: "waveform",
-                    badge: nil
-                )
-                : nil,
+            SettingsDestination(
+                tab: .dictationRecovery,
+                title: localizedAppText("Recovery", de: "Wiederherstellung"),
+                systemImage: "waveform",
+                badge: nil
+            ),
             SettingsDestination(tab: .fileTranscription, title: String(localized: "File Transcription"), systemImage: "doc.text", badge: nil),
             SettingsDestination(tab: .history, title: String(localized: "History"), systemImage: "clock.arrow.circlepath", badge: nil),
             SettingsDestination(tab: .dictionary, title: String(localized: "Dictionary"), systemImage: "book.closed", badge: nil),
@@ -101,16 +99,9 @@ struct SettingsView: View {
         .frame(minWidth: 950, idealWidth: 1050, minHeight: 550, idealHeight: 600)
         .onAppear {
             navigateToFileTranscriptionIfNeeded()
-            navigateAwayFromMissingRecoveryIfNeeded()
         }
         .onChange(of: fileTranscription.showFilePickerFromMenu) { _, _ in
             navigateToFileTranscriptionIfNeeded()
-        }
-        .onChange(of: dictationRecovery.hasRecovery) { _, _ in
-            navigateAwayFromMissingRecoveryIfNeeded()
-        }
-        .onChange(of: dictationRecovery.lastSavedHistoryRecordID) { _, _ in
-            navigateAwayFromMissingRecoveryIfNeeded()
         }
         .onChange(of: homeViewModel.navigateToHistory) { _, navigate in
             if navigate {
@@ -130,23 +121,19 @@ struct SettingsView: View {
                 selectedTab = .workflows
                 WorkflowsNavigationCoordinator.shared.showMine()
             default:
-                selectedTab = Self.availableTab(request.tab, hasRecoveryContent: dictationRecovery.hasRecoveryContent)
+                selectedTab = Self.availableTab(request.tab)
             }
         }
     }
 
-    static func availableTab(_ tab: SettingsTab, hasRecoveryContent: Bool) -> SettingsTab {
-        tab == .dictationRecovery && !hasRecoveryContent ? .recording : tab
+    static func availableTab(_ tab: SettingsTab) -> SettingsTab {
+        tab
     }
 
     private func navigateToFileTranscriptionIfNeeded() {
         if fileTranscription.showFilePickerFromMenu {
             selectedTab = .fileTranscription
         }
-    }
-
-    private func navigateAwayFromMissingRecoveryIfNeeded() {
-        selectedTab = Self.availableTab(selectedTab, hasRecoveryContent: dictationRecovery.hasRecoveryContent)
     }
 
     @ViewBuilder

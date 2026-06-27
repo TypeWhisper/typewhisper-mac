@@ -136,12 +136,14 @@ final class ServiceContainer: ObservableObject {
             modelManager: modelManagerService,
             audioFileService: audioFileService
         )
-        dictationRecoveryViewModel = DictationRecoveryViewModel(
+        let recoveryViewModel = DictationRecoveryViewModel(
             audioRecordingService: audioRecordingService,
             modelManager: modelManagerService,
             historyService: historyService,
-            audioFileService: audioFileService
+            audioFileService: audioFileService,
+            licenseService: licenseService
         )
+        dictationRecoveryViewModel = recoveryViewModel
         settingsViewModel = SettingsViewModel(modelManager: modelManagerService)
         dictationViewModel = DictationViewModel(
             audioRecordingService: audioRecordingService,
@@ -169,7 +171,13 @@ final class ServiceContainer: ObservableObject {
             speechFeedbackService: speechFeedbackService,
             accessibilityAnnouncementService: accessibilityAnnouncementService,
             errorLogService: errorLogService,
-            mediaPlaybackService: mediaPlaybackService
+            mediaPlaybackService: mediaPlaybackService,
+            recoveryFallbackConfigurationProvider: { [recoveryViewModel] primaryEngineId, task in
+                recoveryViewModel.automaticFallbackConfiguration(
+                    excluding: primaryEngineId,
+                    task: task
+                )
+            }
         )
         audioRecorderViewModel = AudioRecorderViewModel(
             recorderService: audioRecorderService,
