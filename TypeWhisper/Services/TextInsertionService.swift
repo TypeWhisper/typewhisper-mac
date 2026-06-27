@@ -420,11 +420,10 @@ final class TextInsertionService {
               let currentState = captureFocusedTextState(for: element) else {
             return false
         }
-        guard let initialValue = initialState.value,
-              let currentValue = currentState.value else {
+        guard let currentValue = currentState.value else {
             return false
         }
-        return initialValue != currentValue
+        return initialState.value != currentValue
     }
 
     /// Saves all current clipboard contents for later restoration.

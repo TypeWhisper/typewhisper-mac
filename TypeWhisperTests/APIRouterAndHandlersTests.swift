@@ -3312,6 +3312,45 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    func testPreserveClipboardAvoidsPasteboardWhenAccessibilityInsertionChangesNilValue() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { element }
+
+        var stateReadCount = 0
+        service.focusedTextStateOverride = { _ in
+            defer { stateReadCount += 1 }
+            if stateReadCount == 0 {
+                return (value: nil, selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+            }
+            return (value: "Hello", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
+        }
+
+        var insertedText: String?
+        service.insertTextAtOverride = { _, text in
+            insertedText = text
+            return true
+        }
+
+        var didSimulatePaste = false
+        service.pasteSimulatorOverride = {
+            didSimulatePaste = true
+        }
+
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+
+        _ = try await service.insertText("Hello", preserveClipboard: true)
+
+        XCTAssertEqual(insertedText, "Hello")
+        XCTAssertFalse(didSimulatePaste)
+        XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
     func testPreserveClipboardFallsBackToPasteboardWhenVerifiedAccessibilityInsertionFails() async throws {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard.withUniqueName()
