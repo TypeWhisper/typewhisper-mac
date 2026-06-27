@@ -372,7 +372,7 @@ public enum PluginAudioUploadEncoder {
         ]
         let mediaTerms = [
             "format", "media", "mime", "content-type", "content type",
-            "codec", "container", "file type", "audio", "file", "data",
+            "codec", "container", "file type", "audio",
             "m4a", "mp4", "aac", "wav",
         ]
         return rejectionTerms.contains { lowercased.contains($0) }

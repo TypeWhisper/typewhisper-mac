@@ -176,6 +176,18 @@ final class OpenAITranscriptionHelperTests: XCTestCase {
                 responseData: Data(#"{"error":{"message":"audio too short","type":"invalid_request_error"}}"#.utf8)
             )
         )
+        XCTAssertFalse(
+            PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+                statusCode: 400,
+                responseData: Data(#"{"error":{"message":"invalid file size","type":"invalid_request_error"}}"#.utf8)
+            )
+        )
+        XCTAssertFalse(
+            PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+                statusCode: 400,
+                responseData: Data(#"{"error":{"message":"corrupt request data","type":"invalid_request_error"}}"#.utf8)
+            )
+        )
     }
 
     func testTranscribeCustomTimeoutAppliesToUploadRequest() async throws {
