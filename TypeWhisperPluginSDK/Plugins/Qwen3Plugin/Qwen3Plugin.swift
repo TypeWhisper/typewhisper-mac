@@ -54,7 +54,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         model = nil
         loadedModelId = nil
         modelState = .notLoaded
-        Self.clearRuntimeCache()
+        Self.scheduleRuntimeCacheClearWhenInferenceIsIdle()
         host = nil
     }
 
@@ -104,7 +104,11 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         guard let modelDef = Self.availableModels.first(where: { $0.id == modelId }) else { return }
 
         if loadedModelId == modelId {
-            unloadModel(clearPersistence: true)
+            model = nil
+            loadedModelId = nil
+            modelState = .notLoaded
+            host?.setUserDefault(nil, forKey: "loadedModel")
+            await Self.clearRuntimeCacheWhenInferenceIsIdle()
         }
         if _selectedModelId == modelId {
             _selectedModelId = nil
@@ -228,7 +232,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         model = nil
         loadedModelId = nil
         modelState = .notLoaded
-        Self.clearRuntimeCache()
+        Self.scheduleRuntimeCacheClearWhenInferenceIsIdle()
         if clearPersistence {
             host?.setUserDefault(nil, forKey: "loadedModel")
         }
@@ -291,6 +295,18 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
 
     private static func clearRuntimeCache() {
         Memory.clearCache()
+    }
+
+    private static func clearRuntimeCacheWhenInferenceIsIdle() async {
+        try? await PluginLocalInferenceGate.shared.withLock {
+            Memory.clearCache()
+        }
+    }
+
+    private static func scheduleRuntimeCacheClearWhenInferenceIsIdle() {
+        Task {
+            await clearRuntimeCacheWhenInferenceIsIdle()
+        }
     }
 
     var settingsView: AnyView? {

@@ -127,6 +127,7 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
     private var lastModelLoadProgressInstant = ContinuousClock().now
     private var lastModelLoadProgressFraction = 0.0
     private var activeModelLoadTask: (generation: Int, task: Task<ModelContainer, Error>)?
+    private var restoreModelTask: Task<Void, Never>?
 
     private func modelsDirectory() -> URL {
         host?.pluginDataDirectory.appendingPathComponent("models")
@@ -174,8 +175,17 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
         }
 
         let persistedLoadedModel = host.userDefault(forKey: "loadedModel") as? String
-        if let persistedLoadedModel, !Self.canRestoreLoadedModel(persistedLoadedModel) {
-            host.setUserDefault(nil, forKey: "loadedModel")
+        let shouldAutoRestoreLoadedModel: Bool
+        if let persistedLoadedModel {
+            if Self.canRestoreLoadedModel(persistedLoadedModel),
+               let modelDef = Self.modelDefinition(for: persistedLoadedModel) {
+                shouldAutoRestoreLoadedModel = isModelDownloaded(modelDef)
+            } else {
+                host.setUserDefault(nil, forKey: "loadedModel")
+                shouldAutoRestoreLoadedModel = false
+            }
+        } else {
+            shouldAutoRestoreLoadedModel = false
         }
 
         _generationTemperature = host.userDefault(forKey: "generationTemperature") as? Double
@@ -184,7 +194,14 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
             ?? PluginLLMTemperatureMode.custom.rawValue
         _hfToken = PluginHuggingFaceTokenHelper.loadToken(from: host)
 
-        Task { await restoreLoadedModel(allowDownloads: false) }
+        restoreModelTask?.cancel()
+        if shouldAutoRestoreLoadedModel {
+            restoreModelTask = Task { [weak self] in
+                await self?.restoreLoadedModel(allowDownloads: false)
+            }
+        } else {
+            restoreModelTask = nil
+        }
     }
 
     func deactivate() {
@@ -193,7 +210,7 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
         loadedModelId = nil
         downloadProgress = 0
         modelState = .notLoaded
-        Self.clearRuntimeCache()
+        Self.scheduleRuntimeCacheClearWhenInferenceIsIdle()
         host = nil
     }
 
@@ -234,7 +251,7 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
             loadedModelId = nil
             downloadProgress = 0
             modelState = .notLoaded
-            Self.clearRuntimeCache()
+            await Self.clearRuntimeCacheWhenInferenceIsIdle()
         }
         if _selectedLLMModelId == modelId {
             _selectedLLMModelId = nil
@@ -524,7 +541,7 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
         loadedModelId = nil
         downloadProgress = 0
         modelState = .notLoaded
-        Self.clearRuntimeCache()
+        Self.scheduleRuntimeCacheClearWhenInferenceIsIdle()
         if clearPersistence {
             host?.setUserDefault(nil, forKey: "loadedModel")
         }
@@ -551,7 +568,7 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
         loadedModelId = nil
         downloadProgress = 0
         modelState = .notLoaded
-        Self.clearRuntimeCache()
+        Self.scheduleRuntimeCacheClearWhenInferenceIsIdle()
         host?.setUserDefault(nil, forKey: "loadedModel")
         try? deleteModelFiles(modelDef)
         host?.notifyCapabilitiesChanged()
@@ -559,6 +576,18 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
 
     private static func clearRuntimeCache() {
         Memory.clearCache()
+    }
+
+    private static func clearRuntimeCacheWhenInferenceIsIdle() async {
+        try? await PluginLocalInferenceGate.shared.withLock {
+            Memory.clearCache()
+        }
+    }
+
+    private static func scheduleRuntimeCacheClearWhenInferenceIsIdle() {
+        Task {
+            await clearRuntimeCacheWhenInferenceIsIdle()
+        }
     }
 
     func restoreLoadedModel(allowDownloads: Bool = true) async {
@@ -584,6 +613,8 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
 
     private func invalidateModelLoad() {
         modelLoadGeneration += 1
+        restoreModelTask?.cancel()
+        restoreModelTask = nil
         activeModelLoadTask?.task.cancel()
         activeModelLoadTask = nil
     }

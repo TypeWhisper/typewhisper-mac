@@ -292,11 +292,13 @@ private struct DiagnosticsReport: Encodable {
     }
 
     struct PluginRuntimeMemoryInfo: Encodable, Equatable {
+        let runtimeIdentifier: String
         let activeMemoryBytes: Int
         let cacheMemoryBytes: Int
         let peakMemoryBytes: Int
 
         init(_ snapshot: PluginRuntimeMemorySnapshot) {
+            self.runtimeIdentifier = snapshot.runtimeIdentifier
             self.activeMemoryBytes = snapshot.activeMemoryBytes
             self.cacheMemoryBytes = snapshot.cacheMemoryBytes
             self.peakMemoryBytes = snapshot.peakMemoryBytes

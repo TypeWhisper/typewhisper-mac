@@ -108,6 +108,7 @@ Return ONLY the JSON array, nothing else.
     private var lastExtractionTime: Date = .distantPast
     private var extractionCooldown: TimeInterval = 30
     private var extractionTask: Task<Void, Never>?
+    private var activeExtractionID: UUID?
     private var skippedWhileBusy = 0
     private var totalStarted = 0
     private var totalCompleted = 0
@@ -160,6 +161,7 @@ Return ONLY the JSON array, nothing else.
             eventSubscriptionId = nil
         }
         extractionTask?.cancel()
+        activeExtractionID = nil
         extractionTask = nil
     }
 
@@ -212,23 +214,26 @@ Return ONLY the JSON array, nothing else.
         // Capture all MainActor properties before detaching
         let prompt = extractionPrompt
         let model = extractionModel
+        let extractionID = UUID()
+        activeExtractionID = extractionID
 
         extractionTask = Task { [weak self] in
             guard let self else { return }
             do {
                 try Task.checkCancellation()
                 try await self.extractAndStore(payload: payload, providerId: providerId, prompt: prompt, model: model)
-                self.finishExtraction(didFail: false)
+                self.finishExtraction(extractionID: extractionID, didFail: false)
             } catch is CancellationError {
-                self.finishExtraction(didFail: false)
+                self.finishExtraction(extractionID: extractionID, didFail: false)
             } catch {
-                self.finishExtraction(didFail: true)
+                self.finishExtraction(extractionID: extractionID, didFail: true)
                 logger.error("Memory extraction failed: \(error.localizedDescription)")
             }
         }
     }
 
-    private func finishExtraction(didFail: Bool) {
+    private func finishExtraction(extractionID: UUID, didFail: Bool) {
+        guard activeExtractionID == extractionID else { return }
         if didFail {
             totalFailed += 1
         } else {
@@ -236,6 +241,7 @@ Return ONLY the JSON array, nothing else.
         }
         lastFinishedAt = Date()
         extractionTask = nil
+        activeExtractionID = nil
     }
 
     private func extractAndStore(payload: TranscriptionCompletedPayload, providerId: String, prompt: String, model: String) async throws {
@@ -245,6 +251,7 @@ Return ONLY the JSON array, nothing else.
             providerId,
             model.isEmpty ? nil : model
         )
+        try Task.checkCancellation()
 
         let entries = parseExtractedMemories(result, source: MemorySource(
             appName: payload.appName,
@@ -264,6 +271,7 @@ Return ONLY the JSON array, nothing else.
         }
 
         let deduped = await deduplicate(entries: entries, using: plugins)
+        try Task.checkCancellation()
         guard !deduped.isEmpty else {
             logger.info("Memory extraction produced only duplicate entries")
             return
@@ -271,6 +279,7 @@ Return ONLY the JSON array, nothing else.
 
         var storedInReadyPlugin = false
         for plugin in plugins where plugin.isReady {
+            try Task.checkCancellation()
             do {
                 try await plugin.store(deduped)
                 storedInReadyPlugin = true

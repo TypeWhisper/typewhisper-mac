@@ -766,7 +766,9 @@ final class ModelManagerService: ObservableObject {
             scheduleAutoUnloadIfNeeded(for: plugin, scheduledKeys: &scheduledKeys)
         }
 
-        let existingKeys = Set(autoUnloadTasks.keys).union(autoUnloadTargets.keys)
+        let existingKeys = Set(autoUnloadTasks.keys)
+            .union(autoUnloadTargets.keys)
+            .union(autoUnloadDiagnostics.keys)
         for key in existingKeys.subtracting(scheduledKeys) {
             autoUnloadTasks[key]?.cancel()
             autoUnloadTasks[key] = nil

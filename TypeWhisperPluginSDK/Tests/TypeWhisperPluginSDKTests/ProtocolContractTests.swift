@@ -344,6 +344,33 @@ private actor GateConcurrencyState {
     }
 }
 
+private actor GateLockRelease {
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func release() {
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
+private actor GateOperationState {
+    private(set) var didRun = false
+
+    func markRan() {
+        didRun = true
+    }
+
+    func value() -> Bool {
+        didRun
+    }
+}
+
 @objc(MockTTSPlugin)
 private final class MockTTSPlugin: NSObject, TTSProviderPlugin, @unchecked Sendable {
     static let pluginId = "com.typewhisper.mock.tts"
@@ -400,6 +427,45 @@ final class ProtocolContractTests: XCTestCase {
 
         let maxConcurrent = await state.maxConcurrent
         XCTAssertEqual(maxConcurrent, 1)
+    }
+
+    func testLocalInferenceGateDoesNotRunCancelledWaiter() async throws {
+        let gate = PluginLocalInferenceGate()
+        let release = GateLockRelease()
+        let cancelledOperation = GateOperationState()
+        let holderStarted = expectation(description: "holder acquired inference gate")
+
+        let holder = Task {
+            try await gate.withLock {
+                holderStarted.fulfill()
+                await release.wait()
+            }
+        }
+        await fulfillment(of: [holderStarted], timeout: 1.0)
+
+        let waiter = Task {
+            try await gate.withLock {
+                await cancelledOperation.markRan()
+            }
+        }
+        waiter.cancel()
+
+        try await Task.sleep(for: .milliseconds(20))
+        await release.release()
+        try await holder.value
+
+        do {
+            try await waiter.value
+            XCTFail("Cancelled waiter should throw before running gated operation")
+        } catch is CancellationError {
+            // Expected.
+        }
+
+        let cancelledOperationRan = await cancelledOperation.value()
+        XCTAssertFalse(cancelledOperationRan)
+
+        let followerRan = try await gate.withLock { true }
+        XCTAssertTrue(followerRan)
     }
 
     func testPluginAuthRolesExposeStableRawValues() {
