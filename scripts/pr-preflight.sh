@@ -22,8 +22,9 @@ run_if_exists() {
 cd "$repo_root"
 
 if ! git rev-parse --verify "$base_ref" >/dev/null 2>&1; then
-  log "warning: base ref '$base_ref' was not found; falling back to HEAD~1"
-  base_ref="HEAD~1"
+  log "error: base ref '$base_ref' was not found"
+  log "hint: fetch the base branch first, or pass an existing ref explicitly"
+  exit 2
 fi
 
 log "checking whitespace and conflict markers against $base_ref"
