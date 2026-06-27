@@ -83,6 +83,35 @@ final class SonioxPluginTests: XCTestCase {
         XCTAssertEqual(host.userDefault(forKey: "selectedRegion") as? String, "us")
     }
 
+    func testSelectedRegionPersistsAcrossPluginActivation() async throws {
+        let host = try PluginTestHostServices()
+        let plugin = SonioxPlugin()
+        plugin.activate(host: host)
+
+        plugin.selectRegion("eu")
+
+        XCTAssertEqual(host.userDefault(forKey: "selectedRegion") as? String, "eu")
+
+        let restartedPlugin = SonioxPlugin()
+        restartedPlugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data("{}".utf8),
+                    Self.httpResponse(url: "https://api.eu.soniox.com/v1/files", statusCode: 200)
+                ),
+            ])
+        }
+
+        let isValid = await restartedPlugin.validateApiKey("soniox-key")
+
+        XCTAssertTrue(isValid)
+        let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
+        XCTAssertEqual(request.url?.absoluteString, "https://api.eu.soniox.com/v1/files")
+    }
+
     func testSonioxPluginAdvertisesTTSProtocolAndDefaultVoice() throws {
         let host = try PluginTestHostServices(secrets: ["api-key": "soniox-key"])
         let plugin = SonioxPlugin()

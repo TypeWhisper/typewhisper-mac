@@ -1617,8 +1617,10 @@ final class SonioxPlugin: NSObject,
     fileprivate var selectedTTSModelIdForSettings: String { _selectedTTSModelId ?? SonioxModelSelection.automatic }
     fileprivate var selectedVoiceIdForSettings: String { selectedVoiceId ?? Self.defaultVoiceId }
 
-    fileprivate func selectRegion(_ regionId: String) {
-        _selectedRegion = SonioxRegion.resolved(regionId, host: host)
+    func selectRegion(_ regionId: String) {
+        let region = SonioxRegion.resolved(regionId, host: nil)
+        _selectedRegion = region
+        host?.setUserDefault(region.id, forKey: SonioxDefaultsKey.selectedRegion)
         host?.notifyCapabilitiesChanged()
     }
 
