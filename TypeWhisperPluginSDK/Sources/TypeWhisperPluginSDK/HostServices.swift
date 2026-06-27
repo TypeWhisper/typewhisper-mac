@@ -303,7 +303,8 @@ public enum PluginAudioUploadEncoder {
         guard statusCode != 415 else { return true }
 
         let message = String(data: responseData, encoding: .utf8) ?? ""
-        return indicatesUnsupportedAudioUpload(message)
+        return audioUploadErrorMessageCandidates(from: message)
+            .contains { indicatesUnsupportedAudioUpload($0) }
     }
 
     public static func shouldRetryWithWavUpload(error: Error) -> Bool {
@@ -323,7 +324,44 @@ public enum PluginAudioUploadEncoder {
             return false
         }
 
-        return indicatesUnsupportedAudioUpload(message)
+        return audioUploadErrorMessageCandidates(from: message)
+            .contains { indicatesUnsupportedAudioUpload($0) }
+    }
+
+    private static func audioUploadErrorMessageCandidates(from responseText: String) -> [String] {
+        let trimmed = responseText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let jsonStart = trimmed.firstIndex(where: { $0 == "{" || $0 == "[" }) else {
+            return [trimmed]
+        }
+
+        let jsonText = String(trimmed[jsonStart...])
+        guard let data = jsonText.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) else {
+            return [trimmed]
+        }
+
+        return extractAudioUploadErrorMessages(from: object)
+    }
+
+    private static func extractAudioUploadErrorMessages(from object: Any) -> [String] {
+        let messageKeys = ["error", "message", "err_msg", "error_message", "detail", "description"]
+
+        if let message = object as? String {
+            return [message]
+        }
+
+        if let dictionary = object as? [String: Any] {
+            return messageKeys.flatMap { key -> [String] in
+                guard let value = dictionary[key] else { return [] }
+                return extractAudioUploadErrorMessages(from: value)
+            }
+        }
+
+        if let array = object as? [Any] {
+            return array.flatMap { extractAudioUploadErrorMessages(from: $0) }
+        }
+
+        return []
     }
 
     private static func indicatesUnsupportedAudioUpload(_ message: String) -> Bool {
