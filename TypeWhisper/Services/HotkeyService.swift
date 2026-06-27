@@ -742,6 +742,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     private func handleEvent(_ event: NSEvent, source: HotkeyEventSource) -> Bool {
         // Escape key cancels active recording/transcription
         if event.type == .keyDown && event.keyCode == Self.escapeKeyCode {
+            cancelPendingHybridModifierHold()
             if shouldDispatch(
                 target: .cancel,
                 phase: .down,

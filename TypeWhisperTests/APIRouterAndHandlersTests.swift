@@ -8304,6 +8304,38 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testEscapeCancelsPendingHybridModifierHold() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.hybridModifierHoldActivationDelay = 0.02
+
+        service.setHotkeyForTesting(controlModifierHotkey(), for: .hybrid)
+
+        var currentFlags = NSEvent.ModifierFlags.control
+        service.modifierFlagsStateProvider = { currentFlags }
+
+        var startCount = 0
+        var cancelCount = 0
+        service.onDictationStart = { _ in startCount += 1 }
+        service.onCancelPressed = { cancelCount += 1 }
+
+        let keyDown = try makeControlModifierEvent(isDown: true)
+        let escape = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [.maskControl])
+        let keyUp = try makeControlModifierEvent(isDown: false)
+
+        XCTAssertFalse(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertFalse(service.processEventForTesting(escape, source: .monitor))
+
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(cancelCount, 1)
+        XCTAssertEqual(startCount, 0)
+        XCTAssertNil(service.currentMode)
+
+        currentFlags = []
+        XCTAssertFalse(service.processEventForTesting(keyUp, source: .monitor))
+    }
+
+    @MainActor
     func testHybridModifierHoldStartsAfterDelayAndStopsOnRelease() async throws {
         let service = HotkeyService()
         service.suspendMonitoring()
