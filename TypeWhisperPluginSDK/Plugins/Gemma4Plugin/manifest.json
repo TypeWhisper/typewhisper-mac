@@ -1,8 +1,8 @@
 {
     "id": "com.typewhisper.gemma4",
     "name": "Gemma 4",
-    "version": "1.0.1",
-    "minHostVersion": "1.4.0",
+    "version": "1.1.0",
+    "minHostVersion": "1.5.0",
     "sdkCompatibilityVersion": "v1",
     "supportedArchitectures": [
         "arm64"
