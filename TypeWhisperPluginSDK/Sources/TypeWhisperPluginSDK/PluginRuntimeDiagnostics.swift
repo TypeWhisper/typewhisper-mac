@@ -75,7 +75,6 @@ public actor PluginLocalInferenceGate {
             release()
             throw CancellationError()
         }
-        try Task.checkCancellation()
     }
 
     private func cancelWaiter(id: UUID) {
