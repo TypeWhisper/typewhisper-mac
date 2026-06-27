@@ -1941,7 +1941,8 @@
       "category": "transcription",
       "downloadCount": 11,
       "descriptions": {
-        "de": "Cloud Speech-to-Text und Text-to-Speech \u00fcber Cartesia APIs. Erfordert einen Cartesia API-Key."
+        "de": "Cloud Speech-to-Text und Text-to-Speech \u00fcber Cartesia APIs. Erfordert einen Cartesia API-Key.",
+        "ja": "Cartesia API\u306b\u3088\u308b\u30af\u30e9\u30a6\u30c9\u97f3\u58f0\u8a8d\u8b58\u3068\u97f3\u58f0\u5408\u6210\u3067\u3059\u3002Cartesia API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
       },
       "categories": [
         "transcription",
@@ -1953,6 +1954,14 @@
       "detailsURL": "https://www.typewhisper.com/addons/cartesia/",
       "homepageURL": "https://www.cartesia.ai/",
       "releases": [
+        {
+          "version": "1.0.2",
+          "minHostVersion": "1.5.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 252703,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cartesia-v1.0.2/CartesiaPlugin.zip",
+          "minOSVersion": "14.0"
+        },
         {
           "version": "1.0.1",
           "minHostVersion": "1.4.0",
