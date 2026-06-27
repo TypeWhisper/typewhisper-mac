@@ -178,6 +178,41 @@ final class DictionaryExporterTests: XCTestCase {
     }
 
     @MainActor
+    func testRoundTripPreservesAutoLearnedSource() throws {
+        let appDir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appDir) }
+        let service = DictionaryService(appSupportDirectory: appDir)
+        service.learnCorrection(original: "recieve", replacement: "receive")
+
+        let json = DictionaryExporter.exportJSON(service.entries)
+        let array = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [[String: Any]])
+        XCTAssertEqual(array.first?["source"] as? String, DictionaryEntrySource.autoLearned.rawValue)
+
+        let parsed = try DictionaryExporter.parseJSON(Data(json.utf8))
+        let correction = try XCTUnwrap(parsed.first)
+        XCTAssertEqual(correction.source, .autoLearned)
+
+        let importedDir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(importedDir) }
+        let importedService = DictionaryService(appSupportDirectory: importedDir)
+        let result = DictionaryExporter.importEntries(parsed, into: importedService)
+
+        XCTAssertEqual(result.imported, 1)
+        XCTAssertEqual(importedService.entries.first?.source, .autoLearned)
+    }
+
+    @MainActor
+    func testParseDefaultsUnknownSourceToManual() throws {
+        let json = """
+        [{"type": "correction", "original": "teh", "replacement": "the", "source": "future"}]
+        """
+
+        let items = try DictionaryExporter.parseJSON(Data(json.utf8))
+
+        XCTAssertEqual(items.first?.source, .manual)
+    }
+
+    @MainActor
     func testImportWithDuplicateDetection() throws {
         let appDir = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appDir) }

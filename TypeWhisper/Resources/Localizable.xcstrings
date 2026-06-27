@@ -21501,6 +21501,16 @@
         }
       }
     },
+    "Auto-learned": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch gelernt"
+          }
+        }
+      }
+    },
     "Correction learning undone": {
       "localizations": {
         "de": {
@@ -21537,6 +21547,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "„%@“ -> „%@“ gelernt"
+          }
+        }
+      }
+    },
+    "Saved %d corrections to Dictionary": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d Korrekturen im Wörterbuch gespeichert"
+          }
+        }
+      }
+    },
+    "Saved to Dictionary: “%@” -> “%@”": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im Wörterbuch gespeichert: „%@“ -> „%@“"
           }
         }
       }

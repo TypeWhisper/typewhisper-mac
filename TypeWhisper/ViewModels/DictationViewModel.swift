@@ -2153,13 +2153,13 @@ final class DictationViewModel: ObservableObject {
         let message: String
         if learned.count == 1, let correction = learned.first {
             message = String.localizedStringWithFormat(
-                String(localized: "Learned “%@” -> “%@”"),
+                String(localized: "Saved to Dictionary: “%@” -> “%@”"),
                 correction.original,
                 correction.replacement
             )
         } else {
             message = String.localizedStringWithFormat(
-                String(localized: "Learned %d corrections"),
+                String(localized: "Saved %d corrections to Dictionary"),
                 learned.count
             )
         }
@@ -2167,7 +2167,7 @@ final class DictationViewModel: ObservableObject {
         showNotchFeedback(
             message: message,
             icon: "wand.and.sparkles",
-            duration: 8.0,
+            duration: 12.0,
             undoTitle: String(localized: "Undo")
         )
     }

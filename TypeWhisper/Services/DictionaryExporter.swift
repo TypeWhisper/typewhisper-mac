@@ -10,6 +10,7 @@ enum DictionaryExporter {
         let caseSensitive: Bool
         let isEnabled: Bool
         let ctcMinSimilarity: Float?
+        let source: DictionaryEntrySource
     }
 
     struct ImportResult {
@@ -32,6 +33,9 @@ enum DictionaryExporter {
             }
             if entry.type == .term, let ctcMinSimilarity = entry.ctcMinSimilarity {
                 dict["ctcMinSimilarity"] = ctcMinSimilarity
+            }
+            if entry.type == .correction, entry.source == .autoLearned {
+                dict["source"] = entry.source.rawValue
             }
             return dict
         }
@@ -91,7 +95,10 @@ enum DictionaryExporter {
                 isEnabled: dict["isEnabled"] as? Bool ?? true,
                 ctcMinSimilarity: type == .term ? parseOptionalFloat(
                     dict["ctcMinSimilarity"] ?? dict["ctc_min_similarity"]
-                ) : nil
+                ) : nil,
+                source: type == .correction
+                    ? DictionaryEntrySource.source(for: dict["source"] as? String)
+                    : .manual
             )
         }
     }
@@ -103,7 +110,7 @@ enum DictionaryExporter {
         let items = parsed.map {
             (type: $0.type, original: $0.original, replacement: $0.replacement,
              caseSensitive: $0.caseSensitive, isEnabled: $0.isEnabled,
-             ctcMinSimilarity: $0.ctcMinSimilarity)
+             ctcMinSimilarity: $0.ctcMinSimilarity, source: $0.source)
         }
         service.importEntries(items)
 

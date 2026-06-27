@@ -464,6 +464,38 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     @MainActor
+    func testHostStorePreservesAutoLearnedDictionarySource() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncAutoLearnedSource")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
+        let snippetService = SnippetService(appSupportDirectory: appSupportDirectory)
+        dictionaryService.learnCorrection(original: "recieve", replacement: "receive")
+
+        let store = TypeWhisperUserDataSyncStore(
+            dictionaryService: dictionaryService,
+            snippetService: snippetService
+        )
+
+        XCTAssertEqual(store.snapshot().dictionaryEntries.first?.source, .autoLearned)
+
+        try store.apply([
+            .upsertDictionary(Self.dictionaryEntry(
+                entryType: .correction,
+                original: "langauge",
+                replacement: "language",
+                source: .autoLearned,
+                updatedAt: Self.date(30)
+            ))
+        ])
+
+        XCTAssertEqual(
+            dictionaryService.entries.first { $0.original == "langauge" }?.source,
+            .autoLearned
+        )
+    }
+
+    @MainActor
     func testHostApplyMergesDuplicateNaturalKeys() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncMerge")
         defer { TestSupport.remove(appSupportDirectory) }
@@ -502,6 +534,7 @@ final class CloudFolderSyncTests: XCTestCase {
         entryType: UserDataSyncDictionaryEntryType = .term,
         original: String,
         replacement: String? = nil,
+        source: DictionaryEntrySource? = nil,
         updatedAt: Date
     ) -> UserDataSyncDictionaryEntry {
         UserDataSyncDictionaryEntry(
@@ -510,6 +543,7 @@ final class CloudFolderSyncTests: XCTestCase {
             replacement: replacement,
             caseSensitive: false,
             isEnabled: true,
+            source: source,
             createdAt: date(1),
             updatedAt: updatedAt
         )

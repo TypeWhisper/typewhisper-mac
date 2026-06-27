@@ -25,6 +25,7 @@ struct DictionaryEntryRow: Identifiable, Equatable {
     let replacement: String?
     let caseSensitive: Bool
     let isEnabled: Bool
+    let source: DictionaryEntrySource
     let termBoostingLabel: String
     let formattedCtcMinSimilarity: String
 
@@ -51,7 +52,7 @@ class DictionaryViewModel: ObservableObject {
 
     // Filter
     enum FilterTab: Int, CaseIterable {
-        case all, terms, corrections, termPacks
+        case all, terms, corrections, autoLearned, termPacks
     }
 
     enum TermBoostingMode: String, CaseIterable, Identifiable {
@@ -109,6 +110,8 @@ class DictionaryViewModel: ObservableObject {
             return entries.filter { $0.type == .term }
         case .corrections:
             return entries.filter { $0.type == .correction }
+        case .autoLearned:
+            return entries.filter { $0.type == .correction && $0.source == .autoLearned }
         case .termPacks:
             return []
         }
@@ -318,6 +321,7 @@ class DictionaryViewModel: ObservableObject {
             replacement: entry.replacement,
             caseSensitive: entry.caseSensitive,
             isEnabled: entry.isEnabled,
+            source: entry.source,
             termBoostingLabel: termBoostingLabel(for: entry.ctcMinSimilarity),
             formattedCtcMinSimilarity: formattedCtcMinSimilarity(entry.ctcMinSimilarity)
         )

@@ -59,10 +59,11 @@ struct DictionarySettingsView: View {
                 Text(String(localized: "All")).tag(DictionaryViewModel.FilterTab.all)
                 Text(String(localized: "Terms")).tag(DictionaryViewModel.FilterTab.terms)
                 Text(String(localized: "Corrections")).tag(DictionaryViewModel.FilterTab.corrections)
+                Text(String(localized: "Auto-learned")).tag(DictionaryViewModel.FilterTab.autoLearned)
                 Text(String(localized: "Term Packs")).tag(DictionaryViewModel.FilterTab.termPacks)
             }
             .pickerStyle(.segmented)
-            .frame(width: 340)
+            .frame(width: 470)
 
             Spacer()
 
@@ -579,6 +580,10 @@ private struct DictionaryCardView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 3))
             }
 
+            if row.source == .autoLearned {
+                DictionarySourceBadge()
+            }
+
             Spacer()
 
             Toggle("", isOn: Binding(
@@ -614,6 +619,19 @@ private struct DictionaryCardView: View {
                 deleteEntry()
             }
         }
+    }
+}
+
+private struct DictionarySourceBadge: View {
+    var body: some View {
+        Label(String(localized: "Auto-learned"), systemImage: "wand.and.sparkles")
+            .font(.caption2)
+            .lineLimit(1)
+            .foregroundStyle(Color.yellow)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(Color.yellow.opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 }
 

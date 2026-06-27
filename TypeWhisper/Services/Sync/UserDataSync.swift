@@ -24,6 +24,7 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
     let replacement: String?
     let caseSensitive: Bool
     let isEnabled: Bool
+    let source: DictionaryEntrySource?
     let createdAt: Date
     let updatedAt: Date
 
@@ -33,6 +34,7 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
         replacement: String?,
         caseSensitive: Bool,
         isEnabled: Bool,
+        source: DictionaryEntrySource? = nil,
         createdAt: Date,
         updatedAt: Date
     ) {
@@ -41,8 +43,45 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
         self.replacement = replacement
         self.caseSensitive = caseSensitive
         self.isEnabled = isEnabled
+        self.source = source
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case entryType
+        case original
+        case replacement
+        case caseSensitive
+        case isEnabled
+        case source
+        case createdAt
+        case updatedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        entryType = try container.decode(UserDataSyncDictionaryEntryType.self, forKey: .entryType)
+        original = try container.decode(String.self, forKey: .original)
+        replacement = try container.decodeIfPresent(String.self, forKey: .replacement)
+        caseSensitive = try container.decode(Bool.self, forKey: .caseSensitive)
+        isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
+        let sourceRawValue = try container.decodeIfPresent(String.self, forKey: .source)
+        source = sourceRawValue.flatMap(DictionaryEntrySource.init(rawValue:))
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(entryType, forKey: .entryType)
+        try container.encode(original, forKey: .original)
+        try container.encodeIfPresent(replacement, forKey: .replacement)
+        try container.encode(caseSensitive, forKey: .caseSensitive)
+        try container.encode(isEnabled, forKey: .isEnabled)
+        try container.encodeIfPresent(source?.rawValue, forKey: .source)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
     }
 }
 

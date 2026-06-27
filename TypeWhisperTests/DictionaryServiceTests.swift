@@ -131,6 +131,10 @@ final class DictionaryServiceTests: XCTestCase {
         XCTAssertEqual(learned.count, 2)
         XCTAssertEqual(learned.map(\.original), ["langauge", "recieve"])
         XCTAssertEqual(service.correctionsCount, 3)
+        XCTAssertEqual(
+            service.corrections.filter { $0.source == .autoLearned }.map(\.original),
+            ["langauge", "recieve"]
+        )
 
         let protectedEntry = try XCTUnwrap(service.corrections.first { $0.original == "langauge" })
         service.updateEntry(
@@ -312,6 +316,7 @@ final class DictionaryServiceTests: XCTestCase {
         XCTAssertEqual(service.corrections.first?.original, "TEH")
         XCTAssertEqual(service.corrections.first?.replacement, "The")
         XCTAssertEqual(service.corrections.first?.caseSensitive, true)
+        XCTAssertEqual(service.corrections.first?.source, .manual)
         XCTAssertEqual(service.corrections.first?.usageCount, 1)
         XCTAssertTrue(try service.deleteAPICorrection(original: "teh"))
         XCTAssertEqual(service.correctionsCount, 0)
@@ -515,6 +520,13 @@ final class DictionaryServiceTests: XCTestCase {
             .filter { $0.type == .correction }
             .map(\.id)
         XCTAssertEqual(allCorrectionIDs, correctionIDs)
+
+        service.learnCorrection(original: "autolearned", replacement: "auto learned")
+        let autoLearnedViewModel = DictionaryViewModel(dictionaryService: service)
+        autoLearnedViewModel.filterTab = .autoLearned
+        let autoLearnedRows = autoLearnedViewModel.filteredEntryRows
+        XCTAssertEqual(autoLearnedRows.map(\.original), ["autolearned"])
+        XCTAssertTrue(autoLearnedRows.allSatisfy { $0.source == .autoLearned })
     }
 
     @MainActor

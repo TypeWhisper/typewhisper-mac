@@ -113,7 +113,8 @@ final class DictionaryService: ObservableObject {
         original: String,
         replacement: String? = nil,
         caseSensitive: Bool = false,
-        ctcMinSimilarity: Float? = nil
+        ctcMinSimilarity: Float? = nil,
+        source: DictionaryEntrySource = .manual
     ) {
         guard let context = modelContext else { return }
 
@@ -129,6 +130,7 @@ final class DictionaryService: ObservableObject {
             replacement: replacement,
             caseSensitive: caseSensitive,
             ctcMinSimilarity: Self.normalizedCtcMinSimilarity(type == .term ? ctcMinSimilarity : nil),
+            source: source,
             createdAt: now,
             updatedAt: now
         )
@@ -222,6 +224,15 @@ final class DictionaryService: ObservableObject {
 
     /// Batch add multiple entries with a single save+reload
     func addEntries(_ items: [(type: DictionaryEntryType, original: String, replacement: String?, caseSensitive: Bool, ctcMinSimilarity: Float?)]) {
+        addEntries(items.map {
+            (type: $0.type, original: $0.original, replacement: $0.replacement,
+             caseSensitive: $0.caseSensitive, ctcMinSimilarity: $0.ctcMinSimilarity,
+             source: DictionaryEntrySource.manual)
+        })
+    }
+
+    /// Batch add multiple entries with a single save+reload
+    func addEntries(_ items: [(type: DictionaryEntryType, original: String, replacement: String?, caseSensitive: Bool, ctcMinSimilarity: Float?, source: DictionaryEntrySource)]) {
         guard let context = modelContext, !items.isEmpty else { return }
 
         var existingOriginals = Set(entries.map { "\($0.type.rawValue):\($0.original.lowercased())" })
@@ -237,6 +248,7 @@ final class DictionaryService: ObservableObject {
                 replacement: item.replacement,
                 caseSensitive: item.caseSensitive,
                 ctcMinSimilarity: Self.normalizedCtcMinSimilarity(item.type == .term ? item.ctcMinSimilarity : nil),
+                source: item.source,
                 createdAt: now,
                 updatedAt: now
             )
@@ -262,6 +274,15 @@ final class DictionaryService: ObservableObject {
 
     /// Import entries preserving all fields including isEnabled state
     func importEntries(_ items: [(type: DictionaryEntryType, original: String, replacement: String?, caseSensitive: Bool, isEnabled: Bool, ctcMinSimilarity: Float?)]) {
+        importEntries(items.map {
+            (type: $0.type, original: $0.original, replacement: $0.replacement,
+             caseSensitive: $0.caseSensitive, isEnabled: $0.isEnabled,
+             ctcMinSimilarity: $0.ctcMinSimilarity, source: DictionaryEntrySource.manual)
+        })
+    }
+
+    /// Import entries preserving all fields including isEnabled state
+    func importEntries(_ items: [(type: DictionaryEntryType, original: String, replacement: String?, caseSensitive: Bool, isEnabled: Bool, ctcMinSimilarity: Float?, source: DictionaryEntrySource)]) {
         guard let context = modelContext, !items.isEmpty else { return }
 
         var existingOriginals = Set(entries.map { "\($0.type.rawValue):\($0.original.lowercased())" })
@@ -278,6 +299,7 @@ final class DictionaryService: ObservableObject {
                 caseSensitive: item.caseSensitive,
                 isEnabled: item.isEnabled,
                 ctcMinSimilarity: Self.normalizedCtcMinSimilarity(item.type == .term ? item.ctcMinSimilarity : nil),
+                source: item.source,
                 createdAt: now,
                 updatedAt: now
             )
@@ -655,6 +677,7 @@ final class DictionaryService: ObservableObject {
                 original: original,
                 replacement: replacement,
                 caseSensitive: false,
+                source: .autoLearned,
                 createdAt: now,
                 updatedAt: now
             )
@@ -720,6 +743,7 @@ final class DictionaryService: ObservableObject {
             entry.replacement = replacement
             entry.caseSensitive = caseSensitive
             entry.isEnabled = true
+            entry.source = .manual
             entry.updatedAt = Date()
         } else {
             let now = Date()
@@ -729,6 +753,7 @@ final class DictionaryService: ObservableObject {
                 replacement: replacement,
                 caseSensitive: caseSensitive,
                 isEnabled: true,
+                source: .manual,
                 createdAt: now,
                 updatedAt: now
             )
@@ -787,6 +812,7 @@ final class DictionaryService: ObservableObject {
                 replacement: entry.type == .correction ? (entry.replacement ?? "") : nil,
                 caseSensitive: entry.caseSensitive,
                 isEnabled: entry.isEnabled,
+                source: entry.source == .manual ? nil : entry.source,
                 createdAt: entry.createdAt,
                 updatedAt: entry.effectiveUpdatedAt
             )
@@ -832,6 +858,7 @@ final class DictionaryService: ObservableObject {
             entry.replacement = replacement
             entry.caseSensitive = synced.caseSensitive
             entry.isEnabled = synced.isEnabled
+            entry.source = synced.source ?? .manual
             entry.updatedAt = synced.updatedAt
             return
         }
@@ -842,6 +869,7 @@ final class DictionaryService: ObservableObject {
             replacement: replacement,
             caseSensitive: synced.caseSensitive,
             isEnabled: synced.isEnabled,
+            source: synced.source ?? .manual,
             createdAt: synced.createdAt,
             updatedAt: synced.updatedAt
         ))
