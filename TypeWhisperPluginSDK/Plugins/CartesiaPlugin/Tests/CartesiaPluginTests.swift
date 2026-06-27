@@ -338,6 +338,36 @@ final class CartesiaPluginTests: XCTestCase {
         XCTAssertTrue(body.contains("name=\"language\"\r\n\r\nen"))
     }
 
+    func testTranscribeFallsBackToWavWhenM4AEncodingFails() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "sk_car_live"])
+        let plugin = CartesiaPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"type":"transcript","text":"Hello from wav","language":"en","words":[]}"#.utf8),
+                    Self.httpResponse(url: "https://api.cartesia.ai/stt", statusCode: 200)
+                )
+            ])
+        }
+
+        let result = try await plugin.transcribe(
+            audio: AudioData(samples: [], wavData: Data("fallback-wav".utf8), duration: 1),
+            language: nil,
+            translate: false,
+            prompt: nil
+        )
+
+        XCTAssertEqual(result.text, "Hello from wav")
+        let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
+        let body = try XCTUnwrap(String(data: try XCTUnwrap(request.httpBody), encoding: .utf8))
+        XCTAssertTrue(body.contains(#"name="file"; filename="audio.wav""#))
+        XCTAssertTrue(body.contains("Content-Type: audio/wav"))
+        XCTAssertTrue(body.contains("fallback-wav"))
+    }
+
     func testTranscribeUsesConfiguredEnglishLanguageWhenSelected() async throws {
         let host = try PluginTestHostServices(
             defaults: ["transcriptionLanguage": "en"],

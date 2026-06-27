@@ -127,6 +127,39 @@ final class OpenAITranscriptionHelperTests: XCTestCase {
         XCTAssertTrue(String(decoding: upload.data.prefix(64), as: UTF8.self).contains("ftyp"))
     }
 
+    func testWavFallbackRetryClassifierRequiresMediaFormatRejectionFor400And422() {
+        XCTAssertTrue(
+            PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+                statusCode: 400,
+                responseData: Data(#"{"error":"unsupported audio format"}"#.utf8)
+            )
+        )
+        XCTAssertTrue(
+            PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+                statusCode: 422,
+                responseData: Data(#"{"error":"invalid MIME type audio/mp4"}"#.utf8)
+            )
+        )
+        XCTAssertTrue(
+            PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+                statusCode: 415,
+                responseData: Data(#"{"error":"bad upload"}"#.utf8)
+            )
+        )
+        XCTAssertFalse(
+            PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+                statusCode: 400,
+                responseData: Data(#"{"error":"file too large"}"#.utf8)
+            )
+        )
+        XCTAssertFalse(
+            PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+                statusCode: 422,
+                responseData: Data(#"{"error":"audio too short"}"#.utf8)
+            )
+        )
+    }
+
     func testTranscribeCustomTimeoutAppliesToUploadRequest() async throws {
         let store = OpenAITranscriptionMockSessionStore()
         PluginHTTPClient.configureForTesting { _ in

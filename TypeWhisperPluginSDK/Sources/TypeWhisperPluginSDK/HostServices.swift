@@ -328,11 +328,15 @@ public enum PluginAudioUploadEncoder {
 
     private static func indicatesUnsupportedAudioUpload(_ message: String) -> Bool {
         let lowercased = message.lowercased()
-        let formatTerms = [
-            "unsupported", "format", "media", "mime", "content-type", "content type",
-            "audio", "file", "codec", "container", "m4a", "mp4", "aac",
+        let rejectionTerms = [
+            "unsupported", "not supported", "does not support", "invalid", "unrecognized", "unknown",
         ]
-        return formatTerms.contains { lowercased.contains($0) }
+        let mediaTerms = [
+            "format", "media", "mime", "content-type", "content type",
+            "codec", "container", "file type", "m4a", "mp4", "aac", "wav",
+        ]
+        return rejectionTerms.contains { lowercased.contains($0) }
+            && mediaTerms.contains { lowercased.contains($0) }
     }
 
     private static func compressedM4AData(from samples: [Float]) throws -> Data {

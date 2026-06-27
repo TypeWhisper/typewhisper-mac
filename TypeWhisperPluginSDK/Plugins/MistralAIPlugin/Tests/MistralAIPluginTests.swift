@@ -112,6 +112,7 @@ final class MistralAIPluginTests: XCTestCase {
         XCTAssertEqual(result.text, "bonjour")
         let requests = store.sessions[0].requestedRequests
         XCTAssertEqual(requests.count, 2)
+        XCTAssertEqual(requests.map(\.timeoutInterval), [120, 120])
         let firstBody = String(decoding: try XCTUnwrap(requests[0].httpBody), as: UTF8.self)
         XCTAssertTrue(firstBody.contains(#"filename="audio.m4a""#))
         XCTAssertTrue(firstBody.contains("Content-Type: audio/mp4"))

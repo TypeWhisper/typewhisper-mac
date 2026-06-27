@@ -399,8 +399,10 @@ final class CartesiaPlugin: NSObject,
             languageHints: languageHints,
             configuredLanguage: _transcriptionLanguage
         )
+        let uploadFile = (try? PluginAudioUploadEncoder.compressedM4AUpload(from: audio))
+            ?? PluginAudioUploadEncoder.wavUpload(from: audio)
         let request = try Self.makeTranscriptionRequest(
-            uploadFile: try PluginAudioUploadEncoder.compressedM4AUpload(from: audio),
+            uploadFile: uploadFile,
             apiKey: apiKey,
             modelId: Self.sttModelId,
             language: resolvedLanguage

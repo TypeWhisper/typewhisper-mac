@@ -228,6 +228,7 @@ struct MistralAPIClient {
             request.httpMethod = "POST"
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
             request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+            request.timeoutInterval = 120
 
             var body = Data()
             body.append("--\(boundary)\r\n".data(using: .utf8)!)
