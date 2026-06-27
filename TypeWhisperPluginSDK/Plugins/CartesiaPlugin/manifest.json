@@ -2,7 +2,7 @@
     "id": "com.typewhisper.cartesia",
     "name": "Cartesia",
     "version": "1.0.0",
-    "minHostVersion": "1.4.0",
+    "minHostVersion": "1.5.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
