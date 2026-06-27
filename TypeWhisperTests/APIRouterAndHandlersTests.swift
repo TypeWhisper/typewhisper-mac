@@ -3185,6 +3185,49 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    func testPreserveClipboardFallsBackToSyntheticPasteWhenDirectAXOnlyMovesSelection() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { element }
+        service.verifiedRestoreGraceDelay = .milliseconds(1)
+
+        var didAttemptDirectAXInsertion = false
+        var pasteCount = 0
+        service.focusedTextStateOverride = { _ in
+            if pasteCount > 0 {
+                return (value: "Hello", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
+            }
+            if didAttemptDirectAXInsertion {
+                return (value: "", selectedText: nil, selectedRange: NSRange(location: 1, length: 0))
+            }
+            return (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+        }
+
+        var insertedText: String?
+        service.insertTextAtOverride = { _, text in
+            insertedText = text
+            didAttemptDirectAXInsertion = true
+            return true
+        }
+        service.pasteSimulatorOverride = {
+            pasteCount += 1
+        }
+
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+
+        let result = try await service.insertText("Hello", preserveClipboard: true)
+
+        XCTAssertEqual(insertedText, "Hello")
+        XCTAssertEqual(pasteCount, 1)
+        XCTAssertEqual(result, .pasted(verification: .verified))
+        XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
     func testAutoEnterSkipsReturnWithoutFocusedTextField() async throws {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard.withUniqueName()

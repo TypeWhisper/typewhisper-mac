@@ -420,18 +420,11 @@ final class TextInsertionService {
               let currentState = captureFocusedTextState(for: element) else {
             return false
         }
-        return Self.focusedTextDidChange(
-            from: (
-                value: initialState.value,
-                selectedText: initialState.selectedText,
-                selectedRange: initialState.selectedRange
-            ),
-            to: (
-                value: currentState.value,
-                selectedText: currentState.selectedText,
-                selectedRange: currentState.selectedRange
-            )
-        )
+        guard let initialValue = initialState.value,
+              let currentValue = currentState.value else {
+            return false
+        }
+        return initialValue != currentValue
     }
 
     /// Saves all current clipboard contents for later restoration.
