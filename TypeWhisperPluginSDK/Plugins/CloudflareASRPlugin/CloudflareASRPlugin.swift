@@ -102,51 +102,62 @@ final class CloudflareASRPlugin: NSObject, TranscriptionEnginePlugin, Dictionary
             throw PluginTranscriptionError.apiError("Invalid URL: \(endpoint)")
         }
 
-        let boundary = UUID().uuidString
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 30
+        func perform(uploadFile: PluginAudioUploadFile) async throws -> (Data, HTTPURLResponse) {
+            let boundary = UUID().uuidString
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+            request.timeoutInterval = 30
 
-        // Cloudflare tunnel service token headers
-        if let cfId = _cfClientId, !cfId.isEmpty,
-           let cfSecret = _cfClientSecret, !cfSecret.isEmpty {
-            request.setValue(cfId, forHTTPHeaderField: "CF-Access-Client-Id")
-            request.setValue(cfSecret, forHTTPHeaderField: "CF-Access-Client-Secret")
+            // Cloudflare tunnel service token headers
+            if let cfId = _cfClientId, !cfId.isEmpty,
+               let cfSecret = _cfClientSecret, !cfSecret.isEmpty {
+                request.setValue(cfId, forHTTPHeaderField: "CF-Access-Client-Id")
+                request.setValue(cfSecret, forHTTPHeaderField: "CF-Access-Client-Secret")
+            }
+
+            // Optional Bearer token for the upstream API
+            if let apiKey = _apiKey, !apiKey.isEmpty {
+                request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+            }
+
+            var body = Data()
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(uploadFile.filename)\"\r\n".data(using: .utf8)!)
+            body.append("Content-Type: \(uploadFile.contentType)\r\n\r\n".data(using: .utf8)!)
+            body.append(uploadFile.data)
+            body.append("\r\n".data(using: .utf8)!)
+
+            body.cfAppendFormField(boundary: boundary, name: "model", value: modelId)
+            body.cfAppendFormField(boundary: boundary, name: "response_format", value: "json")
+
+            if !translate, let language, !language.isEmpty {
+                body.cfAppendFormField(boundary: boundary, name: "language", value: language)
+            }
+
+            if let prompt, !prompt.isEmpty {
+                body.cfAppendFormField(boundary: boundary, name: "prompt", value: prompt)
+            }
+
+            body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+            request.httpBody = body
+
+            let (responseData, response) = try await PluginHTTPClient.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw PluginTranscriptionError.networkError("Invalid response")
+            }
+            return (responseData, httpResponse)
         }
 
-        // Optional Bearer token for the upstream API
-        if let apiKey = _apiKey, !apiKey.isEmpty {
-            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        }
-
-        // Multipart form body
-        var body = Data()
-
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
-        body.append(audio.wavData)
-        body.append("\r\n".data(using: .utf8)!)
-
-        body.cfAppendFormField(boundary: boundary, name: "model", value: modelId)
-        body.cfAppendFormField(boundary: boundary, name: "response_format", value: "json")
-
-        if !translate, let language, !language.isEmpty {
-            body.cfAppendFormField(boundary: boundary, name: "language", value: language)
-        }
-
-        if let prompt, !prompt.isEmpty {
-            body.cfAppendFormField(boundary: boundary, name: "prompt", value: prompt)
-        }
-
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-        request.httpBody = body
-
-        let (responseData, response) = try await PluginHTTPClient.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw PluginTranscriptionError.networkError("Invalid response")
+        let preferredUpload = (try? PluginAudioUploadEncoder.compressedM4AUpload(from: audio))
+            ?? PluginAudioUploadEncoder.wavUpload(from: audio)
+        var (responseData, httpResponse) = try await perform(uploadFile: preferredUpload)
+        if preferredUpload.format != "wav",
+           PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+            statusCode: httpResponse.statusCode,
+            responseData: responseData
+           ) {
+            (responseData, httpResponse) = try await perform(uploadFile: PluginAudioUploadEncoder.wavUpload(from: audio))
         }
 
         switch httpResponse.statusCode {

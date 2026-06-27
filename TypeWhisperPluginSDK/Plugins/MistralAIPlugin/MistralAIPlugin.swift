@@ -221,44 +221,58 @@ struct MistralAPIClient {
         guard let url = URL(string: "https://api.mistral.ai/v1/audio/transcriptions") else {
             throw MistralAPIError.invalidURL
         }
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        
-        let boundary = UUID().uuidString
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        
-        var body = Data()
-        let filename = "audio.wav"
-        let mimeType = "audio/wav"
-        
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)
-        body.append(audio.wavData)
-        body.append("\r\n".data(using: .utf8)!)
-        
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"model\"\r\n\r\n".data(using: .utf8)!)
-        body.append("\(model)\r\n".data(using: .utf8)!)
 
-        
-        if let language = language {
+        func makeRequest(uploadFile: PluginAudioUploadFile) -> URLRequest {
+            let boundary = UUID().uuidString
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+            request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+            var body = Data()
             body.append("--\(boundary)\r\n".data(using: .utf8)!)
-            body.append("Content-Disposition: form-data; name=\"language\"\r\n\r\n".data(using: .utf8)!)
-            body.append("\(language)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(uploadFile.filename)\"\r\n".data(using: .utf8)!)
+            body.append("Content-Type: \(uploadFile.contentType)\r\n\r\n".data(using: .utf8)!)
+            body.append(uploadFile.data)
+            body.append("\r\n".data(using: .utf8)!)
+
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"model\"\r\n\r\n".data(using: .utf8)!)
+            body.append("\(model)\r\n".data(using: .utf8)!)
+
+            if let language = language {
+                body.append("--\(boundary)\r\n".data(using: .utf8)!)
+                body.append("Content-Disposition: form-data; name=\"language\"\r\n\r\n".data(using: .utf8)!)
+                body.append("\(language)\r\n".data(using: .utf8)!)
+            }
+
+            body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+            request.httpBody = body
+            return request
         }
-        
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-        request.httpBody = body
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
+
+        let preferredUpload = (try? PluginAudioUploadEncoder.compressedM4AUpload(from: audio))
+            ?? PluginAudioUploadEncoder.wavUpload(from: audio)
+        var (data, response) = try await PluginHTTPClient.data(for: makeRequest(uploadFile: preferredUpload))
+
+        guard var httpResponse = response as? HTTPURLResponse else {
             throw MistralAPIError.invalidResponse
         }
-        
+
+        if preferredUpload.format != "wav",
+           PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+            statusCode: httpResponse.statusCode,
+            responseData: data
+           ) {
+            (data, response) = try await PluginHTTPClient.data(
+                for: makeRequest(uploadFile: PluginAudioUploadEncoder.wavUpload(from: audio))
+            )
+            guard let retryResponse = response as? HTTPURLResponse else {
+                throw MistralAPIError.invalidResponse
+            }
+            httpResponse = retryResponse
+        }
+
         if httpResponse.statusCode == 200 {
             guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let text = json["text"] as? String else {

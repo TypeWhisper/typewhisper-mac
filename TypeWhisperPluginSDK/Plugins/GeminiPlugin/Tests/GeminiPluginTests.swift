@@ -159,7 +159,7 @@ final class GeminiPluginTests: XCTestCase {
 
     func testTranscriptionRequestUsesGenerateContentJSONAudioPromptAndLanguage() throws {
         let request = try GeminiPlugin.makeTranscriptionRequest(
-            audio: Self.audio(),
+            uploadFile: Self.m4aUpload(),
             apiKey: "gemini-key",
             modelId: "gemini-flash-lite-latest",
             language: " de ",
@@ -187,8 +187,8 @@ final class GeminiPluginTests: XCTestCase {
         XCTAssertTrue(promptText.contains("Language hint: de"))
 
         let inlineData = try XCTUnwrap(parts.last?["inlineData"] as? [String: Any])
-        XCTAssertEqual(inlineData["mimeType"] as? String, "audio/wav")
-        XCTAssertEqual(inlineData["data"] as? String, Data("wav".utf8).base64EncodedString())
+        XCTAssertEqual(inlineData["mimeType"] as? String, "audio/mp4")
+        XCTAssertEqual(inlineData["data"] as? String, Data("m4a".utf8).base64EncodedString())
 
         let generationConfig = try XCTUnwrap(body["generationConfig"] as? [String: Any])
         XCTAssertEqual(generationConfig["temperature"] as? Double, 0.2)
@@ -199,7 +199,7 @@ final class GeminiPluginTests: XCTestCase {
 
     func testPinnedGeminiThreeTranscriptionRequestUsesMinimalThinkingLevel() throws {
         let request = try GeminiPlugin.makeTranscriptionRequest(
-            audio: Self.audio(),
+            uploadFile: Self.m4aUpload(),
             apiKey: "gemini-key",
             modelId: "gemini-3.1-flash-lite",
             language: nil,
@@ -217,7 +217,7 @@ final class GeminiPluginTests: XCTestCase {
 
     func testPinnedGeminiTwoPointFiveTranscriptionRequestUsesZeroThinkingBudget() throws {
         let request = try GeminiPlugin.makeTranscriptionRequest(
-            audio: Self.audio(),
+            uploadFile: Self.m4aUpload(),
             apiKey: "gemini-key",
             modelId: "gemini-2.5-flash",
             language: nil,
@@ -235,7 +235,7 @@ final class GeminiPluginTests: XCTestCase {
 
     func testTranscriptionRequestOmitsEmptyLanguageAndDictionaryTerms() throws {
         let request = try GeminiPlugin.makeTranscriptionRequest(
-            audio: Self.audio(),
+            uploadFile: Self.m4aUpload(),
             apiKey: "gemini-key",
             modelId: "gemini-flash-lite-latest",
             language: " ",
@@ -349,6 +349,68 @@ final class GeminiPluginTests: XCTestCase {
         let parts = try XCTUnwrap(contents.first?["parts"] as? [[String: Any]])
         let promptText = try XCTUnwrap(parts.first?["text"] as? String)
         XCTAssertTrue(promptText.contains("TypeWhisper, Qwen3"))
+        let inlineData = try XCTUnwrap(parts.last?["inlineData"] as? [String: Any])
+        XCTAssertEqual(inlineData["mimeType"] as? String, "audio/mp4")
+    }
+
+    func testTranscribeRetriesWithWavWhenM4AIsRejected() async throws {
+        let host = try PluginTestHostServices(
+            defaults: [
+                Self.cachedLLMModelsKey: try Self.cachedModelsData(),
+                "selectedModel": "gemini-flash-lite-latest",
+            ],
+            secrets: ["api-key": "gemini-key"]
+        )
+        let plugin = GeminiPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"error":{"message":"unsupported audio format"}}"#.utf8),
+                    Self.httpResponse(url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent", statusCode: 415)
+                ),
+                .success(
+                    Data(
+                        """
+                        {
+                          "candidates": [
+                            {
+                              "content": {
+                                "parts": [
+                                  { "text": " fallback transcript " }
+                                ]
+                              }
+                            }
+                          ]
+                        }
+                        """.utf8
+                    ),
+                    Self.httpResponse(url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent", statusCode: 200)
+                ),
+            ])
+        }
+
+        let result = try await plugin.transcribe(
+            audio: Self.audio(),
+            language: "de",
+            translate: false,
+            prompt: "TypeWhisper"
+        )
+
+        XCTAssertEqual(result.text, "fallback transcript")
+        let requests = store.sessions[0].requestedRequests
+        XCTAssertEqual(requests.count, 2)
+        let firstBody = try Self.jsonBody(from: requests[0])
+        let firstParts = try XCTUnwrap((firstBody["contents"] as? [[String: Any]])?.first?["parts"] as? [[String: Any]])
+        XCTAssertEqual((firstParts.last?["inlineData"] as? [String: Any])?["mimeType"] as? String, "audio/mp4")
+        let retryBody = try Self.jsonBody(from: requests[1])
+        let retryParts = try XCTUnwrap((retryBody["contents"] as? [[String: Any]])?.first?["parts"] as? [[String: Any]])
+        XCTAssertEqual((retryParts.last?["inlineData"] as? [String: Any])?["mimeType"] as? String, "audio/wav")
+        let retryPrompt = try XCTUnwrap(retryParts.first?["text"] as? String)
+        XCTAssertTrue(retryPrompt.contains("TypeWhisper"))
+        XCTAssertTrue(retryPrompt.contains("Language hint: de"))
     }
 
     func testTranscriptionHTTPErrorMapping() {
@@ -395,7 +457,17 @@ final class GeminiPluginTests: XCTestCase {
     }
 
     private static func audio() -> AudioData {
-        AudioData(samples: [0], wavData: Data("wav".utf8), duration: 1)
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        return AudioData(samples: samples, wavData: PluginWavEncoder.encode(samples), duration: 1)
+    }
+
+    private static func m4aUpload() -> PluginAudioUploadFile {
+        PluginAudioUploadFile(
+            data: Data("m4a".utf8),
+            filename: "audio.m4a",
+            contentType: "audio/mp4",
+            format: "m4a"
+        )
     }
 
     private static func jsonBody(from request: URLRequest) throws -> [String: Any] {

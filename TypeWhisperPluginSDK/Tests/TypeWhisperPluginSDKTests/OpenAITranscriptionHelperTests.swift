@@ -97,6 +97,36 @@ final class OpenAITranscriptionHelperTests: XCTestCase {
         XCTAssertEqual(normalized.wavData, wavData)
     }
 
+    func testPluginAudioUploadEncoderCreatesWavUploadMetadata() {
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        let audio = AudioData(
+            samples: samples,
+            wavData: PluginWavEncoder.encode(samples),
+            duration: 1.0
+        )
+
+        let upload = PluginAudioUploadEncoder.wavUpload(from: audio)
+
+        XCTAssertEqual(upload.filename, "audio.wav")
+        XCTAssertEqual(upload.contentType, "audio/wav")
+        XCTAssertEqual(upload.format, "wav")
+        XCTAssertEqual(String(data: upload.data.prefix(4), encoding: .utf8), "RIFF")
+    }
+
+    func testPluginAudioUploadEncoderCreatesCompressedM4AUpload() throws {
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        let wavData = PluginWavEncoder.encode(samples)
+
+        let upload = try PluginAudioUploadEncoder.compressedM4AUpload(from: samples)
+
+        XCTAssertEqual(upload.filename, "audio.m4a")
+        XCTAssertEqual(upload.contentType, "audio/mp4")
+        XCTAssertEqual(upload.format, "m4a")
+        XCTAssertTrue(upload.data.count > 0)
+        XCTAssertLessThan(upload.data.count, wavData.count)
+        XCTAssertTrue(String(decoding: upload.data.prefix(64), as: UTF8.self).contains("ftyp"))
+    }
+
     func testTranscribeCustomTimeoutAppliesToUploadRequest() async throws {
         let store = OpenAITranscriptionMockSessionStore()
         PluginHTTPClient.configureForTesting { _ in
@@ -151,14 +181,103 @@ final class OpenAITranscriptionHelperTests: XCTestCase {
 
         XCTAssertTrue(store.sessions.isEmpty)
     }
+
+    func testCompressedAudioWithWavFallbackRetriesUnsupportedMediaAndPreservesFields() async throws {
+        let store = OpenAITranscriptionMockSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"error":"unsupported audio format"}"#.utf8),
+                    415
+                ),
+                .success(
+                    Data(#"{"text":"fallback ok","language":"de"}"#.utf8),
+                    200
+                ),
+            ])
+        }
+
+        let helper = PluginOpenAITranscriptionHelper(baseURL: "https://example.test", responseFormat: "json")
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        let audio = AudioData(
+            samples: samples,
+            wavData: PluginWavEncoder.encode(samples),
+            duration: 1.0
+        )
+
+        let result = try await helper.transcribeCompressedAudioWithWavFallback(
+            audio: audio,
+            apiKey: "test-key",
+            modelName: "whisper-1",
+            language: "de",
+            translate: false,
+            prompt: "TypeWhisper",
+            requestTimeout: 600
+        )
+
+        XCTAssertEqual(result.text, "fallback ok")
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertEqual(requests.map(\.timeoutInterval), [600, 600])
+
+        let firstBody = String(decoding: try XCTUnwrap(requests[0].httpBody), as: UTF8.self)
+        XCTAssertTrue(firstBody.contains(#"filename="audio.m4a""#))
+        XCTAssertTrue(firstBody.contains("Content-Type: audio/mp4"))
+
+        let retryBody = String(decoding: try XCTUnwrap(requests[1].httpBody), as: UTF8.self)
+        XCTAssertTrue(retryBody.contains(#"filename="audio.wav""#))
+        XCTAssertTrue(retryBody.contains("Content-Type: audio/wav"))
+        XCTAssertTrue(retryBody.contains("name=\"model\"\r\n\r\nwhisper-1"))
+        XCTAssertTrue(retryBody.contains("name=\"language\"\r\n\r\nde"))
+        XCTAssertTrue(retryBody.contains("name=\"prompt\"\r\n\r\nTypeWhisper"))
+    }
+
+    func testCompressedAudioWithWavFallbackDoesNotRetryAuthFailure() async throws {
+        let store = OpenAITranscriptionMockSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            store.makeSession(outcomes: [
+                .success(Data(#"{"error":"bad key"}"#.utf8), 401),
+                .success(Data(#"{"text":"should not retry"}"#.utf8), 200),
+            ])
+        }
+
+        let helper = PluginOpenAITranscriptionHelper(baseURL: "https://example.test", responseFormat: "json")
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        let audio = AudioData(
+            samples: samples,
+            wavData: PluginWavEncoder.encode(samples),
+            duration: 1.0
+        )
+
+        do {
+            _ = try await helper.transcribeCompressedAudioWithWavFallback(
+                audio: audio,
+                apiKey: "bad-key",
+                modelName: "whisper-1",
+                language: nil,
+                translate: false,
+                prompt: nil,
+                requestTimeout: 600
+            )
+            XCTFail("Expected invalid API key")
+        } catch PluginTranscriptionError.invalidApiKey {
+            // Expected
+        }
+
+        XCTAssertEqual(store.sessions.first?.requestedRequests.count, 1)
+    }
 }
 
 private final class OpenAITranscriptionMockSessionStore: @unchecked Sendable {
     private let lock = NSLock()
     private(set) var sessions: [OpenAITranscriptionMockSession] = []
 
-    func makeSession() -> OpenAITranscriptionMockSession {
-        let session = OpenAITranscriptionMockSession()
+    func makeSession(
+        outcomes: [OpenAITranscriptionMockSession.Outcome] = [
+            .success(Data(#"{"text":"ok","language":"en"}"#.utf8), 200),
+        ]
+    ) -> OpenAITranscriptionMockSession {
+        let session = OpenAITranscriptionMockSession(outcomes: outcomes)
         lock.withLock {
             sessions.append(session)
         }
@@ -167,21 +286,40 @@ private final class OpenAITranscriptionMockSessionStore: @unchecked Sendable {
 }
 
 private final class OpenAITranscriptionMockSession: PluginHTTPClientSession, @unchecked Sendable {
+    enum Outcome {
+        case success(Data, Int)
+        case failure(Error)
+    }
+
     private let lock = NSLock()
+    private var outcomes: [Outcome]
     private(set) var requestedRequests: [URLRequest] = []
 
+    init(outcomes: [Outcome]) {
+        self.outcomes = outcomes
+    }
+
     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
-        lock.withLock {
+        let outcome = lock.withLock {
             requestedRequests.append(request)
+            if outcomes.count > 1 {
+                return outcomes.removeFirst()
+            }
+            return outcomes.first ?? .failure(URLError(.badServerResponse))
         }
 
-        let response = HTTPURLResponse(
-            url: request.url!,
-            statusCode: 200,
-            httpVersion: nil,
-            headerFields: nil
-        )!
-        return (Data(#"{"text":"ok","language":"en"}"#.utf8), response)
+        switch outcome {
+        case .success(let data, let statusCode):
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: statusCode,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (data, response)
+        case .failure(let error):
+            throw error
+        }
     }
 
     func finishTasksAndInvalidate() {}

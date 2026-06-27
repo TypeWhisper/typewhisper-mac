@@ -475,11 +475,13 @@ final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
         queryItems.append(contentsOf: Self.dictionaryQueryItems(prompt: prompt, modelId: modelId))
         components.queryItems = queryItems
 
+        let uploadFile = try PluginAudioUploadEncoder.compressedM4AUpload(from: audio)
+
         var request = URLRequest(url: components.url!)
         request.httpMethod = "POST"
         request.setValue(authHeaderValue(apiKey: apiKey), forHTTPHeaderField: effectiveAuthHeader)
-        request.setValue("audio/wav", forHTTPHeaderField: "Content-Type")
-        request.httpBody = audio.wavData
+        request.setValue(uploadFile.contentType, forHTTPHeaderField: "Content-Type")
+        request.httpBody = uploadFile.data
         request.timeoutInterval = 60
 
         let (data, response) = try await PluginHTTPClient.data(for: request)

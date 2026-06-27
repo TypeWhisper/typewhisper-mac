@@ -215,6 +215,49 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         XCTAssertEqual(result.text, "hello")
         XCTAssertEqual(store.sessions[0].requestedPaths, ["/v1/audio/transcriptions"])
         XCTAssertEqual(store.sessions[0].requestedRequests.first?.timeoutInterval, 600)
+        let body = String(decoding: try XCTUnwrap(store.sessions[0].requestedRequests.first?.httpBody), as: UTF8.self)
+        XCTAssertTrue(body.contains(#"filename="audio.m4a""#))
+        XCTAssertTrue(body.contains("Content-Type: audio/mp4"))
+    }
+
+    func testTranscribeRetriesWithWavWhenCompatibleServerRejectsM4A() async throws {
+        let host = try PluginTestHostServices(
+            defaults: [
+                "baseURL": "https://example.test",
+                "selectedModel": "large-v3",
+            ]
+        )
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"error":"unsupported audio format"}"#.utf8),
+                    Self.httpResponse(url: "https://example.test/v1/audio/transcriptions", statusCode: 415)
+                ),
+                .success(
+                    Data(#"{"text":"fallback hello"}"#.utf8),
+                    Self.httpResponse(url: "https://example.test/v1/audio/transcriptions", statusCode: 200)
+                ),
+            ])
+        }
+
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        let audio = AudioData(samples: samples, wavData: PluginWavEncoder.encode(samples), duration: 1.0)
+        let result = try await plugin.transcribe(audio: audio, language: "de", translate: false, prompt: "TypeWhisper")
+
+        XCTAssertEqual(result.text, "fallback hello")
+        let requests = store.sessions[0].requestedRequests
+        XCTAssertEqual(requests.count, 2)
+        let firstBody = String(decoding: try XCTUnwrap(requests[0].httpBody), as: UTF8.self)
+        XCTAssertTrue(firstBody.contains(#"filename="audio.m4a""#))
+        let retryBody = String(decoding: try XCTUnwrap(requests[1].httpBody), as: UTF8.self)
+        XCTAssertTrue(retryBody.contains(#"filename="audio.wav""#))
+        XCTAssertTrue(retryBody.contains("name=\"model\"\r\n\r\nlarge-v3"))
+        XCTAssertTrue(retryBody.contains("name=\"language\"\r\n\r\nde"))
+        XCTAssertTrue(retryBody.contains("name=\"prompt\"\r\n\r\nTypeWhisper"))
     }
 
     func testProfileSpecificTranscriptionUsesSeparateCredentialsAndURLs() async throws {

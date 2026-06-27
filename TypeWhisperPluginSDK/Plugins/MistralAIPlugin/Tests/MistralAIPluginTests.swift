@@ -4,6 +4,10 @@ import TypeWhisperPluginSDK
 @testable import MistralAIPlugin
 
 final class MistralAIPluginTests: XCTestCase {
+    override func tearDown() {
+        PluginHTTPClientTestHarness.reset()
+        super.tearDown()
+    }
 
     func testMistralAIPluginAdvertisesProtocols() {
         let plugin: Any = MistralAIPlugin()
@@ -80,5 +84,50 @@ final class MistralAIPluginTests: XCTestCase {
         plugin.selectLLMModel("pixtral-12b-2409")
         
         XCTAssertEqual(selectable.preferredModelId ?? nil, "pixtral-12b-2409")
+    }
+
+    func testTranscriptionRetriesWithWavWhenM4AIsRejected() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "mistral-key"])
+        let plugin = MistralAIPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"message":"unsupported audio format"}"#.utf8),
+                    Self.httpResponse(url: "https://api.mistral.ai/v1/audio/transcriptions", statusCode: 415)
+                ),
+                .success(
+                    Data(#"{"text":"bonjour"}"#.utf8),
+                    Self.httpResponse(url: "https://api.mistral.ai/v1/audio/transcriptions", statusCode: 200)
+                ),
+            ])
+        }
+
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        let audio = AudioData(samples: samples, wavData: PluginWavEncoder.encode(samples), duration: 1.0)
+        let result = try await plugin.transcribe(audio: audio, language: "fr", translate: false, prompt: nil)
+
+        XCTAssertEqual(result.text, "bonjour")
+        let requests = store.sessions[0].requestedRequests
+        XCTAssertEqual(requests.count, 2)
+        let firstBody = String(decoding: try XCTUnwrap(requests[0].httpBody), as: UTF8.self)
+        XCTAssertTrue(firstBody.contains(#"filename="audio.m4a""#))
+        XCTAssertTrue(firstBody.contains("Content-Type: audio/mp4"))
+        let retryBody = String(decoding: try XCTUnwrap(requests[1].httpBody), as: UTF8.self)
+        XCTAssertTrue(retryBody.contains(#"filename="audio.wav""#))
+        XCTAssertTrue(retryBody.contains("Content-Type: audio/wav"))
+        XCTAssertTrue(retryBody.contains("name=\"model\"\r\n\r\nvoxtral-mini-latest"))
+        XCTAssertTrue(retryBody.contains("name=\"language\"\r\n\r\nfr"))
+    }
+
+    private static func httpResponse(url: String, statusCode: Int) -> HTTPURLResponse {
+        HTTPURLResponse(
+            url: URL(string: url)!,
+            statusCode: statusCode,
+            httpVersion: nil,
+            headerFields: nil
+        )!
     }
 }

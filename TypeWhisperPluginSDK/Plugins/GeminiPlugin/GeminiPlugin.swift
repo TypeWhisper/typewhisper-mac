@@ -224,15 +224,33 @@ final class GeminiPlugin: NSObject,
             throw PluginTranscriptionError.noModelSelected
         }
 
-        let request = try Self.makeTranscriptionRequest(
-            audio: audio,
+        let preferredUpload = (try? PluginAudioUploadEncoder.compressedM4AUpload(from: audio))
+            ?? PluginAudioUploadEncoder.wavUpload(from: audio)
+        var request = try Self.makeTranscriptionRequest(
+            uploadFile: preferredUpload,
             apiKey: apiKey,
             modelId: modelId,
             language: language,
             prompt: prompt,
             timeout: Self.transcriptionRequestTimeout
         )
-        let (data, response) = try await PluginHTTPClient.data(for: request)
+        var (data, response) = try await PluginHTTPClient.data(for: request)
+        if let httpResponse = response as? HTTPURLResponse,
+           preferredUpload.format != "wav",
+           PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+            statusCode: httpResponse.statusCode,
+            responseData: data
+           ) {
+            request = try Self.makeTranscriptionRequest(
+                uploadFile: PluginAudioUploadEncoder.wavUpload(from: audio),
+                apiKey: apiKey,
+                modelId: modelId,
+                language: language,
+                prompt: prompt,
+                timeout: Self.transcriptionRequestTimeout
+            )
+            (data, response) = try await PluginHTTPClient.data(for: request)
+        }
         try Self.validateTranscriptionResponse(data: data, response: response)
         let text = try Self.parseTranscriptionResponse(data)
         return PluginTranscriptionResult(text: text, detectedLanguage: language)
@@ -256,7 +274,7 @@ final class GeminiPlugin: NSObject,
     }
 
     static func makeTranscriptionRequest(
-        audio: AudioData,
+        uploadFile: PluginAudioUploadFile,
         apiKey: String,
         modelId: String,
         language: String?,
@@ -275,8 +293,8 @@ final class GeminiPlugin: NSObject,
                     ["text": renderedPrompt],
                     [
                         "inlineData": [
-                            "mimeType": "audio/wav",
-                            "data": audio.wavData.base64EncodedString(),
+                            "mimeType": uploadFile.contentType,
+                            "data": uploadFile.data.base64EncodedString(),
                         ],
                     ],
                 ],

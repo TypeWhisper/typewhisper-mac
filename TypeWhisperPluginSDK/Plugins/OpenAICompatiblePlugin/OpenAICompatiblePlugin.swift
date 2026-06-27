@@ -480,7 +480,7 @@ final class OpenAICompatiblePlugin: NSObject,
             throw PluginTranscriptionError.noModelSelected
         }
 
-        return try await helper.transcribe(
+        return try await helper.transcribeCompressedAudioWithWavFallback(
             audio: audio,
             apiKey: apiKey(for: profileId) ?? "",
             modelName: modelId,

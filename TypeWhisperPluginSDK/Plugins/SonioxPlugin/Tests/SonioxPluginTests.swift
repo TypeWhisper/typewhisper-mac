@@ -233,6 +233,11 @@ final class SonioxPluginTests: XCTestCase {
             ]
         )
 
+        let uploadRequest = try XCTUnwrap(session.requestedRequests.first { $0.url?.path == "/v1/files" })
+        let uploadBody = String(decoding: try XCTUnwrap(uploadRequest.httpBody), as: UTF8.self)
+        XCTAssertTrue(uploadBody.contains(#"filename="audio.m4a""#))
+        XCTAssertTrue(uploadBody.contains("Content-Type: audio/mp4"))
+
         let createRequest = try XCTUnwrap(session.requestedRequests.first { $0.url?.path == "/v1/transcriptions" })
         let body = try Self.jsonBody(from: createRequest)
         XCTAssertEqual(body["model"] as? String, "stt-async-v5")

@@ -996,7 +996,10 @@ final class SonioxPlugin: NSObject,
         apiKey: String,
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
-        let fileId = try await uploadFile(wavData: audio.wavData, apiKey: apiKey)
+        let fileId = try await uploadFile(
+            uploadFile: try PluginAudioUploadEncoder.compressedM4AUpload(from: audio),
+            apiKey: apiKey
+        )
         let transcriptionId = try await createTranscription(
             fileId: fileId,
             language: language,
@@ -1009,7 +1012,7 @@ final class SonioxPlugin: NSObject,
         return try await fetchTranscript(id: transcriptionId, apiKey: apiKey, language: language)
     }
 
-    private func uploadFile(wavData: Data, apiKey: String) async throws -> String {
+    private func uploadFile(uploadFile: PluginAudioUploadFile, apiKey: String) async throws -> String {
         guard let url = URL(string: "\(_selectedRegion.apiBaseURL)/v1/files") else {
             throw PluginTranscriptionError.apiError("Invalid upload URL")
         }
@@ -1023,9 +1026,9 @@ final class SonioxPlugin: NSObject,
 
         var body = Data()
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
-        body.append(wavData)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(uploadFile.filename)\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: \(uploadFile.contentType)\r\n\r\n".data(using: .utf8)!)
+        body.append(uploadFile.data)
         body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
         request.httpBody = body
 

@@ -255,7 +255,10 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
         apiKey: String,
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
-        let audioURL = try await uploadAudio(audio.wavData, apiKey: apiKey)
+        let audioURL = try await uploadAudio(
+            try PluginAudioUploadEncoder.compressedM4AUpload(from: audio),
+            apiKey: apiKey
+        )
         let resultURL = try await submitPreRecorded(
             audioURL: audioURL,
             language: language,
@@ -267,7 +270,7 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
         return try await pollResult(url: resultURL, apiKey: apiKey, fallbackLanguage: language)
     }
 
-    private func uploadAudio(_ wavData: Data, apiKey: String) async throws -> String {
+    private func uploadAudio(_ uploadFile: PluginAudioUploadFile, apiKey: String) async throws -> String {
         guard let url = URL(string: "https://api.gladia.io/v2/upload") else {
             throw PluginTranscriptionError.apiError("Invalid Gladia upload URL")
         }
@@ -283,9 +286,9 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
         body.appendMultipartFile(
             boundary: boundary,
             name: "audio",
-            filename: "audio.wav",
-            contentType: "audio/wav",
-            data: wavData
+            filename: uploadFile.filename,
+            contentType: uploadFile.contentType,
+            data: uploadFile.data
         )
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         request.httpBody = body

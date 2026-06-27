@@ -260,7 +260,7 @@ final class OpenRouterPluginTests: XCTestCase {
 
     func testTranscriptionRequestUsesJSONBase64AndLanguage() throws {
         let request = try OpenRouterPlugin.makeTranscriptionRequest(
-            audio: Self.audio(),
+            uploadFile: Self.m4aUpload(),
             apiKey: "openrouter-key",
             modelId: "openai/whisper-1",
             language: " de ",
@@ -278,13 +278,13 @@ final class OpenRouterPluginTests: XCTestCase {
         XCTAssertEqual(body["language"] as? String, "de")
 
         let inputAudio = try XCTUnwrap(body["input_audio"] as? [String: Any])
-        XCTAssertEqual(inputAudio["format"] as? String, "wav")
-        XCTAssertEqual(inputAudio["data"] as? String, Data("wav".utf8).base64EncodedString())
+        XCTAssertEqual(inputAudio["format"] as? String, "m4a")
+        XCTAssertEqual(inputAudio["data"] as? String, Data("m4a".utf8).base64EncodedString())
     }
 
     func testTranscriptionRequestOmitsEmptyLanguageAndPrompt() throws {
         let request = try OpenRouterPlugin.makeTranscriptionRequest(
-            audio: Self.audio(),
+            uploadFile: Self.m4aUpload(),
             apiKey: "openrouter-key",
             modelId: "openai/whisper-1",
             language: " ",
@@ -331,6 +331,50 @@ final class OpenRouterPluginTests: XCTestCase {
         XCTAssertEqual(body["model"] as? String, "openai/whisper-1")
         XCTAssertEqual(body["language"] as? String, "de")
         XCTAssertNil(body["prompt"])
+        let inputAudio = try XCTUnwrap(body["input_audio"] as? [String: Any])
+        XCTAssertEqual(inputAudio["format"] as? String, "m4a")
+    }
+
+    func testTranscribeRetriesWithWavWhenM4AIsRejected() async throws {
+        let host = try PluginTestHostServices(
+            defaults: ["selectedModel": "openai/whisper-1"],
+            secrets: ["api-key": "openrouter-key"]
+        )
+        let plugin = OpenRouterPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"error":{"message":"unsupported audio format"}}"#.utf8),
+                    Self.httpResponse(url: "https://openrouter.ai/api/v1/audio/transcriptions", statusCode: 415)
+                ),
+                .success(
+                    Data(#"{"text":"fallback transcript"}"#.utf8),
+                    Self.httpResponse(url: "https://openrouter.ai/api/v1/audio/transcriptions", statusCode: 200)
+                ),
+            ])
+        }
+
+        let result = try await plugin.transcribe(
+            audio: Self.audio(),
+            language: "de",
+            translate: false,
+            prompt: nil
+        )
+
+        XCTAssertEqual(result.text, "fallback transcript")
+        let requests = store.sessions[0].requestedRequests
+        XCTAssertEqual(requests.count, 2)
+        let firstBody = try Self.jsonBody(from: requests[0])
+        let firstAudio = try XCTUnwrap(firstBody["input_audio"] as? [String: Any])
+        XCTAssertEqual(firstAudio["format"] as? String, "m4a")
+        let retryBody = try Self.jsonBody(from: requests[1])
+        let retryAudio = try XCTUnwrap(retryBody["input_audio"] as? [String: Any])
+        XCTAssertEqual(retryAudio["format"] as? String, "wav")
+        XCTAssertEqual(retryBody["model"] as? String, "openai/whisper-1")
+        XCTAssertEqual(retryBody["language"] as? String, "de")
     }
 
     func testTranscriptionHTTPErrorMapping() {
@@ -367,7 +411,17 @@ final class OpenRouterPluginTests: XCTestCase {
     }
 
     private static func audio() -> AudioData {
-        AudioData(samples: [0], wavData: Data("wav".utf8), duration: 1)
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        return AudioData(samples: samples, wavData: PluginWavEncoder.encode(samples), duration: 1)
+    }
+
+    private static func m4aUpload() -> PluginAudioUploadFile {
+        PluginAudioUploadFile(
+            data: Data("m4a".utf8),
+            filename: "audio.m4a",
+            contentType: "audio/mp4",
+            format: "m4a"
+        )
     }
 
     private static func jsonBody(from request: URLRequest) throws -> [String: Any] {

@@ -200,13 +200,15 @@ final class ElevenLabsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 120
 
+        let uploadFile = try PluginAudioUploadEncoder.compressedM4AUpload(from: audio)
+
         var body = Data()
         body.appendMultipartFile(
             boundary: boundary,
             name: "file",
-            filename: "audio.wav",
-            contentType: "audio/wav",
-            data: audio.wavData
+            filename: uploadFile.filename,
+            contentType: uploadFile.contentType,
+            data: uploadFile.data
         )
         body.appendMultipartField(boundary: boundary, name: "model_id", value: modelId)
         if let language, !language.isEmpty {

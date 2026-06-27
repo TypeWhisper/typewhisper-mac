@@ -187,7 +187,10 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
         prompt: String?,
         speakerDiarizationEnabled: Bool
     ) async throws -> PluginStructuredTranscriptionResult {
-        let uploadURL = try await uploadAudio(wavData: audio.wavData, apiKey: apiKey)
+        let uploadURL = try await uploadAudio(
+            uploadFile: try PluginAudioUploadEncoder.compressedM4AUpload(from: audio),
+            apiKey: apiKey
+        )
         let transcriptId = try await submitTranscription(
             audioURL: uploadURL,
             modelId: modelId,
@@ -199,7 +202,7 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
         return try await pollTranscription(transcriptId: transcriptId, apiKey: apiKey)
     }
 
-    private func uploadAudio(wavData: Data, apiKey: String) async throws -> String {
+    private func uploadAudio(uploadFile: PluginAudioUploadFile, apiKey: String) async throws -> String {
         guard let url = URL(string: "https://api.assemblyai.com/v2/upload") else {
             throw PluginTranscriptionError.apiError("Invalid upload URL")
         }
@@ -208,7 +211,7 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
         request.httpMethod = "POST"
         request.setValue(apiKey, forHTTPHeaderField: "Authorization")
         request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
-        request.httpBody = wavData
+        request.httpBody = uploadFile.data
         request.timeoutInterval = 120
 
         let (data, response) = try await PluginHTTPClient.data(for: request)

@@ -1,9 +1,14 @@
 import XCTest
 import TypeWhisperPluginSDK
-import TypeWhisperPluginSDKTesting
+@_spi(Testing) import TypeWhisperPluginSDKTesting
 @testable import AssemblyAIPlugin
 
 final class AssemblyAIPluginTests: XCTestCase {
+    override func tearDown() {
+        PluginHTTPClientTestHarness.reset()
+        super.tearDown()
+    }
+
     func testSpeakerDiarizationSettingPersistsAndNotifies() throws {
         let host = try PluginTestHostServices()
         let plugin = AssemblyAIPlugin()
@@ -89,5 +94,50 @@ final class AssemblyAIPluginTests: XCTestCase {
         XCTAssertEqual(result.text, "plain transcript")
         XCTAssertEqual(result.detectedLanguage, "de")
         XCTAssertTrue(result.segments.isEmpty)
+    }
+
+    func testRESTTranscriptionUploadsCompressedM4A() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "assembly-key"])
+        let plugin = AssemblyAIPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"upload_url":"https://cdn.example.test/audio.m4a"}"#.utf8),
+                    Self.httpResponse(url: "https://api.assemblyai.com/v2/upload", statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"id":"transcript_123"}"#.utf8),
+                    Self.httpResponse(url: "https://api.assemblyai.com/v2/transcript", statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"status":"completed","text":"hello","language_code":"en"}"#.utf8),
+                    Self.httpResponse(url: "https://api.assemblyai.com/v2/transcript/transcript_123", statusCode: 200)
+                ),
+            ])
+        }
+
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        let audio = AudioData(samples: samples, wavData: PluginWavEncoder.encode(samples), duration: 1.0)
+        let result = try await plugin.transcribe(audio: audio, language: "en", translate: false, prompt: "TypeWhisper")
+
+        XCTAssertEqual(result.text, "hello")
+        let uploadRequest = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
+        XCTAssertEqual(uploadRequest.url?.path, "/v2/upload")
+        XCTAssertEqual(uploadRequest.value(forHTTPHeaderField: "Content-Type"), "application/octet-stream")
+        let uploadBody = try XCTUnwrap(uploadRequest.httpBody)
+        XCTAssertTrue(String(decoding: uploadBody.prefix(64), as: UTF8.self).contains("ftyp"))
+        XCTAssertNotEqual(uploadBody, audio.wavData)
+    }
+
+    private static func httpResponse(url: String, statusCode: Int) -> HTTPURLResponse {
+        HTTPURLResponse(
+            url: URL(string: url)!,
+            statusCode: statusCode,
+            httpVersion: nil,
+            headerFields: nil
+        )!
     }
 }

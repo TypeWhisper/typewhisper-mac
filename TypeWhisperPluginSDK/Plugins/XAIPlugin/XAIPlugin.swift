@@ -1056,28 +1056,46 @@ final class XAIPlugin: NSObject,
             throw XAIPluginError.invalidURL("https://api.x.ai/v1/stt")
         }
 
-        let boundary = UUID().uuidString
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 120
+        func makeRequest(uploadFile: PluginAudioUploadFile) -> URLRequest {
+            let boundary = UUID().uuidString
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+            request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+            request.timeoutInterval = 120
 
-        var body = Data()
-        if let language, !language.isEmpty {
-            body.appendFormField(boundary: boundary, name: "format", value: "true")
-            body.appendFormField(boundary: boundary, name: "language", value: language)
+            var body = Data()
+            if let language, !language.isEmpty {
+                body.appendFormField(boundary: boundary, name: "format", value: "true")
+                body.appendFormField(boundary: boundary, name: "language", value: language)
+            }
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(uploadFile.filename)\"\r\n".data(using: .utf8)!)
+            body.append("Content-Type: \(uploadFile.contentType)\r\n\r\n".data(using: .utf8)!)
+            body.append(uploadFile.data)
+            body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+            request.httpBody = body
+            return request
         }
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
-        body.append(audio.wavData)
-        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
-        request.httpBody = body
 
-        let (data, response) = try await PluginHTTPClient.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
+        let preferredUpload = (try? PluginAudioUploadEncoder.compressedM4AUpload(from: audio))
+            ?? PluginAudioUploadEncoder.wavUpload(from: audio)
+        var (data, response) = try await PluginHTTPClient.data(for: makeRequest(uploadFile: preferredUpload))
+        guard var httpResponse = response as? HTTPURLResponse else {
             throw PluginTranscriptionError.networkError("Invalid response")
+        }
+        if preferredUpload.format != "wav",
+           PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+            statusCode: httpResponse.statusCode,
+            responseData: data
+           ) {
+            (data, response) = try await PluginHTTPClient.data(
+                for: makeRequest(uploadFile: PluginAudioUploadEncoder.wavUpload(from: audio))
+            )
+            guard let retryResponse = response as? HTTPURLResponse else {
+                throw PluginTranscriptionError.networkError("Invalid response")
+            }
+            httpResponse = retryResponse
         }
 
         switch httpResponse.statusCode {

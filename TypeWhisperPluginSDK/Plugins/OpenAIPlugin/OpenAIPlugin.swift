@@ -1499,13 +1499,14 @@ final class OpenAIPlugin: NSObject,
 
         let responseFormat = modelId.hasPrefix("gpt-4o") ? "json" : "verbose_json"
 
-        return try await transcriptionHelper.transcribe(
+        return try await transcriptionHelper.transcribeCompressedAudio(
             audio: audio,
             apiKey: apiKey,
             modelName: modelId,
             language: language,
             translate: translate && !modelId.hasPrefix("gpt-4o"),
             prompt: prompt,
+            requestTimeout: 30,
             responseFormat: responseFormat
         )
     }

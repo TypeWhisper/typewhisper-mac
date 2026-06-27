@@ -162,7 +162,12 @@ final class CartesiaPluginTests: XCTestCase {
 
     func testTranscriptionRequestUsesNativeCartesiaEndpointHeadersLanguageAndWordTimestamps() throws {
         let request = try CartesiaPlugin.makeTranscriptionRequest(
-            wavData: Data("wav".utf8),
+            uploadFile: PluginAudioUploadFile(
+                data: Data("m4a".utf8),
+                filename: "audio.m4a",
+                contentType: "audio/mp4",
+                format: "m4a"
+            ),
             apiKey: "sk_car_test",
             modelId: CartesiaPlugin.sttModelId,
             language: "de"
@@ -178,8 +183,8 @@ final class CartesiaPluginTests: XCTestCase {
         XCTAssertEqual(request.timeoutInterval, 600)
 
         let body = try XCTUnwrap(String(data: try XCTUnwrap(request.httpBody), encoding: .utf8))
-        XCTAssertTrue(body.contains(#"name="file"; filename="audio.wav""#))
-        XCTAssertTrue(body.contains("Content-Type: audio/wav"))
+        XCTAssertTrue(body.contains(#"name="file"; filename="audio.m4a""#))
+        XCTAssertTrue(body.contains("Content-Type: audio/mp4"))
         XCTAssertTrue(body.contains("name=\"model\"\r\n\r\nink-whisper"))
         XCTAssertTrue(body.contains("name=\"language\"\r\n\r\nde"))
         XCTAssertTrue(body.contains("name=\"timestamp_granularities[]\"\r\n\r\nword"))

@@ -140,20 +140,37 @@ final class OpenRouterPlugin: NSObject,
             throw PluginTranscriptionError.apiError("OpenRouter speech-to-text does not support translation.")
         }
 
-        let request = try Self.makeTranscriptionRequest(
-            audio: audio,
+        let preferredUpload = (try? PluginAudioUploadEncoder.compressedM4AUpload(from: audio))
+            ?? PluginAudioUploadEncoder.wavUpload(from: audio)
+        var request = try Self.makeTranscriptionRequest(
+            uploadFile: preferredUpload,
             apiKey: apiKey,
             modelId: modelId,
             language: language,
             timeout: Self.transcriptionRequestTimeout
         )
-        let (data, response) = try await PluginHTTPClient.data(for: request)
+        var (data, response) = try await PluginHTTPClient.data(for: request)
+        if let httpResponse = response as? HTTPURLResponse,
+           preferredUpload.format != "wav",
+           PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+            statusCode: httpResponse.statusCode,
+            responseData: data
+           ) {
+            request = try Self.makeTranscriptionRequest(
+                uploadFile: PluginAudioUploadEncoder.wavUpload(from: audio),
+                apiKey: apiKey,
+                modelId: modelId,
+                language: language,
+                timeout: Self.transcriptionRequestTimeout
+            )
+            (data, response) = try await PluginHTTPClient.data(for: request)
+        }
         try Self.validateTranscriptionResponse(data: data, response: response)
         return try Self.parseTranscriptionResponse(data)
     }
 
     static func makeTranscriptionRequest(
-        audio: AudioData,
+        uploadFile: PluginAudioUploadFile,
         apiKey: String,
         modelId: String,
         language: String?,
@@ -166,8 +183,8 @@ final class OpenRouterPlugin: NSObject,
         var body: [String: Any] = [
             "model": modelId,
             "input_audio": [
-                "data": audio.wavData.base64EncodedString(),
-                "format": "wav",
+                "data": uploadFile.data.base64EncodedString(),
+                "format": uploadFile.format,
             ],
         ]
         let trimmedLanguage = language?.trimmingCharacters(in: .whitespacesAndNewlines)

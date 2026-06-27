@@ -66,6 +66,43 @@ final class OpenAIPluginTests: XCTestCase {
         XCTAssertTrue(plugin.authStatus(for: .tts).isAvailable)
     }
 
+    func testOpenAITranscribeUploadsCompressedM4AForRESTModels() async throws {
+        let host = try PluginTestHostServices(
+            defaults: ["selectedModel": "whisper-1"],
+            secrets: ["api-key": "sk-live"]
+        )
+        let plugin = OpenAIPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"text":"hello","language":"en"}"#.utf8),
+                    Self.httpResponse(url: "https://api.openai.com/v1/audio/transcriptions", statusCode: 200)
+                ),
+            ])
+        }
+
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        let audio = AudioData(
+            samples: samples,
+            wavData: PluginWavEncoder.encode(samples),
+            duration: 1.0
+        )
+
+        let result = try await plugin.transcribe(audio: audio, language: "en", translate: false, prompt: "TypeWhisper")
+
+        XCTAssertEqual(result.text, "hello")
+        let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
+        let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
+        XCTAssertTrue(body.contains(#"filename="audio.m4a""#))
+        XCTAssertTrue(body.contains("Content-Type: audio/mp4"))
+        XCTAssertTrue(body.contains("name=\"language\"\r\n\r\nen"))
+        XCTAssertTrue(body.contains("name=\"prompt\"\r\n\r\nTypeWhisper"))
+        XCTAssertFalse(body.contains(#"filename="audio.wav""#))
+    }
+
     func testOpenAIWithoutCredentialsMakesCloudAuthRolesUnavailable() throws {
         let host = try PluginTestHostServices()
         let plugin = OpenAIPlugin()
