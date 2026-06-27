@@ -1570,6 +1570,14 @@
       "detailsURL": "https://www.typewhisper.com/addons/soniox/",
       "releases": [
         {
+          "version": "1.2.3",
+          "minHostVersion": "1.5.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 371778,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-soniox-v1.2.3/SonioxPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.2.2",
           "minHostVersion": "1.5.0",
           "sdkCompatibilityVersion": "v1",
