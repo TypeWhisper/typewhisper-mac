@@ -142,6 +142,18 @@ final class OpenAITranscriptionHelperTests: XCTestCase {
         )
         XCTAssertTrue(
             PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+                statusCode: 400,
+                responseData: Data(#"{"error":{"message":"could not process file - is it a valid media file?","type":"invalid_request_error"}}"#.utf8)
+            )
+        )
+        XCTAssertTrue(
+            PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+                statusCode: 400,
+                responseData: Data(#"{"err_msg":"Bad Request: failed to process audio: corrupt or unsupported data"}"#.utf8)
+            )
+        )
+        XCTAssertTrue(
+            PluginAudioUploadEncoder.shouldRetryWithWavUpload(
                 statusCode: 415,
                 responseData: Data(#"{"error":"bad upload"}"#.utf8)
             )

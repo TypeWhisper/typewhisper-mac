@@ -102,7 +102,7 @@ final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapa
             throw PluginTranscriptionError.noModelSelected
         }
 
-        return try await transcriptionHelper.transcribeCompressedAudio(
+        return try await transcriptionHelper.transcribeCompressedAudioWithWavFallback(
             audio: audio,
             apiKey: apiKey,
             modelName: modelId,

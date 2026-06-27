@@ -330,10 +330,12 @@ public enum PluginAudioUploadEncoder {
         let lowercased = message.lowercased()
         let rejectionTerms = [
             "unsupported", "not supported", "does not support", "invalid", "unrecognized", "unknown",
+            "could not process", "failed to process", "corrupt",
         ]
         let mediaTerms = [
             "format", "media", "mime", "content-type", "content type",
-            "codec", "container", "file type", "m4a", "mp4", "aac", "wav",
+            "codec", "container", "file type", "audio", "file", "data",
+            "m4a", "mp4", "aac", "wav",
         ]
         return rejectionTerms.contains { lowercased.contains($0) }
             && mediaTerms.contains { lowercased.contains($0) }
