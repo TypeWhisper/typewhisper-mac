@@ -66,6 +66,10 @@ running_dev_typewhisper_pids() {
 trash_if_present() {
   local path="$1"
   if [[ -e "$path" ]]; then
+    if ! command -v trash >/dev/null 2>&1; then
+      log "error: trash command not found; install trash or remove stale dev apps manually"
+      return 1
+    fi
     if [[ -x "$lsregister" ]] && [[ "$path" == *.app ]]; then
       "$lsregister" -u "$path" >/dev/null 2>&1 || true
     fi
