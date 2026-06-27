@@ -8217,6 +8217,157 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testHybridModifierHoldDoesNotStartBeforeDelay() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.hybridModifierHoldActivationDelay = 0.05
+
+        service.setHotkeyForTesting(controlModifierHotkey(), for: .hybrid)
+
+        var currentFlags = NSEvent.ModifierFlags.control
+        service.modifierFlagsStateProvider = { currentFlags }
+
+        var startCount = 0
+        service.onDictationStart = { _ in startCount += 1 }
+
+        let keyDown = try makeControlModifierEvent(isDown: true)
+        let keyUp = try makeControlModifierEvent(isDown: false)
+
+        XCTAssertFalse(service.processEventForTesting(keyDown, source: .monitor))
+        try await Task.sleep(for: .milliseconds(20))
+        XCTAssertEqual(startCount, 0)
+        XCTAssertNil(service.currentMode)
+
+        currentFlags = []
+        XCTAssertFalse(service.processEventForTesting(keyUp, source: .monitor))
+        try await Task.sleep(for: .milliseconds(60))
+        XCTAssertEqual(startCount, 0)
+        XCTAssertNil(service.currentMode)
+    }
+
+    @MainActor
+    func testHybridModifierShortTapDoesNotToggleDictation() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.hybridModifierHoldActivationDelay = 0.02
+
+        service.setHotkeyForTesting(controlModifierHotkey(), for: .hybrid)
+
+        var currentFlags = NSEvent.ModifierFlags.control
+        service.modifierFlagsStateProvider = { currentFlags }
+
+        var startCount = 0
+        var stopCount = 0
+        service.onDictationStart = { _ in startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+
+        let keyDown = try makeControlModifierEvent(isDown: true)
+        let keyUp = try makeControlModifierEvent(isDown: false)
+
+        XCTAssertFalse(service.processEventForTesting(keyDown, source: .monitor))
+        currentFlags = []
+        XCTAssertFalse(service.processEventForTesting(keyUp, source: .monitor))
+        try await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertEqual(startCount, 0)
+        XCTAssertEqual(stopCount, 0)
+        XCTAssertNil(service.currentMode)
+    }
+
+    @MainActor
+    func testHybridModifierShortcutCancelsPendingHold() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.hybridModifierHoldActivationDelay = 0.02
+
+        service.setHotkeyForTesting(controlModifierHotkey(), for: .hybrid)
+
+        var currentFlags = NSEvent.ModifierFlags.control
+        service.modifierFlagsStateProvider = { currentFlags }
+
+        var startCount = 0
+        service.onDictationStart = { _ in startCount += 1 }
+
+        let keyDown = try makeControlModifierEvent(isDown: true)
+        let shortcutKeyDown = try makeKeyboardEvent(keyCode: 0x30, keyDown: true, flags: [.maskControl])
+        let keyUp = try makeControlModifierEvent(isDown: false)
+
+        XCTAssertFalse(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertFalse(service.processEventForTesting(shortcutKeyDown, source: .monitor))
+
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(startCount, 0)
+        XCTAssertNil(service.currentMode)
+
+        currentFlags = []
+        XCTAssertFalse(service.processEventForTesting(keyUp, source: .monitor))
+    }
+
+    @MainActor
+    func testHybridModifierHoldStartsAfterDelayAndStopsOnRelease() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.hybridModifierHoldActivationDelay = 0.02
+
+        service.setHotkeyForTesting(controlModifierHotkey(), for: .hybrid)
+
+        var currentFlags = NSEvent.ModifierFlags.control
+        service.modifierFlagsStateProvider = { currentFlags }
+
+        var startCount = 0
+        var stopCount = 0
+        let started = expectation(description: "hybrid modifier hold starts after delay")
+        service.onDictationStart = { _ in
+            startCount += 1
+            started.fulfill()
+        }
+        service.onDictationStop = { stopCount += 1 }
+
+        let keyDown = try makeControlModifierEvent(isDown: true)
+        let keyUp = try makeControlModifierEvent(isDown: false)
+
+        XCTAssertFalse(service.processEventForTesting(keyDown, source: .monitor))
+        await fulfillment(of: [started], timeout: 1.0)
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(stopCount, 0)
+        XCTAssertEqual(service.currentMode, .pushToTalk)
+
+        currentFlags = []
+        XCTAssertTrue(service.processEventForTesting(keyUp, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(stopCount, 1)
+        XCTAssertNil(service.currentMode)
+    }
+
+    @MainActor
+    func testHybridModifierDoubleTapStillTogglesDictation() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(controlModifierHotkey(isDoubleTap: true), for: .hybrid)
+
+        var startCount = 0
+        var stopCount = 0
+        service.onDictationStart = { _ in startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+
+        let keyDown = try makeControlModifierEvent(isDown: true)
+        let keyUp = try makeControlModifierEvent(isDown: false)
+
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertTrue(service.processEventForTesting(keyUp, source: .monitor))
+        XCTAssertEqual(startCount, 0)
+
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(service.currentMode, .pushToTalk)
+
+        XCTAssertTrue(service.processEventForTesting(keyUp, source: .monitor))
+        XCTAssertEqual(stopCount, 0)
+        XCTAssertEqual(service.currentMode, .toggle)
+    }
+
+    @MainActor
     func testMonitorFallbackToggleFnStillWorksOnRelease() throws {
         let service = HotkeyService()
         service.suspendMonitoring()
@@ -9128,6 +9279,16 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         )
     }
 
+    @MainActor
+    private func controlModifierHotkey(isDoubleTap: Bool = false) -> UnifiedHotkey {
+        UnifiedHotkey(
+            keyCode: 0x3B,
+            modifierFlags: 0,
+            isFn: false,
+            isDoubleTap: isDoubleTap
+        )
+    }
+
     private func makeKeyboardEvent(
         keyCode: UInt16,
         keyDown: Bool,
@@ -9175,6 +9336,13 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
                 isARepeat: false,
                 keyCode: keyCode
             )
+        )
+    }
+
+    private func makeControlModifierEvent(isDown: Bool) throws -> NSEvent {
+        try makeFlagsChangedEvent(
+            keyCode: 0x3B,
+            modifierFlags: isDown ? [.control] : []
         )
     }
 

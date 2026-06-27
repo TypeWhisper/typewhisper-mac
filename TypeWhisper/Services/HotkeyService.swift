@@ -205,6 +205,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     var workflowTextProcessingModifierPollInterval: TimeInterval = 0.05
     var workflowTextProcessingModifierReleaseTimeout: TimeInterval = 2.0
     var workflowTextProcessingPostReleaseDelay: TimeInterval = 0.15
+    var hybridModifierHoldActivationDelay: TimeInterval = 0.35
 
     private var keyDownTime: Date?
     private var isActive = false
@@ -213,6 +214,10 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     private(set) var activeProfileId: UUID?
     private(set) var activeWorkflowId: UUID?
     private var pushToTalkInterruptionSignaled = false
+    private var pendingHybridModifierHoldWorkItem: DispatchWorkItem?
+    private var pendingHybridModifierHoldHotkey: UnifiedHotkey?
+    private var pendingHybridModifierHoldGeneration: UInt64 = 0
+    private var activeDelayedHybridModifierHold = false
 
     private static let toggleThreshold: TimeInterval = 1.0
     private static let doubleTapThreshold: TimeInterval = 0.4
@@ -397,6 +402,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     }
 
     func cancelDictation() {
+        cancelPendingHybridModifierHold()
         isActive = false
         activeSlotType = nil
         activeGlobalHotkey = nil
@@ -405,9 +411,12 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         currentMode = nil
         keyDownTime = nil
         pushToTalkInterruptionSignaled = false
+        activeDelayedHybridModifierHold = false
     }
 
     private func resetPausedDictationHotkeyState() {
+        cancelPendingHybridModifierHold()
+
         for slotType in HotkeySlotType.allCases where slotType.startsDictation {
             guard var states = slots[slotType] else { continue }
             for index in states.indices {
@@ -495,6 +504,8 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     }
 
     private func setHotkeys(_ hotkeys: [UnifiedHotkey], for slotType: HotkeySlotType) {
+        cancelPendingHybridModifierHold()
+
         let uniqueHotkeys = Self.uniqueHotkeys(hotkeys)
         slots[slotType] = uniqueHotkeys.map { SlotState(hotkey: $0) }
         persistHotkeys(uniqueHotkeys, for: slotType)
@@ -603,6 +614,8 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     }
 
     private func tearDownMonitor() {
+        cancelPendingHybridModifierHold()
+
         if let monitor = globalMonitor {
             NSEvent.removeMonitor(monitor)
             globalMonitor = nil
@@ -740,6 +753,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             return false
         }
 
+        cancelPendingHybridModifierHoldIfInterrupted(by: event)
         signalPushToTalkInterruptionIfNeeded(for: event)
         updateCapsLockOriginTracker(for: event)
         var shouldSuppress = false
@@ -768,7 +782,15 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                     fnTriggerMode: fnTriggerMode
                 )
                 states[index] = state
-                if isMatch { shouldSuppress = true }
+                if shouldSuppressGlobalMatch(
+                    slotType: slotType,
+                    hotkey: hotkey,
+                    keyDown: keyDown,
+                    keyUp: keyUp,
+                    isMatch: isMatch
+                ) {
+                    shouldSuppress = true
+                }
                 dispatchGlobalMatch(
                     slotType: slotType,
                     hotkey: hotkey,
@@ -876,6 +898,104 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         }
 
         return shouldSuppress
+    }
+
+    private func shouldSuppressGlobalMatch(
+        slotType: HotkeySlotType,
+        hotkey: UnifiedHotkey,
+        keyDown: Bool,
+        keyUp: Bool,
+        isMatch: Bool
+    ) -> Bool {
+        guard isMatch else { return false }
+        guard shouldDelayHybridModifierHold(for: slotType, hotkey: hotkey) else { return true }
+
+        if keyDown { return isActive }
+        if keyUp {
+            return isActive
+                && activeSlotType == .hybrid
+                && activeGlobalHotkey == hotkey
+                && activeDelayedHybridModifierHold
+        }
+        return false
+    }
+
+    private func shouldDelayHybridModifierHold(for slotType: HotkeySlotType, hotkey: UnifiedHotkey) -> Bool {
+        slotType == .hybrid && hotkey.kind == .modifierOnly && !hotkey.isDoubleTap
+    }
+
+    private func scheduleDelayedHybridModifierHoldStart(for hotkey: UnifiedHotkey) {
+        cancelPendingHybridModifierHold()
+
+        pendingHybridModifierHoldGeneration &+= 1
+        let generation = pendingHybridModifierHoldGeneration
+        pendingHybridModifierHoldHotkey = hotkey
+
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.activatePendingHybridModifierHold(generation: generation)
+        }
+        pendingHybridModifierHoldWorkItem = workItem
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + hybridModifierHoldActivationDelay,
+            execute: workItem
+        )
+    }
+
+    private func activatePendingHybridModifierHold(generation: UInt64) {
+        guard generation == pendingHybridModifierHoldGeneration,
+              let hotkey = pendingHybridModifierHoldHotkey else {
+            return
+        }
+        guard !dictationHotkeysPaused,
+              !isActive,
+              isModifierOnlyHotkeyStillPressed(hotkey) else {
+            cancelPendingHybridModifierHold()
+            return
+        }
+
+        pendingHybridModifierHoldWorkItem = nil
+        pendingHybridModifierHoldHotkey = nil
+
+        activeSlotType = .hybrid
+        activeGlobalHotkey = hotkey
+        activeProfileId = nil
+        activeWorkflowId = nil
+        keyDownTime = Date()
+        isActive = true
+        pushToTalkInterruptionSignaled = false
+        activeDelayedHybridModifierHold = true
+        currentMode = .pushToTalk
+        onDictationStart?(Self.requestTimestamp())
+    }
+
+    private func cancelPendingHybridModifierHoldIfInterrupted(by event: NSEvent) {
+        guard let hotkey = pendingHybridModifierHoldHotkey else { return }
+
+        switch event.type {
+        case .flagsChanged:
+            if event.keyCode != hotkey.keyCode {
+                cancelPendingHybridModifierHold()
+            }
+        case .keyDown, .otherMouseDown:
+            cancelPendingHybridModifierHold()
+        default:
+            break
+        }
+    }
+
+    private func cancelPendingHybridModifierHold() {
+        pendingHybridModifierHoldWorkItem?.cancel()
+        pendingHybridModifierHoldWorkItem = nil
+        pendingHybridModifierHoldHotkey = nil
+        pendingHybridModifierHoldGeneration &+= 1
+    }
+
+    private func isModifierOnlyHotkeyStillPressed(_ hotkey: UnifiedHotkey) -> Bool {
+        guard hotkey.kind == .modifierOnly,
+              let flag = Self.modifierFlagForKeyCode(hotkey.keyCode) else {
+            return false
+        }
+        return modifierFlagsStateProvider().contains(flag)
     }
 
     private func updateCapsLockOriginTracker(for event: NSEvent) {
@@ -1056,10 +1176,12 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
 #if DEBUG
     func setHotkeyForTesting(_ hotkey: UnifiedHotkey, for slotType: HotkeySlotType) {
+        cancelPendingHybridModifierHold()
         slots[slotType] = [SlotState(hotkey: hotkey)]
     }
 
     func setHotkeysForTesting(_ hotkeys: [UnifiedHotkey], for slotType: HotkeySlotType) {
+        cancelPendingHybridModifierHold()
         slots[slotType] = Self.uniqueHotkeys(hotkeys).map { SlotState(hotkey: $0) }
     }
 
@@ -1379,6 +1501,11 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             return
         }
 
+        if !isActive, shouldDelayHybridModifierHold(for: slotType, hotkey: hotkey) {
+            scheduleDelayedHybridModifierHoldStart(for: hotkey)
+            return
+        }
+
         if isActive {
             // Any hotkey stops active recording
             isActive = false
@@ -1389,6 +1516,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             currentMode = nil
             keyDownTime = nil
             pushToTalkInterruptionSignaled = false
+            activeDelayedHybridModifierHold = false
             onDictationStop?()
         } else {
             let requestTimestamp = Self.requestTimestamp()
@@ -1399,16 +1527,33 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             keyDownTime = Date()
             isActive = true
             pushToTalkInterruptionSignaled = false
+            activeDelayedHybridModifierHold = false
             currentMode = slotType == .toggle ? .toggle : .pushToTalk
             onDictationStart?(requestTimestamp)
         }
     }
 
     private func handleKeyUp(slotType: HotkeySlotType) {
+        if slotType == .hybrid, pendingHybridModifierHoldWorkItem != nil {
+            cancelPendingHybridModifierHold()
+            return
+        }
+
         guard isActive, slotType == activeSlotType, activeProfileId == nil, activeWorkflowId == nil else { return }
 
         switch slotType {
         case .hybrid:
+            if activeDelayedHybridModifierHold {
+                isActive = false
+                activeSlotType = nil
+                activeGlobalHotkey = nil
+                currentMode = nil
+                keyDownTime = nil
+                pushToTalkInterruptionSignaled = false
+                activeDelayedHybridModifierHold = false
+                onDictationStop?()
+                return
+            }
             guard let downTime = keyDownTime else { return }
             if Date().timeIntervalSince(downTime) < Self.toggleThreshold {
                 currentMode = .toggle
@@ -1419,6 +1564,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                 currentMode = nil
                 keyDownTime = nil
                 pushToTalkInterruptionSignaled = false
+                activeDelayedHybridModifierHold = false
                 onDictationStop?()
             }
         case .pushToTalk:
@@ -1428,6 +1574,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             currentMode = nil
             keyDownTime = nil
             pushToTalkInterruptionSignaled = false
+            activeDelayedHybridModifierHold = false
             onDictationStop?()
         case .toggle:
             break
@@ -1455,6 +1602,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             currentMode = nil
             keyDownTime = nil
             pushToTalkInterruptionSignaled = false
+            activeDelayedHybridModifierHold = false
             onDictationStop?()
         } else {
             let requestTimestamp = Self.requestTimestamp()
@@ -1465,6 +1613,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             keyDownTime = Date()
             isActive = true
             pushToTalkInterruptionSignaled = false
+            activeDelayedHybridModifierHold = false
             currentMode = .pushToTalk // hybrid behavior
             onProfileDictationStart?(profileId, requestTimestamp)
         }
@@ -1486,6 +1635,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             currentMode = nil
             keyDownTime = nil
             pushToTalkInterruptionSignaled = false
+            activeDelayedHybridModifierHold = false
             onDictationStop?()
         }
     }
@@ -1503,6 +1653,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                 currentMode = nil
                 keyDownTime = nil
                 pushToTalkInterruptionSignaled = false
+                activeDelayedHybridModifierHold = false
                 onDictationStop?()
                 return
             }
@@ -1519,6 +1670,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             currentMode = nil
             keyDownTime = nil
             pushToTalkInterruptionSignaled = false
+            activeDelayedHybridModifierHold = false
             onDictationStop?()
         } else {
             let requestTimestamp = Self.requestTimestamp()
@@ -1529,6 +1681,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             keyDownTime = Date()
             isActive = true
             pushToTalkInterruptionSignaled = false
+            activeDelayedHybridModifierHold = false
             currentMode = .pushToTalk
             onWorkflowDictationStart?(workflowId, requestTimestamp)
         }
@@ -1555,6 +1708,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             currentMode = nil
             keyDownTime = nil
             pushToTalkInterruptionSignaled = false
+            activeDelayedHybridModifierHold = false
             onDictationStop?()
         }
     }
