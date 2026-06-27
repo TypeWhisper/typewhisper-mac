@@ -58,6 +58,22 @@ enum ModelAutoUnloadPolicy {
     }
 }
 
+struct ModelAutoUnloadDiagnosticsSnapshot: Encodable, Equatable, Sendable {
+    struct Entry: Encodable, Equatable, Sendable {
+        let pluginClassName: String
+        let pluginObjectIdentifier: String
+        let policySeconds: Int
+        let scheduledAt: Date?
+        let dueAt: Date?
+        let lastFiredAt: Date?
+        let lastSelectorResponded: Bool?
+    }
+
+    let policySeconds: Int
+    let policyName: String
+    let entries: [Entry]
+}
+
 @MainActor
 final class ModelManagerService: ObservableObject {
     struct LiveTranscriptionSessionHandle: Sendable {
@@ -87,6 +103,7 @@ final class ModelManagerService: ObservableObject {
 
     private var autoUnloadTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
     private var autoUnloadTargets: [ObjectIdentifier: AutoUnloadTarget] = [:]
+    private var autoUnloadDiagnostics: [ObjectIdentifier: ModelAutoUnloadDiagnosticsSnapshot.Entry] = [:]
     private var cancellables = Set<AnyCancellable>()
 
     private let providerKey = UserDefaultsKeys.selectedEngine
@@ -754,6 +771,7 @@ final class ModelManagerService: ObservableObject {
             autoUnloadTasks[key]?.cancel()
             autoUnloadTasks[key] = nil
             autoUnloadTargets[key] = nil
+            autoUnloadDiagnostics[key] = nil
         }
     }
 
@@ -788,10 +806,24 @@ final class ModelManagerService: ObservableObject {
         autoUnloadTasks[key]?.cancel()
         autoUnloadTasks[key] = nil
         autoUnloadTargets[key] = nil
+        autoUnloadDiagnostics[key] = nil
 
         let seconds = autoUnloadSeconds
         guard seconds != 0 else { return }
 
+        let scheduledAt = Date()
+        let dueAt = seconds == -1
+            ? scheduledAt.addingTimeInterval(0.1)
+            : scheduledAt.addingTimeInterval(TimeInterval(seconds))
+        autoUnloadDiagnostics[key] = ModelAutoUnloadDiagnosticsSnapshot.Entry(
+            pluginClassName: String(describing: type(of: nsPlugin)),
+            pluginObjectIdentifier: Self.diagnosticIdentifier(for: key),
+            policySeconds: seconds,
+            scheduledAt: scheduledAt,
+            dueAt: dueAt,
+            lastFiredAt: nil,
+            lastSelectorResponded: nil
+        )
         autoUnloadTargets[key] = AutoUnloadTarget(plugin: nsPlugin)
         autoUnloadTasks[key] = Task { [weak self] in
             if seconds == -1 {
@@ -812,6 +844,7 @@ final class ModelManagerService: ObservableObject {
         }
         autoUnloadTasks.removeAll()
         autoUnloadTargets.removeAll()
+        autoUnloadDiagnostics.removeAll()
     }
 
     private func performAutoUnload(for key: ObjectIdentifier) {
@@ -820,10 +853,49 @@ final class ModelManagerService: ObservableObject {
             autoUnloadTargets[key] = nil
         }
 
-        guard let nsPlugin = autoUnloadTargets[key]?.plugin else { return }
+        guard let nsPlugin = autoUnloadTargets[key]?.plugin else {
+            recordAutoUnloadFired(for: key, plugin: nil, selectorResponded: false)
+            return
+        }
         let sel = NSSelectorFromString("triggerAutoUnload")
-        guard nsPlugin.responds(to: sel) else { return }
+        let selectorResponded = nsPlugin.responds(to: sel)
+        recordAutoUnloadFired(for: key, plugin: nsPlugin, selectorResponded: selectorResponded)
+        guard selectorResponded else { return }
         nsPlugin.perform(sel)
+    }
+
+    private func recordAutoUnloadFired(
+        for key: ObjectIdentifier,
+        plugin: NSObject?,
+        selectorResponded: Bool
+    ) {
+        let previous = autoUnloadDiagnostics[key]
+        autoUnloadDiagnostics[key] = ModelAutoUnloadDiagnosticsSnapshot.Entry(
+            pluginClassName: plugin.map { String(describing: type(of: $0)) } ?? previous?.pluginClassName ?? "unknown",
+            pluginObjectIdentifier: previous?.pluginObjectIdentifier ?? Self.diagnosticIdentifier(for: key),
+            policySeconds: previous?.policySeconds ?? autoUnloadSeconds,
+            scheduledAt: nil,
+            dueAt: nil,
+            lastFiredAt: Date(),
+            lastSelectorResponded: selectorResponded
+        )
+    }
+
+    func autoUnloadDiagnosticsSnapshot() -> ModelAutoUnloadDiagnosticsSnapshot {
+        ModelAutoUnloadDiagnosticsSnapshot(
+            policySeconds: autoUnloadSeconds,
+            policyName: ModelAutoUnloadPolicy.policyName(seconds: autoUnloadSeconds),
+            entries: autoUnloadDiagnostics.values.sorted {
+                if $0.pluginClassName == $1.pluginClassName {
+                    return $0.pluginObjectIdentifier < $1.pluginObjectIdentifier
+                }
+                return $0.pluginClassName < $1.pluginClassName
+            }
+        )
+    }
+
+    private static func diagnosticIdentifier(for key: ObjectIdentifier) -> String {
+        String(describing: key)
     }
 
     private func runtimeLanguageSelection(
