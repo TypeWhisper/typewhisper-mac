@@ -197,7 +197,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         modelManager.selectProvider("groq")
         let recordingsDirectory = makeTemporaryDirectory()
         let outputURL = recordingsDirectory.appendingPathComponent("Recording success.wav")
-        let failureURL = outputURL.deletingPathExtension().appendingPathExtension("transcription-failure.json")
+        let failureURL = failureSidecarURL(for: outputURL)
         let oldFailure = AudioRecorderViewModel.RecordingTranscriptionFailure(
             phase: .finalTranscription,
             providerError: "old error",
@@ -225,6 +225,41 @@ final class AudioRecorderViewModelTests: XCTestCase {
         let recording = try XCTUnwrap(viewModel.recordings.first)
         XCTAssertEqual(recording.transcript, "fresh transcript")
         XCTAssertNil(recording.transcriptionFailure)
+    }
+
+    func testFailureSidecarWriteErrorStillShowsRecorderFailure() async throws {
+        try preserveStandardDefaults()
+        setupPluginManager(groqBehavior: .failure("HTTP 500: provider unavailable"))
+        let defaults = try makeDefaults()
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        let recordingsDirectory = makeTemporaryDirectory()
+        let outputURL = recordingsDirectory.appendingPathComponent("Recording write-error.wav")
+        let failureURL = failureSidecarURL(for: outputURL)
+        try FileManager.default.createDirectory(at: failureURL, withIntermediateDirectories: true)
+
+        let recorderService = makeRecorderService(
+            recordingsDirectory: recordingsDirectory,
+            outputURL: outputURL
+        )
+        let viewModel = makeViewModel(defaults: defaults, modelManager: modelManager, recorderService: recorderService)
+        viewModel.transcriptionEnabled = true
+        viewModel.livePreviewEnabled = false
+
+        let sessionID = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        _ = try viewModel.apiStopRecording()
+
+        let session = try await waitForRecorderSession(viewModel, id: sessionID, status: .failed)
+        XCTAssertTrue(session.error?.contains("HTTP 500") == true)
+
+        let recording = try XCTUnwrap(viewModel.recordings.first)
+        XCTAssertNil(recording.transcript)
+        let failure = try XCTUnwrap(recording.transcriptionFailure)
+        XCTAssertEqual(failure.phase, .finalTranscription)
+        XCTAssertTrue(failure.providerError.contains("HTTP 500"))
+        XCTAssertGreaterThan(failure.providerError.count, "API error: HTTP 500: provider unavailable".count)
+        let sidecarValues = try failureURL.resourceValues(forKeys: [.isDirectoryKey])
+        XCTAssertEqual(sidecarValues.isDirectory, true)
     }
 
     private func makeViewModel(
@@ -279,6 +314,10 @@ final class AudioRecorderViewModelTests: XCTestCase {
         }
         recorderService.currentBufferOverride = { samples }
         return recorderService
+    }
+
+    private func failureSidecarURL(for audioURL: URL) -> URL {
+        audioURL.appendingPathExtension("transcription-failure.json")
     }
 
     private func livePreviewStartCount(

@@ -9326,6 +9326,12 @@
             "state": "translated",
             "value": "Final transcription returned no text."
           }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最終文字起こしはテキストを返しませんでした。"
+          }
         }
       }
     },
@@ -9341,6 +9347,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "empty result"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "空の結果"
           }
         }
       }
@@ -9358,6 +9370,12 @@
             "state": "translated",
             "value": "final transcription"
           }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最終文字起こし"
+          }
         }
       }
     },
@@ -9374,6 +9392,12 @@
             "state": "translated",
             "value": "preparing final audio"
           }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最終音声の準備"
+          }
         }
       }
     },
@@ -9389,6 +9413,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "saving transcript"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字起こしの保存"
+          }
+        }
+      }
+    },
+    "recorder.failureMetadataSaveError": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ Fehler-Metadaten konnten nicht gespeichert werden: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ Failed to save failure metadata: %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 失敗メタデータを保存できませんでした: %@"
           }
         }
       }
@@ -10025,6 +10077,12 @@
             "state": "translated",
             "value": "Transcription failed"
           }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字起こしに失敗しました"
+          }
         }
       }
     },
@@ -10041,6 +10099,12 @@
             "state": "translated",
             "value": "Transcription failed during %@: %@"
           }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@中に文字起こしに失敗しました: %@"
+          }
         }
       }
     },
@@ -10056,6 +10120,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Transcription failed for %@, %@ during %@: %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字起こしに失敗しました（長さ %@、サイズ %@、%@中）: %@"
           }
         }
       }

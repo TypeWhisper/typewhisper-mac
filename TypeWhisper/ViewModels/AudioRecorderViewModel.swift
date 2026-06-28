@@ -216,6 +216,7 @@ final class AudioRecorderViewModel: ObservableObject {
     private var currentOutputURL: URL?
     private var activeRecorderAPISessionID: UUID?
     private var recorderAPISessions: [UUID: RecorderAPISessionSnapshot] = [:]
+    private var transientTranscriptionFailures: [String: RecordingTranscriptionFailure] = [:]
     private var isInitialized = false
 
     init(
@@ -658,7 +659,7 @@ final class AudioRecorderViewModel: ObservableObject {
             // Also delete sidecar transcript
             let txtURL = item.url.deletingPathExtension().appendingPathExtension("txt")
             try? FileManager.default.removeItem(at: txtURL)
-            try? FileManager.default.removeItem(at: transcriptionFailureURL(for: item.url))
+            clearTranscriptionFailure(for: item.url)
             recordings.removeAll { $0.id == item.id }
         } catch {
             errorMessage = error.localizedDescription
@@ -709,6 +710,7 @@ final class AudioRecorderViewModel: ObservableObject {
                     let duration = audioDuration(for: url)
                     let transcript = loadTranscript(for: url)
                     let transcriptionFailure = loadTranscriptionFailure(for: url)
+                        ?? transientTranscriptionFailures[transcriptionFailureKey(for: url)]
                     return RecordingItem(
                         url: url,
                         date: date,
@@ -845,9 +847,9 @@ final class AudioRecorderViewModel: ObservableObject {
                     providerError: String(localized: "recorder.emptyFinalTranscriptionError"),
                     request: request
                 )
-                saveTranscriptionFailure(failure, for: request.outputURL)
-                errorMessage = recorderTranscriptionFailureAPISummary(failure)
-                return .failed(failure)
+                let recordedFailure = saveTranscriptionFailure(failure, for: request.outputURL)
+                errorMessage = recorderTranscriptionFailureAPISummary(recordedFailure)
+                return .failed(recordedFailure)
             }
         } catch {
             logger.error("Final transcription failed: \(error.localizedDescription)")
@@ -860,9 +862,9 @@ final class AudioRecorderViewModel: ObservableObject {
                 providerError: error.localizedDescription,
                 request: request
             )
-            saveTranscriptionFailure(failure, for: request.outputURL)
-            errorMessage = recorderTranscriptionFailureAPISummary(failure)
-            return .failed(failure)
+            let recordedFailure = saveTranscriptionFailure(failure, for: request.outputURL)
+            errorMessage = recorderTranscriptionFailureAPISummary(recordedFailure)
+            return .failed(recordedFailure)
         }
     }
 
@@ -898,14 +900,18 @@ final class AudioRecorderViewModel: ObservableObject {
                 providerError: error.localizedDescription,
                 request: request
             )
-            saveTranscriptionFailure(failure, for: audioURL)
-            errorMessage = recorderTranscriptionFailureAPISummary(failure)
-            return .failed(failure)
+            let recordedFailure = saveTranscriptionFailure(failure, for: audioURL)
+            errorMessage = recorderTranscriptionFailureAPISummary(recordedFailure)
+            return .failed(recordedFailure)
         }
     }
 
     private func transcriptionFailureURL(for audioURL: URL) -> URL {
-        audioURL.deletingPathExtension().appendingPathExtension("transcription-failure.json")
+        audioURL.appendingPathExtension("transcription-failure.json")
+    }
+
+    private func transcriptionFailureKey(for audioURL: URL) -> String {
+        audioURL.resolvingSymlinksInPath().path
     }
 
     private func makeTranscriptionFailure(
@@ -927,13 +933,33 @@ final class AudioRecorderViewModel: ObservableObject {
         )
     }
 
-    private func saveTranscriptionFailure(_ failure: RecordingTranscriptionFailure, for audioURL: URL) {
+    @discardableResult
+    private func saveTranscriptionFailure(
+        _ failure: RecordingTranscriptionFailure,
+        for audioURL: URL
+    ) -> RecordingTranscriptionFailure {
         let url = transcriptionFailureURL(for: audioURL)
+        let key = transcriptionFailureKey(for: audioURL)
         do {
             let data = try JSONEncoder().encode(failure)
             try data.write(to: url, options: .atomic)
+            transientTranscriptionFailures.removeValue(forKey: key)
+            return failure
         } catch {
             logger.error("Failed to save recorder transcription failure: \(error.localizedDescription)")
+            let surfacedFailure = RecordingTranscriptionFailure(
+                phase: failure.phase,
+                providerError: String(
+                    format: String(localized: "recorder.failureMetadataSaveError"),
+                    failure.providerError,
+                    error.localizedDescription
+                ),
+                engineName: failure.engineName,
+                modelName: failure.modelName,
+                failedAt: failure.failedAt
+            )
+            transientTranscriptionFailures[key] = surfacedFailure
+            return surfacedFailure
         }
     }
 
@@ -944,6 +970,7 @@ final class AudioRecorderViewModel: ObservableObject {
     }
 
     private func clearTranscriptionFailure(for audioURL: URL) {
+        transientTranscriptionFailures.removeValue(forKey: transcriptionFailureKey(for: audioURL))
         try? FileManager.default.removeItem(at: transcriptionFailureURL(for: audioURL))
     }
 
