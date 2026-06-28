@@ -65,6 +65,47 @@ final class AudioRecorderViewModel: ObservableObject {
         let liveSessionResult: TranscriptionResult?
     }
 
+    struct RecordingTranscriptionFailure: Codable, Equatable, Sendable {
+        enum Phase: String, Codable, Equatable, Sendable {
+            case preparingFinalAudio
+            case finalTranscription
+            case emptyResult
+            case savingTranscript
+
+            var displayName: String {
+                switch self {
+                case .preparingFinalAudio:
+                    String(localized: "recorder.failurePhase.preparingFinalAudio")
+                case .finalTranscription:
+                    String(localized: "recorder.failurePhase.finalTranscription")
+                case .emptyResult:
+                    String(localized: "recorder.failurePhase.emptyResult")
+                case .savingTranscript:
+                    String(localized: "recorder.failurePhase.savingTranscript")
+                }
+            }
+        }
+
+        let phase: Phase
+        let providerError: String
+        let engineName: String?
+        let modelName: String?
+        let failedAt: Date
+    }
+
+    private enum FinalTranscriptionOutcome {
+        case skipped
+        case transcriptSaved
+        case failed(RecordingTranscriptionFailure)
+
+        var failure: RecordingTranscriptionFailure? {
+            if case .failed(let failure) = self {
+                return failure
+            }
+            return nil
+        }
+    }
+
     struct RecordingItem: Identifiable {
         let id = UUID()
         let url: URL
@@ -72,6 +113,7 @@ final class AudioRecorderViewModel: ObservableObject {
         let duration: TimeInterval
         let fileSize: Int64
         let transcript: String?
+        let transcriptionFailure: RecordingTranscriptionFailure?
         var fileName: String { url.lastPathComponent }
     }
 
@@ -494,9 +536,12 @@ final class AudioRecorderViewModel: ObservableObject {
 
             EventBus.shared.emit(.recordingStopped(RecordingStoppedPayload(durationSeconds: recordingDuration)))
 
+            let finalTranscriptionOutcome: FinalTranscriptionOutcome
             if let request = finalTranscriptionRequest {
-                await runFinalTranscription(request)
+                finalTranscriptionOutcome = await runFinalTranscription(request)
                 state = .idle
+            } else {
+                finalTranscriptionOutcome = .skipped
             }
 
             // Emit final transcript to LiveTranscriptPlugin
@@ -512,7 +557,15 @@ final class AudioRecorderViewModel: ObservableObject {
 
             if let apiSessionID {
                 if let url {
-                    completeRecorderAPISession(id: apiSessionID, outputURL: url)
+                    if let failure = finalTranscriptionOutcome.failure {
+                        failRecorderAPISession(
+                            id: apiSessionID,
+                            outputURL: url,
+                            error: recorderTranscriptionFailureAPISummary(failure)
+                        )
+                    } else {
+                        completeRecorderAPISession(id: apiSessionID, outputURL: url)
+                    }
                 } else {
                     failRecorderAPISession(id: apiSessionID, error: "Failed to finalize recording")
                 }
@@ -585,8 +638,8 @@ final class AudioRecorderViewModel: ObservableObject {
         }
     }
 
-    private func failRecorderAPISession(id: UUID, error: String) {
-        let outputFile = recorderAPISessions[id]?.outputFile
+    private func failRecorderAPISession(id: UUID, outputURL: URL? = nil, error: String) {
+        let outputFile = outputURL?.path ?? recorderAPISessions[id]?.outputFile
         storeRecorderAPISession(RecorderAPISessionSnapshot(
             id: id,
             status: .failed,
@@ -605,6 +658,7 @@ final class AudioRecorderViewModel: ObservableObject {
             // Also delete sidecar transcript
             let txtURL = item.url.deletingPathExtension().appendingPathExtension("txt")
             try? FileManager.default.removeItem(at: txtURL)
+            try? FileManager.default.removeItem(at: transcriptionFailureURL(for: item.url))
             recordings.removeAll { $0.id == item.id }
         } catch {
             errorMessage = error.localizedDescription
@@ -654,7 +708,15 @@ final class AudioRecorderViewModel: ObservableObject {
                     let size = (attrs[.size] as? Int64) ?? 0
                     let duration = audioDuration(for: url)
                     let transcript = loadTranscript(for: url)
-                    return RecordingItem(url: url, date: date, duration: duration, fileSize: size, transcript: transcript)
+                    let transcriptionFailure = loadTranscriptionFailure(for: url)
+                    return RecordingItem(
+                        url: url,
+                        date: date,
+                        duration: duration,
+                        fileSize: size,
+                        transcript: transcript,
+                        transcriptionFailure: transcriptionFailure
+                    )
                 }
                 .sorted { $0.date > $1.date }
 
@@ -686,6 +748,17 @@ final class AudioRecorderViewModel: ObservableObject {
         return formatter.string(fromByteCount: bytes)
     }
 
+    func transcriptionFailureSummary(for item: RecordingItem) -> String? {
+        guard let failure = item.transcriptionFailure else { return nil }
+        return String(
+            format: String(localized: "recorder.transcriptionFailureSummary"),
+            formattedDuration(item.duration),
+            formattedFileSize(item.fileSize),
+            failure.phase.displayName,
+            failure.providerError
+        )
+    }
+
     // MARK: - Streaming Transcription
 
     private func startStreamingTranscription() {
@@ -715,7 +788,7 @@ final class AudioRecorderViewModel: ObservableObject {
         )
     }
 
-    private func runFinalTranscription(_ request: FinalTranscriptionRequest) async {
+    private func runFinalTranscription(_ request: FinalTranscriptionRequest) async -> FinalTranscriptionOutcome {
         isTranscribing = true
         defer { isTranscribing = false }
 
@@ -723,15 +796,15 @@ final class AudioRecorderViewModel: ObservableObject {
         guard buffer.count > 8000 else { // At least 0.5s of audio
             // Use streaming result as final if buffer too short
             if !partialText.isEmpty {
-                saveTranscript(partialText, for: request.outputURL)
+                return saveTranscriptOutcome(partialText, for: request.outputURL, request: request)
             } else if let liveSessionResult = request.liveSessionResult {
                 let text = liveSessionResult.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !text.isEmpty {
                     partialText = text
-                    saveTranscript(text, for: request.outputURL)
+                    return saveTranscriptOutcome(text, for: request.outputURL, request: request)
                 }
             }
-            return
+            return .skipped
         }
 
         // Fall back to transcribe if engine doesn't support translation
@@ -763,16 +836,33 @@ final class AudioRecorderViewModel: ObservableObject {
             let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
             if !text.isEmpty {
                 partialText = text
-                saveTranscript(text, for: request.outputURL)
+                return saveTranscriptOutcome(text, for: request.outputURL, request: request)
             } else if !partialText.isEmpty {
-                saveTranscript(partialText, for: request.outputURL)
+                return saveTranscriptOutcome(partialText, for: request.outputURL, request: request)
+            } else {
+                let failure = makeTranscriptionFailure(
+                    phase: .emptyResult,
+                    providerError: String(localized: "recorder.emptyFinalTranscriptionError"),
+                    request: request
+                )
+                saveTranscriptionFailure(failure, for: request.outputURL)
+                errorMessage = recorderTranscriptionFailureAPISummary(failure)
+                return .failed(failure)
             }
         } catch {
             logger.error("Final transcription failed: \(error.localizedDescription)")
             // Fall back to streaming result
             if !partialText.isEmpty {
-                saveTranscript(partialText, for: request.outputURL)
+                return saveTranscriptOutcome(partialText, for: request.outputURL, request: request)
             }
+            let failure = makeTranscriptionFailure(
+                phase: .finalTranscription,
+                providerError: error.localizedDescription,
+                request: request
+            )
+            saveTranscriptionFailure(failure, for: request.outputURL)
+            errorMessage = recorderTranscriptionFailureAPISummary(failure)
+            return .failed(failure)
         }
     }
 
@@ -782,17 +872,86 @@ final class AudioRecorderViewModel: ObservableObject {
         audioURL.deletingPathExtension().appendingPathExtension("txt")
     }
 
-    private func saveTranscript(_ text: String, for audioURL: URL) {
+    private func saveTranscript(_ text: String, for audioURL: URL) throws {
         let txtURL = transcriptURL(for: audioURL)
-        do {
-            try text.write(to: txtURL, atomically: true, encoding: .utf8)
-        } catch {
-            logger.error("Failed to save transcript: \(error.localizedDescription)")
-        }
+        try text.write(to: txtURL, atomically: true, encoding: .utf8)
+        clearTranscriptionFailure(for: audioURL)
     }
 
     private func loadTranscript(for audioURL: URL) -> String? {
         let txtURL = transcriptURL(for: audioURL)
         return try? String(contentsOf: txtURL, encoding: .utf8)
+    }
+
+    private func saveTranscriptOutcome(
+        _ text: String,
+        for audioURL: URL,
+        request: FinalTranscriptionRequest
+    ) -> FinalTranscriptionOutcome {
+        do {
+            try saveTranscript(text, for: audioURL)
+            return .transcriptSaved
+        } catch {
+            logger.error("Failed to save transcript: \(error.localizedDescription)")
+            let failure = makeTranscriptionFailure(
+                phase: .savingTranscript,
+                providerError: error.localizedDescription,
+                request: request
+            )
+            saveTranscriptionFailure(failure, for: audioURL)
+            errorMessage = recorderTranscriptionFailureAPISummary(failure)
+            return .failed(failure)
+        }
+    }
+
+    private func transcriptionFailureURL(for audioURL: URL) -> URL {
+        audioURL.deletingPathExtension().appendingPathExtension("transcription-failure.json")
+    }
+
+    private func makeTranscriptionFailure(
+        phase: RecordingTranscriptionFailure.Phase,
+        providerError: String,
+        request: FinalTranscriptionRequest
+    ) -> RecordingTranscriptionFailure {
+        RecordingTranscriptionFailure(
+            phase: phase,
+            providerError: providerError,
+            engineName: request.providerId.flatMap { providerId in
+                PluginManager.shared?.transcriptionEngine(for: providerId)?.providerDisplayName
+            },
+            modelName: modelManager.resolvedModelDisplayName(
+                engineOverrideId: request.providerId,
+                cloudModelOverride: request.resolvedModelId
+            ),
+            failedAt: Date()
+        )
+    }
+
+    private func saveTranscriptionFailure(_ failure: RecordingTranscriptionFailure, for audioURL: URL) {
+        let url = transcriptionFailureURL(for: audioURL)
+        do {
+            let data = try JSONEncoder().encode(failure)
+            try data.write(to: url, options: .atomic)
+        } catch {
+            logger.error("Failed to save recorder transcription failure: \(error.localizedDescription)")
+        }
+    }
+
+    private func loadTranscriptionFailure(for audioURL: URL) -> RecordingTranscriptionFailure? {
+        let url = transcriptionFailureURL(for: audioURL)
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(RecordingTranscriptionFailure.self, from: data)
+    }
+
+    private func clearTranscriptionFailure(for audioURL: URL) {
+        try? FileManager.default.removeItem(at: transcriptionFailureURL(for: audioURL))
+    }
+
+    private func recorderTranscriptionFailureAPISummary(_ failure: RecordingTranscriptionFailure) -> String {
+        String(
+            format: String(localized: "recorder.transcriptionFailureAPISummary"),
+            failure.phase.displayName,
+            failure.providerError
+        )
     }
 }

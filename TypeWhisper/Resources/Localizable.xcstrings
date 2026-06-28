@@ -9313,6 +9313,86 @@
         }
       }
     },
+    "recorder.emptyFinalTranscriptionError": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die finale Transkription hat keinen Text zurueckgegeben."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Final transcription returned no text."
+          }
+        }
+      }
+    },
+    "recorder.failurePhase.emptyResult": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "leeres Ergebnis"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "empty result"
+          }
+        }
+      }
+    },
+    "recorder.failurePhase.finalTranscription": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "finaler Transkription"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "final transcription"
+          }
+        }
+      }
+    },
+    "recorder.failurePhase.preparingFinalAudio": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vorbereitung des finalen Audios"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "preparing final audio"
+          }
+        }
+      }
+    },
+    "recorder.failurePhase.savingTranscript": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speichern des Transkripts"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "saving transcript"
+          }
+        }
+      }
+    },
     "recorder.language": {
       "extractionState": "stale",
       "localizations": {
@@ -9928,6 +10008,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "音声認識"
+          }
+        }
+      }
+    },
+    "recorder.transcriptionFailed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkription fehlgeschlagen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcription failed"
+          }
+        }
+      }
+    },
+    "recorder.transcriptionFailureAPISummary": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkription fehlgeschlagen waehrend %@: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcription failed during %@: %@"
+          }
+        }
+      }
+    },
+    "recorder.transcriptionFailureSummary": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkription fehlgeschlagen fuer %@, %@ waehrend %@: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcription failed for %@, %@ during %@: %@"
           }
         }
       }

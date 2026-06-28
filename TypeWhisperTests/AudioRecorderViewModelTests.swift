@@ -128,19 +128,157 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(splitEnabledCount, 1)
     }
 
+    func testFinalTranscriptionFailurePersistsRecorderFailureAndFailsAPISession() async throws {
+        try preserveStandardDefaults()
+        setupPluginManager(groqBehavior: .failure("HTTP 413: payload too large"))
+        let defaults = try makeDefaults()
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        let viewModel = makeFinalTranscriptionViewModel(defaults: defaults, modelManager: modelManager)
+
+        let sessionID = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        XCTAssertEqual(try viewModel.apiStopRecording(), sessionID)
+
+        let session = try await waitForRecorderSession(viewModel, id: sessionID, status: .failed)
+        let outputFile = try XCTUnwrap(session.outputFile)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outputFile))
+        XCTAssertNil(session.text)
+        XCTAssertTrue(session.error?.contains("HTTP 413") == true)
+
+        let recording = try XCTUnwrap(viewModel.recordings.first)
+        XCTAssertEqual(
+            recording.url.resolvingSymlinksInPath().path,
+            URL(fileURLWithPath: outputFile).resolvingSymlinksInPath().path
+        )
+        XCTAssertNil(recording.transcript)
+        let failure = try XCTUnwrap(recording.transcriptionFailure)
+        XCTAssertEqual(failure.phase, .finalTranscription)
+        XCTAssertEqual(failure.engineName, "Groq")
+        XCTAssertEqual(failure.modelName, "Whisper Large V3")
+        XCTAssertTrue(failure.providerError.contains("HTTP 413"))
+        XCTAssertTrue(session.error?.contains(failure.phase.displayName) == true)
+
+        let summary = try XCTUnwrap(viewModel.transcriptionFailureSummary(for: recording))
+        XCTAssertTrue(summary.contains(viewModel.formattedDuration(recording.duration)))
+        XCTAssertTrue(summary.contains(viewModel.formattedFileSize(recording.fileSize)))
+        XCTAssertTrue(summary.contains(failure.phase.displayName))
+        XCTAssertTrue(summary.contains("HTTP 413"))
+    }
+
+    func testEmptyFinalTranscriptionPersistsRecorderFailure() async throws {
+        try preserveStandardDefaults()
+        setupPluginManager(groqBehavior: .empty)
+        let defaults = try makeDefaults()
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        let viewModel = makeFinalTranscriptionViewModel(defaults: defaults, modelManager: modelManager)
+
+        let sessionID = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        _ = try viewModel.apiStopRecording()
+
+        let session = try await waitForRecorderSession(viewModel, id: sessionID, status: .failed)
+        XCTAssertNotNil(session.outputFile)
+        XCTAssertNil(session.text)
+
+        let recording = try XCTUnwrap(viewModel.recordings.first)
+        XCTAssertNil(recording.transcript)
+        let failure = try XCTUnwrap(recording.transcriptionFailure)
+        XCTAssertEqual(failure.phase, .emptyResult)
+        XCTAssertFalse(failure.providerError.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        XCTAssertTrue(session.error?.contains(failure.phase.displayName) == true)
+        XCTAssertTrue(session.error?.contains(failure.providerError) == true)
+    }
+
+    func testSuccessfulTranscriptSaveClearsPriorRecorderFailure() async throws {
+        try preserveStandardDefaults()
+        setupPluginManager(groqBehavior: .success("fresh transcript"))
+        let defaults = try makeDefaults()
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        let recordingsDirectory = makeTemporaryDirectory()
+        let outputURL = recordingsDirectory.appendingPathComponent("Recording success.wav")
+        let failureURL = outputURL.deletingPathExtension().appendingPathExtension("transcription-failure.json")
+        let oldFailure = AudioRecorderViewModel.RecordingTranscriptionFailure(
+            phase: .finalTranscription,
+            providerError: "old error",
+            engineName: "Groq",
+            modelName: "Whisper Large V3",
+            failedAt: Date.distantPast
+        )
+        try JSONEncoder().encode(oldFailure).write(to: failureURL, options: .atomic)
+
+        let recorderService = makeRecorderService(
+            recordingsDirectory: recordingsDirectory,
+            outputURL: outputURL
+        )
+        let viewModel = makeViewModel(defaults: defaults, modelManager: modelManager, recorderService: recorderService)
+        viewModel.transcriptionEnabled = true
+        viewModel.livePreviewEnabled = false
+
+        let sessionID = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        _ = try viewModel.apiStopRecording()
+
+        let session = try await waitForRecorderSession(viewModel, id: sessionID, status: .completed)
+        XCTAssertEqual(session.text, "fresh transcript")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: failureURL.path))
+
+        let recording = try XCTUnwrap(viewModel.recordings.first)
+        XCTAssertEqual(recording.transcript, "fresh transcript")
+        XCTAssertNil(recording.transcriptionFailure)
+    }
+
     private func makeViewModel(
         defaults: UserDefaults,
         modelManager: ModelManagerService = ModelManagerService(),
         recorderService: AudioRecorderService = AudioRecorderService(),
         livePreviewStartObserver: (() -> Void)? = nil
     ) -> AudioRecorderViewModel {
-        AudioRecorderViewModel(
+        setupEventBus()
+        return AudioRecorderViewModel(
             recorderService: recorderService,
             modelManager: modelManager,
             dictionaryService: DictionaryService(appSupportDirectory: makeTemporaryDirectory()),
             defaults: defaults,
             livePreviewStartObserver: livePreviewStartObserver
         )
+    }
+
+    private func makeFinalTranscriptionViewModel(
+        defaults: UserDefaults,
+        modelManager: ModelManagerService,
+        recordingsDirectory: URL? = nil
+    ) -> AudioRecorderViewModel {
+        let recorderService = makeRecorderService(
+            recordingsDirectory: recordingsDirectory ?? makeTemporaryDirectory()
+        )
+        let viewModel = makeViewModel(defaults: defaults, modelManager: modelManager, recorderService: recorderService)
+        viewModel.transcriptionEnabled = true
+        viewModel.livePreviewEnabled = false
+        return viewModel
+    }
+
+    private func makeRecorderService(
+        recordingsDirectory: URL,
+        outputURL: URL? = nil,
+        samples: [Float] = Array(repeating: 0.25, count: Int(AudioRecorderService.transcriptionSampleRate))
+    ) -> AudioRecorderService {
+        let recorderService = AudioRecorderService()
+        recorderService.recordingsDirectoryOverride = recordingsDirectory
+        recorderService.startRecordingOverride = { _, _, _, proposedOutputURL in
+            let resolvedOutputURL = outputURL ?? proposedOutputURL
+            try FileManager.default.createDirectory(
+                at: resolvedOutputURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try Data("placeholder".utf8).write(to: resolvedOutputURL)
+            return resolvedOutputURL
+        }
+        recorderService.stopRecordingOverride = { resolvedOutputURL in
+            try Data("recorded".utf8).write(to: resolvedOutputURL)
+            return resolvedOutputURL
+        }
+        recorderService.currentBufferOverride = { samples }
+        return recorderService
     }
 
     private func livePreviewStartCount(
@@ -171,7 +309,36 @@ final class AudioRecorderViewModelTests: XCTestCase {
         return startCount
     }
 
-    private func setupPluginManager() {
+    private func waitForRecorderSession(
+        _ viewModel: AudioRecorderViewModel,
+        id: UUID,
+        status: AudioRecorderViewModel.RecorderAPISessionStatus,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async throws -> AudioRecorderViewModel.RecorderAPISessionSnapshot {
+        for _ in 0..<40 {
+            if let session = viewModel.apiRecorderSession(id: id), session.status == status {
+                return session
+            }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        let session = viewModel.apiRecorderSession(id: id)
+        XCTFail("Recorder session \(id) did not reach \(status.rawValue). Current status: \(session?.status.rawValue ?? "missing")", file: file, line: line)
+        return try XCTUnwrap(session, file: file, line: line)
+    }
+
+    private func setupEventBus() {
+        let previousEventBus: EventBus? = EventBus.shared
+        EventBus.shared = EventBus()
+        addTeardownBlock {
+            EventBus.shared = previousEventBus
+        }
+    }
+
+    private func setupPluginManager(
+        groqBehavior: AudioRecorderMockTranscriptionPlugin.TranscriptionBehavior = .success("mock transcription"),
+        assemblyAIBehavior: AudioRecorderMockTranscriptionPlugin.TranscriptionBehavior = .success("mock transcription")
+    ) {
         let previousPluginManager = PluginManager.shared
         addTeardownBlock {
             PluginManager.shared = previousPluginManager
@@ -194,7 +361,8 @@ final class AudioRecorderViewModelTests: XCTestCase {
                         PluginModelInfo(id: "whisper-large-v3", displayName: "Whisper Large V3"),
                         PluginModelInfo(id: "whisper-small", displayName: "Whisper Small")
                     ],
-                    selectedModelId: "whisper-large-v3"
+                    selectedModelId: "whisper-large-v3",
+                    behavior: groqBehavior
                 ),
                 bundle: Bundle.main,
                 sourceURL: appSupportDirectory,
@@ -214,7 +382,8 @@ final class AudioRecorderViewModelTests: XCTestCase {
                         PluginModelInfo(id: "universal-3-pro", displayName: "Universal-3 Pro"),
                         PluginModelInfo(id: "universal-2", displayName: "Universal-2")
                     ],
-                    selectedModelId: "universal-2"
+                    selectedModelId: "universal-2",
+                    behavior: assemblyAIBehavior
                 ),
                 bundle: Bundle.main,
                 sourceURL: appSupportDirectory,
@@ -266,6 +435,12 @@ final class AudioRecorderViewModelTests: XCTestCase {
 }
 
 private final class AudioRecorderMockTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+    enum TranscriptionBehavior {
+        case success(String)
+        case empty
+        case failure(String)
+    }
+
     static let pluginId = "com.typewhisper.mock.audio-recorder"
     static let pluginName = "Audio Recorder Mock"
 
@@ -275,12 +450,14 @@ private final class AudioRecorderMockTranscriptionPlugin: NSObject, Transcriptio
     var selectedModelId: String?
     var isConfigured = true
     var supportsTranslation = true
+    private let behavior: TranscriptionBehavior
 
     required override init() {
         self.providerId = "mock"
         self.providerDisplayName = "Mock"
         self.transcriptionModels = []
         self.selectedModelId = nil
+        self.behavior = .success("mock transcription")
         super.init()
     }
 
@@ -288,12 +465,14 @@ private final class AudioRecorderMockTranscriptionPlugin: NSObject, Transcriptio
         providerId: String,
         displayName: String,
         models: [PluginModelInfo],
-        selectedModelId: String?
+        selectedModelId: String?,
+        behavior: TranscriptionBehavior = .success("mock transcription")
     ) {
         self.providerId = providerId
         self.providerDisplayName = displayName
         self.transcriptionModels = models
         self.selectedModelId = selectedModelId
+        self.behavior = behavior
         super.init()
     }
 
@@ -310,6 +489,13 @@ private final class AudioRecorderMockTranscriptionPlugin: NSObject, Transcriptio
         translate: Bool,
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
-        PluginTranscriptionResult(text: "mock transcription")
+        switch behavior {
+        case .success(let text):
+            PluginTranscriptionResult(text: text)
+        case .empty:
+            PluginTranscriptionResult(text: "")
+        case .failure(let message):
+            throw PluginTranscriptionError.apiError(message)
+        }
     }
 }

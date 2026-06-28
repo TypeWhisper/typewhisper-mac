@@ -400,6 +400,10 @@ private struct RecordingRow: View {
                         if item.transcript != nil {
                             Label(String(localized: "recorder.hasTranscript"), systemImage: "text.quote")
                         }
+                        if item.transcriptionFailure != nil {
+                            Label(String(localized: "recorder.transcriptionFailed"), systemImage: "exclamationmark.triangle")
+                                .foregroundStyle(.red)
+                        }
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -443,6 +447,14 @@ private struct RecordingRow: View {
                     .buttonStyle(.borderless)
                     .help(String(localized: "recorder.delete"))
                 }
+            }
+
+            if let failureSummary = viewModel.transcriptionFailureSummary(for: item) {
+                Label(failureSummary, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             // Expandable transcript
