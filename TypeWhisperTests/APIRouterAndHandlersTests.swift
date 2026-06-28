@@ -8435,7 +8435,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
-    func testHybridModifierHoldStartsAfterDelayAndStopsOnRelease() async throws {
+    func testHybridModifierHoldStartsAfterDelayAndShortReleaseTogglesDictation() async throws {
         let service = HotkeyService()
         service.suspendMonitoring()
         service.hybridModifierHoldActivationDelay = 0.02
@@ -8462,6 +8462,44 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertEqual(startCount, 1)
         XCTAssertEqual(stopCount, 0)
         XCTAssertEqual(service.currentMode, .pushToTalk)
+
+        currentFlags = []
+        XCTAssertTrue(service.processEventForTesting(keyUp, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(stopCount, 0)
+        XCTAssertEqual(service.currentMode, .toggle)
+    }
+
+    @MainActor
+    func testHybridModifierLongHoldStopsAfterRelease() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.hybridModifierHoldActivationDelay = 0.02
+
+        service.setHotkeyForTesting(controlModifierHotkey(), for: .hybrid)
+
+        var currentFlags = NSEvent.ModifierFlags.control
+        service.modifierFlagsStateProvider = { currentFlags }
+
+        var startCount = 0
+        var stopCount = 0
+        let started = expectation(description: "hybrid modifier hold starts after delay")
+        service.onDictationStart = { _ in
+            startCount += 1
+            started.fulfill()
+        }
+        service.onDictationStop = { stopCount += 1 }
+
+        let keyDown = try makeControlModifierEvent(isDown: true)
+        let keyUp = try makeControlModifierEvent(isDown: false)
+
+        XCTAssertFalse(service.processEventForTesting(keyDown, source: .monitor))
+        await fulfillment(of: [started], timeout: 1.0)
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(stopCount, 0)
+        XCTAssertEqual(service.currentMode, .pushToTalk)
+
+        try await Task.sleep(for: .milliseconds(1_050))
 
         currentFlags = []
         XCTAssertTrue(service.processEventForTesting(keyUp, source: .monitor))

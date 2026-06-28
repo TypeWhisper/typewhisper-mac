@@ -1544,20 +1544,10 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
         switch slotType {
         case .hybrid:
-            if activeDelayedHybridModifierHold {
-                isActive = false
-                activeSlotType = nil
-                activeGlobalHotkey = nil
-                currentMode = nil
-                keyDownTime = nil
-                pushToTalkInterruptionSignaled = false
-                activeDelayedHybridModifierHold = false
-                onDictationStop?()
-                return
-            }
             guard let downTime = keyDownTime else { return }
             if Date().timeIntervalSince(downTime) < Self.toggleThreshold {
                 currentMode = .toggle
+                activeDelayedHybridModifierHold = false
             } else {
                 isActive = false
                 activeSlotType = nil
