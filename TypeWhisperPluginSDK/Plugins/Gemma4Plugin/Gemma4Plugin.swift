@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import MLX
 import MLXVLM
 import MLXLMCommon
 import HuggingFace
@@ -90,7 +91,7 @@ private struct Gemma4TokenizerLoader: TokenizerLoader {
 // MARK: - Plugin Entry Point
 
 @objc(Gemma4Plugin)
-final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllableProvider, LLMProviderSetupStatusProviding, LLMModelSelectable, PluginSettingsActivityReporting, PluginDownloadedModelManaging, @unchecked Sendable {
+final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllableProvider, LLMProviderSetupStatusProviding, LLMModelSelectable, PluginSettingsActivityReporting, PluginDownloadedModelManaging, PluginRuntimeMemoryDiagnosticsReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.gemma4"
     static let pluginName = "Gemma 4"
     static let defaultGenerationTemperature = 0.1
@@ -126,6 +127,7 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
     private var lastModelLoadProgressInstant = ContinuousClock().now
     private var lastModelLoadProgressFraction = 0.0
     private var activeModelLoadTask: (generation: Int, task: Task<ModelContainer, Error>)?
+    private var restoreModelTask: Task<Void, Never>?
 
     private func modelsDirectory() -> URL {
         host?.pluginDataDirectory.appendingPathComponent("models")
@@ -173,8 +175,17 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
         }
 
         let persistedLoadedModel = host.userDefault(forKey: "loadedModel") as? String
-        if let persistedLoadedModel, !Self.canRestoreLoadedModel(persistedLoadedModel) {
-            host.setUserDefault(nil, forKey: "loadedModel")
+        let shouldAutoRestoreLoadedModel: Bool
+        if let persistedLoadedModel {
+            if Self.canRestoreLoadedModel(persistedLoadedModel),
+               let modelDef = Self.modelDefinition(for: persistedLoadedModel) {
+                shouldAutoRestoreLoadedModel = isModelDownloaded(modelDef)
+            } else {
+                host.setUserDefault(nil, forKey: "loadedModel")
+                shouldAutoRestoreLoadedModel = false
+            }
+        } else {
+            shouldAutoRestoreLoadedModel = false
         }
 
         _generationTemperature = host.userDefault(forKey: "generationTemperature") as? Double
@@ -183,7 +194,14 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
             ?? PluginLLMTemperatureMode.custom.rawValue
         _hfToken = PluginHuggingFaceTokenHelper.loadToken(from: host)
 
-        Task { await restoreLoadedModel(allowDownloads: false) }
+        restoreModelTask?.cancel()
+        if shouldAutoRestoreLoadedModel {
+            restoreModelTask = Task { [weak self] in
+                await self?.restoreLoadedModel(allowDownloads: false)
+            }
+        } else {
+            restoreModelTask = nil
+        }
     }
 
     func deactivate() {
@@ -192,6 +210,7 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
         loadedModelId = nil
         downloadProgress = 0
         modelState = .notLoaded
+        Self.scheduleRuntimeCacheClearWhenInferenceIsIdle()
         host = nil
     }
 
@@ -232,6 +251,7 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
             loadedModelId = nil
             downloadProgress = 0
             modelState = .notLoaded
+            await Self.clearRuntimeCacheWhenInferenceIsIdle()
         }
         if _selectedLLMModelId == modelId {
             _selectedLLMModelId = nil
@@ -260,48 +280,52 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
         model: String?,
         temperatureDirective: PluginLLMTemperatureDirective
     ) async throws -> String {
-        guard let modelContainer else {
-            throw PluginChatError.notConfigured
-        }
-
         let trimmedUserText = userText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedUserText.isEmpty else {
             throw Gemma4PluginError.noInputText
         }
 
-        let combinedPrompt = """
-        Follow these instructions exactly:
-        \(systemPrompt)
-
-        Input text:
-        \(trimmedUserText)
-        """
-
-        let chat: [Chat.Message] = [
-            .user(combinedPrompt),
-        ]
-        let userInput = UserInput(chat: chat)
-        let input = try await modelContainer.prepare(input: userInput)
         let resolvedTemperature = providerTemperatureDirective
             .resolvedTemperature(applying: temperatureDirective) ?? Self.defaultGenerationTemperature
 
-        let parameters = Self.promptGenerationParameters(
-            temperature: resolvedTemperature,
-            modelId: model ?? loadedModelId
-        )
-
-        let stream = try await modelContainer.generate(input: input, parameters: parameters)
-        var result = ""
-        for await generation in stream {
-            switch generation {
-            case .chunk(let text):
-                result += text
-            case .info, .toolCall:
-                break
+        return try await PluginLocalInferenceGate.shared.withLock { [self] in
+            guard let modelContainer else {
+                throw PluginChatError.notConfigured
             }
-        }
+            defer { Self.clearRuntimeCache() }
 
-        return result.trimmingCharacters(in: .whitespacesAndNewlines)
+            let combinedPrompt = """
+            Follow these instructions exactly:
+            \(systemPrompt)
+
+            Input text:
+            \(trimmedUserText)
+            """
+
+            let chat: [Chat.Message] = [
+                .user(combinedPrompt),
+            ]
+            let userInput = UserInput(chat: chat)
+            let input = try await modelContainer.prepare(input: userInput)
+
+            let parameters = Self.promptGenerationParameters(
+                temperature: resolvedTemperature,
+                modelId: model ?? loadedModelId
+            )
+
+            let stream = try await modelContainer.generate(input: input, parameters: parameters)
+            var result = ""
+            for await generation in stream {
+                switch generation {
+                case .chunk(let text):
+                    result += text
+                case .info, .toolCall:
+                    break
+                }
+            }
+
+            return result.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
     }
 
     // MARK: - LLMModelSelectable
@@ -345,6 +369,15 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
         return String(
             localized: "Load a Gemma 4 model in Integrations before using it for prompts.",
             bundle: bundle
+        )
+    }
+
+    var runtimeMemorySnapshot: PluginRuntimeMemorySnapshot? {
+        let snapshot = Memory.snapshot()
+        return PluginRuntimeMemorySnapshot(
+            activeMemoryBytes: snapshot.activeMemory,
+            cacheMemoryBytes: snapshot.cacheMemory,
+            peakMemoryBytes: snapshot.peakMemory
         )
     }
 
@@ -508,6 +541,7 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
         loadedModelId = nil
         downloadProgress = 0
         modelState = .notLoaded
+        Self.scheduleRuntimeCacheClearWhenInferenceIsIdle()
         if clearPersistence {
             host?.setUserDefault(nil, forKey: "loadedModel")
         }
@@ -534,9 +568,26 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
         loadedModelId = nil
         downloadProgress = 0
         modelState = .notLoaded
+        Self.scheduleRuntimeCacheClearWhenInferenceIsIdle()
         host?.setUserDefault(nil, forKey: "loadedModel")
         try? deleteModelFiles(modelDef)
         host?.notifyCapabilitiesChanged()
+    }
+
+    private static func clearRuntimeCache() {
+        Memory.clearCache()
+    }
+
+    private static func clearRuntimeCacheWhenInferenceIsIdle() async {
+        try? await PluginLocalInferenceGate.shared.withLock {
+            Memory.clearCache()
+        }
+    }
+
+    private static func scheduleRuntimeCacheClearWhenInferenceIsIdle() {
+        Task {
+            await clearRuntimeCacheWhenInferenceIsIdle()
+        }
     }
 
     func restoreLoadedModel(allowDownloads: Bool = true) async {
@@ -562,6 +613,8 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
 
     private func invalidateModelLoad() {
         modelLoadGeneration += 1
+        restoreModelTask?.cancel()
+        restoreModelTask = nil
         activeModelLoadTask?.task.cancel()
         activeModelLoadTask = nil
     }

@@ -330,6 +330,54 @@ private final class MockTTSPlaybackSession: TTSPlaybackSession, @unchecked Senda
     }
 }
 
+private actor GateConcurrencyState {
+    private var currentCount = 0
+    private(set) var maxConcurrent = 0
+
+    func enter() {
+        currentCount += 1
+        maxConcurrent = max(maxConcurrent, currentCount)
+    }
+
+    func leave() {
+        currentCount -= 1
+    }
+}
+
+private actor GateLockRelease {
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var isReleased = false
+
+    func wait() async {
+        guard !isReleased else { return }
+        await withCheckedContinuation { continuation in
+            if isReleased {
+                continuation.resume()
+            } else {
+                self.continuation = continuation
+            }
+        }
+    }
+
+    func release() {
+        isReleased = true
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
+private actor GateOperationState {
+    private(set) var didRun = false
+
+    func markRan() {
+        didRun = true
+    }
+
+    func value() -> Bool {
+        didRun
+    }
+}
+
 @objc(MockTTSPlugin)
 private final class MockTTSPlugin: NSObject, TTSProviderPlugin, @unchecked Sendable {
     static let pluginId = "com.typewhisper.mock.tts"
@@ -366,6 +414,67 @@ private final class MockTTSPlugin: NSObject, TTSProviderPlugin, @unchecked Senda
 }
 
 final class ProtocolContractTests: XCTestCase {
+    func testLocalInferenceGateSerializesConcurrentOperations() async throws {
+        let gate = PluginLocalInferenceGate()
+        let state = GateConcurrencyState()
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for _ in 0..<8 {
+                group.addTask {
+                    try await gate.withLock {
+                        await state.enter()
+                        try await Task.sleep(for: .milliseconds(20))
+                        await state.leave()
+                    }
+                }
+            }
+
+            try await group.waitForAll()
+        }
+
+        let maxConcurrent = await state.maxConcurrent
+        XCTAssertEqual(maxConcurrent, 1)
+    }
+
+    func testLocalInferenceGateDoesNotRunCancelledWaiter() async throws {
+        let gate = PluginLocalInferenceGate()
+        let release = GateLockRelease()
+        let cancelledOperation = GateOperationState()
+        let holderStarted = expectation(description: "holder acquired inference gate")
+
+        let holder = Task {
+            try await gate.withLock {
+                holderStarted.fulfill()
+                await release.wait()
+            }
+        }
+        await fulfillment(of: [holderStarted], timeout: 1.0)
+
+        let waiter = Task {
+            try await gate.withLock {
+                await cancelledOperation.markRan()
+            }
+        }
+        waiter.cancel()
+
+        try await Task.sleep(for: .milliseconds(20))
+        await release.release()
+        try await holder.value
+
+        do {
+            try await waiter.value
+            XCTFail("Cancelled waiter should throw before running gated operation")
+        } catch is CancellationError {
+            // Expected.
+        }
+
+        let cancelledOperationRan = await cancelledOperation.value()
+        XCTAssertFalse(cancelledOperationRan)
+
+        let followerRan = try await gate.withLock { true }
+        XCTAssertTrue(followerRan)
+    }
+
     func testPluginAuthRolesExposeStableRawValues() {
         XCTAssertEqual(PluginAuthRole.transcription.rawValue, "transcription")
         XCTAssertEqual(PluginAuthRole.llm.rawValue, "llm")

@@ -1,5 +1,6 @@
 import AVFoundation
 import CryptoKit
+import Darwin
 import Foundation
 import os.log
 import TypeWhisperPluginSDK
@@ -215,6 +216,35 @@ enum PluginDiagnosticsSupport {
     }
 }
 
+private enum DiagnosticProcessMemorySupport {
+    static func snapshot() -> DiagnosticsReport.ProcessMemoryInfo {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<integer_t>.size)
+        let result = withUnsafeMutablePointer(to: &info) { pointer in
+            pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { reboundPointer in
+                task_info(
+                    mach_task_self_,
+                    task_flavor_t(TASK_VM_INFO),
+                    reboundPointer,
+                    &count
+                )
+            }
+        }
+
+        guard result == KERN_SUCCESS else {
+            return DiagnosticsReport.ProcessMemoryInfo(
+                residentSizeBytes: nil,
+                physicalFootprintBytes: nil
+            )
+        }
+
+        return DiagnosticsReport.ProcessMemoryInfo(
+            residentSizeBytes: UInt64(info.resident_size),
+            physicalFootprintBytes: UInt64(info.phys_footprint)
+        )
+    }
+}
+
 private struct DiagnosticsReport: Encodable {
     struct AppInfo: Encodable {
         let version: String
@@ -256,6 +286,25 @@ private struct DiagnosticsReport: Encodable {
         let remoteAccessAllowed: Bool
     }
 
+    struct ProcessMemoryInfo: Encodable, Equatable {
+        let residentSizeBytes: UInt64?
+        let physicalFootprintBytes: UInt64?
+    }
+
+    struct PluginRuntimeMemoryInfo: Encodable, Equatable {
+        let runtimeIdentifier: String
+        let activeMemoryBytes: Int
+        let cacheMemoryBytes: Int
+        let peakMemoryBytes: Int
+
+        init(_ snapshot: PluginRuntimeMemorySnapshot) {
+            self.runtimeIdentifier = snapshot.runtimeIdentifier
+            self.activeMemoryBytes = snapshot.activeMemoryBytes
+            self.cacheMemoryBytes = snapshot.cacheMemoryBytes
+            self.peakMemoryBytes = snapshot.peakMemoryBytes
+        }
+    }
+
     struct AudioOutputInfo: Encodable {
         let deviceID: UInt32
         let uid: String?
@@ -292,6 +341,7 @@ private struct DiagnosticsReport: Encodable {
         let storedSelectedVersion: String?
         let source: DiagnosticPluginSourceInfo
         let currentSettingsActivity: DiagnosticPluginActivityInfo?
+        let runtimeMemory: PluginRuntimeMemoryInfo?
         let registryVersion: String?
         let registrySource: String?
         let externalBundleNotice: String?
@@ -364,6 +414,9 @@ private struct DiagnosticsReport: Encodable {
     let permissions: PermissionsInfo
     let model: ModelInfo
     let api: APIInfo
+    let processMemory: ProcessMemoryInfo
+    let modelAutoUnload: ModelAutoUnloadDiagnosticsSnapshot
+    let memoryExtraction: MemoryExtractionDiagnosticsSnapshot
     let audio: AudioInfo
     let plugins: [PluginInfo]
     let skippedExternalBundles: [SkippedExternalBundleInfo]
@@ -437,6 +490,7 @@ final class ErrorLogService: ObservableObject {
                 nil
             }
             let activity = (loadedPlugin.instance as? any PluginSettingsActivityReporting)?.currentSettingsActivity
+            let runtimeMemory = (loadedPlugin.instance as? any PluginRuntimeMemoryDiagnosticsReporting)?.runtimeMemorySnapshot
             let registryEntry = container.pluginRegistryService.registry.first { $0.id == loadedPlugin.manifest.id }
             let externalNotice = pluginManager.externalBundleNotice(
                 for: loadedPlugin.manifest.id,
@@ -467,6 +521,7 @@ final class ErrorLogService: ObservableObject {
                 storedSelectedVersion: defaults.string(forKey: Self.pluginDefaultKey(pluginId: loadedPlugin.manifest.id, key: "selectedVersion")),
                 source: pluginSource,
                 currentSettingsActivity: activity.map(DiagnosticPluginActivityInfo.init),
+                runtimeMemory: runtimeMemory.map(DiagnosticsReport.PluginRuntimeMemoryInfo.init),
                 registryVersion: registryEntry?.version,
                 registrySource: registryEntry?.source.rawValue,
                 externalBundleNotice: externalNotice?.diagnosticsValue
@@ -499,7 +554,7 @@ final class ErrorLogService: ObservableObject {
         }
 
         return DiagnosticsReport(
-            schemaVersion: 6,
+            schemaVersion: 7,
             exportedAt: Date(),
             app: .init(
                 version: AppConstants.appVersion,
@@ -538,6 +593,9 @@ final class ErrorLogService: ObservableObject {
                 loopbackOnly: true,
                 remoteAccessAllowed: false
             ),
+            processMemory: DiagnosticProcessMemorySupport.snapshot(),
+            modelAutoUnload: container.modelManagerService.autoUnloadDiagnosticsSnapshot(),
+            memoryExtraction: container.memoryService.extractionDiagnosticsSnapshot(),
             audio: .init(
                 selectedInputDeviceUID: defaults.string(forKey: UserDefaultsKeys.selectedInputDeviceUID),
                 selectedInputDeviceName: container.audioDeviceService.selectedDevice?.name,

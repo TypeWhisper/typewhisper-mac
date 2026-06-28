@@ -6475,7 +6475,24 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let modelManager = ModelManagerService()
         modelManager.scheduleAutoUnloadIfNeeded()
 
+        let scheduledSnapshot = modelManager.autoUnloadDiagnosticsSnapshot()
+        let scheduledEntry = try XCTUnwrap(scheduledSnapshot.entries.first)
+        XCTAssertEqual(scheduledSnapshot.policySeconds, -1)
+        XCTAssertEqual(scheduledSnapshot.policyName, "immediate")
+        XCTAssertEqual(scheduledEntry.pluginClassName, "MockLLMProviderPlugin")
+        XCTAssertNotNil(scheduledEntry.scheduledAt)
+        XCTAssertNotNil(scheduledEntry.dueAt)
+        XCTAssertNil(scheduledEntry.lastFiredAt)
+        XCTAssertNil(scheduledEntry.lastSelectorResponded)
+
         await waitForAutoUnloadCount(plugin, toBecome: 1)
+
+        let firedSnapshot = modelManager.autoUnloadDiagnosticsSnapshot()
+        let firedEntry = try XCTUnwrap(firedSnapshot.entries.first)
+        XCTAssertNil(firedEntry.scheduledAt)
+        XCTAssertNil(firedEntry.dueAt)
+        XCTAssertNotNil(firedEntry.lastFiredAt)
+        XCTAssertEqual(firedEntry.lastSelectorResponded, true)
     }
 
     @MainActor

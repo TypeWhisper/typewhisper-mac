@@ -39,6 +39,23 @@ enum MemoryCaptureScope: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
+struct MemoryExtractionDiagnosticsSnapshot: Encodable, Equatable, Sendable {
+    let inFlight: Bool
+    let skippedWhileBusy: Int
+    let totalStarted: Int
+    let totalCompleted: Int
+    let totalFailed: Int
+    let lastStartedAt: Date?
+    let lastFinishedAt: Date?
+}
+
+typealias MemoryExtractionPromptProcessor = @MainActor (
+    _ prompt: String,
+    _ text: String,
+    _ providerId: String,
+    _ model: String?
+) async throws -> String
+
 @MainActor
 final class MemoryService: ObservableObject, MemoryRetrieving {
     nonisolated static let rawMemoryTypeMetadataKey = "rawMemoryType"
@@ -85,18 +102,37 @@ Return ONLY the JSON array, nothing else.
 """
 
     private let promptProcessingService: PromptProcessingService
+    private let promptProcessor: MemoryExtractionPromptProcessor
     private let workflowNameProvider: @MainActor () -> [String]
     private var eventSubscriptionId: UUID?
     private var lastExtractionTime: Date = .distantPast
-    private let extractionCooldown: TimeInterval = 30
+    private var extractionCooldown: TimeInterval = 30
+    private var extractionTask: Task<Void, Never>?
+    private var activeExtractionID: UUID?
+    private var skippedWhileBusy = 0
+    private var totalStarted = 0
+    private var totalCompleted = 0
+    private var totalFailed = 0
+    private var lastStartedAt: Date?
+    private var lastFinishedAt: Date?
 
     init(
         promptProcessingService: PromptProcessingService,
+        promptProcessor: MemoryExtractionPromptProcessor? = nil,
         workflowNameProvider: @escaping @MainActor () -> [String] = {
             ServiceContainer.shared.workflowService.workflows.map(\.name)
         }
     ) {
         self.promptProcessingService = promptProcessingService
+        self.promptProcessor = promptProcessor ?? { prompt, text, providerId, model in
+            try await promptProcessingService.process(
+                prompt: prompt,
+                text: text,
+                providerOverride: providerId,
+                cloudModelOverride: model,
+                skipMemoryInjection: true
+            )
+        }
         self.workflowNameProvider = workflowNameProvider
         self.isEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.memoryEnabled)
         self.extractionProviderId = UserDefaults.standard.string(forKey: UserDefaultsKeys.memoryExtractionProvider) ?? ""
@@ -124,6 +160,9 @@ Return ONLY the JSON array, nothing else.
             EventBus.shared.unsubscribe(id: id)
             eventSubscriptionId = nil
         }
+        extractionTask?.cancel()
+        activeExtractionID = nil
+        extractionTask = nil
     }
 
     // MARK: - Extraction
@@ -159,33 +198,60 @@ Return ONLY the JSON array, nothing else.
         let providerId = extractionProviderId
         guard !providerId.isEmpty else { return }
 
+        if extractionTask != nil {
+            skippedWhileBusy += 1
+            logger.info("Memory extraction skipped because a previous extraction is still running")
+            return
+        }
+
         // Cooldown
         let now = Date()
         guard now.timeIntervalSince(lastExtractionTime) >= extractionCooldown else { return }
         lastExtractionTime = now
+        totalStarted += 1
+        lastStartedAt = now
 
         // Capture all MainActor properties before detaching
         let prompt = extractionPrompt
         let model = extractionModel
+        let extractionID = UUID()
+        activeExtractionID = extractionID
 
-        Task { [weak self] in
+        extractionTask = Task { [weak self] in
             guard let self else { return }
             do {
+                try Task.checkCancellation()
                 try await self.extractAndStore(payload: payload, providerId: providerId, prompt: prompt, model: model)
+                self.finishExtraction(extractionID: extractionID, didFail: false)
+            } catch is CancellationError {
+                self.finishExtraction(extractionID: extractionID, didFail: false)
             } catch {
+                self.finishExtraction(extractionID: extractionID, didFail: true)
                 logger.error("Memory extraction failed: \(error.localizedDescription)")
             }
         }
     }
 
+    private func finishExtraction(extractionID: UUID, didFail: Bool) {
+        guard activeExtractionID == extractionID else { return }
+        if didFail {
+            totalFailed += 1
+        } else {
+            totalCompleted += 1
+        }
+        lastFinishedAt = Date()
+        extractionTask = nil
+        activeExtractionID = nil
+    }
+
     private func extractAndStore(payload: TranscriptionCompletedPayload, providerId: String, prompt: String, model: String) async throws {
-        let result = try await promptProcessingService.process(
-            prompt: prompt,
-            text: payload.finalText,
-            providerOverride: providerId,
-            cloudModelOverride: model.isEmpty ? nil : model,
-            skipMemoryInjection: true
+        let result = try await promptProcessor(
+            prompt,
+            payload.finalText,
+            providerId,
+            model.isEmpty ? nil : model
         )
+        try Task.checkCancellation()
 
         let entries = parseExtractedMemories(result, source: MemorySource(
             appName: payload.appName,
@@ -205,6 +271,7 @@ Return ONLY the JSON array, nothing else.
         }
 
         let deduped = await deduplicate(entries: entries, using: plugins)
+        try Task.checkCancellation()
         guard !deduped.isEmpty else {
             logger.info("Memory extraction produced only duplicate entries")
             return
@@ -212,6 +279,7 @@ Return ONLY the JSON array, nothing else.
 
         var storedInReadyPlugin = false
         for plugin in plugins where plugin.isReady {
+            try Task.checkCancellation()
             do {
                 try await plugin.store(deduped)
                 storedInReadyPlugin = true
@@ -262,6 +330,28 @@ Return ONLY the JSON array, nothing else.
             return MemoryEntry(content: item.content, type: type, source: source, metadata: metadata, confidence: conf)
         }
     }
+
+    func extractionDiagnosticsSnapshot() -> MemoryExtractionDiagnosticsSnapshot {
+        MemoryExtractionDiagnosticsSnapshot(
+            inFlight: extractionTask != nil,
+            skippedWhileBusy: skippedWhileBusy,
+            totalStarted: totalStarted,
+            totalCompleted: totalCompleted,
+            totalFailed: totalFailed,
+            lastStartedAt: lastStartedAt,
+            lastFinishedAt: lastFinishedAt
+        )
+    }
+
+    #if DEBUG
+    func handleTranscriptionForTesting(_ payload: TranscriptionCompletedPayload) {
+        handleTranscription(payload)
+    }
+
+    func setExtractionCooldownForTesting(_ cooldown: TimeInterval) {
+        extractionCooldown = cooldown
+    }
+    #endif
 
     // MARK: - Deduplication
 
