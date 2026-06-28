@@ -34,7 +34,8 @@ class OverlayIndicatorPanel: NSPanel {
         ignoresMouseEvents = true
         FloatingPanelSpacePolicy.applyIndicatorPolicy(
             to: self,
-            displayMode: DictationViewModel.shared.notchIndicatorDisplay
+            displayMode: DictationViewModel.shared.notchIndicatorDisplay,
+            windowLevel: FloatingPanelSpacePolicy.floatingIndicatorWindowLevel
         )
 
         let hostingView = OverlayFirstMouseHostingView(rootView: OverlayIndicatorView())
@@ -148,7 +149,8 @@ class OverlayIndicatorPanel: NSPanel {
         setFrame(NSRect(x: x, y: y, width: Self.panelWidth, height: Self.panelHeight), display: true)
         FloatingPanelSpacePolicy.orderIndicatorFront(
             self,
-            displayMode: DictationViewModel.shared.notchIndicatorDisplay
+            displayMode: DictationViewModel.shared.notchIndicatorDisplay,
+            windowLevel: FloatingPanelSpacePolicy.floatingIndicatorWindowLevel
         )
     }
 

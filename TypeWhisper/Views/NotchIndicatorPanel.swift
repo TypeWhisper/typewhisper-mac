@@ -65,7 +65,8 @@ class NotchIndicatorPanel: NSPanel {
         ignoresMouseEvents = true
         FloatingPanelSpacePolicy.applyIndicatorPolicy(
             to: self,
-            displayMode: DictationViewModel.shared.notchIndicatorDisplay
+            displayMode: DictationViewModel.shared.notchIndicatorDisplay,
+            windowLevel: FloatingPanelSpacePolicy.notchIndicatorWindowLevel
         )
 
         let hostingView = FirstMouseHostingView(rootView: NotchIndicatorView(geometry: notchGeometry))
@@ -169,7 +170,8 @@ class NotchIndicatorPanel: NSPanel {
         setFrame(NSRect(x: x, y: y, width: Self.panelWidth, height: Self.panelHeight), display: true)
         FloatingPanelSpacePolicy.orderIndicatorFront(
             self,
-            displayMode: DictationViewModel.shared.notchIndicatorDisplay
+            displayMode: DictationViewModel.shared.notchIndicatorDisplay,
+            windowLevel: FloatingPanelSpacePolicy.notchIndicatorWindowLevel
         )
 
         guard !wasVisible else {

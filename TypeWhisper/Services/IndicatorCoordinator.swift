@@ -549,6 +549,9 @@ enum IndicatorFullscreenSuppressionPolicy {
 
         if let focusedWindowIsFullscreen {
             guard focusedWindowIsFullscreen else { return false }
+            // Tahoe fullscreen windows can report a content frame below the notch
+            // strip while auxiliary panels still affect the top menu-bar strip.
+            return true
         } else if !isFullscreenLikeWindow(screenFrame: screenFrame, windowFrame: windowFrame) {
             return false
         }

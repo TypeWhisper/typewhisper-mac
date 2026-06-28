@@ -41,16 +41,23 @@ final class FloatingPanelSpacePolicyTests: XCTestCase {
         )
     }
 
-    func testIndicatorPolicyUsesScreenSaverLevelAboveStatusBarButBelowShielding() {
-        let level = FloatingPanelSpacePolicy.indicatorWindowLevel
+    func testNotchIndicatorPolicyUsesScreenSaverLevelAboveStatusBarButBelowShielding() {
+        let level = FloatingPanelSpacePolicy.notchIndicatorWindowLevel
 
         XCTAssertEqual(level, .screenSaver)
         XCTAssertGreaterThan(level.rawValue, NSWindow.Level.statusBar.rawValue)
         XCTAssertLessThan(level.rawValue, Int(CGShieldingWindowLevel()))
     }
 
+    func testFloatingIndicatorPolicyUsesFloatingLevelBelowStatusBar() {
+        let level = FloatingPanelSpacePolicy.floatingIndicatorWindowLevel
+
+        XCTAssertEqual(level, .floating)
+        XCTAssertLessThan(level.rawValue, NSWindow.Level.statusBar.rawValue)
+    }
+
     @MainActor
-    func testIndicatorPolicyExcludesPanelFromScreenCapture() {
+    func testIndicatorPolicyAppliesRequestedWindowLevelAndExcludesPanelFromScreenCapture() {
         let panel = NSPanel(
             contentRect: .zero,
             styleMask: [.borderless],
@@ -58,8 +65,13 @@ final class FloatingPanelSpacePolicyTests: XCTestCase {
             defer: false
         )
 
-        FloatingPanelSpacePolicy.applyIndicatorPolicy(to: panel, displayMode: .activeScreen)
+        FloatingPanelSpacePolicy.applyIndicatorPolicy(
+            to: panel,
+            displayMode: .activeScreen,
+            windowLevel: FloatingPanelSpacePolicy.floatingIndicatorWindowLevel
+        )
 
+        XCTAssertEqual(panel.level, FloatingPanelSpacePolicy.floatingIndicatorWindowLevel)
         XCTAssertEqual(panel.sharingType, .none)
     }
 }

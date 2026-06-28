@@ -4,7 +4,8 @@ import CoreGraphics
 enum FloatingPanelSpacePolicy {
     // Passive indicator panels should stay above the menu bar on normal spaces
     // without remaining at the shielding level used by system lock overlays.
-    static let indicatorWindowLevel = NSWindow.Level.screenSaver
+    static let notchIndicatorWindowLevel = NSWindow.Level.screenSaver
+    static let floatingIndicatorWindowLevel = NSWindow.Level.floating
 
     private static let activeSpaceIndicatorCollectionBehavior: NSWindow.CollectionBehavior = [
         .moveToActiveSpace,
@@ -35,8 +36,12 @@ enum FloatingPanelSpacePolicy {
     }
 
     @MainActor
-    static func applyIndicatorPolicy(to panel: NSPanel, displayMode: NotchIndicatorDisplay) {
-        panel.level = indicatorWindowLevel
+    static func applyIndicatorPolicy(
+        to panel: NSPanel,
+        displayMode: NotchIndicatorDisplay,
+        windowLevel: NSWindow.Level = notchIndicatorWindowLevel
+    ) {
+        panel.level = windowLevel
         panel.collectionBehavior = indicatorCollectionBehavior(for: displayMode)
         // Best-effort: keep passive indicators visible locally while excluding the
         // window from capture APIs that honor AppKit sharing policy.
@@ -44,8 +49,12 @@ enum FloatingPanelSpacePolicy {
     }
 
     @MainActor
-    static func orderIndicatorFront(_ panel: NSPanel, displayMode: NotchIndicatorDisplay) {
-        applyIndicatorPolicy(to: panel, displayMode: displayMode)
+    static func orderIndicatorFront(
+        _ panel: NSPanel,
+        displayMode: NotchIndicatorDisplay,
+        windowLevel: NSWindow.Level = notchIndicatorWindowLevel
+    ) {
+        applyIndicatorPolicy(to: panel, displayMode: displayMode, windowLevel: windowLevel)
         panel.orderFrontRegardless()
     }
 }
