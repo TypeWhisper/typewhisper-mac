@@ -922,7 +922,10 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     }
 
     private func shouldDelayHybridModifierHold(for slotType: HotkeySlotType, hotkey: UnifiedHotkey) -> Bool {
-        slotType == .hybrid && hotkey.kind == .modifierOnly && !hotkey.isDoubleTap
+        guard slotType == .hybrid, hotkey.kind == .modifierOnly, !hotkey.isDoubleTap else {
+            return false
+        }
+        return Self.modifierFlagForKeyCode(hotkey.keyCode) == .control
     }
 
     private func scheduleDelayedHybridModifierHoldStart(for hotkey: UnifiedHotkey) {

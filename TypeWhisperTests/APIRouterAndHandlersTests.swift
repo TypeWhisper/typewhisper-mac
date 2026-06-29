@@ -8374,6 +8374,32 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testHybridRightOptionSingleTapStillTogglesDictation() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(rightOptionModifierHotkey(), for: .hybrid)
+
+        var startCount = 0
+        var stopCount = 0
+        service.onDictationStart = { _ in startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+
+        let keyDown = try makeRightOptionModifierEvent(isDown: true)
+        let keyUp = try makeRightOptionModifierEvent(isDown: false)
+
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .eventTap))
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(stopCount, 0)
+        XCTAssertEqual(service.currentMode, .pushToTalk)
+
+        XCTAssertTrue(service.processEventForTesting(keyUp, source: .eventTap))
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(stopCount, 0)
+        XCTAssertEqual(service.currentMode, .toggle)
+    }
+
+    @MainActor
     func testHybridModifierShortcutCancelsPendingHold() async throws {
         let service = HotkeyService()
         service.suspendMonitoring()
@@ -9458,6 +9484,15 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         )
     }
 
+    @MainActor
+    private func rightOptionModifierHotkey() -> UnifiedHotkey {
+        UnifiedHotkey(
+            keyCode: 0x3D,
+            modifierFlags: 0,
+            isFn: false
+        )
+    }
+
     private func makeKeyboardEvent(
         keyCode: UInt16,
         keyDown: Bool,
@@ -9512,6 +9547,13 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         try makeFlagsChangedEvent(
             keyCode: 0x3B,
             modifierFlags: isDown ? [.control] : []
+        )
+    }
+
+    private func makeRightOptionModifierEvent(isDown: Bool) throws -> NSEvent {
+        try makeFlagsChangedEvent(
+            keyCode: 0x3D,
+            modifierFlags: isDown ? [.option] : []
         )
     }
 
