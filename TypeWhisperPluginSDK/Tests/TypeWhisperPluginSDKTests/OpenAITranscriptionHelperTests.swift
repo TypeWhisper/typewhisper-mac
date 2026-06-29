@@ -209,6 +209,12 @@ final class OpenAITranscriptionHelperTests: XCTestCase {
                 responseData: Data(#"{"error":"internal server error"}"#.utf8)
             )
         )
+        XCTAssertFalse(
+            PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+                statusCode: 500,
+                responseData: Data(#"{"error":"ffmpeg worker unavailable"}"#.utf8)
+            )
+        )
     }
 
     func testTranscribeCustomTimeoutAppliesToUploadRequest() async throws {

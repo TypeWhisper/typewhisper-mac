@@ -429,8 +429,13 @@ public enum PluginAudioUploadEncoder {
         let lowercased = message.lowercased()
         let probeFailures = [
             "ffprobe failed",
-            "ffprobe",
-            "ffmpeg",
+            "ffprobe error",
+            "ffprobe returned",
+            "ffprobe exited",
+            "ffmpeg failed",
+            "ffmpeg error",
+            "ffmpeg returned",
+            "ffmpeg exited",
             "moov atom not found",
             "invalid data found when processing input",
         ]
