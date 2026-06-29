@@ -802,6 +802,14 @@
       "detailsURL": "https://www.typewhisper.com/addons/cloudflare-asr/",
       "releases": [
         {
+          "version": "1.0.6",
+          "minHostVersion": "1.5.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 202693,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cloudflare-asr-v1.0.6/CloudflareASRPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.5",
           "minHostVersion": "1.5.0",
           "sdkCompatibilityVersion": "v1",
