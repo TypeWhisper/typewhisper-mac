@@ -182,7 +182,7 @@ final class CartesiaPluginTests: XCTestCase {
         XCTAssertTrue(request.value(forHTTPHeaderField: "Content-Type")?.hasPrefix("multipart/form-data; boundary=") == true)
         XCTAssertEqual(request.timeoutInterval, 600)
 
-        let body = try XCTUnwrap(String(data: try XCTUnwrap(request.httpBody), encoding: .utf8))
+        let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
         XCTAssertTrue(body.contains(#"name="file"; filename="audio.m4a""#))
         XCTAssertTrue(body.contains("Content-Type: audio/mp4"))
         XCTAssertTrue(body.contains("name=\"model\"\r\n\r\nink-whisper"))
@@ -305,7 +305,7 @@ final class CartesiaPluginTests: XCTestCase {
         XCTAssertEqual(request.url?.path, "/stt")
         XCTAssertEqual(request.value(forHTTPHeaderField: "Cartesia-Version"), CartesiaPlugin.apiVersion)
 
-        let body = try XCTUnwrap(String(data: try XCTUnwrap(request.httpBody), encoding: .utf8))
+        let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
         XCTAssertTrue(body.contains("name=\"language\"\r\n\r\nde"))
     }
 
@@ -334,7 +334,7 @@ final class CartesiaPluginTests: XCTestCase {
         XCTAssertEqual(result.text, "Hello, how are you?")
 
         let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
-        let body = try XCTUnwrap(String(data: try XCTUnwrap(request.httpBody), encoding: .utf8))
+        let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
         XCTAssertTrue(body.contains("name=\"language\"\r\n\r\nen"))
     }
 
@@ -362,7 +362,7 @@ final class CartesiaPluginTests: XCTestCase {
 
         XCTAssertEqual(result.text, "Hello from wav")
         let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
-        let body = try XCTUnwrap(String(data: try XCTUnwrap(request.httpBody), encoding: .utf8))
+        let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
         XCTAssertTrue(body.contains(#"name="file"; filename="audio.wav""#))
         XCTAssertTrue(body.contains("Content-Type: audio/wav"))
         XCTAssertTrue(body.contains("fallback-wav"))
@@ -438,7 +438,7 @@ final class CartesiaPluginTests: XCTestCase {
         )
 
         let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
-        let body = try XCTUnwrap(String(data: try XCTUnwrap(request.httpBody), encoding: .utf8))
+        let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
         XCTAssertTrue(body.contains("name=\"language\"\r\n\r\nen"))
     }
 
@@ -467,7 +467,7 @@ final class CartesiaPluginTests: XCTestCase {
         XCTAssertEqual(result.text, "Привет, как дела?")
 
         let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
-        let body = try XCTUnwrap(String(data: try XCTUnwrap(request.httpBody), encoding: .utf8))
+        let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
         XCTAssertTrue(body.contains("name=\"language\"\r\n\r\nru"))
     }
 
@@ -501,7 +501,7 @@ final class CartesiaPluginTests: XCTestCase {
         XCTAssertEqual(result.detectedLanguage, "ru")
 
         let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
-        let body = try XCTUnwrap(String(data: try XCTUnwrap(request.httpBody), encoding: .utf8))
+        let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
         XCTAssertTrue(body.contains("name=\"language\"\r\n\r\nru"))
     }
 
@@ -528,7 +528,7 @@ final class CartesiaPluginTests: XCTestCase {
         )
 
         let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
-        let body = try XCTUnwrap(String(data: try XCTUnwrap(request.httpBody), encoding: .utf8))
+        let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
         XCTAssertTrue(body.contains("name=\"language\"\r\n\r\nen"))
     }
 

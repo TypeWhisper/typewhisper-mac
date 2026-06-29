@@ -336,15 +336,19 @@ public enum PluginAudioUploadEncoder {
     }
 
     public static func shouldRetryWithWavUpload(statusCode: Int, responseData: Data) -> Bool {
-        guard [400, 415, 422].contains(statusCode) else {
-            return false
-        }
-
         guard statusCode != 415 else { return true }
 
         let message = String(data: responseData, encoding: .utf8) ?? ""
-        return audioUploadErrorMessageCandidates(from: message)
-            .contains { indicatesUnsupportedAudioUpload($0) }
+        let candidates = audioUploadErrorMessageCandidates(from: message)
+        if [400, 422].contains(statusCode) {
+            return candidates.contains { indicatesUnsupportedAudioUpload($0) }
+        }
+
+        if statusCode == 500 {
+            return candidates.contains { indicatesMediaProbeFailure($0) }
+        }
+
+        return false
     }
 
     public static func shouldRetryWithWavUpload(error: Error) -> Bool {
@@ -360,12 +364,14 @@ public enum PluginAudioUploadEncoder {
             return true
         }
 
-        guard message.contains("HTTP 400:") || message.contains("HTTP 422:") else {
-            return false
+        let candidates = audioUploadErrorMessageCandidates(from: message)
+        if message.contains("HTTP 500:") {
+            return candidates.contains { indicatesMediaProbeFailure($0) }
         }
 
-        return audioUploadErrorMessageCandidates(from: message)
-            .contains { indicatesUnsupportedAudioUpload($0) }
+        guard message.contains("HTTP 400:") || message.contains("HTTP 422:") else { return false }
+
+        return candidates.contains { indicatesUnsupportedAudioUpload($0) }
     }
 
     private static func audioUploadErrorMessageCandidates(from responseText: String) -> [String] {
@@ -419,6 +425,18 @@ public enum PluginAudioUploadEncoder {
             && mediaTerms.contains { lowercased.contains($0) }
     }
 
+    private static func indicatesMediaProbeFailure(_ message: String) -> Bool {
+        let lowercased = message.lowercased()
+        let probeFailures = [
+            "ffprobe failed",
+            "ffprobe",
+            "ffmpeg",
+            "moov atom not found",
+            "invalid data found when processing input",
+        ]
+        return probeFailures.contains { lowercased.contains($0) }
+    }
+
     private static func compressedM4AData(from samples: [Float]) throws -> Data {
         guard !samples.isEmpty else {
             throw PluginTranscriptionError.apiError("Cannot encode empty audio upload")
@@ -442,28 +460,30 @@ public enum PluginAudioUploadEncoder {
             throw PluginTranscriptionError.apiError("Failed to create compressed upload format")
         }
 
-        let file = try AVAudioFile(
-            forWriting: url,
-            settings: settings,
-            commonFormat: .pcmFormatFloat32,
-            interleaved: false
-        )
+        do {
+            let file = try AVAudioFile(
+                forWriting: url,
+                settings: settings,
+                commonFormat: .pcmFormatFloat32,
+                interleaved: false
+            )
 
-        var offset = 0
-        while offset < samples.count {
-            let count = min(compressedUploadChunkFrames, samples.count - offset)
-            guard let buffer = AVAudioPCMBuffer(
-                pcmFormat: format,
-                frameCapacity: AVAudioFrameCount(count)
-            ) else {
-                throw PluginTranscriptionError.apiError("Failed to create compressed upload buffer")
+            var offset = 0
+            while offset < samples.count {
+                let count = min(compressedUploadChunkFrames, samples.count - offset)
+                guard let buffer = AVAudioPCMBuffer(
+                    pcmFormat: format,
+                    frameCapacity: AVAudioFrameCount(count)
+                ) else {
+                    throw PluginTranscriptionError.apiError("Failed to create compressed upload buffer")
+                }
+                buffer.frameLength = AVAudioFrameCount(count)
+                samples.withUnsafeBufferPointer { pointer in
+                    buffer.floatChannelData?[0].update(from: pointer.baseAddress! + offset, count: count)
+                }
+                try file.write(from: buffer)
+                offset += count
             }
-            buffer.frameLength = AVAudioFrameCount(count)
-            samples.withUnsafeBufferPointer { pointer in
-                buffer.floatChannelData?[0].update(from: pointer.baseAddress! + offset, count: count)
-            }
-            try file.write(from: buffer)
-            offset += count
         }
 
         return try Data(contentsOf: url)

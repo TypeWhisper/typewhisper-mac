@@ -124,10 +124,12 @@ final class OpenAITranscriptionHelperTests: XCTestCase {
         XCTAssertEqual(upload.format, "m4a")
         XCTAssertTrue(upload.data.count > 0)
         XCTAssertLessThan(upload.data.count, wavData.count)
-        XCTAssertTrue(String(decoding: upload.data.prefix(64), as: UTF8.self).contains("ftyp"))
+        XCTAssertNotNil(upload.data.range(of: Data("ftyp".utf8)))
+        XCTAssertNotNil(upload.data.range(of: Data("mdat".utf8)))
+        XCTAssertNotNil(upload.data.range(of: Data("moov".utf8)))
     }
 
-    func testWavFallbackRetryClassifierRequiresMediaFormatRejectionFor400And422() {
+    func testWavFallbackRetryClassifierRequiresMediaFormatOrProbeFailure() {
         XCTAssertTrue(
             PluginAudioUploadEncoder.shouldRetryWithWavUpload(
                 statusCode: 400,
@@ -158,6 +160,19 @@ final class OpenAITranscriptionHelperTests: XCTestCase {
                 responseData: Data(#"{"error":"bad upload"}"#.utf8)
             )
         )
+        XCTAssertTrue(
+            PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+                statusCode: 500,
+                responseData: Data(#"{"error":"ffprobe failed: moov atom not found"}"#.utf8)
+            )
+        )
+        XCTAssertTrue(
+            PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+                error: PluginTranscriptionError.apiError(
+                    #"HTTP 500: {"error":"Invalid data found when processing input"}"#
+                )
+            )
+        )
         XCTAssertFalse(
             PluginAudioUploadEncoder.shouldRetryWithWavUpload(
                 statusCode: 400,
@@ -186,6 +201,12 @@ final class OpenAITranscriptionHelperTests: XCTestCase {
             PluginAudioUploadEncoder.shouldRetryWithWavUpload(
                 statusCode: 400,
                 responseData: Data(#"{"error":{"message":"corrupt request data","type":"invalid_request_error"}}"#.utf8)
+            )
+        )
+        XCTAssertFalse(
+            PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+                statusCode: 500,
+                responseData: Data(#"{"error":"internal server error"}"#.utf8)
             )
         )
     }
