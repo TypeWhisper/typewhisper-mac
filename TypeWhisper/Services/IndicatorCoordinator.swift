@@ -488,9 +488,12 @@ enum IndicatorFullscreenSuppressionPolicy {
             windowFrame = nil
         }
         let focusedWindowIsFullscreen = focusedWindowFullscreenProvider()
+        let safeAreaTopInset = screen.safeAreaInsets.top
         let safariWindowFrames = safariWindowFramesProvider(screen.frame)
         let applicationWindowFrames: [CGRect]
-        if let application,
+        if placement == .notchStrip,
+           safeAreaTopInset > 0,
+           let application,
            !isTypeWhisperBundleIdentifier(application.bundleIdentifier, appBundleIdentifier: appBundleIdentifier) {
             applicationWindowFrames = applicationWindowFramesProvider(application.processIdentifier, screen.frame)
         } else {
@@ -499,7 +502,7 @@ enum IndicatorFullscreenSuppressionPolicy {
 
         let shouldSuppress = shouldSuppressIndicator(
             screenFrame: screen.frame,
-            safeAreaTopInset: screen.safeAreaInsets.top,
+            safeAreaTopInset: safeAreaTopInset,
             windowFrame: windowFrame,
             focusedWindowIsFullscreen: focusedWindowIsFullscreen,
             frontmostBundleIdentifier: application?.bundleIdentifier,
