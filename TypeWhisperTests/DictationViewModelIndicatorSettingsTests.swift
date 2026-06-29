@@ -297,6 +297,96 @@ final class IndicatorFullscreenSuppressionPolicyTests: XCTestCase {
         )
     }
 
+    func testSuppressesForeignFullscreenContentWindowBelowNotchStripWhenAXFullscreenIsUnavailable() {
+        let screenFrame = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        let fullscreenContentWindowBelowNotch = CGRect(x: 0, y: 33, width: 1512, height: 949)
+
+        XCTAssertTrue(
+            IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                screenFrame: screenFrame,
+                safeAreaTopInset: 32,
+                windowFrame: fullscreenContentWindowBelowNotch,
+                focusedWindowIsFullscreen: nil,
+                frontmostBundleIdentifier: "com.brave.Browser",
+                appBundleIdentifier: "com.typewhisper.mac.dev",
+                placement: .notchStrip
+            )
+        )
+    }
+
+    func testDoesNotSuppressForeignFullscreenContentWindowBelowNotchStripForBottomPlacementWhenAXFullscreenIsUnavailable() {
+        let screenFrame = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        let fullscreenContentWindowBelowNotch = CGRect(x: 0, y: 33, width: 1512, height: 949)
+
+        XCTAssertFalse(
+            IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                screenFrame: screenFrame,
+                safeAreaTopInset: 32,
+                windowFrame: fullscreenContentWindowBelowNotch,
+                focusedWindowIsFullscreen: nil,
+                frontmostBundleIdentifier: "com.brave.Browser",
+                appBundleIdentifier: "com.typewhisper.mac.dev",
+                placement: .nonNotchArea
+            )
+        )
+    }
+
+    func testSuppressesWhenFocusedWindowIsTransientButApplicationHasFullscreenContentBelowNotch() {
+        let screenFrame = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        let transientToolbarWindow = CGRect(x: 0, y: 0, width: 1512, height: 41)
+        let fullscreenContentWindowBelowNotch = CGRect(x: 0, y: 33, width: 1512, height: 949)
+
+        XCTAssertTrue(
+            IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                screenFrame: screenFrame,
+                safeAreaTopInset: 32,
+                windowFrame: transientToolbarWindow,
+                focusedWindowIsFullscreen: false,
+                frontmostBundleIdentifier: "com.brave.Browser",
+                appBundleIdentifier: "com.typewhisper.mac.dev",
+                placement: .notchStrip,
+                applicationWindowFrames: [fullscreenContentWindowBelowNotch]
+            )
+        )
+    }
+
+    func testDoesNotSuppressBottomPlacementWhenFocusedWindowIsTransientButApplicationHasFullscreenContentBelowNotch() {
+        let screenFrame = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        let transientToolbarWindow = CGRect(x: 0, y: 0, width: 1512, height: 41)
+        let fullscreenContentWindowBelowNotch = CGRect(x: 0, y: 33, width: 1512, height: 949)
+
+        XCTAssertFalse(
+            IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                screenFrame: screenFrame,
+                safeAreaTopInset: 32,
+                windowFrame: transientToolbarWindow,
+                focusedWindowIsFullscreen: false,
+                frontmostBundleIdentifier: "com.brave.Browser",
+                appBundleIdentifier: "com.typewhisper.mac.dev",
+                placement: .nonNotchArea,
+                applicationWindowFrames: [fullscreenContentWindowBelowNotch]
+            )
+        )
+    }
+
+    func testDoesNotSuppressMaximizedMainWindowWhenApplicationWindowScanSeesSameFrameAndAXReportsNotFullscreen() {
+        let screenFrame = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        let maximizedWindowBelowNotch = CGRect(x: 0, y: 33, width: 1512, height: 949)
+
+        XCTAssertFalse(
+            IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                screenFrame: screenFrame,
+                safeAreaTopInset: 32,
+                windowFrame: maximizedWindowBelowNotch,
+                focusedWindowIsFullscreen: false,
+                frontmostBundleIdentifier: "com.brave.Browser",
+                appBundleIdentifier: "com.typewhisper.mac.dev",
+                placement: .notchStrip,
+                applicationWindowFrames: [maximizedWindowBelowNotch]
+            )
+        )
+    }
+
     func testDoesNotSuppressForeignMaximizedWindowWhenAXReportsNotFullscreen() {
         let maximizedWindow = CGRect(x: 0, y: 0, width: 3024, height: 1964)
 

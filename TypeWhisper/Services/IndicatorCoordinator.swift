@@ -251,6 +251,26 @@ private enum SafariBundleIdentifiers {
 enum IndicatorWindowFrameLookup {
     @MainActor
     static func safariWindowFrames(intersecting screenFrame: CGRect) -> [CGRect] {
+        windowFrames(intersecting: screenFrame) { ownerPID, _ in
+            guard let application = NSRunningApplication(processIdentifier: ownerPID) else {
+                return false
+            }
+            return isSafariWindowOwner(application.bundleIdentifier)
+        }
+    }
+
+    @MainActor
+    static func applicationWindowFrames(for processIdentifier: pid_t, intersecting screenFrame: CGRect) -> [CGRect] {
+        windowFrames(intersecting: screenFrame) { ownerPID, _ in
+            ownerPID == processIdentifier
+        }
+    }
+
+    @MainActor
+    private static func windowFrames(
+        intersecting screenFrame: CGRect,
+        matchingOwner: (pid_t, [String: Any]) -> Bool
+    ) -> [CGRect] {
         guard let windowList = CGWindowListCopyWindowInfo(
             [.optionOnScreenOnly, .excludeDesktopElements],
             kCGNullWindowID
@@ -262,8 +282,7 @@ enum IndicatorWindowFrameLookup {
         return windowList.compactMap { windowInfo in
             guard let rawBounds = windowInfo[kCGWindowBounds as String],
                   let ownerPID = windowInfo[kCGWindowOwnerPID as String] as? pid_t,
-                  let application = NSRunningApplication(processIdentifier: ownerPID),
-                  isSafariWindowOwner(application.bundleIdentifier) else {
+                  matchingOwner(ownerPID, windowInfo) else {
                 return nil
             }
 
@@ -456,6 +475,7 @@ enum IndicatorFullscreenSuppressionPolicy {
         focusedWindowFullscreenProvider: () -> Bool? = IndicatorWindowFrameLookup.focusedWindowIsFullscreen,
         windowFrameProvider: (pid_t) -> CGRect? = IndicatorWindowFrameLookup.frontmostWindowFrame(for:),
         safariWindowFramesProvider: @MainActor (CGRect) -> [CGRect] = IndicatorWindowFrameLookup.safariWindowFrames(intersecting:),
+        applicationWindowFramesProvider: @MainActor (pid_t, CGRect) -> [CGRect] = IndicatorWindowFrameLookup.applicationWindowFrames(for:intersecting:),
         appBundleIdentifier: String? = Bundle.main.bundleIdentifier
     ) -> Bool {
         let application = frontmostApplicationProvider()
@@ -469,6 +489,13 @@ enum IndicatorFullscreenSuppressionPolicy {
         }
         let focusedWindowIsFullscreen = focusedWindowFullscreenProvider()
         let safariWindowFrames = safariWindowFramesProvider(screen.frame)
+        let applicationWindowFrames: [CGRect]
+        if let application,
+           !isTypeWhisperBundleIdentifier(application.bundleIdentifier, appBundleIdentifier: appBundleIdentifier) {
+            applicationWindowFrames = applicationWindowFramesProvider(application.processIdentifier, screen.frame)
+        } else {
+            applicationWindowFrames = []
+        }
 
         let shouldSuppress = shouldSuppressIndicator(
             screenFrame: screen.frame,
@@ -478,7 +505,8 @@ enum IndicatorFullscreenSuppressionPolicy {
             frontmostBundleIdentifier: application?.bundleIdentifier,
             appBundleIdentifier: appBundleIdentifier,
             placement: placement,
-            safariWindowFrames: safariWindowFrames
+            safariWindowFrames: safariWindowFrames,
+            applicationWindowFrames: applicationWindowFrames
         )
 
         if shouldSuppress, let application {
@@ -502,7 +530,8 @@ enum IndicatorFullscreenSuppressionPolicy {
         frontmostBundleIdentifier: String?,
         appBundleIdentifier: String?,
         placement: IndicatorPlacement = .notchStrip,
-        safariWindowFrames: [CGRect] = []
+        safariWindowFrames: [CGRect] = [],
+        applicationWindowFrames: [CGRect] = []
     ) -> Bool {
         guard safeAreaTopInset > 0, !screenFrame.isEmpty else {
             return false
@@ -511,7 +540,7 @@ enum IndicatorFullscreenSuppressionPolicy {
         let screenFrame = screenFrame.standardized
 
         if safariWindowFrames.contains(where: {
-            isSafariFullscreenLikeWindow(
+            isFullscreenLikeOrContentWindowBelowNotch(
                 screenFrame: screenFrame,
                 safeAreaTopInset: safeAreaTopInset,
                 windowFrame: $0.standardized
@@ -520,9 +549,37 @@ enum IndicatorFullscreenSuppressionPolicy {
             return true
         }
 
-        guard let candidateWindowFrame = windowFrame,
+        let frontmostIsTypeWhisper = isTypeWhisperBundleIdentifier(
+            frontmostBundleIdentifier,
+            appBundleIdentifier: appBundleIdentifier
+        )
+
+        let candidateWindowFrame = windowFrame?.standardized
+        let focusedWindowIsKnownMainSurface = candidateWindowFrame.map {
+            isFullscreenLikeOrContentWindowBelowNotch(
+                screenFrame: screenFrame,
+                safeAreaTopInset: safeAreaTopInset,
+                windowFrame: $0
+            )
+        } ?? false
+        let focusedWindowExplicitlyNotFullscreen = focusedWindowIsFullscreen == false && focusedWindowIsKnownMainSurface
+
+        if placement == .notchStrip,
+           !frontmostIsTypeWhisper,
+           !focusedWindowExplicitlyNotFullscreen,
+           applicationWindowFrames.contains(where: {
+                isFullscreenLikeOrContentWindowBelowNotch(
+                    screenFrame: screenFrame,
+                    safeAreaTopInset: safeAreaTopInset,
+                    windowFrame: $0.standardized
+                )
+           }) {
+            return true
+        }
+
+        guard let candidateWindowFrame,
               !candidateWindowFrame.isEmpty,
-              !isTypeWhisperBundleIdentifier(frontmostBundleIdentifier, appBundleIdentifier: appBundleIdentifier) else {
+              !frontmostIsTypeWhisper else {
             return false
         }
 
@@ -530,12 +587,12 @@ enum IndicatorFullscreenSuppressionPolicy {
             return false
         }
 
-        let windowFrame = candidateWindowFrame.standardized
+        let windowFrame = candidateWindowFrame
 
         // Safari's hidden fullscreen toolbar can be triggered by auxiliary panels
         // even when the indicator renders away from the notch strip.
         if isSafariBundleIdentifier(frontmostBundleIdentifier),
-           isSafariFullscreenLikeWindow(
+           isFullscreenLikeOrContentWindowBelowNotch(
                 screenFrame: screenFrame,
                 safeAreaTopInset: safeAreaTopInset,
                 windowFrame: windowFrame
@@ -551,6 +608,12 @@ enum IndicatorFullscreenSuppressionPolicy {
             guard focusedWindowIsFullscreen else { return false }
             // Tahoe fullscreen windows can report a content frame below the notch
             // strip while auxiliary panels still affect the top menu-bar strip.
+            return true
+        } else if isFullscreenContentWindowBelowNotch(
+            screenFrame: screenFrame,
+            safeAreaTopInset: safeAreaTopInset,
+            windowFrame: windowFrame
+        ) {
             return true
         } else if !isFullscreenLikeWindow(screenFrame: screenFrame, windowFrame: windowFrame) {
             return false
@@ -573,7 +636,7 @@ enum IndicatorFullscreenSuppressionPolicy {
             && heightCoverage >= minimumFullscreenDimensionCoverage
     }
 
-    private static func isSafariFullscreenLikeWindow(
+    private static func isFullscreenLikeOrContentWindowBelowNotch(
         screenFrame: CGRect,
         safeAreaTopInset: CGFloat,
         windowFrame: CGRect
@@ -582,6 +645,18 @@ enum IndicatorFullscreenSuppressionPolicy {
             return true
         }
 
+        return isFullscreenContentWindowBelowNotch(
+            screenFrame: screenFrame,
+            safeAreaTopInset: safeAreaTopInset,
+            windowFrame: windowFrame
+        )
+    }
+
+    private static func isFullscreenContentWindowBelowNotch(
+        screenFrame: CGRect,
+        safeAreaTopInset: CGFloat,
+        windowFrame: CGRect
+    ) -> Bool {
         let contentHeight = screenFrame.height - safeAreaTopInset
         guard contentHeight > 0 else { return false }
 
