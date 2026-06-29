@@ -421,6 +421,14 @@
       "detailsURL": "https://www.typewhisper.com/addons/openai-compatible/",
       "releases": [
         {
+          "version": "1.1.6",
+          "minHostVersion": "1.5.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 367750,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-compatible-v1.1.6/OpenAICompatiblePlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.1.5",
           "minHostVersion": "1.5.0",
           "sdkCompatibilityVersion": "v1",
