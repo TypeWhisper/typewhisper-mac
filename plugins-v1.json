@@ -2085,6 +2085,14 @@
       "detailsURL": "https://www.typewhisper.com/addons/xai-grok/",
       "releases": [
         {
+          "version": "1.0.2",
+          "minHostVersion": "1.5.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 306843,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-xai-v1.0.2/XAIPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.1",
           "minHostVersion": "1.5.0",
           "sdkCompatibilityVersion": "v1",
