@@ -668,10 +668,15 @@ final class PluginManager: ObservableObject {
             ruleNamesProvider: ruleNamesProvider,
             workflowProvider: workflowProvider
         )
-        host.performPluginActivation(suppressPassiveLoadedModelRestore: !plugin.isBundled) {
+        host.performPluginActivation(suppressPassiveLoadedModelRestore: shouldSuppressPassiveLoadedModelRestore(for: plugin)) {
             plugin.instance.activate(host: host)
         }
         logger.info("Activated plugin: \(plugin.manifest.id)")
+    }
+
+    func shouldSuppressPassiveLoadedModelRestore(for plugin: LoadedPlugin) -> Bool {
+        guard !plugin.isBundled else { return false }
+        return !(plugin.instance is any HostModelLifecyclePolicyAwarePlugin)
     }
 
     @available(*, deprecated, renamed: "setRuleNamesProvider")

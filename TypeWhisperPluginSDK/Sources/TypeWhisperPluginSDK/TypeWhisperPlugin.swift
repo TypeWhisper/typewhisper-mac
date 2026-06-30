@@ -18,6 +18,8 @@ public extension TypeWhisperPlugin {
     var settingsView: AnyView? { nil }
 }
 
+public protocol HostModelLifecyclePolicyAwarePlugin: TypeWhisperPlugin {}
+
 // MARK: - Shared Settings Activity
 
 public struct PluginSettingsActivity: Sendable, Equatable {

@@ -54,6 +54,26 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
         )
     }
 
+    #if DEBUG
+    private func waitForRestoreLoadedModelInvocationCount(
+        _ plugin: WhisperKitPlugin,
+        toBecome expected: Int,
+        timeout: Duration = .seconds(1),
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        while ContinuousClock.now < deadline {
+            if plugin.restoreLoadedModelInvocationCountForTesting == expected {
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertEqual(plugin.restoreLoadedModelInvocationCountForTesting, expected, file: file, line: line)
+    }
+    #endif
+
     func testAvailableModelsIncludeDistilLargeV3Turbo() {
         let model = WhisperKitPlugin.availableModels.first {
             $0.id == "distil-whisper_distil-large-v3_turbo"
@@ -102,11 +122,26 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
         XCTAssertEqual(plugin.selectedModelId, "openai_whisper-tiny")
         XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "openai_whisper-tiny")
 
-        try await Task.sleep(for: .milliseconds(50))
+        #if DEBUG
+        await waitForRestoreLoadedModelInvocationCount(plugin, toBecome: 0)
+        #endif
 
         XCTAssertFalse(plugin.isConfigured)
         XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, "openai_whisper-tiny")
         XCTAssertEqual(host.capabilitiesChangedCount, 0)
+    }
+
+    func testActivationSchedulesPassiveRestoreWhenHostAllowsIt() async throws {
+        let host = try makeHost(defaults: ["loadedModel": "openai_whisper-tiny"])
+        defer { TestSupport.remove(host.pluginDataDirectory) }
+
+        let plugin = WhisperKitPlugin()
+        plugin.activate(host: host)
+
+        XCTAssertTrue(plugin.shouldRestoreLoadedModelsPassively)
+        #if DEBUG
+        await waitForRestoreLoadedModelInvocationCount(plugin, toBecome: 1)
+        #endif
     }
 
     func testUnloadWithoutClearingPersistenceKeepsLoadedModelMarker() throws {

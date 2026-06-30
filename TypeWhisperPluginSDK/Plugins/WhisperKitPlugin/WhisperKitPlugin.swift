@@ -23,6 +23,9 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
     fileprivate var downloadProgress: Double = 0
     private var modelLoadGeneration = 0
     fileprivate var modelLoadTimeoutDuration = WhisperKitPlugin.defaultModelLoadTimeoutDuration
+    #if DEBUG
+    private(set) var restoreLoadedModelInvocationCountForTesting = 0
+    #endif
 
     required override init() {
         super.init()
@@ -614,6 +617,10 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
     }
 
     func restoreLoadedModel(allowDownloads: Bool = true) async {
+        #if DEBUG
+        restoreLoadedModelInvocationCountForTesting += 1
+        #endif
+
         guard let savedId = host?.userDefault(forKey: "loadedModel") as? String,
               let modelDef = Self.availableModels.first(where: { $0.id == savedId }) else {
             return

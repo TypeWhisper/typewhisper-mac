@@ -355,6 +355,8 @@ func activate(host: HostServices) {
 
 `availableWorkflows` exposes read-only `PluginWorkflowInfo` snapshots. Plugins can inspect workflow names, templates, enabled state, trigger metadata, behavior settings, LLM provider/model choices, temperature directives, and output routing without depending on TypeWhisper's internal SwiftData models.
 
+Local model plugins that restore a previously loaded model during activation should first check `host.shouldRestoreLoadedModelsPassively`. Rebuilt plugins that already honor that policy can adopt `HostModelLifecyclePolicyAwarePlugin` so TypeWhisper does not apply the legacy external-plugin `loadedModel` masking shim during `activate(host:)`.
+
 ---
 
 ## Event Bus

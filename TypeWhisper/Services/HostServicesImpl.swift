@@ -4,6 +4,27 @@ import TypeWhisperPluginSDK
 
 private enum PassiveLoadedModelRestoreContext {
     @TaskLocal static var suppressLoadedModelDefault = false
+
+    private static let synchronousActivationAccessKey = "com.typewhisper.host.loadedModel.synchronousActivationAccess"
+
+    static var allowsLoadedModelDefaultInCurrentCallStack: Bool {
+        Thread.current.threadDictionary[synchronousActivationAccessKey] as? Bool == true
+    }
+
+    static func withSynchronousLoadedModelDefaultAccess(_ body: () -> Void) {
+        let threadDictionary = Thread.current.threadDictionary
+        let previousValue = threadDictionary[synchronousActivationAccessKey]
+        threadDictionary[synchronousActivationAccessKey] = true
+        defer {
+            if let previousValue {
+                threadDictionary[synchronousActivationAccessKey] = previousValue
+            } else {
+                threadDictionary.removeObject(forKey: synchronousActivationAccessKey)
+            }
+        }
+
+        body()
+    }
 }
 
 final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, @unchecked Sendable {
@@ -12,8 +33,6 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, @
     let eventBus: EventBusProtocol
     private let ruleNamesProvider: @MainActor () -> [String]
     private let workflowProvider: @MainActor () -> [PluginWorkflowInfo]
-    private let activationContextLock = NSLock()
-    private var synchronousActivationDepth = 0
 
     init(
         pluginId: String,
@@ -55,7 +74,7 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, @
     func userDefault(forKey key: String) -> Any? {
         if key == "loadedModel",
            PassiveLoadedModelRestoreContext.suppressLoadedModelDefault,
-           !isInSynchronousPluginActivation,
+           !PassiveLoadedModelRestoreContext.allowsLoadedModelDefaultInCurrentCallStack,
            !shouldRestoreLoadedModelsPassively {
             return nil
         }
@@ -78,7 +97,7 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, @
         _ body: @escaping () -> Void
     ) {
         let activation = {
-            self.withSynchronousPluginActivation(body)
+            PassiveLoadedModelRestoreContext.withSynchronousLoadedModelDefaultAccess(body)
         }
 
         guard suppressPassiveLoadedModelRestore else {
@@ -89,25 +108,6 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, @
         PassiveLoadedModelRestoreContext.$suppressLoadedModelDefault.withValue(true) {
             activation()
         }
-    }
-
-    private var isInSynchronousPluginActivation: Bool {
-        activationContextLock.withLock {
-            synchronousActivationDepth > 0
-        }
-    }
-
-    private func withSynchronousPluginActivation(_ body: () -> Void) {
-        activationContextLock.withLock {
-            synchronousActivationDepth += 1
-        }
-        defer {
-            activationContextLock.withLock {
-                synchronousActivationDepth -= 1
-            }
-        }
-
-        body()
     }
 
     // MARK: - App Context
