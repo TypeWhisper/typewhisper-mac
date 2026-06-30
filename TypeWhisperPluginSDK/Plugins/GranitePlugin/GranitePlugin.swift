@@ -31,7 +31,9 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
             ?? Self.availableModels.first?.id
         _hfToken = PluginHuggingFaceTokenHelper.loadToken(from: host)
 
-        Task { await restoreLoadedModel(allowDownloads: false) }
+        if shouldRestoreLoadedModelsPassively {
+            Task { await restoreLoadedModel(allowDownloads: false) }
+        }
     }
 
     func deactivate() {
@@ -48,6 +50,10 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
 
     var isConfigured: Bool {
         model != nil && loadedModelId != nil
+    }
+
+    var shouldRestoreLoadedModelsPassively: Bool {
+        host?.shouldRestoreLoadedModelsPassively ?? true
     }
 
     var transcriptionModels: [PluginModelInfo] {
@@ -491,7 +497,7 @@ private struct GraniteSettingsView: View {
             }
         }
         .task {
-            if case .notLoaded = plugin.modelState {
+            if case .notLoaded = plugin.modelState, plugin.shouldRestoreLoadedModelsPassively {
                 isPolling = true
                 await plugin.restoreLoadedModel(allowDownloads: false)
                 isPolling = false

@@ -47,7 +47,9 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
             ?? Self.availableModels.first?.id
         _hfToken = PluginHuggingFaceTokenHelper.loadToken(from: host)
 
-        Task { await restoreLoadedModel(allowDownloads: false) }
+        if shouldRestoreLoadedModelsPassively {
+            Task { await restoreLoadedModel(allowDownloads: false) }
+        }
     }
 
     func deactivate() {
@@ -65,6 +67,10 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
 
     var isConfigured: Bool {
         model != nil && loadedModelId != nil
+    }
+
+    var shouldRestoreLoadedModelsPassively: Bool {
+        host?.shouldRestoreLoadedModelsPassively ?? true
     }
 
     var transcriptionModels: [PluginModelInfo] {
@@ -849,7 +855,7 @@ private struct Qwen3SettingsView: View {
         }
         .task {
             // Auto-restore previously loaded model
-            if case .notLoaded = plugin.modelState {
+            if case .notLoaded = plugin.modelState, plugin.shouldRestoreLoadedModelsPassively {
                 isPolling = true
                 await plugin.restoreLoadedModel(allowDownloads: false)
                 isPolling = false

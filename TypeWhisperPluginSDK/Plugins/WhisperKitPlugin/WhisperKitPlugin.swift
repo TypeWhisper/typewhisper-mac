@@ -39,7 +39,9 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
                 host.setUserDefault(persistedLoadedModel, forKey: "selectedModel")
             }
         }
-        Task { await restoreLoadedModel(allowDownloads: false) }
+        if shouldRestoreLoadedModelsPassively {
+            Task { await restoreLoadedModel(allowDownloads: false) }
+        }
     }
 
     func deactivate() {
@@ -123,6 +125,10 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
 
     var isConfigured: Bool {
         whisperKit != nil && loadedModelId != nil
+    }
+
+    var shouldRestoreLoadedModelsPassively: Bool {
+        host?.shouldRestoreLoadedModelsPassively ?? true
     }
 
     var settingsModelState: WhisperModelState {
@@ -1141,6 +1147,7 @@ private struct WhisperKitSettingsView: View {
             if plugin.whisperKit == nil,
                plugin.loadedModelId == nil,
                plugin.modelState == .notLoaded,
+               plugin.shouldRestoreLoadedModelsPassively,
                let persistedLoadedModelId,
                !persistedLoadedModelId.isEmpty {
                 activeModelId = persistedLoadedModelId

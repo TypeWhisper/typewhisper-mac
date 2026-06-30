@@ -5114,6 +5114,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let audioFileService = AudioFileService()
         let audioRecordingService = AudioRecordingService()
         let audioRecorderService = AudioRecorderService()
+        audioRecorderService.recordingsDirectoryOverride = appSupportDirectory.appendingPathComponent("recordings")
         let hotkeyService = HotkeyService()
         let textInsertionService = TextInsertionService()
         let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
@@ -6433,6 +6434,101 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual(ModelAutoUnloadPolicy.effectiveSeconds(), 0)
         XCTAssertEqual(modelManager.autoUnloadSeconds, 0)
         XCTAssertEqual(ModelAutoUnloadPolicy.policyName(seconds: modelManager.autoUnloadSeconds), "never")
+    }
+
+    @MainActor
+    func testModelAutoUnloadPolicyOnlyNeverAllowsPassiveStartupRestore() throws {
+        let suiteName = "ModelAutoUnloadPolicyTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        defaults.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+
+        XCTAssertFalse(ModelAutoUnloadPolicy.shouldRestoreLoadedModelsPassively(defaults: defaults))
+
+        defaults.set(0, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        XCTAssertTrue(ModelAutoUnloadPolicy.shouldRestoreLoadedModelsPassively(defaults: defaults))
+
+        for activePolicySeconds in [-1, 120, 300, 600, 1800, 3600] {
+            defaults.set(activePolicySeconds, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            XCTAssertFalse(
+                ModelAutoUnloadPolicy.shouldRestoreLoadedModelsPassively(defaults: defaults),
+                "Policy \(activePolicySeconds) should lazy-load models after startup"
+            )
+        }
+    }
+
+    @MainActor
+    func testHostServicesSuppressesInheritedPassiveLoadedModelRestoreForLegacyPluginActivation() async throws {
+        let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        let pluginId = "com.typewhisper.tests.legacy.\(UUID().uuidString)"
+        let loadedModelKey = "plugin.\(pluginId).loadedModel"
+        defer {
+            if let originalAutoUnload {
+                UserDefaults.standard.set(originalAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            }
+            UserDefaults.standard.removeObject(forKey: loadedModelKey)
+        }
+
+        UserDefaults.standard.set(600, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        UserDefaults.standard.set("legacy-loaded-model", forKey: loadedModelKey)
+        let host = HostServicesImpl(
+            pluginId: pluginId,
+            eventBus: MockEventBus(),
+            ruleNamesProvider: { [] }
+        )
+        defer { try? FileManager.default.removeItem(at: host.pluginDataDirectory) }
+
+        var inheritedRestoreTask: Task<String?, Never>?
+        host.performPluginActivation(suppressPassiveLoadedModelRestore: true) {
+            XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, "legacy-loaded-model")
+            inheritedRestoreTask = Task {
+                host.userDefault(forKey: "loadedModel") as? String
+            }
+        }
+
+        let task = try XCTUnwrap(inheritedRestoreTask)
+        let observedLoadedModel = await task.value
+        XCTAssertNil(observedLoadedModel)
+        XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, "legacy-loaded-model")
+    }
+
+    @MainActor
+    func testHostServicesAllowsInheritedPassiveLoadedModelRestoreWhenAutoUnloadIsNever() async throws {
+        let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        let pluginId = "com.typewhisper.tests.never.\(UUID().uuidString)"
+        let loadedModelKey = "plugin.\(pluginId).loadedModel"
+        defer {
+            if let originalAutoUnload {
+                UserDefaults.standard.set(originalAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            }
+            UserDefaults.standard.removeObject(forKey: loadedModelKey)
+        }
+
+        UserDefaults.standard.set(0, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        UserDefaults.standard.set("legacy-loaded-model", forKey: loadedModelKey)
+        let host = HostServicesImpl(
+            pluginId: pluginId,
+            eventBus: MockEventBus(),
+            ruleNamesProvider: { [] }
+        )
+        defer { try? FileManager.default.removeItem(at: host.pluginDataDirectory) }
+
+        var inheritedRestoreTask: Task<String?, Never>?
+        host.performPluginActivation(suppressPassiveLoadedModelRestore: true) {
+            inheritedRestoreTask = Task {
+                host.userDefault(forKey: "loadedModel") as? String
+            }
+        }
+
+        let task = try XCTUnwrap(inheritedRestoreTask)
+        let observedLoadedModel = await task.value
+        XCTAssertEqual(observedLoadedModel, "legacy-loaded-model")
     }
 
     @MainActor

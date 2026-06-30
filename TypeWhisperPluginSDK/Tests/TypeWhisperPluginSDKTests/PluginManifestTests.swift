@@ -2,6 +2,10 @@ import XCTest
 @testable import TypeWhisperPluginSDK
 
 final class PluginManifestTests: XCTestCase {
+    func testPluginSDKCompatibilityLineRemainsV1ForAdditiveHostPolicies() {
+        XCTAssertEqual(PluginSDKCompatibility.currentVersion, "v1")
+    }
+
     func testPluginManifestDecodesOptionalCompatibilityFields() throws {
         let data = Data(
             """

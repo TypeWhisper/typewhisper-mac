@@ -37,7 +37,15 @@ public protocol HostServices: Sendable {
     func setStreamingDisplayActive(_ active: Bool)
 }
 
+public protocol HostModelLifecyclePolicyProviding: Sendable {
+    var shouldRestoreLoadedModelsPassively: Bool { get }
+}
+
 public extension HostServices {
+    var shouldRestoreLoadedModelsPassively: Bool {
+        (self as? any HostModelLifecyclePolicyProviding)?.shouldRestoreLoadedModelsPassively ?? true
+    }
+
     var availableWorkflows: [PluginWorkflowInfo] { [] }
 
     @available(*, deprecated, renamed: "availableRuleNames")

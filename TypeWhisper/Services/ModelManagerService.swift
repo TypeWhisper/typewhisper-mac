@@ -46,6 +46,10 @@ enum ModelAutoUnloadPolicy {
         return defaults.integer(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
     }
 
+    static func shouldRestoreLoadedModelsPassively(defaults: UserDefaults = .standard) -> Bool {
+        effectiveSeconds(defaults: defaults) == 0
+    }
+
     static func policyName(seconds: Int) -> String {
         switch seconds {
         case 0:

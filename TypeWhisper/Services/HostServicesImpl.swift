@@ -2,12 +2,18 @@ import AppKit
 import Foundation
 import TypeWhisperPluginSDK
 
-final class HostServicesImpl: HostServices, @unchecked Sendable {
+private enum PassiveLoadedModelRestoreContext {
+    @TaskLocal static var suppressLoadedModelDefault = false
+}
+
+final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, @unchecked Sendable {
     let pluginId: String
     let pluginDataDirectory: URL
     let eventBus: EventBusProtocol
     private let ruleNamesProvider: @MainActor () -> [String]
     private let workflowProvider: @MainActor () -> [PluginWorkflowInfo]
+    private let activationContextLock = NSLock()
+    private var synchronousActivationDepth = 0
 
     init(
         pluginId: String,
@@ -47,11 +53,61 @@ final class HostServicesImpl: HostServices, @unchecked Sendable {
     // MARK: - UserDefaults (plugin-scoped)
 
     func userDefault(forKey key: String) -> Any? {
-        UserDefaults.standard.object(forKey: "plugin.\(pluginId).\(key)")
+        if key == "loadedModel",
+           PassiveLoadedModelRestoreContext.suppressLoadedModelDefault,
+           !isInSynchronousPluginActivation,
+           !shouldRestoreLoadedModelsPassively {
+            return nil
+        }
+
+        return UserDefaults.standard.object(forKey: "plugin.\(pluginId).\(key)")
     }
 
     func setUserDefault(_ value: Any?, forKey key: String) {
         UserDefaults.standard.set(value, forKey: "plugin.\(pluginId).\(key)")
+    }
+
+    // MARK: - Model Lifecycle Policy
+
+    var shouldRestoreLoadedModelsPassively: Bool {
+        ModelAutoUnloadPolicy.shouldRestoreLoadedModelsPassively()
+    }
+
+    func performPluginActivation(
+        suppressPassiveLoadedModelRestore: Bool,
+        _ body: @escaping () -> Void
+    ) {
+        let activation = {
+            self.withSynchronousPluginActivation(body)
+        }
+
+        guard suppressPassiveLoadedModelRestore else {
+            activation()
+            return
+        }
+
+        PassiveLoadedModelRestoreContext.$suppressLoadedModelDefault.withValue(true) {
+            activation()
+        }
+    }
+
+    private var isInSynchronousPluginActivation: Bool {
+        activationContextLock.withLock {
+            synchronousActivationDepth > 0
+        }
+    }
+
+    private func withSynchronousPluginActivation(_ body: () -> Void) {
+        activationContextLock.withLock {
+            synchronousActivationDepth += 1
+        }
+        defer {
+            activationContextLock.withLock {
+                synchronousActivationDepth -= 1
+            }
+        }
+
+        body()
     }
 
     // MARK: - App Context

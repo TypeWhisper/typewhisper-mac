@@ -79,6 +79,22 @@ private struct MockHostServices: HostServices {
     func setStreamingDisplayActive(_ active: Bool) {}
 }
 
+private struct PolicyAwareMockHostServices: HostServices, HostModelLifecyclePolicyProviding {
+    let pluginDataDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let activeAppBundleId: String? = nil
+    let activeAppName: String? = nil
+    let eventBus: EventBusProtocol = MockEventBus()
+    let availableRuleNames: [String] = []
+    let shouldRestoreLoadedModelsPassively: Bool
+
+    func storeSecret(key: String, value: String) throws {}
+    func loadSecret(key: String) -> String? { nil }
+    func userDefault(forKey key: String) -> Any? { nil }
+    func setUserDefault(_ value: Any?, forKey key: String) {}
+    func notifyCapabilitiesChanged() {}
+    func setStreamingDisplayActive(_ active: Bool) {}
+}
+
 @objc(MockTranscriptionPlugin)
 private final class MockTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
     static let pluginId = "com.typewhisper.mock.transcription"
@@ -514,6 +530,14 @@ final class ProtocolContractTests: XCTestCase {
         XCTAssertEqual(host.availableRuleNames, ["Work", "Docs"])
         XCTAssertEqual(host.availableProfileNames, ["Work", "Docs"])
         XCTAssertEqual(host.activeAppName, "Notes")
+    }
+
+    func testHostServicesPassiveRestorePolicyDefaultsForLegacyHosts() {
+        let legacyHost = MockHostServices(eventBus: MockEventBus(), availableRuleNames: [])
+        XCTAssertTrue(legacyHost.shouldRestoreLoadedModelsPassively)
+
+        let policyAwareHost = PolicyAwareMockHostServices(shouldRestoreLoadedModelsPassively: false)
+        XCTAssertFalse(policyAwareHost.shouldRestoreLoadedModelsPassively)
     }
 
     func testHostServicesExposeWorkflowSnapshots() throws {

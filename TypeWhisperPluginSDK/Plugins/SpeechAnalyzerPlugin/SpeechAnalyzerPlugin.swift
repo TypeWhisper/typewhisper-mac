@@ -32,7 +32,9 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Tran
         Task {
             await populateModels()
             host.notifyCapabilitiesChanged()
-            await restoreLoadedModel(allowDownloads: false)
+            if host.shouldRestoreLoadedModelsPassively {
+                await restoreLoadedModel(allowDownloads: false)
+            }
         }
     }
 

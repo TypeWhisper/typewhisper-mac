@@ -174,9 +174,9 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
             host.setUserDefault(sanitizedSelection, forKey: "selectedLLMModel")
         }
 
-        let persistedLoadedModel = host.userDefault(forKey: "loadedModel") as? String
         let shouldAutoRestoreLoadedModel: Bool
-        if let persistedLoadedModel {
+        if host.shouldRestoreLoadedModelsPassively,
+           let persistedLoadedModel = host.userDefault(forKey: "loadedModel") as? String {
             if Self.canRestoreLoadedModel(persistedLoadedModel),
                let modelDef = Self.modelDefinition(for: persistedLoadedModel) {
                 shouldAutoRestoreLoadedModel = isModelDownloaded(modelDef)
@@ -220,6 +220,10 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
 
     var isAvailable: Bool {
         modelContainer != nil && loadedModelId != nil
+    }
+
+    var shouldRestoreLoadedModelsPassively: Bool {
+        host?.shouldRestoreLoadedModelsPassively ?? true
     }
 
     var supportedModels: [PluginModelInfo] {

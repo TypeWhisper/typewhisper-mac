@@ -668,7 +668,9 @@ final class PluginManager: ObservableObject {
             ruleNamesProvider: ruleNamesProvider,
             workflowProvider: workflowProvider
         )
-        plugin.instance.activate(host: host)
+        host.performPluginActivation(suppressPassiveLoadedModelRestore: !plugin.isBundled) {
+            plugin.instance.activate(host: host)
+        }
         logger.info("Activated plugin: \(plugin.manifest.id)")
     }
 

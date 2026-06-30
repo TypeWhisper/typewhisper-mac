@@ -457,7 +457,7 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         func unsubscribe(id: UUID) {}
     }
 
-    private final class MockHostServices: HostServices, @unchecked Sendable {
+    private final class MockHostServices: HostServices, HostModelLifecyclePolicyProviding, @unchecked Sendable {
         private var defaults: [String: Any]
         private var secrets: [String: String]
 
@@ -466,17 +466,20 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         var activeAppBundleId: String?
         var activeAppName: String?
         var availableRuleNames: [String] = []
+        var shouldRestoreLoadedModelsPassively: Bool
         private(set) var capabilitiesChangedCount = 0
         private(set) var streamingDisplayActiveValues: [Bool] = []
 
         init(
             pluginDataDirectory: URL,
             defaults: [String: Any] = [:],
-            secrets: [String: String] = [:]
+            secrets: [String: String] = [:],
+            shouldRestoreLoadedModelsPassively: Bool = true
         ) {
             self.pluginDataDirectory = pluginDataDirectory
             self.defaults = defaults
             self.secrets = secrets
+            self.shouldRestoreLoadedModelsPassively = shouldRestoreLoadedModelsPassively
         }
 
         func storeSecret(key: String, value: String) throws { secrets[key] = value }
@@ -536,6 +539,29 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         plugin.activate(host: host)
 
         XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, "gemma-4-26b-a4b-it-4bit")
+        XCTAssertEqual(plugin.modelState, .notLoaded)
+    }
+
+    func testGemma4ActivationSkipsPassiveRestoreWhenHostDisallowsIt() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let host = MockHostServices(
+            pluginDataDirectory: appSupportDirectory,
+            defaults: [
+                "selectedLLMModel": "gemma-4-e2b-it-4bit",
+                "loadedModel": "retired-or-unavailable-model"
+            ],
+            shouldRestoreLoadedModelsPassively: false
+        )
+        let plugin = Gemma4Plugin()
+
+        plugin.activate(host: host)
+
+        XCTAssertFalse(plugin.shouldRestoreLoadedModelsPassively)
+        XCTAssertEqual(plugin.selectedLLMModelId, "gemma-4-e2b-it-4bit")
+        XCTAssertEqual(host.userDefault(forKey: "selectedLLMModel") as? String, "gemma-4-e2b-it-4bit")
+        XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, "retired-or-unavailable-model")
         XCTAssertEqual(plugin.modelState, .notLoaded)
     }
 

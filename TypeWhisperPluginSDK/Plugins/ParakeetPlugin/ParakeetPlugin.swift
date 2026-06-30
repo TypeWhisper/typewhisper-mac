@@ -95,7 +95,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
                 selectedVersion = version
             }
         }
-        if restoresModelOnActivate {
+        if restoresModelOnActivate, host.shouldRestoreLoadedModelsPassively {
             Task { await restoreLoadedModel(allowDownloads: false) }
         }
     }
