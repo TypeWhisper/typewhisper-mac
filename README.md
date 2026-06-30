@@ -505,7 +505,7 @@ Hotkeys are direct workflow shortcuts, not context conditions in the app/URL mat
 
 The active workflow name is shown as a badge in the indicator, together with a short explanation of why it matched.
 
-Multiple engines can be loaded simultaneously for instant switching between workflows. Note that loading multiple local models increases memory usage. Cloud engines (Groq, OpenAI, xAI/Grok) have negligible memory overhead.
+Multiple engines can be loaded simultaneously during a session for instant switching between workflows. Note that loading multiple local models increases memory usage. Set `Auto-unload model` to `Never` if you want TypeWhisper to restore previously loaded local models at launch; any active auto-unload policy keeps startup lazy and reloads the selected/downloaded model on first real use. Cloud engines (Groq, OpenAI, xAI/Grok) have negligible memory overhead.
 
 ## Plugins
 
