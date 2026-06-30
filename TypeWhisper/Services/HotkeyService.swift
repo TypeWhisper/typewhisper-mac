@@ -147,6 +147,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     enum HotkeyEventSource: Sendable {
         case eventTap
         case monitor
+        case carbon
     }
 
     private enum HotkeyDispatchPhase: Hashable {
@@ -165,6 +166,19 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         let target: Target
         let phase: HotkeyDispatchPhase
         let hotkey: UnifiedHotkey
+    }
+
+    private struct CarbonHotkeyRegistration {
+        enum Target {
+            case slot(HotkeySlotType)
+            case profile(UUID)
+            case workflow(UUID, WorkflowHotkeyBehavior)
+        }
+
+        let id: UInt32
+        let target: Target
+        let hotkey: UnifiedHotkey
+        var ref: EventHotKeyRef?
     }
 
     enum HotkeyMode: String {
@@ -226,6 +240,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     private static let escapeHotkey = UnifiedHotkey(keyCode: escapeKeyCode, modifierFlags: 0, isFn: false)
     private static let capsLockKeyCode: UInt16 = 0x39
     private static let capsLockSuppressionWindow: TimeInterval = 0.25
+    private static let carbonHotkeySignature: OSType = "tywh".utf16.reduce(0) { ($0 << 8) + OSType($1) }
     private nonisolated static let hotkeyEventTapPlacement: CGEventTapPlacement = .headInsertEventTap
 
     nonisolated static func requestTimestamp() -> UInt64 {
@@ -316,12 +331,18 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     private var localMonitor: Any?
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    private var carbonHotkeyRegistrations: [UInt32: CarbonHotkeyRegistration] = [:]
+    private var carbonHotkeyEventHandlerRef: EventHandlerRef?
     private var recentEventTapDispatches: [HotkeyDispatchKey: Date] = [:]
     private var capsLockOriginSuppressionUntil: Date?
 
     var accessibilityTrustedProvider: () -> Bool = { AXIsProcessTrusted() }
 
     private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "HotkeyService")
+
+    deinit {
+        tearDownMonitor()
+    }
 
     // Modifier keyCodes that generate flagsChanged instead of keyDown/keyUp
     nonisolated static let modifierKeyCodes: Set<UInt16> = [
@@ -542,15 +563,18 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     private func setupMonitor() {
         tearDownMonitor()
         let includeMouse = needsMouseEventMonitoring
+        let suppressingMouse = needsSuppressingMouseEventTap
+        let accessibilityTrusted = accessibilityTrustedProvider()
+        installCarbonHotkeys()
 
-        guard accessibilityTrustedProvider() else {
+        guard accessibilityTrusted else {
             logger.info("Accessibility permission not granted, installing local hotkey monitor only")
             installLocalEventMonitor(includeMouse: includeMouse)
             return
         }
 
         // Try CGEventTap first - it can suppress hotkey events from reaching other apps
-        if setupEventTap(includeMouse: needsSuppressingMouseEventTap) {
+        if setupEventTap(includeMouse: suppressingMouse) {
             logger.info("Using head-inserted CGEventTap for hotkey monitoring with NSEvent compatibility fallback")
             installEventMonitors(includeMouse: includeMouse)
             return
@@ -615,6 +639,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
     private func tearDownMonitor() {
         cancelPendingHybridModifierHold()
+        tearDownCarbonHotkeys()
 
         if let monitor = globalMonitor {
             NSEvent.removeMonitor(monitor)
@@ -651,6 +676,245 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
     func resumeMonitoring() {
         setupMonitor()
+    }
+
+    // MARK: - Carbon Hotkeys (works through Secure Input)
+
+    private func installCarbonHotkeys() {
+        tearDownCarbonHotkeys()
+
+        var nextId: UInt32 = 1
+        for slotType in HotkeySlotType.allCases {
+            for state in slots[slotType] ?? [] {
+                guard let hotkey = state.hotkey else { continue }
+                registerCarbonHotkeyIfSupported(
+                    id: nextId,
+                    target: .slot(slotType),
+                    hotkey: hotkey
+                )
+                nextId &+= 1
+            }
+        }
+
+        for (profileId, state) in profileSlots {
+            registerCarbonHotkeyIfSupported(
+                id: nextId,
+                target: .profile(profileId),
+                hotkey: state.hotkey
+            )
+            nextId &+= 1
+        }
+
+        for states in workflowSlots.values {
+            for state in states {
+                registerCarbonHotkeyIfSupported(
+                    id: nextId,
+                    target: .workflow(state.workflowId, state.behavior),
+                    hotkey: state.hotkey
+                )
+                nextId &+= 1
+            }
+        }
+
+        installCarbonEventHandlersIfNeeded()
+    }
+
+    private func registerCarbonHotkeyIfSupported(
+        id: UInt32,
+        target: CarbonHotkeyRegistration.Target,
+        hotkey: UnifiedHotkey
+    ) {
+        guard Self.supportsCarbonHotkey(hotkey) else { return }
+
+        let hotkeyId = EventHotKeyID(signature: Self.carbonHotkeySignature, id: id)
+        let options = UInt32(kEventHotKeyNoOptions)
+        var ref: EventHotKeyRef?
+        let status = RegisterEventHotKey(
+            UInt32(hotkey.keyCode),
+            Self.carbonModifierFlags(for: hotkey),
+            hotkeyId,
+            GetEventDispatcherTarget(),
+            options,
+            &ref
+        )
+
+        guard status == noErr, ref != nil else {
+            logger.warning(
+                "RegisterEventHotKey failed: id=\(id, privacy: .public), status=\(status, privacy: .public), hotkey=\(Self.displayName(for: hotkey), privacy: .public)"
+            )
+            return
+        }
+
+        carbonHotkeyRegistrations[id] = CarbonHotkeyRegistration(
+            id: id,
+            target: target,
+            hotkey: hotkey,
+            ref: ref
+        )
+    }
+
+    private func installCarbonEventHandlersIfNeeded() {
+        guard !carbonHotkeyRegistrations.isEmpty, carbonHotkeyEventHandlerRef == nil else { return }
+        let selfPtr = Unmanaged.passUnretained(self).toOpaque()
+
+        var eventTypes = [
+            EventTypeSpec(
+                eventClass: OSType(kEventClassKeyboard),
+                eventKind: OSType(kEventHotKeyPressed)
+            ),
+            EventTypeSpec(
+                eventClass: OSType(kEventClassKeyboard),
+                eventKind: OSType(kEventHotKeyReleased)
+            ),
+        ]
+        let status = InstallEventHandler(
+            GetEventDispatcherTarget(),
+            Self.carbonHotkeyEventHandler,
+            eventTypes.count,
+            &eventTypes,
+            selfPtr,
+            &carbonHotkeyEventHandlerRef
+        )
+        if status != noErr {
+            logger.warning("InstallEventHandler failed for Carbon hotkey events: status=\(status, privacy: .public)")
+            tearDownCarbonHotkeys()
+        }
+    }
+
+    private static let carbonHotkeyEventHandler: EventHandlerUPP = { _, event, userData in
+        guard let event, let userData else { return noErr }
+        var hotkeyId = EventHotKeyID()
+        let status = GetEventParameter(
+            event,
+            EventParamName(kEventParamDirectObject),
+            EventParamType(typeEventHotKeyID),
+            nil,
+            MemoryLayout<EventHotKeyID>.size,
+            nil,
+            &hotkeyId
+        )
+        guard status == noErr, hotkeyId.signature == carbonHotkeySignature else {
+            return noErr
+        }
+
+        let phase: HotkeyDispatchPhase
+        switch GetEventKind(event) {
+        case UInt32(kEventHotKeyPressed):
+            phase = .down
+        case UInt32(kEventHotKeyReleased):
+            phase = .up
+        default:
+            return noErr
+        }
+
+        let service = Unmanaged<HotkeyService>.fromOpaque(userData).takeUnretainedValue()
+        DispatchQueue.main.async {
+            service.handleCarbonHotkey(id: hotkeyId.id, phase: phase)
+        }
+        return noErr
+    }
+
+    private func handleCarbonHotkey(id: UInt32, phase: HotkeyDispatchPhase) {
+        guard let registration = carbonHotkeyRegistrations[id] else { return }
+        handleCarbonHotkey(registration: registration, phase: phase)
+    }
+
+    private func handleCarbonHotkey(
+        registration: CarbonHotkeyRegistration,
+        phase: HotkeyDispatchPhase
+    ) {
+        switch registration.target {
+        case let .slot(slotType):
+            guard !(dictationHotkeysPaused && slotType.startsDictation) else { return }
+            dispatchCarbonGlobalMatch(
+                slotType: slotType,
+                hotkey: registration.hotkey,
+                phase: phase
+            )
+
+        case let .profile(profileId):
+            guard !dictationHotkeysPaused else { return }
+            dispatchCarbonProfileMatch(
+                profileId: profileId,
+                hotkey: registration.hotkey,
+                phase: phase
+            )
+
+        case let .workflow(workflowId, behavior):
+            guard !(dictationHotkeysPaused && behavior == .startDictation) else { return }
+            dispatchCarbonWorkflowMatch(
+                workflowId: workflowId,
+                hotkey: registration.hotkey,
+                behavior: behavior,
+                phase: phase
+            )
+        }
+    }
+
+    private func dispatchCarbonGlobalMatch(
+        slotType: HotkeySlotType,
+        hotkey: UnifiedHotkey,
+        phase: HotkeyDispatchPhase
+    ) {
+        guard shouldDispatch(target: .slot(slotType), phase: phase, hotkey: hotkey, source: .carbon) else {
+            return
+        }
+
+        switch phase {
+        case .down:
+            handleKeyDown(slotType: slotType, hotkey: hotkey)
+        case .up:
+            handleKeyUp(slotType: slotType)
+        }
+    }
+
+    private func dispatchCarbonProfileMatch(
+        profileId: UUID,
+        hotkey: UnifiedHotkey,
+        phase: HotkeyDispatchPhase
+    ) {
+        guard shouldDispatch(target: .profile(profileId), phase: phase, hotkey: hotkey, source: .carbon) else {
+            return
+        }
+
+        switch phase {
+        case .down:
+            handleProfileKeyDown(profileId: profileId)
+        case .up:
+            handleProfileKeyUp(profileId: profileId)
+        }
+    }
+
+    private func dispatchCarbonWorkflowMatch(
+        workflowId: UUID,
+        hotkey: UnifiedHotkey,
+        behavior: WorkflowHotkeyBehavior,
+        phase: HotkeyDispatchPhase
+    ) {
+        guard shouldDispatch(target: .workflow(workflowId), phase: phase, hotkey: hotkey, source: .carbon) else {
+            return
+        }
+
+        switch phase {
+        case .down:
+            handleWorkflowKeyDown(workflowId: workflowId, behavior: behavior)
+        case .up:
+            handleWorkflowKeyUp(workflowId: workflowId, behavior: behavior)
+        }
+    }
+
+    private func tearDownCarbonHotkeys() {
+        for registration in carbonHotkeyRegistrations.values {
+            if let ref = registration.ref {
+                UnregisterEventHotKey(ref)
+            }
+        }
+        carbonHotkeyRegistrations.removeAll()
+
+        if let handler = carbonHotkeyEventHandlerRef {
+            RemoveEventHandler(handler)
+            carbonHotkeyEventHandlerRef = nil
+        }
     }
 
     // MARK: - CGEventTap (suppresses hotkey events)
@@ -1165,17 +1429,36 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         }
 
         let dispatchKey = HotkeyDispatchKey(target: target, phase: phase, hotkey: hotkey)
-        if source == .eventTap {
-            recentEventTapDispatches[dispatchKey] = now
-            return true
+        if let recentDispatch = recentEventTapDispatches[dispatchKey],
+           now.timeIntervalSince(recentDispatch) < Self.monitorDedupWindow {
+            return false
         }
 
-        return recentEventTapDispatches[dispatchKey] == nil
+        recentEventTapDispatches[dispatchKey] = now
+        return true
     }
 
     private func logFallbackMatchIfNeeded(hotkey: UnifiedHotkey, source: HotkeyEventSource) {
         guard source == .monitor, eventTap != nil, hotkey.mouseButton == nil else { return }
         logger.info("Matched hotkey via NSEvent compatibility fallback: \(Self.displayName(for: hotkey), privacy: .public)")
+    }
+
+    private nonisolated static func supportsCarbonHotkey(_ hotkey: UnifiedHotkey) -> Bool {
+        hotkey.kind == .keyWithModifiers
+            && !hotkey.isDoubleTap
+            && hotkey.mouseButton == nil
+            && carbonModifierFlags(for: hotkey) != 0
+    }
+
+    private nonisolated static func carbonModifierFlags(for hotkey: UnifiedHotkey) -> UInt32 {
+        let flags = NSEvent.ModifierFlags(rawValue: hotkey.modifierFlags)
+        var carbonFlags: UInt32 = 0
+        if flags.contains(.command) { carbonFlags |= UInt32(cmdKey) }
+        if flags.contains(.option) { carbonFlags |= UInt32(optionKey) }
+        if flags.contains(.control) { carbonFlags |= UInt32(controlKey) }
+        if flags.contains(.shift) { carbonFlags |= UInt32(shiftKey) }
+        if flags.contains(.function) { carbonFlags |= UInt32(kEventKeyModifierFnMask) }
+        return carbonFlags
     }
 
 #if DEBUG
@@ -1212,6 +1495,28 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
     static func eventTapPlacementForTesting() -> CGEventTapPlacement {
         hotkeyEventTapPlacement
+    }
+
+    static func supportsCarbonHotkeyForTesting(_ hotkey: UnifiedHotkey) -> Bool {
+        supportsCarbonHotkey(hotkey)
+    }
+
+    static func carbonModifierFlagsForTesting(_ hotkey: UnifiedHotkey) -> UInt32 {
+        carbonModifierFlags(for: hotkey)
+    }
+
+    func processCarbonHotkeyForTesting(
+        slotType: HotkeySlotType,
+        hotkey: UnifiedHotkey,
+        isPressed: Bool
+    ) {
+        let registration = CarbonHotkeyRegistration(
+            id: 1,
+            target: .slot(slotType),
+            hotkey: hotkey,
+            ref: nil
+        )
+        handleCarbonHotkey(registration: registration, phase: isPressed ? .down : .up)
     }
 #endif
 
