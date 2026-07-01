@@ -615,6 +615,19 @@ final class SonioxPluginTests: XCTestCase {
         XCTAssertEqual(result.detectedLanguage, "en")
     }
 
+    func testRealtimeCollectorFiltersEndSentinelTokens() async throws {
+        let collector = SonioxTranscriptCollector()
+
+        let text = try await collector.applyWebSocketResponse(Data(
+            #"{"tokens":[{"text":"Why am I not eagle.","is_final":true,"language":"en"},{"text":"<end>","is_final":true},{"text":" Я не ебу, что это такое.","is_final":true,"language":"ru"},{"text":"<end>","is_final":true},{"text":" Що це таке?","is_final":true,"language":"uk"},{"text":" <EOS> ","is_final":true}]}"#.utf8
+        ), translating: false)
+
+        XCTAssertEqual(text, "Why am I not eagle. Я не ебу, что это такое. Що це таке?")
+
+        let result = await collector.finalTranscriptionResult(fallbackLanguage: nil)
+        XCTAssertEqual(result.text, "Why am I not eagle. Я не ебу, что это такое. Що це таке?")
+    }
+
     func testRealtimeCollectorPrefersLastInterimPreviewOverShortUnrelatedFinalTail() async throws {
         let collector = SonioxTranscriptCollector()
 

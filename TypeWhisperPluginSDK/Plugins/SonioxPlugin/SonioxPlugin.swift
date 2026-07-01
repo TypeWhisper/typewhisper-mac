@@ -4,6 +4,15 @@ import SwiftUI
 import os
 import TypeWhisperPluginSDK
 
+private func isSonioxTranscriptSentinel(_ text: String) -> Bool {
+    switch text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+    case "<fin>", "<end>", "<eos>":
+        true
+    default:
+        false
+    }
+}
+
 private enum SonioxDefaultsKey {
     static let apiKey = "api-key"
     static let selectedModel = "selectedModel"
@@ -381,7 +390,7 @@ actor SonioxTranscriptCollector {
         for token in tokens {
             guard let tokenText = token["text"] as? String,
                   !tokenText.isEmpty,
-                  tokenText != "<fin>" else {
+                  !isSonioxTranscriptSentinel(tokenText) else {
                 continue
             }
 
@@ -1885,7 +1894,13 @@ final class SonioxPlugin: NSObject,
         // Extract full text from tokens or top-level text field
         let text: String
         if let tokens = json["tokens"] as? [[String: Any]] {
-            text = tokens.compactMap { $0["text"] as? String }.joined()
+            text = tokens.compactMap { token -> String? in
+                guard let tokenText = token["text"] as? String,
+                      !isSonioxTranscriptSentinel(tokenText) else {
+                    return nil
+                }
+                return tokenText
+            }.joined()
         } else {
             text = json["text"] as? String ?? ""
         }
