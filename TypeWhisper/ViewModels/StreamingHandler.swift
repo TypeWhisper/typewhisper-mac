@@ -214,6 +214,18 @@ final class StreamingHandler: @unchecked Sendable {
         } catch {
             logger.warning("Finalizing live transcription failed: \(error.localizedDescription)")
             await modelManager.cancelLiveTranscriptionSession(handle)
+            if let previewResult = stablePreviewResult(
+                stablePreviewBeforeFinish,
+                handle: handle
+            ) {
+                logger.info("Using stable live preview because final live transcription failed")
+                clearStreamingState(notifyStreamingStopped: true)
+
+                let finalText = previewResult.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                progressText.withLock { $0 = finalText }
+                sharedState.withLock { $0.confirmedStreamingText = finalText }
+                return previewResult
+            }
             clearStreamingState(notifyStreamingStopped: true)
             return nil
         }
@@ -493,6 +505,36 @@ final class StreamingHandler: @unchecked Sendable {
         let finalLooksTiny = finalLength <= 8 || finalWordCount <= 1
         let previewIsMuchLonger = previewLength >= max(12, finalLength * 4)
         return finalLooksTiny && previewIsMuchLonger
+    }
+
+    private func stablePreviewResult(
+        _ stablePreview: String,
+        handle: ModelManagerService.LiveTranscriptionSessionHandle
+    ) -> TranscriptionResult? {
+        let preview = stablePreview.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard Self.isSubstantiveStablePreview(preview) else { return nil }
+
+        let configuredLanguage = sharedState.withLock { $0.configuredLanguage }
+        let configuredLanguageCandidates = sharedState.withLock { $0.configuredLanguageCandidates }
+        let task = sharedState.withLock { $0.task }
+        let normalizeNumbers = sharedState.withLock { $0.normalizeNumbers }
+
+        return TranscriptionNormalizationService.normalizeResult(
+            text: preview,
+            detectedLanguage: nil,
+            configuredLanguage: configuredLanguage,
+            configuredLanguageCandidates: configuredLanguageCandidates,
+            duration: bufferedDurationProvider(),
+            processingTime: 0.001,
+            engineUsed: handle.providerId,
+            segments: [],
+            task: task,
+            normalizeNumbers: normalizeNumbers
+        )
+    }
+
+    private nonisolated static func isSubstantiveStablePreview(_ preview: String) -> Bool {
+        transcriptContentLength(preview) >= 12 || transcriptWords(in: preview).count >= 2
     }
 
     private nonisolated static func looksLikeProviderCorrection(confirmed: String, new: String) -> Bool {

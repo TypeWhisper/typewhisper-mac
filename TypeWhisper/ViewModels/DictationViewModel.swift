@@ -1286,10 +1286,13 @@ final class DictationViewModel: ObservableObject {
             return
         }
 
-        let liveSessionResult = await streamingHandler.finish()
+        let liveSessionResultBeforePreviewFallback = await streamingHandler.finish()
         lastStreamingParams = nil
         stopRecordingTimer()
         let previewText = partialText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let liveSessionResult = liveSessionResultBeforePreviewFallback.map {
+            StreamingHandler.resultPreferringStablePreviewIfNeeded($0, stablePreview: previewText)
+        }
         let hasPreviewText = !previewText.isEmpty
         let hasConfirmedText = hasConfirmedTranscriptionResultText(liveSessionResult)
 
@@ -1359,7 +1362,9 @@ final class DictationViewModel: ObservableObject {
         )))
 
         state = .processing
-        processingPhase = String(localized: "Transcribing...")
+        processingPhase = liveSessionResult == nil
+            ? String(localized: "Transcribing...")
+            : String(localized: "Processing...")
         markActiveDictationSessionProcessingIfNeeded()
 
         transcriptionTask = Task {

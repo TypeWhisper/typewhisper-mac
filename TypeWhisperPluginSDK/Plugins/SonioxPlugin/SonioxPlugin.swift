@@ -560,7 +560,7 @@ private final class SonioxLiveTranscriptionSession: LiveTranscriptionSession, @u
         var cancelled = false
     }
 
-    private static let finishTimeoutNanoseconds: UInt64 = 10_000_000_000
+    private static let finishTimeoutNanoseconds: UInt64 = 800_000_000
 
     private let webSocketTask: URLSessionWebSocketTask
     private let receiveTask: Task<Void, Never>

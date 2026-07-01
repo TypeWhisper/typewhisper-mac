@@ -319,6 +319,10 @@ final class StreamingHandlerTests: XCTestCase {
             self.finalResult = finalResult
         }
 
+        func setFinishError(_ error: PluginTranscriptionError?) {
+            finishError = error
+        }
+
         func appendAudio(samples: [Float]) async throws {
             appendedChunkSizes.append(samples.count)
             let progressText: String
@@ -331,7 +335,10 @@ final class StreamingHandlerTests: XCTestCase {
         }
 
         func finish() async throws -> PluginTranscriptionResult {
-            finalResult
+            if let finishError {
+                throw finishError
+            }
+            return finalResult
         }
 
         func cancel() async {}
@@ -341,6 +348,7 @@ final class StreamingHandlerTests: XCTestCase {
         }
 
         private var finalResult = PluginTranscriptionResult(text: "finished", detectedLanguage: "en")
+        private var finishError: PluginTranscriptionError?
     }
 
     override func tearDown() {
@@ -770,6 +778,86 @@ final class StreamingHandlerTests: XCTestCase {
 
         XCTAssertEqual(result.text, "This is the meaningful multilingual preview")
         XCTAssertNil(result.detectedLanguage)
+    }
+
+    func testFinalLiveResultKeepsStablePreviewWhenFinalIsChineseTail() {
+        let result = StreamingHandler.resultPreferringStablePreviewIfNeeded(
+            TranscriptionResult(
+                text: "好。",
+                detectedLanguage: "zh",
+                duration: 3,
+                processingTime: 0.2,
+                engineUsed: "soniox",
+                segments: []
+            ),
+            stablePreview: "English and Russian meaningful preview text"
+        )
+
+        XCTAssertEqual(result.text, "English and Russian meaningful preview text")
+        XCTAssertNil(result.detectedLanguage)
+    }
+
+    func testFinishUsesStablePreviewWhenLiveSessionFinalizationFails() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockLivePlugin()
+        await plugin.session.setProgressUpdates([
+            "English and Russian meaningful preview text",
+        ])
+        await plugin.session.setFinishError(PluginTranscriptionError.networkError("timeout"))
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.live",
+                    name: "Mock Live",
+                    version: "1.0.0",
+                    principalClass: "MockLivePlugin",
+                    requiresAPIKey: false
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+
+        let deltaLock = NSLock()
+        var sentDelta = false
+        let handler = StreamingHandler(
+            modelManager: modelManager,
+            bufferProvider: { [] },
+            recentBufferProvider: { _ in [] },
+            bufferDeltaProvider: { offset in
+                deltaLock.lock()
+                defer { deltaLock.unlock() }
+                guard !sentDelta else { return ([], offset) }
+                sentDelta = true
+                return (Array(repeating: 0.2, count: 4000), 4000)
+            },
+            bufferedDurationProvider: { 0.25 }
+        )
+
+        handler.start(
+            streamPrompt: "Live Terms",
+            engineOverrideId: plugin.providerId,
+            selectedProviderId: plugin.providerId,
+            languageSelection: .auto,
+            task: .transcribe,
+            cloudModelOverride: nil,
+            allowLiveTranscription: true,
+            stateCheck: { true }
+        )
+
+        try await Task.sleep(for: .milliseconds(500))
+        let result = await handler.finish()
+
+        XCTAssertEqual(result?.text, "English and Russian meaningful preview text")
+        XCTAssertEqual(result?.engineUsed, plugin.providerId)
     }
 
     func testFinalLiveResultKeepsProviderFinalWhenPreviewIsNotSubstantive() {
