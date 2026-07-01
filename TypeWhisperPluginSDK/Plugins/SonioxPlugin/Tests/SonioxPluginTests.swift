@@ -18,6 +18,8 @@ final class SonioxPluginTests: XCTestCase {
 
         XCTAssertEqual(plugin.selectedModelId, "stt-rt-v5")
         XCTAssertEqual(plugin.transcriptionModels.map(\.id), ["stt-rt-v5"])
+        XCTAssertGreaterThan(plugin.transcriptionModels[0].languageCount, 1)
+        XCTAssertEqual(plugin.transcriptionModels[0].sizeDescription, "Cloud")
         XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "automatic")
     }
 
@@ -38,14 +40,21 @@ final class SonioxPluginTests: XCTestCase {
                 aliasedModelId: nil,
                 name: "STT RT v5",
                 transcriptionMode: "real_time",
-                languages: []
+                languages: [
+                    SonioxFetchedLanguage(code: "de", name: "German"),
+                    SonioxFetchedLanguage(code: "uk", name: "Ukrainian"),
+                ]
             ),
             SonioxFetchedModel(
                 id: "stt-rt-v6",
                 aliasedModelId: nil,
                 name: "STT RT v6",
                 transcriptionMode: "real_time",
-                languages: []
+                languages: [
+                    SonioxFetchedLanguage(code: "de", name: "German"),
+                    SonioxFetchedLanguage(code: "uk", name: "Ukrainian"),
+                    SonioxFetchedLanguage(code: "ja", name: "Japanese"),
+                ]
             ),
             SonioxFetchedModel(
                 id: "stt-async-v6",
@@ -63,6 +72,7 @@ final class SonioxPluginTests: XCTestCase {
 
         XCTAssertEqual(plugin.selectedModelId, "stt-rt-v6")
         XCTAssertEqual(plugin.transcriptionModels.map(\.id), ["stt-rt-v5", "stt-rt-v6"])
+        XCTAssertEqual(plugin.transcriptionModels.map(\.languageCount), [2, 3])
     }
 
     func testDefaultRegionUsesUSAndPersistsSelection() throws {
@@ -123,6 +133,13 @@ final class SonioxPluginTests: XCTestCase {
         XCTAssertTrue(plugin.authStatus(for: .tts).isAvailable)
     }
 
+    func testSonioxPluginAdvertisesLiveLanguageHintTranscription() {
+        let plugin: Any = SonioxPlugin()
+
+        XCTAssertTrue(plugin is any LiveTranscriptionCapablePlugin)
+        XCTAssertTrue(plugin is any LiveLanguageHintTranscriptionCapablePlugin)
+    }
+
     func testCreateTranscriptionRequestUsesAsyncV5Model() throws {
         let request = try SonioxPlugin.makeCreateTranscriptionRequest(
             fileId: "file_123",
@@ -175,6 +192,60 @@ final class SonioxPluginTests: XCTestCase {
 
         let body = try Self.jsonBody(from: request)
         XCTAssertEqual(body["model"] as? String, "stt-async-v6")
+    }
+
+    func testRealtimeConfigUsesRealtimeV5AndLanguageHints() throws {
+        let payload = SonioxPlugin.makeRealtimeConfigPayload(
+            apiKey: "soniox-key",
+            modelID: "stt-rt-v5",
+            language: "de",
+            languageHints: ["en", "de"],
+            translate: true,
+            prompt: "TypeWhisper, Soniox"
+        )
+
+        XCTAssertEqual(payload["api_key"] as? String, "soniox-key")
+        XCTAssertEqual(payload["model"] as? String, "stt-rt-v5")
+        XCTAssertEqual(payload["audio_format"] as? String, "s16le")
+        XCTAssertEqual(payload["sample_rate"] as? Int, 16_000)
+        XCTAssertEqual(payload["num_channels"] as? Int, 1)
+        XCTAssertEqual(payload["enable_endpoint_detection"] as? Bool, true)
+        XCTAssertEqual(payload["enable_language_identification"] as? Bool, true)
+        XCTAssertEqual(payload["language_hints"] as? [String], ["en", "de"])
+
+        let translation = try XCTUnwrap(payload["translation"] as? [String: Any])
+        XCTAssertEqual(translation["type"] as? String, "one_way")
+        XCTAssertEqual(translation["target_language"] as? String, "en")
+
+        let context = try XCTUnwrap(payload["context"] as? [String: Any])
+        XCTAssertEqual(context["terms"] as? [String], ["TypeWhisper", "Soniox"])
+    }
+
+    func testRealtimeConfigFallsBackToRequestedLanguageHint() {
+        let payload = SonioxPlugin.makeRealtimeConfigPayload(
+            apiKey: "soniox-key",
+            language: "de",
+            translate: false,
+            prompt: nil
+        )
+
+        XCTAssertEqual(payload["model"] as? String, "stt-rt-v5")
+        XCTAssertEqual(payload["language_hints"] as? [String], ["de"])
+        XCTAssertNil(payload["translation"])
+        XCTAssertNil(payload["context"])
+    }
+
+    func testRealtimeConfigAcceptsNonEnglishLanguageHints() {
+        let payload = SonioxPlugin.makeRealtimeConfigPayload(
+            apiKey: "soniox-key",
+            language: nil,
+            languageHints: ["uk", "ja"],
+            translate: false,
+            prompt: nil
+        )
+
+        XCTAssertEqual(payload["language_hints"] as? [String], ["uk", "ja"])
+        XCTAssertEqual(payload["enable_language_identification"] as? Bool, true)
     }
 
     func testTTSRequestUsesJapanRegionAndPCMOutput() throws {
@@ -524,6 +595,53 @@ final class SonioxPluginTests: XCTestCase {
             ],
             totalDuration: 0
         ))
+    }
+
+    func testRealtimeCollectorBuildsStableFinalAndInterimText() async throws {
+        let collector = SonioxTranscriptCollector()
+
+        let first = try await collector.applyWebSocketResponse(Data(
+            #"{"tokens":[{"text":"Hello","is_final":true,"language":"en"},{"text":" ","is_final":true},{"text":"worl","is_final":false}]}"#.utf8
+        ), translating: false)
+        XCTAssertEqual(first, "Hello worl")
+
+        let second = try await collector.applyWebSocketResponse(Data(
+            #"{"tokens":[{"text":"world","is_final":true},{"text":"<fin>","is_final":true}]}"#.utf8
+        ), translating: false)
+        XCTAssertEqual(second, "Hello world")
+
+        let result = await collector.finalTranscriptionResult(fallbackLanguage: nil)
+        XCTAssertEqual(result.text, "Hello world")
+        XCTAssertEqual(result.detectedLanguage, "en")
+    }
+
+    func testRealtimeCollectorFiltersOriginalTokensWhenTranslating() async throws {
+        let collector = SonioxTranscriptCollector()
+
+        let text = try await collector.applyWebSocketResponse(Data(
+            #"{"tokens":[{"text":"Hallo","is_final":true,"translation_status":"original","language":"de"},{"text":"Hello","is_final":true,"translation_status":"translation","source_language":"de"}]}"#.utf8
+        ), translating: true)
+
+        XCTAssertEqual(text, "Hello")
+        let result = await collector.finalTranscriptionResult(fallbackLanguage: nil)
+        XCTAssertEqual(result.text, "Hello")
+        XCTAssertEqual(result.detectedLanguage, "de")
+    }
+
+    func testRealtimeCollectorSurfacesTopLevelSonioxErrors() async {
+        let collector = SonioxTranscriptCollector()
+
+        do {
+            _ = try await collector.applyWebSocketResponse(Data(
+                #"{"tokens":[],"error_code":401,"error_type":"unauthenticated","error_message":"Invalid API key"}"#.utf8
+            ), translating: false)
+            XCTFail("Expected Soniox error")
+        } catch {
+            XCTAssertEqual((error as? PluginTranscriptionError)?.localizedDescription, "API error: Invalid API key")
+        }
+
+        let storedError = await collector.error
+        XCTAssertEqual(storedError, "Invalid API key")
     }
 
     private static func jsonBody(from request: URLRequest) throws -> [String: Any] {
