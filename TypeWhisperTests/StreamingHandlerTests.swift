@@ -315,6 +315,10 @@ final class StreamingHandlerTests: XCTestCase {
             self.progressUpdates = progressUpdates
         }
 
+        func setFinalResult(_ finalResult: PluginTranscriptionResult) {
+            self.finalResult = finalResult
+        }
+
         func appendAudio(samples: [Float]) async throws {
             appendedChunkSizes.append(samples.count)
             let progressText: String
@@ -327,7 +331,7 @@ final class StreamingHandlerTests: XCTestCase {
         }
 
         func finish() async throws -> PluginTranscriptionResult {
-            PluginTranscriptionResult(text: "finished", detectedLanguage: "en")
+            finalResult
         }
 
         func cancel() async {}
@@ -335,6 +339,8 @@ final class StreamingHandlerTests: XCTestCase {
         func recordedChunks() -> [Int] {
             appendedChunkSizes
         }
+
+        private var finalResult = PluginTranscriptionResult(text: "finished", detectedLanguage: "en")
     }
 
     override func tearDown() {
@@ -747,6 +753,40 @@ final class StreamingHandlerTests: XCTestCase {
         )
 
         XCTAssertEqual(stable, "Ich bin an Koeln.")
+    }
+
+    func testFinalLiveResultKeepsStablePreviewWhenFinalIsShortUnrelatedTail() {
+        let result = StreamingHandler.resultPreferringStablePreviewIfNeeded(
+            TranscriptionResult(
+                text: "ครับ",
+                detectedLanguage: "th",
+                duration: 3,
+                processingTime: 0.2,
+                engineUsed: "soniox",
+                segments: []
+            ),
+            stablePreview: "This is the meaningful multilingual preview"
+        )
+
+        XCTAssertEqual(result.text, "This is the meaningful multilingual preview")
+        XCTAssertNil(result.detectedLanguage)
+    }
+
+    func testFinalLiveResultKeepsProviderFinalWhenPreviewIsNotSubstantive() {
+        let result = StreamingHandler.resultPreferringStablePreviewIfNeeded(
+            TranscriptionResult(
+                text: "yes",
+                detectedLanguage: "en",
+                duration: 1,
+                processingTime: 0.1,
+                engineUsed: "soniox",
+                segments: []
+            ),
+            stablePreview: "yeah"
+        )
+
+        XCTAssertEqual(result.text, "yes")
+        XCTAssertEqual(result.detectedLanguage, "en")
     }
 
     func testPreviewFallbackOptOutSkipsIntermediateWorkAndAllowsFinalTranscription() async throws {

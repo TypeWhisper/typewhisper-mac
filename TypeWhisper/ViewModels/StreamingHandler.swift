@@ -186,6 +186,7 @@ final class StreamingHandler: @unchecked Sendable {
             return nil
         }
 
+        let stablePreviewBeforeFinish = sharedState.withLock { $0.confirmedStreamingText }
         let delta = nextBufferDelta()
 
         do {
@@ -200,12 +201,16 @@ final class StreamingHandler: @unchecked Sendable {
                 task: sharedState.withLock { $0.task },
                 normalizeNumbers: sharedState.withLock { $0.normalizeNumbers }
             )
+            let finalResult = Self.resultPreferringStablePreviewIfNeeded(
+                result,
+                stablePreview: stablePreviewBeforeFinish
+            )
             clearStreamingState(notifyStreamingStopped: true)
 
-            let finalText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let finalText = finalResult.text.trimmingCharacters(in: .whitespacesAndNewlines)
             progressText.withLock { $0 = finalText }
             sharedState.withLock { $0.confirmedStreamingText = finalText }
-            return result
+            return finalResult
         } catch {
             logger.warning("Finalizing live transcription failed: \(error.localizedDescription)")
             await modelManager.cancelLiveTranscriptionSession(handle)
@@ -453,6 +458,43 @@ final class StreamingHandler: @unchecked Sendable {
         return appendPreviewText(confirmed, new)
     }
 
+    nonisolated static func resultPreferringStablePreviewIfNeeded(
+        _ result: TranscriptionResult,
+        stablePreview: String
+    ) -> TranscriptionResult {
+        let preview = stablePreview.trimmingCharacters(in: .whitespacesAndNewlines)
+        let final = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard shouldPreferStablePreview(final: final, preview: preview) else {
+            return result
+        }
+
+        logger.info("Using stable live preview because final live transcript looked like a short unrelated tail")
+        return TranscriptionResult(
+            text: preview,
+            detectedLanguage: nil,
+            duration: result.duration,
+            processingTime: result.processingTime,
+            engineUsed: result.engineUsed,
+            segments: result.segments
+        )
+    }
+
+    private nonisolated static func shouldPreferStablePreview(final: String, preview: String) -> Bool {
+        guard !final.isEmpty, !preview.isEmpty, final != preview else { return false }
+        guard !preview.contains(final), !final.contains(preview) else { return false }
+
+        let finalLength = transcriptContentLength(final)
+        let previewLength = transcriptContentLength(preview)
+        let finalWordCount = transcriptWords(in: final).count
+        let previewWordCount = transcriptWords(in: preview).count
+
+        guard previewLength >= 12 || previewWordCount >= 2 else { return false }
+
+        let finalLooksTiny = finalLength <= 8 || finalWordCount <= 1
+        let previewIsMuchLonger = previewLength >= max(12, finalLength * 4)
+        return finalLooksTiny && previewIsMuchLonger
+    }
+
     private nonisolated static func looksLikeProviderCorrection(confirmed: String, new: String) -> Bool {
         let confirmedScalars = Array(confirmed.unicodeScalars)
         let newScalars = Array(new.unicodeScalars)
@@ -637,6 +679,12 @@ final class StreamingHandler: @unchecked Sendable {
         guard shorterCount >= 4, longerCount - shorterCount <= 2 else { return false }
 
         return lhs.hasPrefix(rhs) || rhs.hasPrefix(lhs)
+    }
+
+    private nonisolated static func transcriptContentLength(_ text: String) -> Int {
+        text.unicodeScalars.filter { scalar in
+            !CharacterSet.whitespacesAndNewlines.contains(scalar)
+        }.count
     }
 
     private nonisolated static func transcriptWords(in text: String) -> [(normalized: String, endIndex: String.Index)] {

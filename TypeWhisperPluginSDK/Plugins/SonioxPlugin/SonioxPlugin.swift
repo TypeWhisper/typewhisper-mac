@@ -313,8 +313,15 @@ private final class SonioxAVAudioPlayback: SonioxTTSAudioPlayback, @unchecked Se
 // MARK: - Transcript Collector
 
 actor SonioxTranscriptCollector {
+    private struct PreferredFinalText {
+        let text: String
+        let usedInterimPreview: Bool
+    }
+
     private var finals: [String] = []
     private var interim: String = ""
+    private var lastInterimPreview: String = ""
+    private var lastInterimLanguage: String?
     private var _detectedLanguage: String?
     private var _error: String?
 
@@ -331,7 +338,12 @@ actor SonioxTranscriptCollector {
 
     func setInterim(_ text: String, language: String? = nil) {
         interim = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let preview = currentText()
+        if !preview.isEmpty {
+            lastInterimPreview = preview
+        }
         if let language, !language.isEmpty {
+            lastInterimLanguage = language
             _detectedLanguage = language
         }
     }
@@ -423,11 +435,95 @@ actor SonioxTranscriptCollector {
     }
 
     func finalTranscriptionResult(fallbackLanguage: String?) -> PluginTranscriptionResult {
-        let text = finalResult()
-        return PluginTranscriptionResult(
-            text: text.isEmpty ? currentText() : text,
-            detectedLanguage: detectedLanguage(fallback: fallbackLanguage)
+        let preferred = Self.preferredFinalText(
+            finalText: finalResult(),
+            currentText: currentText(),
+            lastInterimPreview: lastInterimPreview
         )
+        let language = preferred.usedInterimPreview
+            ? (lastInterimLanguage ?? fallbackLanguage)
+            : detectedLanguage(fallback: fallbackLanguage)
+        return PluginTranscriptionResult(
+            text: preferred.text,
+            detectedLanguage: language
+        )
+    }
+
+    private static func preferredFinalText(
+        finalText: String,
+        currentText: String,
+        lastInterimPreview: String
+    ) -> PreferredFinalText {
+        let final = finalText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let current = currentText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let preview = lastInterimPreview.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fallback = current.isEmpty ? preview : current
+
+        guard !final.isEmpty else {
+            return PreferredFinalText(text: fallback, usedInterimPreview: current.isEmpty && !preview.isEmpty)
+        }
+        guard shouldPreferInterimPreview(final: final, preview: preview) else {
+            return PreferredFinalText(text: final, usedInterimPreview: false)
+        }
+        return PreferredFinalText(text: preview, usedInterimPreview: true)
+    }
+
+    private static func shouldPreferInterimPreview(final: String, preview: String) -> Bool {
+        guard !final.isEmpty, !preview.isEmpty, final != preview else { return false }
+        guard !preview.contains(final), !final.contains(preview) else { return false }
+
+        let finalLength = transcriptContentLength(final)
+        let previewLength = transcriptContentLength(preview)
+        let finalWordCount = transcriptWords(in: final).count
+        let previewWordCount = transcriptWords(in: preview).count
+
+        guard previewLength >= 12 || previewWordCount >= 2 else { return false }
+
+        let finalLooksTiny = finalLength <= 8 || finalWordCount <= 1
+        let previewIsMuchLonger = previewLength >= max(12, finalLength * 4)
+        return finalLooksTiny && previewIsMuchLonger
+    }
+
+    private static func transcriptContentLength(_ text: String) -> Int {
+        text.unicodeScalars.filter { scalar in
+            !CharacterSet.whitespacesAndNewlines.contains(scalar)
+        }.count
+    }
+
+    private static func transcriptWords(in text: String) -> [String] {
+        var words: [String] = []
+        var wordStart: String.Index?
+
+        var index = text.startIndex
+        while index < text.endIndex {
+            let scalar = text[index].unicodeScalars.first
+            let isWordCharacter = scalar.map {
+                CharacterSet.alphanumerics.contains($0) || $0 == "'"
+            } ?? false
+
+            if isWordCharacter {
+                if wordStart == nil { wordStart = index }
+            } else if let start = wordStart {
+                let word = String(text[start..<index])
+                    .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
+                if !word.isEmpty {
+                    words.append(word)
+                }
+                wordStart = nil
+            }
+
+            index = text.index(after: index)
+        }
+
+        if let start = wordStart {
+            let word = String(text[start..<text.endIndex])
+                .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
+            if !word.isEmpty {
+                words.append(word)
+            }
+        }
+
+        return words
     }
 
     private static func errorMessage(from json: [String: Any]) -> String? {
