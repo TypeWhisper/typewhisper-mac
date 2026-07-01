@@ -7839,6 +7839,160 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testCarbonWorkflowHotkeyStartsDictation() {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        let workflowId = UUID()
+        let hotkey = commandOptionAHotkey()
+        service.registerWorkflowHotkeys([(id: workflowId, hotkey: hotkey, behavior: .startDictation)])
+
+        var startedWorkflowId: UUID?
+        service.onWorkflowDictationStart = { workflowId, _ in startedWorkflowId = workflowId }
+
+        service.processCarbonWorkflowHotkeyForTesting(
+            workflowId: workflowId,
+            hotkey: hotkey,
+            behavior: .startDictation,
+            isPressed: true
+        )
+
+        XCTAssertEqual(startedWorkflowId, workflowId)
+        XCTAssertEqual(service.currentMode, .pushToTalk)
+        XCTAssertEqual(service.activeWorkflowId, workflowId)
+
+        service.processCarbonWorkflowHotkeyForTesting(
+            workflowId: workflowId,
+            hotkey: hotkey,
+            behavior: .startDictation,
+            isPressed: false
+        )
+        XCTAssertEqual(service.currentMode, .toggle)
+        XCTAssertEqual(service.activeWorkflowId, workflowId)
+    }
+
+    @MainActor
+    func testCarbonWorkflowHotkeyTextProcessingDispatchesOnPhysicalKeyRelease() async {
+        let (service, workflowId, hotkey) = makeCarbonWorkflowTextProcessingService(
+            keyStateProvider: { _ in false }
+        )
+
+        var textWorkflowId: UUID?
+        let textProcessingCallback = expectation(description: "workflow text processing callback")
+        service.onWorkflowTextProcessing = {
+            textWorkflowId = $0
+            textProcessingCallback.fulfill()
+        }
+
+        service.processCarbonWorkflowHotkeyForTesting(
+            workflowId: workflowId,
+            hotkey: hotkey,
+            behavior: .processSelectedText,
+            isPressed: true
+        )
+        XCTAssertNil(textWorkflowId)
+        XCTAssertEqual(service.activeWorkflowId, workflowId)
+
+        service.processCarbonWorkflowHotkeyForTesting(
+            workflowId: workflowId,
+            hotkey: hotkey,
+            behavior: .processSelectedText,
+            isPressed: false
+        )
+        await fulfillment(of: [textProcessingCallback], timeout: 1.0)
+        XCTAssertEqual(textWorkflowId, workflowId)
+        XCTAssertNil(service.activeWorkflowId)
+    }
+
+    @MainActor
+    func testCarbonWorkflowHotkeyTextProcessingWaitsForPhysicalKeyUpAfterModifierRelease() async throws {
+        let workflowId = UUID()
+        let hotkey = commandOptionAHotkey()
+        var keyIsDown = true
+        let service = makeCarbonWorkflowTextProcessingService(
+            workflowId: workflowId,
+            hotkey: hotkey,
+            keyStateProvider: { keyCode in keyCode == hotkey.keyCode && keyIsDown }
+        ).service
+
+        var textWorkflowId: UUID?
+        let textProcessingCallback = expectation(description: "workflow text processing callback")
+        service.onWorkflowTextProcessing = {
+            textWorkflowId = $0
+            textProcessingCallback.fulfill()
+        }
+
+        service.processCarbonWorkflowHotkeyForTesting(
+            workflowId: workflowId,
+            hotkey: hotkey,
+            behavior: .processSelectedText,
+            isPressed: true
+        )
+        XCTAssertNil(textWorkflowId)
+        XCTAssertEqual(service.activeWorkflowId, workflowId)
+
+        service.processCarbonWorkflowHotkeyForTesting(
+            workflowId: workflowId,
+            hotkey: hotkey,
+            behavior: .processSelectedText,
+            isPressed: false
+        )
+        try await Task.sleep(for: .milliseconds(20))
+        XCTAssertNil(textWorkflowId)
+        XCTAssertEqual(service.activeWorkflowId, workflowId)
+
+        keyIsDown = false
+        let physicalKeyUp = try makeKeyboardEvent(keyCode: 0x00, keyDown: false, flags: [])
+        XCTAssertTrue(service.processEventForTesting(physicalKeyUp, source: .monitor))
+        await fulfillment(of: [textProcessingCallback], timeout: 1.0)
+        XCTAssertEqual(textWorkflowId, workflowId)
+        XCTAssertNil(service.activeWorkflowId)
+    }
+
+    @MainActor
+    func testCarbonWorkflowHotkeyTextProcessingCompletesWithoutMonitorKeyUpAfterPhysicalKeyRelease() async throws {
+        let workflowId = UUID()
+        let hotkey = commandOptionAHotkey()
+        var keyIsDown = true
+        let service = makeCarbonWorkflowTextProcessingService(
+            workflowId: workflowId,
+            hotkey: hotkey,
+            keyStateProvider: { keyCode in keyCode == hotkey.keyCode && keyIsDown }
+        ).service
+
+        var textWorkflowId: UUID?
+        let textProcessingCallback = expectation(description: "workflow text processing callback")
+        service.onWorkflowTextProcessing = {
+            textWorkflowId = $0
+            textProcessingCallback.fulfill()
+        }
+
+        service.processCarbonWorkflowHotkeyForTesting(
+            workflowId: workflowId,
+            hotkey: hotkey,
+            behavior: .processSelectedText,
+            isPressed: true
+        )
+        XCTAssertNil(textWorkflowId)
+        XCTAssertEqual(service.activeWorkflowId, workflowId)
+
+        service.processCarbonWorkflowHotkeyForTesting(
+            workflowId: workflowId,
+            hotkey: hotkey,
+            behavior: .processSelectedText,
+            isPressed: false
+        )
+        try await Task.sleep(for: .milliseconds(20))
+        XCTAssertNil(textWorkflowId)
+        XCTAssertEqual(service.activeWorkflowId, workflowId)
+
+        keyIsDown = false
+        await fulfillment(of: [textProcessingCallback], timeout: 1.0)
+        XCTAssertEqual(textWorkflowId, workflowId)
+        XCTAssertNil(service.activeWorkflowId)
+    }
+
+    @MainActor
     func testCarbonHotkeyDispatchDedupesFollowingEventTapDispatch() async throws {
         let service = HotkeyService()
         service.suspendMonitoring()
@@ -9671,6 +9825,25 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
             modifierFlags: NSEvent.ModifierFlags([.command, .option]).rawValue,
             isFn: false
         )
+    }
+
+    @MainActor
+    private func makeCarbonWorkflowTextProcessingService(
+        workflowId: UUID = UUID(),
+        hotkey: UnifiedHotkey? = nil,
+        keyStateProvider: @escaping (UInt16) -> Bool
+    ) -> (service: HotkeyService, workflowId: UUID, hotkey: UnifiedHotkey) {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.workflowTextProcessingModifierPollInterval = 0.001
+        service.workflowTextProcessingModifierReleaseTimeout = 0.25
+        service.workflowTextProcessingPostReleaseDelay = 0.001
+        service.modifierFlagsStateProvider = { [] }
+        service.keyStateProvider = keyStateProvider
+
+        let hotkey = hotkey ?? commandOptionAHotkey()
+        service.registerWorkflowHotkeys([(id: workflowId, hotkey: hotkey, behavior: .processSelectedText)])
+        return (service, workflowId, hotkey)
     }
 
     @MainActor

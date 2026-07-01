@@ -216,6 +216,9 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     var modifierFlagsStateProvider: () -> NSEvent.ModifierFlags = {
         NSEvent.ModifierFlags(rawValue: UInt(CGEventSource.flagsState(.combinedSessionState).rawValue))
     }
+    var keyStateProvider: (UInt16) -> Bool = { keyCode in
+        CGEventSource.keyState(.combinedSessionState, key: CGKeyCode(keyCode))
+    }
     var workflowTextProcessingModifierPollInterval: TimeInterval = 0.05
     var workflowTextProcessingModifierReleaseTimeout: TimeInterval = 2.0
     var workflowTextProcessingPostReleaseDelay: TimeInterval = 0.15
@@ -891,15 +894,62 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         behavior: WorkflowHotkeyBehavior,
         phase: HotkeyDispatchPhase
     ) {
+        if behavior == .processSelectedText,
+           hotkey.kind == .keyWithModifiers,
+           phase == .up,
+           keyStateProvider(hotkey.keyCode) {
+            dispatchCarbonWorkflowKeyUpWhenPhysicalKeyReleases(
+                workflowId: workflowId,
+                hotkey: hotkey,
+                behavior: behavior
+            )
+            return
+        }
+
         guard shouldDispatch(target: .workflow(workflowId), phase: phase, hotkey: hotkey, source: .carbon) else {
             return
         }
 
         switch phase {
         case .down:
+            if behavior == .processSelectedText, hotkey.kind == .keyWithModifiers {
+                setWorkflowKeyWasDown(workflowId: workflowId, hotkey: hotkey, keyWasDown: true)
+            }
             handleWorkflowKeyDown(workflowId: workflowId, behavior: behavior)
         case .up:
             handleWorkflowKeyUp(workflowId: workflowId, behavior: behavior)
+        }
+    }
+
+    private func setWorkflowKeyWasDown(workflowId: UUID, hotkey: UnifiedHotkey, keyWasDown: Bool) {
+        guard var states = workflowSlots[workflowId],
+              let index = states.firstIndex(where: { $0.hotkey == hotkey }) else {
+            return
+        }
+        states[index].keyWasDown = keyWasDown
+        workflowSlots[workflowId] = states
+    }
+
+    private func dispatchCarbonWorkflowKeyUpWhenPhysicalKeyReleases(
+        workflowId: UUID,
+        hotkey: UnifiedHotkey,
+        behavior: WorkflowHotkeyBehavior
+    ) {
+        guard activeWorkflowId == workflowId else { return }
+        guard keyStateProvider(hotkey.keyCode) else {
+            guard shouldDispatch(target: .workflow(workflowId), phase: .up, hotkey: hotkey, source: .carbon) else {
+                return
+            }
+            handleWorkflowKeyUp(workflowId: workflowId, behavior: behavior)
+            return
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + workflowTextProcessingModifierPollInterval) { [weak self] in
+            self?.dispatchCarbonWorkflowKeyUpWhenPhysicalKeyReleases(
+                workflowId: workflowId,
+                hotkey: hotkey,
+                behavior: behavior
+            )
         }
     }
 
@@ -1513,6 +1563,21 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         let registration = CarbonHotkeyRegistration(
             id: 1,
             target: .slot(slotType),
+            hotkey: hotkey,
+            ref: nil
+        )
+        handleCarbonHotkey(registration: registration, phase: isPressed ? .down : .up)
+    }
+
+    func processCarbonWorkflowHotkeyForTesting(
+        workflowId: UUID,
+        hotkey: UnifiedHotkey,
+        behavior: WorkflowHotkeyBehavior,
+        isPressed: Bool
+    ) {
+        let registration = CarbonHotkeyRegistration(
+            id: 1,
+            target: .workflow(workflowId, behavior),
             hotkey: hotkey,
             ref: nil
         )
