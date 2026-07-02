@@ -20,31 +20,37 @@ See the [release readiness guide](docs/release-readiness.md), [support matrix](d
 
 <p align="center">
   <a href=".github/screenshots/home.png"><img src=".github/screenshots/home.png" width="270" alt="Home Dashboard"></a>
-  <a href=".github/screenshots/recording.png"><img src=".github/screenshots/recording.png" width="270" alt="Recording &amp; Hotkeys"></a>
-  <a href=".github/screenshots/workflows.png"><img src=".github/screenshots/workflows.png" width="270" alt="Workflows"></a>
+  <a href=".github/screenshots/recording.png"><img src=".github/screenshots/recording.png" width="270" alt="Recording"></a>
+  <a href=".github/screenshots/recovery.png"><img src=".github/screenshots/recovery.png" width="270" alt="Recovery"></a>
 </p>
 
 <p align="center">
-  <a href=".github/screenshots/plugins.png"><img src=".github/screenshots/plugins.png" width="270" alt="Installed Integrations"></a>
-  <a href=".github/screenshots/integrations-available.png"><img src=".github/screenshots/integrations-available.png" width="270" alt="Available Integrations"></a>
+  <a href=".github/screenshots/hotkeys.png"><img src=".github/screenshots/hotkeys.png" width="270" alt="Hotkeys"></a>
+  <a href=".github/screenshots/workflows.png"><img src=".github/screenshots/workflows.png" width="270" alt="Workflows"></a>
   <a href=".github/screenshots/file-transcription.png"><img src=".github/screenshots/file-transcription.png" width="270" alt="File Transcription"></a>
 </p>
 
 <p align="center">
+  <a href=".github/screenshots/recorder.png"><img src=".github/screenshots/recorder.png" width="270" alt="Recorder API"></a>
   <a href=".github/screenshots/history.png"><img src=".github/screenshots/history.png" width="270" alt="History"></a>
   <a href=".github/screenshots/dictionary.png"><img src=".github/screenshots/dictionary.png" width="270" alt="Dictionary"></a>
-  <a href=".github/screenshots/dictionary-term-packs.png"><img src=".github/screenshots/dictionary-term-packs.png" width="270" alt="Dictionary Term Packs"></a>
 </p>
 
 <p align="center">
+  <a href=".github/screenshots/dictionary-term-packs.png"><img src=".github/screenshots/dictionary-term-packs.png" width="270" alt="Dictionary Term Packs"></a>
   <a href=".github/screenshots/snippets.png"><img src=".github/screenshots/snippets.png" width="270" alt="Snippets"></a>
+  <a href=".github/screenshots/plugins.png"><img src=".github/screenshots/plugins.png" width="270" alt="Installed Integrations"></a>
+</p>
+
+<p align="center">
+  <a href=".github/screenshots/integrations-available.png"><img src=".github/screenshots/integrations-available.png" width="270" alt="Integration Marketplace"></a>
+  <a href=".github/screenshots/premium.png"><img src=".github/screenshots/premium.png" width="270" alt="Premium"></a>
+  <a href=".github/screenshots/license.png"><img src=".github/screenshots/license.png" width="270" alt="License"></a>
+</p>
+
+<p align="center">
   <a href=".github/screenshots/general.png"><img src=".github/screenshots/general.png" width="270" alt="General Settings"></a>
   <a href=".github/screenshots/advanced.png"><img src=".github/screenshots/advanced.png" width="270" alt="Advanced Settings"></a>
-</p>
-
-<p align="center">
-  <a href=".github/screenshots/recorder.png"><img src=".github/screenshots/recorder.png" width="270" alt="Recorder API"></a>
-  <a href=".github/screenshots/menu-bar.png"><img src=".github/screenshots/menu-bar.png" width="270" alt="Menu Bar"></a>
   <a href=".github/screenshots/about.png"><img src=".github/screenshots/about.png" width="270" alt="About"></a>
 </p>
 
