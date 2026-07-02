@@ -19,7 +19,11 @@ struct WidgetData: Codable {
     }
 
     private static var sharedFileURL: URL? {
-        FileManager.default
+        // Ad-hoc signed dev builds expand $(TeamIdentifierPrefix) to nothing,
+        // producing a malformed group id like ".com.typewhisper.mac". Asking
+        // containermanagerd for that container can block indefinitely.
+        guard !groupIdentifier.hasPrefix(".") else { return nil }
+        return FileManager.default
             .containerURL(forSecurityApplicationGroupIdentifier: groupIdentifier)?
             .appendingPathComponent(fileName)
     }

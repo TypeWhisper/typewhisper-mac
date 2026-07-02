@@ -19,8 +19,13 @@ final class WidgetDataService {
 
     private func updateWidgetData(records: [TranscriptionRecord]) {
         let data = buildWidgetData(records: records)
-        data.save()
-        WidgetCenter.shared.reloadAllTimelines()
+        // Writing to the group container goes through containermanagerd and can
+        // block; keep it off the main thread so a slow container lookup cannot
+        // freeze the app.
+        Task.detached(priority: .utility) {
+            data.save()
+            WidgetCenter.shared.reloadAllTimelines()
+        }
     }
 
     private func buildWidgetData(records: [TranscriptionRecord]) -> WidgetData {
