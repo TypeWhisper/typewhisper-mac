@@ -305,6 +305,7 @@ final class DictationViewModel: ObservableObject {
     private let recentTranscriptionPaletteHandler: RecentTranscriptionPaletteHandler
     private let settingsHandler: DictationSettingsHandler
     private var transcriptionTask: Task<Void, Never>?
+    private var stopFinalizationTask: Task<Void, Never>?
     private var targetAppCorrectionLearningTask: Task<Void, Never>?
     private var pendingLearnedCorrections: [LearnedDictionaryCorrection] = []
     private var errorResetTask: Task<Void, Never>?
@@ -973,6 +974,10 @@ final class DictationViewModel: ObservableObject {
             showNotchFeedback(message: cancelledMessage, icon: "xmark.circle", duration: 1.5)
         case .processing:
             cancelActiveDictationSessionIfNeeded(message: cancelledMessage)
+            stopFinalizationTask?.cancel()
+            stopFinalizationTask = nil
+            streamingHandler.stop()
+            lastStreamingParams = nil
             transcriptionTask?.cancel()
             transcriptionTask = nil
             audioRecordingService.discardActiveRecoveryRecording()
@@ -1279,12 +1284,19 @@ final class DictationViewModel: ObservableObject {
         state = .processing
         processingPhase = String(localized: "Processing...")
         markActiveDictationSessionProcessingIfNeeded()
-        Task {
+        stopFinalizationTask = Task { [weak self] in
+            guard let self else { return }
             await finalizeStopDictation()
         }
     }
 
     private func finalizeStopDictation() async {
+        defer {
+            if Task.isCancelled {
+                isStopInFlight = false
+            }
+            stopFinalizationTask = nil
+        }
         let sessionID = activeDictationSessionID
 
         clearRecordingStartCueState(resetReadiness: false)
@@ -1316,8 +1328,10 @@ final class DictationViewModel: ObservableObject {
         let previewText = partialText.trimmingCharacters(in: .whitespacesAndNewlines)
         let stopPolicy = AudioRecordingService.StopPolicy.finalizeShortSpeech()
         var samples = await audioRecordingService.stopRecording(policy: stopPolicy)
+        guard !Task.isCancelled else { return }
         logger.info("Stop timing: stopRecording done elapsedMs=\(stopElapsedMs(), privacy: .public), previewTextLength=\(previewText.count, privacy: .public)")
         let liveSessionResultBeforePreviewFallback = await streamingHandler.finish(finalSamples: samples)
+        guard !Task.isCancelled else { return }
         logger.info("Stop timing: streamingHandler.finish done elapsedMs=\(stopElapsedMs(), privacy: .public), resultTextLength=\(liveSessionResultBeforePreviewFallback?.text.count ?? -1, privacy: .public)")
         var liveSessionResult = liveSessionResultBeforePreviewFallback.map {
             StreamingHandler.resultPreferringStablePreviewIfNeeded($0, stablePreview: previewText)
@@ -1400,6 +1414,7 @@ final class DictationViewModel: ObservableObject {
             ? String(localized: "Transcribing...")
             : String(localized: "Processing...")
 
+        guard !Task.isCancelled else { return }
         let usedLiveSessionResult = liveSessionResult != nil
         transcriptionTask = Task {
             do {
@@ -1659,6 +1674,7 @@ final class DictationViewModel: ObservableObject {
             }
             self.transcriptionTask = nil
         }
+        stopFinalizationTask = nil
     }
 
     private func stableLivePreviewFallbackResult(
@@ -1820,6 +1836,10 @@ final class DictationViewModel: ObservableObject {
         errorResetTask?.cancel()
         insertingResetTask?.cancel()
         insertingResetTask = nil
+        stopFinalizationTask?.cancel()
+        stopFinalizationTask = nil
+        transcriptionTask?.cancel()
+        transcriptionTask = nil
         urlResolutionTask?.cancel()
         urlResolutionTask = nil
         metadataCaptureTask?.cancel()

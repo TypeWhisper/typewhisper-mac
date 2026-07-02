@@ -3651,6 +3651,71 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    func testCancelDuringProcessingCancelsStopFinalizationBeforeTranscriptionTaskExists() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            MockTranscriptionPlugin.reset()
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        let stopGate = RecorderStartGate()
+        var pasteCount = 0
+
+        context.textInsertionService.captureActiveAppOverride = {
+            ("Notes", "com.apple.Notes", nil)
+        }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.pasteSimulatorOverride = {
+            pasteCount += 1
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            _ = await stopGate.enter()
+            await stopGate.waitForRelease()
+            return Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        XCTAssertEqual(context.dictationViewModel.state, .recording)
+
+        _ = context.dictationViewModel.apiStopRecording()
+        XCTAssertEqual(context.dictationViewModel.state, .processing)
+
+        await stopGate.waitForFirstEntry()
+        context.dictationViewModel.handleCancelHotkey()
+        context.dictationViewModel.handleCancelHotkey()
+
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
+        XCTAssertEqual(
+            context.dictationViewModel.apiDictationSession(id: sessionID)?.error,
+            try TestSupport.localizedCatalogValueForCurrentLocale(for: "Cancelled")
+        )
+
+        await stopGate.release()
+
+        for _ in 0..<20 {
+            if MockTranscriptionPlugin.transcribeCallCount > 0 || pasteCount > 0 {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+
+        let session = try XCTUnwrap(context.dictationViewModel.apiDictationSession(id: sessionID))
+        XCTAssertEqual(session.status, .failed)
+        XCTAssertNil(session.transcription)
+        XCTAssertEqual(MockTranscriptionPlugin.transcribeCallCount, 0)
+        XCTAssertEqual(pasteCount, 0)
+    }
+
+    @MainActor
     func testApiStopRecordingUsesStableLivePreviewInsteadOfSlowBatchFallback() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?
