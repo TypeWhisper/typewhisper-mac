@@ -839,11 +839,15 @@ final class DictationViewModel: ObservableObject {
 
     private func setupBindings() {
         hotkeyService.onDictationStart = { [weak self] requestTimestamp in
-            self?.startRecording(requestUptimeNanoseconds: requestTimestamp)
+            guard let self else { return }
+            logger.info("hotkey→onDictationStart (state=\(String(describing: self.state), privacy: .public))")
+            self.startRecording(requestUptimeNanoseconds: requestTimestamp)
         }
 
         hotkeyService.onDictationStop = { [weak self] in
-            self?.stopDictation()
+            guard let self else { return }
+            logger.info("hotkey→onDictationStop (state=\(String(describing: self.state), privacy: .public), stopInFlight=\(String(describing: self.isStopInFlight), privacy: .public))")
+            self.stopDictation()
         }
 
         hotkeyService.onWorkflowDictationStart = { [weak self] workflowId, requestTimestamp in
@@ -983,6 +987,12 @@ final class DictationViewModel: ObservableObject {
         sessionID: UUID = UUID(),
         requestUptimeNanoseconds: UInt64 = DispatchTime.now().uptimeNanoseconds
     ) {
+        guard state == .idle else {
+            logger.warning("startRecording rejected: state=\(String(describing: self.state), privacy: .public); resetting hotkey state")
+            hotkeyService.cancelDictation()
+            return
+        }
+
         let startTimestamp = CFAbsoluteTimeGetCurrent()
         clearRecordingStartCueState()
 
@@ -1008,15 +1018,23 @@ final class DictationViewModel: ObservableObject {
 
         guard canDictate else {
             let errorMessage = TranscriptionEngineError.modelNotLoaded.localizedDescription
+            logger.warning("startRecording rejected: canDictate=false; resetting hotkey state")
             failDictationSession(id: sessionID, error: errorMessage)
             showError(errorMessage, category: "recording")
+            // Resync the hotkey toggle: HotkeyService already flipped isActive=true
+            // before invoking onDictationStart. Without this, a rejected start leaves
+            // the toggle stuck "active", so the next press is consumed as a phantom
+            // stop and every subsequent start/stop needs an extra press.
+            hotkeyService.cancelDictation()
             return
         }
 
         guard audioRecordingService.hasMicrophonePermission else {
             let errorMessage = "Microphone permission required."
+            logger.warning("startRecording rejected: microphone permission missing; resetting hotkey state")
             failDictationSession(id: sessionID, error: errorMessage)
             showError(errorMessage, category: "recording")
+            hotkeyService.cancelDictation()
             return
         }
 
@@ -1258,6 +1276,9 @@ final class DictationViewModel: ObservableObject {
         guard state == .recording, !isStopInFlight else { return }
         clearCancelWarning()
         isStopInFlight = true
+        state = .processing
+        processingPhase = String(localized: "Processing...")
+        markActiveDictationSessionProcessingIfNeeded()
         Task {
             await finalizeStopDictation()
         }
@@ -1286,12 +1307,22 @@ final class DictationViewModel: ObservableObject {
             return
         }
 
-        let liveSessionResult = await streamingHandler.finish()
+        let stopStart = CFAbsoluteTimeGetCurrent()
+        func stopElapsedMs() -> String { String(format: "%.0f", (CFAbsoluteTimeGetCurrent() - stopStart) * 1000) }
+
+        let streamingParams = lastStreamingParams
         lastStreamingParams = nil
         stopRecordingTimer()
         let previewText = partialText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let stopPolicy = AudioRecordingService.StopPolicy.finalizeShortSpeech()
+        var samples = await audioRecordingService.stopRecording(policy: stopPolicy)
+        logger.info("Stop timing: stopRecording done elapsedMs=\(stopElapsedMs(), privacy: .public), previewTextLength=\(previewText.count, privacy: .public)")
+        let liveSessionResultBeforePreviewFallback = await streamingHandler.finish(finalSamples: samples)
+        logger.info("Stop timing: streamingHandler.finish done elapsedMs=\(stopElapsedMs(), privacy: .public), resultTextLength=\(liveSessionResultBeforePreviewFallback?.text.count ?? -1, privacy: .public)")
+        var liveSessionResult = liveSessionResultBeforePreviewFallback.map {
+            StreamingHandler.resultPreferringStablePreviewIfNeeded($0, stablePreview: previewText)
+        }
         let hasPreviewText = !previewText.isEmpty
-        let hasConfirmedText = hasConfirmedTranscriptionResultText(liveSessionResult)
 
         if !partialText.isEmpty {
             let elapsed = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
@@ -1302,10 +1333,17 @@ final class DictationViewModel: ObservableObject {
             )))
         }
 
-        let stopPolicy = AudioRecordingService.StopPolicy.finalizeShortSpeech()
-        var samples = await audioRecordingService.stopRecording(policy: stopPolicy)
         let peakLevel = audioRecordingService.peakRawAudioLevel
         let rawDuration = Double(samples.count) / AudioRecordingService.targetSampleRate
+        if !hasConfirmedTranscriptionResultText(liveSessionResult),
+           let previewResult = stableLivePreviewFallbackResult(
+            previewText: previewText,
+            streamingParams: streamingParams,
+            duration: rawDuration
+           ) {
+            liveSessionResult = previewResult
+        }
+        let hasConfirmedText = hasConfirmedTranscriptionResultText(liveSessionResult)
         let decision = classifyShortSpeech(
             rawDuration: rawDuration,
             peakLevel: peakLevel,
@@ -1358,14 +1396,16 @@ final class DictationViewModel: ObservableObject {
             durationSeconds: audioDuration
         )))
 
-        state = .processing
-        processingPhase = String(localized: "Transcribing...")
-        markActiveDictationSessionProcessingIfNeeded()
+        processingPhase = liveSessionResult == nil
+            ? String(localized: "Transcribing...")
+            : String(localized: "Processing...")
 
+        let usedLiveSessionResult = liveSessionResult != nil
         transcriptionTask = Task {
             do {
                 // Wait for browser URL resolution so URL-based profile overrides apply
                 await urlResolutionTask?.value
+                logger.info("Stop timing: urlResolutionTask done elapsedMs=\(stopElapsedMs(), privacy: .public)")
 
                 let activeApp = capturedActiveApp ?? textInsertionService.captureActiveApp()
                 let resolvedOutputFormat = self.resolvedEffectiveOutputFormat(for: activeApp)
@@ -1407,6 +1447,7 @@ final class DictationViewModel: ObservableObject {
                     )
                 }
                 let result = transcription.result
+                logger.info("Stop timing: final transcription ready elapsedMs=\(stopElapsedMs(), privacy: .public), usedLiveResult=\(usedLiveSessionResult, privacy: .public)")
 
                 // Bail out if a new recording started while we were transcribing
                 guard !Task.isCancelled else { return }
@@ -1471,6 +1512,7 @@ final class DictationViewModel: ObservableObject {
                     normalizeNumbers: self.effectiveNumberNormalizationOverride
                 )
                 text = ppResult.text
+                logger.info("Stop timing: post-processing done elapsedMs=\(stopElapsedMs(), privacy: .public)")
                 let transcriptionID = sessionID ?? UUID()
                 let completionTimestamp = Date()
                 recentTranscriptionStore.recordTranscription(
@@ -1509,6 +1551,7 @@ final class DictationViewModel: ObservableObject {
                         autoEnter: self.effectiveAutoEnterEnabled,
                         outputFormat: resolvedOutputFormat
                     )
+                    logger.info("Stop timing: text inserted elapsedMs=\(stopElapsedMs(), privacy: .public)")
                     if case .pasted(.unverified(let reason)) = insertionResult {
                         logger.info(
                             "Text insertion paste could not be verified; continuing with clipboard paste fallback. reason=\(reason.rawValue, privacy: .public), app=\(activeApp.bundleId ?? "nil", privacy: .public)"
@@ -1616,6 +1659,44 @@ final class DictationViewModel: ObservableObject {
             }
             self.transcriptionTask = nil
         }
+    }
+
+    private func stableLivePreviewFallbackResult(
+        previewText: String,
+        streamingParams: StreamingParamsSnapshot?,
+        duration: Double
+    ) -> TranscriptionResult? {
+        let preview = previewText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let streamingParams,
+              streamingProviderSupportsLiveSession(streamingParams),
+              StreamingHandler.isSubstantiveStablePreview(preview) else {
+            return nil
+        }
+
+        let engineUsed = streamingParams.engineOverrideId
+            ?? streamingParams.providerId
+            ?? "unknown"
+        logger.info("Using stable live preview as final text because live finalization returned no usable text")
+        return TranscriptionNormalizationService.normalizeResult(
+            text: preview,
+            detectedLanguage: nil,
+            configuredLanguage: streamingParams.languageSelection.requestedLanguage,
+            configuredLanguageCandidates: streamingParams.languageSelection.selectedCodes,
+            duration: duration,
+            processingTime: 0.001,
+            engineUsed: engineUsed,
+            segments: [],
+            task: streamingParams.task,
+            normalizeNumbers: streamingParams.normalizeNumbers
+        )
+    }
+
+    private func streamingProviderSupportsLiveSession(_ streamingParams: StreamingParamsSnapshot) -> Bool {
+        guard let providerId = streamingParams.engineOverrideId ?? streamingParams.providerId,
+              let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
+            return false
+        }
+        return plugin is any LiveTranscriptionCapablePlugin
     }
 
     private func transcribeFinalAudio(

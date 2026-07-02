@@ -4,6 +4,15 @@ import SwiftUI
 import os
 import TypeWhisperPluginSDK
 
+private func isSonioxTranscriptSentinel(_ text: String) -> Bool {
+    switch text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+    case "<fin>", "<end>", "<eos>":
+        true
+    default:
+        false
+    }
+}
+
 private enum SonioxDefaultsKey {
     static let apiKey = "api-key"
     static let selectedModel = "selectedModel"
@@ -312,9 +321,16 @@ private final class SonioxAVAudioPlayback: SonioxTTSAudioPlayback, @unchecked Se
 
 // MARK: - Transcript Collector
 
-private actor TranscriptCollector {
+actor SonioxTranscriptCollector {
+    private struct PreferredFinalText {
+        let text: String
+        let usedInterimPreview: Bool
+    }
+
     private var finals: [String] = []
     private var interim: String = ""
+    private var lastInterimPreview: String = ""
+    private var lastInterimLanguage: String?
     private var _detectedLanguage: String?
     private var _error: String?
 
@@ -331,7 +347,12 @@ private actor TranscriptCollector {
 
     func setInterim(_ text: String, language: String? = nil) {
         interim = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let preview = currentText()
+        if !preview.isEmpty {
+            lastInterimPreview = preview
+        }
         if let language, !language.isEmpty {
+            lastInterimLanguage = language
             _detectedLanguage = language
         }
     }
@@ -341,6 +362,71 @@ private actor TranscriptCollector {
     }
 
     var error: String? { _error }
+
+    @discardableResult
+    func applyWebSocketResponse(_ data: Data, translating: Bool) throws -> String? {
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+
+        if let message = Self.errorMessage(from: json) {
+            _error = message
+            throw PluginTranscriptionError.apiError(message)
+        }
+
+        // The finished response can still carry remaining final tokens; process
+        // them before clearing the interim state.
+        if json["finished"] as? Bool == true {
+            interim = ""
+        }
+
+        guard let tokens = json["tokens"] as? [[String: Any]] else {
+            return nil
+        }
+
+        var finalText: [String] = []
+        var interimText: [String] = []
+        var tokenLanguage: String?
+
+        for token in tokens {
+            guard let tokenText = token["text"] as? String,
+                  !tokenText.isEmpty,
+                  !isSonioxTranscriptSentinel(tokenText) else {
+                continue
+            }
+
+            if translating {
+                let status = token["translation_status"] as? String
+                if status == "original" {
+                    continue
+                }
+            }
+
+            if tokenLanguage == nil {
+                if let sourceLanguage = token["source_language"] as? String, !sourceLanguage.isEmpty {
+                    tokenLanguage = sourceLanguage
+                } else if let language = token["language"] as? String, !language.isEmpty {
+                    tokenLanguage = language
+                }
+            }
+
+            if token["is_final"] as? Bool == true {
+                finalText.append(tokenText)
+            } else {
+                interimText.append(tokenText)
+            }
+        }
+
+        if !finalText.isEmpty {
+            addFinal(finalText.joined(), language: tokenLanguage)
+        }
+        if !interimText.isEmpty {
+            setInterim(interimText.joined(), language: tokenLanguage)
+        }
+
+        let text = currentText()
+        return text.isEmpty ? nil : text
+    }
 
     func currentText() -> String {
         var parts = finals
@@ -357,6 +443,345 @@ private actor TranscriptCollector {
     func detectedLanguage(fallback: String?) -> String? {
         _detectedLanguage ?? fallback
     }
+
+    func finalTranscriptionResult(fallbackLanguage: String?) -> PluginTranscriptionResult {
+        let preferred = Self.preferredFinalText(
+            finalText: finalResult(),
+            currentText: currentText(),
+            lastInterimPreview: lastInterimPreview
+        )
+        let language = preferred.usedInterimPreview
+            ? (lastInterimLanguage ?? fallbackLanguage)
+            : detectedLanguage(fallback: fallbackLanguage)
+        return PluginTranscriptionResult(
+            text: preferred.text,
+            detectedLanguage: language
+        )
+    }
+
+    private static func preferredFinalText(
+        finalText: String,
+        currentText: String,
+        lastInterimPreview: String
+    ) -> PreferredFinalText {
+        let final = finalText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let current = currentText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let preview = lastInterimPreview.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fallback = current.isEmpty ? preview : current
+
+        guard !final.isEmpty else {
+            return PreferredFinalText(text: fallback, usedInterimPreview: current.isEmpty && !preview.isEmpty)
+        }
+        guard shouldPreferInterimPreview(final: final, preview: preview) else {
+            return PreferredFinalText(text: final, usedInterimPreview: false)
+        }
+        return PreferredFinalText(text: preview, usedInterimPreview: true)
+    }
+
+    private static func shouldPreferInterimPreview(final: String, preview: String) -> Bool {
+        guard !final.isEmpty, !preview.isEmpty, final != preview else { return false }
+        guard !preview.contains(final), !final.contains(preview) else { return false }
+
+        let finalLength = transcriptContentLength(final)
+        let previewLength = transcriptContentLength(preview)
+        let previewWordCount = transcriptWords(in: preview).count
+
+        guard previewLength >= 12 || previewWordCount >= 2 else { return false }
+
+        let finalLooksTiny = finalLength <= 8
+        let previewIsMuchLonger = previewLength >= max(12, finalLength * 4)
+        return finalLooksTiny && previewIsMuchLonger
+    }
+
+    private static func transcriptContentLength(_ text: String) -> Int {
+        text.unicodeScalars.filter { scalar in
+            !CharacterSet.whitespacesAndNewlines.contains(scalar)
+        }.count
+    }
+
+    private static func transcriptWords(in text: String) -> [String] {
+        var words: [String] = []
+        var wordStart: String.Index?
+
+        var index = text.startIndex
+        while index < text.endIndex {
+            let scalar = text[index].unicodeScalars.first
+            let isWordCharacter = scalar.map {
+                CharacterSet.alphanumerics.contains($0) || $0 == "'"
+            } ?? false
+
+            if isWordCharacter {
+                if wordStart == nil { wordStart = index }
+            } else if let start = wordStart {
+                let word = String(text[start..<index])
+                    .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
+                if !word.isEmpty {
+                    words.append(word)
+                }
+                wordStart = nil
+            }
+
+            index = text.index(after: index)
+        }
+
+        if let start = wordStart {
+            let word = String(text[start..<text.endIndex])
+                .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
+            if !word.isEmpty {
+                words.append(word)
+            }
+        }
+
+        return words
+    }
+
+    private static func errorMessage(from json: [String: Any]) -> String? {
+        if json["error_code"] != nil || json["error_type"] != nil {
+            return (json["error_message"] as? String)
+                ?? (json["error_type"] as? String)
+                ?? "Unknown Soniox error"
+        }
+
+        if let message = json["error_message"] as? String, !message.isEmpty {
+            return message
+        }
+
+        if let error = json["error"] as? [String: Any] {
+            return (error["message"] as? String)
+                ?? (error["error_message"] as? String)
+                ?? (error["type"] as? String)
+                ?? "Unknown Soniox error"
+        }
+
+        if let error = json["error"] as? String, !error.isEmpty {
+            return error
+        }
+
+        return nil
+    }
+}
+
+// MARK: - Live STT Session
+
+final class SonioxLiveTranscriptionSession: LiveTranscriptionSession, @unchecked Sendable {
+    private struct State {
+        var finished = false
+        var cancelled = false
+    }
+
+    private static let finishTimeoutNanoseconds: UInt64 = 800_000_000
+    private static let logger = Logger(subsystem: "com.typewhisper.soniox", category: "LiveSession")
+
+    private let webSocketTask: URLSessionWebSocketTask
+    private let receiveTask: Task<Void, Never>
+    private let collector: SonioxTranscriptCollector
+    private let language: String?
+    private let state = OSAllocatedUnfairLock(initialState: State())
+
+    private init(
+        webSocketTask: URLSessionWebSocketTask,
+        receiveTask: Task<Void, Never>,
+        collector: SonioxTranscriptCollector,
+        language: String?
+    ) {
+        self.webSocketTask = webSocketTask
+        self.receiveTask = receiveTask
+        self.collector = collector
+        self.language = language
+    }
+
+    static func connect(
+        apiKey: String,
+        region: SonioxRegion,
+        modelId: String,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool,
+        webSocketURLOverride: URL? = nil
+    ) async throws -> SonioxLiveTranscriptionSession {
+        guard let url = webSocketURLOverride ?? URL(string: region.sttRealtimeWebSocketURL) else {
+            throw PluginTranscriptionError.apiError("Invalid Soniox WebSocket URL")
+        }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 30
+
+        let webSocketTask = URLSession.shared.webSocketTask(with: request)
+        let collector = SonioxTranscriptCollector()
+        let receiveTask = Task { [webSocketTask, collector, onProgress] in
+            do {
+                while !Task.isCancelled {
+                    let message = try await webSocketTask.receive()
+                    guard let data = Self.data(from: message) else { continue }
+                    if let text = try await collector.applyWebSocketResponse(data, translating: translate),
+                       !text.isEmpty {
+                        _ = onProgress(text)
+                    }
+                    if Self.isFinishedResponse(data) {
+                        break
+                    }
+                }
+            } catch is CancellationError {
+                return
+            } catch is PluginTranscriptionError {
+                // applyWebSocketResponse stores normalized Soniox API errors in
+                // the collector before throwing; do not store localizedDescription
+                // here or the final error gets prefixed twice.
+                return
+            } catch {
+                // A deliberate teardown (finish timeout / cancel) cancels this task
+                // before cancelling the socket; the resulting receive error must not
+                // poison the collected transcript.
+                if Task.isCancelled { return }
+                await collector.setError(error.localizedDescription)
+            }
+        }
+
+        webSocketTask.resume()
+
+        do {
+            try await webSocketTask.send(.string(try SonioxPlugin.makeRealtimeConfigMessage(
+                apiKey: apiKey,
+                modelID: modelId,
+                language: languageSelection.requestedLanguage,
+                languageHints: languageSelection.languageHints,
+                translate: translate,
+                prompt: prompt
+            )))
+        } catch {
+            receiveTask.cancel()
+            webSocketTask.cancel(with: .goingAway, reason: nil)
+            throw error
+        }
+
+        return SonioxLiveTranscriptionSession(
+            webSocketTask: webSocketTask,
+            receiveTask: receiveTask,
+            collector: collector,
+            language: languageSelection.requestedLanguage
+        )
+    }
+
+    func appendAudio(samples: [Float]) async throws {
+        guard !state.withLock({ $0.finished || $0.cancelled }) else { return }
+        if let error = await collector.error {
+            throw PluginTranscriptionError.apiError(error)
+        }
+
+        let data = SonioxPlugin.floatToPCM16(samples)
+        guard !data.isEmpty else { return }
+        do {
+            try await webSocketTask.send(.data(data))
+        } catch {
+            if let collectorError = await collector.error {
+                throw PluginTranscriptionError.apiError(collectorError)
+            }
+            if let pluginError = error as? PluginTranscriptionError {
+                throw pluginError
+            }
+            await collector.setError(error.localizedDescription)
+            throw PluginTranscriptionError.networkError(error.localizedDescription)
+        }
+    }
+
+    func finish() async throws -> PluginTranscriptionResult {
+        let shouldFinish = state.withLock { state in
+            guard !state.finished else { return false }
+            state.finished = true
+            return !state.cancelled
+        }
+
+        if shouldFinish {
+            let finishStart = CFAbsoluteTimeGetCurrent()
+            do {
+                try await webSocketTask.send(.string(#"{"type":"finalize"}"#))
+                try await webSocketTask.send(.data(Data()))
+            } catch {
+                if let collectorError = await collector.error {
+                    throw PluginTranscriptionError.apiError(collectorError)
+                }
+                if let pluginError = error as? PluginTranscriptionError {
+                    throw pluginError
+                }
+                await collector.setError(error.localizedDescription)
+                throw PluginTranscriptionError.networkError(error.localizedDescription)
+            }
+            let finishedCleanly = await waitForReceiveTask()
+            let elapsedMs = (CFAbsoluteTimeGetCurrent() - finishStart) * 1000
+            if finishedCleanly {
+                Self.logger.info("Live finish: server confirmed finished in \(String(format: "%.0f", elapsedMs), privacy: .public)ms")
+            } else {
+                // The finalize response tokens have already been collected; do not
+                // block insertion on the server closing the socket.
+                Self.logger.warning("Live finish: server did not send finished within timeout, returning collected transcript after \(String(format: "%.0f", elapsedMs), privacy: .public)ms")
+            }
+        }
+
+        receiveTask.cancel()
+        webSocketTask.cancel(with: .normalClosure, reason: nil)
+
+        if let error = await collector.error {
+            throw PluginTranscriptionError.apiError(error)
+        }
+        return await collector.finalTranscriptionResult(fallbackLanguage: language)
+    }
+
+    func cancel() async {
+        let shouldCancel = state.withLock { state in
+            guard !state.cancelled else { return false }
+            state.cancelled = true
+            return true
+        }
+        guard shouldCancel else { return }
+        receiveTask.cancel()
+        webSocketTask.cancel(with: .goingAway, reason: nil)
+    }
+
+    /// Waits for the receive loop to observe the server's `finished` response.
+    /// Returns `false` on timeout. The task group cannot exit while the receive
+    /// loop is still blocked in `receive()` — awaiting `receiveTask.value` does
+    /// not react to cancellation — so on timeout the socket is torn down first
+    /// to unblock the receive loop; otherwise this method would silently wait
+    /// until the server closes the connection (~10s) despite the timeout.
+    private func waitForReceiveTask() async -> Bool {
+        await withTaskGroup(of: Bool.self) { group in
+            group.addTask { [receiveTask] in
+                await receiveTask.value
+                return true
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: Self.finishTimeoutNanoseconds)
+                return false
+            }
+
+            let finishedCleanly = await group.next() ?? false
+            if !finishedCleanly {
+                receiveTask.cancel()
+                webSocketTask.cancel(with: .normalClosure, reason: nil)
+            }
+            group.cancelAll()
+            return finishedCleanly
+        }
+    }
+
+    private static func data(from message: URLSessionWebSocketTask.Message) -> Data? {
+        switch message {
+        case .string(let text):
+            return text.data(using: .utf8)
+        case .data(let data):
+            return data
+        @unknown default:
+            return nil
+        }
+    }
+
+    private static func isFinishedResponse(_ data: Data) -> Bool {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return false
+        }
+        return json["finished"] as? Bool == true
+    }
 }
 
 // MARK: - Plugin Entry Point
@@ -364,6 +789,7 @@ private actor TranscriptCollector {
 @objc(SonioxPlugin)
 final class SonioxPlugin: NSObject,
     SourceProgressLanguageHintTranscriptionEnginePlugin,
+    LiveLanguageHintTranscriptionCapablePlugin,
     DictionaryTermsCapabilityProviding,
     DictionaryTermsBudgetProviding,
     TTSProviderPlugin,
@@ -466,10 +892,18 @@ final class SonioxPlugin: NSObject,
     var transcriptionModels: [PluginModelInfo] {
         let models = Self.realtimeModels(from: _fetchedModels)
         guard !models.isEmpty else {
-            return [PluginModelInfo(id: Self.defaultRealtimeModelId, displayName: "STT RT v5")]
+            return [Self.pluginModelInfo(
+                id: Self.defaultRealtimeModelId,
+                displayName: "STT RT v5",
+                languages: []
+            )]
         }
         return models.map { model in
-            PluginModelInfo(id: model.id, displayName: model.name ?? model.id)
+            Self.pluginModelInfo(
+                id: model.id,
+                displayName: model.name ?? model.id,
+                languages: model.languages
+            )
         }
     }
 
@@ -665,16 +1099,12 @@ final class SonioxPlugin: NSObject,
         guard let apiKey = normalizedAPIKey else {
             throw PluginTranscriptionError.notConfigured
         }
-        guard let modelId = _selectedModelId else {
-            throw PluginTranscriptionError.noModelSelected
-        }
 
         do {
             return try await transcribeWebSocket(
                 audio: audio, language: language, translate: translate,
-                modelId: modelId, prompt: prompt, apiKey: apiKey,
-                onProgress: onProgress,
-                onSourceProgress: { _ in true }
+                modelId: effectiveRealtimeModelId, prompt: prompt, apiKey: apiKey,
+                onProgress: onProgress
             )
         } catch {
             logger.warning("WebSocket streaming failed, falling back to REST: \(error.localizedDescription)")
@@ -721,9 +1151,6 @@ final class SonioxPlugin: NSObject,
         guard let apiKey = normalizedAPIKey else {
             throw PluginTranscriptionError.notConfigured
         }
-        guard let modelId = _selectedModelId else {
-            throw PluginTranscriptionError.noModelSelected
-        }
 
         let effectiveHints = Self.resolvedLanguageHints(
             requestedLanguage: languageSelection.requestedLanguage,
@@ -736,11 +1163,10 @@ final class SonioxPlugin: NSObject,
                 language: languageSelection.requestedLanguage,
                 languageHints: effectiveHints,
                 translate: translate,
-                modelId: modelId,
+                modelId: effectiveRealtimeModelId,
                 prompt: prompt,
                 apiKey: apiKey,
-                onProgress: onProgress,
-                onSourceProgress: { _ in true }
+                onProgress: onProgress
             )
         } catch {
             logger.warning("WebSocket streaming failed, falling back to REST: \(error.localizedDescription)")
@@ -784,6 +1210,40 @@ final class SonioxPlugin: NSObject,
         return result
     }
 
+    func createLiveTranscriptionSession(
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        try await createLiveTranscriptionSession(
+            languageSelection: PluginLanguageSelection(requestedLanguage: language),
+            translate: translate,
+            prompt: prompt,
+            onProgress: onProgress
+        )
+    }
+
+    func createLiveTranscriptionSession(
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        guard let apiKey = normalizedAPIKey else {
+            throw PluginTranscriptionError.notConfigured
+        }
+
+        return try await createStreamingSession(
+            apiKey: apiKey,
+            modelId: effectiveRealtimeModelId,
+            languageSelection: languageSelection,
+            translate: translate,
+            prompt: prompt,
+            onProgress: onProgress
+        )
+    }
+
     // MARK: - WebSocket Implementation
 
     private func transcribeWebSocket(
@@ -794,163 +1254,52 @@ final class SonioxPlugin: NSObject,
         modelId: String,
         prompt: String?,
         apiKey: String,
-        onProgress: @Sendable @escaping (String) -> Bool,
-        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
+        onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
-        guard let url = URL(string: _selectedRegion.sttRealtimeWebSocketURL) else {
-            throw PluginTranscriptionError.apiError("Invalid Soniox WebSocket URL")
-        }
+        let session = try await createStreamingSession(
+            apiKey: apiKey,
+            modelId: modelId,
+            languageSelection: PluginLanguageSelection(
+                requestedLanguage: language,
+                languageHints: languageHints
+            ),
+            translate: translate,
+            prompt: prompt,
+            onProgress: onProgress
+        )
 
-        let wsTask = URLSession.shared.webSocketTask(with: url)
-        wsTask.resume()
-
-        // Send config message with API key (Soniox auth is in the first message)
-        var config: [String: Any] = [
-            "api_key": apiKey,
-            "model": modelId,
-            "audio_format": "s16le",
-            "sample_rate": 16000,
-            "num_channels": 1,
-            "enable_endpoint_detection": true,
-        ]
-
-        let effectiveHints = Self.resolvedLanguageHints(requestedLanguage: language, languageHints: languageHints)
-        if !effectiveHints.isEmpty {
-            config["language_hints"] = effectiveHints
-        }
-
-        if translate {
-            config["translation"] = [
-                "type": "one_way",
-                "target_language": "en",
-            ]
-        }
-        if let context = Self.contextPayload(prompt: prompt) {
-            config["context"] = context
-        }
-
-        let configData = try JSONSerialization.data(withJSONObject: config)
-        guard let configString = String(data: configData, encoding: .utf8) else {
-            throw PluginTranscriptionError.apiError("Failed to encode config")
-        }
-        try await wsTask.send(.string(configString))
-
-        // Receive loop
-        let collector = TranscriptCollector()
-        let loggerRef = self.logger
-        let isTranslating = translate
-
-        let receiveTask = Task {
-            var shouldEmitSourceProgress = true
-            do {
-                while !Task.isCancelled {
-                    let message = try await wsTask.receive()
-
-                    guard case .string(let text) = message else { continue }
-
-                    guard let data = text.data(using: .utf8),
-                          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                        continue
-                    }
-
-                    // Check for finished signal
-                    if json["finished"] as? Bool == true { break }
-
-                    // Check for error
-                    if let errorObj = json["error"] as? [String: Any] {
-                        let msg = errorObj["message"] as? String ?? "Unknown Soniox error"
-                        loggerRef.error("Soniox error: \(msg)")
-                        await collector.setError(msg)
-                        break
-                    }
-
-                    // Parse tokens
-                    guard let tokens = json["tokens"] as? [[String: Any]] else { continue }
-
-                    if shouldEmitSourceProgress,
-                       let sourceProgress = Self.sourceProgress(
-                           fromTokens: tokens,
-                           totalDuration: audio.duration
-                       ) {
-                        shouldEmitSourceProgress = onSourceProgress(sourceProgress)
-                    }
-
-                    var finalText: [String] = []
-                    var interimText: [String] = []
-                    var tokenLanguage: String?
-
-                    for token in tokens {
-                        guard let tokenStr = token["text"] as? String else { continue }
-
-                        // When translating, skip original tokens
-                        if isTranslating {
-                            let status = token["translation_status"] as? String
-                            if status == "original" { continue }
-                        }
-
-                        let isFinal = token["is_final"] as? Bool ?? false
-                        if let lang = token["language"] as? String, !lang.isEmpty {
-                            tokenLanguage = lang
-                        }
-
-                        if isFinal {
-                            finalText.append(tokenStr)
-                        } else {
-                            interimText.append(tokenStr)
-                        }
-                    }
-
-                    let joinedFinal = finalText.joined()
-                    let joinedInterim = interimText.joined()
-
-                    if !joinedFinal.isEmpty {
-                        await collector.addFinal(joinedFinal, language: tokenLanguage)
-                    }
-                    if !joinedInterim.isEmpty {
-                        await collector.setInterim(joinedInterim, language: tokenLanguage)
-                    }
-
-                    let currentText = await collector.currentText()
-                    if !currentText.isEmpty {
-                        _ = onProgress(currentText)
-                    }
-                }
-            } catch {
-                loggerRef.error("WebSocket receive error: \(error.localizedDescription)")
-            }
-        }
-
-        // Send audio as binary frames
-        let pcmData = Self.floatToPCM16(audio.samples)
-        let chunkSize = 8192
+        let chunkSize = 4_096
         var offset = 0
-
-        defer { receiveTask.cancel() }
-
-        while offset < pcmData.count {
-            let end = min(offset + chunkSize, pcmData.count)
-            let chunk = pcmData.subdata(in: offset..<end)
-            try await wsTask.send(.data(chunk))
-            offset = end
+        do {
+            while offset < audio.samples.count {
+                let end = min(offset + chunkSize, audio.samples.count)
+                try await session.appendAudio(samples: Array(audio.samples[offset..<end]))
+                offset = end
+            }
+            return try await session.finish()
+        } catch {
+            await session.cancel()
+            throw error
         }
+    }
 
-        // Finalize pending tokens and signal end of audio
-        try await wsTask.send(.string("{\"type\":\"finalize\"}"))
-        try await wsTask.send(.data(Data()))
-
-        // Wait for server to finish
-        _ = await receiveTask.result
-
-        wsTask.cancel(with: .normalClosure, reason: nil)
-
-        // Check for server-side errors (e.g. invalid API key)
-        if let error = await collector.error {
-            throw PluginTranscriptionError.apiError(error)
-        }
-
-        let finalText = await collector.finalResult()
-        let detectedLanguage = await collector.detectedLanguage(fallback: language)
-        return PluginTranscriptionResult(text: finalText, detectedLanguage: detectedLanguage)
+    private func createStreamingSession(
+        apiKey: String,
+        modelId: String,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> SonioxLiveTranscriptionSession {
+        try await SonioxLiveTranscriptionSession.connect(
+            apiKey: apiKey,
+            region: _selectedRegion,
+            modelId: modelId,
+            languageSelection: languageSelection,
+            translate: translate,
+            prompt: prompt,
+            onProgress: onProgress
+        )
     }
 
     static func sourceProgress(
@@ -1139,6 +1488,67 @@ final class SonioxPlugin: NSObject,
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         request.timeoutInterval = 30
         return request
+    }
+
+    static func makeRealtimeConfigPayload(
+        apiKey: String,
+        modelID: String = SonioxPlugin.defaultRealtimeModelId,
+        language: String?,
+        languageHints: [String] = [],
+        translate: Bool,
+        prompt: String?
+    ) -> [String: Any] {
+        var config: [String: Any] = [
+            "api_key": apiKey,
+            "model": modelID,
+            "audio_format": "s16le",
+            "sample_rate": 16_000,
+            "num_channels": 1,
+            "enable_endpoint_detection": true,
+            "enable_language_identification": true,
+        ]
+
+        let effectiveHints = Self.resolvedLanguageHints(
+            requestedLanguage: language,
+            languageHints: languageHints
+        )
+        if !effectiveHints.isEmpty {
+            config["language_hints"] = effectiveHints
+        }
+
+        if translate {
+            config["translation"] = [
+                "type": "one_way",
+                "target_language": "en",
+            ]
+        }
+        if let context = Self.contextPayload(prompt: prompt) {
+            config["context"] = context
+        }
+
+        return config
+    }
+
+    static func makeRealtimeConfigMessage(
+        apiKey: String,
+        modelID: String = SonioxPlugin.defaultRealtimeModelId,
+        language: String?,
+        languageHints: [String] = [],
+        translate: Bool,
+        prompt: String?
+    ) throws -> String {
+        let data = try JSONSerialization.data(withJSONObject: makeRealtimeConfigPayload(
+            apiKey: apiKey,
+            modelID: modelID,
+            language: language,
+            languageHints: languageHints,
+            translate: translate,
+            prompt: prompt
+        ))
+        guard let string = String(data: data, encoding: .utf8) else {
+            throw PluginTranscriptionError.apiError("Failed to encode Soniox realtime config")
+        }
+        return string
     }
 
     static func makeTTSRequest(
@@ -1364,6 +1774,20 @@ final class SonioxPlugin: NSObject,
         sortedModels(models.filter { $0.transcriptionMode == "real_time" })
     }
 
+    private static func pluginModelInfo(
+        id: String,
+        displayName: String,
+        languages: [SonioxFetchedLanguage]
+    ) -> PluginModelInfo {
+        let languageCount = languages.isEmpty ? sonioxSupportedLanguages.count : languages.count
+        return PluginModelInfo(
+            id: id,
+            displayName: displayName,
+            sizeDescription: "Cloud",
+            languageCount: languageCount
+        )
+    }
+
     private static func asyncModels(from models: [SonioxFetchedModel]) -> [SonioxFetchedModel] {
         sortedModels(models.filter { $0.transcriptionMode == "async" })
     }
@@ -1513,7 +1937,13 @@ final class SonioxPlugin: NSObject,
         // Extract full text from tokens or top-level text field
         let text: String
         if let tokens = json["tokens"] as? [[String: Any]] {
-            text = tokens.compactMap { $0["text"] as? String }.joined()
+            text = tokens.compactMap { token -> String? in
+                guard let tokenText = token["text"] as? String,
+                      !isSonioxTranscriptSentinel(tokenText) else {
+                    return nil
+                }
+                return tokenText
+            }.joined()
         } else {
             text = json["text"] as? String ?? ""
         }
@@ -1523,11 +1953,11 @@ final class SonioxPlugin: NSObject,
 
     // MARK: - Audio Conversion
 
-    private static func floatToPCM16(_ samples: [Float]) -> Data {
+    static func floatToPCM16(_ samples: [Float]) -> Data {
         var data = Data(capacity: samples.count * 2)
         for sample in samples {
             let clamped = max(-1.0, min(1.0, sample))
-            var int16 = Int16(clamped * 32767.0)
+            var int16 = Int16(clamped * 32767.0).littleEndian
             withUnsafeBytes(of: &int16) { data.append(contentsOf: $0) }
         }
         return data
