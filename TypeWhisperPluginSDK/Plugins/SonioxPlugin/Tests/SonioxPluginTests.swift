@@ -1,4 +1,6 @@
 import Foundation
+import Network
+import os
 import XCTest
 import TypeWhisperPluginSDK
 @_spi(Testing) import TypeWhisperPluginSDKTesting
@@ -18,6 +20,8 @@ final class SonioxPluginTests: XCTestCase {
 
         XCTAssertEqual(plugin.selectedModelId, "stt-rt-v5")
         XCTAssertEqual(plugin.transcriptionModels.map(\.id), ["stt-rt-v5"])
+        XCTAssertGreaterThan(plugin.transcriptionModels[0].languageCount, 1)
+        XCTAssertEqual(plugin.transcriptionModels[0].sizeDescription, "Cloud")
         XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "automatic")
     }
 
@@ -38,14 +42,21 @@ final class SonioxPluginTests: XCTestCase {
                 aliasedModelId: nil,
                 name: "STT RT v5",
                 transcriptionMode: "real_time",
-                languages: []
+                languages: [
+                    SonioxFetchedLanguage(code: "de", name: "German"),
+                    SonioxFetchedLanguage(code: "uk", name: "Ukrainian"),
+                ]
             ),
             SonioxFetchedModel(
                 id: "stt-rt-v6",
                 aliasedModelId: nil,
                 name: "STT RT v6",
                 transcriptionMode: "real_time",
-                languages: []
+                languages: [
+                    SonioxFetchedLanguage(code: "de", name: "German"),
+                    SonioxFetchedLanguage(code: "uk", name: "Ukrainian"),
+                    SonioxFetchedLanguage(code: "ja", name: "Japanese"),
+                ]
             ),
             SonioxFetchedModel(
                 id: "stt-async-v6",
@@ -63,6 +74,7 @@ final class SonioxPluginTests: XCTestCase {
 
         XCTAssertEqual(plugin.selectedModelId, "stt-rt-v6")
         XCTAssertEqual(plugin.transcriptionModels.map(\.id), ["stt-rt-v5", "stt-rt-v6"])
+        XCTAssertEqual(plugin.transcriptionModels.map(\.languageCount), [2, 3])
     }
 
     func testDefaultRegionUsesUSAndPersistsSelection() throws {
@@ -123,6 +135,13 @@ final class SonioxPluginTests: XCTestCase {
         XCTAssertTrue(plugin.authStatus(for: .tts).isAvailable)
     }
 
+    func testSonioxPluginAdvertisesLiveLanguageHintTranscription() {
+        let plugin: Any = SonioxPlugin()
+
+        XCTAssertTrue(plugin is any LiveTranscriptionCapablePlugin)
+        XCTAssertTrue(plugin is any LiveLanguageHintTranscriptionCapablePlugin)
+    }
+
     func testCreateTranscriptionRequestUsesAsyncV5Model() throws {
         let request = try SonioxPlugin.makeCreateTranscriptionRequest(
             fileId: "file_123",
@@ -175,6 +194,60 @@ final class SonioxPluginTests: XCTestCase {
 
         let body = try Self.jsonBody(from: request)
         XCTAssertEqual(body["model"] as? String, "stt-async-v6")
+    }
+
+    func testRealtimeConfigUsesRealtimeV5AndLanguageHints() throws {
+        let payload = SonioxPlugin.makeRealtimeConfigPayload(
+            apiKey: "soniox-key",
+            modelID: "stt-rt-v5",
+            language: "de",
+            languageHints: ["en", "de"],
+            translate: true,
+            prompt: "TypeWhisper, Soniox"
+        )
+
+        XCTAssertEqual(payload["api_key"] as? String, "soniox-key")
+        XCTAssertEqual(payload["model"] as? String, "stt-rt-v5")
+        XCTAssertEqual(payload["audio_format"] as? String, "s16le")
+        XCTAssertEqual(payload["sample_rate"] as? Int, 16_000)
+        XCTAssertEqual(payload["num_channels"] as? Int, 1)
+        XCTAssertEqual(payload["enable_endpoint_detection"] as? Bool, true)
+        XCTAssertEqual(payload["enable_language_identification"] as? Bool, true)
+        XCTAssertEqual(payload["language_hints"] as? [String], ["en", "de"])
+
+        let translation = try XCTUnwrap(payload["translation"] as? [String: Any])
+        XCTAssertEqual(translation["type"] as? String, "one_way")
+        XCTAssertEqual(translation["target_language"] as? String, "en")
+
+        let context = try XCTUnwrap(payload["context"] as? [String: Any])
+        XCTAssertEqual(context["terms"] as? [String], ["TypeWhisper", "Soniox"])
+    }
+
+    func testRealtimeConfigFallsBackToRequestedLanguageHint() {
+        let payload = SonioxPlugin.makeRealtimeConfigPayload(
+            apiKey: "soniox-key",
+            language: "de",
+            translate: false,
+            prompt: nil
+        )
+
+        XCTAssertEqual(payload["model"] as? String, "stt-rt-v5")
+        XCTAssertEqual(payload["language_hints"] as? [String], ["de"])
+        XCTAssertNil(payload["translation"])
+        XCTAssertNil(payload["context"])
+    }
+
+    func testRealtimeConfigAcceptsNonEnglishLanguageHints() {
+        let payload = SonioxPlugin.makeRealtimeConfigPayload(
+            apiKey: "soniox-key",
+            language: nil,
+            languageHints: ["uk", "ja"],
+            translate: false,
+            prompt: nil
+        )
+
+        XCTAssertEqual(payload["language_hints"] as? [String], ["uk", "ja"])
+        XCTAssertEqual(payload["enable_language_identification"] as? Bool, true)
     }
 
     func testTTSRequestUsesJapanRegionAndPCMOutput() throws {
@@ -526,6 +599,156 @@ final class SonioxPluginTests: XCTestCase {
         ))
     }
 
+    func testRealtimeCollectorBuildsStableFinalAndInterimText() async throws {
+        let collector = SonioxTranscriptCollector()
+
+        let first = try await collector.applyWebSocketResponse(Data(
+            #"{"tokens":[{"text":"Hello","is_final":true,"language":"en"},{"text":" ","is_final":true},{"text":"worl","is_final":false}]}"#.utf8
+        ), translating: false)
+        XCTAssertEqual(first, "Hello worl")
+
+        let second = try await collector.applyWebSocketResponse(Data(
+            #"{"tokens":[{"text":"world","is_final":true},{"text":"<fin>","is_final":true}]}"#.utf8
+        ), translating: false)
+        XCTAssertEqual(second, "Hello world")
+
+        let result = await collector.finalTranscriptionResult(fallbackLanguage: nil)
+        XCTAssertEqual(result.text, "Hello world")
+        XCTAssertEqual(result.detectedLanguage, "en")
+    }
+
+    func testRealtimeCollectorFiltersEndSentinelTokens() async throws {
+        let collector = SonioxTranscriptCollector()
+
+        let text = try await collector.applyWebSocketResponse(Data(
+            #"{"tokens":[{"text":"Why am I not eagle.","is_final":true,"language":"en"},{"text":"<end>","is_final":true},{"text":" Я не ебу, что это такое.","is_final":true,"language":"ru"},{"text":"<end>","is_final":true},{"text":" Що це таке?","is_final":true,"language":"uk"},{"text":" <EOS> ","is_final":true}]}"#.utf8
+        ), translating: false)
+
+        XCTAssertEqual(text, "Why am I not eagle. Я не ебу, что это такое. Що це таке?")
+
+        let result = await collector.finalTranscriptionResult(fallbackLanguage: nil)
+        XCTAssertEqual(result.text, "Why am I not eagle. Я не ебу, что это такое. Що це таке?")
+        XCTAssertEqual(result.detectedLanguage, "en")
+    }
+
+    func testRealtimeCollectorPrefersLastInterimPreviewOverShortUnrelatedFinalTail() async throws {
+        let collector = SonioxTranscriptCollector()
+
+        let preview = try await collector.applyWebSocketResponse(Data(
+            #"{"tokens":[{"text":"Это нормальный multilingual preview","is_final":false,"language":"ru"}]}"#.utf8
+        ), translating: false)
+        XCTAssertEqual(preview, "Это нормальный multilingual preview")
+
+        let tail = try await collector.applyWebSocketResponse(Data(
+            #"{"tokens":[{"text":"ครับ","is_final":true,"language":"th"}]}"#.utf8
+        ), translating: false)
+        XCTAssertEqual(tail, "ครับ")
+
+        _ = try await collector.applyWebSocketResponse(Data(
+            #"{"tokens":[],"finished":true}"#.utf8
+        ), translating: false)
+
+        let result = await collector.finalTranscriptionResult(fallbackLanguage: nil)
+        XCTAssertEqual(result.text, "Это нормальный multilingual preview")
+        XCTAssertEqual(result.detectedLanguage, "ru")
+    }
+
+    func testRealtimeCollectorKeepsLongUnsegmentedFinalText() async throws {
+        let collector = SonioxTranscriptCollector()
+
+        _ = try await collector.applyWebSocketResponse(Data(
+            #"{"tokens":[{"text":"This is a much longer stable preview","is_final":false,"language":"en"}]}"#.utf8
+        ), translating: false)
+        _ = try await collector.applyWebSocketResponse(Data(
+            #"{"tokens":[{"text":"这是一个完整的中文最终结果","is_final":true,"language":"zh"}]}"#.utf8
+        ), translating: false)
+
+        let result = await collector.finalTranscriptionResult(fallbackLanguage: nil)
+        XCTAssertEqual(result.text, "这是一个完整的中文最终结果")
+        XCTAssertEqual(result.detectedLanguage, "zh")
+    }
+
+    func testRealtimeCollectorFiltersOriginalTokensWhenTranslating() async throws {
+        let collector = SonioxTranscriptCollector()
+
+        let text = try await collector.applyWebSocketResponse(Data(
+            #"{"tokens":[{"text":"Hallo","is_final":true,"translation_status":"original","language":"de"},{"text":"Hello","is_final":true,"translation_status":"translation","source_language":"de"}]}"#.utf8
+        ), translating: true)
+
+        XCTAssertEqual(text, "Hello")
+        let result = await collector.finalTranscriptionResult(fallbackLanguage: nil)
+        XCTAssertEqual(result.text, "Hello")
+        XCTAssertEqual(result.detectedLanguage, "de")
+    }
+
+    func testRealtimeCollectorSurfacesTopLevelSonioxErrors() async {
+        let collector = SonioxTranscriptCollector()
+
+        do {
+            _ = try await collector.applyWebSocketResponse(Data(
+                #"{"tokens":[],"error_code":401,"error_type":"unauthenticated","error_message":"Invalid API key"}"#.utf8
+            ), translating: false)
+            XCTFail("Expected Soniox error")
+        } catch {
+            XCTAssertEqual((error as? PluginTranscriptionError)?.localizedDescription, "API error: Invalid API key")
+        }
+
+        let storedError = await collector.error
+        XCTAssertEqual(storedError, "Invalid API key")
+    }
+
+    func testLiveSessionFinishReturnsCollectedTranscriptWhenServerNeverSendsFinished() async throws {
+        let server = try LocalWebSocketServer { text, server in
+            guard text.contains("finalize") else { return }
+            server.sendText(#"{"tokens":[{"text":"hello","is_final":true},{"text":" world","is_final":true}]}"#)
+        }
+        defer { server.stop() }
+        let port = try await server.start()
+
+        let session = try await SonioxLiveTranscriptionSession.connect(
+            apiKey: "test-key",
+            region: .unitedStates,
+            modelId: "stt-rt-v5",
+            languageSelection: PluginLanguageSelection(requestedLanguage: "en"),
+            translate: false,
+            prompt: nil,
+            onProgress: { _ in true },
+            webSocketURLOverride: URL(string: "ws://127.0.0.1:\(port)")!
+        )
+
+        let start = CFAbsoluteTimeGetCurrent()
+        let result = try await session.finish()
+        let elapsed = CFAbsoluteTimeGetCurrent() - start
+
+        XCTAssertEqual(result.text, "hello world")
+        // The finish timeout is 0.8s; without a working timeout finish() hangs
+        // until the server closes the socket, which this server never does.
+        XCTAssertLessThan(elapsed, 3.0)
+    }
+
+    func testLiveSessionFinishReturnsPromptlyWhenServerConfirmsFinished() async throws {
+        let server = try LocalWebSocketServer { text, server in
+            guard text.contains("finalize") else { return }
+            server.sendText(#"{"tokens":[{"text":"done","is_final":true}],"finished":true}"#)
+        }
+        defer { server.stop() }
+        let port = try await server.start()
+
+        let session = try await SonioxLiveTranscriptionSession.connect(
+            apiKey: "test-key",
+            region: .unitedStates,
+            modelId: "stt-rt-v5",
+            languageSelection: PluginLanguageSelection(requestedLanguage: "en"),
+            translate: false,
+            prompt: nil,
+            onProgress: { _ in true },
+            webSocketURLOverride: URL(string: "ws://127.0.0.1:\(port)")!
+        )
+
+        let result = try await session.finish()
+        XCTAssertEqual(result.text, "done")
+    }
+
     private static func jsonBody(from request: URLRequest) throws -> [String: Any] {
         let data = try XCTUnwrap(request.httpBody)
         return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
@@ -567,6 +790,85 @@ private final class SourceProgressRecorder: @unchecked Sendable {
     func append(_ value: PluginTranscriptionSourceProgress) {
         lock.withLock {
             storage.append(value)
+        }
+    }
+}
+
+/// Minimal loopback WebSocket server for exercising `SonioxLiveTranscriptionSession`
+/// against controlled server behavior (e.g. never sending `finished: true`).
+private final class LocalWebSocketServer: @unchecked Sendable {
+    private let listener: NWListener
+    private let queue = DispatchQueue(label: "LocalWebSocketServer")
+    private let lock = NSLock()
+    private var connection: NWConnection?
+    private let onText: (String, LocalWebSocketServer) -> Void
+
+    init(onText: @escaping (String, LocalWebSocketServer) -> Void) throws {
+        self.onText = onText
+        let parameters = NWParameters.tcp
+        let webSocketOptions = NWProtocolWebSocket.Options()
+        webSocketOptions.autoReplyPing = true
+        parameters.defaultProtocolStack.applicationProtocols.insert(webSocketOptions, at: 0)
+        listener = try NWListener(using: parameters)
+    }
+
+    func start() async throws -> UInt16 {
+        listener.newConnectionHandler = { [weak self] connection in
+            guard let self else { return }
+            self.lock.withLock { self.connection = connection }
+            connection.start(queue: self.queue)
+            self.receiveNextMessage(on: connection)
+        }
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let didResume = OSAllocatedUnfairLock(initialState: false)
+            listener.stateUpdateHandler = { [listener] state in
+                let result: (Result<UInt16, Error>)? = {
+                    switch state {
+                    case .ready:
+                        return .success(listener.port?.rawValue ?? 0)
+                    case .failed(let error):
+                        return .failure(error)
+                    default:
+                        return nil
+                    }
+                }()
+                guard let result else { return }
+                let alreadyResumed = didResume.withLock { resumed in
+                    defer { resumed = true }
+                    return resumed
+                }
+                guard !alreadyResumed else { return }
+                continuation.resume(with: result)
+            }
+            listener.start(queue: queue)
+        }
+    }
+
+    func sendText(_ text: String) {
+        guard let connection = lock.withLock({ connection }) else { return }
+        let metadata = NWProtocolWebSocket.Metadata(opcode: .text)
+        let context = NWConnection.ContentContext(identifier: "text", metadata: [metadata])
+        connection.send(
+            content: Data(text.utf8),
+            contentContext: context,
+            isComplete: true,
+            completion: .contentProcessed { _ in }
+        )
+    }
+
+    func stop() {
+        lock.withLock { connection }?.cancel()
+        listener.cancel()
+    }
+
+    private func receiveNextMessage(on connection: NWConnection) {
+        connection.receiveMessage { [weak self] data, _, _, error in
+            guard let self, error == nil else { return }
+            if let data, let text = String(data: data, encoding: .utf8), !text.isEmpty {
+                self.onText(text, self)
+            }
+            self.receiveNextMessage(on: connection)
         }
     }
 }

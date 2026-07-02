@@ -315,6 +315,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         nonisolated(unsafe) private static var _lastPrompt: String?
         nonisolated(unsafe) private static var _lastLanguageSelection = PluginLanguageSelection()
         nonisolated(unsafe) private static var _responseText = "transcribed"
+        nonisolated(unsafe) private static var _transcribeCallCount = 0
 
         static var lastPrompt: String? {
             promptLock.withLock { _lastPrompt }
@@ -324,11 +325,16 @@ final class APIRouterAndHandlersTests: XCTestCase {
             promptLock.withLock { _lastLanguageSelection }
         }
 
+        static var transcribeCallCount: Int {
+            promptLock.withLock { _transcribeCallCount }
+        }
+
         static func reset() {
             promptLock.withLock {
                 _lastPrompt = nil
                 _lastLanguageSelection = PluginLanguageSelection()
                 _responseText = "transcribed"
+                _transcribeCallCount = 0
             }
         }
 
@@ -358,6 +364,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             Self.promptLock.withLock {
                 Self._lastPrompt = prompt
                 Self._lastLanguageSelection = PluginLanguageSelection(requestedLanguage: language)
+                Self._transcribeCallCount += 1
             }
             return PluginTranscriptionResult(text: Self.promptLock.withLock { Self._responseText }, detectedLanguage: language)
         }
@@ -371,11 +378,55 @@ final class APIRouterAndHandlersTests: XCTestCase {
             Self.promptLock.withLock {
                 Self._lastPrompt = prompt
                 Self._lastLanguageSelection = languageSelection
+                Self._transcribeCallCount += 1
             }
             return PluginTranscriptionResult(
                 text: Self.promptLock.withLock { Self._responseText },
                 detectedLanguage: languageSelection.requestedLanguage ?? languageSelection.languageHints.first
             )
+        }
+    }
+
+    @objc(APIRouterMockLiveTranscriptionPlugin)
+    private final class MockLiveTranscriptionPlugin: NSObject, LiveTranscriptionCapablePlugin, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.live-transcription" }
+        static var pluginName: String { "Mock Live Transcription" }
+
+        var providerId: String { "mock-live" }
+        var providerDisplayName: String { "Mock Live" }
+        var isConfigured: Bool { true }
+        var transcriptionModels: [PluginModelInfo] { [PluginModelInfo(id: "live", displayName: "Live")] }
+        var selectedModelId: String? { "live" }
+        var supportsTranslation: Bool { false }
+
+        required override init() {}
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+        func selectModel(_ modelId: String) {}
+
+        func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+            XCTFail("Batch transcribe should not be used when stable live preview is available")
+            return PluginTranscriptionResult(text: "batch", detectedLanguage: language)
+        }
+
+        func createLiveTranscriptionSession(
+            language: String?,
+            translate: Bool,
+            prompt: String?,
+            onProgress: @Sendable @escaping (String) -> Bool
+        ) async throws -> any LiveTranscriptionSession {
+            MockLiveSession()
+        }
+
+        private actor MockLiveSession: LiveTranscriptionSession {
+            func appendAudio(samples: [Float]) async throws {}
+
+            func finish() async throws -> PluginTranscriptionResult {
+                PluginTranscriptionResult(text: "", detectedLanguage: "en")
+            }
+
+            func cancel() async {}
         }
     }
 
@@ -3548,6 +3599,183 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
+    func testApiStopRecordingMovesToProcessingAndRejectsRestartWhileRecorderDrains() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        let stopGate = RecorderStartGate()
+
+        var startCount = 0
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {
+            startCount += 1
+        }
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            _ = await stopGate.enter()
+            await stopGate.waitForRelease()
+            return []
+        }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        XCTAssertEqual(context.dictationViewModel.state, .recording)
+        XCTAssertEqual(startCount, 1)
+
+        _ = context.dictationViewModel.apiStopRecording()
+        XCTAssertEqual(context.dictationViewModel.state, .processing)
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .processing)
+
+        await stopGate.waitForFirstEntry()
+
+        let ignoredSessionID = context.dictationViewModel.apiStartRecording()
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(context.dictationViewModel.state, .processing)
+        XCTAssertNil(context.dictationViewModel.apiDictationSession(id: ignoredSessionID))
+
+        await stopGate.release()
+
+        for _ in 0..<40 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .failed {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
+    }
+
+    @MainActor
+    func testCancelDuringProcessingCancelsStopFinalizationBeforeTranscriptionTaskExists() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            MockTranscriptionPlugin.reset()
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        let stopGate = RecorderStartGate()
+        var pasteCount = 0
+
+        context.textInsertionService.captureActiveAppOverride = {
+            ("Notes", "com.apple.Notes", nil)
+        }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.pasteSimulatorOverride = {
+            pasteCount += 1
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            _ = await stopGate.enter()
+            await stopGate.waitForRelease()
+            return Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        XCTAssertEqual(context.dictationViewModel.state, .recording)
+
+        _ = context.dictationViewModel.apiStopRecording()
+        XCTAssertEqual(context.dictationViewModel.state, .processing)
+
+        await stopGate.waitForFirstEntry()
+        context.dictationViewModel.handleCancelHotkey()
+        context.dictationViewModel.handleCancelHotkey()
+
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
+        XCTAssertEqual(
+            context.dictationViewModel.apiDictationSession(id: sessionID)?.error,
+            try TestSupport.localizedCatalogValueForCurrentLocale(for: "Cancelled")
+        )
+
+        await stopGate.release()
+
+        for _ in 0..<20 {
+            if MockTranscriptionPlugin.transcribeCallCount > 0 || pasteCount > 0 {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+
+        let session = try XCTUnwrap(context.dictationViewModel.apiDictationSession(id: sessionID))
+        XCTAssertEqual(session.status, .failed)
+        XCTAssertNil(session.transcription)
+        XCTAssertEqual(MockTranscriptionPlugin.transcribeCallCount, 0)
+        XCTAssertEqual(pasteCount, 0)
+    }
+
+    @MainActor
+    func testApiStopRecordingUsesStableLivePreviewInsteadOfSlowBatchFallback() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        let livePlugin = MockLiveTranscriptionPlugin()
+        PluginManager.shared.loadedPlugins.append(LoadedPlugin(
+            manifest: PluginManifest(
+                id: "com.typewhisper.mock.live-transcription",
+                name: "Mock Live",
+                version: "1.0.0",
+                principalClass: "APIRouterMockLiveTranscriptionPlugin"
+            ),
+            instance: livePlugin,
+            bundle: Bundle.main,
+            sourceURL: appSupportDirectory,
+            isEnabled: true
+        ))
+        context.modelManager.selectProvider(livePlugin.providerId)
+        let pasteboard = NSPasteboard.withUniqueName()
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.captureActiveAppOverride = {
+            ("Notes", "com.apple.Notes", nil)
+        }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.pasteSimulatorOverride = {}
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        context.dictationViewModel.partialText = "live preview text"
+
+        _ = context.dictationViewModel.apiStopRecording()
+
+        for _ in 0..<40 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .completed {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+
+        let session = try XCTUnwrap(context.dictationViewModel.apiDictationSession(id: sessionID))
+        XCTAssertEqual(session.status, .completed)
+        XCTAssertEqual(session.transcription?.rawText, "live preview text")
+        XCTAssertEqual(session.transcription?.text, "live preview text")
+        XCTAssertEqual(MockTranscriptionPlugin.transcribeCallCount, 0)
+    }
+
+    @MainActor
     func testPushToTalkInterruptionDiscardStopsImmediatelyAndMarksSessionFailedByDefault() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?
@@ -5317,6 +5545,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
     private final class DictationContext: @unchecked Sendable {
         let dictationViewModel: DictationViewModel
+        let modelManager: ModelManagerService
         let audioRecordingService: AudioRecordingService
         let hotkeyService: HotkeyService
         let audioDeviceService: AudioDeviceService
@@ -5331,6 +5560,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         init(
             dictationViewModel: DictationViewModel,
+            modelManager: ModelManagerService,
             audioRecordingService: AudioRecordingService,
             hotkeyService: HotkeyService,
             audioDeviceService: AudioDeviceService,
@@ -5344,6 +5574,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             retainedObjects: [AnyObject]
         ) {
             self.dictationViewModel = dictationViewModel
+            self.modelManager = modelManager
             self.audioRecordingService = audioRecordingService
             self.hotkeyService = hotkeyService
             self.audioDeviceService = audioDeviceService
@@ -5473,6 +5704,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         return DictationContext(
             dictationViewModel: dictationViewModel,
+            modelManager: modelManager,
             audioRecordingService: audioRecordingService,
             hotkeyService: hotkeyService,
             audioDeviceService: audioDeviceService,
