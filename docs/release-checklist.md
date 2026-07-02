@@ -81,7 +81,7 @@
   - Reorder the selected languages and confirm hint-aware engines receive the ordered list
   - Confirm engines without language-hint support use the first selected language
 - Verify CLI and HTTP API locally
-- Upgrade from `1.4.0` with Workflows, History, Dictionary, Snippets, hotkeys, enabled plugins, and update channel preserved
+- Upgrade from `1.4.0` with History, legacy prompts/profiles, Workflows, Dictionary, Snippets, hotkeys, enabled plugins, and update channel preserved
 
 ## Before `1.5.0`
 
