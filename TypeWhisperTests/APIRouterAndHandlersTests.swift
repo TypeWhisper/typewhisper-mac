@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import CoreAudio
 import Foundation
 import XCTest
@@ -17,6 +18,116 @@ private func rtfAttributedStringContainsFontTrait(
     let font = attributed.attribute(.font, at: range.location, effectiveRange: &effectiveRange) as? NSFont
     guard let font else { return false }
     return NSFontManager.shared.traits(of: font).contains(trait)
+}
+
+final class SecureInputDiagnosticsProviderTests: XCTestCase {
+    func testSnapshotPrefersOnConsoleIORegistryOwner() {
+        let consoleUsers: NSArray = [
+            [
+                "kCGSSessionSecureInputPID": NSNumber(value: 111),
+                "kCGSSessionOnConsoleKey": NSNumber(value: false),
+            ],
+            [
+                "kCGSSessionSecureInputPID": NSNumber(value: 222),
+                "kCGSessionOnConsoleKey": NSNumber(value: true),
+            ],
+        ]
+
+        let snapshot = SecureInputDiagnosticsProvider.snapshot(
+            consoleUsers: consoleUsers,
+            currentSessionPID: 333,
+            carbonSecureInputEnabled: true,
+            processResolver: { pid in
+                SecureInputProcessInfo(
+                    pid: pid,
+                    appName: "App \(pid)",
+                    bundleIdentifier: "test.\(pid)",
+                    executablePath: "/Applications/App\(pid).app"
+                )
+            }
+        )
+
+        XCTAssertTrue(snapshot.isActive)
+        XCTAssertEqual(snapshot.primarySource, "ioRegistry")
+        XCTAssertEqual(snapshot.primaryPID, 222)
+        XCTAssertEqual(snapshot.primaryAppName, "App 222")
+        XCTAssertEqual(snapshot.ioRegistryPID, 222)
+        XCTAssertEqual(snapshot.currentSessionPID, 333)
+    }
+
+    func testSnapshotDoesNotBlameCurrentSessionWhenIORegistryOwnerCannotBeResolved() {
+        let consoleUsers: NSArray = [
+            [
+                "kCGSSessionSecureInputPID": NSNumber(value: 111),
+                "kCGSessionOnConsoleKey": NSNumber(value: true),
+            ],
+        ]
+
+        let snapshot = SecureInputDiagnosticsProvider.snapshot(
+            consoleUsers: consoleUsers,
+            currentSessionPID: 333,
+            carbonSecureInputEnabled: true,
+            processResolver: { pid in
+                guard pid == 333 else { return nil }
+                return SecureInputProcessInfo(
+                    pid: pid,
+                    appName: "Current App",
+                    bundleIdentifier: "test.current",
+                    executablePath: "/Applications/Current.app"
+                )
+            }
+        )
+
+        XCTAssertTrue(snapshot.isActive)
+        XCTAssertEqual(snapshot.primarySource, "unknown")
+        XCTAssertEqual(snapshot.primaryPID, 111)
+        XCTAssertNil(snapshot.primaryAppName)
+        XCTAssertEqual(snapshot.ioRegistryPID, 111)
+        XCTAssertEqual(snapshot.currentSessionPID, 333)
+    }
+
+    func testSnapshotPreservesActiveStateWhenOwnerIsUnknown() {
+        let snapshot = SecureInputDiagnosticsProvider.snapshot(
+            consoleUsers: nil,
+            currentSessionPID: nil,
+            carbonSecureInputEnabled: true,
+            processResolver: { _ in nil }
+        )
+
+        XCTAssertTrue(snapshot.isActive)
+        XCTAssertEqual(snapshot.primarySource, "unknown")
+        XCTAssertNil(snapshot.primaryPID)
+        XCTAssertEqual(snapshot.userFacingOwner, "another app")
+    }
+
+    func testSnapshotDoesNotTreatResolvedStaleOwnerAsActive() {
+        let consoleUsers: NSArray = [
+            [
+                "kCGSSessionSecureInputPID": NSNumber(value: 111),
+                "kCGSessionOnConsoleKey": NSNumber(value: true),
+            ],
+        ]
+
+        let snapshot = SecureInputDiagnosticsProvider.snapshot(
+            consoleUsers: consoleUsers,
+            currentSessionPID: nil,
+            carbonSecureInputEnabled: false,
+            processResolver: { pid in
+                SecureInputProcessInfo(
+                    pid: pid,
+                    appName: "Stale App",
+                    bundleIdentifier: "test.stale",
+                    executablePath: "/Applications/Stale.app"
+                )
+            }
+        )
+
+        XCTAssertFalse(snapshot.isActive)
+        XCTAssertEqual(snapshot.primarySource, "ioRegistry")
+        XCTAssertEqual(snapshot.primaryPID, 111)
+        XCTAssertEqual(snapshot.primaryAppName, "Stale App")
+        XCTAssertEqual(snapshot.ioRegistryPID, 111)
+    }
 }
 
 final class APIRouterAndHandlersTests: XCTestCase {
@@ -7752,6 +7863,275 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testCarbonHotkeySupportIsLimitedToSinglePressKeyWithModifiers() {
+        XCTAssertTrue(HotkeyService.supportsCarbonHotkeyForTesting(commandOptionAHotkey()))
+        XCTAssertTrue(HotkeyService.supportsCarbonHotkeyForTesting(fnF14Hotkey()))
+        XCTAssertEqual(
+            HotkeyService.carbonModifierFlagsForTesting(commandOptionAHotkey()),
+            UInt32(cmdKey) | UInt32(optionKey)
+        )
+        XCTAssertEqual(
+            HotkeyService.carbonModifierFlagsForTesting(fnF14Hotkey()),
+            UInt32(kEventKeyModifierFnMask)
+        )
+
+        XCTAssertFalse(HotkeyService.supportsCarbonHotkeyForTesting(bareSpaceHotkey()))
+        XCTAssertFalse(HotkeyService.supportsCarbonHotkeyForTesting(commandOptionComboHotkey()))
+        XCTAssertFalse(HotkeyService.supportsCarbonHotkeyForTesting(controlModifierHotkey()))
+        XCTAssertFalse(HotkeyService.supportsCarbonHotkeyForTesting(UnifiedHotkey(mouseButton: 3)))
+
+        let doubleTap = UnifiedHotkey(
+            keyCode: 0x00,
+            modifierFlags: NSEvent.ModifierFlags([.command, .option]).rawValue,
+            isFn: false,
+            isDoubleTap: true
+        )
+        XCTAssertFalse(HotkeyService.supportsCarbonHotkeyForTesting(doubleTap))
+    }
+
+    @MainActor
+    func testCarbonHotkeyDispatchStartsToggleWithoutKeyboardEvent() {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        let hotkey = fnF14Hotkey()
+        service.setHotkeyForTesting(hotkey, for: .toggle)
+
+        var startCount = 0
+        service.onDictationStart = { _ in
+            startCount += 1
+        }
+
+        service.processCarbonHotkeyForTesting(slotType: .toggle, hotkey: hotkey, isPressed: true)
+
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(service.currentMode, .toggle)
+    }
+
+    @MainActor
+    func testCarbonHotkeyReleaseStopsPushToTalk() {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        let hotkey = commandOptionAHotkey()
+        service.setHotkeyForTesting(hotkey, for: .pushToTalk)
+
+        var startCount = 0
+        var stopCount = 0
+        service.onDictationStart = { _ in
+            startCount += 1
+        }
+        service.onDictationStop = {
+            stopCount += 1
+        }
+
+        service.processCarbonHotkeyForTesting(slotType: .pushToTalk, hotkey: hotkey, isPressed: true)
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(service.currentMode, .pushToTalk)
+
+        service.processCarbonHotkeyForTesting(slotType: .pushToTalk, hotkey: hotkey, isPressed: false)
+        XCTAssertEqual(stopCount, 1)
+        XCTAssertNil(service.currentMode)
+    }
+
+    @MainActor
+    func testCarbonWorkflowHotkeyStartsDictation() {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        let workflowId = UUID()
+        let hotkey = commandOptionAHotkey()
+        service.registerWorkflowHotkeys([(id: workflowId, hotkey: hotkey, behavior: .startDictation)])
+
+        var startedWorkflowId: UUID?
+        service.onWorkflowDictationStart = { workflowId, _ in startedWorkflowId = workflowId }
+
+        service.processCarbonWorkflowHotkeyForTesting(
+            workflowId: workflowId,
+            hotkey: hotkey,
+            behavior: .startDictation,
+            isPressed: true
+        )
+
+        XCTAssertEqual(startedWorkflowId, workflowId)
+        XCTAssertEqual(service.currentMode, .pushToTalk)
+        XCTAssertEqual(service.activeWorkflowId, workflowId)
+
+        service.processCarbonWorkflowHotkeyForTesting(
+            workflowId: workflowId,
+            hotkey: hotkey,
+            behavior: .startDictation,
+            isPressed: false
+        )
+        XCTAssertEqual(service.currentMode, .toggle)
+        XCTAssertEqual(service.activeWorkflowId, workflowId)
+    }
+
+    @MainActor
+    func testCarbonWorkflowHotkeyTextProcessingDispatchesOnPhysicalKeyRelease() async {
+        let (service, workflowId, hotkey) = makeCarbonWorkflowTextProcessingService(
+            keyStateProvider: { _ in false }
+        )
+
+        var textWorkflowId: UUID?
+        let textProcessingCallback = expectation(description: "workflow text processing callback")
+        service.onWorkflowTextProcessing = {
+            textWorkflowId = $0
+            textProcessingCallback.fulfill()
+        }
+
+        service.processCarbonWorkflowHotkeyForTesting(
+            workflowId: workflowId,
+            hotkey: hotkey,
+            behavior: .processSelectedText,
+            isPressed: true
+        )
+        XCTAssertNil(textWorkflowId)
+        XCTAssertEqual(service.activeWorkflowId, workflowId)
+
+        service.processCarbonWorkflowHotkeyForTesting(
+            workflowId: workflowId,
+            hotkey: hotkey,
+            behavior: .processSelectedText,
+            isPressed: false
+        )
+        await fulfillment(of: [textProcessingCallback], timeout: 1.0)
+        XCTAssertEqual(textWorkflowId, workflowId)
+        XCTAssertNil(service.activeWorkflowId)
+    }
+
+    @MainActor
+    func testCarbonWorkflowHotkeyTextProcessingWaitsForPhysicalKeyUpAfterModifierRelease() async throws {
+        let workflowId = UUID()
+        let hotkey = commandOptionAHotkey()
+        var keyIsDown = true
+        let service = makeCarbonWorkflowTextProcessingService(
+            workflowId: workflowId,
+            hotkey: hotkey,
+            keyStateProvider: { keyCode in keyCode == hotkey.keyCode && keyIsDown }
+        ).service
+
+        var textWorkflowId: UUID?
+        let textProcessingCallback = expectation(description: "workflow text processing callback")
+        service.onWorkflowTextProcessing = {
+            textWorkflowId = $0
+            textProcessingCallback.fulfill()
+        }
+
+        service.processCarbonWorkflowHotkeyForTesting(
+            workflowId: workflowId,
+            hotkey: hotkey,
+            behavior: .processSelectedText,
+            isPressed: true
+        )
+        XCTAssertNil(textWorkflowId)
+        XCTAssertEqual(service.activeWorkflowId, workflowId)
+
+        service.processCarbonWorkflowHotkeyForTesting(
+            workflowId: workflowId,
+            hotkey: hotkey,
+            behavior: .processSelectedText,
+            isPressed: false
+        )
+        try await Task.sleep(for: .milliseconds(20))
+        XCTAssertNil(textWorkflowId)
+        XCTAssertEqual(service.activeWorkflowId, workflowId)
+
+        keyIsDown = false
+        let physicalKeyUp = try makeKeyboardEvent(keyCode: 0x00, keyDown: false, flags: [])
+        XCTAssertTrue(service.processEventForTesting(physicalKeyUp, source: .monitor))
+        await fulfillment(of: [textProcessingCallback], timeout: 1.0)
+        XCTAssertEqual(textWorkflowId, workflowId)
+        XCTAssertNil(service.activeWorkflowId)
+    }
+
+    @MainActor
+    func testCarbonWorkflowHotkeyTextProcessingCompletesWithoutMonitorKeyUpAfterPhysicalKeyRelease() async throws {
+        let workflowId = UUID()
+        let hotkey = commandOptionAHotkey()
+        var keyIsDown = true
+        let service = makeCarbonWorkflowTextProcessingService(
+            workflowId: workflowId,
+            hotkey: hotkey,
+            keyStateProvider: { keyCode in keyCode == hotkey.keyCode && keyIsDown }
+        ).service
+
+        var textWorkflowId: UUID?
+        let textProcessingCallback = expectation(description: "workflow text processing callback")
+        service.onWorkflowTextProcessing = {
+            textWorkflowId = $0
+            textProcessingCallback.fulfill()
+        }
+
+        service.processCarbonWorkflowHotkeyForTesting(
+            workflowId: workflowId,
+            hotkey: hotkey,
+            behavior: .processSelectedText,
+            isPressed: true
+        )
+        XCTAssertNil(textWorkflowId)
+        XCTAssertEqual(service.activeWorkflowId, workflowId)
+
+        service.processCarbonWorkflowHotkeyForTesting(
+            workflowId: workflowId,
+            hotkey: hotkey,
+            behavior: .processSelectedText,
+            isPressed: false
+        )
+        try await Task.sleep(for: .milliseconds(20))
+        XCTAssertNil(textWorkflowId)
+        XCTAssertEqual(service.activeWorkflowId, workflowId)
+
+        keyIsDown = false
+        await fulfillment(of: [textProcessingCallback], timeout: 1.0)
+        XCTAssertEqual(textWorkflowId, workflowId)
+        XCTAssertNil(service.activeWorkflowId)
+    }
+
+    @MainActor
+    func testCarbonHotkeyDispatchDedupesFollowingEventTapDispatch() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        let hotkey = commandOptionAHotkey()
+        service.setHotkeyForTesting(hotkey, for: .toggle)
+
+        var startCount = 0
+        service.onDictationStart = { _ in
+            startCount += 1
+        }
+
+        let keyDown = try makeKeyboardEvent(keyCode: 0x00, keyDown: true, flags: [.maskCommand, .maskAlternate])
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .eventTap))
+        await Task.yield()
+        XCTAssertEqual(startCount, 1)
+
+        service.processCarbonHotkeyForTesting(slotType: .toggle, hotkey: hotkey, isPressed: true)
+        XCTAssertEqual(startCount, 1)
+    }
+
+    @MainActor
+    func testCarbonHotkeyDispatchDedupesFollowingMonitorDispatch() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        let hotkey = commandOptionAHotkey()
+        service.setHotkeyForTesting(hotkey, for: .toggle)
+
+        var startCount = 0
+        service.onDictationStart = { _ in
+            startCount += 1
+        }
+
+        let keyDown = try makeKeyboardEvent(keyCode: 0x00, keyDown: true, flags: [.maskCommand, .maskAlternate])
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+
+        service.processCarbonHotkeyForTesting(slotType: .toggle, hotkey: hotkey, isPressed: true)
+        XCTAssertEqual(startCount, 1)
+    }
+
+    @MainActor
     func testMiddleMousePassesThroughWhenNoMouseHotkeyIsBound() throws {
         let service = HotkeyService()
         service.suspendMonitoring()
@@ -9544,10 +9924,38 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    private func makeCarbonWorkflowTextProcessingService(
+        workflowId: UUID = UUID(),
+        hotkey: UnifiedHotkey? = nil,
+        keyStateProvider: @escaping (UInt16) -> Bool
+    ) -> (service: HotkeyService, workflowId: UUID, hotkey: UnifiedHotkey) {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.workflowTextProcessingModifierPollInterval = 0.001
+        service.workflowTextProcessingModifierReleaseTimeout = 0.25
+        service.workflowTextProcessingPostReleaseDelay = 0.001
+        service.modifierFlagsStateProvider = { [] }
+        service.keyStateProvider = keyStateProvider
+
+        let hotkey = hotkey ?? commandOptionAHotkey()
+        service.registerWorkflowHotkeys([(id: workflowId, hotkey: hotkey, behavior: .processSelectedText)])
+        return (service, workflowId, hotkey)
+    }
+
+    @MainActor
     private func commandShiftCHotkey() -> UnifiedHotkey {
         UnifiedHotkey(
             keyCode: 0x08,
             modifierFlags: NSEvent.ModifierFlags([.command, .shift]).rawValue,
+            isFn: false
+        )
+    }
+
+    @MainActor
+    private func fnF14Hotkey() -> UnifiedHotkey {
+        UnifiedHotkey(
+            keyCode: 0x6B,
+            modifierFlags: NSEvent.ModifierFlags.function.rawValue,
             isFn: false
         )
     }

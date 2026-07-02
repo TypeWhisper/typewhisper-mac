@@ -412,6 +412,7 @@ private struct DiagnosticsReport: Encodable {
     let app: AppInfo
     let system: SystemInfo
     let permissions: PermissionsInfo
+    let secureInput: SecureInputDiagnostics
     let model: ModelInfo
     let api: APIInfo
     let processMemory: ProcessMemoryInfo
@@ -554,7 +555,7 @@ final class ErrorLogService: ObservableObject {
         }
 
         return DiagnosticsReport(
-            schemaVersion: 7,
+            schemaVersion: 8,
             exportedAt: Date(),
             app: .init(
                 version: AppConstants.appVersion,
@@ -577,6 +578,7 @@ final class ErrorLogService: ObservableObject {
                 microphoneGranted: AVAudioApplication.shared.recordPermission == .granted,
                 accessibilityGranted: container.textInsertionService.isAccessibilityGranted
             ),
+            secureInput: SecureInputDiagnosticsProvider.snapshot(),
             model: .init(
                 selectedProviderId: container.modelManagerService.selectedProviderId,
                 selectedModelId: container.modelManagerService.selectedModelId,

@@ -1,10 +1,26 @@
+import Combine
 import SwiftUI
 
 struct HotkeySettingsView: View {
     @ObservedObject private var dictation = DictationViewModel.shared
+    @State private var secureInputDiagnostics = SecureInputDiagnosticsProvider.snapshot()
+    private let secureInputRefresh = Timer.publish(every: 3, on: .main, in: .common).autoconnect()
 
     var body: some View {
         Form {
+            if secureInputDiagnostics.isActive {
+                Section {
+                    Label {
+                        Text(String(localized: "Secure Input is active in \(secureInputDiagnostics.userFacingOwner). Standard key+modifier shortcuts should keep working. Fallback-only shortcut types may not work until that app leaves password or sensitive input."))
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                    }
+                }
+            }
+
             Section(String(localized: "Hotkeys")) {
                 MultiHotkeySlotRecorder(
                     slot: .hybrid,
@@ -65,6 +81,9 @@ struct HotkeySettingsView: View {
         .formStyle(.grouped)
         .padding()
         .frame(minWidth: 500, minHeight: 300)
+        .onReceive(secureInputRefresh) { _ in
+            secureInputDiagnostics = SecureInputDiagnosticsProvider.snapshot()
+        }
     }
 }
 
