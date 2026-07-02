@@ -1,0 +1,18 @@
+{
+    "id": "com.typewhisper.volcengine.ark",
+    "name": "Volcengine Ark",
+    "version": "1.0.0",
+    "minHostVersion": "0.12.0",
+    "sdkCompatibilityVersion": "v1",
+    "minOSVersion": "14.0",
+    "author": "moshoujingli",
+    "description": "LLM provider via Volcengine Ark. Auto model discovery, thinking toggle, OpenAI-compatible chat completions. Credentials stored in macOS Keychain.",
+    "descriptions": {
+        "de": "LLM-Anbieter via Volcengine Ark. Automatische Modellerkennung, Thinking-Schalter, OpenAI-kompatible Chat-Completions. Anmeldedaten werden im macOS Schlüsselbund gespeichert.",
+        "zh-Hans": "通过火山引擎 (方舟) 接入 LLM。自动模型发现、思考开关、Chat Completions 接口。凭证存储在 macOS Keychain 中。"
+    },
+    "category": "llm",
+    "iconSystemName": "flame.fill",
+    "principalClass": "ArkPlugin",
+    "requiresAPIKey": true
+}
