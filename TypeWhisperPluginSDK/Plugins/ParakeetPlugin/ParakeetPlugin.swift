@@ -42,10 +42,12 @@ private actor AsyncTranscriptionGate {
 final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, TranscriptPreviewFallbackPolicyProviding, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.parakeet"
     static let pluginName = "Parakeet"
+    static let vocabularyAssetFileName = "parakeet_vocab.json"
     private static let logger = Logger(subsystem: "com.typewhisper.plugin.parakeet", category: "Transcription")
     private static let shortClipConfidenceThreshold: Float = 0.55
     private static let shortClipConfidenceGateDuration: TimeInterval = 1.0
     private static let fluidAudioProgressMinimumSampleCount = 240_000
+    typealias VocabularyAssetFetcher = @Sendable (_ url: URL, _ description: String) async throws -> Data
 
     fileprivate var host: HostServices?
     fileprivate var asrManager: AsrManager?
@@ -589,6 +591,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
         do {
             applyHuggingFaceTokenToEnvironment()
+            try await ensureVocabularyAsset(for: selectedVersion)
             let models = try await AsrModels.downloadAndLoad(version: selectedVersion.asrModelVersion)
             downloadProgress = 0.7
 
@@ -617,6 +620,82 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             modelState = .error(error.localizedDescription)
             downloadProgress = 0
         }
+    }
+
+    static func vocabularyAssetURL(for version: ParakeetVersion) -> URL {
+        let repo: String
+        switch version {
+        case .v2:
+            repo = "FluidInference/parakeet-tdt-0.6b-v2-coreml"
+        case .v3:
+            repo = "FluidInference/parakeet-tdt-0.6b-v3-coreml"
+        }
+        return URL(string: "https://huggingface.co/\(repo)/resolve/main/\(vocabularyAssetFileName)")!
+    }
+
+    static func vocabularyAssetDirectory(for version: ParakeetVersion) -> URL {
+        AsrModels.defaultCacheDirectory(for: version.asrModelVersion)
+    }
+
+    func ensureVocabularyAsset(
+        for version: ParakeetVersion,
+        targetDirectory: URL? = nil,
+        fetcher: VocabularyAssetFetcher = { url, description in
+            try await DownloadUtils.fetchHuggingFaceFile(from: url, description: description)
+        }
+    ) async throws {
+        let directory = targetDirectory ?? Self.vocabularyAssetDirectory(for: version)
+        let targetURL = directory.appendingPathComponent(Self.vocabularyAssetFileName, isDirectory: false)
+        guard !Self.vocabularyAssetExists(at: targetURL) else { return }
+
+        let vocabularyURL = Self.vocabularyAssetURL(for: version)
+        let description = "\(version.modelDef.displayName) vocabulary"
+        let data: Data
+        do {
+            data = try await fetcher(vocabularyURL, description)
+        } catch {
+            throw ParakeetVocabularyAssetError.downloadFailed(version: version, underlying: error)
+        }
+        guard !data.isEmpty else {
+            throw ParakeetVocabularyAssetError.emptyDownload(version: version)
+        }
+
+        let fileManager = FileManager.default
+        do {
+            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+            let temporaryURL = directory.appendingPathComponent(
+                ".\(Self.vocabularyAssetFileName).\(UUID().uuidString).tmp",
+                isDirectory: false
+            )
+            do {
+                try data.write(to: temporaryURL, options: .atomic)
+                if Self.vocabularyAssetExists(at: targetURL) {
+                    try? fileManager.removeItem(at: temporaryURL)
+                    return
+                }
+                if fileManager.fileExists(atPath: targetURL.path) {
+                    try fileManager.removeItem(at: targetURL)
+                }
+                try fileManager.moveItem(at: temporaryURL, to: targetURL)
+            } catch {
+                try? fileManager.removeItem(at: temporaryURL)
+                throw error
+            }
+        } catch {
+            throw ParakeetVocabularyAssetError.installFailed(
+                version: version,
+                path: targetURL,
+                underlying: error
+            )
+        }
+    }
+
+    private static func vocabularyAssetExists(at url: URL) -> Bool {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let size = attributes[.size] as? NSNumber else {
+            return false
+        }
+        return size.intValue > 0
     }
 
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
@@ -790,6 +869,23 @@ enum CtcModelState: Equatable {
     case downloading
     case ready
     case error(String)
+}
+
+private enum ParakeetVocabularyAssetError: LocalizedError {
+    case downloadFailed(version: ParakeetVersion, underlying: Error)
+    case emptyDownload(version: ParakeetVersion)
+    case installFailed(version: ParakeetVersion, path: URL, underlying: Error)
+
+    var errorDescription: String? {
+        switch self {
+        case .downloadFailed(let version, let underlying):
+            return "Failed to download Parakeet vocabulary file for \(version.modelDef.displayName): \(underlying.localizedDescription)"
+        case .emptyDownload(let version):
+            return "Failed to download Parakeet vocabulary file for \(version.modelDef.displayName): downloaded file was empty"
+        case .installFailed(let version, let path, let underlying):
+            return "Failed to install Parakeet vocabulary file for \(version.modelDef.displayName) at \(path.path): \(underlying.localizedDescription)"
+        }
+    }
 }
 
 // MARK: - Settings View

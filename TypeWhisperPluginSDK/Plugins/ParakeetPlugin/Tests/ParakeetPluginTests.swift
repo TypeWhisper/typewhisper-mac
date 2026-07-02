@@ -16,10 +16,166 @@ final class ParakeetPluginTests: XCTestCase {
         }
     }
 
+    private actor VocabularyFetchRecorder {
+        private var requests: [(url: URL, description: String)] = []
+        private let data: Data?
+        private let error: Error?
+
+        init(data: Data) {
+            self.data = data
+            self.error = nil
+        }
+
+        init(error: Error) {
+            self.data = nil
+            self.error = error
+        }
+
+        func fetch(url: URL, description: String) async throws -> Data {
+            requests.append((url: url, description: description))
+            if let data {
+                return data
+            }
+            throw error ?? URLError(.unknown)
+        }
+
+        func requestCount() -> Int {
+            requests.count
+        }
+
+        func firstRequest() -> (url: URL, description: String)? {
+            requests.first
+        }
+    }
+
     private func makePlugin(restoresModelOnActivate: Bool = false) -> ParakeetPlugin {
         let plugin = ParakeetPlugin()
         plugin.restoresModelOnActivate = restoresModelOnActivate
         return plugin
+    }
+
+    private func makeTemporaryDirectory(prefix: String = "ParakeetPluginTests") throws -> URL {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "\(prefix)-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: directory)
+        }
+        return directory
+    }
+
+    func testVocabularyAssetURLsMapToVersionRepositories() {
+        XCTAssertEqual(
+            ParakeetPlugin.vocabularyAssetURL(for: .v2).absoluteString,
+            "https://huggingface.co/FluidInference/parakeet-tdt-0.6b-v2-coreml/resolve/main/parakeet_vocab.json"
+        )
+        XCTAssertEqual(
+            ParakeetPlugin.vocabularyAssetURL(for: .v3).absoluteString,
+            "https://huggingface.co/FluidInference/parakeet-tdt-0.6b-v3-coreml/resolve/main/parakeet_vocab.json"
+        )
+    }
+
+    func testEnsureVocabularyAssetSkipsExistingFile() async throws {
+        let directory = try makeTemporaryDirectory()
+        let targetURL = directory.appendingPathComponent(ParakeetPlugin.vocabularyAssetFileName)
+        let existingData = Data(#"{"0":"existing"}"#.utf8)
+        try existingData.write(to: targetURL)
+        let recorder = VocabularyFetchRecorder(data: Data(#"{"0":"downloaded"}"#.utf8))
+        let plugin = makePlugin()
+
+        try await plugin.ensureVocabularyAsset(
+            for: .v3,
+            targetDirectory: directory,
+            fetcher: { url, description in
+                try await recorder.fetch(url: url, description: description)
+            }
+        )
+
+        let requestCount = await recorder.requestCount()
+        XCTAssertEqual(requestCount, 0)
+        XCTAssertEqual(try Data(contentsOf: targetURL), existingData)
+    }
+
+    func testEnsureVocabularyAssetRepairsEmptyExistingFile() async throws {
+        let directory = try makeTemporaryDirectory()
+        let targetURL = directory.appendingPathComponent(ParakeetPlugin.vocabularyAssetFileName)
+        try Data().write(to: targetURL)
+        let downloadedData = Data(#"{"0":"downloaded"}"#.utf8)
+        let recorder = VocabularyFetchRecorder(data: downloadedData)
+        let plugin = makePlugin()
+
+        try await plugin.ensureVocabularyAsset(
+            for: .v3,
+            targetDirectory: directory,
+            fetcher: { url, description in
+                try await recorder.fetch(url: url, description: description)
+            }
+        )
+
+        XCTAssertEqual(try Data(contentsOf: targetURL), downloadedData)
+        let requestCount = await recorder.requestCount()
+        XCTAssertEqual(requestCount, 1)
+    }
+
+    func testEnsureVocabularyAssetDownloadsMissingFile() async throws {
+        let directory = try makeTemporaryDirectory()
+        let targetURL = directory.appendingPathComponent(ParakeetPlugin.vocabularyAssetFileName)
+        let downloadedData = Data(#"{"0":"<blank>"}"#.utf8)
+        let recorder = VocabularyFetchRecorder(data: downloadedData)
+        let plugin = makePlugin()
+
+        try await plugin.ensureVocabularyAsset(
+            for: .v3,
+            targetDirectory: directory,
+            fetcher: { url, description in
+                try await recorder.fetch(url: url, description: description)
+            }
+        )
+
+        XCTAssertEqual(try Data(contentsOf: targetURL), downloadedData)
+        let requestCount = await recorder.requestCount()
+        XCTAssertEqual(requestCount, 1)
+        let recordedRequest = await recorder.firstRequest()
+        let request = try XCTUnwrap(recordedRequest)
+        XCTAssertEqual(request.url, ParakeetPlugin.vocabularyAssetURL(for: .v3))
+        XCTAssertEqual(request.description, "Parakeet TDT v3 vocabulary")
+    }
+
+    func testEnsureVocabularyAssetSurfacesFailedFetch() async throws {
+        let directory = try makeTemporaryDirectory()
+        let targetURL = directory.appendingPathComponent(ParakeetPlugin.vocabularyAssetFileName)
+        let recorder = VocabularyFetchRecorder(
+            error: NSError(
+                domain: "ParakeetVocabularyAssetTests",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "network unavailable"]
+            )
+        )
+        let plugin = makePlugin()
+
+        do {
+            try await plugin.ensureVocabularyAsset(
+                for: .v2,
+                targetDirectory: directory,
+                fetcher: { url, description in
+                    try await recorder.fetch(url: url, description: description)
+                }
+            )
+            XCTFail("Expected vocabulary download to fail")
+        } catch {
+            XCTAssertTrue(
+                error.localizedDescription.contains(
+                    "Failed to download Parakeet vocabulary file for Parakeet TDT v2"
+                )
+            )
+            XCTAssertTrue(error.localizedDescription.contains("network unavailable"))
+        }
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: targetURL.path))
+        let requestCount = await recorder.requestCount()
+        XCTAssertEqual(requestCount, 1)
     }
 
     func testActivationPromotesPersistedLoadedModelToSelectedModelWhenSelectionMissing() throws {
