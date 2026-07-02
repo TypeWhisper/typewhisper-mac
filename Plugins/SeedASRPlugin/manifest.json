@@ -1,0 +1,18 @@
+{
+    "id": "com.typewhisper.seed-asr",
+    "name": "Seed ASR 2.0",
+    "version": "1.0.0",
+    "minHostVersion": "0.12.0",
+    "sdkCompatibilityVersion": "v1",
+    "minOSVersion": "14.0",
+    "author": "moshoujingli",
+    "description": "Real-time streaming transcription via Volcengine Seed ASR 2.0. Custom binary WebSocket protocol with optional boosting tables for domain vocabulary. Credentials stored in macOS Keychain.",
+    "descriptions": {
+        "de": "Echtzeit-Streaming-Transkription via Volcengine Seed ASR 2.0. Eigenes binäres WebSocket-Protokoll mit optionalen Boosting-Tabellen für Fachvokabular. Anmeldedaten werden im macOS Schlüsselbund gespeichert.",
+        "zh-Hans": "通过火山引擎 Seed ASR 2.0 进行实时流式语音识别。自定义二进制 WebSocket 协议，可选热词表用于领域词汇。凭证存储在 macOS Keychain 中。"
+    },
+    "category": "transcription",
+    "iconSystemName": "waveform.badge.mic",
+    "principalClass": "SeedASRPlugin",
+    "requiresAPIKey": true
+}
