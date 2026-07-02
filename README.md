@@ -6,7 +6,7 @@
 
 Speech-to-text and AI text processing for macOS. Transcribe audio using on-device AI models or cloud APIs (Groq, OpenAI, xAI/Grok), then transform the result with reusable workflows. Your voice data stays on your Mac with local models - or use cloud APIs for faster processing.
 
-TypeWhisper `1.4` is the current stable release for macOS. It includes system-wide dictation, file transcription, unified workflows, history, dictionary, snippets, bundled integrations, the community plugin registry, and local automation APIs. Advanced surfaces like the HTTP API, CLI, widgets, watch folders, and the plugin SDK remain supported for power users and automation.
+TypeWhisper `1.5` is the current stable release for macOS. It includes system-wide dictation, file transcription, unified workflows, history, dictionary, snippets, bundled integrations, the community plugin registry, local automation APIs, app-aware insertion, expanded provider support, and local-model reliability improvements. Advanced surfaces like the HTTP API, CLI, widgets, watch folders, and the plugin SDK remain supported for power users and automation.
 
 See the [release readiness guide](docs/release-readiness.md), [support matrix](docs/support-matrix.md), and [release checklist](docs/release-checklist.md) for the current release definition and ship gates.
 
@@ -50,15 +50,15 @@ See the [release readiness guide](docs/release-readiness.md), [support matrix](d
 
 <!-- readme-screenshots:end -->
 
-## What's New in 1.4
+## What's New in 1.5
 
-- **Redesigned Integrations** - Installed, Discover, and Manual tabs now group built-in, marketplace, community, and manually installed plugins with clearer source, hosting, and capability metadata
-- **Community plugin registry** - `1.4` builds can discover community plugins through the new registry feed while older `1.3.x` builds stay on the official marketplace feed
-- **Model download controls** - Local model plugins now have clearer downloaded model management, host-version gates, Hugging Face token support, and license acceptance flows where required
-- **New bundled providers** - xAI/Grok, Smallest AI Pulse, Supertonic TTS, refreshed OpenAI voices, Qwen3 ASR, Granite, Voxtral, and Gemma 4 expand the bundled plugin set
-- **Local automation APIs** - Recorder and dictionary HTTP endpoints, watch-folder file jobs, per-request STT engine/model overrides, and CLI/API improvements give power users more automation surface
-- **Workflow and hotkey polish** - Workflow drag reordering, multiple global hotkeys per action, prompt-boundary hardening, direct text hotkeys, and safer Apple Intelligence handling improve day-to-day dictation flows
-- **Dictation reliability pass** - Live transcript, recording indicators, fullscreen/fixed-display handling, USB and multichannel audio capture, route-change recovery, and hotkey startup latency all received focused fixes
+- **App-aware dictation insertion** - Dictation output now better respects sentence position, trailing spaces, terminal paste behavior, rich-text targets, and target-app context
+- **Expanded speech and AI providers** - Gemini speech transcription, Cartesia speech transcription, Sber SaluteSpeech, OpenRouter speech-to-text, Reson8, Mistral AI, Soniox regions and TTS, and OpenAI-compatible profiles broaden the bundled provider set
+- **Local model reliability** - MLX memory-footprint controls, idle auto-unload behavior, stalled Gemma 4 download recovery, and Parakeet vocabulary repair improve local model setup and day-to-day stability
+- **Dictionary learning and normalization** - Auto-learned corrections, target-app correction learning, per-term CTC tuning plumbing, multilingual number-word normalization, English ordinals, digit sequences, and French decimal cleanup improve recognition output
+- **Workflow and hotkey reliability** - Hybrid modifier timing, non-Control modifier taps, global push-to-talk, Pages workflow hotkeys, menu-based dictation pause, Esc confirmation, and automatic workflow output resolution all received targeted fixes
+- **Recording and indicator polish** - Virtual audio input support, media pause/resume hardening, fullscreen indicator fixes, recorder final-failure surfacing, FaceTime built-in microphone capture, and TaskForge insertion fallback improve real-world capture and insertion flows
+- **Release and plugin metadata cleanup** - Cloud ASR upload fallback handling, plugin host-compatibility metadata, plugin uninstall cleanup, and GitHub Latest protection keep the 1.5 distribution path clean
 
 ## Features
 
@@ -124,7 +124,7 @@ brew install --cask typewhisper/tap/typewhisper
 
 Download the latest DMG from [GitHub Releases](https://github.com/TypeWhisper/typewhisper-mac/releases/latest).
 
-Stable direct-download releases use the default Sparkle channel. Release candidates such as `1.4.0-rc*` and daily builds are published as GitHub prereleases, update the shared Sparkle appcast on their own channels, and are excluded from Homebrew.
+Stable direct-download releases use the default Sparkle channel. Release candidates such as `1.5.0-rc*` and daily builds are published as GitHub prereleases, update the shared Sparkle appcast on their own channels, and are excluded from Homebrew.
 Installed builds can switch channels in `Settings -> About` via the `Update Channel` picker.
 
 ## Quick Start

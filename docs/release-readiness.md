@@ -1,8 +1,8 @@
 # TypeWhisper 1.x Release Readiness
 
-This document defines the release gates for the current `1.x` product path leading into the stable `1.3.0` release.
+This document defines the release gates for the current `1.x` product path leading into the stable `1.5.0` release.
 
-TypeWhisper `1.x` is a stable direct-download release line for macOS. The Mac App Store remains out of scope. For `1.3`, the focus is unified workflows, spoken feedback, per-request engine control, multilingual hints, hotkey robustness, and streaming-dictionary support in plugins.
+TypeWhisper `1.x` is a stable direct-download release line for macOS. The Mac App Store remains out of scope. For `1.5`, the focus is app-aware dictation insertion, expanded bundled providers, local-model memory reliability, dictionary-learning improvements, workflow and hotkey reliability, and stable plugin metadata for the current SDK line.
 
 ## Audience
 
@@ -31,17 +31,15 @@ These surfaces remain part of `1.x`, but they are positioned as advanced or auto
 - Widgets
 - Watch Folder
 
-## `1.3` Focus Areas
+## `1.5` Focus Areas
 
-- Spoken feedback (TTS) with a new bundled `System Voice` plugin, scoped to transcription readback
-- Per-request STT engine/model selection through the HTTP API and CLI
-- Multilingual language hints with a multi-select picker and selected-count indicator
-- Fn press-and-release and press-and-hold hotkey strategies
-- GPT-5/Codex compatibility for the bundled OpenAI plugin
-- Dictionary terms forwarded through streaming transcription providers without breaking sessions
-- Qwen3 context-bias formatter refactor
-- Audio recovery hardening around Bluetooth route changes
-- Fixes landed from the 1.2.3 review pass (K1-K4, M1/M7/M8)
+- App-aware smart insertion for plain text, rich text, terminal paste, sentence-boundary, and target-app contexts
+- Virtual audio input support, recorder-specific engine overrides, source progress for file transcription, and recorder failure surfacing
+- Expanded bundled speech and AI provider support across Gemini, Cartesia, Sber SaluteSpeech, OpenRouter, Reson8, Mistral AI, Soniox regions and TTS, and OpenAI-compatible profiles
+- Local MLX memory-footprint controls, idle local-model auto-unload behavior, Gemma 4 download recovery, and Parakeet vocabulary repair
+- Auto-learned dictionary corrections, target-app correction learning, per-term CTC tuning plumbing, and broader number normalization
+- Workflow, hotkey, indicator, and insertion reliability fixes across Hybrid modifiers, Pages workflows, Esc confirmation, fullscreen indicators, TaskForge, and FaceTime capture
+- Plugin host compatibility metadata, release-channel correctness, and stable GitHub Latest/Homebrew/Appcast behavior
 
 ## Stability Contracts for `1.x`
 
@@ -72,7 +70,7 @@ These surfaces remain part of `1.x`, but they are positioned as advanced or auto
 
 ## Release Gates
 
-`1.3.0` is only tagged once all of the following conditions are met:
+`1.5.0` is only tagged once all of the following conditions are met:
 
 - `xcodebuild test` for the app scheme passes.
 - `swift test --package-path TypeWhisperPluginSDK` passes.
@@ -80,9 +78,9 @@ These surfaces remain part of `1.x`, but they are positioned as advanced or auto
 - There are no first-party build warnings.
 - Plugin manifests validate successfully.
 - README, security guidance, support matrix, and plugin documentation are up to date.
-- The `1.3.0-rc*` line ran on real machines for multiple days without P0/P1 blockers before the stable tag.
+- The `1.5.0-rc*` line ran on real machines for multiple days without P0/P1 blockers before the stable tag.
 - The default channel remains `stable`; `release-candidate` and `daily` exist as Sparkle channels for preview builds.
-- `1.3.0-rc*` and daily builds are distributed as GitHub prereleases, appear in the shared Sparkle appcast only on their own channels, and do not update Homebrew.
+- `1.5.0-rc*` and daily builds are distributed as GitHub prereleases, appear in the shared Sparkle appcast only on their own channels, and do not update Homebrew.
 - The appcast entry for preview builds advertises `minimumSystemVersion` `14.0`.
 
 ## Manual Smoke Checks Before Tagging
@@ -112,7 +110,7 @@ These surfaces remain part of `1.x`, but they are positioned as advanced or auto
 - Dictionary terms streamed through AssemblyAI, Soniox, and SpeechAnalyzer without session breakage
 - Very short speech clips and streaming-preview/no-speech guard behavior
 - Audio preview and recording after device changes, especially AirPods/Bluetooth profile switches; no crash during Bluetooth route changes
-- Upgrade from `1.2.2` with History, legacy prompts/profiles, Workflows, Dictionary, Snippets, hotkeys, enabled plugins, and update channel preserved
+- Upgrade from `1.4.0` with History, legacy prompts/profiles, Workflows, Dictionary, Snippets, hotkeys, enabled plugins, and update channel preserved
 
 ## Release Outputs
 
