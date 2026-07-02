@@ -417,8 +417,42 @@ final class ModelManagerService: ObservableObject {
         }
 
         guard let livePlugin = plugin as? LiveTranscriptionCapablePlugin else {
-            restoreCloudModelOverride(plugin: plugin, previousId: overrideRestoreId)
-            return nil
+            // For engines without native live session support, use a universal chunked session
+            // that processes audio in the background during recording. This ensures that when
+            // recording stops, only a short tail of audio needs transcription regardless of
+            // how long the recording was.
+            let allowsChunked = (plugin as? TranscriptPreviewFallbackPolicyProviding)?.allowsTranscriptPreviewFallback ?? true
+            guard allowsChunked else {
+                restoreCloudModelOverride(plugin: plugin, previousId: overrideRestoreId)
+                return nil
+            }
+
+            let capturedPlugin = plugin
+            let capturedLanguage = runtimeSelection.requestedLanguage
+            let capturedTranslate = task == .translate
+            let capturedPrompt = prompt
+
+            let transcribeChunk: UniversalChunkedLiveSession.ChunkTranscriber = { samples in
+                let audio = await Self.makeAudioData(from: samples)
+                return try await capturedPlugin.transcribe(
+                    audio: audio,
+                    language: capturedLanguage,
+                    translate: capturedTranslate,
+                    prompt: capturedPrompt
+                )
+            }
+
+            let session = UniversalChunkedLiveSession(
+                transcribeChunk: transcribeChunk,
+                onProgress: onProgress
+            )
+
+            return LiveTranscriptionSessionHandle(
+                providerId: providerId,
+                session: session,
+                cloudModelOverridePlugin: overrideRestoreId == nil ? nil : plugin,
+                cloudModelOverrideRestoreId: overrideRestoreId
+            )
         }
 
         let session: any LiveTranscriptionSession

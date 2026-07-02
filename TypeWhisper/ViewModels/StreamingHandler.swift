@@ -14,6 +14,7 @@ final class StreamingHandler: @unchecked Sendable {
         var task: TranscriptionTask = .transcribe
         var livePreviewAudioGate = LivePreviewAudioGate()
         var sampleCursor = 0
+        var showPreview: Bool = true
     }
 
     private static let liveSessionPollInterval: Duration = .milliseconds(350)
@@ -104,11 +105,6 @@ final class StreamingHandler: @unchecked Sendable {
     ) {
         stop()
 
-        guard allowLiveTranscription else {
-            logger.info("Live transcript preview skipped: disabled")
-            return
-        }
-
         let providerId = engineOverrideId ?? selectedProviderId
         guard let providerId,
               PluginManager.shared.transcriptionEngine(for: providerId) != nil else {
@@ -122,8 +118,11 @@ final class StreamingHandler: @unchecked Sendable {
             state.configuredLanguage = languageSelection.requestedLanguage
             state.configuredLanguageCandidates = languageSelection.selectedCodes
             state.task = task
+            state.showPreview = allowLiveTranscription
         }
-        onStreamingStateChange?(true)
+        if allowLiveTranscription {
+            onStreamingStateChange?(true)
+        }
 
         streamingTask = Task { [weak self] in
             guard let self else { return }
@@ -360,8 +359,10 @@ final class StreamingHandler: @unchecked Sendable {
             sharedState.withLock { $0.confirmedStreamingText = stable }
         }
 
-        Task { @MainActor [weak self] in
-            self?.onPartialTextUpdate?(stable)
+        if sharedState.withLock({ $0.showPreview }) {
+            Task { @MainActor [weak self] in
+                self?.onPartialTextUpdate?(stable)
+            }
         }
         return true
     }

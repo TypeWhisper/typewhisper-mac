@@ -37,6 +37,7 @@
 		E8FB3269B522A8923134AD9A /* TranscriptionNormalizationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16CD1A34084E0761A8659612 /* TranscriptionNormalizationServiceTests.swift */; };
 		D4A100000000000000000001 /* RecorderTranscriptionBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4A100000000000000000002 /* RecorderTranscriptionBuffer.swift */; };
 		D4A100000000000000000003 /* RecorderTranscriptionBufferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4A100000000000000000004 /* RecorderTranscriptionBufferTests.swift */; };
+		D4A100000000000000000005 /* UniversalChunkedLiveSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4A100000000000000000006 /* UniversalChunkedLiveSession.swift */; };
 		F0A1B2C3D4E5F60718293A4B /* GeminiPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000141 /* GeminiPlugin.swift */; };
 		4D49535452414C0000000001 /* MistralAIPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D49535452414C0000000002 /* MistralAIPlugin.swift */; };
 		4D49535452414C0000000010 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 4D49535452414C0000000003 /* manifest.json */; };
@@ -841,6 +842,7 @@
 		9A645F000000000000000108 /* DutchNumberWordParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DutchNumberWordParser.swift; sourceTree = "<group>"; };
 		206526FD5E41E23B077E3499 /* TranscriptionNormalizationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionNormalizationService.swift; sourceTree = "<group>"; };
 		D4A100000000000000000002 /* RecorderTranscriptionBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderTranscriptionBuffer.swift; sourceTree = "<group>"; };
+		D4A100000000000000000006 /* UniversalChunkedLiveSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UniversalChunkedLiveSession.swift; sourceTree = "<group>"; };
 		BB00000000000000000238 /* AudioRecorderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderService.swift; sourceTree = "<group>"; };
 		BB00000000000000000239 /* AudioRecorderViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000240 /* AudioRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderView.swift; sourceTree = "<group>"; };
@@ -1529,6 +1531,7 @@
 				BB00000000000000000272 /* TermPackRegistryService.swift */,
 				BB00000000000000000286 /* LicenseService.swift */,
 				D4A100000000000000000002 /* RecorderTranscriptionBuffer.swift */,
+				D4A100000000000000000006 /* UniversalChunkedLiveSession.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -3989,6 +3992,7 @@
 				AA00000000000000000335 /* PunctuationStrategyResolver.swift in Sources */,
 				AA00000000000000000336 /* PunctuationVerificationService.swift in Sources */,
 				D4A100000000000000000001 /* RecorderTranscriptionBuffer.swift in Sources */,
+				D4A100000000000000000005 /* UniversalChunkedLiveSession.swift in Sources */,
 				AA00000000000000000250 /* AudioRecorderService.swift in Sources */,
 				AA00000000000000000251 /* AudioRecorderViewModel.swift in Sources */,
 				AA00000000000000000252 /* AudioRecorderView.swift in Sources */,
