@@ -136,13 +136,25 @@
       "author": "TypeWhisper",
       "description": "Local speech-to-text powered by NVIDIA Parakeet TDT. Fast and accurate, 25 languages.",
       "descriptions": {
-        "de": "Lokale Spracherkennung mit NVIDIA Parakeet TDT. Schnell und praezise, 25 Sprachen."
+        "de": "Lokale Spracherkennung mit NVIDIA Parakeet TDT. Schnell und pr\u00e4zise, 25 Sprachen.",
+        "ja": "NVIDIA Parakeet TDT\u306b\u3088\u308b\u30ed\u30fc\u30ab\u30eb\u97f3\u58f0\u8a8d\u8b58\u3067\u3059\u3002\u9ad8\u901f\u304b\u3064\u9ad8\u7cbe\u5ea6\u3067\u300125\u8a00\u8a9e\u306b\u5bfe\u5fdc\u3057\u307e\u3059\u3002"
       },
       "category": "transcription",
       "downloadCount": 28633,
       "iconSystemName": "bird",
       "detailsURL": "https://www.typewhisper.com/addons/parakeet/",
       "releases": [
+        {
+          "version": "1.3.0",
+          "minHostVersion": "1.5.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 3755529,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-parakeet-v1.3.0/ParakeetPlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        },
         {
           "version": "1.2.15",
           "minHostVersion": "1.2.1",
