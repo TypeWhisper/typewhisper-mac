@@ -374,9 +374,10 @@ actor SonioxTranscriptCollector {
             throw PluginTranscriptionError.apiError(message)
         }
 
+        // The finished response can still carry remaining final tokens; process
+        // them before clearing the interim state.
         if json["finished"] as? Bool == true {
             interim = ""
-            return nil
         }
 
         guard let tokens = json["tokens"] as? [[String: Any]] else {
@@ -563,13 +564,14 @@ actor SonioxTranscriptCollector {
 
 // MARK: - Live STT Session
 
-private final class SonioxLiveTranscriptionSession: LiveTranscriptionSession, @unchecked Sendable {
+final class SonioxLiveTranscriptionSession: LiveTranscriptionSession, @unchecked Sendable {
     private struct State {
         var finished = false
         var cancelled = false
     }
 
     private static let finishTimeoutNanoseconds: UInt64 = 800_000_000
+    private static let logger = Logger(subsystem: "com.typewhisper.soniox", category: "LiveSession")
 
     private let webSocketTask: URLSessionWebSocketTask
     private let receiveTask: Task<Void, Never>
@@ -596,9 +598,10 @@ private final class SonioxLiveTranscriptionSession: LiveTranscriptionSession, @u
         languageSelection: PluginLanguageSelection,
         translate: Bool,
         prompt: String?,
-        onProgress: @Sendable @escaping (String) -> Bool
+        onProgress: @Sendable @escaping (String) -> Bool,
+        webSocketURLOverride: URL? = nil
     ) async throws -> SonioxLiveTranscriptionSession {
-        guard let url = URL(string: region.sttRealtimeWebSocketURL) else {
+        guard let url = webSocketURLOverride ?? URL(string: region.sttRealtimeWebSocketURL) else {
             throw PluginTranscriptionError.apiError("Invalid Soniox WebSocket URL")
         }
 
@@ -623,6 +626,10 @@ private final class SonioxLiveTranscriptionSession: LiveTranscriptionSession, @u
             } catch is CancellationError {
                 return
             } catch {
+                // A deliberate teardown (finish timeout / cancel) cancels this task
+                // before cancelling the socket; the resulting receive error must not
+                // poison the collected transcript.
+                if Task.isCancelled { return }
                 await collector.setError(error.localizedDescription)
             }
         }
@@ -679,16 +686,25 @@ private final class SonioxLiveTranscriptionSession: LiveTranscriptionSession, @u
         }
 
         if shouldFinish {
+            let finishStart = CFAbsoluteTimeGetCurrent()
             do {
                 try await webSocketTask.send(.string(#"{"type":"finalize"}"#))
                 try await webSocketTask.send(.data(Data()))
-                try await waitForReceiveTask()
             } catch {
                 if let collectorError = await collector.error {
                     throw PluginTranscriptionError.apiError(collectorError)
                 }
                 await collector.setError(error.localizedDescription)
                 throw PluginTranscriptionError.networkError(error.localizedDescription)
+            }
+            let finishedCleanly = await waitForReceiveTask()
+            let elapsedMs = (CFAbsoluteTimeGetCurrent() - finishStart) * 1000
+            if finishedCleanly {
+                Self.logger.info("Live finish: server confirmed finished in \(String(format: "%.0f", elapsedMs), privacy: .public)ms")
+            } else {
+                // The finalize response tokens have already been collected; do not
+                // block insertion on the server closing the socket.
+                Self.logger.warning("Live finish: server did not send finished within timeout, returning collected transcript after \(String(format: "%.0f", elapsedMs), privacy: .public)ms")
             }
         }
 
@@ -712,18 +728,30 @@ private final class SonioxLiveTranscriptionSession: LiveTranscriptionSession, @u
         webSocketTask.cancel(with: .goingAway, reason: nil)
     }
 
-    private func waitForReceiveTask() async throws {
-        try await withThrowingTaskGroup(of: Void.self) { group in
+    /// Waits for the receive loop to observe the server's `finished` response.
+    /// Returns `false` on timeout. The task group cannot exit while the receive
+    /// loop is still blocked in `receive()` — awaiting `receiveTask.value` does
+    /// not react to cancellation — so on timeout the socket is torn down first
+    /// to unblock the receive loop; otherwise this method would silently wait
+    /// until the server closes the connection (~10s) despite the timeout.
+    private func waitForReceiveTask() async -> Bool {
+        await withTaskGroup(of: Bool.self) { group in
             group.addTask { [receiveTask] in
                 await receiveTask.value
+                return true
             }
             group.addTask {
-                try await Task.sleep(nanoseconds: Self.finishTimeoutNanoseconds)
-                throw PluginTranscriptionError.networkError("Soniox WebSocket did not finish.")
+                try? await Task.sleep(nanoseconds: Self.finishTimeoutNanoseconds)
+                return false
             }
 
-            defer { group.cancelAll() }
-            try await group.next()
+            let finishedCleanly = await group.next() ?? false
+            if !finishedCleanly {
+                receiveTask.cancel()
+                webSocketTask.cancel(with: .normalClosure, reason: nil)
+            }
+            group.cancelAll()
+            return finishedCleanly
         }
     }
 

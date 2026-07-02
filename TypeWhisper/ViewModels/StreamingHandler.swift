@@ -177,21 +177,25 @@ final class StreamingHandler: @unchecked Sendable {
     }
 
     @MainActor
-    func finish() async -> TranscriptionResult? {
+    func finish(finalSamples: [Float]? = nil) async -> TranscriptionResult? {
+        let finishStart = CFAbsoluteTimeGetCurrent()
+        func elapsedMs() -> String { String(format: "%.0f", (CFAbsoluteTimeGetCurrent() - finishStart) * 1000) }
+
         streamingTask?.cancel()
         streamingTask = nil
 
-        guard let handle = sharedState.withLock({ $0.liveSessionHandle }) else {
+        guard let handle = claimLiveSessionHandleForFinish() else {
             clearStreamingState(notifyStreamingStopped: true)
             return nil
         }
 
         let stablePreviewBeforeFinish = sharedState.withLock { $0.confirmedStreamingText }
-        let delta = nextBufferDelta()
+        let delta = nextBufferDelta(finalSamples: finalSamples)
 
         do {
             if !delta.samples.isEmpty {
                 try await handle.session.appendAudio(samples: delta.samples)
+                logger.info("Finish timing: tail appendAudio done elapsedMs=\(elapsedMs(), privacy: .public) tailSamples=\(delta.samples.count, privacy: .public)")
             }
             let result = try await modelManager.finishLiveTranscriptionSession(
                 handle,
@@ -201,6 +205,7 @@ final class StreamingHandler: @unchecked Sendable {
                 task: sharedState.withLock { $0.task },
                 normalizeNumbers: sharedState.withLock { $0.normalizeNumbers }
             )
+            logger.info("Finish timing: live session finalized elapsedMs=\(elapsedMs(), privacy: .public) resultTextLength=\(result.text.count, privacy: .public)")
             let finalResult = Self.resultPreferringStablePreviewIfNeeded(
                 result,
                 stablePreview: stablePreviewBeforeFinish
@@ -212,7 +217,7 @@ final class StreamingHandler: @unchecked Sendable {
             sharedState.withLock { $0.confirmedStreamingText = finalText }
             return finalResult
         } catch {
-            logger.warning("Finalizing live transcription failed: \(error.localizedDescription)")
+            logger.warning("Finalizing live transcription failed: \(error.localizedDescription, privacy: .public) [flushedTailSamples=\(String(describing: delta.samples.count), privacy: .public), elapsedMs=\(elapsedMs(), privacy: .public)]")
             await modelManager.cancelLiveTranscriptionSession(handle)
             if let previewResult = stablePreviewResult(
                 stablePreviewBeforeFinish,
@@ -249,6 +254,14 @@ final class StreamingHandler: @unchecked Sendable {
         }
 
         clearStreamingState(notifyStreamingStopped: true)
+    }
+
+    private func claimLiveSessionHandleForFinish() -> ModelManagerService.LiveTranscriptionSessionHandle? {
+        sharedState.withLock { state in
+            let handle = state.liveSessionHandle
+            state.liveSessionHandle = nil
+            return handle
+        }
     }
 
     private func runLiveSessionLoop(stateCheck: @escaping @MainActor @Sendable () -> Bool) async {
@@ -316,8 +329,15 @@ final class StreamingHandler: @unchecked Sendable {
         }
     }
 
-    private func nextBufferDelta() -> (samples: [Float], nextOffset: Int) {
+    private func nextBufferDelta(finalSamples: [Float]? = nil) -> (samples: [Float], nextOffset: Int) {
         let sampleCursor = sharedState.withLock { $0.sampleCursor }
+        if let finalSamples {
+            let clampedOffset = max(0, min(sampleCursor, finalSamples.count))
+            let samples = Array(finalSamples.dropFirst(clampedOffset))
+            sharedState.withLock { $0.sampleCursor = finalSamples.count }
+            return (samples, finalSamples.count)
+        }
+
         let delta = bufferDeltaProvider(sampleCursor)
         sharedState.withLock { $0.sampleCursor = delta.nextOffset }
         return delta
@@ -533,11 +553,20 @@ final class StreamingHandler: @unchecked Sendable {
         )
     }
 
-    private nonisolated static func isSubstantiveStablePreview(_ preview: String) -> Bool {
+    nonisolated static func isSubstantiveStablePreview(_ preview: String) -> Bool {
         transcriptContentLength(preview) >= 12 || transcriptWords(in: preview).count >= 2
     }
 
     private nonisolated static func looksLikeProviderCorrection(confirmed: String, new: String) -> Bool {
+        let compactConfirmed = compactNormalizedTranscript(confirmed)
+        let compactNew = compactNormalizedTranscript(new)
+        if compactConfirmed == compactNew {
+            return true
+        }
+        if compactConfirmed.count >= 8, compactNew.hasPrefix(compactConfirmed) {
+            return true
+        }
+
         let confirmedScalars = Array(confirmed.unicodeScalars)
         let newScalars = Array(new.unicodeScalars)
         let shortestCount = min(confirmedScalars.count, newScalars.count)
@@ -727,6 +756,14 @@ final class StreamingHandler: @unchecked Sendable {
         text.unicodeScalars.filter { scalar in
             !CharacterSet.whitespacesAndNewlines.contains(scalar)
         }.count
+    }
+
+    private nonisolated static func compactNormalizedTranscript(_ text: String) -> String {
+        text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
+            .unicodeScalars
+            .filter { CharacterSet.alphanumerics.contains($0) }
+            .map(String.init)
+            .joined()
     }
 
     private nonisolated static func transcriptWords(in text: String) -> [(normalized: String, endIndex: String.Index)] {

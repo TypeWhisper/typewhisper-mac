@@ -763,6 +763,49 @@ final class StreamingHandlerTests: XCTestCase {
         XCTAssertEqual(stable, "Ich bin an Koeln.")
     }
 
+    func testStabilizeTextReplacesCompactedProvisionalCorrections() {
+        let updates = [
+            "Fourscore",
+            "Four score",
+            "Four score and se ven",
+            "Four score and seven years a",
+            "Four score and seven years ago our f",
+            "Four score and seven years ago our fathers",
+            "Four score and seven years ago our fathers brought forth",
+        ]
+
+        let stable = updates.reduce("") { confirmed, update in
+            StreamingHandler.stabilizeText(confirmed: confirmed, new: update)
+        }
+
+        XCTAssertEqual(
+            stable,
+            "Four score and seven years ago our fathers brought forth"
+        )
+    }
+
+    func testStabilizeTextDropsRepeatedEarlierPrefixWithGrowingMultilingualTail() {
+        var stable = "Four score and seven years ago our fathers brought forth on this continent a new nation."
+
+        stable = StreamingHandler.stabilizeText(
+            confirmed: stable,
+            new: "brought forth on this continent a new nation. У"
+        )
+        XCTAssertEqual(
+            stable,
+            "Four score and seven years ago our fathers brought forth on this continent a new nation. У"
+        )
+
+        stable = StreamingHandler.stabilizeText(
+            confirmed: stable,
+            new: "brought forth on this continent a new nation. У Лукоморья дуб зелёный"
+        )
+        XCTAssertEqual(
+            stable,
+            "Four score and seven years ago our fathers brought forth on this continent a new nation. У Лукоморья дуб зелёный"
+        )
+    }
+
     func testFinalLiveResultKeepsStablePreviewWhenFinalIsShortUnrelatedTail() {
         let result = StreamingHandler.resultPreferringStablePreviewIfNeeded(
             TranscriptionResult(
@@ -1016,6 +1059,76 @@ final class StreamingHandlerTests: XCTestCase {
         let recorded = await plugin.session.recordedChunks()
         XCTAssertEqual(recorded, chunks.map(\.count))
         XCTAssertEqual(plugin.lastPrompt, "Live Terms")
+    }
+
+    func testLiveSessionFinishSendsTailFromFinalSamplesAfterRecorderDrain() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockLivePlugin()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.live",
+                    name: "Mock Live",
+                    version: "1.0.0",
+                    principalClass: "MockLivePlugin",
+                    requiresAPIKey: false
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+
+        let firstChunk = Array(repeating: Float(0.2), count: 4000)
+        let tailChunk = Array(repeating: Float(0.3), count: 3000)
+        let finalSamples = firstChunk + tailChunk
+        let deltaLock = NSLock()
+        var sentFirstChunk = false
+
+        let handler = StreamingHandler(
+            modelManager: modelManager,
+            bufferProvider: { [] },
+            recentBufferProvider: { _ in [] },
+            bufferDeltaProvider: { offset in
+                deltaLock.lock()
+                defer { deltaLock.unlock() }
+                guard !sentFirstChunk else {
+                    return ([], offset)
+                }
+                sentFirstChunk = true
+                return (firstChunk, firstChunk.count)
+            },
+            bufferedDurationProvider: { Double(finalSamples.count) / 16_000.0 }
+        )
+
+        var activeChecks = 0
+        handler.start(
+            streamPrompt: "Live Terms",
+            engineOverrideId: plugin.providerId,
+            selectedProviderId: plugin.providerId,
+            languageSelection: .exact("en"),
+            task: .transcribe,
+            cloudModelOverride: nil,
+            allowLiveTranscription: true,
+            stateCheck: {
+                activeChecks += 1
+                return activeChecks <= 2
+            }
+        )
+
+        try await Task.sleep(for: .milliseconds(500))
+        let result = await handler.finish(finalSamples: finalSamples)
+
+        XCTAssertEqual(result?.text, "finished")
+        let recorded = await plugin.session.recordedChunks()
+        XCTAssertEqual(recorded, [firstChunk.count, tailChunk.count])
     }
 
     func testLiveSessionProgressAllowsProviderCorrections() async throws {

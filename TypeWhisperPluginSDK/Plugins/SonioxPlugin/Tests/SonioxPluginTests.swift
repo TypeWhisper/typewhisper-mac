@@ -1,4 +1,6 @@
 import Foundation
+import Network
+import os
 import XCTest
 import TypeWhisperPluginSDK
 @_spi(Testing) import TypeWhisperPluginSDKTesting
@@ -679,6 +681,58 @@ final class SonioxPluginTests: XCTestCase {
         XCTAssertEqual(storedError, "Invalid API key")
     }
 
+    func testLiveSessionFinishReturnsCollectedTranscriptWhenServerNeverSendsFinished() async throws {
+        let server = try LocalWebSocketServer { text, server in
+            guard text.contains("finalize") else { return }
+            server.sendText(#"{"tokens":[{"text":"hello","is_final":true},{"text":" world","is_final":true}]}"#)
+        }
+        defer { server.stop() }
+        let port = try await server.start()
+
+        let session = try await SonioxLiveTranscriptionSession.connect(
+            apiKey: "test-key",
+            region: .unitedStates,
+            modelId: "stt-rt-v5",
+            languageSelection: PluginLanguageSelection(requestedLanguage: "en"),
+            translate: false,
+            prompt: nil,
+            onProgress: { _ in true },
+            webSocketURLOverride: URL(string: "ws://127.0.0.1:\(port)")!
+        )
+
+        let start = CFAbsoluteTimeGetCurrent()
+        let result = try await session.finish()
+        let elapsed = CFAbsoluteTimeGetCurrent() - start
+
+        XCTAssertEqual(result.text, "hello world")
+        // The finish timeout is 0.8s; without a working timeout finish() hangs
+        // until the server closes the socket, which this server never does.
+        XCTAssertLessThan(elapsed, 3.0)
+    }
+
+    func testLiveSessionFinishReturnsPromptlyWhenServerConfirmsFinished() async throws {
+        let server = try LocalWebSocketServer { text, server in
+            guard text.contains("finalize") else { return }
+            server.sendText(#"{"tokens":[{"text":"done","is_final":true}],"finished":true}"#)
+        }
+        defer { server.stop() }
+        let port = try await server.start()
+
+        let session = try await SonioxLiveTranscriptionSession.connect(
+            apiKey: "test-key",
+            region: .unitedStates,
+            modelId: "stt-rt-v5",
+            languageSelection: PluginLanguageSelection(requestedLanguage: "en"),
+            translate: false,
+            prompt: nil,
+            onProgress: { _ in true },
+            webSocketURLOverride: URL(string: "ws://127.0.0.1:\(port)")!
+        )
+
+        let result = try await session.finish()
+        XCTAssertEqual(result.text, "done")
+    }
+
     private static func jsonBody(from request: URLRequest) throws -> [String: Any] {
         let data = try XCTUnwrap(request.httpBody)
         return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
@@ -720,6 +774,85 @@ private final class SourceProgressRecorder: @unchecked Sendable {
     func append(_ value: PluginTranscriptionSourceProgress) {
         lock.withLock {
             storage.append(value)
+        }
+    }
+}
+
+/// Minimal loopback WebSocket server for exercising `SonioxLiveTranscriptionSession`
+/// against controlled server behavior (e.g. never sending `finished: true`).
+private final class LocalWebSocketServer: @unchecked Sendable {
+    private let listener: NWListener
+    private let queue = DispatchQueue(label: "LocalWebSocketServer")
+    private let lock = NSLock()
+    private var connection: NWConnection?
+    private let onText: (String, LocalWebSocketServer) -> Void
+
+    init(onText: @escaping (String, LocalWebSocketServer) -> Void) throws {
+        self.onText = onText
+        let parameters = NWParameters.tcp
+        let webSocketOptions = NWProtocolWebSocket.Options()
+        webSocketOptions.autoReplyPing = true
+        parameters.defaultProtocolStack.applicationProtocols.insert(webSocketOptions, at: 0)
+        listener = try NWListener(using: parameters)
+    }
+
+    func start() async throws -> UInt16 {
+        listener.newConnectionHandler = { [weak self] connection in
+            guard let self else { return }
+            self.lock.withLock { self.connection = connection }
+            connection.start(queue: self.queue)
+            self.receiveNextMessage(on: connection)
+        }
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let didResume = OSAllocatedUnfairLock(initialState: false)
+            listener.stateUpdateHandler = { [listener] state in
+                let result: (Result<UInt16, Error>)? = {
+                    switch state {
+                    case .ready:
+                        return .success(listener.port?.rawValue ?? 0)
+                    case .failed(let error):
+                        return .failure(error)
+                    default:
+                        return nil
+                    }
+                }()
+                guard let result else { return }
+                let alreadyResumed = didResume.withLock { resumed in
+                    defer { resumed = true }
+                    return resumed
+                }
+                guard !alreadyResumed else { return }
+                continuation.resume(with: result)
+            }
+            listener.start(queue: queue)
+        }
+    }
+
+    func sendText(_ text: String) {
+        guard let connection = lock.withLock({ connection }) else { return }
+        let metadata = NWProtocolWebSocket.Metadata(opcode: .text)
+        let context = NWConnection.ContentContext(identifier: "text", metadata: [metadata])
+        connection.send(
+            content: Data(text.utf8),
+            contentContext: context,
+            isComplete: true,
+            completion: .contentProcessed { _ in }
+        )
+    }
+
+    func stop() {
+        lock.withLock { connection }?.cancel()
+        listener.cancel()
+    }
+
+    private func receiveNextMessage(on connection: NWConnection) {
+        connection.receiveMessage { [weak self] data, _, _, error in
+            guard let self, error == nil else { return }
+            if let data, let text = String(data: data, encoding: .utf8), !text.isEmpty {
+                self.onText(text, self)
+            }
+            self.receiveNextMessage(on: connection)
         }
     }
 }
