@@ -517,12 +517,11 @@ final class StreamingHandler: @unchecked Sendable {
 
         let finalLength = transcriptContentLength(final)
         let previewLength = transcriptContentLength(preview)
-        let finalWordCount = transcriptWords(in: final).count
         let previewWordCount = transcriptWords(in: preview).count
 
         guard previewLength >= 12 || previewWordCount >= 2 else { return false }
 
-        let finalLooksTiny = finalLength <= 8 || finalWordCount <= 1
+        let finalLooksTiny = finalLength <= 8
         let previewIsMuchLonger = previewLength >= max(12, finalLength * 4)
         return finalLooksTiny && previewIsMuchLonger
     }

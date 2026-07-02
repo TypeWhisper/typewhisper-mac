@@ -134,13 +134,6 @@ if [[ -z "${app_path:-}" ]] || [[ ! -d "$app_path" ]]; then
   exit 1
 fi
 
-if [[ -d "$app_path/Contents/PlugIns" ]]; then
-  while IFS= read -r -d '' test_bundle; do
-    rm -rf "$test_bundle"
-    log "removed stale test bundle: $test_bundle"
-  done < <(find "$app_path/Contents/PlugIns" -maxdepth 1 -name '*.xctest' -type d -print0 2>/dev/null)
-fi
-
 mkdir -p "$install_dir"
 trash_if_present "$installed_app"
 ditto "$app_path" "$installed_app"

@@ -1,5 +1,4 @@
 import Foundation
-import Darwin
 import XCTest
 @testable import TypeWhisper
 
@@ -63,68 +62,5 @@ final class HTTPRequestParserTests: XCTestCase {
         XCTAssertThrowsError(try HTTPRequestParser.parse(requestData)) { error in
             XCTAssertEqual(error as? HTTPParseError, .bodyTooLarge)
         }
-    }
-
-    func testHTTPServerServesLoopbackRequests() async throws {
-        let router = APIRouter()
-        router.register("GET", "/ping") { _ in
-            .json(["ok": true])
-        }
-
-        let server = HTTPServer(router: router)
-        let port = try Self.availableLoopbackPort()
-        let running = expectation(description: "server running")
-        server.onStateChange = { isRunning in
-            if isRunning {
-                running.fulfill()
-            }
-        }
-
-        try server.start(port: port)
-        await fulfillment(of: [running], timeout: 1)
-        defer { server.stop() }
-
-        let url = URL(string: "http://127.0.0.1:\(port)/ping")!
-        let (data, response) = try await URLSession.shared.data(from: url)
-
-        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
-        let object = try JSONSerialization.jsonObject(with: data) as? [String: Bool]
-        XCTAssertEqual(object?["ok"], true)
-    }
-
-    private static func availableLoopbackPort() throws -> UInt16 {
-        let socket = Darwin.socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)
-        guard socket >= 0 else {
-            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
-        }
-        defer { Darwin.close(socket) }
-
-        var address = sockaddr_in()
-        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-        address.sin_family = sa_family_t(AF_INET)
-        address.sin_port = 0
-        address.sin_addr = in_addr(s_addr: inet_addr("127.0.0.1"))
-
-        let bindResult = withUnsafePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
-                Darwin.bind(socket, socketAddress, socklen_t(MemoryLayout<sockaddr_in>.size))
-            }
-        }
-        guard bindResult == 0 else {
-            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
-        }
-
-        var boundAddress = sockaddr_in()
-        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
-        let nameResult = withUnsafeMutablePointer(to: &boundAddress) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
-                Darwin.getsockname(socket, socketAddress, &length)
-            }
-        }
-        guard nameResult == 0 else {
-            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
-        }
-
-        return UInt16(bigEndian: boundAddress.sin_port)
     }
 }

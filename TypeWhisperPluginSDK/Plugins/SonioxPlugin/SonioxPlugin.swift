@@ -484,12 +484,11 @@ actor SonioxTranscriptCollector {
 
         let finalLength = transcriptContentLength(final)
         let previewLength = transcriptContentLength(preview)
-        let finalWordCount = transcriptWords(in: final).count
         let previewWordCount = transcriptWords(in: preview).count
 
         guard previewLength >= 12 || previewWordCount >= 2 else { return false }
 
-        let finalLooksTiny = finalLength <= 8 || finalWordCount <= 1
+        let finalLooksTiny = finalLength <= 8
         let previewIsMuchLonger = previewLength >= max(12, finalLength * 4)
         return finalLooksTiny && previewIsMuchLonger
     }
@@ -625,6 +624,11 @@ final class SonioxLiveTranscriptionSession: LiveTranscriptionSession, @unchecked
                 }
             } catch is CancellationError {
                 return
+            } catch is PluginTranscriptionError {
+                // applyWebSocketResponse stores normalized Soniox API errors in
+                // the collector before throwing; do not store localizedDescription
+                // here or the final error gets prefixed twice.
+                return
             } catch {
                 // A deliberate teardown (finish timeout / cancel) cancels this task
                 // before cancelling the socket; the resulting receive error must not
@@ -673,6 +677,9 @@ final class SonioxLiveTranscriptionSession: LiveTranscriptionSession, @unchecked
             if let collectorError = await collector.error {
                 throw PluginTranscriptionError.apiError(collectorError)
             }
+            if let pluginError = error as? PluginTranscriptionError {
+                throw pluginError
+            }
             await collector.setError(error.localizedDescription)
             throw PluginTranscriptionError.networkError(error.localizedDescription)
         }
@@ -693,6 +700,9 @@ final class SonioxLiveTranscriptionSession: LiveTranscriptionSession, @unchecked
             } catch {
                 if let collectorError = await collector.error {
                     throw PluginTranscriptionError.apiError(collectorError)
+                }
+                if let pluginError = error as? PluginTranscriptionError {
+                    throw pluginError
                 }
                 await collector.setError(error.localizedDescription)
                 throw PluginTranscriptionError.networkError(error.localizedDescription)
@@ -1260,12 +1270,17 @@ final class SonioxPlugin: NSObject,
 
         let chunkSize = 4_096
         var offset = 0
-        while offset < audio.samples.count {
-            let end = min(offset + chunkSize, audio.samples.count)
-            try await session.appendAudio(samples: Array(audio.samples[offset..<end]))
-            offset = end
+        do {
+            while offset < audio.samples.count {
+                let end = min(offset + chunkSize, audio.samples.count)
+                try await session.appendAudio(samples: Array(audio.samples[offset..<end]))
+                offset = end
+            }
+            return try await session.finish()
+        } catch {
+            await session.cancel()
+            throw error
         }
-        return try await session.finish()
     }
 
     private func createStreamingSession(

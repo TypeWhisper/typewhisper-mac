@@ -840,6 +840,23 @@ final class StreamingHandlerTests: XCTestCase {
         XCTAssertNil(result.detectedLanguage)
     }
 
+    func testFinalLiveResultKeepsLongUnsegmentedProviderFinal() {
+        let result = StreamingHandler.resultPreferringStablePreviewIfNeeded(
+            TranscriptionResult(
+                text: "这是一个完整的中文最终结果",
+                detectedLanguage: "zh",
+                duration: 3,
+                processingTime: 0.2,
+                engineUsed: "soniox",
+                segments: []
+            ),
+            stablePreview: "This is a much longer stable preview that should not replace the final"
+        )
+
+        XCTAssertEqual(result.text, "这是一个完整的中文最终结果")
+        XCTAssertEqual(result.detectedLanguage, "zh")
+    }
+
     func testFinishUsesStablePreviewWhenLiveSessionFinalizationFails() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
