@@ -143,6 +143,33 @@ final class ParakeetPluginTests: XCTestCase {
         XCTAssertEqual(request.description, "Parakeet TDT v3 vocabulary")
     }
 
+    func testEnsureVocabularyAssetCreatesMissingTargetDirectory() async throws {
+        let parentDirectory = try makeTemporaryDirectory()
+        let directory = parentDirectory.appendingPathComponent("missing-cache", isDirectory: true)
+        let targetURL = directory.appendingPathComponent(ParakeetPlugin.vocabularyAssetFileName)
+        let downloadedData = Data(#"{"0":"created-directory"}"#.utf8)
+        let recorder = VocabularyFetchRecorder(data: downloadedData)
+        let plugin = makePlugin()
+
+        try await plugin.ensureVocabularyAsset(
+            for: .v2,
+            targetDirectory: directory,
+            fetcher: { url, description in
+                try await recorder.fetch(url: url, description: description)
+            }
+        )
+
+        var isDirectory = ObjCBool(false)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: directory.path, isDirectory: &isDirectory))
+        XCTAssertTrue(isDirectory.boolValue)
+        XCTAssertEqual(try Data(contentsOf: targetURL), downloadedData)
+        let requestCount = await recorder.requestCount()
+        XCTAssertEqual(requestCount, 1)
+        let recordedRequest = await recorder.firstRequest()
+        let request = try XCTUnwrap(recordedRequest)
+        XCTAssertEqual(request.url, ParakeetPlugin.vocabularyAssetURL(for: .v2))
+    }
+
     func testEnsureVocabularyAssetSurfacesFailedFetch() async throws {
         let directory = try makeTemporaryDirectory()
         let targetURL = directory.appendingPathComponent(ParakeetPlugin.vocabularyAssetFileName)

@@ -661,18 +661,21 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         }
 
         let fileManager = FileManager.default
+        var installFailureURL = directory
         do {
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
             let temporaryURL = directory.appendingPathComponent(
                 ".\(Self.vocabularyAssetFileName).\(UUID().uuidString).tmp",
                 isDirectory: false
             )
+            installFailureURL = temporaryURL
             do {
                 try data.write(to: temporaryURL, options: .atomic)
                 if Self.vocabularyAssetExists(at: targetURL) {
                     try? fileManager.removeItem(at: temporaryURL)
                     return
                 }
+                installFailureURL = targetURL
                 if fileManager.fileExists(atPath: targetURL.path) {
                     try fileManager.removeItem(at: targetURL)
                 }
@@ -684,7 +687,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         } catch {
             throw ParakeetVocabularyAssetError.installFailed(
                 version: version,
-                path: targetURL,
+                path: installFailureURL,
                 underlying: error
             )
         }
