@@ -9,17 +9,17 @@
 - Review `README.md`, `SECURITY.md`, `docs/support-matrix.md`, `docs/release-readiness.md`, `TypeWhisperPluginSDK/Plugins/README.md`, and `TypeWhisperPluginSDK/README.md`
 - If README screenshots changed, run `scripts/update-readme-screenshots.sh`; otherwise verify the gallery with `scripts/update-readme-screenshots.sh --check`
 - Confirm marketplace plugin manifests and registry releases carry the current `sdkCompatibilityVersion`
-- Confirm `MARKETING_VERSION = 1.5.0` across the app, CLI, and widgets
-- Prepare or refresh `docs/release-notes/1.5.0.md`
-- If you want to edit the notes directly on GitHub, create or update the draft release for `v1.5.0` before pushing the tag
-- Otherwise the release workflow will publish `docs/release-notes/1.5.0.md` automatically when no release already exists
+- Confirm `MARKETING_VERSION = 1.6.0` across the app, CLI, and widgets
+- Prepare or refresh `docs/release-notes/1.6.0.md`
+- If you want to edit the notes directly on GitHub, create or update the draft release for `v1.6.0` before pushing the tag
+- Otherwise the release workflow will publish `docs/release-notes/1.6.0.md` automatically when no release already exists
 
-## Before `1.5.0-rc1`
+## Before `1.6.0-rc1`
 
 - Confirm `1.3.x` builds continue to use `plugins-v1.json`
-- Confirm `1.4.x`, `1.5.0-rc*`, `1.5.0` daily, and `1.5.0` stable builds use `plugins-community-v1.json`
+- Confirm `1.4.x`, `1.5.x`, `1.6.0-rc*`, `1.6.0` daily, and `1.6.0` stable builds use `plugins-community-v1.json`
 - Confirm community registry entries under `PluginRegistry/community-v1/` set `source` to `community`; omitted `source` values in published feeds must remain official marketplace entries
-- Keep community plugin submissions out of the `1.5` release scope unless they are already bundled or first-party
+- Keep community plugin submissions out of the `1.6` release scope unless they are already bundled or first-party
 - Smoke-test the Integrations hub grouped lists for Built-in, Marketplace, Community, and Manual plugin paths
 - Smoke-test the Installed, Discover, and Manual tabs at desktop and compact window sizes
 - Verify Discover search, the Community include/exclude checkbox, and the capability filter menu
@@ -30,7 +30,7 @@
 
 ## RC Smoke Checks
 
-- Publish `1.5.0-rc*` on the `release-candidate` channel and daily builds on the `daily` channel
+- Publish `1.6.0-rc*` on the `release-candidate` channel and daily builds on the `daily` channel
 - Stable builds must use only the default channel
 - Fresh install
 - Permission recovery
@@ -81,13 +81,13 @@
   - Reorder the selected languages and confirm hint-aware engines receive the ordered list
   - Confirm engines without language-hint support use the first selected language
 - Verify CLI and HTTP API locally
-- Upgrade from `1.4.0` with History, legacy prompts/profiles, Workflows, Dictionary, Snippets, hotkeys, enabled plugins, and update channel preserved
+- Upgrade from `1.5.0` with History, Workflows, Dictionary, Snippets, hotkeys, enabled plugins, and update channel preserved
 
-## Before `1.5.0`
+## Before `1.6.0`
 
-- Observe the latest `1.5.0-rc*` build on real machines for multiple days
+- Observe the latest `1.6.0-rc*` build on real machines for multiple days
 - No open P0/P1 bugs in the core workflow
 - Finalize release notes
 - RC and daily tags must not update Homebrew or trigger stable website messaging
 - Verify DMG, ZIP, and the `release-candidate` appcast entry with `minimumSystemVersion` set to `14.0`
-- Verify Homebrew and the stable appcast update only at the final `1.5.0`
+- Verify Homebrew and the stable appcast update only at the final `1.6.0`

@@ -6,9 +6,9 @@
 
 Speech-to-text and AI text processing for macOS. Transcribe audio using on-device AI models or cloud APIs (Groq, OpenAI, xAI/Grok), then transform the result with reusable workflows. Your voice data stays on your Mac with local models - or use cloud APIs for faster processing.
 
-TypeWhisper `1.5` is the current stable release for macOS. It includes system-wide dictation, file transcription, unified workflows, history, dictionary, snippets, bundled integrations, the community plugin registry, local automation APIs, app-aware insertion, expanded provider support, and local-model reliability improvements. Advanced surfaces like the HTTP API, CLI, widgets, watch folders, and the plugin SDK remain supported for power users and automation.
+TypeWhisper `1.5` is the current stable release for macOS. It includes system-wide dictation, file transcription, unified workflows, history, dictionary, snippets, bundled integrations, the community plugin registry, local automation APIs, app-aware insertion, expanded provider support, and local-model reliability improvements. The `main` branch is now preparing the `1.6` release-candidate line; `1.5` receives hotfixes only from `release/1.5`.
 
-See the [release readiness guide](docs/release-readiness.md), [support matrix](docs/support-matrix.md), and [release checklist](docs/release-checklist.md) for the current release definition and ship gates.
+See the [release readiness guide](docs/release-readiness.md), [support matrix](docs/support-matrix.md), and [release checklist](docs/release-checklist.md) for the active `1.6` release definition and ship gates.
 
 <p align="center">
   <video src="https://github.com/user-attachments/assets/22fe922d-4a4c-47d1-805e-684a148ebd03" autoplay loop muted playsinline width="270"></video>
@@ -130,7 +130,7 @@ brew install --cask typewhisper/tap/typewhisper
 
 Download the latest DMG from [GitHub Releases](https://github.com/TypeWhisper/typewhisper-mac/releases/latest).
 
-Stable direct-download releases use the default Sparkle channel. Release candidates such as `1.5.0-rc*` and daily builds are published as GitHub prereleases, update the shared Sparkle appcast on their own channels, and are excluded from Homebrew.
+Stable direct-download releases use the default Sparkle channel. Release candidates such as `1.6.0-rc*` and daily builds such as `v1.6.0-daily.*` are published as GitHub prereleases, update the shared Sparkle appcast on their own channels, and are excluded from Homebrew.
 Installed builds can switch channels in `Settings -> About` via the `Update Channel` picker.
 
 ## Quick Start
