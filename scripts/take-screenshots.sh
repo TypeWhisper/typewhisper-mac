@@ -12,28 +12,30 @@ SCHEME="TypeWhisper"
 PROJECT="TypeWhisper.xcodeproj"
 APP_NAME="TypeWhisper"
 BUILD_DIR="$PROJECT_DIR/build-screenshots"
-SCREENSHOT_DIR="$PROJECT_DIR/.github/screenshots"
+DEFAULT_SCREENSHOT_DIR="$PROJECT_DIR/.github/screenshots"
+SCREENSHOT_DIR="${SCREENSHOT_DIR:-$DEFAULT_SCREENSHOT_DIR}"
 PROCESS_NAME="TypeWhisper"
+SCREENSHOT_LOCALE="${SCREENSHOT_LOCALE:-auto}"
 
 # Tabs to screenshot (in sidebar order)
-# Format: "tab_label:filename" - tab_label must match the sidebar text exactly
+# Format: "filename|english_label|german_label"
 TABS=(
-    "Home:home"
-    "General:general"
-    "Recording:recording"
-    "Recovery:recovery"
-    "Hotkeys:hotkeys"
-    "File Transcription:file-transcription"
-    "Recorder:recorder"
-    "History:history"
-    "Dictionary:dictionary"
-    "Snippets:snippets"
-    "Workflows:workflows"
-    "Premium:premium"
-    "Integrations:plugins"
-    "Advanced:advanced"
-    "License:license"
-    "About:about"
+    "home|Home|Start"
+    "general|General|Allgemein"
+    "recording|Recording|Aufnahme"
+    "recovery|Recovery|Recovery"
+    "hotkeys|Hotkeys|Tastenkürzel"
+    "file-transcription|File Transcription|Datei-Transkription"
+    "recorder|Recorder|Recorder"
+    "history|History|Verlauf"
+    "dictionary|Dictionary|Wörterbuch"
+    "snippets|Snippets|Snippets"
+    "workflows|Workflows|Workflows"
+    "premium|Premium|Premium"
+    "plugins|Integrations|Integrationen"
+    "advanced|Advanced|Erweitert"
+    "license|License|Lizenz"
+    "about|About|Über"
 )
 
 # ---------------------------------------------------------------------------
@@ -42,16 +44,53 @@ TABS=(
 
 log() { echo "--- $* ---"; }
 
+applescript_list() {
+    local first=true
+    printf '{'
+    for item in "$@"; do
+        local escaped="${item//\\/\\\\}"
+        escaped="${escaped//\"/\\\"}"
+        if [ "$first" = false ]; then
+            printf ', '
+        fi
+        printf '"%s"' "$escaped"
+        first=false
+    done
+    printf '}'
+}
+
+labels_for_entry() {
+    local entry="$1"
+    local filename label_en label_de
+    IFS='|' read -r filename label_en label_de <<< "$entry"
+
+    case "$SCREENSHOT_LOCALE" in
+        en)
+            printf '%s\0%s\0' "$filename" "$label_en"
+            ;;
+        de)
+            printf '%s\0%s\0%s\0' "$filename" "${label_de:-$label_en}" "$label_en"
+            ;;
+        auto)
+            printf '%s\0%s\0' "$filename" "$label_en"
+            if [ -n "${label_de:-}" ] && [ "$label_de" != "$label_en" ]; then
+                printf '%s\0' "$label_de"
+            fi
+            ;;
+    esac
+}
+
 get_settings_window_id() {
-    # Settings window has name="Settings" - layer may be 0 or 3 (floating)
+    # Settings window title is localized - layer may be 0 or 3 (floating)
     swift -e '
 import CoreGraphics
 import Foundation
+let titles: Set<String> = ["Settings", "Einstellungen"]
 let windowList = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as NSArray? ?? []
 for case let w as NSDictionary in windowList {
     let owner = w["kCGWindowOwnerName"] as? String ?? ""
     let name = w["kCGWindowName"] as? String ?? ""
-    if owner == "TypeWhisper" && name == "Settings" {
+    if owner == "TypeWhisper" && titles.contains(name) {
         print(w["kCGWindowNumber"] as? Int ?? 0)
         break
     }
@@ -98,26 +137,41 @@ for case let w as NSDictionary in windowList {
 }
 
 click_sidebar_tab() {
-    local tab_label="$1"
+    local labels
+    labels="$(applescript_list "$@")"
     osascript <<EOF
 tell application "System Events"
     tell process "$PROCESS_NAME"
         set frontmost to true
         delay 0.2
-        tell window "Settings"
+        set targetLabels to $labels
+        set settingsWindow to missing value
+        repeat with w in windows
+            try
+                set windowName to name of w
+                if windowName is "Settings" or windowName is "Einstellungen" then
+                    set settingsWindow to w
+                    exit repeat
+                end if
+            end try
+        end repeat
+        if settingsWindow is missing value then error "Settings window not found"
+
+        tell settingsWindow
             tell outline 1 of scroll area 1 of group 1 of splitter group 1 of group 1
                 set rowList to rows
                 repeat with r in rowList
                     try
                         set cellText to value of static text 1 of UI element 1 of r
-                        if cellText is "$tab_label" then
+                        if targetLabels contains cellText then
                             select r
-                            exit repeat
+                            return cellText
                         end if
                     end try
                 end repeat
             end tell
         end tell
+        error "Sidebar tab not found"
     end tell
 end tell
 EOF
@@ -129,7 +183,16 @@ tell application "System Events"
     tell process "TypeWhisper"
         click menu bar item 1 of menu bar 2
         delay 0.3
-        click menu item "Settings..." of menu 1 of menu bar item 1 of menu bar 2
+        repeat with candidate in menu items of menu 1 of menu bar item 1 of menu bar 2
+            try
+                set itemName to name of candidate
+                if itemName starts with "Settings" or itemName starts with "Einstellungen" then
+                    click candidate
+                    return
+                end if
+            end try
+        end repeat
+        error "Settings menu item not found"
     end tell
 end tell
 EOF
@@ -144,12 +207,34 @@ NOTCH_ONLY=false
 TABS_ONLY=false
 EXPLORE=false
 
-for arg in "$@"; do
-    case "$arg" in
+while (($#)); do
+    case "$1" in
         --skip-build) SKIP_BUILD=true ;;
         --notch-only) NOTCH_ONLY=true ;;
         --tabs-only) TABS_ONLY=true ;;
         --explore) EXPLORE=true ;;
+        --locale)
+            if [ $# -lt 2 ]; then
+                echo "Missing value for --locale"
+                exit 1
+            fi
+            SCREENSHOT_LOCALE="$2"
+            shift
+            ;;
+        --locale=*)
+            SCREENSHOT_LOCALE="${1#*=}"
+            ;;
+        --output-dir)
+            if [ $# -lt 2 ]; then
+                echo "Missing value for --output-dir"
+                exit 1
+            fi
+            SCREENSHOT_DIR="$2"
+            shift
+            ;;
+        --output-dir=*)
+            SCREENSHOT_DIR="${1#*=}"
+            ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo ""
@@ -158,12 +243,28 @@ for arg in "$@"; do
             echo "  --notch-only   Only capture the notch indicator"
             echo "  --tabs-only    Only capture settings tabs"
             echo "  --explore      Dump accessibility hierarchy and exit"
+            echo "  --locale LANG  Sidebar/window language: auto, en, or de (default: auto)"
+            echo "  --output-dir   Directory for screenshots (default: .github/screenshots)"
             echo "  --help         Show this help"
             exit 0
             ;;
-        *) echo "Unknown option: $arg"; exit 1 ;;
+        *) echo "Unknown option: $1"; exit 1 ;;
     esac
+    shift
 done
+
+case "$SCREENSHOT_LOCALE" in
+    auto|en|de) ;;
+    *) echo "Invalid locale: $SCREENSHOT_LOCALE (expected auto, en, or de)"; exit 1 ;;
+esac
+
+case "$SCREENSHOT_DIR" in
+    /*) ;;
+    *) SCREENSHOT_DIR="$PROJECT_DIR/$SCREENSHOT_DIR" ;;
+esac
+
+echo "Screenshot locale: $SCREENSHOT_LOCALE"
+echo "Screenshot output: $SCREENSHOT_DIR"
 
 # ---------------------------------------------------------------------------
 # Step 1: Build (Debug for speed)
@@ -279,12 +380,16 @@ if [ "$NOTCH_ONLY" = false ]; then
     log "Capturing settings tabs"
 
     for entry in "${TABS[@]}"; do
-        tab_label="${entry%%:*}"
-        filename="${entry##*:}"
+        tab_parts=()
+        while IFS= read -r -d '' part; do
+            tab_parts+=("$part")
+        done < <(labels_for_entry "$entry")
+        filename="${tab_parts[0]}"
+        tab_labels=("${tab_parts[@]:1}")
 
-        echo "  Tab: $tab_label -> $filename.png"
+        echo "  Tab: ${tab_labels[*]} -> $filename.png"
 
-        click_sidebar_tab "$tab_label"
+        click_sidebar_tab "${tab_labels[@]}"
         sleep 1
 
         WINDOW_ID=$(get_settings_window_id)
