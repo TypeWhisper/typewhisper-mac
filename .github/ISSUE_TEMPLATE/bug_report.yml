@@ -41,7 +41,7 @@ body:
     validations:
       required: true
   - type: input
-    id: macos-version
+    id: os-version
     attributes:
       label: OS Version
       placeholder: "e.g. macOS 15.3 Sequoia or iOS 27.0"
