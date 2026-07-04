@@ -2,6 +2,18 @@ name: Feature Request
 description: Suggest a new feature or improvement
 labels: ["enhancement"]
 body:
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: Which TypeWhisper app or surface should this apply to?
+      options:
+        - macOS
+        - iOS
+        - iOS Keyboard
+        - Cloud Provider
+    validations:
+      required: true
   - type: textarea
     id: problem
     attributes:

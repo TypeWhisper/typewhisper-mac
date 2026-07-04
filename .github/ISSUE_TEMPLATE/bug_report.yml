@@ -2,6 +2,18 @@ name: Bug Report
 description: Report a bug or unexpected behavior
 labels: ["bug"]
 body:
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: Which TypeWhisper app or surface is affected?
+      options:
+        - macOS
+        - iOS
+        - iOS Keyboard
+        - Cloud Provider
+    validations:
+      required: true
   - type: textarea
     id: description
     attributes:
@@ -31,10 +43,8 @@ body:
   - type: input
     id: macos-version
     attributes:
-      label: macOS Version
-      placeholder: "e.g. macOS 15.3 Sequoia"
-    validations:
-      required: true
+      label: OS Version
+      placeholder: "e.g. macOS 15.3 Sequoia or iOS 27.0"
   - type: input
     id: app-version
     attributes:
