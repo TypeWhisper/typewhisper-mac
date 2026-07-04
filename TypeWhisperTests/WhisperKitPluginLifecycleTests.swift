@@ -144,6 +144,33 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
         #endif
     }
 
+    func testRestoreWhileSameModelLoadingDoesNotStartAnotherLoad() async throws {
+        let modelId = "openai_whisper-large-v3_turbo"
+        let host = try makeHost(
+            defaults: [
+                "selectedModel": modelId,
+                "loadedModel": modelId,
+            ],
+            shouldRestoreLoadedModelsPassively: false
+        )
+        defer { TestSupport.remove(host.pluginDataDirectory) }
+
+        let plugin = WhisperKitPlugin()
+        plugin.activate(host: host)
+        plugin.setLoadingModelForTesting(modelId)
+
+        let generation = plugin.modelLoadGenerationForTesting
+
+        await plugin.restoreLoadedModel(allowDownloads: true)
+
+        XCTAssertEqual(plugin.modelLoadGenerationForTesting, generation)
+        XCTAssertEqual(plugin.loadingModelIdForTesting, modelId)
+        XCTAssertEqual(plugin.currentSettingsActivity?.message, "Optimizing model")
+        #if DEBUG
+        XCTAssertEqual(plugin.restoreLoadedModelInvocationCountForTesting, 1)
+        #endif
+    }
+
     func testUnloadWithoutClearingPersistenceKeepsLoadedModelMarker() throws {
         let host = try makeHost(defaults: [
             "selectedModel": "openai_whisper-tiny",
@@ -279,6 +306,7 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
         XCTAssertEqual(plugin.currentSettingsActivity?.isError, true)
         XCTAssertEqual(host.capabilitiesChangedCount, 1)
         XCTAssertTrue(plugin.currentSettingsActivity?.message.contains("Large v3 Turbo") == true)
+        XCTAssertNil(plugin.loadingModelIdForTesting)
     }
 
     func testActivationDoesNotMarkPluginConfiguredBeforeRestoreSucceeds() async throws {

@@ -528,6 +528,77 @@ final class APIRouterAndHandlersTests: XCTestCase {
         }
     }
 
+    @objc(APIRouterRestoringTranscriptionPlugin)
+    private final class RestoringTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActivityReporting, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.restoring-transcription" }
+        static var pluginName: String { "Restoring Mock Transcription" }
+
+        private let stateLock = NSLock()
+        private var _configured = false
+        private var _currentModelId: String?
+        private var _currentSettingsActivity: PluginSettingsActivity?
+        private var _restoreCount = 0
+
+        var restoreDelay: Duration = .milliseconds(0)
+        var restoreShouldConfigure = true
+
+        var configured: Bool {
+            get { stateLock.withLock { _configured } }
+            set { stateLock.withLock { _configured = newValue } }
+        }
+
+        var currentModelId: String? {
+            get { stateLock.withLock { _currentModelId } }
+            set { stateLock.withLock { _currentModelId = newValue } }
+        }
+
+        var activity: PluginSettingsActivity? {
+            get { stateLock.withLock { _currentSettingsActivity } }
+            set { stateLock.withLock { _currentSettingsActivity = newValue } }
+        }
+
+        var restoreCount: Int {
+            stateLock.withLock { _restoreCount }
+        }
+
+        required override init() {}
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+
+        var providerId: String { "restoring-mock" }
+        var providerDisplayName: String { "Restoring Mock" }
+        var isConfigured: Bool { configured }
+        var transcriptionModels: [PluginModelInfo] { [PluginModelInfo(id: "tiny", displayName: "Tiny")] }
+        var selectedModelId: String? { currentModelId }
+        var currentSettingsActivity: PluginSettingsActivity? { activity }
+        func selectModel(_ modelId: String) {
+            currentModelId = modelId
+        }
+        var supportsTranslation: Bool { false }
+
+        @objc func triggerRestoreModel() {
+            let delay = restoreDelay
+            let shouldConfigure = restoreShouldConfigure
+            stateLock.withLock {
+                _restoreCount += 1
+            }
+
+            Task { [weak self] in
+                try? await Task.sleep(for: delay)
+                guard let self, shouldConfigure else { return }
+                self.stateLock.withLock {
+                    self._configured = true
+                    self._currentSettingsActivity = nil
+                }
+            }
+        }
+
+        func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+            PluginTranscriptionResult(text: "transcribed", detectedLanguage: language)
+        }
+    }
+
     @objc(APIRouterCatalogTranscriptionPlugin)
     private final class CatalogTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.catalog-transcription" }
@@ -6862,6 +6933,136 @@ final class APIRouterAndHandlersTests: XCTestCase {
         )
 
         XCTAssertEqual(plugin.selectedModelId, "alpha", "cloudModelOverride must not persist the plugin's default model")
+    }
+
+    @MainActor
+    func testModelManagerWaitsForBusyTranscriptionRestorePastInitialTimeout() async throws {
+        let selectedEngineKey = UserDefaultsKeys.selectedEngine
+        let originalSelection = UserDefaults.standard.object(forKey: selectedEngineKey)
+        UserDefaults.standard.removeObject(forKey: selectedEngineKey)
+        defer {
+            if let originalSelection {
+                UserDefaults.standard.set(originalSelection, forKey: selectedEngineKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: selectedEngineKey)
+            }
+        }
+
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = RestoringTranscriptionPlugin()
+        plugin.currentModelId = "tiny"
+        plugin.configured = false
+        plugin.activity = PluginSettingsActivity(message: "Optimizing model")
+        plugin.restoreDelay = .milliseconds(60)
+
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.restoring-transcription",
+                    name: "Restoring Mock Transcription",
+                    version: "1.0.0",
+                    principalClass: "APIRouterRestoringTranscriptionPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.setPluginRestoreWaitConfigurationForTesting(
+            initialAttempts: 1,
+            busyAttempts: 20,
+            pollInterval: .milliseconds(10)
+        )
+        modelManager.selectProvider(plugin.providerId)
+
+        let result = try await modelManager.transcribe(
+            audioSamples: [Float](repeating: 0, count: 16_000),
+            language: nil,
+            task: .transcribe,
+            engineOverrideId: nil,
+            cloudModelOverride: nil,
+            prompt: nil
+        )
+
+        XCTAssertEqual(result.text, "transcribed")
+        XCTAssertEqual(plugin.restoreCount, 1)
+    }
+
+    @MainActor
+    func testModelManagerReportsBusyRestoreTimeoutInsteadOfGenericNoModelLoaded() async throws {
+        let selectedEngineKey = UserDefaultsKeys.selectedEngine
+        let originalSelection = UserDefaults.standard.object(forKey: selectedEngineKey)
+        UserDefaults.standard.removeObject(forKey: selectedEngineKey)
+        defer {
+            if let originalSelection {
+                UserDefaults.standard.set(originalSelection, forKey: selectedEngineKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: selectedEngineKey)
+            }
+        }
+
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = RestoringTranscriptionPlugin()
+        plugin.currentModelId = "tiny"
+        plugin.configured = false
+        plugin.activity = PluginSettingsActivity(message: "Optimizing model")
+        plugin.restoreShouldConfigure = false
+
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.restoring-transcription",
+                    name: "Restoring Mock Transcription",
+                    version: "1.0.0",
+                    principalClass: "APIRouterRestoringTranscriptionPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.setPluginRestoreWaitConfigurationForTesting(
+            initialAttempts: 1,
+            busyAttempts: 2,
+            pollInterval: .milliseconds(10)
+        )
+        modelManager.selectProvider(plugin.providerId)
+
+        do {
+            _ = try await modelManager.transcribe(
+                audioSamples: [Float](repeating: 0, count: 16_000),
+                language: nil,
+                task: .transcribe,
+                engineOverrideId: nil,
+                cloudModelOverride: nil,
+                prompt: nil
+            )
+            XCTFail("Expected restore timeout")
+        } catch let error as TranscriptionEngineError {
+            guard case .modelLoadFailed(let detail) = error else {
+                return XCTFail("Expected modelLoadFailed, got \(error)")
+            }
+            XCTAssertTrue(detail.contains("Optimizing model"), "Expected activity in detail, got \(detail)")
+            XCTAssertFalse(error.localizedDescription.contains("No model loaded"))
+        }
+
+        XCTAssertEqual(plugin.restoreCount, 1)
     }
 
     @MainActor

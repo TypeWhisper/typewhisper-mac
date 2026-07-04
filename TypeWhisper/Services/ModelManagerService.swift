@@ -95,6 +95,18 @@ final class ModelManagerService: ObservableObject {
         }
     }
 
+    private enum PluginRestoreResult {
+        case unavailable
+        case configured
+        case failed(String)
+    }
+
+    private enum PluginRestoreWaitResult {
+        case configured
+        case failed(String)
+        case timedOut(activity: PluginSettingsActivity?)
+    }
+
     @Published private(set) var selectedProviderId: String?
 
     @Published var autoUnloadSeconds: Int {
@@ -109,6 +121,9 @@ final class ModelManagerService: ObservableObject {
     private var autoUnloadTargets: [ObjectIdentifier: AutoUnloadTarget] = [:]
     private var autoUnloadDiagnostics: [ObjectIdentifier: ModelAutoUnloadDiagnosticsSnapshot.Entry] = [:]
     private var cancellables = Set<AnyCancellable>()
+    private var pluginConfiguredWaitAttempts = 300
+    private var pluginRestoreBusyWaitAttempts = 5_700
+    private var pluginConfiguredPollInterval: Duration = .milliseconds(100)
 
     private let providerKey = UserDefaultsKeys.selectedEngine
     private let modelKey = UserDefaultsKeys.selectedModelId
@@ -117,6 +132,18 @@ final class ModelManagerService: ObservableObject {
         self.autoUnloadSeconds = ModelAutoUnloadPolicy.effectiveSeconds()
         self.selectedProviderId = UserDefaults.standard.string(forKey: providerKey)
     }
+
+    #if DEBUG
+    func setPluginRestoreWaitConfigurationForTesting(
+        initialAttempts: Int,
+        busyAttempts: Int,
+        pollInterval: Duration
+    ) {
+        pluginConfiguredWaitAttempts = max(0, initialAttempts)
+        pluginRestoreBusyWaitAttempts = max(0, busyAttempts)
+        pluginConfiguredPollInterval = pollInterval
+    }
+    #endif
 
     // MARK: - Public API
 
@@ -1302,7 +1329,10 @@ final class ModelManagerService: ObservableObject {
                 throw modelNotLoadedError(for: plugin)
             }
         } else if !plugin.isConfigured {
-            await triggerRestoreModel(plugin)
+            let restoreResult = await triggerRestoreModel(plugin)
+            if case .failed(let message) = restoreResult {
+                throw TranscriptionEngineError.modelLoadFailed(message)
+            }
         }
 
         return overrideRestoreId
@@ -1356,11 +1386,23 @@ final class ModelManagerService: ObservableObject {
 
     /// Trigger model restore via ObjC dispatch (avoids Swift protocol witness table issues
     /// with dynamically loaded plugin bundles) and poll until ready.
-    private func triggerRestoreModel(_ plugin: TranscriptionEnginePlugin) async {
+    private func triggerRestoreModel(_ plugin: TranscriptionEnginePlugin) async -> PluginRestoreResult {
+        let restoreSelector = NSSelectorFromString("triggerRestoreModel")
         guard let nsPlugin = plugin as? NSObject,
-              nsPlugin.responds(to: NSSelectorFromString("triggerRestoreModel")) else { return }
-        _ = nsPlugin.perform(NSSelectorFromString("triggerRestoreModel"))
-        _ = await waitForPluginConfigured(plugin)
+              nsPlugin.responds(to: restoreSelector) else {
+            return .unavailable
+        }
+        _ = nsPlugin.perform(restoreSelector)
+
+        switch await waitForPluginRestoreConfigured(plugin) {
+        case .configured:
+            return .configured
+        case .failed(let message):
+            return .failed(message)
+        case .timedOut(let activity):
+            guard let activity else { return .unavailable }
+            return .failed(Self.restoreTimeoutMessage(activity: activity))
+        }
     }
 
     private func waitForPluginConfigured(
@@ -1368,14 +1410,82 @@ final class ModelManagerService: ObservableObject {
         selectedModelId: String? = nil,
         stopOnMismatchedSelection: Bool = false
     ) async -> Bool {
-        for _ in 0..<300 {
-            try? await Task.sleep(for: .milliseconds(100))
-            guard plugin.isConfigured else { continue }
-            guard let selectedModelId else { return true }
-            let currentModelId = plugin.selectedModelId
-            if currentModelId == selectedModelId { return true }
-            if stopOnMismatchedSelection, currentModelId != nil { return false }
+        for _ in 0..<pluginConfiguredWaitAttempts {
+            if let configured = pluginConfiguredState(
+                plugin,
+                selectedModelId: selectedModelId,
+                stopOnMismatchedSelection: stopOnMismatchedSelection
+            ) {
+                return configured
+            }
+            try? await Task.sleep(for: pluginConfiguredPollInterval)
         }
-        return false
+
+        return pluginConfiguredState(
+            plugin,
+            selectedModelId: selectedModelId,
+            stopOnMismatchedSelection: stopOnMismatchedSelection
+        ) ?? false
+    }
+
+    private func waitForPluginRestoreConfigured(_ plugin: TranscriptionEnginePlugin) async -> PluginRestoreWaitResult {
+        var latestActivity: PluginSettingsActivity?
+
+        for _ in 0..<pluginConfiguredWaitAttempts {
+            if plugin.isConfigured { return .configured }
+            if let activity = pluginSettingsActivity(plugin) {
+                latestActivity = activity
+                if activity.isError {
+                    return .failed(activity.message)
+                }
+            }
+            try? await Task.sleep(for: pluginConfiguredPollInterval)
+        }
+
+        if plugin.isConfigured { return .configured }
+
+        guard latestActivity != nil else {
+            return .timedOut(activity: nil)
+        }
+
+        for _ in 0..<pluginRestoreBusyWaitAttempts {
+            if plugin.isConfigured { return .configured }
+            guard let activity = pluginSettingsActivity(plugin) else {
+                return .timedOut(activity: latestActivity)
+            }
+            latestActivity = activity
+            if activity.isError {
+                return .failed(activity.message)
+            }
+            try? await Task.sleep(for: pluginConfiguredPollInterval)
+        }
+
+        if plugin.isConfigured { return .configured }
+        return .timedOut(activity: latestActivity)
+    }
+
+    private func pluginConfiguredState(
+        _ plugin: TranscriptionEnginePlugin,
+        selectedModelId: String?,
+        stopOnMismatchedSelection: Bool
+    ) -> Bool? {
+        guard plugin.isConfigured else { return nil }
+        guard let selectedModelId else { return true }
+        let currentModelId = plugin.selectedModelId
+        if currentModelId == selectedModelId { return true }
+        if stopOnMismatchedSelection, currentModelId != nil { return false }
+        return nil
+    }
+
+    private func pluginSettingsActivity(_ plugin: TranscriptionEnginePlugin) -> PluginSettingsActivity? {
+        (plugin as? any PluginSettingsActivityReporting)?.currentSettingsActivity
+    }
+
+    private static func restoreTimeoutMessage(activity: PluginSettingsActivity) -> String {
+        let message = activity.message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !message.isEmpty else {
+            return "Timed out while restoring the selected model."
+        }
+        return "Timed out while restoring the selected model: \(message)."
     }
 }
