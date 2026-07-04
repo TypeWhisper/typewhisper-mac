@@ -49,13 +49,25 @@
       "author": "TypeWhisper",
       "description": "Local speech-to-text powered by WhisperKit. 8 model sizes, 99 languages, streaming support.",
       "descriptions": {
-        "de": "Lokale Spracherkennung mit WhisperKit. 8 Modellgroessen, 99 Sprachen, Streaming-Unterstuetzung."
+        "de": "Lokale Spracherkennung mit WhisperKit. 8 Modellgr\u00f6\u00dfen, 99 Sprachen, Streaming-Unterst\u00fctzung.",
+        "ja": "WhisperKit\u306b\u3088\u308b\u30ed\u30fc\u30ab\u30eb\u97f3\u58f0\u8a8d\u8b58\u3067\u3059\u30028\u7a2e\u985e\u306e\u30e2\u30c7\u30eb\u30b5\u30a4\u30ba\u300199\u8a00\u8a9e\u3001\u30b9\u30c8\u30ea\u30fc\u30df\u30f3\u30b0\u306b\u5bfe\u5fdc\u3057\u307e\u3059\u3002"
       },
       "category": "transcription",
       "downloadCount": 11052,
       "iconSystemName": "waveform",
       "detailsURL": "https://www.typewhisper.com/addons/whisperkit/",
       "releases": [
+        {
+          "version": "1.1.0",
+          "minHostVersion": "1.5.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 1923389,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-whisperkit-v1.1.0/WhisperKitPlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        },
         {
           "version": "1.0.24",
           "minHostVersion": "1.4.0",
