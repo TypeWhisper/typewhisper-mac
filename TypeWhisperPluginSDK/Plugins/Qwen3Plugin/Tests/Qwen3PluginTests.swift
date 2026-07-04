@@ -153,20 +153,87 @@ final class Qwen3PluginTests: XCTestCase {
         )
     }
 
+    func testRestoreCandidatesUseDownloadedSelectedModelWithoutLoadedModel() throws {
+        let model = try XCTUnwrap(Qwen3Plugin.availableModels.first { $0.id == "qwen3-asr-1.7b-8bit" })
+        let host = try PluginTestHostServices(
+            defaults: ["selectedModel": model.id],
+            shouldRestoreLoadedModelsPassively: false
+        )
+        let plugin = Qwen3Plugin()
+
+        plugin.activate(host: host)
+        try makeDownloadedModelDirectory(model, host: host)
+
+        XCTAssertNil(host.userDefault(forKey: "loadedModel"))
+        XCTAssertEqual(plugin.selectedModelId, model.id)
+        XCTAssertEqual(plugin.downloadedModels.map(\.id), [model.id])
+        XCTAssertEqual(plugin.restoreCandidateModelIds(allowDownloads: false), [model.id])
+    }
+
+    func testDownloadedModelSelectionIsRestoreableWithoutDownloadingFallbacks() throws {
+        let model = try XCTUnwrap(Qwen3Plugin.availableModels.first { $0.id == "qwen3-asr-1.7b-8bit" })
+        let host = try PluginTestHostServices(shouldRestoreLoadedModelsPassively: false)
+        let plugin = Qwen3Plugin()
+
+        plugin.activate(host: host)
+        try makeDownloadedModelDirectory(model, host: host)
+
+        XCTAssertTrue(plugin.shouldRestoreDownloadedSelection(model.id, previousLoadedModelId: nil))
+        XCTAssertFalse(plugin.shouldRestoreDownloadedSelection(model.id, previousLoadedModelId: model.id))
+        XCTAssertEqual(plugin.restoreCandidateModelIds(preferredModelId: model.id, allowDownloads: false), [model.id])
+    }
+
+    func testRestoreCandidatesFallBackToSoleDownloadedModelWithoutSelection() throws {
+        let model = try XCTUnwrap(Qwen3Plugin.availableModels.first { $0.id == "qwen3-asr-1.7b-8bit" })
+        let host = try PluginTestHostServices(shouldRestoreLoadedModelsPassively: false)
+        let plugin = Qwen3Plugin()
+
+        plugin.activate(host: host)
+        try makeDownloadedModelDirectory(model, host: host)
+
+        XCTAssertNil(plugin.selectedModelId)
+        XCTAssertEqual(plugin.downloadedModels.map(\.id), [model.id])
+        XCTAssertEqual(plugin.restoreCandidateModelIds(allowDownloads: false), [model.id])
+    }
+
+    func testUndownloadedModelSelectionDoesNotRestoreOrDownload() throws {
+        let model = try XCTUnwrap(Qwen3Plugin.availableModels.first { $0.id == "qwen3-asr-1.7b-8bit" })
+        let host = try PluginTestHostServices(shouldRestoreLoadedModelsPassively: false)
+        let plugin = Qwen3Plugin()
+
+        plugin.activate(host: host)
+        plugin.selectModel(model.id)
+
+        XCTAssertEqual(plugin.selectedModelId, model.id)
+        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, model.id)
+        XCTAssertFalse(plugin.shouldRestoreDownloadedSelection(model.id, previousLoadedModelId: nil))
+        XCTAssertTrue(plugin.restoreCandidateModelIds(preferredModelId: model.id, allowDownloads: false).isEmpty)
+        XCTAssertNil(host.userDefault(forKey: "loadedModel"))
+    }
+
+    func testRestoreCandidatesDoNotDefaultToUndownloadedModel() throws {
+        let host = try PluginTestHostServices(shouldRestoreLoadedModelsPassively: false)
+        let plugin = Qwen3Plugin()
+
+        plugin.activate(host: host)
+
+        XCTAssertNil(plugin.selectedModelId)
+        XCTAssertTrue(plugin.downloadedModels.isEmpty)
+        XCTAssertTrue(plugin.restoreCandidateModelIds(allowDownloads: false).isEmpty)
+    }
+
     func testDeleteDownloadedModelRemovesCacheAndClearsSelection() async throws {
         let model = try XCTUnwrap(Qwen3Plugin.availableModels.first)
-        let host = try PluginTestHostServices(defaults: ["selectedModel": model.id])
+        let host = try PluginTestHostServices(
+            defaults: ["selectedModel": model.id],
+            shouldRestoreLoadedModelsPassively: false
+        )
         let plugin = Qwen3Plugin()
 
         plugin.activate(host: host)
         host.setUserDefault(model.id, forKey: "loadedModel")
 
-        let modelDirectory = host.pluginDataDirectory
-            .appendingPathComponent("models", isDirectory: true)
-            .appendingPathComponent("mlx-audio", isDirectory: true)
-            .appendingPathComponent(model.repoId.replacingOccurrences(of: "/", with: "_"), isDirectory: true)
-        try FileManager.default.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
-        try Data("partial".utf8).write(to: modelDirectory.appendingPathComponent("model.safetensors"))
+        let modelDirectory = try makeDownloadedModelDirectory(model, host: host)
 
         XCTAssertEqual(plugin.downloadedModels.map(\.id), [model.id])
 
@@ -176,5 +243,19 @@ final class Qwen3PluginTests: XCTestCase {
         XCTAssertNil(plugin.selectedModelId)
         XCTAssertNil(host.userDefault(forKey: "selectedModel"))
         XCTAssertNil(host.userDefault(forKey: "loadedModel"))
+    }
+
+    @discardableResult
+    private func makeDownloadedModelDirectory(
+        _ model: Qwen3ModelDef,
+        host: PluginTestHostServices
+    ) throws -> URL {
+        let modelDirectory = host.pluginDataDirectory
+            .appendingPathComponent("models", isDirectory: true)
+            .appendingPathComponent("mlx-audio", isDirectory: true)
+            .appendingPathComponent(model.repoId.replacingOccurrences(of: "/", with: "_"), isDirectory: true)
+        try FileManager.default.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
+        try Data("partial".utf8).write(to: modelDirectory.appendingPathComponent("model.safetensors"))
+        return modelDirectory
     }
 }

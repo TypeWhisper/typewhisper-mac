@@ -44,7 +44,6 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     func activate(host: HostServices) {
         self.host = host
         _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
-            ?? Self.availableModels.first?.id
         _hfToken = PluginHuggingFaceTokenHelper.loadToken(from: host)
 
         if shouldRestoreLoadedModelsPassively {
@@ -135,8 +134,25 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     var selectedModelId: String? { _selectedModelId }
 
     func selectModel(_ modelId: String) {
+        let previousLoadedModelId = loadedModelId
+        let shouldClearLoadedModel = previousLoadedModelId != nil && previousLoadedModelId != modelId
         _selectedModelId = modelId
         host?.setUserDefault(modelId, forKey: "selectedModel")
+
+        if shouldClearLoadedModel {
+            model = nil
+            loadedModelId = nil
+            modelState = .notLoaded
+            host?.setUserDefault(nil, forKey: "loadedModel")
+            Self.scheduleRuntimeCacheClearWhenInferenceIsIdle()
+            host?.notifyCapabilitiesChanged()
+        }
+
+        guard shouldRestoreDownloadedSelection(modelId, previousLoadedModelId: previousLoadedModelId) else {
+            return
+        }
+
+        Task { await restoreLoadedModel(allowDownloads: false, preferredModelId: modelId) }
     }
 
     var supportsTranslation: Bool { false }
@@ -232,7 +248,11 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     }
 
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
-    @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: true) } }
+    @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: false) } }
+    @objc(triggerRestoreModelForModel:) func triggerRestoreModel(forModel modelId: NSString?) {
+        let preferredModelId = modelId.map(String.init)
+        Task { await restoreLoadedModel(allowDownloads: false, preferredModelId: preferredModelId) }
+    }
 
     func unloadModel(clearPersistence: Bool = true) {
         model = nil
@@ -256,13 +276,68 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         }
     }
 
-    func restoreLoadedModel(allowDownloads: Bool = true) async {
-        guard let savedId = host?.userDefault(forKey: "loadedModel") as? String,
-              let modelDef = Self.availableModels.first(where: { $0.id == savedId }) else {
-            return
+    func restoreLoadedModel(allowDownloads: Bool = false) async {
+        await restoreLoadedModel(allowDownloads: allowDownloads, preferredModelId: nil)
+    }
+
+    func restoreLoadedModel(allowDownloads: Bool = false, preferredModelId: String?) async {
+        for modelId in restoreCandidateModelIds(
+            preferredModelId: preferredModelId,
+            allowDownloads: allowDownloads
+        ) {
+            guard let modelDef = Self.availableModels.first(where: { $0.id == modelId }) else {
+                continue
+            }
+            do {
+                try await loadModel(modelDef)
+                return
+            } catch {
+                continue
+            }
         }
-        guard allowDownloads || hasDownloadedModel(modelDef) else { return }
-        try? await loadModel(modelDef)
+    }
+
+    func restoreCandidateModelIds(
+        preferredModelId: String? = nil,
+        allowDownloads: Bool = false
+    ) -> [String] {
+        var candidateIds: [String] = []
+
+        func appendCandidate(_ modelId: String?) {
+            guard let modelId, !modelId.isEmpty else { return }
+            guard Self.availableModels.contains(where: { $0.id == modelId }) else { return }
+            guard !candidateIds.contains(modelId) else { return }
+            candidateIds.append(modelId)
+        }
+
+        appendCandidate(preferredModelId)
+        appendCandidate(host?.userDefault(forKey: "loadedModel") as? String)
+        appendCandidate(_selectedModelId)
+
+        let downloadedIds = downloadedModels.map(\.id)
+        if downloadedIds.count == 1 {
+            appendCandidate(downloadedIds[0])
+        }
+
+        guard !allowDownloads else { return candidateIds }
+
+        return candidateIds.filter { modelId in
+            guard let modelDef = Self.availableModels.first(where: { $0.id == modelId }) else {
+                return false
+            }
+            return hasDownloadedModel(modelDef)
+        }
+    }
+
+    func shouldRestoreDownloadedSelection(
+        _ modelId: String,
+        previousLoadedModelId: String?
+    ) -> Bool {
+        guard previousLoadedModelId != modelId else { return false }
+        guard let modelDef = Self.availableModels.first(where: { $0.id == modelId }) else {
+            return false
+        }
+        return hasDownloadedModel(modelDef)
     }
 
     private func hasDownloadedModel(_ modelDef: Qwen3ModelDef) -> Bool {
