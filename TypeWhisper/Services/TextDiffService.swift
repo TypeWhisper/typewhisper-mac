@@ -136,10 +136,13 @@ final class TextDiffService {
             return []
         }
 
-        var suggestions: [CorrectionSuggestion] = []
-        var seenOriginals = Set<String>()
+        var suggestion: CorrectionSuggestion?
 
         for (originalToken, editedToken) in zip(originalTokens, editedTokens) where originalToken != editedToken {
+            guard suggestion == nil else {
+                return []
+            }
+
             let originalStripped = Self.strippedWordToken(originalToken)
             let editedStripped = Self.strippedWordToken(editedToken)
 
@@ -156,23 +159,14 @@ final class TextDiffService {
                 return []
             }
 
-            let originalKey = originalStripped.lowercased()
-            guard !seenOriginals.contains(originalKey) else {
-                return []
-            }
-
-            seenOriginals.insert(originalKey)
-            suggestions.append(CorrectionSuggestion(
+            suggestion = CorrectionSuggestion(
                 original: originalStripped,
                 replacement: editedStripped
-            ))
-
-            guard suggestions.count <= maxSuggestions else {
-                return []
-            }
+            )
         }
 
-        return suggestions
+        guard let suggestion else { return [] }
+        return [suggestion]
     }
 
     private static func wordTokens(in text: String) -> [String] {

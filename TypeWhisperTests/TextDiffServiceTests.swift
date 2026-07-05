@@ -26,21 +26,36 @@ final class TextDiffServiceTests: XCTestCase {
         XCTAssertTrue(suggestions.isEmpty)
     }
 
-    func testHighConfidenceExtractionFindsUpToThreeSingleTokenReplacements() {
+    func testHighConfidenceExtractionFindsSingleLocalTokenReplacement() {
         let service = TextDiffService()
 
         let suggestions = service.extractHighConfidenceCorrections(
-            original: "teh langauge recieved",
-            edited: "the language received"
+            original: "please use teh word",
+            edited: "please use the word"
         )
 
-        XCTAssertEqual(suggestions.count, 3)
-        XCTAssertEqual(suggestions.map(\.original), ["teh", "langauge", "recieved"])
-        XCTAssertEqual(suggestions.map(\.replacement), ["the", "language", "received"])
+        XCTAssertEqual(suggestions.count, 1)
+        XCTAssertEqual(suggestions.first?.original, "teh")
+        XCTAssertEqual(suggestions.first?.replacement, "the")
     }
 
     func testHighConfidenceExtractionSkipsAmbiguousAndLowSignalEdits() {
         let service = TextDiffService()
+
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: "teh langauge",
+            edited: "the language"
+        ).isEmpty)
+
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: "remove this sentence",
+            edited: "write new copy"
+        ).isEmpty)
+
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: "remove this sentence",
+            edited: ""
+        ).isEmpty)
 
         XCTAssertTrue(service.extractHighConfidenceCorrections(
             original: "teh quick fox",
