@@ -3,6 +3,7 @@ import SwiftData
 
 @Model
 final class UsageStatisticsDay {
+    @Attribute(.unique)
     var day: Date
     var transcriptionCount: Int
     var totalWords: Int

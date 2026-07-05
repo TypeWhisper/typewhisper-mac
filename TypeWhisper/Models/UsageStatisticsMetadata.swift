@@ -3,6 +3,7 @@ import SwiftData
 
 @Model
 final class UsageStatisticsMetadata {
+    @Attribute(.unique)
     var key: String
     var value: String
 

@@ -102,38 +102,46 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
             return
         }
 
-        upsertDay(
-            timestamp: timestamp,
-            wordsCount: wordsCount,
-            durationSeconds: durationSeconds,
-            appBundleIdentifier: appBundleIdentifier
-        )
-        save()
-        fetchDays()
+        do {
+            try upsertDay(
+                timestamp: timestamp,
+                wordsCount: wordsCount,
+                durationSeconds: durationSeconds,
+                appBundleIdentifier: appBundleIdentifier
+            )
+            save()
+            fetchDays()
+        } catch {
+            usageStatisticsLogger.error("Failed to record usage statistics: \(error.localizedDescription)")
+        }
     }
 
     func backfillFromHistoryIfNeeded(_ records: [TranscriptionRecord]) {
         guard !historyBackfillCompleted else { return }
 
-        for record in records {
-            let wordsCount = record.wordsCount > 0
-                ? record.wordsCount
-                : record.finalText.split(separator: " ").count
-            guard wordsCount > 0,
-                  record.durationSeconds.isFinite,
-                  record.durationSeconds >= 0 else {
-                continue
+        do {
+            for record in records {
+                let wordsCount = record.wordsCount > 0
+                    ? record.wordsCount
+                    : record.finalText.split(separator: " ").count
+                guard wordsCount > 0,
+                      record.durationSeconds.isFinite,
+                      record.durationSeconds >= 0 else {
+                    continue
+                }
+                try upsertDay(
+                    timestamp: record.timestamp,
+                    wordsCount: wordsCount,
+                    durationSeconds: record.durationSeconds,
+                    appBundleIdentifier: record.appBundleIdentifier
+                )
             }
-            upsertDay(
-                timestamp: record.timestamp,
-                wordsCount: wordsCount,
-                durationSeconds: record.durationSeconds,
-                appBundleIdentifier: record.appBundleIdentifier
-            )
+            try setHistoryBackfillCompleted(true)
+            save()
+            fetchDays()
+        } catch {
+            usageStatisticsLogger.error("Failed to backfill usage statistics: \(error.localizedDescription)")
         }
-        setHistoryBackfillCompleted(true)
-        save()
-        fetchDays()
     }
 
     func summary(from start: Date?, to end: Date = Date()) -> UsageStatisticsSummary {
@@ -191,7 +199,7 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
             for day in try modelContext.fetch(FetchDescriptor<UsageStatisticsDay>()) {
                 modelContext.delete(day)
             }
-            setHistoryBackfillCompleted(true)
+            try setHistoryBackfillCompleted(true)
             save()
             fetchDays()
         } catch {
@@ -205,7 +213,7 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
             for day in try modelContext.fetch(FetchDescriptor<UsageStatisticsDay>()) {
                 modelContext.delete(day)
             }
-            setHistoryBackfillCompleted(false)
+            try setHistoryBackfillCompleted(false)
             save()
             fetchDays()
             backfillFromHistoryIfNeeded(records)
@@ -216,7 +224,12 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
     #endif
 
     private var historyBackfillCompleted: Bool {
-        metadataValue(for: Self.historyBackfillCompletedKey) == "true"
+        do {
+            return try metadataValue(for: Self.historyBackfillCompletedKey) == "true"
+        } catch {
+            usageStatisticsLogger.error("Failed to read usage statistics metadata: \(error.localizedDescription)")
+            return true
+        }
     }
 
     private func upsertDay(
@@ -224,13 +237,16 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
         wordsCount: Int,
         durationSeconds: Double,
         appBundleIdentifier: String?
-    ) {
+    ) throws {
         let dayStart = calendar.startOfDay(for: timestamp)
-        let statisticsDay = findDay(dayStart) ?? {
+        let statisticsDay: UsageStatisticsDay
+        if let existingDay = try findDay(dayStart) {
+            statisticsDay = existingDay
+        } else {
             let day = UsageStatisticsDay(day: dayStart)
             modelContext.insert(day)
-            return day
-        }()
+            statisticsDay = day
+        }
         statisticsDay.add(
             wordsCount: wordsCount,
             durationSeconds: durationSeconds,
@@ -249,9 +265,9 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
         }
     }
 
-    private func findDay(_ day: Date) -> UsageStatisticsDay? {
+    private func findDay(_ day: Date) throws -> UsageStatisticsDay? {
         let descriptor = FetchDescriptor<UsageStatisticsDay>()
-        guard let existing = try? modelContext.fetch(descriptor) else { return nil }
+        let existing = try modelContext.fetch(descriptor)
         return existing.first { $0.day == day }
     }
 
@@ -270,20 +286,19 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
                 )
             }
         } catch {
+            usageStatisticsLogger.error("Failed to fetch usage statistics days: \(error.localizedDescription)")
             days = []
         }
     }
 
-    private func metadataValue(for key: String) -> String? {
-        guard let metadata = try? modelContext.fetch(FetchDescriptor<UsageStatisticsMetadata>()) else {
-            return nil
-        }
+    private func metadataValue(for key: String) throws -> String? {
+        let metadata = try modelContext.fetch(FetchDescriptor<UsageStatisticsMetadata>())
         return metadata.first { $0.key == key }?.value
     }
 
-    private func setHistoryBackfillCompleted(_ completed: Bool) {
+    private func setHistoryBackfillCompleted(_ completed: Bool) throws {
         let value = completed ? "true" : "false"
-        if let existing = try? modelContext.fetch(FetchDescriptor<UsageStatisticsMetadata>())
+        if let existing = try modelContext.fetch(FetchDescriptor<UsageStatisticsMetadata>())
             .first(where: { $0.key == Self.historyBackfillCompletedKey }) {
             existing.value = value
         } else {

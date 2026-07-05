@@ -76,8 +76,8 @@ final class UsageStatisticsServiceTests: XCTestCase {
         let directory = try TestSupport.makeTemporaryDirectory(prefix: "UsageStatisticsDashboard")
         defer { TestSupport.remove(directory) }
 
-        let calendar = Self.utcCalendar()
-        let now = Self.date(year: 2026, month: 7, day: 5, hour: 12, calendar: calendar)
+        let calendar = Calendar.current
+        let now = calendar.date(byAdding: .hour, value: 12, to: calendar.startOfDay(for: Date()))!
         let historyService = HistoryService(appSupportDirectory: directory)
         historyService.clearAll()
         historyService.addRecord(
