@@ -229,7 +229,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         let didReportProgress = await progressReported.wait()
         XCTAssertTrue(didReportProgress, "Timed out waiting for transcription progress callback")
 
-        XCTAssertEqual(viewModel.files.first?.phaseDescription, "Transcribing")
+        XCTAssertEqual(viewModel.files.first?.phaseDescription, String(localized: "Transcribing"))
         XCTAssertEqual(viewModel.files.first?.progressText, "Partial transcript")
         await finishRunner.open()
         try await waitForBatchToFinish(viewModel)
@@ -275,7 +275,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertTrue(didReportProgress, "Timed out waiting for source progress callback")
 
         let item = try XCTUnwrap(viewModel.files.first)
-        XCTAssertEqual(item.phaseDescription, "Transcribing")
+        XCTAssertEqual(item.phaseDescription, String(localized: "Transcribing"))
         XCTAssertEqual(item.progressFraction, 0.25)
         XCTAssertEqual(item.progressText, "Minute one")
         XCTAssertEqual(item.sourceProgress?.processedDuration, 60)
