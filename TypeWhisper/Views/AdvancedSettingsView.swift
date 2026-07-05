@@ -15,6 +15,7 @@ struct AdvancedSettingsView: View {
     @State private var cliSymlinkTarget = ""
     @State private var raycastInstalled = false
     @State private var showClearMemoryConfirmation = false
+    @State private var showClearUsageStatisticsConfirmation = false
     @State private var showDiagnosticsExportError = false
     @State private var diagnosticsExportErrorMessage = ""
 
@@ -292,6 +293,22 @@ struct AdvancedSettingsView: View {
                             info: String(localized: "Older entries are automatically removed at app launch.")
                         )
                     }
+                }
+
+                Button(role: .destructive) {
+                    showClearUsageStatisticsConfirmation = true
+                } label: {
+                    Label(String(localized: "Clear Usage Statistics"), systemImage: "trash")
+                }
+                .confirmationDialog(
+                    String(localized: "Clear Usage Statistics?"),
+                    isPresented: $showClearUsageStatisticsConfirmation
+                ) {
+                    Button(String(localized: "Clear Statistics"), role: .destructive) {
+                        ServiceContainer.shared.usageStatisticsService.clearUsageStatistics()
+                    }
+                } message: {
+                    Text(String(localized: "This will permanently delete aggregate word, app, time-saved, and activity statistics. Transcription history entries are unchanged."))
                 }
             }
 

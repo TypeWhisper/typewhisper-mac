@@ -9,6 +9,7 @@ final class HistoryServiceTests: XCTestCase {
 
         let service = HistoryService(appSupportDirectory: appSupportDirectory)
         service.clearAll()
+        let usageStatisticsService = UsageStatisticsService(appSupportDirectory: appSupportDirectory)
 
         service.addRecord(
             rawText: "Weekly planning meeting",
@@ -39,11 +40,17 @@ final class HistoryServiceTests: XCTestCase {
         let staleRecord = try XCTUnwrap(service.records.first(where: { $0.finalText == "Older note" }))
         staleRecord.timestamp = Calendar.current.date(byAdding: .day, value: -120, to: Date())!
         service.updateRecord(staleRecord, finalText: staleRecord.finalText)
+        usageStatisticsService.backfillFromHistoryIfNeeded(service.records)
 
         service.purgeOldRecords(retentionDays: 30)
 
         XCTAssertEqual(service.records.count, 1)
         XCTAssertEqual(service.totalRecords, 1)
         XCTAssertEqual(service.totalWords, 3)
+
+        let allTimeUsage = usageStatisticsService.summary(from: nil)
+        XCTAssertEqual(allTimeUsage.transcriptionCount, 2)
+        XCTAssertEqual(allTimeUsage.words, 5)
+        XCTAssertEqual(allTimeUsage.appCount, 2)
     }
 }

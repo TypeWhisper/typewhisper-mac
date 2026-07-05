@@ -12,6 +12,7 @@ final class ServiceContainer: ObservableObject {
     let hotkeyService: HotkeyService
     let textInsertionService: TextInsertionService
     let historyService: HistoryService
+    let usageStatisticsService: UsageStatisticsService
     let recentTranscriptionStore: RecentTranscriptionStore
     let textDiffService: TextDiffService
     let profileService: ProfileService
@@ -75,6 +76,7 @@ final class ServiceContainer: ObservableObject {
         hotkeyService = HotkeyService()
         textInsertionService = TextInsertionService()
         historyService = HistoryService()
+        usageStatisticsService = UsageStatisticsService()
         recentTranscriptionStore = RecentTranscriptionStore()
         textDiffService = TextDiffService()
         profileService = ProfileService()
@@ -110,7 +112,10 @@ final class ServiceContainer: ObservableObject {
         pluginManager = PluginManager()
         pluginRegistryService = PluginRegistryService()
         termPackRegistryService = TermPackRegistryService()
-        widgetDataService = WidgetDataService(historyService: historyService)
+        widgetDataService = WidgetDataService(
+            historyService: historyService,
+            usageStatisticsService: usageStatisticsService
+        )
         memoryService = MemoryService(promptProcessingService: promptProcessingService)
         appFormatterService = AppFormatterService()
         dictationPunctuationProfileStore = DictationPunctuationProfileStore()
@@ -141,6 +146,7 @@ final class ServiceContainer: ObservableObject {
             modelManager: modelManagerService,
             historyService: historyService,
             audioFileService: audioFileService,
+            usageStatisticsRecorder: usageStatisticsService,
             licenseService: licenseService
         )
         dictationRecoveryViewModel = recoveryViewModel
@@ -172,6 +178,7 @@ final class ServiceContainer: ObservableObject {
             accessibilityAnnouncementService: accessibilityAnnouncementService,
             errorLogService: errorLogService,
             mediaPlaybackService: mediaPlaybackService,
+            usageStatisticsRecorder: usageStatisticsService,
             recoveryFallbackConfigurationProvider: { [recoveryViewModel] primaryEngineId, task in
                 recoveryViewModel.automaticFallbackConfiguration(
                     excluding: primaryEngineId,
@@ -219,7 +226,10 @@ final class ServiceContainer: ObservableObject {
             termPackRegistryService: termPackRegistryService
         )
         snippetsViewModel = SnippetsViewModel(snippetService: snippetService)
-        homeViewModel = HomeViewModel(historyService: historyService)
+        homeViewModel = HomeViewModel(
+            historyService: historyService,
+            usageStatisticsService: usageStatisticsService
+        )
         promptActionsViewModel = PromptActionsViewModel(
             promptActionService: promptActionService,
             promptProcessingService: promptProcessingService,
@@ -269,6 +279,7 @@ final class ServiceContainer: ObservableObject {
 
         hotkeyService.setup()
         dictationViewModel.registerInitialTriggerHotkeys()
+        usageStatisticsService.backfillFromHistoryIfNeeded(historyService.records)
         let retentionDays = UserDefaults.standard.integer(forKey: UserDefaultsKeys.historyRetentionDays)
         if retentionDays > 0 { historyService.purgeOldRecords(retentionDays: retentionDays) }
 

@@ -5,51 +5,48 @@ import WidgetKit
 @MainActor
 final class WidgetDataService {
     private let historyService: HistoryService
+    private let usageStatisticsService: UsageStatisticsService
     private var cancellable: AnyCancellable?
 
-    init(historyService: HistoryService) {
+    init(historyService: HistoryService, usageStatisticsService: UsageStatisticsService) {
         self.historyService = historyService
+        self.usageStatisticsService = usageStatisticsService
 
-        cancellable = historyService.$records
+        cancellable = Publishers.CombineLatest(historyService.$records, usageStatisticsService.$days)
             .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
-            .sink { [weak self] records in
-                self?.updateWidgetData(records: records)
+            .sink { [weak self] records, _ in
+                self?.updateWidgetData(records: records, now: Date())
             }
     }
 
-    private func updateWidgetData(records: [TranscriptionRecord]) {
-        let data = buildWidgetData(records: records)
+    private func updateWidgetData(records: [TranscriptionRecord], now: Date) {
+        let data = buildWidgetData(records: records, now: now)
         data.save()
         WidgetCenter.shared.reloadAllTimelines()
     }
 
-    private func buildWidgetData(records: [TranscriptionRecord]) -> WidgetData {
+    func buildWidgetData(records: [TranscriptionRecord], now: Date = Date()) -> WidgetData {
         let calendar = Calendar.current
-        let now = Date()
         let startOfToday = calendar.startOfDay(for: now)
-        let startOfWeek = calendar.date(byAdding: .day, value: -7, to: now) ?? now
+        let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday) ?? now
+        let startOfWeek = calendar.date(byAdding: .day, value: -6, to: startOfToday) ?? startOfToday
 
-        let todayRecords = records.filter { $0.timestamp >= startOfToday }
-        let weekRecords = records.filter { $0.timestamp >= startOfWeek }
+        let todaySummary = usageStatisticsService.summary(startDay: startOfToday, endDayExclusive: startOfTomorrow)
+        let weekSummary = usageStatisticsService.summary(startDay: startOfWeek, endDayExclusive: startOfTomorrow)
 
         // Stats
-        let wordsToday = todayRecords.reduce(0) { $0 + $1.wordsCount }
-        let wordsThisWeek = weekRecords.reduce(0) { $0 + $1.wordsCount }
+        let wordsToday = todaySummary.words
+        let wordsThisWeek = weekSummary.words
 
-        let totalMinutesWeek = weekRecords.reduce(0.0) { $0 + $1.durationSeconds } / 60.0
         let averageWPM: String
-        if totalMinutesWeek > 0 && wordsThisWeek > 0 {
-            averageWPM = "\(Int(Double(wordsThisWeek) / totalMinutesWeek))"
+        if weekSummary.rawWPM > 0 {
+            averageWPM = "\(Int(weekSummary.rawWPM))"
         } else {
             averageWPM = "-"
         }
 
-        let uniqueApps = Set(weekRecords.compactMap { $0.appBundleIdentifier })
-
         // Time saved today (typing at 45 WPM baseline)
-        let todayMinutes = todayRecords.reduce(0.0) { $0 + $1.durationSeconds } / 60.0
-        let typingMinutes = Double(wordsToday) / 45.0
-        let savedMinutes = typingMinutes - todayMinutes
+        let savedMinutes = todaySummary.rawSavedMinutes
         let timeSavedToday: String
         if savedMinutes > 0 {
             let mins = Int(savedMinutes)
@@ -67,23 +64,18 @@ final class WidgetDataService {
             timeSavedToday: timeSavedToday,
             wordsThisWeek: wordsThisWeek,
             averageWPM: averageWPM,
-            appsUsed: uniqueApps.count
+            appsUsed: weekSummary.appCount
         )
 
         // Chart - 7 days
         var chartPoints: [WidgetChartPoint] = []
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "E"
-        for i in (0..<7).reversed() {
-            guard let day = calendar.date(byAdding: .day, value: -i, to: now) else { continue }
-            let dayStart = calendar.startOfDay(for: day)
-            let dayEnd = calendar.date(byAdding: .day, value: 1, to: dayStart) ?? dayStart
-            let dayWords = records.filter { $0.timestamp >= dayStart && $0.timestamp < dayEnd }
-                .reduce(0) { $0 + $1.wordsCount }
+        for snapshot in usageStatisticsService.dailyWordCounts(days: 7, endingAt: now) {
             chartPoints.append(WidgetChartPoint(
-                dateLabel: dateFormatter.string(from: day),
-                date: dayStart,
-                wordCount: dayWords
+                dateLabel: dateFormatter.string(from: snapshot.day),
+                date: snapshot.day,
+                wordCount: snapshot.totalWords
             ))
         }
 

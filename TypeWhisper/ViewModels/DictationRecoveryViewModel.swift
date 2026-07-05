@@ -80,6 +80,7 @@ final class DictationRecoveryViewModel: ObservableObject {
     private let audioRecordingService: AudioRecordingService
     private let modelManager: ModelManagerService
     private let historyService: HistoryService
+    private let usageStatisticsRecorder: UsageStatisticsRecording?
     private let licenseService: LicenseService?
     private let audioSamplesLoader: AudioSamplesLoader
     private let transcriptionRunner: TranscriptionRunner
@@ -93,6 +94,7 @@ final class DictationRecoveryViewModel: ObservableObject {
         modelManager: ModelManagerService,
         historyService: HistoryService,
         audioFileService: AudioFileService,
+        usageStatisticsRecorder: UsageStatisticsRecording? = nil,
         licenseService: LicenseService? = nil,
         defaults: UserDefaults = .standard,
         audioSamplesLoader: AudioSamplesLoader? = nil,
@@ -102,6 +104,7 @@ final class DictationRecoveryViewModel: ObservableObject {
         self.audioRecordingService = audioRecordingService
         self.modelManager = modelManager
         self.historyService = historyService
+        self.usageStatisticsRecorder = usageStatisticsRecorder
         self.licenseService = licenseService
         self.defaults = defaults
         self.audioSamplesLoader = audioSamplesLoader ?? { [audioFileService] url in
@@ -287,6 +290,13 @@ final class DictationRecoveryViewModel: ObservableObject {
                     }
                     return
                 }
+
+                usageStatisticsRecorder?.recordTranscription(
+                    timestamp: Date(),
+                    wordsCount: text.split(separator: " ").count,
+                    durationSeconds: result.duration,
+                    appBundleIdentifier: Bundle.main.bundleIdentifier
+                )
 
                 let historyID = UUID()
                 historyService.addRecord(

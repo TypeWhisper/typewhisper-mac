@@ -57,11 +57,13 @@ final class HomeViewModel: ObservableObject {
     }
 
     private let historyService: HistoryService
+    private let usageStatisticsService: UsageStatisticsService
     private var cancellables = Set<AnyCancellable>()
     private var refreshWorkItem: DispatchWorkItem?
 
-    init(historyService: HistoryService) {
+    init(historyService: HistoryService, usageStatisticsService: UsageStatisticsService) {
         self.historyService = historyService
+        self.usageStatisticsService = usageStatisticsService
         self.showSetupWizard = !UserDefaults.standard.bool(forKey: UserDefaultsKeys.setupWizardCompleted)
 
         setupBindings()
@@ -70,6 +72,11 @@ final class HomeViewModel: ObservableObject {
 
     private func setupBindings() {
         historyService.$records
+            .dropFirst()
+            .sink { [weak self] _ in self?.scheduleRefresh() }
+            .store(in: &cancellables)
+
+        usageStatisticsService.$days
             .dropFirst()
             .sink { [weak self] _ in self?.scheduleRefresh() }
             .store(in: &cancellables)
@@ -93,19 +100,10 @@ final class HomeViewModel: ObservableObject {
     func refresh() {
         let now = Date()
         let allRecords = historyService.records
-        hasAnyTranscriptions = !allRecords.isEmpty
-
-        // Filter records for current period
-        let filtered: [TranscriptionRecord]
-        if let days = selectedTimePeriod.days {
-            let cutoff = Calendar.current.date(byAdding: .day, value: -days, to: now) ?? now
-            filtered = allRecords.filter { $0.timestamp >= cutoff }
-        } else {
-            filtered = allRecords
-        }
+        hasAnyTranscriptions = usageStatisticsService.hasAnyStatistics || !allRecords.isEmpty
 
         // Stats for current period
-        let stats = computeStats(for: filtered)
+        let stats = computeStats(for: currentSummary(now: now))
         wordsCount = stats.words
         averageWPM = stats.wpm
         appsUsed = stats.apps
@@ -113,10 +111,7 @@ final class HomeViewModel: ObservableObject {
 
         // Trends (compare with previous period of same length)
         if let days = selectedTimePeriod.days {
-            let currentCutoff = Calendar.current.date(byAdding: .day, value: -days, to: now) ?? now
-            let prevCutoff = Calendar.current.date(byAdding: .day, value: -days, to: currentCutoff) ?? currentCutoff
-            let prevFiltered = allRecords.filter { $0.timestamp >= prevCutoff && $0.timestamp < currentCutoff }
-            let prevStats = computeStats(for: prevFiltered)
+            let prevStats = computeStats(for: usageStatisticsService.previousPeriodSummary(days: days, endingAt: now))
 
             wordsTrend = Self.trendPercent(current: Double(stats.words), previous: Double(prevStats.words))
             appsTrend = Self.trendPercent(current: Double(stats.apps), previous: Double(prevStats.apps))
@@ -130,7 +125,7 @@ final class HomeViewModel: ObservableObject {
         }
 
         // Chart data
-        chartData = buildChartData(records: filtered)
+        chartData = buildChartData(now: now)
 
         // Recent transcriptions
         recentTranscriptions = Array(allRecords.prefix(3))
@@ -145,24 +140,34 @@ final class HomeViewModel: ObservableObject {
         let rawSavedMinutes: Double
     }
 
-    private func computeStats(for records: [TranscriptionRecord]) -> PeriodStats {
-        let words = records.reduce(0) { $0 + $1.wordsCount }
-        let totalMinutes = records.reduce(0.0) { $0 + $1.durationSeconds } / 60.0
+    private func currentSummary(now: Date) -> UsageStatisticsSummary {
+        guard let days = selectedTimePeriod.days else {
+            return usageStatisticsService.summary(from: nil, to: now)
+        }
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: now)
+        guard let startDay = calendar.date(byAdding: .day, value: -(days - 1), to: today),
+              let endDay = calendar.date(byAdding: .day, value: 1, to: today) else {
+            return .empty
+        }
+        return usageStatisticsService.summary(startDay: startDay, endDayExclusive: endDay)
+    }
 
+    private func computeStats(for summary: UsageStatisticsSummary) -> PeriodStats {
+        let words = summary.words
         let rawWPM: Double
         let wpm: String
-        if totalMinutes > 0 && words > 0 {
-            rawWPM = Double(words) / totalMinutes
+        if summary.rawWPM > 0 {
+            rawWPM = summary.rawWPM
             wpm = "\(Int(rawWPM))"
         } else {
             rawWPM = 0
             wpm = "—"
         }
 
-        let apps = Set(records.compactMap { $0.appBundleIdentifier }).count
+        let apps = summary.appCount
 
-        let typingMinutes = Double(words) / 45.0
-        let rawSavedMinutes = typingMinutes - totalMinutes
+        let rawSavedMinutes = summary.rawSavedMinutes
         let timeSaved: String
         if rawSavedMinutes > 0 {
             let mins = Int(rawSavedMinutes)
@@ -183,29 +188,10 @@ final class HomeViewModel: ObservableObject {
         return ((current - previous) / previous) * 100
     }
 
-    private func buildChartData(records: [TranscriptionRecord]) -> [ActivityDataPoint] {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        let days = selectedTimePeriod.days ?? max(1, {
-            guard let oldest = records.last?.timestamp else { return 30 }
-            return calendar.dateComponents([.day], from: oldest, to: today).day.map { $0 + 1 } ?? 30
-        }())
-
-        var dataByDay: [Date: Int] = [:]
-        for i in 0..<days {
-            if let date = calendar.date(byAdding: .day, value: -i, to: today) {
-                dataByDay[date] = 0
-            }
-        }
-
-        for record in records {
-            let day = calendar.startOfDay(for: record.timestamp)
-            dataByDay[day, default: 0] += record.wordsCount
-        }
-
-        return dataByDay
-            .map { ActivityDataPoint(date: $0.key, wordCount: $0.value) }
-            .sorted { $0.date < $1.date }
+    private func buildChartData(now: Date) -> [ActivityDataPoint] {
+        usageStatisticsService
+            .dailyWordCounts(days: selectedTimePeriod.days, endingAt: now)
+            .map { ActivityDataPoint(date: $0.day, wordCount: $0.totalWords) }
     }
 
     func completeSetupWizard() {

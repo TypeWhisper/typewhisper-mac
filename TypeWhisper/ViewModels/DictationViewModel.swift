@@ -270,6 +270,7 @@ final class DictationViewModel: ObservableObject {
     private let modelManager: ModelManagerService
     private let settingsViewModel: SettingsViewModel
     private let historyService: HistoryService
+    private let usageStatisticsRecorder: UsageStatisticsRecording?
     private let recentTranscriptionStore: RecentTranscriptionStore
     private let profileService: ProfileService
     private let workflowService: WorkflowService
@@ -380,6 +381,7 @@ final class DictationViewModel: ObservableObject {
         accessibilityAnnouncementService: AccessibilityAnnouncementService,
         errorLogService: ErrorLogService,
         mediaPlaybackService: MediaPlaybackService,
+        usageStatisticsRecorder: UsageStatisticsRecording? = nil,
         recoveryFallbackConfigurationProvider: RecoveryFallbackConfigurationProvider? = nil,
         recoveryFallbackRunner: RecoveryFallbackRunner? = nil
     ) {
@@ -389,6 +391,7 @@ final class DictationViewModel: ObservableObject {
         self.modelManager = modelManager
         self.settingsViewModel = settingsViewModel
         self.historyService = historyService
+        self.usageStatisticsRecorder = usageStatisticsRecorder
         self.recentTranscriptionStore = recentTranscriptionStore
         self.profileService = profileService
         self.workflowService = workflowService
@@ -1625,6 +1628,12 @@ final class DictationViewModel: ObservableObject {
                 audioRecordingService.discardActiveRecoveryRecording()
                 soundService.play(.transcriptionSuccess, enabled: soundFeedbackEnabled)
                 let wordCount = text.split(separator: " ").count
+                usageStatisticsRecorder?.recordTranscription(
+                    timestamp: completionTimestamp,
+                    wordsCount: wordCount,
+                    durationSeconds: audioDuration,
+                    appBundleIdentifier: activeApp.bundleId
+                )
                 let detectedLang = result.detectedLanguage ?? language
                 let completedTranscription = DictationSessionTranscription(
                     text: text,
