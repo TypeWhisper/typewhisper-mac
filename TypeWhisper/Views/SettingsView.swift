@@ -391,6 +391,7 @@ struct RecordingSettingsView: View {
     @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
     @State private var selectedProvider: String?
     @State private var customSounds: [String] = SoundChoice.installedCustomSounds()
+    @State private var draggedInputDevicePriorityItem: AudioInputDevicePriorityItem?
     private let soundService = ServiceContainer.shared.soundService
 
     private var needsPermissions: Bool {
@@ -417,6 +418,175 @@ struct RecordingSettingsView: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private var inputDeviceSelectionBinding: Binding<String?> {
+        Binding(
+            get: { audioDevice.selectedDeviceUID },
+            set: { newValue in
+                if let newValue {
+                    audioDevice.selectInputDeviceAsPrimary(newValue)
+                } else {
+                    audioDevice.clearInputDevicePriorityList()
+                }
+            }
+        )
+    }
+
+    @ViewBuilder
+    private var microphonePriorityEditor: some View {
+        if shouldShowMicrophonePriorityList {
+            LabeledContent(String(localized: "Microphone Priority")) {
+                VStack(alignment: .trailing, spacing: 6) {
+                    microphonePriorityList
+                        .frame(maxWidth: 560, alignment: .leading)
+
+                    microphonePriorityAddMenu
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } else {
+            HStack {
+                Spacer()
+                microphonePriorityAddMenu
+            }
+        }
+    }
+
+    private var shouldShowMicrophonePriorityList: Bool {
+        let priorityList = audioDevice.inputDevicePriorityList
+        guard priorityList.count == 1, let item = priorityList.first else {
+            return priorityList.count > 1
+        }
+
+        return !audioDevice.isInputDevicePriorityItemAvailable(item)
+    }
+
+    @ViewBuilder
+    private var microphonePriorityList: some View {
+        if !audioDevice.inputDevicePriorityList.isEmpty {
+            VStack(spacing: 0) {
+                ForEach(Array(audioDevice.inputDevicePriorityList.enumerated()), id: \.element.id) { index, item in
+                    microphonePriorityRow(index: index, item: item)
+                        .onDrag {
+                            draggedInputDevicePriorityItem = item
+                            return NSItemProvider(object: item.uid as NSString)
+                        }
+                        .onDrop(
+                            of: ["public.text"],
+                            delegate: MicrophonePriorityDropDelegate(
+                                item: item,
+                                audioDevice: audioDevice,
+                                draggedItem: $draggedInputDevicePriorityItem
+                            )
+                        )
+
+                    if index < audioDevice.inputDevicePriorityList.count - 1 {
+                        Divider()
+                            .padding(.leading, 40)
+                    }
+                }
+            }
+        }
+    }
+
+    private var microphonePriorityAddMenu: some View {
+        Menu {
+            if audioDevice.inputDevicePriorityCandidates.isEmpty {
+                Text(String(localized: "No more microphones"))
+            } else {
+                ForEach(audioDevice.inputDevicePriorityCandidates) { device in
+                    Button(audioDevice.displayName(for: device)) {
+                        audioDevice.addInputDeviceToPriorityList(device)
+                    }
+                }
+            }
+        } label: {
+            Label(String(localized: "Add Microphone"), systemImage: "plus")
+                .font(.callout)
+        }
+        .menuStyle(.borderlessButton)
+        .controlSize(.small)
+        .help(String(localized: "Add Microphone"))
+    }
+
+    private func microphonePriorityRow(index: Int, item: AudioInputDevicePriorityItem) -> some View {
+        let isAvailable = audioDevice.isInputDevicePriorityItemAvailable(item)
+        let canMoveUp = index > 0
+        let canMoveDown = index < audioDevice.inputDevicePriorityList.count - 1
+
+        return HStack(spacing: 8) {
+            Image(systemName: "line.3.horizontal")
+                .foregroundStyle(.tertiary)
+                .font(.system(size: 11, weight: .semibold))
+                .frame(width: 12)
+
+            Text("\(index + 1).")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(width: 20, alignment: .trailing)
+
+            Text(audioDevice.displayName(for: item))
+                .font(.callout)
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            if !isAvailable {
+                Text(String(localized: "Disconnected"))
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+            }
+
+            Spacer(minLength: 8)
+
+            Button {
+                audioDevice.removeInputDevicePriorityItem(item)
+            } label: {
+                Image(systemName: "minus.circle")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .font(.system(size: 13))
+            .help(String(localized: "Remove microphone"))
+        }
+        .padding(.vertical, 3)
+        .frame(minHeight: 24)
+        .contentShape(Rectangle())
+        .contextMenu {
+            Button {
+                moveMicrophonePriorityItemUp(item)
+            } label: {
+                Label(String(localized: "Move Up"), systemImage: "chevron.up")
+            }
+            .disabled(!canMoveUp)
+
+            Button {
+                moveMicrophonePriorityItemDown(item)
+            } label: {
+                Label(String(localized: "Move Down"), systemImage: "chevron.down")
+            }
+            .disabled(!canMoveDown)
+        }
+        .modifier(MicrophonePriorityAccessibilityActions(
+            canMoveUp: canMoveUp,
+            canMoveDown: canMoveDown,
+            moveUp: { moveMicrophonePriorityItemUp(item) },
+            moveDown: { moveMicrophonePriorityItemDown(item) }
+        ))
+    }
+
+    private func moveMicrophonePriorityItemUp(_ item: AudioInputDevicePriorityItem) {
+        guard let index = audioDevice.inputDevicePriorityList.firstIndex(of: item),
+              index > 0 else { return }
+
+        audioDevice.moveInputDevicePriorityItems(from: IndexSet(integer: index), to: index - 1)
+    }
+
+    private func moveMicrophonePriorityItemDown(_ item: AudioInputDevicePriorityItem) {
+        guard let index = audioDevice.inputDevicePriorityList.firstIndex(of: item),
+              index < audioDevice.inputDevicePriorityList.count - 1 else { return }
+
+        audioDevice.moveInputDevicePriorityItems(from: IndexSet(integer: index), to: index + 2)
     }
 
     var body: some View {
@@ -484,13 +654,15 @@ struct RecordingSettingsView: View {
             }
 
             Section(String(localized: "Microphone")) {
-                Picker(String(localized: "Input Device"), selection: $audioDevice.selectedDeviceUID) {
+                Picker(String(localized: "Input Device"), selection: inputDeviceSelectionBinding) {
                     Text(String(localized: "System Default")).tag(nil as String?)
                     Divider()
                     ForEach(audioDevice.inputDevices) { device in
                         Text(audioDevice.displayName(for: device)).tag(device.uid as String?)
                     }
                 }
+
+                microphonePriorityEditor
 
                 if let message = audioDevice.selectedDeviceStatusMessage {
                     Label(message, systemImage: "exclamationmark.triangle")
@@ -504,18 +676,12 @@ struct RecordingSettingsView: View {
                             .foregroundStyle(.secondary)
                             .font(.caption)
 
-                        GeometryReader { geo in
-                            ZStack(alignment: .leading) {
-                                RoundedRectangle(cornerRadius: 3)
-                                    .fill(.quaternary)
-
-                                RoundedRectangle(cornerRadius: 3)
-                                    .fill(Color.green.gradient)
-                                    .frame(width: max(0, geo.size.width * CGFloat(audioDevice.previewAudioLevel)))
-                                    .animation(.easeOut(duration: 0.08), value: audioDevice.previewAudioLevel)
-                            }
-                        }
-                        .frame(height: 6)
+                        AudioWaveformView(
+                            audioLevel: audioDevice.previewAudioLevel,
+                            isSetup: false,
+                            compact: true
+                        )
+                        .foregroundStyle(.green)
                     }
                     .padding(.vertical, 4)
                 }
@@ -756,6 +922,51 @@ private struct SoundEventPicker: View {
         } catch {
             // File copy failed - silently ignore
         }
+    }
+}
+
+private struct MicrophonePriorityAccessibilityActions: ViewModifier {
+    let canMoveUp: Bool
+    let canMoveDown: Bool
+    let moveUp: () -> Void
+    let moveDown: () -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if canMoveUp && canMoveDown {
+            content
+                .accessibilityAction(named: Text(String(localized: "Move Up")), moveUp)
+                .accessibilityAction(named: Text(String(localized: "Move Down")), moveDown)
+        } else if canMoveUp {
+            content
+                .accessibilityAction(named: Text(String(localized: "Move Up")), moveUp)
+        } else if canMoveDown {
+            content
+                .accessibilityAction(named: Text(String(localized: "Move Down")), moveDown)
+        } else {
+            content
+        }
+    }
+}
+
+private struct MicrophonePriorityDropDelegate: DropDelegate {
+    let item: AudioInputDevicePriorityItem
+    let audioDevice: AudioDeviceService
+    @Binding var draggedItem: AudioInputDevicePriorityItem?
+
+    func dropEntered(info: DropInfo) {
+        guard let draggedItem,
+              draggedItem != item,
+              let fromIndex = audioDevice.inputDevicePriorityList.firstIndex(of: draggedItem),
+              let toIndex = audioDevice.inputDevicePriorityList.firstIndex(of: item) else { return }
+
+        let destination = toIndex > fromIndex ? toIndex + 1 : toIndex
+        audioDevice.moveInputDevicePriorityItems(from: IndexSet(integer: fromIndex), to: destination)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggedItem = nil
+        return true
     }
 }
 

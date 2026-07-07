@@ -456,13 +456,23 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     @Published private(set) var systemLevel: Float = 0
     @Published private(set) var systemAudioWarningMessage: String?
     var recordingsDirectoryOverride: URL?
-    var startRecordingOverride: ((_ micEnabled: Bool, _ systemAudioEnabled: Bool, _ format: OutputFormat, _ outputURL: URL) async throws -> URL)?
+    var startRecordingOverride: ((
+        _ micEnabled: Bool,
+        _ systemAudioEnabled: Bool,
+        _ format: OutputFormat,
+        _ outputURL: URL,
+        _ microphoneSelection: ResolvedRecordingInputSelection
+    ) async throws -> URL)?
     var stopRecordingOverride: ((_ outputURL: URL) async throws -> URL?)?
     var currentBufferOverride: (() -> [Float])?
 
     private var audioEngine: AVAudioEngine?
+    private var micInputCaptureSession: AudioInputCaptureSession?
     private let micDefaultInputController: AudioInputDeviceDefaultControlling = CoreAudioInputDeviceDefaultController()
     private let micTransportResolver: AudioDeviceTransportResolving = CoreAudioDeviceTransportResolver()
+    private let micBluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing
+    private let micInputCaptureFactory: AudioInputCaptureFactory
+    private let micInputActivationGuard: AudioInputDeviceActivating
     private let micFileLock = OSAllocatedUnfairLock<AVAudioFile?>(initialState: nil)
     private var scStream: SCStream?
     private var streamOutput: SystemAudioStreamOutput?
@@ -493,6 +503,16 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     private static let systemAudioNonSilentThreshold: Float = 0.0001
 
     static let recordingsDirectoryName = "TypeWhisper Recordings"
+
+    init(
+        inputActivationGuard: AudioInputDeviceActivating = AudioInputDeviceActivationGuard(),
+        bluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing = CoreAudioBluetoothInputRouteStabilizer(),
+        inputCaptureFactory: AudioInputCaptureFactory = CoreAudioHALInputCaptureFactory()
+    ) {
+        self.micInputActivationGuard = inputActivationGuard
+        self.micBluetoothInputRouteStabilizer = bluetoothInputRouteStabilizer
+        self.micInputCaptureFactory = inputCaptureFactory
+    }
 
     var recordingsDirectory: URL {
         if let recordingsDirectoryOverride {
@@ -593,7 +613,12 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         }
     }
 
-    func startRecording(micEnabled: Bool, systemAudioEnabled: Bool, format: OutputFormat) async throws -> URL {
+    func startRecording(
+        micEnabled: Bool,
+        systemAudioEnabled: Bool,
+        format: OutputFormat,
+        microphoneSelection: ResolvedRecordingInputSelection = .systemDefault
+    ) async throws -> URL {
         guard micEnabled || systemAudioEnabled else {
             throw RecorderError.noSourceEnabled
         }
@@ -619,7 +644,13 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
         if let startRecordingOverride {
             do {
-                self.finalOutputURL = try await startRecordingOverride(micEnabled, systemAudioEnabled, format, outputURL)
+                self.finalOutputURL = try await startRecordingOverride(
+                    micEnabled,
+                    systemAudioEnabled,
+                    format,
+                    outputURL,
+                    microphoneSelection
+                )
             } catch {
                 await rollbackFailedStart()
                 throw error
@@ -638,7 +669,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
                     let micURL = tempDir.appendingPathComponent("mic-\(sessionId).wav")
                     self.micTempURL = micURL
-                    try startMicRecording(outputURL: micURL)
+                    try startMicRecording(outputURL: micURL, microphoneSelection: microphoneSelection)
                 }
 
                 // Start system audio recording
@@ -725,6 +756,14 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             streamOutput = nil
         }
 
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        audioEngine?.stop()
+        audioEngine = nil
+        micInputCaptureSession?.stop()
+        micInputCaptureSession = nil
+        micInputActivationGuard.restore(reason: "recorder-mic-stop")
+        micFileLock.withLock { $0 = nil }
+
         var completedURL = finalOutputURL
 
         // Mix or copy to final output
@@ -765,7 +804,36 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
     // MARK: - Microphone Recording
 
-    private func startMicRecording(outputURL: URL) throws {
+    private func startMicRecording(
+        outputURL: URL,
+        microphoneSelection: ResolvedRecordingInputSelection
+    ) throws {
+        if microphoneSelection.hasExplicitDeviceSelection,
+           !microphoneSelection.usesBluetoothTransport,
+           let deviceID = microphoneSelection.deviceID {
+            try startInputOnlyMicRecording(deviceID: deviceID, outputURL: outputURL)
+            return
+        }
+
+        if microphoneSelection.hasExplicitDeviceSelection,
+           microphoneSelection.usesBluetoothTransport {
+            guard micInputActivationGuard.activateIfNeeded(
+                deviceID: microphoneSelection.deviceID,
+                usesBluetoothTransport: true,
+                reason: "recorder-mic-start"
+            ) else {
+                throw RecorderError.engineStartFailed("Selected microphone conflicts with the current audio route.")
+            }
+
+            guard micBluetoothInputRouteStabilizer.waitForActivatedDefaultInput(
+                deviceID: microphoneSelection.deviceID,
+                reason: "recorder-mic-start"
+            ) else {
+                micInputActivationGuard.restore(reason: "recorder-mic-route-stabilization-failed")
+                throw RecorderError.engineStartFailed("Selected microphone did not become the active input route.")
+            }
+        }
+
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
         var inputFormat = inputNode.outputFormat(forBus: 0)
@@ -904,6 +972,94 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
         try engine.start()
         audioEngine = engine
+    }
+
+    private func startInputOnlyMicRecording(deviceID: AudioDeviceID, outputURL: URL) throws {
+        let inputFormat = try micInputCaptureFactory.inputOnlyCaptureFormat(deviceID: deviceID)
+        guard let monoFormat = AudioInputBufferNormalizer.monoFloatFormat(for: inputFormat) else {
+            throw RecorderError.engineStartFailed("Cannot create input-only microphone format")
+        }
+
+        let audioFile = try AVAudioFile(
+            forWriting: outputURL,
+            settings: [
+                AVFormatIDKey: kAudioFormatLinearPCM,
+                AVSampleRateKey: monoFormat.sampleRate,
+                AVNumberOfChannelsKey: 1,
+                AVLinearPCMBitDepthKey: 16,
+                AVLinearPCMIsFloatKey: false,
+                AVLinearPCMIsBigEndianKey: false,
+            ]
+        )
+
+        guard let transcriptionFormat = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: Self.transcriptionSampleRate,
+            channels: 1,
+            interleaved: false
+        ) else {
+            throw RecorderError.engineStartFailed("Cannot create transcription format")
+        }
+        let transcriptionConverter = AVAudioConverter(from: monoFormat, to: transcriptionFormat)
+
+        micFileLock.withLock { $0 = audioFile }
+
+        let session = try micInputCaptureFactory.startInputOnlyCapture(
+            deviceID: deviceID,
+            label: "recorder-mic",
+            bufferSize: 4096
+        ) { [weak self] buffer in
+            guard let self,
+                  let writeBuffer = AudioInputBufferNormalizer.monoFloatBuffer(from: buffer) else { return }
+
+            if let channelData = writeBuffer.floatChannelData?[0] {
+                let samples = UnsafeBufferPointer(start: channelData, count: Int(writeBuffer.frameLength))
+                let rms = sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(max(samples.count, 1)))
+                let level = min(1.0, rms * 5)
+                DispatchQueue.main.async {
+                    self.micLevel = level
+                }
+            }
+
+            self.micFileLock.withLock { file in
+                guard let file else { return }
+                do {
+                    try file.write(from: writeBuffer)
+                } catch {
+                    logger.error("Failed to write input-only mic audio: \(error.localizedDescription)")
+                }
+            }
+
+            if let transcriptionConverter {
+                let targetFrameCount = AVAudioFrameCount(
+                    Double(writeBuffer.frameLength) * Self.transcriptionSampleRate / monoFormat.sampleRate
+                )
+                guard targetFrameCount > 0,
+                      let convertedBuffer = AVAudioPCMBuffer(pcmFormat: transcriptionFormat, frameCapacity: targetFrameCount) else { return }
+                var convError: NSError?
+                let convConsumed = OSAllocatedUnfairLock(initialState: false)
+                transcriptionConverter.convert(to: convertedBuffer, error: &convError) { _, outStatus in
+                    let wasConsumed = convConsumed.withLock { flag in
+                        let prev = flag
+                        flag = true
+                        return prev
+                    }
+                    if wasConsumed {
+                        outStatus.pointee = .noDataNow
+                        return nil
+                    }
+                    outStatus.pointee = .haveData
+                    return writeBuffer
+                }
+                if convError == nil, convertedBuffer.frameLength > 0,
+                   let data = convertedBuffer.floatChannelData?[0] {
+                    let samples = Array(UnsafeBufferPointer(start: data, count: Int(convertedBuffer.frameLength)))
+                    self.appendMicTranscriptionSamples(samples)
+                }
+            }
+        }
+
+        micInputCaptureSession = session
     }
 
     private func enableMicVoiceProcessingIfNeeded(
@@ -1504,6 +1660,9 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         audioEngine?.inputNode.removeTap(onBus: 0)
         audioEngine?.stop()
         audioEngine = nil
+        micInputCaptureSession?.stop()
+        micInputCaptureSession = nil
+        micInputActivationGuard.restore(reason: "recorder-mic-rollback")
         micFileLock.withLock { $0 = nil }
 
         cleanupTempFile(micTempURL)

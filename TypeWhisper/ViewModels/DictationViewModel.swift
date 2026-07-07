@@ -1046,12 +1046,14 @@ final class DictationViewModel: ObservableObject {
             return
         }
 
+        let resolvedInputSelection = audioDeviceService.resolvedRecordingInputSelection()
+
         do {
             let initialForcedWorkflow = forcedWorkflow(for: forcedWorkflowId)
             audioRecordingService.microphoneBoostEnabled = microphoneBoostEnabled(for: initialForcedWorkflow)
-            audioRecordingService.selectedDeviceID = audioDeviceService.selectedDeviceID
-            audioRecordingService.hasExplicitDeviceSelection = audioDeviceService.selectedDeviceUID != nil
-            let selectedInputUsesBluetooth = audioDeviceService.selectedDeviceUsesBluetoothTransport
+            audioRecordingService.selectedDeviceID = resolvedInputSelection.deviceID
+            audioRecordingService.hasExplicitDeviceSelection = resolvedInputSelection.hasExplicitDeviceSelection
+            let selectedInputUsesBluetooth = resolvedInputSelection.usesBluetoothTransport
             audioRecordingService.selectedInputDeviceUsesBluetoothTransport = selectedInputUsesBluetooth
             prepareRecordingStartCue(playsSound: !selectedInputUsesBluetooth)
             let audioStartTimestamp = DispatchTime.now().uptimeNanoseconds
@@ -1126,7 +1128,10 @@ final class DictationViewModel: ObservableObject {
                 errorMessage = String(localized: "No mic detected.")
             } else if let recordingError = error as? AudioRecordingService.AudioRecordingError,
                       case .selectedInputDeviceIncompatible(let issue) = recordingError {
-                audioDeviceService.markSelectedDeviceCompatibility(.incompatible(issue))
+                audioDeviceService.markRecordingInputSelectionCompatibility(
+                    .incompatible(issue),
+                    selection: resolvedInputSelection
+                )
                 errorMessage = recordingError.localizedDescription
             } else {
                 errorMessage = error.localizedDescription

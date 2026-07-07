@@ -151,7 +151,7 @@ struct NotchIndicatorView: View {
         .animation(.easeOut(duration: 0.24), value: currentWidth)
         .animation(.easeOut(duration: 0.24), value: expandedBodyHeight)
         .animation(.easeInOut(duration: 0.18), value: presentation.state)
-        .animation(.easeOut(duration: 0.08), value: presentation.audioLevel)
+        .animation(.linear(duration: 0.025), value: presentation.audioLevel)
         .onChange(of: presentation.partialText) {
             if showTranscriptPreview, !presentation.partialText.isEmpty, !textExpanded {
                 withAnimation(.easeOut(duration: 0.24)) {

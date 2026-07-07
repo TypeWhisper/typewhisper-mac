@@ -1037,6 +1037,9 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             CGEvent.tapEnable(tap: tap, enable: true)
         }
         logger.warning("CGEventTap was disabled by system, re-enabling")
+        DispatchQueue.main.async { [weak self] in
+            self?.recoverReleasedActiveHotkeyAfterEventTapDisable()
+        }
     }
 
     private func handleEventTapCallback(_ event: CGEvent) -> Bool {
@@ -1063,7 +1066,9 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                 hotkey: Self.escapeHotkey,
                 source: source
             ) {
-                onCancelPressed?()
+                performHotkeyAction(source: source) { [weak self] in
+                    self?.onCancelPressed?()
+                }
             }
             return false
         }
@@ -1368,14 +1373,18 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             if source != .eventTap {
                 logFallbackMatchIfNeeded(hotkey: hotkey, source: source)
             }
-            handleKeyDown(slotType: slotType, hotkey: hotkey)
+            performHotkeyAction(source: source) { [weak self] in
+                self?.handleKeyDown(slotType: slotType, hotkey: hotkey)
+            }
         } else if keyUp, shouldDispatch(
             target: .slot(slotType),
             phase: .up,
             hotkey: hotkey,
             source: source
         ) {
-            handleKeyUp(slotType: slotType)
+            performHotkeyAction(source: source) { [weak self] in
+                self?.handleKeyUp(slotType: slotType)
+            }
         }
     }
 
@@ -1395,14 +1404,18 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             if source != .eventTap {
                 logFallbackMatchIfNeeded(hotkey: hotkey, source: source)
             }
-            handleProfileKeyDown(profileId: profileId)
+            performHotkeyAction(source: source) { [weak self] in
+                self?.handleProfileKeyDown(profileId: profileId)
+            }
         } else if keyUp, shouldDispatch(
             target: .profile(profileId),
             phase: .up,
             hotkey: hotkey,
             source: source
         ) {
-            handleProfileKeyUp(profileId: profileId)
+            performHotkeyAction(source: source) { [weak self] in
+                self?.handleProfileKeyUp(profileId: profileId)
+            }
         }
     }
 
@@ -1428,14 +1441,30 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             if source != .eventTap {
                 logFallbackMatchIfNeeded(hotkey: hotkey, source: source)
             }
-            handleWorkflowKeyDown(workflowId: workflowId, behavior: behavior)
+            performHotkeyAction(source: source) { [weak self] in
+                self?.handleWorkflowKeyDown(workflowId: workflowId, behavior: behavior)
+            }
         } else if keyUp, !isTextProcessingModifierRelease, shouldDispatch(
             target: .workflow(workflowId),
             phase: .up,
             hotkey: hotkey,
             source: source
         ) {
-            handleWorkflowKeyUp(workflowId: workflowId, behavior: behavior)
+            performHotkeyAction(source: source) { [weak self] in
+                self?.handleWorkflowKeyUp(workflowId: workflowId, behavior: behavior)
+            }
+        }
+    }
+
+    private func performHotkeyAction(
+        source: HotkeyEventSource,
+        _ action: @escaping @Sendable () -> Void
+    ) {
+        switch source {
+        case .eventTap:
+            DispatchQueue.main.async(execute: action)
+        case .monitor, .carbon:
+            action()
         }
     }
 
@@ -1493,6 +1522,46 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         logger.info("Matched hotkey via NSEvent compatibility fallback: \(Self.displayName(for: hotkey), privacy: .public)")
     }
 
+    private func recoverReleasedActiveHotkeyAfterEventTapDisable() {
+        guard isActive,
+              currentMode == .pushToTalk,
+              activeProfileId == nil,
+              activeWorkflowId == nil,
+              let slotType = activeSlotType,
+              let hotkey = activeGlobalHotkey,
+              !isHotkeyPhysicallyPressed(hotkey) else {
+            return
+        }
+
+        logger.warning(
+            "Recovering active dictation after CGEventTap disable; hotkey is no longer pressed: \(Self.displayName(for: hotkey), privacy: .public)"
+        )
+        handleKeyUp(slotType: slotType)
+    }
+
+    private func isHotkeyPhysicallyPressed(_ hotkey: UnifiedHotkey) -> Bool {
+        switch hotkey.kind {
+        case .fn:
+            return modifierFlagsStateProvider().contains(.function)
+        case .modifierOnly:
+            guard let flag = Self.modifierFlagForKeyCode(hotkey.keyCode) else { return false }
+            return modifierFlagsStateProvider().contains(flag)
+        case .modifierCombo:
+            let flags = modifierFlagsStateProvider()
+            if !hotkey.modifierKeyCodes.isEmpty {
+                let activeModifierKeyCodes = Self.modifierKeyCodes(from: flags)
+                return hotkey.modifierKeyCodes.isSubset(of: activeModifierKeyCodes)
+            }
+            let requiredFlags = NSEvent.ModifierFlags(rawValue: hotkey.modifierFlags)
+            let relevantMask: NSEvent.ModifierFlags = [.command, .option, .control, .shift, .function]
+            return flags.intersection(relevantMask).isSuperset(of: requiredFlags)
+        case .keyWithModifiers, .bareKey:
+            return keyStateProvider(hotkey.keyCode)
+        case .mouseButton:
+            return true
+        }
+    }
+
     private nonisolated static func supportsCarbonHotkey(_ hotkey: UnifiedHotkey) -> Bool {
         hotkey.kind == .keyWithModifiers
             && !hotkey.isDoubleTap
@@ -1529,6 +1598,10 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     @discardableResult
     func processEventForTesting(_ event: NSEvent, source: HotkeyEventSource) -> Bool {
         handleEvent(event, source: source)
+    }
+
+    func recoverReleasedActiveHotkeyAfterEventTapDisableForTesting() {
+        recoverReleasedActiveHotkeyAfterEventTapDisable()
     }
 
     func needsMouseEventMonitoringForTesting() -> Bool {

@@ -187,6 +187,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private let configLock = NSLock()
     private let stopStateLock = NSLock()
     private let engineLock = NSLock()
+    private let audioLevelPublishLock = NSLock()
     private let processingQueue = DispatchQueue(label: "com.typewhisper.audio-processing", qos: .userInteractive)
     private let recoveryQueue = DispatchQueue(label: "com.typewhisper.audio-recovery", qos: .userInitiated)
     private let engineTeardownRetainer = DelayedReleaseRetainer<AVAudioEngine>(label: "com.typewhisper.audio-engine-teardown")
@@ -203,9 +204,13 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private var _lastStopGraceCaptureApplied = false
     private var recordingRequestUptimeNanoseconds: UInt64?
     private var hasLoggedFirstConvertedSample = false
+    private var lastAudioLevelPublishUptimeNanoseconds: UInt64 = 0
+    private var pendingAudioLevelUpdate: (level: Float, rms: Float)?
+    private var isAudioLevelPublishScheduled = false
 
     static let targetSampleRate: Double = 16000
     private static let captureTapFrames: AVAudioFrameCount = 256
+    private static let audioLevelPublishIntervalNanoseconds: UInt64 = 33_333_333
     private static let engineTeardownRetentionInterval: TimeInterval = 0.3
 
     init(
@@ -456,6 +461,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             }
 
             setLastStopGraceCaptureApplied(false)
+            resetAudioLevelPublishing()
             DispatchQueue.main.async { [weak self] in
                 self?.isRecording = false
                 self?.audioLevel = normalizedLevel
@@ -498,9 +504,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
             let samples = drainSampleBuffer()
 
+            resetAudioLevelPublishing()
             DispatchQueue.main.async { [weak self] in
                 self?.isRecording = false
                 self?.audioLevel = 0
+                self?.rawAudioLevel = 0
             }
 
             return samples
@@ -542,9 +550,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
         let samples = drainSampleBuffer()
 
+        resetAudioLevelPublishing()
         DispatchQueue.main.async { [weak self] in
             self?.isRecording = false
             self?.audioLevel = 0
+            self?.rawAudioLevel = 0
         }
 
         return samples
@@ -928,6 +938,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         outputVolumeGuard.restoreIfRaised(reason: "recording-start-failed")
         outputVolumeGuard.clear()
         inputActivationGuard.restore(reason: "recording-start-failed")
+        resetAudioLevelPublishing()
         DispatchQueue.main.async { [weak self] in
             self?.isRecording = false
             self?.audioLevel = 0
@@ -961,6 +972,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         hasLoggedFirstConvertedSample = false
         bufferLock.unlock()
         initialInputTapSeenLock.withLock { $0 = false }
+        resetAudioLevelPublishing()
     }
 
     private func markInitialInputTapSeenIfNeeded(_ buffer: AVAudioPCMBuffer) {
@@ -1110,6 +1122,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         outputVolumeGuard.restoreIfRaised(reason: "recording-start-failed")
         outputVolumeGuard.clear()
         inputActivationGuard.restore(reason: "recording-start-failed")
+        resetAudioLevelPublishing()
         DispatchQueue.main.async { [weak self] in
             self?.isRecording = false
             self?.audioLevel = 0
@@ -1145,14 +1158,71 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             )
         }
 
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.audioLevel = normalizedLevel
-            self.rawAudioLevel = rms
-            if didReceiveFirstBuffer {
-                self.onFirstRecordingAudioBuffer?()
+        publishAudioLevel(normalizedLevel, rms: rms, force: didReceiveFirstBuffer)
+        if didReceiveFirstBuffer {
+            DispatchQueue.main.async { [weak self] in
+                self?.onFirstRecordingAudioBuffer?()
             }
         }
+    }
+
+    private func publishAudioLevel(_ level: Float, rms: Float, force: Bool = false) {
+        let now = DispatchTime.now().uptimeNanoseconds
+        var shouldPublishNow = false
+        var publishDelayNanoseconds: UInt64?
+
+        audioLevelPublishLock.lock()
+        let elapsed = now &- lastAudioLevelPublishUptimeNanoseconds
+        if force || lastAudioLevelPublishUptimeNanoseconds == 0 || elapsed >= Self.audioLevelPublishIntervalNanoseconds {
+            lastAudioLevelPublishUptimeNanoseconds = now
+            pendingAudioLevelUpdate = nil
+            shouldPublishNow = true
+        } else {
+            pendingAudioLevelUpdate = (level, rms)
+            if !isAudioLevelPublishScheduled {
+                isAudioLevelPublishScheduled = true
+                publishDelayNanoseconds = Self.audioLevelPublishIntervalNanoseconds - elapsed
+            }
+        }
+        audioLevelPublishLock.unlock()
+
+        if shouldPublishNow {
+            DispatchQueue.main.async { [weak self] in
+                self?.audioLevel = level
+                self?.rawAudioLevel = rms
+            }
+        }
+
+        if let publishDelayNanoseconds {
+            DispatchQueue.main.asyncAfter(deadline: .now() + .nanoseconds(Int(publishDelayNanoseconds))) { [weak self] in
+                self?.flushPendingAudioLevelUpdate()
+            }
+        }
+    }
+
+    private func flushPendingAudioLevelUpdate() {
+        let update: (level: Float, rms: Float)?
+
+        audioLevelPublishLock.lock()
+        update = pendingAudioLevelUpdate
+        pendingAudioLevelUpdate = nil
+        isAudioLevelPublishScheduled = false
+        if update != nil {
+            lastAudioLevelPublishUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds
+        }
+        audioLevelPublishLock.unlock()
+
+        guard let update else { return }
+        audioLevel = update.level
+        rawAudioLevel = update.rms
+    }
+
+    private func resetAudioLevelPublishing() {
+        audioLevelPublishLock.lock()
+        lastAudioLevelPublishUptimeNanoseconds = 0
+        pendingAudioLevelUpdate = nil
+        isAudioLevelPublishScheduled = false
+        audioLevelPublishLock.unlock()
     }
 
 #if DEBUG
@@ -1415,6 +1485,14 @@ extension AudioRecordingService {
 
     func testingProcessConvertedSamples(_ samples: [Float]) {
         processConvertedSamples(samples)
+    }
+
+    func testingMarkAudioLevelPublishedNow() {
+        audioLevelPublishLock.lock()
+        lastAudioLevelPublishUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds
+        pendingAudioLevelUpdate = nil
+        isAudioLevelPublishScheduled = false
+        audioLevelPublishLock.unlock()
     }
 
     func testingFailActiveRecordingDueToRecovery(_ error: AudioRecordingError) {
