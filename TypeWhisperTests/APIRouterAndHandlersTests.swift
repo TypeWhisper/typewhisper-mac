@@ -2601,7 +2601,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         await MainActor.run {
             apiContext.audioRecorderService.recordingsDirectoryOverride = recordingsDirectory
-            apiContext.audioRecorderService.startRecordingOverride = { _, _, _, outputURL in
+            apiContext.audioRecorderService.startRecordingOverride = { _, _, _, outputURL, _ in
                 try Data("placeholder".utf8).write(to: outputURL)
                 return outputURL
             }
@@ -2685,7 +2685,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         await MainActor.run {
             apiContext.audioRecorderService.recordingsDirectoryOverride = recordingsDirectory
-            apiContext.audioRecorderService.startRecordingOverride = { _, _, _, outputURL in
+            apiContext.audioRecorderService.startRecordingOverride = { _, _, _, outputURL, _ in
                 try Data("placeholder".utf8).write(to: outputURL)
                 return outputURL
             }
@@ -2755,7 +2755,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         await MainActor.run {
             apiContext.audioRecorderService.recordingsDirectoryOverride = recordingsDirectory
-            apiContext.audioRecorderService.startRecordingOverride = { _, _, _, outputURL in
+            apiContext.audioRecorderService.startRecordingOverride = { _, _, _, outputURL, _ in
                 try Data("placeholder".utf8).write(to: outputURL)
                 let entry = await gate.enter()
                 if entry == 1 {
@@ -3389,6 +3389,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
         service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
         service.pasteVerificationAttempts = 0
         service.defaultPasteFallbackRestoreDelay = .milliseconds(1)
         service.focusedTextStateOverride = { _ in
@@ -3425,6 +3426,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
         service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
         service.verifiedRestoreGraceDelay = .milliseconds(1)
 
         var didAttemptDirectAXInsertion = false
@@ -3513,6 +3515,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
         service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
 
         var stateReadCount = 0
         service.focusedTextStateOverride = { _ in
@@ -3552,6 +3555,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
         service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
 
         var stateReadCount = 0
         service.focusedTextStateOverride = { _ in
@@ -4623,6 +4627,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
     func testApiStartRecording_skipsStartSoundForBluetoothInput() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let originalPriorityList = UserDefaults.standard.object(forKey: UserDefaultsKeys.inputDevicePriorityList)
         let originalAudioDuckingEnabled = UserDefaults.standard.object(forKey: UserDefaultsKeys.audioDuckingEnabled)
         let originalAudioDuckingLevel = UserDefaults.standard.object(forKey: UserDefaultsKeys.audioDuckingLevel)
         var events: [String] = []
@@ -4657,6 +4662,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             dictationContext = nil
             TestSupport.remove(appSupportDirectory)
             Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
+            Self.restoreUserDefault(originalPriorityList, forKey: UserDefaultsKeys.inputDevicePriorityList)
             Self.restoreUserDefault(originalAudioDuckingEnabled, forKey: UserDefaultsKeys.audioDuckingEnabled)
             Self.restoreUserDefault(originalAudioDuckingLevel, forKey: UserDefaultsKeys.audioDuckingLevel)
         }
@@ -4707,6 +4713,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
     func testApiStartRecording_keepsStartSoundForUSBInputAfterInputIsReady() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let originalPriorityList = UserDefaults.standard.object(forKey: UserDefaultsKeys.inputDevicePriorityList)
         var events: [String] = []
         let usbDeviceID = AudioDeviceID(410)
         let soundService = MockSoundService { event, enabled in
@@ -4726,6 +4733,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             dictationContext = nil
             TestSupport.remove(appSupportDirectory)
             Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
+            Self.restoreUserDefault(originalPriorityList, forKey: UserDefaultsKeys.inputDevicePriorityList)
         }
 
         dictationContext = Self.makeDictationContext(
@@ -4762,6 +4770,92 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
         XCTAssertEqual(events, ["start_audio", "start_sound"])
         XCTAssertTrue(context.dictationViewModel.isRecordingInputReady)
+    }
+
+    @MainActor
+    func testApiStartRecordingUsesNextAvailablePriorityMicrophone() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let originalPriorityList = UserDefaults.standard.object(forKey: UserDefaultsKeys.inputDevicePriorityList)
+        let usbDeviceID = AudioDeviceID(510)
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        UserDefaults.standard.set(
+            try JSONEncoder().encode([
+                AudioInputDevicePriorityItem(uid: "missing-primary", name: "Desk Mic"),
+                AudioInputDevicePriorityItem(uid: "usb-input", name: "USB Mic")
+            ]),
+            forKey: UserDefaultsKeys.inputDevicePriorityList
+        )
+        let transportResolver = FakeAudioDeviceTransportResolver(
+            transports: [usbDeviceID: kAudioDeviceTransportTypeUSB]
+        )
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+            Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
+            Self.restoreUserDefault(originalPriorityList, forKey: UserDefaultsKeys.inputDevicePriorityList)
+        }
+
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            audioDeviceTransportResolver: transportResolver
+        )
+        let context = try XCTUnwrap(dictationContext)
+        context.audioDeviceService.inputDevices = [
+            AudioInputDevice(deviceID: usbDeviceID, name: "USB Mic", uid: "usb-input")
+        ]
+        context.audioDeviceService.audioDeviceIDResolverOverride = { uid in
+            uid == "usb-input" ? usbDeviceID : nil
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { selectedDeviceID in
+            XCTAssertEqual(selectedDeviceID, usbDeviceID)
+            return true
+        }
+        context.audioRecordingService.startRecordingOverride = {
+            XCTAssertEqual(context.audioRecordingService.selectedDeviceID, usbDeviceID)
+        }
+
+        _ = context.dictationViewModel.apiStartRecording()
+
+        XCTAssertTrue(context.audioRecordingService.hasExplicitDeviceSelection)
+    }
+
+    @MainActor
+    func testApiStartRecordingFallsBackToSystemDefaultWhenPriorityMicrophonesUnavailable() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let originalPriorityList = UserDefaults.standard.object(forKey: UserDefaultsKeys.inputDevicePriorityList)
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        UserDefaults.standard.set(
+            try JSONEncoder().encode([
+                AudioInputDevicePriorityItem(uid: "missing-primary", name: "Desk Mic")
+            ]),
+            forKey: UserDefaultsKeys.inputDevicePriorityList
+        )
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+            Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
+            Self.restoreUserDefault(originalPriorityList, forKey: UserDefaultsKeys.inputDevicePriorityList)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        context.audioDeviceService.inputDevices = []
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { selectedDeviceID in
+            XCTAssertNil(selectedDeviceID)
+            return true
+        }
+        context.audioRecordingService.startRecordingOverride = {
+            XCTAssertNil(context.audioRecordingService.selectedDeviceID)
+            XCTAssertFalse(context.audioRecordingService.hasExplicitDeviceSelection)
+        }
+
+        _ = context.dictationViewModel.apiStartRecording()
     }
 
     #if !APPSTORE
@@ -5197,6 +5291,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
     func testApiStartRecording_showsNoMicDetectedErrorWhenSelectedInputUnavailable() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let originalPriorityList = UserDefaults.standard.object(forKey: UserDefaultsKeys.inputDevicePriorityList)
         let deviceID = AudioDeviceID(42)
         let transportResolver = FakeAudioDeviceTransportResolver(
             transports: [deviceID: kAudioDeviceTransportTypeUSB]
@@ -5211,6 +5306,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
             dictationContext = nil
             TestSupport.remove(appSupportDirectory)
             Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
+            Self.restoreUserDefault(originalPriorityList, forKey: UserDefaultsKeys.inputDevicePriorityList)
         }
 
         dictationContext = Self.makeDictationContext(
@@ -5579,7 +5675,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let audioRecorderViewModel = AudioRecorderViewModel(
             recorderService: audioRecorderService,
             modelManager: modelManager,
-            dictionaryService: dictionaryService
+            dictionaryService: dictionaryService,
+            audioDeviceService: audioDeviceService
         )
 
         let router = APIRouter()
@@ -8272,6 +8369,56 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testEventTapDefersDictationStartOutOfCallback() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(spaceHotkey(), for: .toggle)
+
+        var startCount = 0
+        service.onDictationStart = { _ in
+            startCount += 1
+        }
+
+        let keyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .eventTap))
+        XCTAssertEqual(startCount, 0)
+
+        await Task.yield()
+        XCTAssertEqual(startCount, 1)
+    }
+
+    @MainActor
+    func testEventTapDisableRecoversReleasedPushToTalkHotkey() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(spaceHotkey(), for: .pushToTalk)
+
+        var physicalKeyIsDown = true
+        service.keyStateProvider = { keyCode in
+            keyCode == 0x31 && physicalKeyIsDown
+        }
+
+        var startCount = 0
+        var stopCount = 0
+        service.onDictationStart = { _ in startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+
+        let keyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true)
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .eventTap))
+        await Task.yield()
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(stopCount, 0)
+        XCTAssertEqual(service.currentMode, .pushToTalk)
+
+        physicalKeyIsDown = false
+        service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+        XCTAssertEqual(stopCount, 1)
+        XCTAssertNil(service.currentMode)
+    }
+
+    @MainActor
     func testSuppressingEventTapMaskOnlyIncludesMouseEventsWhenRequested() {
         let keyboardOnlyMask = HotkeyService.suppressingEventTapMaskForTesting(includeMouse: false)
 
@@ -8624,7 +8771,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
-    func testMiddleMouseHotkeyPassesThroughEvenWhenSideMouseHotkeyUsesSuppressingTap() throws {
+    func testMiddleMouseHotkeyPassesThroughEvenWhenSideMouseHotkeyUsesSuppressingTap() async throws {
         let service = HotkeyService()
         service.suspendMonitoring()
         service.setHotkeysForTesting([
@@ -8642,11 +8789,12 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertTrue(service.needsMouseEventMonitoringForTesting())
         XCTAssertTrue(service.needsSuppressingMouseEventTapForTesting())
         XCTAssertFalse(service.processEventForTesting(middleMouseDown, source: .eventTap))
+        await Task.yield()
         XCTAssertEqual(startCount, 1)
     }
 
     @MainActor
-    func testMatchingSideMouseHotkeyDispatchesAndSuppressesClick() throws {
+    func testMatchingSideMouseHotkeyDispatchesAndSuppressesClick() async throws {
         let service = HotkeyService()
         service.suspendMonitoring()
         service.setHotkeyForTesting(UnifiedHotkey(mouseButton: 3), for: .toggle)
@@ -8662,6 +8810,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertTrue(service.needsMouseEventMonitoringForTesting())
         XCTAssertTrue(service.needsSuppressingMouseEventTapForTesting())
         XCTAssertTrue(service.processEventForTesting(sideMouseDown, source: .eventTap))
+        await Task.yield()
         XCTAssertEqual(startCount, 1)
         XCTAssertTrue(service.processEventForTesting(sideMouseUp, source: .eventTap))
     }
@@ -9283,7 +9432,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
-    func testHybridRightOptionSingleTapStillTogglesDictation() throws {
+    func testHybridRightOptionSingleTapStillTogglesDictation() async throws {
         let service = HotkeyService()
         service.suspendMonitoring()
 
@@ -9298,11 +9447,13 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         let keyUp = try makeRightOptionModifierEvent(isDown: false)
 
         XCTAssertTrue(service.processEventForTesting(keyDown, source: .eventTap))
+        await Task.yield()
         XCTAssertEqual(startCount, 1)
         XCTAssertEqual(stopCount, 0)
         XCTAssertEqual(service.currentMode, .pushToTalk)
 
         XCTAssertTrue(service.processEventForTesting(keyUp, source: .eventTap))
+        await Task.yield()
         XCTAssertEqual(startCount, 1)
         XCTAssertEqual(stopCount, 0)
         XCTAssertEqual(service.currentMode, .toggle)
@@ -10171,13 +10322,13 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
             restoredService.onDictationStop = { stopCount += 1 }
 
             let oldKeyDown = try makeKeyboardEvent(keyCode: 0x31, keyDown: true, flags: [.maskControl])
-            XCTAssertFalse(restoredService.processEventForTesting(oldKeyDown, source: .eventTap))
+            XCTAssertFalse(restoredService.processEventForTesting(oldKeyDown, source: .monitor))
             XCTAssertEqual(startCount, 0)
 
             let newKeyDown = try makeKeyboardEvent(keyCode: 0x00, keyDown: true, flags: [.maskCommand, .maskAlternate])
             let newKeyUp = try makeKeyboardEvent(keyCode: 0x00, keyDown: false, flags: [.maskCommand, .maskAlternate])
-            XCTAssertTrue(restoredService.processEventForTesting(newKeyDown, source: .eventTap))
-            XCTAssertTrue(restoredService.processEventForTesting(newKeyUp, source: .eventTap))
+            XCTAssertTrue(restoredService.processEventForTesting(newKeyDown, source: .monitor))
+            XCTAssertTrue(restoredService.processEventForTesting(newKeyUp, source: .monitor))
             XCTAssertEqual(startCount, 1)
             XCTAssertEqual(stopCount, 1)
         }

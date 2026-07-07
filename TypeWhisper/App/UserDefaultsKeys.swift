@@ -58,6 +58,7 @@ enum UserDefaultsKeys {
 
     // MARK: - Audio Device
     static let selectedInputDeviceUID = "selectedInputDeviceUID"
+    static let inputDevicePriorityList = "inputDevicePriorityList"
 
     // MARK: - Home / Setup
     static let setupWizardCompleted = "setupWizardCompleted"

@@ -1,3 +1,4 @@
+import AudioToolbox
 import XCTest
 import TypeWhisperPluginSDK
 @testable import TypeWhisper
@@ -126,6 +127,79 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(disabledCount, 0)
         XCTAssertEqual(transcriptOnlyCount, 0)
         XCTAssertEqual(splitEnabledCount, 1)
+    }
+
+    func testRecorderStartPassesResolvedMicrophonePrioritySelection() async throws {
+        try preserveStandardDefaults()
+        let defaults = try makeDefaults()
+        let recordingsDirectory = makeTemporaryDirectory()
+        let usbDeviceID = AudioDeviceID(620)
+        let usbDevice = AudioInputDevice(deviceID: usbDeviceID, name: "USB Mic", uid: "usb-input")
+        let audioDeviceService = AudioDeviceService(
+            initialInputDevices: [usbDevice],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false
+        )
+        audioDeviceService.audioDeviceIDResolverOverride = { uid in
+            uid == "usb-input" ? usbDeviceID : nil
+        }
+        audioDeviceService.addInputDeviceToPriorityList(usbDevice)
+
+        let recorderService = AudioRecorderService()
+        recorderService.recordingsDirectoryOverride = recordingsDirectory
+        var capturedSelection: ResolvedRecordingInputSelection?
+        recorderService.startRecordingOverride = { _, _, _, outputURL, microphoneSelection in
+            capturedSelection = microphoneSelection
+            try Data("placeholder".utf8).write(to: outputURL)
+            return outputURL
+        }
+
+        let viewModel = makeViewModel(
+            defaults: defaults,
+            recorderService: recorderService,
+            audioDeviceService: audioDeviceService
+        )
+
+        _ = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+
+        XCTAssertEqual(capturedSelection?.deviceUID, "usb-input")
+        XCTAssertEqual(capturedSelection?.deviceID, usbDeviceID)
+        XCTAssertTrue(capturedSelection?.hasExplicitDeviceSelection == true)
+    }
+
+    func testRecorderStartIgnoresMicrophonePriorityWhenMicDisabled() async throws {
+        try preserveStandardDefaults()
+        let defaults = try makeDefaults()
+        let recordingsDirectory = makeTemporaryDirectory()
+        let usbDeviceID = AudioDeviceID(621)
+        let usbDevice = AudioInputDevice(deviceID: usbDeviceID, name: "USB Mic", uid: "usb-input")
+        let audioDeviceService = AudioDeviceService(
+            initialInputDevices: [usbDevice],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false
+        )
+        audioDeviceService.addInputDeviceToPriorityList(usbDevice)
+
+        let recorderService = AudioRecorderService()
+        recorderService.recordingsDirectoryOverride = recordingsDirectory
+        var capturedSelection: ResolvedRecordingInputSelection?
+        recorderService.startRecordingOverride = { _, _, _, outputURL, microphoneSelection in
+            capturedSelection = microphoneSelection
+            try Data("placeholder".utf8).write(to: outputURL)
+            return outputURL
+        }
+
+        let viewModel = makeViewModel(
+            defaults: defaults,
+            recorderService: recorderService,
+            audioDeviceService: audioDeviceService
+        )
+
+        _ = try await viewModel.apiStartRecording(micEnabled: false, systemAudioEnabled: true)
+
+        XCTAssertNil(capturedSelection?.deviceUID)
+        XCTAssertNil(capturedSelection?.deviceID)
+        XCTAssertFalse(capturedSelection?.hasExplicitDeviceSelection == true)
     }
 
     func testFinalTranscriptionFailurePersistsRecorderFailureAndFailsAPISession() async throws {
@@ -266,6 +340,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         defaults: UserDefaults,
         modelManager: ModelManagerService = ModelManagerService(),
         recorderService: AudioRecorderService = AudioRecorderService(),
+        audioDeviceService: AudioDeviceService = AudioDeviceService(initialInputDevices: [], monitorDeviceChanges: false),
         livePreviewStartObserver: (() -> Void)? = nil
     ) -> AudioRecorderViewModel {
         setupEventBus()
@@ -273,6 +348,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
             recorderService: recorderService,
             modelManager: modelManager,
             dictionaryService: DictionaryService(appSupportDirectory: makeTemporaryDirectory()),
+            audioDeviceService: audioDeviceService,
             defaults: defaults,
             livePreviewStartObserver: livePreviewStartObserver
         )
@@ -299,7 +375,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
     ) -> AudioRecorderService {
         let recorderService = AudioRecorderService()
         recorderService.recordingsDirectoryOverride = recordingsDirectory
-        recorderService.startRecordingOverride = { _, _, _, proposedOutputURL in
+        recorderService.startRecordingOverride = { _, _, _, proposedOutputURL, _ in
             let resolvedOutputURL = outputURL ?? proposedOutputURL
             try FileManager.default.createDirectory(
                 at: resolvedOutputURL.deletingLastPathComponent(),
@@ -327,7 +403,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         let defaults = try makeDefaults()
         let recorderService = AudioRecorderService()
         recorderService.recordingsDirectoryOverride = makeTemporaryDirectory()
-        recorderService.startRecordingOverride = { _, _, _, outputURL in
+        recorderService.startRecordingOverride = { _, _, _, outputURL, _ in
             try Data("placeholder".utf8).write(to: outputURL)
             return outputURL
         }
@@ -435,7 +511,9 @@ final class AudioRecorderViewModelTests: XCTestCase {
     private func preserveStandardDefaults() throws {
         let keys = [
             UserDefaultsKeys.selectedEngine,
-            UserDefaultsKeys.selectedModelId
+            UserDefaultsKeys.selectedModelId,
+            UserDefaultsKeys.selectedInputDeviceUID,
+            UserDefaultsKeys.inputDevicePriorityList
         ]
         let originals = Dictionary(uniqueKeysWithValues: keys.map { ($0, UserDefaults.standard.object(forKey: $0)) })
         for key in keys {

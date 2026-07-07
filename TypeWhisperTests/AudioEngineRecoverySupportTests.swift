@@ -1,11 +1,35 @@
 import AudioToolbox
 import AudioUnit
 import AVFoundation
+import Combine
 import XCTest
 @testable import TypeWhisper
 
 private final class TestClock: @unchecked Sendable {
     var now: TimeInterval = 0
+}
+
+private final class AudioLevelUpdateRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var levels: [Float] = []
+
+    var count: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return levels.count
+    }
+
+    var last: Float? {
+        lock.lock()
+        defer { lock.unlock() }
+        return levels.last
+    }
+
+    func append(_ level: Float) {
+        lock.lock()
+        levels.append(level)
+        lock.unlock()
+    }
 }
 
 private func makeMonoBuffer(samples: [Float]) throws -> AVAudioPCMBuffer {
@@ -40,6 +64,38 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
 
         XCTAssertGreaterThan(level, 0.65)
         XCTAssertLessThan(level, 0.9)
+    }
+
+    @MainActor
+    func testAudioLevelPublishingCoalescesRapidBufferUpdates() async throws {
+        let service = AudioRecordingService()
+        let recorder = AudioLevelUpdateRecorder()
+        let firstUpdate = expectation(description: "first audio level update")
+
+        let cancellable = service.$audioLevel
+            .dropFirst()
+            .sink { level in
+                recorder.append(level)
+                if recorder.count == 1 {
+                    firstUpdate.fulfill()
+                }
+            }
+
+        service.testingProcessConvertedSamples(Array(repeating: 0.25 as Float, count: 160))
+        await fulfillment(of: [firstUpdate], timeout: 1.0)
+
+        service.testingMarkAudioLevelPublishedNow()
+        service.testingProcessConvertedSamples(Array(repeating: 0.10 as Float, count: 160))
+        service.testingProcessConvertedSamples(Array(repeating: 0.20 as Float, count: 160))
+
+        try await Task.sleep(for: .milliseconds(5))
+        XCTAssertEqual(recorder.count, 1)
+
+        try await Task.sleep(for: .milliseconds(45))
+        XCTAssertEqual(recorder.count, 2)
+        XCTAssertEqual(recorder.last ?? -1, AudioLevelMeter.normalizedLevel(rms: 0.20), accuracy: 0.0001)
+
+        cancellable.cancel()
     }
 
     func testAudioInputSignalRejectsZeroFilledBluetoothTapBuffer() throws {
@@ -520,11 +576,14 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
 
 final class AudioDeviceServiceCompatibilityTests: XCTestCase {
     private var originalSelectedDeviceUID: Any?
+    private var originalInputDevicePriorityList: Any?
 
     override func setUp() {
         super.setUp()
         originalSelectedDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        originalInputDevicePriorityList = UserDefaults.standard.object(forKey: UserDefaultsKeys.inputDevicePriorityList)
         UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.inputDevicePriorityList)
     }
 
     override func tearDown() {
@@ -533,7 +592,17 @@ final class AudioDeviceServiceCompatibilityTests: XCTestCase {
         } else {
             UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
         }
+        if let originalInputDevicePriorityList {
+            UserDefaults.standard.set(originalInputDevicePriorityList, forKey: UserDefaultsKeys.inputDevicePriorityList)
+        } else {
+            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.inputDevicePriorityList)
+        }
         super.tearDown()
+    }
+
+    private func savedInputDevicePriorityList() throws -> [AudioInputDevicePriorityItem] {
+        let data = try XCTUnwrap(UserDefaults.standard.data(forKey: UserDefaultsKeys.inputDevicePriorityList))
+        return try JSONDecoder().decode([AudioInputDevicePriorityItem].self, from: data)
     }
 
     func testStartPreview_selectedIncompatibleDeviceDoesNotActivatePreview() {
@@ -805,6 +874,173 @@ final class AudioDeviceServiceCompatibilityTests: XCTestCase {
         XCTAssertEqual(service.selectedDeviceUID, "display-mic")
         XCTAssertEqual(service.selectedDevice?.uid, "display-mic")
         XCTAssertNotNil(service.selectedDeviceStatusMessage)
+    }
+
+    func testMigratesSavedSelectedInputDeviceToPriorityList() throws {
+        UserDefaults.standard.set("usb-input", forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let device = AudioInputDevice(
+            deviceID: AudioDeviceID(42),
+            name: "USB Mic",
+            uid: "usb-input"
+        )
+
+        let service = AudioDeviceService(
+            initialInputDevices: [device],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false
+        )
+
+        XCTAssertEqual(service.inputDevicePriorityList, [
+            AudioInputDevicePriorityItem(uid: "usb-input", name: "USB Mic")
+        ])
+        XCTAssertEqual(try savedInputDevicePriorityList(), service.inputDevicePriorityList)
+    }
+
+    func testMovingInputDevicePriorityUpdatesSelectedDeviceAndPersistsDeduplicatedList() throws {
+        let builtIn = AudioInputDevice(deviceID: AudioDeviceID(1), name: "Built-in Mic", uid: "built-in")
+        let usb = AudioInputDevice(deviceID: AudioDeviceID(2), name: "USB Mic", uid: "usb-input")
+        UserDefaults.standard.set(
+            try JSONEncoder().encode([
+                AudioInputDevicePriorityItem(uid: "built-in", name: "Built-in Mic"),
+                AudioInputDevicePriorityItem(uid: "usb-input", name: "USB Mic"),
+                AudioInputDevicePriorityItem(uid: "built-in", name: "Built-in Mic")
+            ]),
+            forKey: UserDefaultsKeys.inputDevicePriorityList
+        )
+        let service = AudioDeviceService(
+            initialInputDevices: [builtIn, usb],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false
+        )
+
+        XCTAssertEqual(service.inputDevicePriorityList.map(\.uid), ["built-in", "usb-input"])
+
+        service.moveInputDevicePriorityItems(from: IndexSet(integer: 1), to: 0)
+
+        XCTAssertEqual(service.inputDevicePriorityList.map(\.uid), ["usb-input", "built-in"])
+        XCTAssertEqual(service.selectedDeviceUID, "usb-input")
+        XCTAssertEqual(try savedInputDevicePriorityList().map(\.uid), ["usb-input", "built-in"])
+    }
+
+    func testSelectingPrimaryInputDeviceReplacesMigratedFallbackList() throws {
+        let builtIn = AudioInputDevice(deviceID: AudioDeviceID(1), name: "Built-in Mic", uid: "built-in")
+        let usb = AudioInputDevice(deviceID: AudioDeviceID(2), name: "USB Mic", uid: "usb-input")
+        UserDefaults.standard.set(
+            try JSONEncoder().encode([
+                AudioInputDevicePriorityItem(uid: "built-in", name: "Built-in Mic")
+            ]),
+            forKey: UserDefaultsKeys.inputDevicePriorityList
+        )
+        UserDefaults.standard.set("built-in", forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let service = AudioDeviceService(
+            initialInputDevices: [builtIn, usb],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false,
+            transportResolver: FakeAudioDeviceTransportResolver(
+                transports: [
+                    AudioDeviceID(1): kAudioDeviceTransportTypeBuiltIn,
+                    AudioDeviceID(2): kAudioDeviceTransportTypeUSB
+                ]
+            ),
+            inputActivationGuard: FakeAudioInputDeviceActivator()
+        )
+
+        service.selectInputDeviceAsPrimary("usb-input")
+
+        XCTAssertEqual(service.selectedDeviceUID, "usb-input")
+        XCTAssertEqual(service.inputDevicePriorityList.map(\.uid), ["usb-input"])
+        XCTAssertEqual(try savedInputDevicePriorityList().map(\.uid), ["usb-input"])
+    }
+
+    func testResolvedRecordingInputSelectionSkipsDisconnectedPrimaryDevice() throws {
+        UserDefaults.standard.set(
+            try JSONEncoder().encode([
+                AudioInputDevicePriorityItem(uid: "missing-primary", name: "Desk Mic"),
+                AudioInputDevicePriorityItem(uid: "usb-input", name: "USB Mic")
+            ]),
+            forKey: UserDefaultsKeys.inputDevicePriorityList
+        )
+        let usbDeviceID = AudioDeviceID(42)
+        let transportResolver = FakeAudioDeviceTransportResolver(
+            transports: [usbDeviceID: kAudioDeviceTransportTypeUSB]
+        )
+        let service = AudioDeviceService(
+            initialInputDevices: [
+                AudioInputDevice(deviceID: usbDeviceID, name: "USB Mic", uid: "usb-input")
+            ],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false,
+            transportResolver: transportResolver
+        )
+        service.audioDeviceIDResolverOverride = { uid in
+            uid == "usb-input" ? usbDeviceID : nil
+        }
+
+        let selection = service.resolvedRecordingInputSelection()
+
+        XCTAssertEqual(selection.deviceUID, "usb-input")
+        XCTAssertEqual(selection.deviceID, usbDeviceID)
+        XCTAssertTrue(selection.hasExplicitDeviceSelection)
+    }
+
+    func testResolvedRecordingInputSelectionKeepsAvailablePrimaryWhenFallbackExists() throws {
+        UserDefaults.standard.set(
+            try JSONEncoder().encode([
+                AudioInputDevicePriorityItem(uid: "hyperx-input", name: "HyperX QuadCast 2"),
+                AudioInputDevicePriorityItem(uid: "built-in", name: "MacBook Pro Microphone")
+            ]),
+            forKey: UserDefaultsKeys.inputDevicePriorityList
+        )
+        let hyperxDeviceID = AudioDeviceID(42)
+        let builtInDeviceID = AudioDeviceID(43)
+        let service = AudioDeviceService(
+            initialInputDevices: [
+                AudioInputDevice(deviceID: hyperxDeviceID, name: "HyperX QuadCast 2", uid: "hyperx-input"),
+                AudioInputDevice(deviceID: builtInDeviceID, name: "MacBook Pro Microphone", uid: "built-in")
+            ],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false,
+            transportResolver: FakeAudioDeviceTransportResolver(
+                transports: [
+                    hyperxDeviceID: kAudioDeviceTransportTypeUSB,
+                    builtInDeviceID: kAudioDeviceTransportTypeBuiltIn
+                ]
+            )
+        )
+        service.audioDeviceIDResolverOverride = { uid in
+            switch uid {
+            case "hyperx-input": return hyperxDeviceID
+            case "built-in": return builtInDeviceID
+            default: return nil
+            }
+        }
+
+        let selection = service.resolvedRecordingInputSelection()
+
+        XCTAssertEqual(selection.deviceUID, "hyperx-input")
+        XCTAssertEqual(selection.deviceID, hyperxDeviceID)
+        XCTAssertEqual(selection.deviceName, "HyperX QuadCast 2")
+        XCTAssertTrue(selection.hasExplicitDeviceSelection)
+    }
+
+    func testResolvedRecordingInputSelectionFallsBackToSystemDefaultWhenPriorityListUnavailable() throws {
+        UserDefaults.standard.set(
+            try JSONEncoder().encode([
+                AudioInputDevicePriorityItem(uid: "missing-primary", name: "Desk Mic")
+            ]),
+            forKey: UserDefaultsKeys.inputDevicePriorityList
+        )
+        let service = AudioDeviceService(
+            initialInputDevices: [],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false
+        )
+
+        let selection = service.resolvedRecordingInputSelection()
+
+        XCTAssertNil(selection.deviceUID)
+        XCTAssertNil(selection.deviceID)
+        XCTAssertFalse(selection.hasExplicitDeviceSelection)
     }
 
     func testPreviewRecoveryEngineSwap_replacesStoredEngineInstance() {

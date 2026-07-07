@@ -122,7 +122,9 @@ final class ServiceContainer: ObservableObject {
         punctuationRulesLoader = PunctuationRulesLoader()
         punctuationStrategyResolver = PunctuationStrategyResolver(profileStore: dictationPunctuationProfileStore)
         punctuationVerificationService = PunctuationVerificationService(rulesLoader: punctuationRulesLoader)
-        audioRecorderService = AudioRecorderService()
+        audioRecorderService = AudioRecorderService(
+            inputActivationGuard: inputActivationGuard
+        )
         promptProcessingService.memoryService = memoryService
         promptProcessingService.modelManagerService = modelManagerService
         watchFolderService = WatchFolderService(audioFileService: audioFileService, modelManagerService: modelManagerService)
@@ -189,7 +191,8 @@ final class ServiceContainer: ObservableObject {
         audioRecorderViewModel = AudioRecorderViewModel(
             recorderService: audioRecorderService,
             modelManager: modelManagerService,
-            dictionaryService: dictionaryService
+            dictionaryService: dictionaryService,
+            audioDeviceService: audioDeviceService
         )
 
 
