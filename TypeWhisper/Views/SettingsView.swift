@@ -512,6 +512,8 @@ struct RecordingSettingsView: View {
 
     private func microphonePriorityRow(index: Int, item: AudioInputDevicePriorityItem) -> some View {
         let isAvailable = audioDevice.isInputDevicePriorityItemAvailable(item)
+        let canMoveUp = index > 0
+        let canMoveDown = index < audioDevice.inputDevicePriorityList.count - 1
 
         return HStack(spacing: 8) {
             Image(systemName: "line.3.horizontal")
@@ -550,6 +552,41 @@ struct RecordingSettingsView: View {
         .padding(.vertical, 3)
         .frame(minHeight: 24)
         .contentShape(Rectangle())
+        .contextMenu {
+            Button {
+                moveMicrophonePriorityItemUp(item)
+            } label: {
+                Label(String(localized: "Move Up"), systemImage: "chevron.up")
+            }
+            .disabled(!canMoveUp)
+
+            Button {
+                moveMicrophonePriorityItemDown(item)
+            } label: {
+                Label(String(localized: "Move Down"), systemImage: "chevron.down")
+            }
+            .disabled(!canMoveDown)
+        }
+        .modifier(MicrophonePriorityAccessibilityActions(
+            canMoveUp: canMoveUp,
+            canMoveDown: canMoveDown,
+            moveUp: { moveMicrophonePriorityItemUp(item) },
+            moveDown: { moveMicrophonePriorityItemDown(item) }
+        ))
+    }
+
+    private func moveMicrophonePriorityItemUp(_ item: AudioInputDevicePriorityItem) {
+        guard let index = audioDevice.inputDevicePriorityList.firstIndex(of: item),
+              index > 0 else { return }
+
+        audioDevice.moveInputDevicePriorityItems(from: IndexSet(integer: index), to: index - 1)
+    }
+
+    private func moveMicrophonePriorityItemDown(_ item: AudioInputDevicePriorityItem) {
+        guard let index = audioDevice.inputDevicePriorityList.firstIndex(of: item),
+              index < audioDevice.inputDevicePriorityList.count - 1 else { return }
+
+        audioDevice.moveInputDevicePriorityItems(from: IndexSet(integer: index), to: index + 2)
     }
 
     var body: some View {
@@ -884,6 +921,30 @@ private struct SoundEventPicker: View {
             selection = SoundChoice.custom(filename).storageKey
         } catch {
             // File copy failed - silently ignore
+        }
+    }
+}
+
+private struct MicrophonePriorityAccessibilityActions: ViewModifier {
+    let canMoveUp: Bool
+    let canMoveDown: Bool
+    let moveUp: () -> Void
+    let moveDown: () -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if canMoveUp && canMoveDown {
+            content
+                .accessibilityAction(named: Text(String(localized: "Move Up")), moveUp)
+                .accessibilityAction(named: Text(String(localized: "Move Down")), moveDown)
+        } else if canMoveUp {
+            content
+                .accessibilityAction(named: Text(String(localized: "Move Up")), moveUp)
+        } else if canMoveDown {
+            content
+                .accessibilityAction(named: Text(String(localized: "Move Down")), moveDown)
+        } else {
+            content
         }
     }
 }
