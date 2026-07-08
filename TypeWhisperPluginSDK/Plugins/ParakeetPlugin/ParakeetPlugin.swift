@@ -641,7 +641,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         for version: ParakeetVersion,
         targetDirectory: URL? = nil,
         fetcher: VocabularyAssetFetcher = { url, description in
-            try await DownloadUtils.fetchHuggingFaceFile(from: url, description: description)
+            try await ParakeetPlugin.downloadVocabularyAsset(from: url, description: description)
         }
     ) async throws {
         let directory = targetDirectory ?? Self.vocabularyAssetDirectory(for: version)
@@ -699,6 +699,36 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             return false
         }
         return size.intValue > 0
+    }
+
+    private static func downloadVocabularyAsset(from url: URL, description: String) async throws -> Data {
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 600
+        if let token = currentHuggingFaceToken() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        let (data, response) = try await PluginHTTPClient.data(for: request, resourceTimeout: 600)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw ParakeetVocabularyAssetHTTPError(description: description, statusCode: nil)
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw ParakeetVocabularyAssetHTTPError(
+                description: description,
+                statusCode: httpResponse.statusCode
+            )
+        }
+        return data
+    }
+
+    private static func currentHuggingFaceToken() -> String? {
+        for key in PluginHuggingFaceTokenHelper.environmentKeys {
+            if let token = PluginHuggingFaceTokenHelper.normalizedToken(ProcessInfo.processInfo.environment[key]) {
+                return token
+            }
+        }
+        return nil
     }
 
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
@@ -872,6 +902,18 @@ enum CtcModelState: Equatable {
     case downloading
     case ready
     case error(String)
+}
+
+private struct ParakeetVocabularyAssetHTTPError: LocalizedError, Sendable {
+    let description: String
+    let statusCode: Int?
+
+    var errorDescription: String? {
+        guard let statusCode else {
+            return "Invalid HTTP response while downloading \(description)"
+        }
+        return "HTTP \(statusCode) while downloading \(description)"
+    }
 }
 
 private enum ParakeetVocabularyAssetError: LocalizedError {
