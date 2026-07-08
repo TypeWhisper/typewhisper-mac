@@ -1068,6 +1068,9 @@ struct PluginSettingsView: View {
         selectedTab = .installed
 
         let resolvedRegistryPlugin = registryPlugin ?? registryService.registry.first { $0.id == pluginId }
+        if registryService.installStates[pluginId]?.requiresRestart == true {
+            return
+        }
         enableInstalledPluginIfNeeded(pluginId)
 
         guard let installedPlugin = pluginManager.loadedPlugins.first(where: { $0.id == pluginId }),
@@ -1579,7 +1582,7 @@ private struct InstalledPluginRow: View {
                 Spacer(minLength: 12)
 
                 HStack(spacing: 8) {
-                    if plugin.supportsSettingsWindow {
+                    if plugin.supportsSettingsWindow && !restartRequired {
                         Button {
                             PluginSettingsWindowManager.shared.present(plugin)
                         } label: {
@@ -1597,6 +1600,7 @@ private struct InstalledPluginRow: View {
                         }
                     ))
                     .labelsHidden()
+                    .disabled(restartRequired)
                     .accessibilityLabel(String(localized: "Enable \(plugin.manifest.name)"))
 
                     if hasOverflowActions {
@@ -1776,6 +1780,10 @@ private struct InstalledPluginRow: View {
 
     private var hasOverflowActions: Bool {
         detailsURL != nil || homepageURL != nil || canRepairInstallation || !plugin.isBundled
+    }
+
+    private var restartRequired: Bool {
+        installState?.requiresRestart == true
     }
 
     private func downloadedModelCountTitle(_ count: Int) -> String {
@@ -2038,6 +2046,15 @@ private struct PluginInstallStateView: View {
                 Text(String(localized: "Installing..."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+        case .restartRequired:
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.clockwise.circle.fill")
+                    .foregroundStyle(.orange)
+                Text(String(localized: "Restart TypeWhisper to finish updating."))
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .lineLimit(1)
             }
         case .error(let message):
             HStack(spacing: 6) {

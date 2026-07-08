@@ -639,7 +639,11 @@ final class PluginManager: ObservableObject {
         return false
     }
 
-    private func makeUnloadedPluginRecord(manifest: PluginManifest, sourceURL: URL) throws -> LoadedPlugin {
+    private func makeUnloadedPluginRecord(
+        manifest: PluginManifest,
+        sourceURL: URL,
+        isEnabled: Bool = false
+    ) throws -> LoadedPlugin {
         guard let bundle = Bundle(url: sourceURL) else {
             throw PluginLoadError.failedToCreateBundle(bundleName: sourceURL.lastPathComponent)
         }
@@ -649,8 +653,22 @@ final class PluginManager: ObservableObject {
             instance: UnloadedPluginPlaceholder(),
             bundle: bundle,
             sourceURL: sourceURL,
-            isEnabled: false
+            isEnabled: isEnabled
         )
+    }
+
+    func registerUnloadedPlugin(manifest: PluginManifest, sourceURL: URL, isEnabled: Bool) throws {
+        if let existingIndex = loadedPlugins.firstIndex(where: { $0.manifest.id == manifest.id }) {
+            loadedPlugins.remove(at: existingIndex)
+        }
+
+        loadedPlugins.append(try makeUnloadedPluginRecord(
+            manifest: manifest,
+            sourceURL: sourceURL,
+            isEnabled: isEnabled
+        ))
+        UserDefaults.standard.set(isEnabled, forKey: "plugin.\(manifest.id).enabled")
+        logger.info("Registered plugin \(manifest.id, privacy: .public) v\(manifest.version, privacy: .public) as restart-required unloaded placeholder")
     }
 
     func setRuleNamesProvider(_ provider: @escaping @MainActor () -> [String]) {

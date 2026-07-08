@@ -850,6 +850,8 @@ struct SetupWizardView: View {
                 case .extracting:
                     ProgressView()
                         .controlSize(.small)
+                case .restartRequired:
+                    statusPill(localizedAppText("Restart", de: "Neustart"), systemImage: "arrow.clockwise.circle.fill", color: .orange)
                 case .error:
                     statusPill(localizedAppText("Retry later", de: "Später erneut"), systemImage: "exclamationmark.triangle.fill", color: .orange)
                 }

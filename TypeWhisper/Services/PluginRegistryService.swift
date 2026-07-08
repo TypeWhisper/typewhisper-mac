@@ -487,7 +487,15 @@ final class PluginRegistryService: ObservableObject {
     enum InstallState: Equatable {
         case downloading(Double)
         case extracting
+        case restartRequired
         case error(String)
+
+        var requiresRestart: Bool {
+            if case .restartRequired = self {
+                return true
+            }
+            return false
+        }
     }
 
     // MARK: - Version Comparison
@@ -748,13 +756,17 @@ final class PluginRegistryService: ObservableObject {
                 return false
             }
 
-            _ = try installBundle(
+            let installResult = try installBundle(
                 at: bundleURL,
                 expectedPluginId: plugin.id,
                 copyBundle: false
             )
 
-            installStates.removeValue(forKey: plugin.id)
+            if installResult.requiresRestart {
+                installStates[plugin.id] = .restartRequired
+            } else {
+                installStates.removeValue(forKey: plugin.id)
+            }
             lastFetchDate = nil // invalidate cache so installInfo refreshes
             updateAvailableUpdatesCount()
             logger.info("Installed plugin \(plugin.id) v\(plugin.version)")
@@ -806,7 +818,9 @@ final class PluginRegistryService: ObservableObject {
         let fm = FileManager.default
 
         if url.pathExtension == "bundle" {
-            return try installBundle(at: url, expectedPluginId: nil, copyBundle: true)
+            let result = try installBundle(at: url, expectedPluginId: nil, copyBundle: true)
+            updateInstallState(for: result)
+            return result.manifest
         } else if url.pathExtension == "zip" {
             let tempDir = fm.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -830,17 +844,35 @@ final class PluginRegistryService: ObservableObject {
                               userInfo: [NSLocalizedDescriptionKey: "No .bundle found in ZIP"])
             }
 
-            return try installBundle(at: bundleURL, expectedPluginId: nil, copyBundle: false)
+            let result = try installBundle(at: bundleURL, expectedPluginId: nil, copyBundle: false)
+            updateInstallState(for: result)
+            return result.manifest
         }
 
         throw NSError(domain: "PluginRegistry", code: 5,
                       userInfo: [NSLocalizedDescriptionKey: "Unsupported plugin package"])
     }
 
-    private func installBundle(at bundleURL: URL, expectedPluginId: String?, copyBundle: Bool) throws -> PluginManifest {
+    private struct InstallResult {
+        let manifest: PluginManifest
+        let requiresRestart: Bool
+    }
+
+    private func updateInstallState(for result: InstallResult) {
+        if result.requiresRestart {
+            installStates[result.manifest.id] = .restartRequired
+        } else {
+            installStates.removeValue(forKey: result.manifest.id)
+        }
+    }
+
+    private func installBundle(at bundleURL: URL, expectedPluginId: String?, copyBundle: Bool) throws -> InstallResult {
         let fm = FileManager.default
         let manifest = try readManifest(at: bundleURL)
-        let existingLoadedBundleURL = PluginManager.shared.bundleURL(for: manifest.id)
+        let existingLoadedPlugin = PluginManager.shared.loadedPlugins.first { $0.manifest.id == manifest.id }
+        let existingLoadedBundleURL = existingLoadedPlugin?.sourceURL
+        let replacingRuntimeLoadedPlugin = existingLoadedPlugin?.isRuntimeLoaded == true
+        let shouldEnableAfterRestart = existingLoadedPlugin?.isEnabled == true
 
         guard manifest.isCompatibleWithCurrentEnvironment else {
             let architecture = RuntimeArchitecture.current
@@ -891,7 +923,15 @@ final class PluginRegistryService: ObservableObject {
                 try fm.moveItem(at: bundleURL, to: destinationURL)
             }
 
-            try PluginManager.shared.loadPlugin(at: destinationURL)
+            if replacingRuntimeLoadedPlugin {
+                try PluginManager.shared.registerUnloadedPlugin(
+                    manifest: manifest,
+                    sourceURL: destinationURL,
+                    isEnabled: shouldEnableAfterRestart
+                )
+            } else {
+                try PluginManager.shared.loadPlugin(at: destinationURL)
+            }
             try removeDuplicateBundles(for: manifest.id, keeping: destinationURL)
 
             if hadExistingBundle, fm.fileExists(atPath: backupURL.path) {
@@ -915,7 +955,7 @@ final class PluginRegistryService: ObservableObject {
             throw error
         }
 
-        return manifest
+        return InstallResult(manifest: manifest, requiresRestart: replacingRuntimeLoadedPlugin)
     }
 
     static func validateDownloadedArchiveResponse(_ response: URLResponse) throws {

@@ -524,6 +524,76 @@ final class PluginRegistryServiceTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testInstallingOverRuntimeLoadedPluginRequiresRestartInsteadOfHotReloading() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginRuntimeUpdate")
+        let incomingDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginRuntimeUpdateIncoming")
+        let cacheDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginRuntimeUpdateCache")
+        defer {
+            TestSupport.remove(appSupportDirectory)
+            TestSupport.remove(incomingDirectory)
+            TestSupport.remove(cacheDirectory)
+            UserDefaults.standard.removeObject(forKey: "plugin.com.typewhisper.runtime-update.enabled")
+        }
+
+        let previousPluginManager = PluginManager.shared
+        let pluginManager = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared = pluginManager
+        defer { PluginManager.shared = previousPluginManager }
+
+        let pluginId = "com.typewhisper.runtime-update"
+        let existingURL = pluginManager.pluginsDirectory
+            .appendingPathComponent("RuntimeUpdatePlugin.bundle", isDirectory: true)
+        try Self.makePluginBundle(
+            at: existingURL,
+            pluginId: pluginId,
+            pluginName: "Runtime Update Plugin",
+            version: "1.0.0"
+        )
+
+        let existingBundle = try XCTUnwrap(Bundle(url: existingURL))
+        pluginManager.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: pluginId,
+                    name: "Runtime Update Plugin",
+                    version: "1.0.0",
+                    principalClass: "RuntimeUpdatePlugin"
+                ),
+                instance: MockRuntimeUpdatePlugin(),
+                bundle: existingBundle,
+                sourceURL: existingURL,
+                isEnabled: true
+            ),
+        ]
+
+        let incomingURL = incomingDirectory
+            .appendingPathComponent("RuntimeUpdatePlugin.bundle", isDirectory: true)
+        try Self.makePluginBundle(
+            at: incomingURL,
+            pluginId: pluginId,
+            pluginName: "Runtime Update Plugin",
+            version: "1.0.1"
+        )
+
+        let service = PluginRegistryService(
+            registryBaseURL: URL(string: "https://example.com")!,
+            cacheDirectory: cacheDirectory,
+            fetchData: { _ in throw URLError(.badServerResponse) }
+        )
+
+        let manifest = try await service.installFromFile(incomingURL)
+
+        XCTAssertEqual(manifest.version, "1.0.1")
+        XCTAssertEqual(service.installStates[pluginId], .restartRequired)
+
+        let registeredPlugin = try XCTUnwrap(pluginManager.loadedPlugins.first { $0.manifest.id == pluginId })
+        XCTAssertEqual(registeredPlugin.manifest.version, "1.0.1")
+        XCTAssertEqual(registeredPlugin.sourceURL, existingURL)
+        XCTAssertTrue(registeredPlugin.isEnabled)
+        XCTAssertFalse(registeredPlugin.isRuntimeLoaded)
+    }
+
     func testMalformedPluginEntryIsSkippedInsteadOfFailingEntireRegistry() throws {
         // A single bad entry (wrong type on a required field) must not empty
         // the marketplace: the decoder reports the error and keeps the rest.
@@ -1053,5 +1123,52 @@ final class PluginRegistryServiceTests: XCTestCase {
             }
             """.utf8
         )
+    }
+
+    private static func makePluginBundle(
+        at bundleURL: URL,
+        pluginId: String,
+        pluginName: String,
+        version: String
+    ) throws {
+        let contentsURL = bundleURL.appendingPathComponent("Contents", isDirectory: true)
+        let resourcesURL = contentsURL.appendingPathComponent("Resources", isDirectory: true)
+        try FileManager.default.createDirectory(at: resourcesURL, withIntermediateDirectories: true)
+
+        let infoPlist: [String: Any] = [
+            "CFBundleIdentifier": pluginId,
+            "CFBundleName": pluginName,
+            "CFBundlePackageType": "BNDL",
+            "CFBundleShortVersionString": version,
+            "CFBundleVersion": "1",
+        ]
+        let infoData = try PropertyListSerialization.data(
+            fromPropertyList: infoPlist,
+            format: .xml,
+            options: 0
+        )
+        try infoData.write(to: contentsURL.appendingPathComponent("Info.plist"))
+
+        let manifest = PluginManifest(
+            id: pluginId,
+            name: pluginName,
+            version: version,
+            principalClass: "RuntimeUpdatePlugin"
+        )
+        try JSONEncoder()
+            .encode(manifest)
+            .write(to: resourcesURL.appendingPathComponent("manifest.json"))
+    }
+
+    private final class MockRuntimeUpdatePlugin: NSObject, TypeWhisperPlugin, @unchecked Sendable {
+        static let pluginId = "com.typewhisper.runtime-update"
+        static let pluginName = "Runtime Update Plugin"
+
+        required override init() {
+            super.init()
+        }
+
+        func activate(host: any HostServices) {}
+        func deactivate() {}
     }
 }
