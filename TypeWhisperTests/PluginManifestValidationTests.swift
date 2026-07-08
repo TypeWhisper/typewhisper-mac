@@ -788,6 +788,24 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         )
     }
 
+    func testGemma4MismatchedParameterShapeErrorsUseCacheRecoveryMessage() throws {
+        let model = try XCTUnwrap(Gemma4Plugin.modelDefinition(for: "gemma-4-e4b-it-4bit"))
+        let error = NSError(
+            domain: "Test",
+            code: 1,
+            userInfo: [
+                NSLocalizedDescriptionKey: "Mismatched parameter language_model.model.per_layer_model_projection.weight in Gemma4.Gemma4TextLanguageModel.Gemma4TextBackbone.Gemma4ScaledLinear shape. Actual [10752, 320], expected [10752, 2560]"
+            ]
+        )
+
+        let message = Gemma4Plugin.userFacingLoadErrorMessage(for: error, modelDef: model)
+
+        XCTAssertEqual(
+            message,
+            "The downloaded Gemma model cache appears incomplete or incompatible. Delete the cached model and download it again."
+        )
+    }
+
     func testGemma4ResetCachedModelDeletesCacheAndClearsLoadedState() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

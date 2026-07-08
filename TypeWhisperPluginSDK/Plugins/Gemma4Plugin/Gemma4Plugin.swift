@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 import MLX
-import MLXVLM
+import MLXLLM
 import MLXLMCommon
 import HuggingFace
 import Hub
@@ -479,7 +479,7 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
                     extraEOSTokens: ["<turn|>"]
                 )
             let loadTask = Task<ModelContainer, Error> {
-                try await VLMModelFactory.shared.loadContainer(
+                try await LLMModelFactory.shared.loadContainer(
                     from: downloader,
                     using: Gemma4TokenizerLoader(),
                     configuration: configuration
@@ -871,6 +871,7 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
             || rawMessage.contains("missing weight")
             || rawMessage.contains("shape mismatch")
             || rawMessage.contains("size mismatch")
+            || (rawMessage.contains("mismatched parameter") && rawMessage.contains("shape"))
             || (rawMessage.contains("checkpoint")
                 && (rawMessage.contains("not found")
                     || rawMessage.contains("missing")
