@@ -301,6 +301,47 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertNil(recording.transcriptionFailure)
     }
 
+    func testFinalTranscriptionDoesNotForceGlobalDefaultModelAsRecorderOverride() async throws {
+        try preserveStandardDefaults()
+        let defaults = try makeDefaults()
+        let appSupportDirectory = makeTemporaryDirectory()
+        let previousPluginManager = PluginManager.shared
+        addTeardownBlock {
+            PluginManager.shared = previousPluginManager
+        }
+
+        let plugin = RecorderOverrideMarkerTranscriptionPlugin()
+        let pluginManager = PluginManager(appSupportDirectory: appSupportDirectory)
+        pluginManager.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: RecorderOverrideMarkerTranscriptionPlugin.pluginId,
+                    name: RecorderOverrideMarkerTranscriptionPlugin.pluginName,
+                    version: "1.0.0",
+                    principalClass: "RecorderOverrideMarkerTranscriptionPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+        PluginManager.shared = pluginManager
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+        let viewModel = makeFinalTranscriptionViewModel(defaults: defaults, modelManager: modelManager)
+
+        XCTAssertNil(viewModel.selectedModel)
+
+        let sessionID = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        _ = try viewModel.apiStopRecording()
+
+        let session = try await waitForRecorderSession(viewModel, id: sessionID, status: .completed)
+        XCTAssertEqual(session.text, "unforced whisper-large-v3")
+        XCTAssertEqual(plugin.selectedModelOverrides, [])
+    }
+
     func testFailureSidecarWriteErrorStillShowsRecorderFailure() async throws {
         try preserveStandardDefaults()
         setupPluginManager(groqBehavior: .failure("HTTP 500: provider unavailable"))
@@ -614,5 +655,51 @@ private final class AudioRecorderMockTranscriptionPlugin: NSObject, Transcriptio
         case .failure(let message):
             throw PluginTranscriptionError.apiError(message)
         }
+    }
+}
+
+private final class RecorderOverrideMarkerTranscriptionPlugin: NSObject, TranscriptionModelCatalogProviding, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.recorder-override-marker"
+    static let pluginName = "Recorder Override Marker"
+
+    private let models = [
+        PluginModelInfo(id: "whisper-large-v3", displayName: "Whisper Large V3"),
+        PluginModelInfo(id: "whisper-small", displayName: "Whisper Small")
+    ]
+    private var selectedModelReadCount = 0
+    private var currentModelId = "whisper-large-v3"
+    private(set) var selectedModelOverrides: [String] = []
+
+    var providerId: String { "recorder-override-marker" }
+    var providerDisplayName: String { Self.pluginName }
+    var isConfigured: Bool { true }
+    var selectedModelId: String? {
+        selectedModelReadCount += 1
+        if selectedModelReadCount == 1 {
+            currentModelId = "whisper-small"
+            return "whisper-large-v3"
+        }
+        return currentModelId
+    }
+    var availableModels: [PluginModelInfo] { models }
+    var transcriptionModels: [PluginModelInfo] { models }
+    var supportsTranslation: Bool { true }
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    func selectModel(_ modelId: String) {
+        selectedModelOverrides.append(modelId)
+        currentModelId = modelId
+    }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        let mode = selectedModelOverrides.isEmpty ? "unforced" : "forced"
+        return PluginTranscriptionResult(text: "\(mode) \(currentModelId)")
     }
 }

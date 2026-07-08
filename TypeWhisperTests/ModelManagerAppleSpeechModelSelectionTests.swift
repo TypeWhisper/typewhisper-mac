@@ -116,6 +116,28 @@ final class ModelManagerAppleSpeechModelSelectionTests: XCTestCase {
         XCTAssertEqual(plugin.selectedModelId, "speechanalyzer-en_US")
     }
 
+    func testManualModelOverrideLoadsPersistedAppleSpeechModelWhenRuntimeModelIsUnloaded() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockAppleSpeechTranscriptionPlugin(
+            persistedSelectedModelId: "speechanalyzer-en_US"
+        )
+        let modelManager = installAppleSpeechPlugin(plugin, appSupportDirectory: appSupportDirectory)
+
+        let result = try await modelManager.transcribe(
+            audioSamples: [Float](repeating: 0, count: 16_000),
+            languageSelection: .auto,
+            task: .transcribe,
+            cloudModelOverride: "speechanalyzer-en_US"
+        )
+
+        XCTAssertEqual(result.text, "transcribed with speechanalyzer-en_US")
+        XCTAssertEqual(plugin.requestedLanguagePreparations, [])
+        XCTAssertEqual(plugin.transcribedModelIds, ["speechanalyzer-en_US"])
+        XCTAssertEqual(plugin.selectedModelId, "speechanalyzer-en_US")
+    }
+
     func testAppleSpeechUsesActionableErrorWhenNoModelCanBePrepared() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -178,24 +200,28 @@ private final class MockAppleSpeechTranscriptionPlugin: NSObject, TranscriptionM
     let availableModels: [PluginModelInfo]
     private(set) var requestedLanguagePreparations: [String?] = []
     private(set) var transcribedModelIds: [String] = []
+    private let persistedSelectedModelId: String?
     private var currentModelId: String?
 
     init(
-        availableModels: [PluginModelInfo] = defaultAvailableModels
+        availableModels: [PluginModelInfo] = defaultAvailableModels,
+        persistedSelectedModelId: String? = nil
     ) {
         self.availableModels = availableModels
+        self.persistedSelectedModelId = persistedSelectedModelId
         super.init()
     }
 
     required override init() {
         self.availableModels = Self.defaultAvailableModels
+        self.persistedSelectedModelId = nil
         super.init()
     }
 
     var providerId: String { AppleSpeechModelSelection.providerId }
     var providerDisplayName: String { "Apple Speech" }
     var isConfigured: Bool { currentModelId != nil }
-    var selectedModelId: String? { currentModelId }
+    var selectedModelId: String? { currentModelId ?? persistedSelectedModelId }
     var supportsTranslation: Bool { false }
     var supportsStreaming: Bool { false }
     var supportedLanguages: [String] {

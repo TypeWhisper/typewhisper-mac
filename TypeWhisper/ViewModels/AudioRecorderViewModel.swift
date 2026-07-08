@@ -59,7 +59,7 @@ final class AudioRecorderViewModel: ObservableObject {
         let languageSelection: LanguageSelection
         let task: TranscriptionTask
         let providerId: String?
-        let resolvedModelId: String?
+        let modelOverrideId: String?
         let prompt: String?
         let dictionaryTermHints: [PluginDictionaryTermHint]
         let liveSessionResult: TranscriptionResult?
@@ -534,7 +534,7 @@ final class AudioRecorderViewModel: ObservableObject {
                     languageSelection: languageSelection,
                     task: selectedTask,
                     providerId: providerId,
-                    resolvedModelId: effectiveModelId,
+                    modelOverrideId: selectedModel,
                     prompt: dictionaryPrompt,
                     dictionaryTermHints: dictionaryTermHints,
                     liveSessionResult: liveSessionResult
@@ -798,7 +798,7 @@ final class AudioRecorderViewModel: ObservableObject {
             selectedProviderId: modelManager.selectedProviderId,
             languageSelection: languageSelection,
             task: task,
-            cloudModelOverride: effectiveModelId,
+            cloudModelOverride: selectedModel,
             allowLiveTranscription: true,
             stateCheck: { [weak self] in self?.state == .recording }
         )
@@ -844,7 +844,7 @@ final class AudioRecorderViewModel: ObservableObject {
                     languageSelection: request.languageSelection,
                     task: effectiveTask,
                     engineOverrideId: request.providerId,
-                    cloudModelOverride: request.resolvedModelId,
+                    cloudModelOverride: request.modelOverrideId,
                     prompt: request.prompt,
                     dictionaryTermHints: request.dictionaryTermHints
                 )
@@ -941,7 +941,7 @@ final class AudioRecorderViewModel: ObservableObject {
             },
             modelName: modelManager.resolvedModelDisplayName(
                 engineOverrideId: request.providerId,
-                cloudModelOverride: request.resolvedModelId
+                cloudModelOverride: request.modelOverrideId
             ),
             failedAt: Date()
         )

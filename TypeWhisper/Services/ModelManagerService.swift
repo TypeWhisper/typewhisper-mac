@@ -349,13 +349,14 @@ final class ModelManagerService: ObservableObject {
     ) -> String? {
         guard let override else { return nil }
         let previousId = plugin.selectedModelId
+        if previousId != override || !plugin.isConfigured {
+            plugin.selectModel(override)
+        }
         // If the plugin had no previous selection we can't express "unselect" through the SDK,
         // so the override stays in place. For configured plugins selectedModelId is normally set.
         guard let previousId, previousId != override else {
-            if previousId != override { plugin.selectModel(override) }
             return nil
         }
-        plugin.selectModel(override)
         return previousId
     }
 
