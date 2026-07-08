@@ -839,7 +839,7 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
             )
         }
 
-        let rawMessage = String(describing: error).lowercased()
+        let rawMessage = "\(String(describing: error))\n\(error.localizedDescription)".lowercased()
         if isRecoverableCacheError(rawMessage) {
             let bundle = Bundle(for: Gemma4Plugin.self)
             return String(

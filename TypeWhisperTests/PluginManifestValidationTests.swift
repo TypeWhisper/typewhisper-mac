@@ -439,6 +439,13 @@ final class PluginDownloadedModelManagementTests: XCTestCase {
 
 @MainActor
 final class Gemma4PluginModelPolicyTests: XCTestCase {
+    private struct LocalizedOnlyError: LocalizedError, CustomStringConvertible {
+        let message: String
+
+        var errorDescription: String? { message }
+        var description: String { "LocalizedOnlyError" }
+    }
+
     private actor RequestRecorder {
         private var request: URLRequest?
 
@@ -796,6 +803,20 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
             userInfo: [
                 NSLocalizedDescriptionKey: "Mismatched parameter language_model.model.per_layer_model_projection.weight in Gemma4.Gemma4TextLanguageModel.Gemma4TextBackbone.Gemma4ScaledLinear shape. Actual [10752, 320], expected [10752, 2560]"
             ]
+        )
+
+        let message = Gemma4Plugin.userFacingLoadErrorMessage(for: error, modelDef: model)
+
+        XCTAssertEqual(
+            message,
+            "The downloaded Gemma model cache appears incomplete or incompatible. Delete the cached model and download it again."
+        )
+    }
+
+    func testGemma4LocalizedOnlyMismatchedParameterShapeErrorsUseCacheRecoveryMessage() throws {
+        let model = try XCTUnwrap(Gemma4Plugin.modelDefinition(for: "gemma-4-e2b-it-4bit"))
+        let error = LocalizedOnlyError(
+            message: "Mismatched parameter language_model.model.per_layer_model_projection.weight in Gemma4Model.Gemma4TextModel.Gemma4TextModelInner.ScaledLinear shape. Actual [8960, 192], expected [8960, 1536]"
         )
 
         let message = Gemma4Plugin.userFacingLoadErrorMessage(for: error, modelDef: model)
