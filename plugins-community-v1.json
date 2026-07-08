@@ -1598,6 +1598,17 @@
       "detailsURL": "https://www.typewhisper.com/addons/gemma4/",
       "releases": [
         {
+          "version": "1.1.2",
+          "minHostVersion": "1.5.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 18994849,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gemma4-v1.1.2/Gemma4Plugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        },
+        {
           "version": "1.1.1",
           "minHostVersion": "1.5.0",
           "sdkCompatibilityVersion": "v1",
