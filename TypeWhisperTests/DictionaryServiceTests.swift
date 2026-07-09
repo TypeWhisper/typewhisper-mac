@@ -187,7 +187,42 @@ final class DictionaryServiceTests: XCTestCase {
         XCTAssertEqual(learned.count, 1)
         XCTAssertEqual(learned.first?.original, "filler")
         XCTAssertEqual(learned.first?.replacement, "")
-        XCTAssertEqual(service.applyCorrections(to: "drop filler text"), "drop  text")
+        XCTAssertEqual(service.applyCorrections(to: "drop filler text"), "drop text")
+    }
+
+    @MainActor
+    func testWhitespaceBearingLatinFillerCorrectionsStillApplyAtWordBoundaries() throws {
+        let plainDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(plainDirectory) }
+
+        let plainService = DictionaryService(appSupportDirectory: plainDirectory)
+        plainService.addEntry(type: .correction, original: "um", replacement: "")
+
+        XCTAssertEqual(plainService.applyCorrections(to: "Um I think this works"), "I think this works")
+        XCTAssertEqual(plainService.applyCorrections(to: "I said um today"), "I said today")
+
+        let whitespaceDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(whitespaceDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: whitespaceDirectory)
+        service.addEntry(type: .correction, original: "um ", replacement: "")
+        service.addEntry(type: .correction, original: " huh", replacement: "")
+
+        XCTAssertEqual(service.applyCorrections(to: "Um I think this works"), "I think this works")
+        XCTAssertEqual(service.applyCorrections(to: "I said um today"), "I said today")
+        XCTAssertEqual(service.applyCorrections(to: "this was huh"), "this was")
+    }
+
+    @MainActor
+    func testWhitespaceBearingFillerCorrectionsKeepOneSeparatorBetweenWords() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: " um ", replacement: "")
+
+        XCTAssertEqual(service.applyCorrections(to: "I said um today"), "I said today")
+        XCTAssertEqual(service.applyCorrections(to: "I said, um today"), "I said, today")
     }
 
     @MainActor
@@ -197,11 +232,15 @@ final class DictionaryServiceTests: XCTestCase {
 
         let service = DictionaryService(appSupportDirectory: appSupportDirectory)
         service.addEntry(type: .correction, original: "rake", replacement: "RAKE")
+        service.addEntry(type: .correction, original: "um", replacement: "")
+        service.addEntry(type: .correction, original: "um ", replacement: "")
 
         XCTAssertEqual(service.applyCorrections(to: "rake"), "RAKE")
         XCTAssertEqual(service.applyCorrections(to: "Rake"), "RAKE")
         XCTAssertEqual(service.applyCorrections(to: "brake rakes"), "brake rakes")
         XCTAssertEqual(service.applyCorrections(to: "Use rake, rake/brake, and (rake)."), "Use RAKE, RAKE/brake, and (RAKE).")
+        XCTAssertEqual(service.applyCorrections(to: "umbrella stand"), "umbrella stand")
+        XCTAssertEqual(service.applyCorrections(to: "album art"), "album art")
     }
 
     @MainActor

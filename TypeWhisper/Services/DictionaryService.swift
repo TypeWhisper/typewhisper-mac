@@ -602,7 +602,8 @@ final class DictionaryService: ObservableObject {
         with replacement: String,
         caseSensitive: Bool
     ) -> String {
-        guard !original.isEmpty else { return text }
+        let boundaryOriginal = original.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !original.isEmpty, !boundaryOriginal.isEmpty else { return text }
 
         var result = ""
         var searchStart = text.startIndex
@@ -610,18 +611,100 @@ final class DictionaryService: ObservableObject {
 
         while let range = text.range(of: original, options: options, range: searchStart..<text.endIndex, locale: .current) {
             guard range.lowerBound < range.upperBound else { break }
+            let boundaryRange = boundaryEvaluationRange(for: range, in: text)
 
-            if isBoundaryMatch(range, in: text, original: original) {
-                result += text[searchStart..<range.lowerBound]
-                result += replacement
+            if boundaryRange.lowerBound < boundaryRange.upperBound,
+               isBoundaryMatch(boundaryRange, in: text, original: boundaryOriginal) {
+                let resolvedReplacement = boundaryReplacement(
+                    for: range,
+                    in: text,
+                    replacement: replacement,
+                    lowerLimit: searchStart
+                )
+                result += text[searchStart..<resolvedReplacement.range.lowerBound]
+                result += resolvedReplacement.text
+                searchStart = resolvedReplacement.range.upperBound
             } else {
                 result += text[searchStart..<range.upperBound]
+                searchStart = range.upperBound
             }
-            searchStart = range.upperBound
         }
 
         result += text[searchStart..<text.endIndex]
         return result
+    }
+
+    private func boundaryReplacement(
+        for range: Range<String.Index>,
+        in text: String,
+        replacement: String,
+        lowerLimit: String.Index
+    ) -> (range: Range<String.Index>, text: String) {
+        guard replacement.isEmpty else { return (range, replacement) }
+
+        let deletionRange = emptyBoundaryReplacementRange(for: range, in: text, lowerLimit: lowerLimit)
+        return (deletionRange, separatorAfterDeleting(deletionRange, in: text))
+    }
+
+    private func emptyBoundaryReplacementRange(
+        for range: Range<String.Index>,
+        in text: String,
+        lowerLimit: String.Index
+    ) -> Range<String.Index> {
+        var lowerBound = range.lowerBound
+        var upperBound = range.upperBound
+
+        if upperBound < text.endIndex, text[upperBound].isWhitespace {
+            while upperBound < text.endIndex, text[upperBound].isWhitespace {
+                upperBound = text.index(after: upperBound)
+            }
+        } else if shouldConsumeLeadingWhitespace(for: range, in: text) {
+            while lowerBound > lowerLimit {
+                let previous = text.index(before: lowerBound)
+                guard text[previous].isWhitespace else { break }
+                lowerBound = previous
+            }
+        }
+
+        return lowerBound..<upperBound
+    }
+
+    private func shouldConsumeLeadingWhitespace(for range: Range<String.Index>, in text: String) -> Bool {
+        guard range.lowerBound < range.upperBound else { return false }
+        let lastMatchedIndex = text.index(before: range.upperBound)
+        return !text[lastMatchedIndex].isWhitespace || range.upperBound == text.endIndex
+    }
+
+    private func separatorAfterDeleting(_ range: Range<String.Index>, in text: String) -> String {
+        let previous = range.lowerBound > text.startIndex ? text[text.index(before: range.lowerBound)] : nil
+        let next = range.upperBound < text.endIndex ? text[range.upperBound] : nil
+
+        if previous?.isLatinOrNumber == true && next?.isLatinOrNumber == true {
+            return " "
+        }
+
+        if previous?.keepsFollowingWordSeparatedAfterDeletion == true && next?.isLatinOrNumber == true {
+            return " "
+        }
+
+        return ""
+    }
+
+    private func boundaryEvaluationRange(for range: Range<String.Index>, in text: String) -> Range<String.Index> {
+        var lowerBound = range.lowerBound
+        var upperBound = range.upperBound
+
+        while lowerBound < upperBound, text[lowerBound].isWhitespace {
+            lowerBound = text.index(after: lowerBound)
+        }
+
+        while lowerBound < upperBound {
+            let previous = text.index(before: upperBound)
+            guard text[previous].isWhitespace else { break }
+            upperBound = previous
+        }
+
+        return lowerBound..<upperBound
     }
 
     private func isBoundaryMatch(_ range: Range<String.Index>, in text: String, original: String) -> Bool {
@@ -912,6 +995,15 @@ private extension Character {
             (0xF900...0xFAFF).contains(Int(scalar.value)) ||
             (0x20000...0x323AF).contains(Int(scalar.value)) ||
             (0xFF66...0xFF9D).contains(Int(scalar.value))
+        }
+    }
+
+    var keepsFollowingWordSeparatedAfterDeletion: Bool {
+        switch self {
+        case ",", ".", "!", "?", ";", ":":
+            return true
+        default:
+            return false
         }
     }
 

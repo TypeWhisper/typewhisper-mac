@@ -333,6 +333,42 @@ final class SpeechPunctuationServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testPipelineAppliesWhitespaceFillerCorrections() async throws {
+        let appSupportDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: appSupportDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: appSupportDirectory) }
+
+        let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        let profileStore = DictationPunctuationProfileStore(defaults: UserDefaults(suiteName: #function)!, storageKey: #function)
+        let strategyResolver = PunctuationStrategyResolver(profileStore: profileStore)
+        dictionaryService.addEntry(type: .correction, original: "um", replacement: "")
+
+        let pipeline = PostProcessingPipeline(
+            snippetService: SnippetService(),
+            dictionaryService: dictionaryService,
+            appFormatterService: nil,
+            speechPunctuationService: SpeechPunctuationService(rulesLoader: makeRulesLoader()),
+            punctuationStrategyResolver: strategyResolver
+        )
+
+        let result = try await pipeline.process(
+            text: "Um this still works",
+            context: PostProcessingContext(language: "en"),
+            dictationContext: DictationRuntimeContext(
+                engineId: "parakeet",
+                modelId: "parakeet-v3",
+                configuredLanguage: "en",
+                detectedLanguage: nil
+            )
+        )
+
+        XCTAssertEqual(result.text, "this still works")
+        XCTAssertEqual(result.appliedSteps, ["Corrections"])
+    }
+
+    @MainActor
     func testPipelineNormalizesNumbersBeforeLaterPostProcessing() async throws {
         let previousDefault = UserDefaults.standard.object(forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled)
         UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled)
