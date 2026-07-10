@@ -56,6 +56,7 @@
 		A10000000000000000000005 /* SpeechFeedbackServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* SpeechFeedbackServiceTests.swift */; };
 		A10000000000000000000006 /* WorkflowServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000005 /* WorkflowServiceTests.swift */; };
 		AA00000000000000000350 /* ObjCExceptionCatcher.m in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000351 /* ObjCExceptionCatcher.m */; };
+		C85600000000000000000001 /* CoreAudioHALCallbackContext.c in Sources */ = {isa = PBXBuildFile; fileRef = C85600000000000000000003 /* CoreAudioHALCallbackContext.c */; };
 		AA00000000000000000353 /* PostUpdatePromptCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000353 /* PostUpdatePromptCoordinator.swift */; };
 		AA00000000000000000354 /* SettingsNavigationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000354 /* SettingsNavigationCoordinator.swift */; };
 		AA00000000000000000355 /* PostUpdateLicensePromptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000355 /* PostUpdateLicensePromptView.swift */; };
@@ -593,6 +594,8 @@
 		BB00000000000000000033 /* DictationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000350 /* ObjCExceptionCatcher.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ObjCExceptionCatcher.h; sourceTree = "<group>"; };
 		BB00000000000000000351 /* ObjCExceptionCatcher.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ObjCExceptionCatcher.m; sourceTree = "<group>"; };
+		C85600000000000000000002 /* CoreAudioHALCallbackContext.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CoreAudioHALCallbackContext.h; sourceTree = "<group>"; };
+		C85600000000000000000003 /* CoreAudioHALCallbackContext.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = CoreAudioHALCallbackContext.c; sourceTree = "<group>"; };
 		BB00000000000000000352 /* TypeWhisper-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "TypeWhisper-Bridging-Header.h"; sourceTree = "<group>"; };
 		BB00000000000000000353 /* PostUpdatePromptCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostUpdatePromptCoordinator.swift; sourceTree = "<group>"; };
 		BB00000000000000000354 /* SettingsNavigationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsNavigationCoordinator.swift; sourceTree = "<group>"; };
@@ -1491,6 +1494,8 @@
 				533A00000000000000000003 /* DictationRecoveryAudioStore.swift */,
 				BB00000000000000000350 /* ObjCExceptionCatcher.h */,
 				BB00000000000000000351 /* ObjCExceptionCatcher.m */,
+				C85600000000000000000002 /* CoreAudioHALCallbackContext.h */,
+				C85600000000000000000003 /* CoreAudioHALCallbackContext.c */,
 				BB00000000000000000220 /* AudioPlaybackService.swift */,
 				BB00000000000000000031 /* HotkeyService.swift */,
 				BB00000000000000000362 /* SecureInputDiagnostics.swift */,
@@ -3885,6 +3890,7 @@
 				AA00000000000000000030 /* AudioRecordingService.swift in Sources */,
 				533A00000000000000000004 /* DictationRecoveryAudioStore.swift in Sources */,
 				AA00000000000000000350 /* ObjCExceptionCatcher.m in Sources */,
+				C85600000000000000000001 /* CoreAudioHALCallbackContext.c in Sources */,
 				AA00000000000000000230 /* AudioPlaybackService.swift in Sources */,
 				AA00000000000000000031 /* HotkeyService.swift in Sources */,
 				AA00000000000000000362 /* SecureInputDiagnostics.swift in Sources */,

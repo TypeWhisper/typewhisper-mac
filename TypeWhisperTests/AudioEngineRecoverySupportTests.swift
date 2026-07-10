@@ -1819,9 +1819,284 @@ final class CoreAudioHALInputCaptureSessionTests: XCTestCase {
         XCTAssertEqual(receivedBuffers.first?.format.sampleRate, 96_000)
         XCTAssertEqual(receivedBuffers.first?.format.channelCount, 2)
 
+        let disposed = expectation(description: "HAL session finalizes after quiescence")
+        operations.disposeHook = { disposed.fulfill() }
         session.stop()
 
         XCTAssertEqual(operations.stopCalls, 1)
+        XCTAssertEqual(operations.uninitializeCalls, 0)
+        XCTAssertEqual(operations.disposeCalls, 0)
+        wait(for: [disposed], timeout: 1.0)
+        XCTAssertEqual(operations.uninitializeCalls, 1)
+        XCTAssertEqual(operations.disposeCalls, 1)
+    }
+
+    func testStopClosesCallbackGateBeforeHALStopAndDropsLateCallback() throws {
+        let operations = FakeCoreAudioHALInputOperations()
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 1,
+            interleaved: false
+        ))
+        var receivedBufferCount = 0
+        let session = try CoreAudioHALInputCaptureSession(
+            deviceID: AudioDeviceID(903),
+            format: format,
+            bufferSize: 128,
+            label: "test-hal",
+            operations: operations
+        ) { _ in
+            receivedBufferCount += 1
+        }
+
+        var lateCallbackStatus: OSStatus?
+        operations.stopHook = {
+            lateCallbackStatus = operations.invokeStoredCallback()
+        }
+        let disposed = expectation(description: "late-callback session finalizes")
+        operations.disposeHook = { disposed.fulfill() }
+
+        session.stop()
+
+        XCTAssertEqual(try XCTUnwrap(lateCallbackStatus), noErr)
+        XCTAssertEqual(operations.invokeStoredCallback(), noErr)
+        XCTAssertTrue(operations.renderCalls.isEmpty)
+        XCTAssertEqual(receivedBufferCount, 0)
+        XCTAssertEqual(operations.stopCalls, 1)
+        XCTAssertEqual(operations.uninitializeCalls, 0)
+        XCTAssertEqual(operations.disposeCalls, 0)
+        wait(for: [disposed], timeout: 1.0)
+        XCTAssertEqual(operations.uninitializeCalls, 1)
+        XCTAssertEqual(operations.disposeCalls, 1)
+    }
+
+    func testStartFailureClosesOpenedCallbackGateBeforeHALStop() throws {
+        let operations = FakeCoreAudioHALInputOperations()
+        operations.startError = CoreAudioHALInputOperationError(
+            operation: "test-hal start",
+            status: -50
+        )
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 1,
+            interleaved: false
+        ))
+        var lateCallbackStatus: OSStatus?
+        operations.stopHook = {
+            lateCallbackStatus = operations.invokeStoredCallback()
+        }
+        let disposed = expectation(description: "start failure session finalizes")
+        operations.disposeHook = { disposed.fulfill() }
+
+        XCTAssertThrowsError(try CoreAudioHALInputCaptureSession(
+            deviceID: AudioDeviceID(907),
+            format: format,
+            bufferSize: 128,
+            label: "test-hal",
+            operations: operations,
+            onBuffer: { _ in }
+        )) { error in
+            XCTAssertTrue(error is CoreAudioHALInputOperationError)
+        }
+
+        XCTAssertEqual(operations.startCalls, 1)
+        XCTAssertEqual(try XCTUnwrap(lateCallbackStatus), noErr)
+        XCTAssertEqual(operations.invokeStoredCallback(), noErr)
+        XCTAssertTrue(operations.renderCalls.isEmpty)
+        XCTAssertEqual(operations.stopCalls, 1)
+        XCTAssertEqual(operations.uninitializeCalls, 0)
+        XCTAssertEqual(operations.disposeCalls, 0)
+        wait(for: [disposed], timeout: 1.0)
+        XCTAssertEqual(operations.uninitializeCalls, 1)
+        XCTAssertEqual(operations.disposeCalls, 1)
+    }
+
+    func testDeinitStopsAndFinalizesHALUnitWithoutExplicitStop() throws {
+        let operations = FakeCoreAudioHALInputOperations()
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 1,
+            interleaved: false
+        ))
+        let disposed = expectation(description: "deinitialized session finalizes")
+        operations.disposeHook = { disposed.fulfill() }
+
+        var session: CoreAudioHALInputCaptureSession? = try CoreAudioHALInputCaptureSession(
+            deviceID: AudioDeviceID(908),
+            format: format,
+            bufferSize: 128,
+            label: "test-hal",
+            operations: operations,
+            onBuffer: { _ in }
+        )
+        XCTAssertNotNil(session)
+
+        session = nil
+
+        XCTAssertEqual(operations.stopCalls, 1)
+        XCTAssertEqual(operations.uninitializeCalls, 0)
+        XCTAssertEqual(operations.disposeCalls, 0)
+        wait(for: [disposed], timeout: 1.0)
+        XCTAssertEqual(operations.uninitializeCalls, 1)
+        XCTAssertEqual(operations.disposeCalls, 1)
+    }
+
+    func testStopIsIdempotentWhileHALFinalizationIsPending() throws {
+        let operations = FakeCoreAudioHALInputOperations()
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 1,
+            interleaved: false
+        ))
+        let session = try CoreAudioHALInputCaptureSession(
+            deviceID: AudioDeviceID(904),
+            format: format,
+            bufferSize: 128,
+            label: "test-hal",
+            operations: operations,
+            onBuffer: { _ in }
+        )
+        let disposed = expectation(description: "idempotent session finalizes once")
+        operations.disposeHook = { disposed.fulfill() }
+
+        session.stop()
+        session.stop()
+
+        XCTAssertEqual(operations.stopCalls, 1)
+        XCTAssertEqual(operations.uninitializeCalls, 0)
+        XCTAssertEqual(operations.disposeCalls, 0)
+        wait(for: [disposed], timeout: 1.0)
+        XCTAssertEqual(operations.stopCalls, 1)
+        XCTAssertEqual(operations.uninitializeCalls, 1)
+        XCTAssertEqual(operations.disposeCalls, 1)
+    }
+
+    func testSessionWaitsForAdmittedCallbackBeforeFinalizingHALUnit() throws {
+        let operations = FakeCoreAudioHALInputOperations()
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 1,
+            interleaved: false
+        ))
+        let renderStarted = expectation(description: "render callback started")
+        let callbackFinished = expectation(description: "render callback finished")
+        let disposed = expectation(description: "drained session finalizes")
+        let releaseRender = DispatchSemaphore(value: 0)
+        operations.renderHook = {
+            renderStarted.fulfill()
+            _ = releaseRender.wait(timeout: .now() + 2.0)
+        }
+        operations.disposeHook = { disposed.fulfill() }
+        let session = try CoreAudioHALInputCaptureSession(
+            deviceID: AudioDeviceID(905),
+            format: format,
+            bufferSize: 128,
+            label: "test-hal",
+            operations: operations,
+            onBuffer: { _ in }
+        )
+
+        DispatchQueue.global().async {
+            _ = operations.invokeStoredCallback()
+            callbackFinished.fulfill()
+        }
+        wait(for: [renderStarted], timeout: 1.0)
+
+        session.stop()
+        XCTAssertEqual(operations.stopCalls, 1)
+
+        Thread.sleep(forTimeInterval: 0.35)
+        XCTAssertEqual(operations.uninitializeCalls, 0)
+        XCTAssertEqual(operations.disposeCalls, 0)
+
+        releaseRender.signal()
+        wait(for: [callbackFinished, disposed], timeout: 2.0)
+        XCTAssertEqual(operations.uninitializeCalls, 1)
+        XCTAssertEqual(operations.disposeCalls, 1)
+    }
+
+    func testCallbackRegistrationFailureClosesStoredCallbackBeforeHALStop() throws {
+        let operations = FakeCoreAudioHALInputOperations()
+        operations.inputCallbackError = CoreAudioHALInputOperationError(
+            operation: "test-hal set callback",
+            status: -50
+        )
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 1,
+            interleaved: false
+        ))
+        var lateCallbackStatus: OSStatus?
+        operations.stopHook = {
+            lateCallbackStatus = operations.invokeStoredCallback()
+        }
+        let disposed = expectation(description: "failed session finalizes")
+        operations.disposeHook = { disposed.fulfill() }
+
+        XCTAssertThrowsError(try CoreAudioHALInputCaptureSession(
+            deviceID: AudioDeviceID(906),
+            format: format,
+            bufferSize: 128,
+            label: "test-hal",
+            operations: operations,
+            onBuffer: { _ in }
+        )) { error in
+            XCTAssertTrue(error is CoreAudioHALInputOperationError)
+        }
+
+        XCTAssertEqual(try XCTUnwrap(lateCallbackStatus), noErr)
+        XCTAssertTrue(operations.renderCalls.isEmpty)
+        XCTAssertEqual(operations.stopCalls, 1)
+        XCTAssertEqual(operations.uninitializeCalls, 0)
+        XCTAssertEqual(operations.disposeCalls, 0)
+        wait(for: [disposed], timeout: 1.0)
+        XCTAssertEqual(operations.uninitializeCalls, 1)
+        XCTAssertEqual(operations.disposeCalls, 1)
+    }
+
+    func testInitializationFailureClosesStoredCallbackBeforeHALStop() throws {
+        let operations = FakeCoreAudioHALInputOperations()
+        operations.initializeError = CoreAudioHALInputOperationError(
+            operation: "test-hal initialize",
+            status: -50
+        )
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 1,
+            interleaved: false
+        ))
+        var lateCallbackStatus: OSStatus?
+        operations.stopHook = {
+            lateCallbackStatus = operations.invokeStoredCallback()
+        }
+        let disposed = expectation(description: "initialization failure session finalizes")
+        operations.disposeHook = { disposed.fulfill() }
+
+        XCTAssertThrowsError(try CoreAudioHALInputCaptureSession(
+            deviceID: AudioDeviceID(909),
+            format: format,
+            bufferSize: 128,
+            label: "test-hal",
+            operations: operations,
+            onBuffer: { _ in }
+        )) { error in
+            XCTAssertTrue(error is CoreAudioHALInputOperationError)
+        }
+
+        XCTAssertEqual(operations.initializeCalls, 1)
+        XCTAssertEqual(try XCTUnwrap(lateCallbackStatus), noErr)
+        XCTAssertTrue(operations.renderCalls.isEmpty)
+        XCTAssertEqual(operations.stopCalls, 1)
+        XCTAssertEqual(operations.uninitializeCalls, 0)
+        XCTAssertEqual(operations.disposeCalls, 0)
+        wait(for: [disposed], timeout: 1.0)
         XCTAssertEqual(operations.uninitializeCalls, 1)
         XCTAssertEqual(operations.disposeCalls, 1)
     }
@@ -1835,6 +2110,8 @@ final class CoreAudioHALInputCaptureSessionTests: XCTestCase {
             channels: 1,
             interleaved: false
         ))
+        let disposed = expectation(description: "failed current-device session finalizes")
+        operations.disposeHook = { disposed.fulfill() }
 
         XCTAssertThrowsError(try CoreAudioHALInputCaptureSession(
             deviceID: AudioDeviceID(901),
@@ -1846,6 +2123,7 @@ final class CoreAudioHALInputCaptureSessionTests: XCTestCase {
         )) { error in
             XCTAssertEqual(error as? SelectedInputDeviceError, .incompatible(.cannotSetDevice))
         }
+        wait(for: [disposed], timeout: 1.0)
         XCTAssertEqual(operations.disposeCalls, 1)
     }
 
@@ -1864,6 +2142,8 @@ final class CoreAudioHALInputCaptureSessionTests: XCTestCase {
             channels: 1,
             interleaved: false
         ))
+        let disposed = expectation(description: "diagnostic failure session finalizes")
+        operations.disposeHook = { disposed.fulfill() }
 
         XCTAssertThrowsError(try CoreAudioHALInputCaptureSession(
             deviceID: AudioDeviceID(902),
@@ -1885,6 +2165,8 @@ final class CoreAudioHALInputCaptureSessionTests: XCTestCase {
         XCTAssertEqual(failure.errorDescription, "test-hal set current input device failed with status -50 (-50)")
         XCTAssertEqual(failure.formatSampleRate, 48_000)
         XCTAssertEqual(failure.formatChannelCount, 1)
+        wait(for: [disposed], timeout: 1.0)
+        XCTAssertEqual(operations.disposeCalls, 1)
     }
 }
 
@@ -2211,7 +2493,7 @@ private final class FakeAudioInputCaptureFactory: AudioInputCaptureFactory {
     }
 }
 
-private final class FakeCoreAudioHALInputOperations: CoreAudioHALInputOperating {
+private final class FakeCoreAudioHALInputOperations: CoreAudioHALInputOperating, @unchecked Sendable {
     struct EnableIOCall: Equatable {
         let enabled: UInt32
         let scope: AudioUnitScope
@@ -2225,7 +2507,13 @@ private final class FakeCoreAudioHALInputOperations: CoreAudioHALInputOperating 
 
     let audioUnit: AudioUnit = AudioUnit(bitPattern: 0x1)!
     var currentDeviceError: Error?
+    var inputCallbackError: Error?
+    var initializeError: Error?
+    var startError: Error?
     var renderStatus: OSStatus = noErr
+    var stopHook: (() -> Void)?
+    var disposeHook: (() -> Void)?
+    var renderHook: (() -> Void)?
     private(set) var enableIOCalls: [EnableIOCall] = []
     private(set) var currentDeviceCalls: [AudioDeviceID] = []
     private(set) var streamFormatCalls: [AudioStreamBasicDescription] = []
@@ -2262,18 +2550,22 @@ private final class FakeCoreAudioHALInputOperations: CoreAudioHALInputOperating 
 
     func setInputCallback(_ callback: inout AURenderCallbackStruct, audioUnit: AudioUnit, label: String) throws {
         inputCallback = callback
+        if let inputCallbackError { throw inputCallbackError }
     }
 
     func initialize(_ audioUnit: AudioUnit, label: String) throws {
         initializeCalls += 1
+        if let initializeError { throw initializeError }
     }
 
     func start(_ audioUnit: AudioUnit, label: String) throws {
         startCalls += 1
+        if let startError { throw startError }
     }
 
     func stop(_ audioUnit: AudioUnit) {
         stopCalls += 1
+        stopHook?()
     }
 
     func uninitialize(_ audioUnit: AudioUnit) {
@@ -2282,6 +2574,7 @@ private final class FakeCoreAudioHALInputOperations: CoreAudioHALInputOperating 
 
     func dispose(_ audioUnit: AudioUnit) {
         disposeCalls += 1
+        disposeHook?()
     }
 
     func render(
@@ -2292,8 +2585,21 @@ private final class FakeCoreAudioHALInputOperations: CoreAudioHALInputOperating 
         frameCount: UInt32,
         data: UnsafeMutablePointer<AudioBufferList>
     ) -> OSStatus {
+        renderHook?()
         renderCalls.append(.init(busNumber: busNumber, frameCount: frameCount))
         return renderStatus
+    }
+
+    @discardableResult
+    func invokeStoredCallback(frameCount: UInt32 = 64) -> OSStatus? {
+        guard let callback = inputCallback,
+              let inputProc = callback.inputProc,
+              let inputProcRefCon = callback.inputProcRefCon else {
+            return nil
+        }
+        var flags = AudioUnitRenderActionFlags()
+        var timestamp = AudioTimeStamp()
+        return inputProc(inputProcRefCon, &flags, &timestamp, 1, frameCount, nil)
     }
 }
 
