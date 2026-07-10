@@ -1871,6 +1871,15 @@ final class CoreAudioHALInputCaptureSessionTests: XCTestCase {
         XCTAssertEqual(operations.disposeCalls, 1)
     }
 
+    func testCallbackContextSealWaitsForDrainAndRejectsFutureEntries() {
+        let transitions = CoreAudioHALInputCaptureSession.testingCallbackContextSealTransitions()
+
+        XCTAssertFalse(transitions.sealedWhileInFlight)
+        XCTAssertTrue(transitions.sealedAfterDrain)
+        XCTAssertFalse(transitions.enteredAfterSeal)
+        XCTAssertTrue(transitions.payloadAfterSealWasNil)
+    }
+
     func testStartFailureClosesOpenedCallbackGateBeforeHALStop() throws {
         let operations = FakeCoreAudioHALInputOperations()
         operations.startError = CoreAudioHALInputOperationError(
@@ -2010,7 +2019,9 @@ final class CoreAudioHALInputCaptureSessionTests: XCTestCase {
         session.stop()
         XCTAssertEqual(operations.stopCalls, 1)
 
-        Thread.sleep(forTimeInterval: 0.35)
+        Thread.sleep(
+            forTimeInterval: CoreAudioHALInputCaptureSession.testingCallbackQuiescenceInterval + 0.05
+        )
         XCTAssertEqual(operations.uninitializeCalls, 0)
         XCTAssertEqual(operations.disposeCalls, 0)
 

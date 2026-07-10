@@ -8,15 +8,14 @@ struct CoreAudioHALCallbackContext {
     void *payload;
 };
 
-_Static_assert(sizeof(unsigned long long) >= sizeof(void *),
-               "CoreAudio callback context requires a 64-bit platform");
 _Static_assert(ATOMIC_LLONG_LOCK_FREE == 2,
                "CoreAudio callback context requires a lock-free C11 atomic word");
 
 #define CORE_AUDIO_HAL_CALLBACK_CLOSED ((unsigned long long)1)
 #define CORE_AUDIO_HAL_CALLBACK_TEARDOWN_CLAIMED ((unsigned long long)2)
-#define CORE_AUDIO_HAL_CALLBACK_IN_FLIGHT_INCREMENT ((unsigned long long)4)
-#define CORE_AUDIO_HAL_CALLBACK_IN_FLIGHT_MASK (~((unsigned long long)3))
+#define CORE_AUDIO_HAL_CALLBACK_DESTROY_SEALED ((unsigned long long)4)
+#define CORE_AUDIO_HAL_CALLBACK_IN_FLIGHT_INCREMENT ((unsigned long long)8)
+#define CORE_AUDIO_HAL_CALLBACK_IN_FLIGHT_MASK (~((unsigned long long)7))
 
 CoreAudioHALCallbackContext *CoreAudioHALCallbackContextCreate(void *payload) {
     if (payload == NULL) {
@@ -47,6 +46,8 @@ bool CoreAudioHALCallbackContextOpen(CoreAudioHALCallbackContext *context) {
         if ((observed & CORE_AUDIO_HAL_CALLBACK_CLOSED) == 0) {
             return true;
         }
+        // Defensively prevent future callers from reopening a reused context
+        // while a callback is still observing its closed state.
         if ((observed & CORE_AUDIO_HAL_CALLBACK_IN_FLIGHT_MASK) != 0) {
             return false;
         }
@@ -70,6 +71,11 @@ bool CoreAudioHALCallbackContextEnter(
     unsigned long long observed = atomic_load_explicit(&context->state, memory_order_acquire);
 
     for (;;) {
+        if ((observed & CORE_AUDIO_HAL_CALLBACK_DESTROY_SEALED) != 0) {
+            *payload = NULL;
+            return false;
+        }
+
         // Rejected callbacks count too: they still dereference this context while
         // observing the closed gate and must finish before it is destroyed.
         if ((observed & CORE_AUDIO_HAL_CALLBACK_IN_FLIGHT_MASK) == CORE_AUDIO_HAL_CALLBACK_IN_FLIGHT_MASK) {
@@ -123,4 +129,30 @@ bool CoreAudioHALCallbackContextBeginTeardown(CoreAudioHALCallbackContext *conte
 bool CoreAudioHALCallbackContextIsDrained(CoreAudioHALCallbackContext *context) {
     const unsigned long long state = atomic_load_explicit(&context->state, memory_order_acquire);
     return (state & CORE_AUDIO_HAL_CALLBACK_IN_FLIGHT_MASK) == 0;
+}
+
+bool CoreAudioHALCallbackContextSealForDestruction(CoreAudioHALCallbackContext *context) {
+    unsigned long long observed = atomic_load_explicit(&context->state, memory_order_acquire);
+
+    for (;;) {
+        if ((observed & CORE_AUDIO_HAL_CALLBACK_TEARDOWN_CLAIMED) == 0) {
+            return false;
+        }
+        if ((observed & CORE_AUDIO_HAL_CALLBACK_DESTROY_SEALED) != 0) {
+            return true;
+        }
+        if ((observed & CORE_AUDIO_HAL_CALLBACK_IN_FLIGHT_MASK) != 0) {
+            return false;
+        }
+
+        const unsigned long long desired = observed | CORE_AUDIO_HAL_CALLBACK_DESTROY_SEALED;
+        if (atomic_compare_exchange_weak_explicit(
+                &context->state,
+                &observed,
+                desired,
+                memory_order_acq_rel,
+                memory_order_acquire)) {
+            return true;
+        }
+    }
 }

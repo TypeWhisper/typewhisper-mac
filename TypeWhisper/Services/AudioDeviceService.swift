@@ -2318,6 +2318,9 @@ final class CoreAudioHALInputOperations: CoreAudioHALInputOperating {
 }
 
 final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecked Sendable {
+    private static let callbackQuiescenceInterval: TimeInterval = 0.3
+    private static let callbackDrainRetryInterval: TimeInterval = 0.01
+
     final class RenderState: @unchecked Sendable {
         let audioUnit: AudioUnit
         let operations: CoreAudioHALInputOperating
@@ -2342,9 +2345,6 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
             label: "com.typewhisper.coreaudio-hal-teardown",
             qos: .utility
         )
-        private static let quiescenceInterval: TimeInterval = 0.3
-        private static let drainRetryInterval: TimeInterval = 0.01
-
         let audioUnit: AudioUnit
         let operations: CoreAudioHALInputOperating
         let renderState: RenderState
@@ -2390,14 +2390,18 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
         }
 
         private func scheduleFinalization() {
-            Self.teardownQueue.asyncAfter(deadline: .now() + Self.quiescenceInterval) { [self] in
+            Self.teardownQueue.asyncAfter(
+                deadline: .now() + CoreAudioHALInputCaptureSession.callbackQuiescenceInterval
+            ) { [self] in
                 finalizeWhenDrained()
             }
         }
 
         private func finalizeWhenDrained() {
             guard CoreAudioHALCallbackContextIsDrained(callbackContext) else {
-                Self.teardownQueue.asyncAfter(deadline: .now() + Self.drainRetryInterval) { [self] in
+                Self.teardownQueue.asyncAfter(
+                    deadline: .now() + CoreAudioHALInputCaptureSession.callbackDrainRetryInterval
+                ) { [self] in
                     finalizeWhenDrained()
                 }
                 return
@@ -2412,19 +2416,31 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
 
             operations.uninitialize(audioUnit)
             operations.dispose(audioUnit)
-            // AudioUnitDispose prevents new native callbacks. Wait once more for a
-            // rejected callback that was already inspecting the C gate.
-            destroyCallbackContextWhenDrained()
+            sealCallbackContextWhenDrained()
         }
 
-        private func destroyCallbackContextWhenDrained() {
-            guard CoreAudioHALCallbackContextIsDrained(callbackContext) else {
-                Self.teardownQueue.asyncAfter(deadline: .now() + Self.drainRetryInterval) { [self] in
-                    destroyCallbackContextWhenDrained()
+        private func sealCallbackContextWhenDrained() {
+            // The seal atomically verifies the last admitted callback has left and
+            // prevents another callback from entering the final drain-to-destroy gap.
+            guard CoreAudioHALCallbackContextSealForDestruction(callbackContext) else {
+                Self.teardownQueue.asyncAfter(
+                    deadline: .now() + CoreAudioHALInputCaptureSession.callbackDrainRetryInterval
+                ) { [self] in
+                    sealCallbackContextWhenDrained()
                 }
                 return
             }
 
+            // Keep the sealed refCon alive for one more quiescence window so a native
+            // callback that had not yet touched the atomic state can still reject safely.
+            Self.teardownQueue.asyncAfter(
+                deadline: .now() + CoreAudioHALInputCaptureSession.callbackQuiescenceInterval
+            ) { [self] in
+                destroySealedCallbackContext()
+            }
+        }
+
+        private func destroySealedCallbackContext() {
             let shouldFinalize = lifecycleLock.withLock { () -> Bool in
                 guard disposalStarted, !finalized else { return false }
                 finalized = true
@@ -3240,6 +3256,53 @@ extension AudioDeviceService {
 extension CoreAudioHALInputCaptureSession {
     static func testingInputOnlyCaptureChannelCount(for hardwareChannelCount: AVAudioChannelCount) -> AVAudioChannelCount {
         inputOnlyCaptureChannelCount(for: hardwareChannelCount)
+    }
+
+    static var testingCallbackQuiescenceInterval: TimeInterval {
+        callbackQuiescenceInterval
+    }
+
+    static func testingCallbackContextSealTransitions() -> (
+        sealedWhileInFlight: Bool,
+        sealedAfterDrain: Bool,
+        enteredAfterSeal: Bool,
+        payloadAfterSealWasNil: Bool
+    ) {
+        var payloadStorage: UInt8 = 0
+        return withUnsafeMutablePointer(to: &payloadStorage) { payloadPointer in
+            guard let callbackContext = CoreAudioHALCallbackContextCreate(
+                UnsafeMutableRawPointer(payloadPointer)
+            ) else {
+                return (false, false, true, false)
+            }
+            defer { CoreAudioHALCallbackContextDestroy(callbackContext) }
+
+            guard CoreAudioHALCallbackContextOpen(callbackContext) else {
+                return (false, false, true, false)
+            }
+
+            var admittedPayload: UnsafeMutableRawPointer?
+            guard CoreAudioHALCallbackContextEnter(callbackContext, &admittedPayload) else {
+                return (false, false, true, false)
+            }
+            guard CoreAudioHALCallbackContextBeginTeardown(callbackContext) else {
+                CoreAudioHALCallbackContextLeave(callbackContext)
+                return (false, false, true, false)
+            }
+
+            let sealedWhileInFlight = CoreAudioHALCallbackContextSealForDestruction(callbackContext)
+            CoreAudioHALCallbackContextLeave(callbackContext)
+            let sealedAfterDrain = CoreAudioHALCallbackContextSealForDestruction(callbackContext)
+
+            var payloadAfterSeal: UnsafeMutableRawPointer?
+            let enteredAfterSeal = CoreAudioHALCallbackContextEnter(callbackContext, &payloadAfterSeal)
+            return (
+                sealedWhileInFlight,
+                sealedAfterDrain,
+                enteredAfterSeal,
+                payloadAfterSeal == nil
+            )
+        }
     }
 }
 #endif

@@ -23,6 +23,8 @@ void CoreAudioHALCallbackContextLeave(CoreAudioHALCallbackContext * _Nonnull con
 /// Atomically closes the callback gate and claims teardown. Only the first caller succeeds.
 bool CoreAudioHALCallbackContextBeginTeardown(CoreAudioHALCallbackContext * _Nonnull context);
 bool CoreAudioHALCallbackContextIsDrained(CoreAudioHALCallbackContext * _Nonnull context);
+/// Atomically verifies the context is drained and prevents future callback admission.
+bool CoreAudioHALCallbackContextSealForDestruction(CoreAudioHALCallbackContext * _Nonnull context);
 
 #ifdef __cplusplus
 }
