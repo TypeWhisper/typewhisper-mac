@@ -380,13 +380,18 @@ final class AudioRecorderViewModelTests: XCTestCase {
     private func makeViewModel(
         defaults: UserDefaults,
         modelManager: ModelManagerService = ModelManagerService(),
-        recorderService: AudioRecorderService = AudioRecorderService(),
+        recorderService: AudioRecorderService? = nil,
         audioDeviceService: AudioDeviceService = AudioDeviceService(initialInputDevices: [], monitorDeviceChanges: false),
         livePreviewStartObserver: (() -> Void)? = nil
     ) -> AudioRecorderViewModel {
         setupEventBus()
+        let resolvedRecorderService = recorderService ?? {
+            let service = AudioRecorderService()
+            service.recordingsDirectoryOverride = makeTemporaryDirectory()
+            return service
+        }()
         return AudioRecorderViewModel(
-            recorderService: recorderService,
+            recorderService: resolvedRecorderService,
             modelManager: modelManager,
             dictionaryService: DictionaryService(appSupportDirectory: makeTemporaryDirectory()),
             audioDeviceService: audioDeviceService,
