@@ -782,6 +782,87 @@ struct IndicatorRectDiagnostics: Encodable, Equatable, Sendable {
     }
 }
 
+struct IndicatorScreenGeometry: Equatable {
+    enum CoordinateSpace {
+        case quartz
+        case appKit
+    }
+
+    let identifier: CGDirectDisplayID
+    let appKitFrame: CGRect
+    let quartzDisplayBounds: CGRect?
+
+    init(
+        identifier: CGDirectDisplayID,
+        appKitFrame: CGRect,
+        quartzDisplayBounds: CGRect?
+    ) {
+        self.identifier = identifier
+        self.appKitFrame = appKitFrame
+        self.quartzDisplayBounds = quartzDisplayBounds
+    }
+
+    init?(screen: NSScreen) {
+        guard let screenNumber = screen.deviceDescription[
+            NSDeviceDescriptionKey("NSScreenNumber")
+        ] as? NSNumber else {
+            return nil
+        }
+
+        let displayID = CGDirectDisplayID(screenNumber.uint32Value)
+        let quartzDisplayBounds = CGDisplayBounds(displayID)
+        self.init(
+            identifier: displayID,
+            appKitFrame: screen.frame,
+            quartzDisplayBounds: quartzDisplayBounds.isNull || quartzDisplayBounds.isEmpty
+                ? nil
+                : quartzDisplayBounds.standardized
+        )
+    }
+
+    static func displayIdentifier(
+        containing point: CGPoint,
+        among displays: [IndicatorScreenGeometry],
+        in coordinateSpace: CoordinateSpace
+    ) -> CGDirectDisplayID? {
+        displays.first { display in
+            guard let frame = display.frame(in: coordinateSpace) else { return false }
+            return frame.contains(point)
+        }?.identifier
+    }
+
+    static func displayIdentifier(
+        intersecting frame: CGRect,
+        among displays: [IndicatorScreenGeometry],
+        in coordinateSpace: CoordinateSpace
+    ) -> CGDirectDisplayID? {
+        let bestDisplay = displays
+            .compactMap { display -> (display: IndicatorScreenGeometry, area: CGFloat)? in
+                guard let displayFrame = display.frame(in: coordinateSpace) else { return nil }
+                let intersection = frame.intersection(displayFrame)
+                let area = intersection.isNull ? 0 : intersection.width * intersection.height
+                return (display, area)
+            }
+            .max(by: { $0.area < $1.area })
+
+        if let bestDisplay, bestDisplay.area > 0 {
+            return bestDisplay.display.identifier
+        }
+
+        let center = CGPoint(x: frame.midX, y: frame.midY)
+        return displayIdentifier(containing: center, among: displays, in: coordinateSpace)
+    }
+
+    private func frame(in coordinateSpace: CoordinateSpace) -> CGRect? {
+        switch coordinateSpace {
+        case .quartz:
+            quartzDisplayBounds
+        case .appKit:
+            appKitFrame
+        }
+    }
+}
+
 @MainActor
 final class IndicatorScreenResolver {
     typealias FocusedElementPositionProvider = () -> CGPoint?
@@ -799,6 +880,11 @@ final class IndicatorScreenResolver {
     private let screensProvider: ScreensProvider
     private let mainScreenProvider: MainScreenProvider
     private let windowFrameProvider: WindowFrameProvider
+
+    private struct ScreenDescriptor {
+        let screen: NSScreen
+        let geometry: IndicatorScreenGeometry
+    }
 
     init(
         focusedElementPositionProvider: @escaping FocusedElementPositionProvider = {
@@ -828,22 +914,36 @@ final class IndicatorScreenResolver {
 
         switch displayMode {
         case .activeScreen:
-            if let screen = screen(containing: focusedElementPositionProvider()) {
+            let displayDescriptors = screens.compactMap { screen -> ScreenDescriptor? in
+                guard let geometry = IndicatorScreenGeometry(screen: screen) else { return nil }
+                return ScreenDescriptor(screen: screen, geometry: geometry)
+            }
+
+            if let screen = screen(
+                containingQuartzPoint: focusedElementPositionProvider(),
+                displayDescriptors: displayDescriptors
+            ) {
                 return screen
             }
 
             if let focusedWindowFrame = focusedWindowFrameProvider(),
-               let screen = screen(intersecting: focusedWindowFrame) {
+               let screen = screen(
+                   intersectingQuartzFrame: focusedWindowFrame,
+                   displayDescriptors: displayDescriptors
+               ) {
                 return screen
             }
 
             if let application = frontmostApplicationProvider(),
                let windowFrame = windowFrameProvider(application.processIdentifier),
-               let screen = screen(intersecting: windowFrame) {
+               let screen = screen(
+                   intersectingQuartzFrame: windowFrame,
+                   displayDescriptors: displayDescriptors
+               ) {
                 return screen
             }
 
-            if let screen = screen(containing: mouseLocationProvider()) {
+            if let screen = screen(containingAppKitPoint: mouseLocationProvider(), screens: screens) {
                 return screen
             }
 
@@ -855,27 +955,39 @@ final class IndicatorScreenResolver {
         }
     }
 
-    private func screen(containing point: CGPoint?) -> NSScreen? {
+    private func screen(
+        containingQuartzPoint point: CGPoint?,
+        displayDescriptors: [ScreenDescriptor]
+    ) -> NSScreen? {
         guard let point else { return nil }
-        return screensProvider().first { $0.frame.contains(point) }
-    }
-
-    private func screen(intersecting frame: CGRect) -> NSScreen? {
-        let screens = screensProvider()
-        let bestScreen = screens
-            .map { screen in
-                let intersection = frame.intersection(screen.frame)
-                let area = intersection.isNull ? 0 : intersection.width * intersection.height
-                return (screen, area)
-            }
-            .max(by: { $0.1 < $1.1 })
-
-        if let bestScreen, bestScreen.1 > 0 {
-            return bestScreen.0
+        guard let displayIdentifier = IndicatorScreenGeometry.displayIdentifier(
+            containing: point,
+            among: displayDescriptors.map(\.geometry),
+            in: .quartz
+        ) else {
+            return nil
         }
 
-        let center = CGPoint(x: frame.midX, y: frame.midY)
-        return screen(containing: center)
+        return displayDescriptors.first { $0.geometry.identifier == displayIdentifier }?.screen
+    }
+
+    private func screen(
+        intersectingQuartzFrame frame: CGRect,
+        displayDescriptors: [ScreenDescriptor]
+    ) -> NSScreen? {
+        guard let displayIdentifier = IndicatorScreenGeometry.displayIdentifier(
+            intersecting: frame,
+            among: displayDescriptors.map(\.geometry),
+            in: .quartz
+        ) else {
+            return nil
+        }
+
+        return displayDescriptors.first { $0.geometry.identifier == displayIdentifier }?.screen
+    }
+
+    private func screen(containingAppKitPoint point: CGPoint, screens: [NSScreen]) -> NSScreen? {
+        screens.first { $0.frame.contains(point) }
     }
 
 }
