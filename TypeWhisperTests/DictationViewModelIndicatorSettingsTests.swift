@@ -1,6 +1,18 @@
 import XCTest
 import AppKit
+import CoreGraphics
 @testable import TypeWhisper
+
+@MainActor
+private func quartzDisplayBounds(for screen: NSScreen) -> CGRect? {
+    guard let screenNumber = screen.deviceDescription[
+        NSDeviceDescriptionKey("NSScreenNumber")
+    ] as? NSNumber else {
+        return nil
+    }
+
+    return CGDisplayBounds(CGDirectDisplayID(screenNumber.uint32Value))
+}
 
 final class DictationViewModelIndicatorSettingsTests: XCTestCase {
     private var defaults: UserDefaults!
@@ -130,11 +142,12 @@ final class IndicatorScreenResolverTests: XCTestCase {
     @MainActor
     func testActiveScreenPrefersFocusedElementBeforeWindowLookup() throws {
         let screen = try XCTUnwrap(NSScreen.screens.first)
+        let quartzBounds = try XCTUnwrap(quartzDisplayBounds(for: screen))
         var windowLookupCalled = false
         var mouseLookupCalled = false
 
         let resolver = IndicatorScreenResolver(
-            focusedElementPositionProvider: { CGPoint(x: screen.frame.midX, y: screen.frame.midY) },
+            focusedElementPositionProvider: { CGPoint(x: quartzBounds.midX, y: quartzBounds.midY) },
             frontmostApplicationProvider: { NSRunningApplication.current },
             mouseLocationProvider: {
                 mouseLookupCalled = true
@@ -144,7 +157,7 @@ final class IndicatorScreenResolverTests: XCTestCase {
             mainScreenProvider: { screen },
             windowFrameProvider: { _ in
                 windowLookupCalled = true
-                return screen.frame
+                return quartzBounds
             }
         )
 
@@ -158,6 +171,7 @@ final class IndicatorScreenResolverTests: XCTestCase {
     @MainActor
     func testActiveScreenUsesWindowFrameBeforeMouseFallback() throws {
         let screen = try XCTUnwrap(NSScreen.screens.first)
+        let quartzBounds = try XCTUnwrap(quartzDisplayBounds(for: screen))
         var mouseLookupCalled = false
 
         let resolver = IndicatorScreenResolver(
@@ -170,7 +184,7 @@ final class IndicatorScreenResolverTests: XCTestCase {
             },
             screensProvider: { [screen] },
             mainScreenProvider: { screen },
-            windowFrameProvider: { _ in screen.frame }
+            windowFrameProvider: { _ in quartzBounds }
         )
 
         let resolvedScreen = resolver.resolveScreen(for: .activeScreen)
@@ -182,12 +196,13 @@ final class IndicatorScreenResolverTests: XCTestCase {
     @MainActor
     func testActiveScreenUsesFocusedWindowBeforeFrontmostApplicationFallback() throws {
         let screen = try XCTUnwrap(NSScreen.screens.first)
+        let quartzBounds = try XCTUnwrap(quartzDisplayBounds(for: screen))
         var frontmostWindowLookupCalled = false
         var mouseLookupCalled = false
 
         let resolver = IndicatorScreenResolver(
             focusedElementPositionProvider: { nil },
-            focusedWindowFrameProvider: { screen.frame },
+            focusedWindowFrameProvider: { quartzBounds },
             frontmostApplicationProvider: { NSRunningApplication.current },
             mouseLocationProvider: {
                 mouseLookupCalled = true
@@ -230,6 +245,149 @@ final class IndicatorScreenResolverTests: XCTestCase {
 
         XCTAssertTrue(resolvedScreen === screen)
         XCTAssertTrue(mouseLookupCalled)
+    }
+
+    @MainActor
+    func testActiveScreenFallsBackToMainScreenWhenNoSourceResolves() throws {
+        let screen = try XCTUnwrap(NSScreen.screens.first)
+        var mouseLookupCalled = false
+        var mainScreenProviderCalled = false
+
+        let resolver = IndicatorScreenResolver(
+            focusedElementPositionProvider: { nil },
+            focusedWindowFrameProvider: { nil },
+            frontmostApplicationProvider: { nil },
+            mouseLocationProvider: {
+                mouseLookupCalled = true
+                return CGPoint(x: screen.frame.maxX + 10_000, y: screen.frame.maxY + 10_000)
+            },
+            screensProvider: { [screen] },
+            mainScreenProvider: {
+                mainScreenProviderCalled = true
+                return screen
+            },
+            windowFrameProvider: { _ in nil }
+        )
+
+        let resolvedScreen = resolver.resolveScreen(for: .activeScreen)
+
+        XCTAssertTrue(resolvedScreen === screen)
+        XCTAssertTrue(mouseLookupCalled)
+        XCTAssertTrue(mainScreenProviderCalled)
+    }
+}
+
+final class IndicatorScreenGeometryTests: XCTestCase {
+    func testQuartzPointUsesQuartzBoundsForVerticallyStackedDisplays() {
+        let displays = verticallyStackedDisplays()
+        let point = CGPoint(x: 960, y: -540)
+
+        XCTAssertEqual(
+            IndicatorScreenGeometry.displayIdentifier(
+                containing: point,
+                among: [displays.primary, displays.top, displays.bottom],
+                in: .quartz
+            ),
+            displays.top.identifier
+        )
+        XCTAssertEqual(
+            IndicatorScreenGeometry.displayIdentifier(
+                containing: point,
+                among: [displays.primary, displays.top, displays.bottom],
+                in: .appKit
+            ),
+            displays.bottom.identifier
+        )
+    }
+
+    func testQuartzWindowFrameUsesLargestIntersection() {
+        let displays = verticallyStackedDisplays()
+        let frame = CGRect(x: 100, y: -1_000, width: 1_000, height: 1_100)
+
+        XCTAssertEqual(
+            IndicatorScreenGeometry.displayIdentifier(
+                intersecting: frame,
+                among: [displays.primary, displays.top, displays.bottom],
+                in: .quartz
+            ),
+            displays.top.identifier
+        )
+        XCTAssertEqual(
+            IndicatorScreenGeometry.displayIdentifier(
+                intersecting: frame,
+                among: [displays.primary, displays.top, displays.bottom],
+                in: .appKit
+            ),
+            displays.bottom.identifier
+        )
+    }
+
+    func testQuartzWindowFrameFallsBackToItsCenter() {
+        let displays = verticallyStackedDisplays()
+        let frame = CGRect(x: 960, y: -540, width: 0, height: 0)
+
+        XCTAssertEqual(
+            IndicatorScreenGeometry.displayIdentifier(
+                intersecting: frame,
+                among: [displays.primary, displays.top, displays.bottom],
+                in: .quartz
+            ),
+            displays.top.identifier
+        )
+    }
+
+    func testAppKitMousePointUsesAppKitFrames() {
+        let displays = verticallyStackedDisplays()
+        let point = CGPoint(x: 960, y: -540)
+
+        XCTAssertEqual(
+            IndicatorScreenGeometry.displayIdentifier(
+                containing: point,
+                among: [displays.primary, displays.top, displays.bottom],
+                in: .appKit
+            ),
+            displays.bottom.identifier
+        )
+    }
+
+    func testQuartzLookupSkipsDisplaysWithoutQuartzBounds() {
+        let displays = verticallyStackedDisplays()
+        let unavailableTop = IndicatorScreenGeometry(
+            identifier: displays.top.identifier,
+            appKitFrame: displays.top.appKitFrame,
+            quartzDisplayBounds: nil
+        )
+
+        XCTAssertNil(
+            IndicatorScreenGeometry.displayIdentifier(
+                containing: CGPoint(x: 960, y: 1_440),
+                among: [unavailableTop],
+                in: .quartz
+            )
+        )
+    }
+
+    private func verticallyStackedDisplays() -> (
+        primary: IndicatorScreenGeometry,
+        top: IndicatorScreenGeometry,
+        bottom: IndicatorScreenGeometry
+    ) {
+        let primary = IndicatorScreenGeometry(
+            identifier: 1,
+            appKitFrame: CGRect(x: 0, y: 0, width: 1_440, height: 900),
+            quartzDisplayBounds: CGRect(x: 0, y: 0, width: 1_440, height: 900)
+        )
+        let top = IndicatorScreenGeometry(
+            identifier: 2,
+            appKitFrame: CGRect(x: 0, y: 900, width: 1_920, height: 1_080),
+            quartzDisplayBounds: CGRect(x: 0, y: -1_080, width: 1_920, height: 1_080)
+        )
+        let bottom = IndicatorScreenGeometry(
+            identifier: 3,
+            appKitFrame: CGRect(x: 0, y: -1_080, width: 1_920, height: 1_080),
+            quartzDisplayBounds: CGRect(x: 0, y: 900, width: 1_920, height: 1_080)
+        )
+        return (primary, top, bottom)
     }
 }
 
