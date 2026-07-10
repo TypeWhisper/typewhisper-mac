@@ -22,46 +22,26 @@ struct WorkflowTextProcessingService {
         _ targetLanguageCode: String,
         _ sourceLanguageCode: String?
     ) async throws -> String
-    typealias LLMSelectionProvider = (_ workflow: Workflow) -> (providerId: String?, cloudModel: String?)
-
     private let promptProcessor: PromptProcessor
     private let appleTranslator: AppleTranslator?
-    private let llmSelectionProvider: LLMSelectionProvider
 
     init(
         promptProcessor: @escaping PromptProcessor,
-        appleTranslator: AppleTranslator?,
-        llmSelectionProvider: @escaping LLMSelectionProvider = { workflow in
-            let behavior = workflow.behavior
-            return (behavior.providerId, behavior.cloudModel)
-        }
+        appleTranslator: AppleTranslator?
     ) {
         self.promptProcessor = promptProcessor
         self.appleTranslator = appleTranslator
-        self.llmSelectionProvider = llmSelectionProvider
     }
 
-    init(promptProcessingService: PromptProcessingService, translationService: AnyObject?, workflowService: WorkflowService? = nil) {
+    init(promptProcessingService: PromptProcessingService, translationService: AnyObject?, workflowService _: WorkflowService? = nil) {
         self.promptProcessor = { prompt, text, providerId, cloudModel, temperatureDirective in
-            try await promptProcessingService.process(
+            try await promptProcessingService.processWorkflow(
                 prompt: prompt,
                 text: text,
                 providerOverride: providerId,
                 cloudModelOverride: cloudModel,
-                temperatureDirective: temperatureDirective,
-                skipMemoryInjection: true
+                temperatureDirective: temperatureDirective
             )
-        }
-        self.llmSelectionProvider = { workflow in
-            if let workflowService {
-                return (
-                    workflowService.llmProviderId(for: workflow),
-                    workflowService.llmCloudModel(for: workflow)
-                )
-            }
-
-            let behavior = workflow.behavior
-            return (behavior.providerId, behavior.cloudModel)
         }
 
         #if canImport(Translation)
@@ -111,23 +91,13 @@ struct WorkflowTextProcessingService {
         }
 
         let behavior = workflow.behavior
-        let selection = llmSelectionProvider(workflow)
-        let shouldBoundDictatedText = selection.providerId != PromptProcessingService.appleIntelligenceId
-        let workflowInput = shouldBoundDictatedText
-            ? TypeWhisperDictatedTextBoundary.wrap(text)
-            : text
-        let result = try await promptProcessor(
+        return try await promptProcessor(
             systemPrompt,
-            workflowInput,
-            selection.providerId,
-            selection.cloudModel,
+            text,
+            Self.trimmedOrNil(behavior.providerId),
+            Self.trimmedOrNil(behavior.cloudModel),
             behavior.temperatureDirective
         )
-        guard shouldBoundDictatedText else {
-            return result
-        }
-
-        return TypeWhisperDictatedTextBoundary.sanitize(result, originalUserText: text)
     }
 
     func canProcess(
@@ -171,6 +141,11 @@ struct WorkflowTextProcessingService {
         let sourceLanguageCode = WorkflowTranslationLanguageNormalizer.normalizedLanguageIdentifier(from: sourceRaw)
 
         return try await appleTranslator(text, targetLanguageCode, sourceLanguageCode)
+    }
+
+    private static func trimmedOrNil(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
     }
 }
 

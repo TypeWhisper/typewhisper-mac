@@ -22090,6 +22090,106 @@
           }
         }
       }
+    },
+    "Add Fallback": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォールバックを追加"
+          }
+        }
+      }
+    },
+    "Drag this row to reorder global LLM fallbacks.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この行をドラッグしてグローバルLLMフォールバックを並べ替えます。"
+          }
+        }
+      }
+    },
+    "Drag to reorder global LLM fallbacks": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "グローバルLLMフォールバックを並べ替えるにはドラッグ"
+          }
+        }
+      }
+    },
+    "Global LLM Fallbacks": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "グローバルLLMフォールバック"
+          }
+        }
+      }
+    },
+    "Inherited LLM workflows try these providers in order. A workflow override uses only its selected provider.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "継承されたLLMワークフローは、これらのプロバイダを順番に試します。ワークフローの上書きは、選択したプロバイダのみを使用します。"
+          }
+        }
+      }
+    },
+    "No global LLM fallbacks are configured yet.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "グローバルLLMフォールバックはまだ設定されていません。"
+          }
+        }
+      }
+    },
+    "Remove fallback": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォールバックを削除"
+          }
+        }
+      }
+    },
+    "This workflow currently inherits the global LLM fallback list from Workflow settings.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このワークフローは現在、ワークフロー設定のグローバルLLMフォールバックリストを継承しています。"
+          }
+        }
+      }
+    },
+    "This workflow uses only its selected provider and does not use global fallbacks.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このワークフローは選択したプロバイダのみを使用し、グローバルフォールバックは使用しません。"
+          }
+        }
+      }
+    },
+    "Use Global Fallback List": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "グローバルフォールバックリストを使用"
+          }
+        }
+      }
     }
   },
   "version": "1.1"

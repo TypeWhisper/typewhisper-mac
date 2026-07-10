@@ -142,6 +142,8 @@ enum UserDefaultsKeys {
     static let watchFolderModel = "watchFolderModel"
 
     // MARK: - Workflows
+    static let llmFallbackPriorityList = "llmFallbackPriorityList"
+    // Legacy values retained solely as migration inputs for llmFallbackPriorityList.
     static let workflowDefaultLLMProviderId = "workflowDefaultLLMProviderId"
     static let workflowDefaultLLMCloudModel = "workflowDefaultLLMCloudModel"
     static let workflowShortTranscriptionMinimumWords = "workflowShortTranscriptionMinimumWords"

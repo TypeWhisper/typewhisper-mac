@@ -127,4 +127,129 @@ final class PromptProcessingModelResolutionTests: XCTestCase {
         XCTAssertEqual(resolution.modelId, "anything")
         XCTAssertFalse(resolution.persistGlobally)
     }
+
+    func testFallbackListMigratesWorkflowDefaultBeforeDistinctPromptDefault() throws {
+        let suiteName = "PromptProcessingModelResolutionTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set("Gemma 4 (MLX)", forKey: UserDefaultsKeys.workflowDefaultLLMProviderId)
+        defaults.set("gemma-4-large", forKey: UserDefaultsKeys.workflowDefaultLLMCloudModel)
+        defaults.set("Groq", forKey: "llmProviderType")
+        defaults.set("llama-3.3", forKey: "llmCloudModel")
+
+        let service = PromptProcessingService(userDefaults: defaults)
+
+        XCTAssertEqual(
+            service.fallbackPriorityList.map { ($0.providerId, $0.modelId) }.map { "\($0.0)|\($0.1 ?? "")" },
+            ["Gemma 4 (MLX)|gemma-4-large", "Groq|llama-3.3"]
+        )
+        XCTAssertNotEqual(service.fallbackPriorityList[0].id, service.fallbackPriorityList[1].id)
+        XCTAssertNotNil(defaults.data(forKey: UserDefaultsKeys.llmFallbackPriorityList))
+        XCTAssertEqual(defaults.string(forKey: "llmProviderType"), "Groq")
+    }
+
+    func testExistingEmptyFallbackListDoesNotRemigrateLegacyDefaults() throws {
+        let suiteName = "PromptProcessingModelResolutionTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(try JSONEncoder().encode([LLMFallbackPriorityItem]()), forKey: UserDefaultsKeys.llmFallbackPriorityList)
+        defaults.set("Groq", forKey: "llmProviderType")
+        defaults.set("llama-3.3", forKey: "llmCloudModel")
+
+        let service = PromptProcessingService(userDefaults: defaults)
+
+        XCTAssertTrue(service.fallbackPriorityList.isEmpty)
+    }
+
+    func testCorruptFallbackListRemigratesLegacyDefaults() throws {
+        let suiteName = "PromptProcessingModelResolutionTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(Data("not valid fallback JSON".utf8), forKey: UserDefaultsKeys.llmFallbackPriorityList)
+        defaults.set("Groq", forKey: "llmProviderType")
+        defaults.set("llama-3.3", forKey: "llmCloudModel")
+
+        let service = PromptProcessingService(userDefaults: defaults)
+
+        XCTAssertEqual(
+            service.fallbackPriorityList.map { "\($0.providerId)|\($0.modelId ?? "")" },
+            ["Groq|llama-3.3"]
+        )
+    }
+
+    func testFallbackListKeepsUUIDsAndOrderAcrossReorderAndReload() throws {
+        let suiteName = "PromptProcessingModelResolutionTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let first = LLMFallbackPriorityItem(providerId: "Groq", modelId: "llama-3.3")
+        let second = LLMFallbackPriorityItem(providerId: "Mistral", modelId: nil)
+        defaults.set(
+            try JSONEncoder().encode([first, second]),
+            forKey: UserDefaultsKeys.llmFallbackPriorityList
+        )
+
+        let service = PromptProcessingService(userDefaults: defaults)
+        service.moveLLMFallbacks(from: IndexSet(integer: 1), to: 0)
+
+        XCTAssertEqual(service.fallbackPriorityList.map(\.id), [second.id, first.id])
+
+        let reloaded = PromptProcessingService(userDefaults: defaults)
+        XCTAssertEqual(reloaded.fallbackPriorityList.map(\.id), [second.id, first.id])
+        XCTAssertEqual(reloaded.fallbackPriorityList.map(\.providerId), ["Mistral", "Groq"])
+    }
+
+    func testFallbackListRejectsDuplicatePairsAndPersistsRemoval() throws {
+        let suiteName = "PromptProcessingModelResolutionTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(
+            try JSONEncoder().encode([LLMFallbackPriorityItem]()),
+            forKey: UserDefaultsKeys.llmFallbackPriorityList
+        )
+
+        let service = PromptProcessingService(userDefaults: defaults)
+        service.addLLMFallback(providerId: "Groq", modelId: "llama-3.3")
+        service.addLLMFallback(providerId: "Groq", modelId: "llama-3.3")
+        service.addLLMFallback(providerId: "Mistral")
+
+        XCTAssertEqual(service.fallbackPriorityList.count, 2)
+        let groq = try XCTUnwrap(service.fallbackPriorityList.first)
+        let mistral = try XCTUnwrap(service.fallbackPriorityList.last)
+
+        service.updateLLMFallback(mistral, providerId: "Groq", modelId: "llama-3.3")
+        XCTAssertEqual(service.fallbackPriorityList.map(\.providerId), ["Groq", "Mistral"])
+
+        service.removeLLMFallback(groq)
+        let reloaded = PromptProcessingService(userDefaults: defaults)
+        XCTAssertEqual(reloaded.fallbackPriorityList.map(\.id), [mistral.id])
+        XCTAssertEqual(reloaded.fallbackPriorityList.map(\.providerId), ["Mistral"])
+    }
+
+    func testEmptyFallbackListThrowsAggregateErrorWithoutAttempts() async throws {
+        let suiteName = "PromptProcessingModelResolutionTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(
+            try JSONEncoder().encode([LLMFallbackPriorityItem]()),
+            forKey: UserDefaultsKeys.llmFallbackPriorityList
+        )
+
+        let service = PromptProcessingService(userDefaults: defaults)
+
+        do {
+            _ = try await service.process(prompt: "Fix grammar", text: "hello world")
+            XCTFail("Expected an empty fallback list to fail")
+        } catch let error as LLMFallbackExhaustedError {
+            XCTAssertTrue(error.failures.isEmpty)
+            XCTAssertEqual(error.localizedDescription, "No LLM fallbacks are configured.")
+        } catch {
+            XCTFail("Expected LLMFallbackExhaustedError, got \(error)")
+        }
+    }
 }

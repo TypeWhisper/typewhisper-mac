@@ -120,6 +120,7 @@ final class ModelManagerService: ObservableObject {
     private var autoUnloadTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
     private var autoUnloadTargets: [ObjectIdentifier: AutoUnloadTarget] = [:]
     private var autoUnloadDiagnostics: [ObjectIdentifier: ModelAutoUnloadDiagnosticsSnapshot.Entry] = [:]
+    private var autoUnloadUsageCounts: [ObjectIdentifier: Int] = [:]
     private var cancellables = Set<AnyCancellable>()
     private var pluginConfiguredWaitAttempts = 300
     private var pluginRestoreBusyWaitAttempts = 5_700
@@ -815,6 +816,28 @@ final class ModelManagerService: ObservableObject {
         scheduleAutoUnloadIfNeeded(for: nsPlugin, scheduledKeys: &scheduledKeys)
     }
 
+    func beginAutoUnloadProtectedUse(of plugin: any TypeWhisperPlugin) {
+        guard let nsPlugin = plugin as? NSObject else { return }
+        let key = ObjectIdentifier(nsPlugin)
+        autoUnloadUsageCounts[key, default: 0] += 1
+        clearAutoUnloadSchedule(for: key)
+    }
+
+    func endAutoUnloadProtectedUse(of plugin: any TypeWhisperPlugin) {
+        guard let nsPlugin = plugin as? NSObject else { return }
+        let key = ObjectIdentifier(nsPlugin)
+        guard let currentUses = autoUnloadUsageCounts[key], currentUses > 0 else { return }
+        let remainingUses = currentUses - 1
+        if remainingUses > 0 {
+            autoUnloadUsageCounts[key] = remainingUses
+            return
+        }
+
+        autoUnloadUsageCounts[key] = nil
+        var scheduledKeys = Set<ObjectIdentifier>()
+        scheduleAutoUnloadIfNeeded(for: nsPlugin, scheduledKeys: &scheduledKeys)
+    }
+
     private static func shouldAutoUnloadLocalLLMProvider(_ plugin: any LLMProviderPlugin) -> Bool {
         guard let setupStatus = plugin as? any LLMProviderSetupStatusProviding else {
             return false
@@ -837,10 +860,8 @@ final class ModelManagerService: ObservableObject {
         let key = ObjectIdentifier(nsPlugin)
         guard scheduledKeys.insert(key).inserted else { return }
 
-        autoUnloadTasks[key]?.cancel()
-        autoUnloadTasks[key] = nil
-        autoUnloadTargets[key] = nil
-        autoUnloadDiagnostics[key] = nil
+        clearAutoUnloadSchedule(for: key)
+        guard autoUnloadUsageCounts[key] == nil else { return }
 
         let seconds = autoUnloadSeconds
         guard seconds != 0 else { return }
@@ -870,6 +891,13 @@ final class ModelManagerService: ObservableObject {
             guard !Task.isCancelled else { return }
             self?.performAutoUnload(for: key)
         }
+    }
+
+    private func clearAutoUnloadSchedule(for key: ObjectIdentifier) {
+        autoUnloadTasks[key]?.cancel()
+        autoUnloadTasks[key] = nil
+        autoUnloadTargets[key] = nil
+        autoUnloadDiagnostics[key] = nil
     }
 
     func cancelAutoUnloadTimer() {

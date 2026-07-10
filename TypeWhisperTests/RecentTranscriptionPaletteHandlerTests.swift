@@ -712,7 +712,10 @@ final class PromptPaletteHandlerTests: XCTestCase {
             behavior: WorkflowBehavior(settings: ["targetLanguage": "German"])
         )
 
-        let promptProcessingService = PromptProcessingService()
+        let suiteName = "RecentTranscriptionPaletteHandlerTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let promptProcessingService = PromptProcessingService(userDefaults: defaults)
         promptProcessingService.selectedProviderId = "missing-provider"
 
         let controller = PromptPaletteControllerSpy()

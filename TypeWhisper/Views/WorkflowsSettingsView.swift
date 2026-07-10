@@ -74,6 +74,15 @@ struct WorkflowsSettingsView: View {
     }
 }
 
+private struct LLMFallbackProviderMenuOption: Identifiable {
+    let providerId: String
+    let displayName: String
+    let includesProviderDefault: Bool
+    let models: [PluginModelInfo]
+
+    var id: String { providerId }
+}
+
 private struct MyWorkflowsPage: View {
     @ObservedObject private var workflowService = ServiceContainer.shared.workflowService
     @ObservedObject private var promptProcessingService = ServiceContainer.shared.promptProcessingService
@@ -103,6 +112,29 @@ private struct MyWorkflowsPage: View {
         }
     }
 
+    private var fallbackAddOptions: [LLMFallbackProviderMenuOption] {
+        let configuredFallbacks = promptProcessingService.fallbackPriorityList
+
+        return promptProcessingService.availableProviders.compactMap { provider in
+            let includesProviderDefault = !configuredFallbacks.contains {
+                $0.providerId == provider.id && $0.modelId == nil
+            }
+            let remainingModels = promptProcessingService.modelsForProvider(provider.id).filter { model in
+                !configuredFallbacks.contains {
+                    $0.providerId == provider.id && $0.modelId == model.id
+                }
+            }
+
+            guard includesProviderDefault || !remainingModels.isEmpty else { return nil }
+            return LLMFallbackProviderMenuOption(
+                providerId: provider.id,
+                displayName: provider.displayName,
+                includesProviderDefault: includesProviderDefault,
+                models: remainingModels
+            )
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -111,7 +143,7 @@ private struct MyWorkflowsPage: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    providerDefaultsCard
+                    fallbackPriorityCard
 
                     if workflowService.workflows.isEmpty {
                         emptyState
@@ -206,112 +238,47 @@ private struct MyWorkflowsPage: View {
         .background(.bar)
     }
 
-    private var providerDefaultsCard: some View {
+    private var fallbackPriorityCard: some View {
         WorkflowSectionCard(
-            title: localizedAppText("Default LLM", de: "Standard-LLM"),
+            title: localizedAppText("Global LLM Fallbacks", de: "Globale LLM-Fallbacks"),
             description: localizedAppText(
-                "New workflows use this provider unless a workflow overrides it in Advanced.",
-                de: "Neue Workflows verwenden diesen Provider, sofern ein Workflow ihn nicht unter Erweitert überschreibt."
-            )
+                "Inherited LLM workflows try these providers in order. A workflow override uses only its selected provider.",
+                de: "Vererbte LLM-Workflows probieren diese Provider der Reihe nach. Ein Workflow-Override verwendet nur seinen ausgewählten Provider."
+            ),
+            compact: true
         ) {
             let providers = promptProcessingService.availableProviders
 
-            VStack(alignment: .leading, spacing: 10) {
-                if providers.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                if promptProcessingService.fallbackPriorityList.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
                         Text(
                             localizedAppText(
-                                "No LLM providers are installed yet.",
-                                de: "Es sind noch keine LLM-Provider installiert."
+                                "No global LLM fallbacks are configured yet.",
+                                de: "Es sind noch keine globalen LLM-Fallbacks eingerichtet."
                             )
                         )
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                    }
+                } else {
+                    fallbackPriorityList
+                }
 
+                HStack(alignment: .center, spacing: 12) {
+                    if providers.isEmpty {
                         Button(localizedAppText("Open Integrations", de: "Integrationen öffnen")) {
                             SettingsNavigationCoordinator.shared.navigate(to: .integrations)
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
-                    }
-                } else {
-                    let models = promptProcessingService.modelsForProvider(workflowService.defaultProviderId)
-
-                    ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .top, spacing: 12) {
-                            compactDefaultLLMField(title: localizedAppText("Provider", de: "Provider")) {
-                                Picker(
-                                    localizedAppText("Provider", de: "Provider"),
-                                    selection: workflowDefaultProviderBinding
-                                ) {
-                                    ForEach(providers, id: \.id) { provider in
-                                        Text(provider.displayName).tag(provider.id)
-                                    }
-                                }
-                            }
-
-                            if !models.isEmpty {
-                                compactDefaultLLMField(title: localizedAppText("Model", de: "Modell")) {
-                                    Picker(
-                                        localizedAppText("Model", de: "Modell"),
-                                        selection: $workflowService.defaultCloudModel
-                                    ) {
-                                        Text(localizedAppText("Provider Default", de: "Provider-Standard"))
-                                            .tag("")
-                                        ForEach(models, id: \.id) { model in
-                                            Text(model.displayName).tag(model.id)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            compactDefaultLLMField(title: localizedAppText("Provider", de: "Provider")) {
-                                Picker(
-                                    localizedAppText("Provider", de: "Provider"),
-                                    selection: workflowDefaultProviderBinding
-                                ) {
-                                    ForEach(providers, id: \.id) { provider in
-                                        Text(provider.displayName).tag(provider.id)
-                                    }
-                                }
-                            }
-
-                            if !models.isEmpty {
-                                compactDefaultLLMField(title: localizedAppText("Model", de: "Modell")) {
-                                    Picker(
-                                        localizedAppText("Model", de: "Modell"),
-                                        selection: $workflowService.defaultCloudModel
-                                    ) {
-                                        Text(localizedAppText("Provider Default", de: "Provider-Standard"))
-                                            .tag("")
-                                        ForEach(models, id: \.id) { model in
-                                            Text(model.displayName).tag(model.id)
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                    } else if !fallbackAddOptions.isEmpty {
+                        fallbackPriorityAddMenu
                     }
 
-                    HStack(alignment: .firstTextBaseline, spacing: 12) {
-                        Text(
-                            promptProcessingService.isProviderReady(workflowService.defaultProviderId)
-                                ? localizedAppText(
-                                    "Ready for new workflows.",
-                                    de: "Bereit für neue Workflows."
-                                )
-                                : localizedAppText(
-                                    "Provider setup not finished yet.",
-                                    de: "Provider-Setup ist noch nicht abgeschlossen."
-                                )
-                        )
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
 
-                        Spacer(minLength: 0)
-
+                    if !providers.isEmpty {
                         Button(localizedAppText("Manage in Integrations", de: "In Integrationen verwalten")) {
                             SettingsNavigationCoordinator.shared.navigate(to: .integrations)
                         }
@@ -323,34 +290,93 @@ private struct MyWorkflowsPage: View {
         }
     }
 
-    private var workflowDefaultProviderBinding: Binding<String> {
-        Binding(
-            get: { workflowService.defaultProviderId },
-            set: { providerId in
-                workflowService.defaultProviderId = providerId
-                let models = promptProcessingService.modelsForProvider(providerId)
-                if !workflowService.defaultCloudModel.isEmpty,
-                   !models.contains(where: { $0.id == workflowService.defaultCloudModel }) {
-                    workflowService.defaultCloudModel = ""
+    private var fallbackPriorityList: some View {
+        let fallbacks = promptProcessingService.fallbackPriorityList
+
+        return VStack(spacing: 0) {
+            ForEach(Array(fallbacks.enumerated()), id: \.element.id) { index, item in
+                LLMFallbackPriorityRow(
+                    item: item,
+                    index: index,
+                    count: fallbacks.count,
+                    promptProcessingService: promptProcessingService,
+                    onMove: { item, offset in
+                        moveFallback(item, by: offset)
+                    },
+                    onDrop: moveFallback(draggedID:droppedOn:)
+                )
+
+                if index < fallbacks.count - 1 {
+                    Divider()
+                        .padding(.leading, 34)
                 }
             }
+        }
+    }
+
+    private var fallbackPriorityAddMenu: some View {
+        let options = fallbackAddOptions
+
+        return Menu {
+            ForEach(options) { option in
+                if option.models.isEmpty {
+                    Button(option.displayName) {
+                        promptProcessingService.addLLMFallback(providerId: option.providerId, modelId: nil)
+                    }
+                } else {
+                    Menu(option.displayName) {
+                        if option.includesProviderDefault {
+                            Button(localizedAppText("Provider Default", de: "Provider-Standard")) {
+                                promptProcessingService.addLLMFallback(providerId: option.providerId, modelId: nil)
+                            }
+
+                            Divider()
+                        }
+
+                        ForEach(option.models, id: \.id) { model in
+                            Button(model.displayName) {
+                                promptProcessingService.addLLMFallback(providerId: option.providerId, modelId: model.id)
+                            }
+                        }
+                    }
+                }
+            }
+        } label: {
+            Label(localizedAppText("Add Fallback", de: "Fallback hinzufügen"), systemImage: "plus")
+        }
+        .menuStyle(.borderlessButton)
+        .controlSize(.small)
+        .help(localizedAppText("Add Fallback", de: "Fallback hinzufügen"))
+    }
+
+    private func moveFallback(_ item: LLMFallbackPriorityItem, by offset: Int) {
+        let fallbacks = promptProcessingService.fallbackPriorityList
+        guard let currentIndex = fallbacks.firstIndex(where: { $0.id == item.id }) else { return }
+
+        let targetIndex = currentIndex + offset
+        guard fallbacks.indices.contains(targetIndex) else { return }
+
+        let destination = offset < 0 ? targetIndex : targetIndex + 1
+        promptProcessingService.moveLLMFallbacks(
+            from: IndexSet(integer: currentIndex),
+            to: destination
         )
     }
 
-    @ViewBuilder
-    private func compactDefaultLLMField<Content: View>(
-        title: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-
-            content()
-                .controlSize(.small)
+    private func moveFallback(draggedID: UUID, droppedOn item: LLMFallbackPriorityItem) -> Bool {
+        let fallbacks = promptProcessingService.fallbackPriorityList
+        guard draggedID != item.id,
+              let fromIndex = fallbacks.firstIndex(where: { $0.id == draggedID }),
+              let toIndex = fallbacks.firstIndex(where: { $0.id == item.id }) else {
+            return false
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+
+        let destination = toIndex > fromIndex ? toIndex + 1 : toIndex
+        promptProcessingService.moveLLMFallbacks(
+            from: IndexSet(integer: fromIndex),
+            to: destination
+        )
+        return true
     }
 
     private var searchField: some View {
@@ -489,6 +515,275 @@ private struct MyWorkflowsPage: View {
         var reordered = workflowService.workflows
         reordered.swapAt(currentIndex, targetIndex)
         workflowService.reorderWorkflows(reordered)
+    }
+}
+
+private struct LLMFallbackPriorityRow: View {
+    let item: LLMFallbackPriorityItem
+    let index: Int
+    let count: Int
+    @ObservedObject var promptProcessingService: PromptProcessingService
+    let onMove: (LLMFallbackPriorityItem, Int) -> Void
+    let onDrop: (UUID, LLMFallbackPriorityItem) -> Bool
+
+    @State private var isDropTargeted = false
+    @State private var isHovered = false
+
+    private var availableModels: [PluginModelInfo] {
+        promptProcessingService.modelsForProvider(item.providerId)
+    }
+
+    private var providerOptions: [(id: String, displayName: String)] {
+        let otherFallbacks = promptProcessingService.fallbackPriorityList.filter { $0.id != item.id }
+        var providers = promptProcessingService.availableProviders.filter { provider in
+            provider.id == item.providerId || !otherFallbacks.contains {
+                $0.providerId == provider.id && $0.modelId == nil
+            }
+        }
+        if !providers.contains(where: { $0.id == item.providerId }) {
+            providers.insert(
+                (id: item.providerId, displayName: promptProcessingService.displayName(for: item.providerId)),
+                at: 0
+            )
+        }
+        return providers
+    }
+
+    private var modelOptions: [PluginModelInfo] {
+        let otherFallbacks = promptProcessingService.fallbackPriorityList.filter { $0.id != item.id }
+        return availableModels.filter { model in
+            model.id == item.modelId || !otherFallbacks.contains {
+                $0.providerId == item.providerId && $0.modelId == model.id
+            }
+        }
+    }
+
+    private var canSelectProviderDefault: Bool {
+        item.modelId == nil || !promptProcessingService.fallbackPriorityList.contains {
+            $0.id != item.id && $0.providerId == item.providerId && $0.modelId == nil
+        }
+    }
+
+    private var canMoveUp: Bool { index > 0 }
+    private var canMoveDown: Bool { index < count - 1 }
+    private var showsModelPicker: Bool { !availableModels.isEmpty || item.modelId != nil }
+    private var isReady: Bool { promptProcessingService.isProviderReady(item.providerId) }
+    private var statusText: String {
+        isReady
+            ? localizedAppText("Ready", de: "Bereit")
+            : localizedAppText("Unavailable", de: "Nicht verfügbar")
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Image(systemName: "line.3.horizontal")
+                .foregroundStyle(.tertiary)
+                .font(.system(size: 10, weight: .semibold))
+                .frame(width: 10)
+
+            Text("\(index + 1)")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.tertiary)
+                .frame(width: 14, alignment: .trailing)
+
+            selectionFields
+
+            Spacer(minLength: 6)
+
+            statusLabel
+
+            Button {
+                promptProcessingService.removeLLMFallback(item)
+            } label: {
+                Image(systemName: "minus.circle")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .font(.system(size: 12))
+            .help(localizedAppText("Remove fallback", de: "Fallback entfernen"))
+            .accessibilityLabel(localizedAppText("Remove fallback", de: "Fallback entfernen"))
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 5)
+        .background(rowBackgroundColor)
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
+        .contextMenu {
+            Button {
+                onMove(item, -1)
+            } label: {
+                Label(localizedAppText("Move Up", de: "Nach oben bewegen"), systemImage: "chevron.up")
+            }
+            .disabled(!canMoveUp)
+
+            Button {
+                onMove(item, 1)
+            } label: {
+                Label(localizedAppText("Move Down", de: "Nach unten bewegen"), systemImage: "chevron.down")
+            }
+            .disabled(!canMoveDown)
+
+            Divider()
+
+            Button(role: .destructive) {
+                promptProcessingService.removeLLMFallback(item)
+            } label: {
+                Label(localizedAppText("Remove", de: "Entfernen"), systemImage: "trash")
+            }
+        }
+        .modifier(LLMFallbackPriorityAccessibilityActions(
+            canMoveUp: canMoveUp,
+            canMoveDown: canMoveDown,
+            moveUp: { onMove(item, -1) },
+            moveDown: { onMove(item, 1) }
+        ))
+        .fallbackPriorityReordering(
+            fallbackID: item.id.uuidString,
+            isTargeted: $isDropTargeted,
+            onDrop: { droppedItems in
+                guard let droppedID = droppedItems.first,
+                      let draggedID = UUID(uuidString: droppedID) else {
+                    return false
+                }
+                return onDrop(draggedID, item)
+            }
+        )
+        .help(localizedAppText("Drag to reorder global LLM fallbacks", de: "Ziehen, um globale LLM-Fallbacks zu sortieren"))
+        .accessibilityHint(localizedAppText(
+            "Drag this row to reorder global LLM fallbacks.",
+            de: "Ziehe diese Zeile, um globale LLM-Fallbacks zu sortieren."
+        ))
+    }
+
+    @ViewBuilder
+    private var selectionFields: some View {
+        providerPicker
+        if showsModelPicker {
+            modelPicker
+        }
+    }
+
+    private var providerPicker: some View {
+        Picker(localizedAppText("Provider", de: "Provider"), selection: providerBinding) {
+            ForEach(providerOptions, id: \.id) { provider in
+                Text(provider.displayName).tag(provider.id)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .controlSize(.small)
+        .frame(width: 170, alignment: .leading)
+    }
+
+    private var modelPicker: some View {
+        Picker(localizedAppText("Model", de: "Modell"), selection: modelBinding) {
+            if canSelectProviderDefault {
+                Text(localizedAppText("Provider Default", de: "Provider-Standard"))
+                    .tag(nil as String?)
+            }
+
+            if let selectedModelID = item.modelId,
+               !availableModels.contains(where: { $0.id == selectedModelID }) {
+                Text(selectedModelID).tag(selectedModelID as String?)
+            }
+
+            ForEach(modelOptions, id: \.id) { model in
+                Text(model.displayName).tag(model.id as String?)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .controlSize(.small)
+        .frame(width: 170, alignment: .leading)
+    }
+
+    private var statusLabel: some View {
+        ViewThatFits(in: .horizontal) {
+            Label(statusText, systemImage: isReady ? "checkmark.circle" : "exclamationmark.triangle")
+                .font(.caption)
+                .fixedSize()
+
+            Image(systemName: isReady ? "checkmark.circle" : "exclamationmark.triangle")
+                .font(.caption)
+                .help(statusText)
+                .accessibilityLabel(statusText)
+        }
+        .foregroundStyle(isReady ? Color.secondary : Color.orange)
+    }
+
+    private var providerBinding: Binding<String> {
+        Binding(
+            get: { item.providerId },
+            set: { providerID in
+                promptProcessingService.updateLLMFallback(item, providerId: providerID, modelId: nil)
+            }
+        )
+    }
+
+    private var modelBinding: Binding<String?> {
+        Binding(
+            get: { item.modelId },
+            set: { modelID in
+                promptProcessingService.updateLLMFallback(item, providerId: item.providerId, modelId: modelID)
+            }
+        )
+    }
+
+    private var rowBackgroundColor: Color {
+        if isDropTargeted {
+            return Color.accentColor.opacity(0.08)
+        }
+
+        if isHovered {
+            return Color.primary.opacity(0.035)
+        }
+
+        return Color.clear
+    }
+}
+
+private struct LLMFallbackPriorityAccessibilityActions: ViewModifier {
+    let canMoveUp: Bool
+    let canMoveDown: Bool
+    let moveUp: () -> Void
+    let moveDown: () -> Void
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if canMoveUp && canMoveDown {
+            content
+                .accessibilityAction(named: Text(localizedAppText("Move Up", de: "Nach oben bewegen")), moveUp)
+                .accessibilityAction(named: Text(localizedAppText("Move Down", de: "Nach unten bewegen")), moveDown)
+        } else if canMoveUp {
+            content
+                .accessibilityAction(named: Text(localizedAppText("Move Up", de: "Nach oben bewegen")), moveUp)
+        } else if canMoveDown {
+            content
+                .accessibilityAction(named: Text(localizedAppText("Move Down", de: "Nach unten bewegen")), moveDown)
+        } else {
+            content
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func fallbackPriorityReordering(
+        fallbackID: String,
+        isTargeted: Binding<Bool>,
+        onDrop: @escaping ([String]) -> Bool
+    ) -> some View {
+        self
+            .draggable(fallbackID)
+            .dropDestination(for: String.self) { droppedItems, _ in
+                onDrop(droppedItems)
+            } isTargeted: { targeted in
+                isTargeted.wrappedValue = targeted
+            }
+            .overlay {
+                OpenHandCursorView()
+                    .allowsHitTesting(false)
+            }
     }
 }
 
@@ -1239,13 +1534,7 @@ private struct WorkflowEditorPage: View {
                     localizedAppText("Provider", de: "Provider"),
                     selection: workflowProviderOverrideBinding
                 ) {
-                    Text(
-                        localizedAppText(
-                            "Use Workflow Default (\(promptProcessingService.displayName(for: workflowService.defaultProviderId)))",
-                            de: "Workflow-Standard verwenden (\(promptProcessingService.displayName(for: workflowService.defaultProviderId)))",
-                            ja: "ワークフロー既定値を使用（\(promptProcessingService.displayName(for: workflowService.defaultProviderId))）"
-                        )
-                    )
+                    Text(globalFallbackListPickerLabel)
                     .tag(nil as String?)
 
                     ForEach(providers, id: \.id) { provider in
@@ -1256,12 +1545,12 @@ private struct WorkflowEditorPage: View {
                 Text(
                     draft.providerId == nil
                         ? localizedAppText(
-                            "This workflow currently inherits the default provider from the workflow settings.",
-                            de: "Dieser Workflow übernimmt aktuell den Standard-Provider aus den Workflow-Einstellungen."
+                            "This workflow currently inherits the global LLM fallback list from Workflow settings.",
+                            de: "Dieser Workflow übernimmt aktuell die globale LLM-Fallback-Liste aus den Workflow-Einstellungen."
                         )
                         : localizedAppText(
-                            "This workflow uses its own provider selection instead of the workflow default.",
-                            de: "Dieser Workflow verwendet seine eigene Provider-Auswahl statt des Workflow-Standards."
+                            "This workflow uses only its selected provider and does not use global fallbacks.",
+                            de: "Dieser Workflow verwendet nur seinen ausgewählten Provider und keine globalen Fallbacks."
                         )
                 )
                 .font(.caption)
@@ -1304,6 +1593,19 @@ private struct WorkflowEditorPage: View {
                 }
             }
         }
+    }
+
+    private var globalFallbackListPickerLabel: String {
+        guard let primaryFallbackItem = promptProcessingService.primaryFallbackItem else {
+            return localizedAppText("Use Global Fallback List", de: "Globale Fallback-Liste verwenden")
+        }
+
+        let providerName = promptProcessingService.displayName(for: primaryFallbackItem.providerId)
+        return localizedAppText(
+            "Use Global Fallback List (starts with \(providerName))",
+            de: "Globale Fallback-Liste verwenden (beginnt mit \(providerName))",
+            ja: "グローバルフォールバックリストを使用（最初: \(providerName)）"
+        )
     }
 
     private var triggerSection: some View {
@@ -2071,23 +2373,24 @@ private struct WorkflowAppPickerSheet: View {
 private struct WorkflowSectionCard<Content: View>: View {
     let title: String
     let description: String
+    var compact = false
     @ViewBuilder let content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: compact ? 8 : 12) {
+            VStack(alignment: .leading, spacing: compact ? 3 : 4) {
                 Text(title)
-                    .font(.headline)
+                    .font(compact ? Font.subheadline.weight(.semibold) : Font.headline)
                 Text(description)
-                    .font(.subheadline)
+                    .font(compact ? .caption : .subheadline)
                     .foregroundStyle(.secondary)
             }
 
             content
         }
-        .padding(16)
+        .padding(compact ? 12 : 16)
         .background {
-            workflowsElevatedPanel(cornerRadius: 18)
+            workflowsElevatedPanel(cornerRadius: compact ? 14 : 18)
         }
     }
 }

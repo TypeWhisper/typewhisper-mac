@@ -16,7 +16,11 @@ enum TypeWhisperDictatedTextBoundary {
         """
     }
 
-    static func sanitize(_ text: String, originalUserText: String) -> String {
+    static func sanitize(
+        _ text: String,
+        originalUserText: String,
+        fallbackToOriginalUserText: Bool = true
+    ) -> String {
         let normalizedText = text
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
@@ -43,8 +47,8 @@ enum TypeWhisperDictatedTextBoundary {
             return cleaned
         }
 
-        let fallback = originalUserText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return fallback
+        guard fallbackToOriginalUserText else { return "" }
+        return originalUserText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func isTypeWhisperScaffoldLine(_ line: String) -> Bool {
@@ -142,8 +146,16 @@ enum AppleIntelligencePromptBuilder {
 }
 
 enum AppleIntelligenceResponseSanitizer {
-    static func sanitize(_ text: String, originalUserText: String) -> String {
-        TypeWhisperDictatedTextBoundary.sanitize(text, originalUserText: originalUserText)
+    static func sanitize(
+        _ text: String,
+        originalUserText: String,
+        fallbackToOriginalUserText: Bool = true
+    ) -> String {
+        TypeWhisperDictatedTextBoundary.sanitize(
+            text,
+            originalUserText: originalUserText,
+            fallbackToOriginalUserText: fallbackToOriginalUserText
+        )
     }
 }
 
@@ -169,7 +181,11 @@ final class FoundationModelsProvider: LLMProvider, @unchecked Sendable {
         let session = LanguageModelSession(model: model, instructions: Instructions(systemPrompt))
         let prompt = Prompt(AppleIntelligencePromptBuilder.prompt(for: userText))
         let response = try await session.respond(to: prompt)
-        return AppleIntelligenceResponseSanitizer.sanitize(response.content, originalUserText: userText)
+        return AppleIntelligenceResponseSanitizer.sanitize(
+            response.content,
+            originalUserText: userText,
+            fallbackToOriginalUserText: false
+        )
         #else
         throw LLMError.notAvailable
         #endif

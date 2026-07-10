@@ -172,6 +172,15 @@ final class APIRouterAndHandlersTests: XCTestCase {
         static var pluginId: String { "com.typewhisper.mock.llm" }
         static var pluginName: String { "Mock LLM" }
 
+        enum ProcessOutcome: Sendable {
+            case response(String)
+            case delayedResponse(String, milliseconds: Int)
+            case rateLimit
+            case networkFailure
+            case apiFailure(String)
+            case waitForCancellation
+        }
+
         private let requestLock = NSLock()
         var models: [PluginModelInfo] = []
         var responseText = "processed"
@@ -189,6 +198,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
         nonisolated(unsafe) private var _lastTemperatureDirective: PluginLLMTemperatureDirective?
         nonisolated(unsafe) private var _autoUnloadCount = 0
         nonisolated(unsafe) private var _restoreCount = 0
+        nonisolated(unsafe) private var _processCallCount = 0
+        nonisolated(unsafe) private var _queuedProcessOutcomes: [ProcessOutcome] = []
 
         var lastSystemPrompt: String? {
             requestLock.withLock { _lastSystemPrompt }
@@ -214,6 +225,15 @@ final class APIRouterAndHandlersTests: XCTestCase {
             requestLock.withLock { _restoreCount }
         }
 
+        var processCallCount: Int {
+            requestLock.withLock { _processCallCount }
+        }
+
+        var queuedProcessOutcomes: [ProcessOutcome] {
+            get { requestLock.withLock { _queuedProcessOutcomes } }
+            set { requestLock.withLock { _queuedProcessOutcomes = newValue } }
+        }
+
         required override init() {}
 
         func activate(host: HostServices) {}
@@ -228,12 +248,9 @@ final class APIRouterAndHandlersTests: XCTestCase {
         var currentSettingsActivity: PluginSettingsActivity? { nil }
 
         func process(systemPrompt: String, userText: String, model: String?) async throws -> String {
-            requestLock.withLock {
-                _lastSystemPrompt = systemPrompt
-                _lastUserText = userText
-                _lastRequestedModel = model
-            }
-            return responseText
+            try await resolveProcessOutcome(
+                recordProcessRequest(systemPrompt: systemPrompt, userText: userText, model: model)
+            )
         }
 
         func process(
@@ -242,13 +259,53 @@ final class APIRouterAndHandlersTests: XCTestCase {
             model: String?,
             temperatureDirective: PluginLLMTemperatureDirective
         ) async throws -> String {
+            try await resolveProcessOutcome(
+                recordProcessRequest(
+                    systemPrompt: systemPrompt,
+                    userText: userText,
+                    model: model,
+                    temperatureDirective: temperatureDirective
+                )
+            )
+        }
+
+        private func recordProcessRequest(
+            systemPrompt: String,
+            userText: String,
+            model: String?,
+            temperatureDirective: PluginLLMTemperatureDirective? = nil
+        ) -> ProcessOutcome {
             requestLock.withLock {
                 _lastSystemPrompt = systemPrompt
                 _lastUserText = userText
                 _lastRequestedModel = model
-                _lastTemperatureDirective = temperatureDirective
+                if let temperatureDirective {
+                    _lastTemperatureDirective = temperatureDirective
+                }
+                _processCallCount += 1
+                return _queuedProcessOutcomes.isEmpty
+                    ? .response(responseText)
+                    : _queuedProcessOutcomes.removeFirst()
             }
-            return responseText
+        }
+
+        private func resolveProcessOutcome(_ outcome: ProcessOutcome) async throws -> String {
+            switch outcome {
+            case .response(let response):
+                return response
+            case .delayedResponse(let response, let milliseconds):
+                try await Task.sleep(for: .milliseconds(milliseconds))
+                return response
+            case .rateLimit:
+                throw LLMError.providerError("HTTP 429 Too Many Requests")
+            case .networkFailure:
+                throw URLError(.notConnectedToInternet)
+            case .apiFailure(let message):
+                throw LLMError.providerError(message)
+            case .waitForCancellation:
+                try await Task.sleep(for: .seconds(60))
+                return requestLock.withLock { responseText }
+            }
         }
 
         @objc func triggerAutoUnload() {
@@ -6039,6 +6096,37 @@ final class APIRouterAndHandlersTests: XCTestCase {
         }
     }
 
+    private static func makeEmptyLLMFallbackDefaults() -> (suiteName: String, defaults: UserDefaults) {
+        let suiteName = "APIRouterAndHandlersTests.LLMFallbacks.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults.set(Data("[]".utf8), forKey: UserDefaultsKeys.llmFallbackPriorityList)
+        return (suiteName, defaults)
+    }
+
+    @MainActor
+    private static func installLLMFallbackTestProviders(
+        _ providers: [MockLLMProviderPlugin],
+        appSupportDirectory: URL
+    ) {
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = providers.enumerated().map { index, provider in
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.tests.llm-fallback.\(index)",
+                    name: "LLM Fallback Test \(index)",
+                    version: "1.0.0",
+                    principalClass: "APIRouterMockLLMProviderPlugin"
+                ),
+                instance: provider,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        }
+    }
+
     private static func multipartTranscribeBody(
         wavData: Data,
         boundary: String,
@@ -6134,17 +6222,12 @@ final class APIRouterAndHandlersTests: XCTestCase {
 
     @MainActor
     func testPromptProcessingUsesStableProviderIdsAndLegacyAliases() async throws {
-        let providerKey = "llmProviderType"
-        let modelKey = "llmCloudModel"
-        let originalProvider = UserDefaults.standard.object(forKey: providerKey)
-        let originalModel = UserDefaults.standard.object(forKey: modelKey)
-        defer {
-            Self.restoreUserDefault(originalProvider, forKey: providerKey)
-            Self.restoreUserDefault(originalModel, forKey: modelKey)
-        }
-
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
+        let suiteName = "APIRouterAndHandlersTests.LegacyLLMAlias.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
 
         EventBus.shared = EventBus()
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
@@ -6171,8 +6254,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
             )
         ]
 
-        UserDefaults.standard.set("OpenAI Compatible", forKey: providerKey)
-        let service = PromptProcessingService()
+        defaults.set("OpenAI Compatible", forKey: "llmProviderType")
+        let service = PromptProcessingService(userDefaults: defaults)
         service.validateSelectionAfterPluginLoad()
 
         XCTAssertEqual(service.selectedProviderId, "openai-compatible:alter")
@@ -6431,88 +6514,352 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
-    func testPromptProcessingRepairsInvalidGlobalCloudModelBeforeRequest() async throws {
-        let providerKey = "llmProviderType"
-        let modelKey = "llmCloudModel"
-        let originalProvider = UserDefaults.standard.object(forKey: providerKey)
-        let originalModel = UserDefaults.standard.object(forKey: modelKey)
-        defer {
-            if let originalProvider {
-                UserDefaults.standard.set(originalProvider, forKey: providerKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: providerKey)
-            }
-            if let originalModel {
-                UserDefaults.standard.set(originalModel, forKey: modelKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: modelKey)
-            }
-        }
-
+    func testPromptProcessingFallsBackAfterRateLimitNetworkAndAPIErrors() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
 
-        UserDefaults.standard.set("Gemini", forKey: providerKey)
-        UserDefaults.standard.set("legacy-direct-model", forKey: modelKey)
+        let rateLimited = MockLLMProviderPlugin()
+        rateLimited.configuredProviderId = "rate-limited"
+        rateLimited.queuedProcessOutcomes = [.rateLimit]
+        let networkFailed = MockLLMProviderPlugin()
+        networkFailed.configuredProviderId = "network-failed"
+        networkFailed.queuedProcessOutcomes = [.networkFailure]
+        let apiFailed = MockLLMProviderPlugin()
+        apiFailed.configuredProviderId = "api-failed"
+        apiFailed.queuedProcessOutcomes = [.apiFailure("API rejected the request")]
+        let succeeding = MockLLMProviderPlugin()
+        succeeding.configuredProviderId = "succeeding"
+        succeeding.queuedProcessOutcomes = [.response("fallback result")]
 
-        EventBus.shared = EventBus()
-        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        Self.installLLMFallbackTestProviders(
+            [rateLimited, networkFailed, apiFailed, succeeding],
+            appSupportDirectory: appSupportDirectory
+        )
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        for provider in [rateLimited, networkFailed, apiFailed, succeeding] {
+            service.addLLMFallback(providerId: provider.providerId)
+        }
 
-        let plugin = MockLLMProviderPlugin()
-        plugin.models = [
+        let result = try await service.process(prompt: "Fix grammar", text: "hello world")
+
+        XCTAssertEqual(result, "fallback result")
+        XCTAssertEqual(rateLimited.processCallCount, 1)
+        XCTAssertEqual(networkFailed.processCallCount, 1)
+        XCTAssertEqual(apiFailed.processCallCount, 1)
+        XCTAssertEqual(succeeding.processCallCount, 1)
+    }
+
+    @MainActor
+    func testPromptProcessingFallsBackAfterUnavailableLocalProviderCannotRestore() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        let unavailableLocal = MockLLMProviderPlugin()
+        unavailableLocal.configuredProviderId = "unavailable-local"
+        unavailableLocal.available = false
+        unavailableLocal.requiresExternalCredentials = false
+        unavailableLocal.unavailableReason = "The local model could not be restored."
+        let succeeding = MockLLMProviderPlugin()
+        succeeding.configuredProviderId = "remote-fallback"
+        succeeding.queuedProcessOutcomes = [.response("remote fallback result")]
+
+        Self.installLLMFallbackTestProviders([unavailableLocal, succeeding], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: unavailableLocal.providerId)
+        service.addLLMFallback(providerId: succeeding.providerId)
+
+        let result = try await service.process(prompt: "Fix grammar", text: "hello world")
+
+        XCTAssertEqual(result, "remote fallback result")
+        XCTAssertEqual(unavailableLocal.restoreCount, 1)
+        XCTAssertEqual(unavailableLocal.processCallCount, 0)
+        XCTAssertEqual(succeeding.processCallCount, 1)
+    }
+
+    @MainActor
+    func testPromptProcessingFallsBackWhenSavedProviderIsNoLongerInstalled() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        let succeeding = MockLLMProviderPlugin()
+        succeeding.configuredProviderId = "installed-fallback"
+        succeeding.queuedProcessOutcomes = [.response("installed fallback result")]
+
+        Self.installLLMFallbackTestProviders([succeeding], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: "removed-provider")
+        service.addLLMFallback(providerId: succeeding.providerId)
+
+        let result = try await service.process(prompt: "Fix grammar", text: "hello world")
+
+        XCTAssertEqual(result, "installed fallback result")
+        XCTAssertEqual(succeeding.processCallCount, 1)
+    }
+
+    @MainActor
+    func testPromptProcessingFallsBackAfterEmptyResult() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        let empty = MockLLMProviderPlugin()
+        empty.configuredProviderId = "empty-result"
+        empty.queuedProcessOutcomes = [.response(" \n\t ")]
+        let succeeding = MockLLMProviderPlugin()
+        succeeding.configuredProviderId = "non-empty-result"
+        succeeding.queuedProcessOutcomes = [.response("usable fallback result")]
+
+        Self.installLLMFallbackTestProviders([empty, succeeding], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: empty.providerId)
+        service.addLLMFallback(providerId: succeeding.providerId)
+
+        let result = try await service.process(prompt: "Fix grammar", text: "hello world")
+
+        XCTAssertEqual(result, "usable fallback result")
+        XCTAssertEqual(empty.processCallCount, 1)
+        XCTAssertEqual(succeeding.processCallCount, 1)
+    }
+
+    @MainActor
+    func testWorkflowProcessingFallsBackAfterScaffoldOnlyResult() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        let scaffoldOnly = MockLLMProviderPlugin()
+        scaffoldOnly.configuredProviderId = "scaffold-only"
+        scaffoldOnly.queuedProcessOutcomes = [
+            .response(
+                """
+                BEGIN TYPEWHISPER DICTATED TEXT
+                END TYPEWHISPER DICTATED TEXT
+                """
+            )
+        ]
+        let succeeding = MockLLMProviderPlugin()
+        succeeding.configuredProviderId = "workflow-fallback"
+        succeeding.queuedProcessOutcomes = [.response("usable workflow result")]
+
+        Self.installLLMFallbackTestProviders([scaffoldOnly, succeeding], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: scaffoldOnly.providerId)
+        service.addLLMFallback(providerId: succeeding.providerId)
+
+        let result = try await service.processWorkflow(
+            prompt: "Fix grammar",
+            text: "hello world",
+            behavior: WorkflowBehavior()
+        )
+
+        XCTAssertEqual(result, "usable workflow result")
+        XCTAssertEqual(scaffoldOnly.processCallCount, 1)
+        XCTAssertEqual(succeeding.processCallCount, 1)
+    }
+
+    @MainActor
+    func testPromptProcessingReportsAggregateErrorAfterFallbackListExhaustion() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        let rateLimited = MockLLMProviderPlugin()
+        rateLimited.configuredProviderId = "rate-limited"
+        rateLimited.queuedProcessOutcomes = [.rateLimit]
+        let networkFailed = MockLLMProviderPlugin()
+        networkFailed.configuredProviderId = "network-failed"
+        networkFailed.queuedProcessOutcomes = [.networkFailure]
+
+        Self.installLLMFallbackTestProviders([rateLimited, networkFailed], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: rateLimited.providerId)
+        service.addLLMFallback(providerId: networkFailed.providerId)
+
+        do {
+            _ = try await service.process(prompt: "Fix grammar", text: "hello world")
+            XCTFail("Expected the fallback list to be exhausted")
+        } catch let error as LLMFallbackExhaustedError {
+            XCTAssertEqual(error.failures.map(\.providerId), ["rate-limited", "network-failed"])
+            XCTAssertEqual(error.failures.count, 2)
+            XCTAssertTrue(error.failures[0].reason.contains("429"))
+            XCTAssertFalse(error.failures[1].reason.isEmpty)
+        }
+    }
+
+    @MainActor
+    func testExplicitWorkflowProviderDoesNotCallGlobalFallbackList() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        let explicit = MockLLMProviderPlugin()
+        explicit.configuredProviderId = "strict-workflow-provider"
+        explicit.queuedProcessOutcomes = [.apiFailure("Explicit workflow provider failed")]
+        let fallback = MockLLMProviderPlugin()
+        fallback.configuredProviderId = "global-fallback"
+        fallback.queuedProcessOutcomes = [.response("must not be used")]
+
+        Self.installLLMFallbackTestProviders([explicit, fallback], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: fallback.providerId)
+
+        do {
+            _ = try await service.processWorkflow(
+                prompt: "Fix grammar",
+                text: "hello world",
+                behavior: WorkflowBehavior(providerId: explicit.providerId)
+            )
+            XCTFail("Expected the explicit workflow provider error")
+        } catch is LLMFallbackExhaustedError {
+            XCTFail("An explicit workflow provider must not use the global fallback list")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, "LLM error: Explicit workflow provider failed")
+        }
+
+        XCTAssertEqual(explicit.processCallCount, 1)
+        XCTAssertEqual(fallback.processCallCount, 0)
+    }
+
+    @MainActor
+    func testPromptProcessingCancellationDoesNotStartNextFallbackAttempt() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        let blocking = MockLLMProviderPlugin()
+        blocking.configuredProviderId = "blocking"
+        blocking.queuedProcessOutcomes = [.waitForCancellation]
+        let fallback = MockLLMProviderPlugin()
+        fallback.configuredProviderId = "must-not-start"
+        fallback.queuedProcessOutcomes = [.response("must not be used")]
+
+        Self.installLLMFallbackTestProviders([blocking, fallback], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: blocking.providerId)
+        service.addLLMFallback(providerId: fallback.providerId)
+
+        let task = Task { @MainActor in
+            try await service.process(prompt: "Fix grammar", text: "hello world")
+        }
+        for _ in 0..<100 {
+            if blocking.processCallCount == 1 { break }
+            await Task.yield()
+        }
+        XCTAssertEqual(blocking.processCallCount, 1)
+
+        task.cancel()
+        do {
+            _ = try await task.value
+            XCTFail("Expected prompt processing to be cancelled")
+        } catch is CancellationError {
+            // Expected: cancellation bypasses all remaining fallbacks.
+        } catch {
+            XCTFail("Expected CancellationError, got \(error)")
+        }
+
+        XCTAssertEqual(fallback.processCallCount, 0)
+    }
+
+    @MainActor
+    func testPromptProcessingFallsBackWhenConfiguredModelIsUnavailable() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        let unavailableModel = MockLLMProviderPlugin()
+        unavailableModel.configuredProviderId = "unavailable-model"
+        unavailableModel.models = [
             PluginModelInfo(id: "gemini-2.5-flash", displayName: "Gemini 2.5 Flash"),
             PluginModelInfo(id: "gemini-2.5-pro", displayName: "Gemini 2.5 Pro")
         ]
-
-        let manifest = PluginManifest(
-            id: "com.typewhisper.mock.llm",
-            name: "Mock LLM",
-            version: "1.0.0",
-            principalClass: "APIRouterMockLLMProviderPlugin"
+        let fallback = MockLLMProviderPlugin()
+        fallback.configuredProviderId = "model-fallback"
+        fallback.queuedProcessOutcomes = [.response("fallback result")]
+        Self.installLLMFallbackTestProviders(
+            [unavailableModel, fallback],
+            appSupportDirectory: appSupportDirectory
         )
-        PluginManager.shared.loadedPlugins = [
-            LoadedPlugin(
-                manifest: manifest,
-                instance: plugin,
-                bundle: Bundle.main,
-                sourceURL: appSupportDirectory,
-                isEnabled: true
-            )
-        ]
 
-        let service = PromptProcessingService()
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(
+            providerId: unavailableModel.providerId,
+            modelId: "legacy-direct-model"
+        )
+        service.addLLMFallback(providerId: fallback.providerId)
         let result = try await service.process(prompt: "Fix grammar", text: "hello world")
 
-        XCTAssertEqual(result, "processed")
-        XCTAssertEqual(plugin.lastRequestedModel, "gemini-2.5-flash")
-        XCTAssertEqual(service.selectedCloudModel, "gemini-2.5-flash")
-        XCTAssertEqual(UserDefaults.standard.string(forKey: modelKey), "gemini-2.5-flash")
+        XCTAssertEqual(result, "fallback result")
+        XCTAssertEqual(unavailableModel.processCallCount, 0)
+        XCTAssertEqual(fallback.processCallCount, 1)
+    }
+
+    @MainActor
+    func testPromptProcessingDefersLocalAutoUnloadAcrossSameProviderFallbacks() async throws {
+        let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        defer {
+            Self.restoreUserDefault(originalAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        }
+        UserDefaults.standard.set(-1, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        let local = MockLLMProviderPlugin()
+        local.configuredProviderId = "multi-model-local"
+        local.requiresExternalCredentials = false
+        local.models = [
+            PluginModelInfo(id: "first-model", displayName: "First Model"),
+            PluginModelInfo(id: "second-model", displayName: "Second Model")
+        ]
+        local.queuedProcessOutcomes = [
+            .apiFailure("First model failed"),
+            .delayedResponse("second model result", milliseconds: 300)
+        ]
+
+        Self.installLLMFallbackTestProviders([local], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        let modelManager = ModelManagerService()
+        service.modelManagerService = modelManager
+        service.addLLMFallback(providerId: local.providerId, modelId: "first-model")
+        service.addLLMFallback(providerId: local.providerId, modelId: "second-model")
+        modelManager.scheduleAutoUnloadIfNeeded(for: local)
+
+        let processingTask = Task { @MainActor in
+            try await service.process(prompt: "Fix grammar", text: "hello world")
+        }
+        for _ in 0..<100 where local.processCallCount < 2 {
+            await Task.yield()
+        }
+        XCTAssertEqual(local.processCallCount, 2)
+
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(local.autoUnloadCount, 0, "Auto-unload must wait until the fallback chain finishes")
+
+        let processingResult = try await processingTask.value
+        XCTAssertEqual(processingResult, "second model result")
+        await waitForAutoUnloadCount(local, toBecome: 1)
     }
 
     @MainActor
     func testPromptProcessingIgnoresInvalidPromptOverrideWithoutPersistingIt() async throws {
-        let providerKey = "llmProviderType"
-        let modelKey = "llmCloudModel"
-        let originalProvider = UserDefaults.standard.object(forKey: providerKey)
-        let originalModel = UserDefaults.standard.object(forKey: modelKey)
-        defer {
-            if let originalProvider {
-                UserDefaults.standard.set(originalProvider, forKey: providerKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: providerKey)
-            }
-            if let originalModel {
-                UserDefaults.standard.set(originalModel, forKey: modelKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: modelKey)
-            }
-        }
-
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
-
-        UserDefaults.standard.set("Gemini", forKey: providerKey)
-        UserDefaults.standard.set("gemini-2.5-pro", forKey: modelKey)
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
 
         EventBus.shared = EventBus()
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
@@ -6539,7 +6886,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
             )
         ]
 
-        let service = PromptProcessingService()
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: plugin.providerId, modelId: "gemini-2.5-pro")
         let result = try await service.process(
             prompt: "Fix grammar",
             text: "hello world",
@@ -6549,33 +6897,15 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual(result, "processed")
         XCTAssertEqual(plugin.lastRequestedModel, "gemini-2.5-pro")
         XCTAssertEqual(service.selectedCloudModel, "gemini-2.5-pro")
-        XCTAssertEqual(UserDefaults.standard.string(forKey: modelKey), "gemini-2.5-pro")
+        XCTAssertEqual(service.primaryFallbackItem?.modelId, "gemini-2.5-pro")
     }
 
     @MainActor
     func testPromptProcessingPassesTemperatureDirectiveToTemperatureAwareProvider() async throws {
-        let providerKey = "llmProviderType"
-        let modelKey = "llmCloudModel"
-        let originalProvider = UserDefaults.standard.object(forKey: providerKey)
-        let originalModel = UserDefaults.standard.object(forKey: modelKey)
-        defer {
-            if let originalProvider {
-                UserDefaults.standard.set(originalProvider, forKey: providerKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: providerKey)
-            }
-            if let originalModel {
-                UserDefaults.standard.set(originalModel, forKey: modelKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: modelKey)
-            }
-        }
-
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
-
-        UserDefaults.standard.set("Gemini", forKey: providerKey)
-        UserDefaults.standard.set("gemini-2.5-pro", forKey: modelKey)
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
 
         EventBus.shared = EventBus()
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
@@ -6599,7 +6929,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
             )
         ]
 
-        let service = PromptProcessingService()
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: plugin.providerId, modelId: "gemini-2.5-pro")
         _ = try await service.process(
             prompt: "Fix grammar",
             text: "hello world",
@@ -6611,29 +6942,11 @@ final class APIRouterAndHandlersTests: XCTestCase {
     }
 
     @MainActor
-    func testPromptProcessingReturnsSetupRequiredForLocalProviderWithoutLoadedModel() async throws {
-        let providerKey = "llmProviderType"
-        let modelKey = "llmCloudModel"
-        let originalProvider = UserDefaults.standard.object(forKey: providerKey)
-        let originalModel = UserDefaults.standard.object(forKey: modelKey)
-        defer {
-            if let originalProvider {
-                UserDefaults.standard.set(originalProvider, forKey: providerKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: providerKey)
-            }
-            if let originalModel {
-                UserDefaults.standard.set(originalModel, forKey: modelKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: modelKey)
-            }
-        }
-
+    func testPromptProcessingAggregatesSetupFailureForLocalProviderWithoutLoadedModel() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
-
-        UserDefaults.standard.set("Gemma 4 (MLX)", forKey: providerKey)
-        UserDefaults.standard.removeObject(forKey: modelKey)
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
 
         EventBus.shared = EventBus()
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
@@ -6660,16 +6973,17 @@ final class APIRouterAndHandlersTests: XCTestCase {
             )
         ]
 
-        let service = PromptProcessingService()
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: plugin.providerId)
 
         do {
             _ = try await service.process(prompt: "Fix grammar", text: "hello world")
-            XCTFail("Expected local provider setup error")
+            XCTFail("Expected the fallback list to be exhausted")
+        } catch let error as LLMFallbackExhaustedError {
+            XCTAssertEqual(error.failures.map(\.providerId), [plugin.providerId])
+            XCTAssertTrue(error.localizedDescription.contains("Load a Gemma 4 model"))
         } catch {
-            XCTAssertEqual(
-                error.localizedDescription,
-                "Load a Gemma 4 model in Integrations before using it for prompts."
-            )
+            XCTFail("Expected LLMFallbackExhaustedError, got \(error)")
         }
     }
 
