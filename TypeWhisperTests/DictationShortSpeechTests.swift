@@ -227,8 +227,8 @@ final class MicrophoneBoostProcessorTests: XCTestCase {
 }
 
 final class DictationInsertionTextFormatterTests: XCTestCase {
-    func testAddsTrailingSpaceToNonEmptyTextWithoutTrailingWhitespace() {
-        XCTAssertEqual(DictationInsertionTextFormatter.textForInsertion("Hello"), "Hello ")
+    func testDoesNotAddTrailingSpaceToNonEmptyText() {
+        XCTAssertEqual(DictationInsertionTextFormatter.textForInsertion("Hello"), "Hello")
     }
 
     func testLeavesExistingTrailingSpaceUntouched() {
@@ -243,7 +243,7 @@ final class DictationInsertionTextFormatterTests: XCTestCase {
         XCTAssertEqual(DictationInsertionTextFormatter.textForInsertion(""), "")
     }
 
-    func testDisabledContextualInsertionKeepsTrailingSpaceOnlyBehavior() {
+    func testDisabledContextualInsertionDoesNotAddTrailingSpace() {
         let context = TextInsertionService.InsertionContext(
             value: "coffeemachine",
             selectedRange: NSRange(location: 6, length: 0),
@@ -258,14 +258,14 @@ final class DictationInsertionTextFormatterTests: XCTestCase {
                 insertionContext: context,
                 contextualInsertionEnabled: false
             ),
-            "Strong. "
+            "Strong."
         )
     }
 
-    func testMissingContextKeepsTrailingSpaceOnlyBehavior() {
+    func testMissingContextDoesNotAddTrailingSpace() {
         XCTAssertEqual(
             DictationInsertionTextFormatter.textForInsertion("Strong."),
-            "Strong. "
+            "Strong."
         )
     }
 
@@ -418,7 +418,7 @@ final class DictationInsertionTextFormatterTests: XCTestCase {
 
         XCTAssertEqual(
             DictationInsertionTextFormatter.textForInsertion("NASA tools.", insertionContext: context),
-            " NASA tools. "
+            " NASA tools."
         )
     }
 
@@ -433,7 +433,7 @@ final class DictationInsertionTextFormatterTests: XCTestCase {
 
         XCTAssertEqual(
             DictationInsertionTextFormatter.textForInsertion("TypeWhisper", insertionContext: context),
-            " TypeWhisper "
+            " TypeWhisper"
         )
     }
 

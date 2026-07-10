@@ -2388,7 +2388,7 @@ enum DictationInsertionTextFormatter {
         contextualInsertionEnabled: Bool = true
     ) -> String {
         guard contextualInsertionEnabled, let insertionContext else {
-            return textWithTrailingSpaceIfNeeded(text)
+            return text
         }
 
         let boundaries = insertionBoundaries(for: insertionContext)
@@ -2411,17 +2411,9 @@ enum DictationInsertionTextFormatter {
                shouldInsertSpace(between: last, and: next) {
                 result += " "
             }
-        } else {
-            result = textWithTrailingSpaceIfNeeded(result)
         }
 
         return result
-    }
-
-    private static func textWithTrailingSpaceIfNeeded(_ text: String) -> String {
-        guard let lastScalar = text.unicodeScalars.last else { return text }
-        guard !CharacterSet.whitespacesAndNewlines.contains(lastScalar) else { return text }
-        return text + " "
     }
 
     private struct InsertionBoundaries {
