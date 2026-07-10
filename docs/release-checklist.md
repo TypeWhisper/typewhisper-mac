@@ -37,6 +37,8 @@
 - First dictation
 - File transcription
 - Workflow prompt action
+- Global LLM fallback list: add provider/model pairs, reject duplicates, reorder entries, remove entries, and preserve unavailable providers for repair
+- Inherited prompt/workflow LLM processing: verify unavailable, restore, rate-limit, network/API, and empty-result failures advance to the next entry; explicit workflow providers remain strict single calls; cancellation and total failure insert no text
 - Workflow setup step (cross-tab navigation)
 - History edit/export
 - Post-processing transparency in history and indicators

@@ -17,6 +17,7 @@ TypeWhisper `1.x` is a stable direct-download release line for macOS. The Mac Ap
 - File transcription, including batch processing and export
 - Workflow processing with bundled prompt presets and custom actions
 - Workflows for app, URL, combined app + URL, direct hotkey, and global fallback control, with legacy prompt/profile compatibility
+- Ordered global LLM provider/model fallbacks for inherited prompt and workflow processing, with strict single-provider workflow overrides
 - History, Dictionary, and Snippets
 - Bundled default integrations and bundled plugins
 
@@ -92,6 +93,7 @@ These surfaces remain part of `1.x`, but they are positioned as advanced or auto
 - History edit/export
 - History entry shows both STT and AI-processed text where applicable
 - Workflow matching for app + URL, URL-only, app-only, direct hotkey, and global fallback triggers
+- Global LLM fallback ordering, legacy migration, unavailable-provider repair, failure advance, cancellation, and strict explicit workflow-provider behavior
 - Auto-submit workflow behavior and legacy Auto Enter profile compatibility
 - Plugin enable/disable
 - Community term pack download and apply

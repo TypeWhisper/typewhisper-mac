@@ -88,7 +88,7 @@ See the [release readiness guide](docs/release-readiness.md), [support matrix](d
 ### AI Processing
 
 - **Workflows** - Build reusable transformations for translation, rewriting, extraction, formatting, and app-specific automation. Workflows can run automatically by app, website, or app + website combinations, from a dedicated hotkey, as a global fallback, or manually from the Workflow Palette. Hotkey workflows can either start dictation or process the current selection/clipboard directly.
-- **LLM providers** - Apple Intelligence (macOS 26+), Groq, OpenAI / ChatGPT, xAI/Grok, Gemini, and OpenAI Compatible with per-prompt provider and model override
+- **LLM provider fallbacks** - Order Apple Intelligence (macOS 26+), Groq, OpenAI / ChatGPT, xAI/Grok, Gemini, OpenAI Compatible, and local providers in one global provider/model list. Prompts and workflows inherit that order by default; a workflow with an explicit provider stays on that single provider
 - **Speech providers** - System voices, xAI/Grok TTS, and experimental local Supertonic TTS can provide spoken feedback and readback
 - **Local prompt processing** - Gemma 4 via MLX runs on-device on Apple Silicon, with the current verified release path limited to the E2B/E4B 4-bit models
 - **Translation** - Translate transcriptions on-device using Apple Translate
@@ -500,6 +500,8 @@ Workflows let you configure transcription, transformation, and automation behavi
 - **docs.google.com** - German dictation workflow that translates to English
 
 Create workflows in Settings > Workflows. Choose a template, then use Automatic to enable app, website, hotkey, or any combination of those trigger components. Always stays the global fallback, and Manual keeps the workflow palette-only. Hotkey workflows choose whether the shortcut starts dictation or processes the current selection/clipboard through the same insertion path as the Workflow Palette. Spoken language can be left on full auto-detect, fixed to one exact language, or restricted to a shortlist of likely languages for better detection accuracy. Website patterns support subdomain matching - e.g. `google.com` also matches `docs.google.com`.
+
+LLM Prompt workflows inherit the ordered global LLM fallback list shown at the top of Settings > Workflows. TypeWhisper moves to the next provider/model when an inherited attempt is unavailable, cannot restore, is rate-limited, hits a network or API error, or returns no text. Selecting a provider inside a workflow disables that fallback behavior for the workflow and makes one strict provider call instead.
 
 When you start dictating, TypeWhisper matches the active app and browser URL against enabled workflows with the following priority:
 1. **App + URL match** - highest specificity (e.g. Chrome + github.com)
