@@ -40,14 +40,28 @@ class NotchIndicatorPanel: NSPanel {
     private static let presentationAnimationDuration: Duration = .milliseconds(220)
 
     private let screenResolver: IndicatorScreenResolver
+    private let displayModeProvider: () -> NotchIndicatorDisplay
     private let notchGeometry = NotchGeometry()
     private var cancellables = Set<AnyCancellable>()
     private var cachedScreen: NSScreen?
     private var showTask: Task<Void, Never>?
     private var dismissTask: Task<Void, Never>?
 
-    init(screenResolver: IndicatorScreenResolver) {
+    convenience init(screenResolver: IndicatorScreenResolver) {
+        self.init(
+            screenResolver: screenResolver,
+            displayModeProvider: { DictationViewModel.shared.notchIndicatorDisplay },
+            content: { NotchIndicatorView(geometry: $0) }
+        )
+    }
+
+    init<Content: View>(
+        screenResolver: IndicatorScreenResolver,
+        displayModeProvider: @escaping () -> NotchIndicatorDisplay,
+        @ViewBuilder content: (NotchGeometry) -> Content
+    ) {
         self.screenResolver = screenResolver
+        self.displayModeProvider = displayModeProvider
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: Self.panelWidth, height: Self.panelHeight),
             styleMask: [.borderless, .nonactivatingPanel, .utilityWindow, .hudWindow],
@@ -65,11 +79,11 @@ class NotchIndicatorPanel: NSPanel {
         ignoresMouseEvents = true
         FloatingPanelSpacePolicy.applyIndicatorPolicy(
             to: self,
-            displayMode: DictationViewModel.shared.notchIndicatorDisplay,
+            displayMode: displayModeProvider(),
             windowLevel: FloatingPanelSpacePolicy.notchIndicatorWindowLevel
         )
 
-        let hostingView = FirstMouseHostingView(rootView: NotchIndicatorView(geometry: notchGeometry))
+        let hostingView = FirstMouseHostingView(rootView: content(notchGeometry))
         hostingView.sizingOptions = []
         contentView = hostingView
     }
@@ -147,27 +161,8 @@ class NotchIndicatorPanel: NSPanel {
         showTask?.cancel()
         dismissTask?.cancel()
 
-        let screen: NSScreen
-        if let cached = cachedScreen, isVisible {
-            screen = cached
-        } else {
-            screen = resolveScreen()
-            cachedScreen = screen
-        }
-
-        notchGeometry.update(for: screen)
-
-        let screenFrame = screen.frame
-        let x = screenFrame.midX - Self.panelWidth / 2
-        let y = screenFrame.origin.y + screenFrame.height - Self.panelHeight
-
         let wasVisible = isVisible
-        setFrame(NSRect(x: x, y: y, width: Self.panelWidth, height: Self.panelHeight), display: true)
-        FloatingPanelSpacePolicy.orderIndicatorFront(
-            self,
-            displayMode: DictationViewModel.shared.notchIndicatorDisplay,
-            windowLevel: FloatingPanelSpacePolicy.notchIndicatorWindowLevel
-        )
+        placePanel()
 
         guard !wasVisible else {
             if !notchGeometry.isPresented {
@@ -189,16 +184,39 @@ class NotchIndicatorPanel: NSPanel {
         }
     }
 
+    private func placePanel() {
+        let screen: NSScreen
+        if let cached = cachedScreen, isVisible {
+            screen = cached
+        } else {
+            screen = resolveScreen()
+            cachedScreen = screen
+        }
+
+        notchGeometry.update(for: screen)
+
+        let screenFrame = screen.frame
+        let x = screenFrame.midX - Self.panelWidth / 2
+        let y = screenFrame.origin.y + screenFrame.height - Self.panelHeight
+
+        setFrame(NSRect(x: x, y: y, width: Self.panelWidth, height: Self.panelHeight), display: true)
+        FloatingPanelSpacePolicy.orderIndicatorFront(
+            self,
+            displayMode: displayModeProvider(),
+            windowLevel: FloatingPanelSpacePolicy.notchIndicatorWindowLevel
+        )
+    }
+
     private func resolveScreen() -> NSScreen {
-        screenResolver.resolveScreen(for: DictationViewModel.shared.notchIndicatorDisplay)
+        screenResolver.resolveScreen(for: displayModeProvider())
     }
 
     func refreshPlacementForActiveContextChange() {
-        guard isVisible else { return }
-        if DictationViewModel.shared.notchIndicatorDisplay == .activeScreen {
+        guard isVisible, notchGeometry.isPresented else { return }
+        if displayModeProvider() == .activeScreen {
             cachedScreen = nil
         }
-        show()
+        placePanel()
     }
 
     func dismiss() {

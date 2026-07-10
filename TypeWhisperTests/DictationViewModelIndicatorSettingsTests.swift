@@ -1,6 +1,7 @@
 import XCTest
 import AppKit
 import CoreGraphics
+import SwiftUI
 @testable import TypeWhisper
 
 @MainActor
@@ -971,6 +972,60 @@ final class IndicatorPresentationStateTests: XCTestCase {
             visibility: .never,
             presentation: recorderPresentation
         ))
+    }
+}
+
+@MainActor
+final class NotchIndicatorPanelLifecycleTests: XCTestCase {
+    func testPlacementRefreshDoesNotCancelInFlightDismissal() async throws {
+        let panel = try makePanel()
+        defer { panel.orderOut(nil) }
+
+        panel.show()
+        await Task.yield()
+        XCTAssertTrue(panel.isVisible)
+
+        panel.dismiss()
+        panel.refreshPlacementForActiveContextChange()
+        try await Task.sleep(for: .milliseconds(300))
+
+        XCTAssertFalse(panel.isVisible)
+    }
+
+    func testShowCancelsInFlightDismissalForNewActivity() async throws {
+        let panel = try makePanel()
+        defer { panel.orderOut(nil) }
+
+        panel.show()
+        await Task.yield()
+        XCTAssertTrue(panel.isVisible)
+
+        panel.dismiss()
+        panel.show()
+        try await Task.sleep(for: .milliseconds(300))
+
+        XCTAssertTrue(panel.isVisible)
+    }
+
+    private func makePanel() throws -> NotchIndicatorPanel {
+        guard let screen = NSScreen.screens.first else {
+            throw XCTSkip("Notch indicator panel tests require an available screen")
+        }
+
+        let resolver = IndicatorScreenResolver(
+            focusedElementPositionProvider: { nil },
+            focusedWindowFrameProvider: { nil },
+            frontmostApplicationProvider: { nil },
+            mouseLocationProvider: { CGPoint(x: screen.frame.midX, y: screen.frame.midY) },
+            screensProvider: { [screen] },
+            mainScreenProvider: { screen },
+            windowFrameProvider: { _ in nil }
+        )
+        return NotchIndicatorPanel(
+            screenResolver: resolver,
+            displayModeProvider: { .activeScreen },
+            content: { _ in EmptyView() }
+        )
     }
 }
 
