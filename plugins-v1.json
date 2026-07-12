@@ -1916,13 +1916,22 @@
       "author": "TypeWhisper",
       "description": "Send transcribed or processed text to any webhook URL via HTTP POST.",
       "descriptions": {
-        "de": "Transkribierten oder verarbeiteten Text per HTTP POST an eine beliebige Webhook-URL senden."
+        "de": "Transkribierten oder verarbeiteten Text per HTTP POST an eine beliebige Webhook-URL senden.",
+        "ja": "\u6587\u5b57\u8d77\u3053\u3057\u6e08\u307f\u307e\u305f\u306f\u51e6\u7406\u6e08\u307f\u306e\u30c6\u30ad\u30b9\u30c8\u3092HTTP POST\u3067\u4efb\u610f\u306eWebhook URL\u3078\u9001\u4fe1\u3057\u307e\u3059\u3002"
       },
       "category": "post-processor",
       "downloadCount": 848,
       "iconSystemName": "arrow.up.forward.app",
       "detailsURL": "https://www.typewhisper.com/addons/webhook/",
       "releases": [
+        {
+          "version": "1.0.14",
+          "minHostVersion": "0.9.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 260179,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-webhook-v1.0.14/WebhookPlugin.zip",
+          "minOSVersion": "14.0"
+        },
         {
           "version": "1.0.13",
           "minHostVersion": "0.9.0",
