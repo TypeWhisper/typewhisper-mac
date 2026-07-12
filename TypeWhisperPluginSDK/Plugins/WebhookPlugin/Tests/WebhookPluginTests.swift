@@ -51,6 +51,58 @@ final class WebhookPluginTests: XCTestCase {
         )
     }
 
+    func testNewDraftIsNotPersistedUntilSaved() throws {
+        let host = try PluginTestHostServices()
+        let service = ExampleWebhookService(dataDirectory: host.pluginDataDirectory, host: host)
+        var draft = ExampleWebhookConfig()
+
+        XCTAssertTrue(service.webhooks.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: configURL(for: host).path))
+
+        draft.name = "New Hook"
+        draft.url = "https://example.com/new"
+        service.saveWebhook(draft)
+
+        XCTAssertEqual(service.webhooks.map(\.id), [draft.id])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: configURL(for: host).path))
+    }
+
+    func testSaveWebhookUpdatesExistingWebhookWithoutDuplicatingIt() throws {
+        let host = try PluginTestHostServices()
+        let service = ExampleWebhookService(dataDirectory: host.pluginDataDirectory, host: host)
+        var webhook = ExampleWebhookConfig(name: "Original", url: "https://example.com/original")
+
+        service.saveWebhook(webhook)
+        webhook.name = "Updated"
+        webhook.url = "https://example.com/updated"
+        service.saveWebhook(webhook)
+
+        XCTAssertEqual(service.webhooks.count, 1)
+        XCTAssertEqual(service.webhooks.first?.id, webhook.id)
+        XCTAssertEqual(service.webhooks.first?.name, "Updated")
+        XCTAssertEqual(service.webhooks.first?.url, "https://example.com/updated")
+    }
+
+    func testLoadRemovesOnlyUnmodifiedDefaultDrafts() throws {
+        let host = try PluginTestHostServices()
+        let emptyDraft = ExampleWebhookConfig()
+        let namedDraft = ExampleWebhookConfig(name: "Keep Me")
+        let configuredWebhook = ExampleWebhookConfig(
+            name: "Configured",
+            url: "https://example.com/configured"
+        )
+        let configData = try JSONEncoder().encode([emptyDraft, namedDraft, configuredWebhook])
+        try configData.write(to: configURL(for: host), options: .atomic)
+
+        let service = ExampleWebhookService(dataDirectory: host.pluginDataDirectory, host: host)
+
+        XCTAssertEqual(Set(service.webhooks.map(\.id)), Set([namedDraft.id, configuredWebhook.id]))
+
+        let storedData = try Data(contentsOf: configURL(for: host))
+        let persisted = try JSONDecoder().decode([ExampleWebhookConfig].self, from: storedData)
+        XCTAssertEqual(Set(persisted.map(\.id)), Set([namedDraft.id, configuredWebhook.id]))
+    }
+
     func testLoadMigratesLegacyPlaintextSensitiveHeaders() throws {
         let host = try PluginTestHostServices()
         let legacyWebhook = ExampleWebhookConfig(

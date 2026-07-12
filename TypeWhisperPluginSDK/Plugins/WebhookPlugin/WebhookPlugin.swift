@@ -93,6 +93,16 @@ struct ExampleWebhookConfig: Codable, Identifiable {
         self.profileFilter = profileFilter
     }
 
+    var isUnmodifiedDefaultDraft: Bool {
+        name.isEmpty
+            && url.isEmpty
+            && httpMethod == "POST"
+            && headers == ["Content-Type": "application/json"]
+            && secretHeaderNames.isEmpty
+            && isEnabled
+            && profileFilter.isEmpty
+    }
+
     private enum CodingKeys: String, CodingKey {
         case id
         case name
@@ -181,8 +191,11 @@ final class ExampleWebhookService: ObservableObject, @unchecked Sendable {
     private func loadConfig() {
         guard let data = try? Data(contentsOf: configURL),
               let config = try? JSONDecoder().decode([ExampleWebhookConfig].self, from: data) else { return }
-        webhooks = config.map(resolveSecretHeaders)
-        if config.contains(where: containsPlaintextSecretHeader) || config.contains(where: containsEmptySensitiveHeader) {
+        let migratedConfig = config.filter { !$0.isUnmodifiedDefaultDraft }
+        webhooks = migratedConfig.map(resolveSecretHeaders)
+        if migratedConfig.count != config.count
+            || migratedConfig.contains(where: containsPlaintextSecretHeader)
+            || migratedConfig.contains(where: containsEmptySensitiveHeader) {
             saveConfig()
         }
     }
@@ -212,6 +225,14 @@ final class ExampleWebhookService: ObservableObject, @unchecked Sendable {
         clearSecretsRemoved(from: webhooks[index], next: nextWebhook)
         webhooks[index] = nextWebhook
         saveConfig()
+    }
+
+    func saveWebhook(_ webhook: ExampleWebhookConfig) {
+        if webhooks.contains(where: { $0.id == webhook.id }) {
+            updateWebhook(webhook)
+        } else {
+            addWebhook(webhook)
+        }
     }
 
     static func secretStorageKey(webhookID: UUID, headerName: String) -> String {
@@ -426,7 +447,7 @@ struct ExampleWebhookSettingsView: View {
                     .font(.headline)
                 Spacer()
                 Button {
-                    service.addWebhook(ExampleWebhookConfig())
+                    editingWebhook = ExampleWebhookConfig()
                 } label: {
                     Label(String(localized: "Add Webhook", bundle: bundle), systemImage: "plus")
                 }
@@ -484,7 +505,7 @@ struct ExampleWebhookSettingsView: View {
                 webhook: webhook,
                 availableProfiles: service.host.availableRuleNames,
                 onSave: { updated in
-                    service.updateWebhook(updated)
+                    service.saveWebhook(updated)
                     editingWebhook = nil
                 },
                 onCancel: { editingWebhook = nil }
