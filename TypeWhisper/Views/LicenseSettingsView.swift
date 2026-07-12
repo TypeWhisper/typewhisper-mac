@@ -769,7 +769,10 @@ struct LicenseSettingsView: View {
             AppConstants.Polar.checkoutURLEnterprise
         }
 
-        return URL(string: urlString)
+        return AppConstants.Polar.appCheckoutURL(
+            baseURL: urlString,
+            content: "settings_\(tier.rawValue)_monthly"
+        )
     }
 
     private var selectedCommercialLifetimeURL: URL? {
@@ -784,7 +787,10 @@ struct LicenseSettingsView: View {
             AppConstants.Polar.checkoutURLEnterpriseLifetime
         }
 
-        return URL(string: urlString)
+        return AppConstants.Polar.appCheckoutURL(
+            baseURL: urlString,
+            content: "settings_\(tier.rawValue)_lifetime"
+        )
     }
 
     @MainActor
@@ -867,7 +873,12 @@ struct LicenseSettingsView: View {
             case .silver: AppConstants.Polar.checkoutURLSupporterSilver
             case .gold: AppConstants.Polar.checkoutURLSupporterGold
             }
-            openURL(URL(string: url))
+            openURL(
+                AppConstants.Polar.appCheckoutURL(
+                    baseURL: url,
+                    content: "settings_\(tier.rawValue)_one_time"
+                )
+            )
         } label: {
             VStack(spacing: 6) {
                 Image(systemName: supporterTierIcon(tier))
