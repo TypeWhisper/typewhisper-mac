@@ -167,6 +167,35 @@ enum AppConstants {
         static let checkoutURLSupporterBronze = "https://buy.polar.sh/polar_cl_yilyo1V90RnuUX59V2PyLUIg45FpzYI8aMhG824wYn8"
         static let checkoutURLSupporterSilver = "https://buy.polar.sh/polar_cl_lXFAqnanhrrPd1RZ95SCb2L05L3lNrUQIkYVd0ZmK5b"
         static let checkoutURLSupporterGold = "https://buy.polar.sh/polar_cl_FpojMlLmyF73gOqpXLihSE0lNYnoQoaMxGp724IIor4"
+
+        static func attributedCheckoutURL(
+            baseURL: String,
+            source: String,
+            medium: String,
+            content: String
+        ) -> URL? {
+            guard var components = URLComponents(string: baseURL) else { return nil }
+            var queryItems = components.queryItems ?? []
+            queryItems.removeAll { item in
+                ["utm_source", "utm_medium", "utm_content"].contains(item.name)
+            }
+            queryItems.append(contentsOf: [
+                URLQueryItem(name: "utm_source", value: source),
+                URLQueryItem(name: "utm_medium", value: medium),
+                URLQueryItem(name: "utm_content", value: content),
+            ])
+            components.queryItems = queryItems
+            return components.url
+        }
+
+        static func appCheckoutURL(baseURL: String, content: String) -> URL? {
+            attributedCheckoutURL(
+                baseURL: baseURL,
+                source: "typewhisper_mac",
+                medium: "app",
+                content: "mac_\(content)"
+            )
+        }
     }
 
     enum Website {
