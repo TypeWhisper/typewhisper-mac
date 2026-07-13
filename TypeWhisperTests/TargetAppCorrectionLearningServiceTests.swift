@@ -722,8 +722,11 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
             selectedText: nil,
             selectedRange: NSRange(location: 3, length: 0)
         )
+        let textInsertionService = TextInsertionService()
+        textInsertionService.focusedTextElementOverride = { element }
+        textInsertionService.focusedTextStateOverride = { _ in nil }
         let service = TargetAppCorrectionLearningService(
-            textInsertionService: TextInsertionService(),
+            textInsertionService: textInsertionService,
             textDiffService: TextDiffService(),
             dictionaryService: DictionaryService(appSupportDirectory: appSupportDirectory),
             pollSchedule: [.seconds(60)],
