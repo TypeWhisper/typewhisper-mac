@@ -320,27 +320,34 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
         XCTAssertEqual(plugin.settingsModelState, .ready("openai_whisper-large-v3_turbo"))
     }
 
-    func testModelLoadTimeoutClearsPersistedLoadedModelAndReportsError() async throws {
+    func testSlowModelLoadWarningKeepsLoadActiveAndPreventsRetry() async throws {
         let host = try makeHost(defaults: [
             "selectedModel": "openai_whisper-large-v3_turbo",
             "loadedModel": "openai_whisper-large-v3_turbo",
-        ])
+        ], shouldRestoreLoadedModelsPassively: false)
         defer { TestSupport.remove(host.pluginDataDirectory) }
 
         let plugin = WhisperKitPlugin()
         plugin.activate(host: host)
-        plugin.setModelLoadTimeoutForTesting(.milliseconds(10))
-        plugin.startModelLoadTimeoutForTesting(modelName: "Large v3 Turbo")
+        plugin.setSlowModelLoadWarningDurationForTesting(.milliseconds(10))
+        plugin.startSlowModelLoadWarningForTesting()
+        let generation = plugin.modelLoadGenerationForTesting
 
         try await Task.sleep(for: .milliseconds(50))
 
         XCTAssertFalse(plugin.isConfigured)
-        XCTAssertNil(host.userDefault(forKey: "loadedModel"))
+        XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, "openai_whisper-large-v3_turbo")
         XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "openai_whisper-large-v3_turbo")
-        XCTAssertEqual(plugin.currentSettingsActivity?.isError, true)
+        XCTAssertEqual(plugin.currentSettingsActivity?.isError, false)
+        XCTAssertEqual(plugin.currentSettingsActivity?.message, "Model optimization is taking longer than expected")
         XCTAssertEqual(host.capabilitiesChangedCount, 1)
-        XCTAssertTrue(plugin.currentSettingsActivity?.message.contains("Large v3 Turbo") == true)
-        XCTAssertNil(plugin.loadingModelIdForTesting)
+        XCTAssertEqual(plugin.loadingModelIdForTesting, "openai_whisper-large-v3_turbo")
+        XCTAssertEqual(plugin.modelLoadGenerationForTesting, generation)
+
+        await plugin.restoreLoadedModel(allowDownloads: true)
+
+        XCTAssertEqual(plugin.loadingModelIdForTesting, "openai_whisper-large-v3_turbo")
+        XCTAssertEqual(plugin.modelLoadGenerationForTesting, generation)
     }
 
     func testActivationDoesNotMarkPluginConfiguredBeforeRestoreSucceeds() async throws {
