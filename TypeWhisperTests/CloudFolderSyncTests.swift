@@ -496,6 +496,57 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     @MainActor
+    func testDictionaryResetActionsKeepHostSnapshotConsistent() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncDictionaryReset")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let suiteName = "CloudFolderSyncDictionaryReset-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
+        let snippetService = SnippetService(appSupportDirectory: appSupportDirectory)
+        dictionaryService.addEntry(type: .term, original: "ManualBeforeReset")
+        dictionaryService.learnCorrection(original: "recieve", replacement: "receive")
+
+        let viewModel = DictionaryViewModel(dictionaryService: dictionaryService, defaults: defaults)
+        let pack = TermPack(
+            id: "sync-reset-pack",
+            name: "Sync Reset Pack",
+            description: "Sync reset test pack",
+            icon: "shippingbox",
+            terms: ["ManagedPackTerm"],
+            corrections: [],
+            version: "1.0.0",
+            author: "Tests",
+            localizedNames: nil,
+            localizedDescriptions: nil
+        )
+        viewModel.activatePack(pack)
+
+        let store = TypeWhisperUserDataSyncStore(
+            dictionaryService: dictionaryService,
+            snippetService: snippetService,
+            defaults: defaults
+        )
+
+        viewModel.requestReset(.resetCustomDictionary)
+        viewModel.confirmReset()
+        XCTAssertTrue(store.snapshot().dictionaryEntries.isEmpty)
+        XCTAssertEqual(dictionaryService.entries.map(\.original), ["ManagedPackTerm"])
+
+        dictionaryService.addEntry(type: .term, original: "ManualAfterReset")
+        dictionaryService.learnCorrection(original: "langauge", replacement: "language")
+        viewModel.requestReset(.deactivateAllTermPacks)
+        viewModel.confirmReset()
+
+        let snapshot = store.snapshot()
+        XCTAssertEqual(Set(snapshot.dictionaryEntries.map(\.original)), ["ManualAfterReset", "langauge"])
+        XCTAssertFalse(dictionaryService.entries.contains { $0.original == "ManagedPackTerm" })
+        XCTAssertTrue(viewModel.activatedPackStates.isEmpty)
+    }
+
+    @MainActor
     func testHostApplyMergesDuplicateNaturalKeys() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncMerge")
         defer { TestSupport.remove(appSupportDirectory) }

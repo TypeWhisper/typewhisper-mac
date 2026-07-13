@@ -17,17 +17,15 @@ struct DictionarySettingsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if viewModel.entries.isEmpty && viewModel.filterTab != .termPacks {
+            dictionaryHeader
+
+            if viewModel.filterTab == .termPacks {
+                termPacksView
+            } else if viewModel.entries.isEmpty {
                 emptyState
             } else {
-                dictionaryHeader
-
-                if viewModel.filterTab == .termPacks {
-                    termPacksView
-                } else {
-                    dictionarySearchField
-                    dictionaryEntriesView
-                }
+                dictionarySearchField
+                dictionaryEntriesView
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -51,6 +49,26 @@ struct DictionarySettingsView: View {
             Button(String(localized: "OK")) { viewModel.clearImportMessage() }
         } message: {
             Text(viewModel.importMessage ?? "")
+        }
+        .alert(
+            resetConfirmationTitle,
+            isPresented: Binding(
+                get: { viewModel.pendingResetRequest != nil },
+                set: { if !$0 { viewModel.cancelReset() } }
+            )
+        ) {
+            if let request = viewModel.pendingResetRequest {
+                Button(resetConfirmationButtonTitle(for: request.action), role: .destructive) {
+                    viewModel.confirmReset()
+                }
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {
+                viewModel.cancelReset()
+            }
+        } message: {
+            if let request = viewModel.pendingResetRequest {
+                Text(resetConfirmationMessage(for: request))
+            }
         }
     }
 
@@ -94,6 +112,12 @@ struct DictionarySettingsView: View {
                 } label: {
                     Label(String(localized: "Import..."), systemImage: "square.and.arrow.down")
                 }
+
+                Divider()
+
+                resetMenuButton(.clearAutoLearnedCorrections)
+                resetMenuButton(.resetCustomDictionary)
+                resetMenuButton(.deactivateAllTermPacks)
             } label: {
                 Image(systemName: "ellipsis.circle")
             }
@@ -102,6 +126,100 @@ struct DictionarySettingsView: View {
         }
         .padding(.horizontal, 4)
         .padding(.bottom, 4)
+    }
+
+    @ViewBuilder
+    private func resetMenuButton(_ action: DictionaryResetAction) -> some View {
+        let request = viewModel.resetRequest(for: action)
+        Button(role: .destructive) {
+            viewModel.requestReset(action)
+        } label: {
+            Label(resetMenuTitle(for: action), systemImage: resetMenuIcon(for: action))
+        }
+        .disabled(!request.canPerform)
+    }
+
+    private func resetMenuTitle(for action: DictionaryResetAction) -> String {
+        switch action {
+        case .clearAutoLearnedCorrections:
+            return localizedAppText(
+                "Clear Auto-Learned Corrections...",
+                de: "Automatisch gelernte Korrekturen löschen..."
+            )
+        case .resetCustomDictionary:
+            return localizedAppText(
+                "Reset Custom Dictionary...",
+                de: "Eigenes Dictionary zurücksetzen..."
+            )
+        case .deactivateAllTermPacks:
+            return localizedAppText(
+                "Deactivate All Term Packs...",
+                de: "Alle Begriff-Pakete deaktivieren..."
+            )
+        }
+    }
+
+    private func resetMenuIcon(for action: DictionaryResetAction) -> String {
+        switch action {
+        case .clearAutoLearnedCorrections:
+            return "wand.and.stars"
+        case .resetCustomDictionary:
+            return "trash"
+        case .deactivateAllTermPacks:
+            return "shippingbox.and.arrow.backward"
+        }
+    }
+
+    private var resetConfirmationTitle: String {
+        guard let action = viewModel.pendingResetRequest?.action else { return "" }
+        switch action {
+        case .clearAutoLearnedCorrections:
+            return localizedAppText(
+                "Clear Auto-Learned Corrections?",
+                de: "Automatisch gelernte Korrekturen löschen?"
+            )
+        case .resetCustomDictionary:
+            return localizedAppText(
+                "Reset Custom Dictionary?",
+                de: "Eigenes Dictionary zurücksetzen?"
+            )
+        case .deactivateAllTermPacks:
+            return localizedAppText(
+                "Deactivate All Term Packs?",
+                de: "Alle Begriff-Pakete deaktivieren?"
+            )
+        }
+    }
+
+    private func resetConfirmationButtonTitle(for action: DictionaryResetAction) -> String {
+        switch action {
+        case .clearAutoLearnedCorrections:
+            return localizedAppText("Clear Corrections", de: "Korrekturen löschen")
+        case .resetCustomDictionary:
+            return localizedAppText("Reset Dictionary", de: "Dictionary zurücksetzen")
+        case .deactivateAllTermPacks:
+            return localizedAppText("Deactivate Packs", de: "Pakete deaktivieren")
+        }
+    }
+
+    private func resetConfirmationMessage(for request: DictionaryResetRequest) -> String {
+        switch request.action {
+        case .clearAutoLearnedCorrections:
+            return localizedAppText(
+                "This deletes \(request.autoLearnedCorrectionCount) auto-learned corrections. Manual entries and term packs remain unchanged. This cannot be undone.",
+                de: "Dadurch werden \(request.autoLearnedCorrectionCount) automatisch gelernte Korrekturen gelöscht. Manuelle Einträge und Begriff-Pakete bleiben unverändert. Dies kann nicht rückgängig gemacht werden."
+            )
+        case .resetCustomDictionary:
+            return localizedAppText(
+                "This deletes \(request.termCount) custom terms, \(request.manualCorrectionCount) manual corrections, and \(request.autoLearnedCorrectionCount) auto-learned corrections. \(request.activePackCount) active term packs and their entries remain unchanged. This cannot be undone.",
+                de: "Dadurch werden \(request.termCount) eigene Begriffe, \(request.manualCorrectionCount) manuelle Korrekturen und \(request.autoLearnedCorrectionCount) automatisch gelernte Korrekturen gelöscht. \(request.activePackCount) aktive Begriff-Pakete und deren Einträge bleiben unverändert. Dies kann nicht rückgängig gemacht werden."
+            )
+        case .deactivateAllTermPacks:
+            return localizedAppText(
+                "This deactivates \(request.activePackCount) term packs and removes \(request.termCount) pack terms and \(request.correctionCount) pack corrections. Custom and auto-learned entries remain unchanged.",
+                de: "Dadurch werden \(request.activePackCount) Begriff-Pakete deaktiviert sowie \(request.termCount) Paket-Begriffe und \(request.correctionCount) Paket-Korrekturen entfernt. Eigene und automatisch gelernte Einträge bleiben unverändert."
+            )
+        }
     }
 
     private var dictionarySearchField: some View {

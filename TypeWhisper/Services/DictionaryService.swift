@@ -317,7 +317,22 @@ final class DictionaryService: ObservableObject {
 
     /// Batch delete multiple entries
     func deleteEntries(_ entriesToDelete: [DictionaryEntry]) {
-        guard let context = modelContext, !entriesToDelete.isEmpty else { return }
+        do {
+            try deleteEntries(ids: Set(entriesToDelete.map(\.id)))
+        } catch {
+            logger.error("Failed to batch delete entries: \(error.localizedDescription)")
+        }
+    }
+
+    /// Batch delete entries by stable IDs and report persistence failures to the caller.
+    func deleteEntries(ids: Set<UUID>) throws {
+        guard !ids.isEmpty else { return }
+        guard let context = modelContext else {
+            throw DictionaryServiceMutationError.unavailable
+        }
+
+        let entriesToDelete = entries.filter { ids.contains($0.id) }
+        guard !entriesToDelete.isEmpty else { return }
 
         for entry in entriesToDelete {
             context.delete(entry)
@@ -327,7 +342,10 @@ final class DictionaryService: ObservableObject {
             try context.save()
             loadEntries()
         } catch {
+            context.rollback()
+            loadEntries()
             logger.error("Failed to batch delete entries: \(error.localizedDescription)")
+            throw DictionaryServiceMutationError.saveFailed(error)
         }
     }
 

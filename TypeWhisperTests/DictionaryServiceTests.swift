@@ -737,6 +737,192 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testClearAutoLearnedResetRequiresConfirmationAndPreservesOtherEntries() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .term, original: "ManualTerm")
+        service.addEntry(type: .correction, original: "teh", replacement: "the")
+        service.learnCorrection(original: "recieve", replacement: "receive")
+        let viewModel = DictionaryViewModel(dictionaryService: service)
+
+        let summary = viewModel.resetRequest(for: .clearAutoLearnedCorrections)
+        XCTAssertEqual(summary.entryCount, 1)
+        XCTAssertEqual(summary.autoLearnedCorrectionCount, 1)
+        XCTAssertTrue(summary.canPerform)
+
+        let originalIDs = service.entries.map(\.id)
+        viewModel.requestReset(.clearAutoLearnedCorrections)
+        XCTAssertNotNil(viewModel.pendingResetRequest)
+        XCTAssertEqual(service.entries.map(\.id), originalIDs)
+
+        viewModel.cancelReset()
+        XCTAssertNil(viewModel.pendingResetRequest)
+        XCTAssertEqual(service.entries.map(\.id), originalIDs)
+
+        viewModel.requestReset(.clearAutoLearnedCorrections)
+        viewModel.confirmReset()
+
+        XCTAssertEqual(Set(service.entries.map(\.original)), ["ManualTerm", "teh"])
+        XCTAssertFalse(service.entries.contains { $0.source == .autoLearned })
+        XCTAssertNil(viewModel.pendingResetRequest)
+        XCTAssertFalse(viewModel.resetRequest(for: .clearAutoLearnedCorrections).canPerform)
+    }
+
+    @MainActor
+    func testResetCustomDictionaryPreservesActivePackEntriesSnapshotsAndExport() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let suiteName = "DictionaryResetCustom-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .term, original: "ManualTerm")
+        service.addEntry(type: .correction, original: "teh", replacement: "the")
+        service.learnCorrection(original: "recieve", replacement: "receive")
+        let viewModel = DictionaryViewModel(dictionaryService: service, defaults: defaults)
+        let pack = TermPack(
+            id: "reset-pack",
+            name: "Reset Pack",
+            description: "Reset test pack",
+            icon: "shippingbox",
+            terms: ["PackTerm"],
+            corrections: [TermPackCorrection(original: "pakc", replacement: "pack")],
+            version: "1.0.0",
+            author: "Tests",
+            localizedNames: nil,
+            localizedDescriptions: nil
+        )
+        viewModel.activatePack(pack)
+
+        let summary = viewModel.resetRequest(for: .resetCustomDictionary)
+        XCTAssertEqual(summary.termCount, 1)
+        XCTAssertEqual(summary.manualCorrectionCount, 1)
+        XCTAssertEqual(summary.autoLearnedCorrectionCount, 1)
+        XCTAssertEqual(summary.activePackCount, 1)
+
+        viewModel.requestReset(.resetCustomDictionary)
+        viewModel.confirmReset()
+
+        XCTAssertEqual(Set(service.entries.map(\.original)), ["PackTerm", "pakc"])
+        XCTAssertNotNil(viewModel.activatedPackStates[pack.id])
+
+        let persistedStatesData = try XCTUnwrap(
+            defaults.data(forKey: UserDefaultsKeys.activatedTermPackStates)
+        )
+        let persistedStates = try JSONDecoder().decode([ActivatedTermPackState].self, from: persistedStatesData)
+        XCTAssertEqual(persistedStates.map(\.packID), [pack.id])
+
+        let exported = DictionaryExporter.exportJSON(service.entries)
+        XCTAssertTrue(exported.contains("PackTerm"))
+        XCTAssertTrue(exported.contains("pakc"))
+        XCTAssertFalse(exported.contains("ManualTerm"))
+        XCTAssertFalse(exported.contains("recieve"))
+
+        let reloadedViewModel = DictionaryViewModel(dictionaryService: service, defaults: defaults)
+        XCTAssertNotNil(reloadedViewModel.activatedPackStates[pack.id])
+    }
+
+    @MainActor
+    func testDeactivateAllPacksRemovesOnlyTrackedEntriesAndPersistsEmptySnapshots() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let suiteName = "DictionaryDeactivatePacks-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .term, original: "ManualTerm")
+        service.addEntry(type: .correction, original: "teh", replacement: "the")
+        service.learnCorrection(original: "recieve", replacement: "receive")
+        let viewModel = DictionaryViewModel(dictionaryService: service, defaults: defaults)
+        let firstPack = TermPack(
+            id: "first-reset-pack",
+            name: "First Reset Pack",
+            description: "First reset test pack",
+            icon: "shippingbox",
+            terms: ["ManualTerm", "FirstPackTerm"],
+            corrections: [TermPackCorrection(original: "frist", replacement: "first")],
+            version: "1.0.0",
+            author: "Tests",
+            localizedNames: nil,
+            localizedDescriptions: nil
+        )
+        let secondPack = TermPack(
+            id: "second-reset-pack",
+            name: "Second Reset Pack",
+            description: "Second reset test pack",
+            icon: "shippingbox",
+            terms: ["SecondPackTerm"],
+            corrections: [],
+            version: "1.0.0",
+            author: "Tests",
+            localizedNames: nil,
+            localizedDescriptions: nil
+        )
+        viewModel.activatePack(firstPack)
+        viewModel.activatePack(secondPack)
+
+        let summary = viewModel.resetRequest(for: .deactivateAllTermPacks)
+        XCTAssertEqual(summary.activePackCount, 2)
+        XCTAssertEqual(summary.termCount, 2)
+        XCTAssertEqual(summary.correctionCount, 1)
+
+        viewModel.requestReset(.deactivateAllTermPacks)
+        viewModel.confirmReset()
+
+        XCTAssertEqual(Set(service.entries.map(\.original)), ["ManualTerm", "teh", "recieve"])
+        XCTAssertTrue(viewModel.activatedPackStates.isEmpty)
+        let persistedStatesData = try XCTUnwrap(
+            defaults.data(forKey: UserDefaultsKeys.activatedTermPackStates)
+        )
+        XCTAssertTrue(try JSONDecoder().decode([ActivatedTermPackState].self, from: persistedStatesData).isEmpty)
+        XCTAssertFalse(viewModel.resetRequest(for: .deactivateAllTermPacks).canPerform)
+        XCTAssertTrue(DictionaryExporter.exportJSON(service.entries).contains("recieve"))
+    }
+
+    @MainActor
+    func testResetActionsAreDisabledForEmptyCategoriesIncludingPackWithNoInstalledEntries() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        let viewModel = DictionaryViewModel(dictionaryService: service)
+
+        XCTAssertFalse(viewModel.resetRequest(for: .clearAutoLearnedCorrections).canPerform)
+        XCTAssertFalse(viewModel.resetRequest(for: .resetCustomDictionary).canPerform)
+        XCTAssertFalse(viewModel.resetRequest(for: .deactivateAllTermPacks).canPerform)
+        viewModel.requestReset(.clearAutoLearnedCorrections)
+        XCTAssertNil(viewModel.pendingResetRequest)
+
+        service.addEntry(type: .term, original: "ExistingTerm")
+        let pack = TermPack(
+            id: "duplicate-only-pack",
+            name: "Duplicate Only",
+            description: "Installs no entries",
+            icon: "shippingbox",
+            terms: ["ExistingTerm"],
+            corrections: [],
+            version: "1.0.0",
+            author: "Tests",
+            localizedNames: nil,
+            localizedDescriptions: nil
+        )
+        viewModel.activatePack(pack)
+
+        let packSummary = viewModel.resetRequest(for: .deactivateAllTermPacks)
+        XCTAssertTrue(packSummary.canPerform)
+        XCTAssertEqual(packSummary.activePackCount, 1)
+        XCTAssertEqual(packSummary.entryCount, 0)
+
+        viewModel.requestReset(.deactivateAllTermPacks)
+        viewModel.confirmReset()
+        XCTAssertEqual(service.entries.map(\.original), ["ExistingTerm"])
+        XCTAssertTrue(viewModel.activatedPackStates.isEmpty)
+    }
+
+    @MainActor
     func testCommercialIndustryPacksAreHiddenWithoutCommercialLicense() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

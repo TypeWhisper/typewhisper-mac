@@ -34,6 +34,37 @@ struct DictionaryEntryRow: Identifiable, Equatable {
     }
 }
 
+enum DictionaryResetAction: String, Identifiable, Equatable {
+    case clearAutoLearnedCorrections
+    case resetCustomDictionary
+    case deactivateAllTermPacks
+
+    var id: String { rawValue }
+}
+
+struct DictionaryResetRequest: Identifiable, Equatable {
+    let action: DictionaryResetAction
+    let termCount: Int
+    let manualCorrectionCount: Int
+    let autoLearnedCorrectionCount: Int
+    let activePackCount: Int
+
+    var id: String { action.id }
+    var correctionCount: Int { manualCorrectionCount + autoLearnedCorrectionCount }
+    var entryCount: Int { termCount + correctionCount }
+
+    var canPerform: Bool {
+        switch action {
+        case .clearAutoLearnedCorrections:
+            return autoLearnedCorrectionCount > 0
+        case .resetCustomDictionary:
+            return entryCount > 0
+        case .deactivateAllTermPacks:
+            return activePackCount > 0
+        }
+    }
+}
+
 // MARK: - Dictionary ViewModel
 
 @MainActor
@@ -49,6 +80,7 @@ class DictionaryViewModel: ObservableObject {
     @Published var entries: [DictionaryEntry] = []
     @Published var error: String?
     @Published var importMessage: String?
+    @Published private(set) var pendingResetRequest: DictionaryResetRequest?
 
     // Filter
     enum FilterTab: Int, CaseIterable {
@@ -100,6 +132,7 @@ class DictionaryViewModel: ObservableObject {
     private let dictionaryService: DictionaryService
     private let licenseService: LicenseService?
     private let termPackRegistryService: TermPackRegistryService?
+    private let defaults: UserDefaults
     private var cancellables = Set<AnyCancellable>()
     private var selectedEntry: DictionaryEntry?
 
@@ -172,11 +205,13 @@ class DictionaryViewModel: ObservableObject {
     init(
         dictionaryService: DictionaryService,
         licenseService: LicenseService? = nil,
-        termPackRegistryService: TermPackRegistryService? = nil
+        termPackRegistryService: TermPackRegistryService? = nil,
+        defaults: UserDefaults = .standard
     ) {
         self.dictionaryService = dictionaryService
         self.licenseService = licenseService
         self.termPackRegistryService = termPackRegistryService
+        self.defaults = defaults
         self.entries = dictionaryService.entries
         migrateLegacyActivatedPacks()
         loadActivatedPackStates()
@@ -320,6 +355,90 @@ class DictionaryViewModel: ObservableObject {
         importMessage = nil
     }
 
+    // MARK: - Reset Actions
+
+    func resetRequest(for action: DictionaryResetAction) -> DictionaryResetRequest {
+        switch action {
+        case .clearAutoLearnedCorrections:
+            let autoLearnedCorrections = dictionaryService.entries.filter {
+                $0.type == .correction && $0.source == .autoLearned
+            }
+            return DictionaryResetRequest(
+                action: action,
+                termCount: 0,
+                manualCorrectionCount: 0,
+                autoLearnedCorrectionCount: autoLearnedCorrections.count,
+                activePackCount: 0
+            )
+
+        case .resetCustomDictionary:
+            let packEntryIDs = managedPackEntryIDs()
+            let customEntries = dictionaryService.entries.filter { !packEntryIDs.contains($0.id) }
+            return DictionaryResetRequest(
+                action: action,
+                termCount: customEntries.filter { $0.type == .term }.count,
+                manualCorrectionCount: customEntries.filter {
+                    $0.type == .correction && $0.source == .manual
+                }.count,
+                autoLearnedCorrectionCount: customEntries.filter {
+                    $0.type == .correction && $0.source == .autoLearned
+                }.count,
+                activePackCount: activatedPackStates.count
+            )
+
+        case .deactivateAllTermPacks:
+            let packEntryIDs = managedPackEntryIDs()
+            let packEntries = dictionaryService.entries.filter { packEntryIDs.contains($0.id) }
+            return DictionaryResetRequest(
+                action: action,
+                termCount: packEntries.filter { $0.type == .term }.count,
+                manualCorrectionCount: packEntries.filter { $0.type == .correction }.count,
+                autoLearnedCorrectionCount: 0,
+                activePackCount: activatedPackStates.count
+            )
+        }
+    }
+
+    func requestReset(_ action: DictionaryResetAction) {
+        let request = resetRequest(for: action)
+        guard request.canPerform else { return }
+        pendingResetRequest = request
+    }
+
+    func cancelReset() {
+        pendingResetRequest = nil
+    }
+
+    func confirmReset() {
+        guard let action = pendingResetRequest?.action else { return }
+        pendingResetRequest = nil
+
+        do {
+            switch action {
+            case .clearAutoLearnedCorrections:
+                let ids = Set(dictionaryService.entries.filter {
+                    $0.type == .correction && $0.source == .autoLearned
+                }.map(\.id))
+                try dictionaryService.deleteEntries(ids: ids)
+
+            case .resetCustomDictionary:
+                let packEntryIDs = managedPackEntryIDs()
+                let ids = Set(dictionaryService.entries.filter {
+                    !packEntryIDs.contains($0.id)
+                }.map(\.id))
+                try dictionaryService.deleteEntries(ids: ids)
+
+            case .deactivateAllTermPacks:
+                let ids = managedPackEntryIDs()
+                try dictionaryService.deleteEntries(ids: ids)
+                activatedPackStates = [:]
+                saveActivatedPackStates()
+            }
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
     func termBoostingLabel(for threshold: Float?) -> String {
         termBoostingMode(for: threshold).displayName
     }
@@ -458,7 +577,7 @@ class DictionaryViewModel: ObservableObject {
     }
 
     func applyIndustryPreset(_ preset: IndustryPreset) {
-        UserDefaults.standard.set(preset.rawValue, forKey: UserDefaultsKeys.selectedIndustryPreset)
+        defaults.set(preset.rawValue, forKey: UserDefaultsKeys.selectedIndustryPreset)
 
         guard let packID = preset.termPackID,
               hasCommercialLicense,
@@ -549,10 +668,20 @@ class DictionaryViewModel: ObservableObject {
     }
 
     private func removeSnapshotEntries(from states: [String: ActivatedTermPackState]) {
+        let ids = managedPackEntryIDs(from: states)
+        guard !ids.isEmpty else { return }
+
+        let entriesToDelete = dictionaryService.entries.filter { ids.contains($0.id) }
+        dictionaryService.deleteEntries(entriesToDelete)
+    }
+
+    private func managedPackEntryIDs(
+        from states: [String: ActivatedTermPackState]? = nil
+    ) -> Set<UUID> {
         var termsToRemove = Set<String>()
         var correctionsToRemove = Set<String>() // "original|replacement" keys
 
-        for state in states.values {
+        for state in (states ?? activatedPackStates).values {
             for term in state.installedTerms {
                 termsToRemove.insert(term.lowercased())
             }
@@ -561,18 +690,15 @@ class DictionaryViewModel: ObservableObject {
             }
         }
 
-        let entriesToDelete = dictionaryService.entries.filter { entry in
+        return Set(dictionaryService.entries.compactMap { entry -> UUID? in
             if entry.type == .term {
-                return termsToRemove.contains(entry.original.lowercased())
+                return termsToRemove.contains(entry.original.lowercased()) ? entry.id : nil
             } else if entry.type == .correction, let replacement = entry.replacement {
-                return correctionsToRemove.contains("\(entry.original.lowercased())|\(replacement.lowercased())")
+                let key = "\(entry.original.lowercased())|\(replacement.lowercased())"
+                return correctionsToRemove.contains(key) ? entry.id : nil
             }
-            return false
-        }
-
-        if !entriesToDelete.isEmpty {
-            dictionaryService.deleteEntries(entriesToDelete)
-        }
+            return nil
+        })
     }
 
     /// Adds term entries, skipping any that already exist. Returns the terms that were actually added.
@@ -616,7 +742,7 @@ class DictionaryViewModel: ObservableObject {
     // MARK: - Persistence
 
     private func loadActivatedPackStates() {
-        guard let data = UserDefaults.standard.data(forKey: UserDefaultsKeys.activatedTermPackStates) else { return }
+        guard let data = defaults.data(forKey: UserDefaultsKeys.activatedTermPackStates) else { return }
         do {
             let states = try JSONDecoder().decode([ActivatedTermPackState].self, from: data)
             activatedPackStates = Dictionary(uniqueKeysWithValues: states.map { ($0.packID, $0) })
@@ -629,7 +755,7 @@ class DictionaryViewModel: ObservableObject {
     private func saveActivatedPackStates() {
         let states = Array(activatedPackStates.values)
         if let data = try? JSONEncoder().encode(states) {
-            UserDefaults.standard.set(data, forKey: UserDefaultsKeys.activatedTermPackStates)
+            defaults.set(data, forKey: UserDefaultsKeys.activatedTermPackStates)
         }
     }
 
@@ -637,8 +763,8 @@ class DictionaryViewModel: ObservableObject {
     /// Does NOT auto-reactivate packs - just cleans up the old key. Entries remain in dictionary.
     private func migrateLegacyActivatedPacks() {
         let legacyKey = UserDefaultsKeys.activatedTermPacks
-        guard UserDefaults.standard.stringArray(forKey: legacyKey) != nil else { return }
+        guard defaults.stringArray(forKey: legacyKey) != nil else { return }
         // Clear legacy key - packs will need to be re-activated
-        UserDefaults.standard.removeObject(forKey: legacyKey)
+        defaults.removeObject(forKey: legacyKey)
     }
 }
