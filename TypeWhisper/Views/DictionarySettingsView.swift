@@ -9,6 +9,7 @@ struct DictionarySettingsView: View {
     @ObservedObject private var viewModel = DictionaryViewModel.shared
     @ObservedObject private var termPackRegistryService: TermPackRegistryService
     @ObservedObject private var pluginManager: PluginManager
+    @State private var expandedCorrectionGroups = Set<String>()
 
     init() {
         _termPackRegistryService = ObservedObject(wrappedValue: TermPackRegistryService.shared)
@@ -240,21 +241,66 @@ struct DictionarySettingsView: View {
                     DictionaryEngineSupportSection(rows: engineSupportRows)
                 }
 
-                if viewModel.filteredEntryRows.isEmpty {
+                if viewModel.filteredListRows.isEmpty {
                     dictionaryEntriesEmptyState
                 } else {
-                    ForEach(viewModel.filteredEntryRows) { row in
-                        DictionaryCardView(
-                            row: row,
-                            setEntryEnabled: { viewModel.setEntryEnabled(id: row.id, enabled: $0) },
-                            editEntry: { viewModel.startEditingEntry(id: row.id) },
-                            deleteEntry: { viewModel.deleteEntry(id: row.id) }
-                        )
+                    ForEach(viewModel.filteredListRows) { listRow in
+                        dictionaryListRow(listRow)
                     }
                 }
             }
             .padding(.horizontal, 2)
         }
+    }
+
+    @ViewBuilder
+    private func dictionaryListRow(_ listRow: DictionaryListRow) -> some View {
+        switch listRow {
+        case .entry(let row):
+            DictionaryCardView(
+                row: row,
+                setEntryEnabled: { viewModel.setEntryEnabled(id: row.id, enabled: $0) },
+                editEntry: { viewModel.startEditingEntry(id: row.id) },
+                deleteEntry: { viewModel.deleteEntry(id: row.id) }
+            )
+
+        case .correctionGroup(let group):
+            if group.aliases.count == 1, let row = group.aliases.first {
+                DictionaryCardView(
+                    row: row,
+                    setEntryEnabled: { viewModel.setEntryEnabled(id: row.id, enabled: $0) },
+                    editEntry: { viewModel.startEditingEntry(id: row.id) },
+                    deleteEntry: { viewModel.deleteEntry(id: row.id) },
+                    addAlias: { viewModel.startCreatingCorrectionAlias(replacement: group.replacement) }
+                )
+            } else {
+                DictionaryCorrectionGroupCardView(
+                    group: group,
+                    isExpanded: correctionGroupExpansionBinding(for: group.replacement),
+                    setEntryEnabled: { id, enabled in
+                        viewModel.setEntryEnabled(id: id, enabled: enabled)
+                    },
+                    editEntry: { viewModel.startEditingEntry(id: $0) },
+                    deleteEntry: { viewModel.deleteEntry(id: $0) },
+                    addAlias: { viewModel.startCreatingCorrectionAlias(replacement: group.replacement) }
+                )
+            }
+        }
+    }
+
+    private func correctionGroupExpansionBinding(for replacement: String) -> Binding<Bool> {
+        Binding(
+            get: {
+                viewModel.hasActiveSearch || expandedCorrectionGroups.contains(replacement)
+            },
+            set: { isExpanded in
+                if isExpanded {
+                    expandedCorrectionGroups.insert(replacement)
+                } else {
+                    expandedCorrectionGroups.remove(replacement)
+                }
+            }
+        )
     }
 
     private var dictionaryEntriesEmptyState: some View {
@@ -681,6 +727,7 @@ private struct DictionaryCardView: View {
     let setEntryEnabled: (Bool) -> Void
     let editEntry: () -> Void
     let deleteEntry: () -> Void
+    var addAlias: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 10) {
@@ -733,6 +780,17 @@ private struct DictionaryCardView: View {
 
             Spacer()
 
+            if let addAlias, row.type == .correction, !(row.replacement?.isEmpty ?? true) {
+                Button {
+                    addAlias()
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .buttonStyle(.borderless)
+                .help(localizedAppText("Add alias", de: "Variante hinzufügen"))
+                .accessibilityLabel(localizedAppText("Add alias", de: "Variante hinzufügen"))
+            }
+
             Toggle("", isOn: Binding(
                 get: { row.isEnabled },
                 set: { setEntryEnabled($0) }
@@ -757,6 +815,155 @@ private struct DictionaryCardView: View {
             editEntry()
         }
         .accessibilityElement(children: .combine)
+        .contextMenu {
+            Button(String(localized: "Edit")) {
+                editEntry()
+            }
+            if let addAlias {
+                Button(localizedAppText("Add Alias", de: "Variante hinzufügen")) {
+                    addAlias()
+                }
+            }
+            Divider()
+            Button(String(localized: "Delete"), role: .destructive) {
+                deleteEntry()
+            }
+        }
+    }
+}
+
+private struct DictionaryCorrectionGroupCardView: View {
+    let group: DictionaryCorrectionGroupRow
+    @Binding var isExpanded: Bool
+    let setEntryEnabled: (UUID, Bool) -> Void
+    let editEntry: (UUID) -> Void
+    let deleteEntry: (UUID) -> Void
+    let addAlias: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            DisclosureGroup(isExpanded: $isExpanded) {
+                VStack(spacing: 0) {
+                    ForEach(Array(group.aliases.enumerated()), id: \.element.id) { index, alias in
+                        if index > 0 {
+                            Divider()
+                                .padding(.leading, 28)
+                        }
+
+                        DictionaryCorrectionAliasRow(
+                            row: alias,
+                            setEntryEnabled: { setEntryEnabled(alias.id, $0) },
+                            editEntry: { editEntry(alias.id) },
+                            deleteEntry: { deleteEntry(alias.id) }
+                        )
+                    }
+                }
+                .padding(.top, 8)
+            } label: {
+                HStack(spacing: 8) {
+                    Text(String(localized: "Correction"))
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundStyle(Color.orange)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.orange.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 5))
+
+                    Text(group.replacementDisplayText)
+                        .font(.callout)
+                        .fontWeight(.semibold)
+                        .lineLimit(1)
+
+                    Text(localizedAppText(
+                        "\(group.aliases.count) variants",
+                        de: "\(group.aliases.count) Varianten"
+                    ))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.secondary.opacity(0.10))
+                    .clipShape(Capsule())
+                }
+            }
+
+            Button {
+                addAlias()
+            } label: {
+                Image(systemName: "plus")
+            }
+            .buttonStyle(.borderless)
+            .help(localizedAppText("Add alias", de: "Variante hinzufügen"))
+            .accessibilityLabel(localizedAppText("Add alias", de: "Variante hinzufügen"))
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(NSColor.controlBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+        )
+        .contextMenu {
+            Button(localizedAppText("Add Alias", de: "Variante hinzufügen")) {
+                addAlias()
+            }
+        }
+    }
+}
+
+private struct DictionaryCorrectionAliasRow: View {
+    let row: DictionaryEntryRow
+    let setEntryEnabled: (Bool) -> Void
+    let editEntry: () -> Void
+    let deleteEntry: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "arrow.turn.down.right")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .frame(width: 18)
+
+            Text(row.original)
+                .font(.callout)
+                .strikethrough()
+                .foregroundStyle(row.isEnabled ? .primary : .secondary)
+
+            if row.caseSensitive {
+                Text("Aa")
+                    .font(.caption2)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Color.secondary.opacity(0.12))
+                    .foregroundStyle(.secondary)
+                    .clipShape(RoundedRectangle(cornerRadius: 3))
+            }
+
+            if row.source == .autoLearned {
+                DictionarySourceBadge()
+            }
+
+            Spacer()
+
+            Toggle("", isOn: Binding(
+                get: { row.isEnabled },
+                set: { setEntryEnabled($0) }
+            ))
+            .toggleStyle(.switch)
+            .labelsHidden()
+            .accessibilityLabel(String(localized: "Enable \(row.original)"))
+            .onTapGesture {}
+        }
+        .padding(.leading, 8)
+        .padding(.vertical, 6)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            editEntry()
+        }
         .contextMenu {
             Button(String(localized: "Edit")) {
                 editEntry()
@@ -813,12 +1020,24 @@ private struct DictionaryEditorSheet: View {
         case original, replacement
     }
 
+    private var title: String {
+        if viewModel.lockedCorrectionReplacement != nil {
+            return localizedAppText("Add Correction Alias", de: "Korrekturvariante hinzufügen")
+        }
+        if viewModel.isCreatingNew {
+            return viewModel.editType == .term
+                ? String(localized: "New Term")
+                : String(localized: "New Correction")
+        }
+        return viewModel.editType == .term
+            ? String(localized: "Edit Term")
+            : String(localized: "Edit Correction")
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text(viewModel.isCreatingNew
-                     ? (viewModel.editType == .term ? String(localized: "New Term") : String(localized: "New Correction"))
-                     : (viewModel.editType == .term ? String(localized: "Edit Term") : String(localized: "Edit Correction")))
+                Text(title)
                     .font(.headline)
                 Spacer()
             }
@@ -858,6 +1077,16 @@ private struct DictionaryEditorSheet: View {
                                 TextField(String(localized: "e.g. Kubernetes"), text: $viewModel.editReplacement)
                                     .textFieldStyle(.roundedBorder)
                                     .focused($focusedField, equals: .replacement)
+                                    .disabled(viewModel.lockedCorrectionReplacement != nil)
+
+                                if viewModel.lockedCorrectionReplacement != nil {
+                                    Text(localizedAppText(
+                                        "The correct text is fixed by the selected group.",
+                                        de: "Der korrekte Text wird von der ausgewählten Gruppe vorgegeben."
+                                    ))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                }
                             }
                         }
 

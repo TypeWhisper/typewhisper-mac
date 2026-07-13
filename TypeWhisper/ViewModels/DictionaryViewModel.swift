@@ -34,6 +34,47 @@ struct DictionaryEntryRow: Identifiable, Equatable {
     }
 }
 
+enum DictionaryListRowID: Hashable {
+    case entry(UUID)
+    case correctionGroup(String)
+}
+
+struct DictionaryCorrectionGroupRow: Identifiable, Equatable {
+    let replacement: String
+    let aliases: [DictionaryEntryRow]
+
+    var id: DictionaryListRowID {
+        .correctionGroup(replacement)
+    }
+
+    var replacementDisplayText: String {
+        dictionaryReplacementDisplayText(replacement)
+    }
+}
+
+enum DictionaryListRow: Identifiable, Equatable {
+    case entry(DictionaryEntryRow)
+    case correctionGroup(DictionaryCorrectionGroupRow)
+
+    var id: DictionaryListRowID {
+        switch self {
+        case .entry(let row):
+            return .entry(row.id)
+        case .correctionGroup(let group):
+            return group.id
+        }
+    }
+
+    var entryRows: [DictionaryEntryRow] {
+        switch self {
+        case .entry(let row):
+            return [row]
+        case .correctionGroup(let group):
+            return group.aliases
+        }
+    }
+}
+
 enum DictionaryResetAction: String, Identifiable, Equatable {
     case clearAutoLearnedCorrections
     case resetCustomDictionary
@@ -119,6 +160,7 @@ class DictionaryViewModel: ObservableObject {
     @Published var editCaseSensitive = false
     @Published var editTermBoostingMode: TermBoostingMode = .automatic
     @Published var editAdvancedCtcMinSimilarity: Double = 0.65
+    @Published private(set) var lockedCorrectionReplacement: String?
 
     // Term Packs
     @Published var activatedPackStates: [String: ActivatedTermPackState] = [:]
@@ -136,34 +178,47 @@ class DictionaryViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var selectedEntry: DictionaryEntry?
 
-    var filteredEntries: [DictionaryEntry] {
-        let entriesForSelectedFilter: [DictionaryEntry]
+    private var entriesForSelectedFilter: [DictionaryEntry] {
         switch filterTab {
         case .all:
-            entriesForSelectedFilter = entries
+            return entries
         case .terms:
-            entriesForSelectedFilter = entries.filter { $0.type == .term }
+            return entries.filter { $0.type == .term }
         case .corrections:
-            entriesForSelectedFilter = entries.filter { $0.type == .correction }
+            return entries.filter { $0.type == .correction }
         case .autoLearned:
-            entriesForSelectedFilter = entries.filter {
+            return entries.filter {
                 $0.type == .correction && $0.source == .autoLearned
             }
         case .termPacks:
             return []
         }
+    }
+
+    var filteredListRows: [DictionaryListRow] {
+        let listRows = groupedListRows(from: entriesForSelectedFilter.map(row))
 
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return entriesForSelectedFilter }
+        guard !query.isEmpty else { return listRows }
 
-        return entriesForSelectedFilter.filter { entry in
-            entry.original.localizedCaseInsensitiveContains(query) ||
-                (entry.replacement?.localizedCaseInsensitiveContains(query) ?? false)
+        return listRows.filter { listRow in
+            switch listRow {
+            case .entry(let row):
+                return rowMatchesSearch(row, query: query)
+            case .correctionGroup(let group):
+                return group.replacement.localizedCaseInsensitiveContains(query) ||
+                    group.aliases.contains { rowMatchesSearch($0, query: query) }
+            }
         }
     }
 
     var filteredEntryRows: [DictionaryEntryRow] {
-        filteredEntries.map(row)
+        filteredListRows.flatMap(\.entryRows)
+    }
+
+    var filteredEntries: [DictionaryEntry] {
+        let visibleIDs = Set(filteredEntryRows.map(\.id))
+        return entriesForSelectedFilter.filter { visibleIDs.contains($0.id) }
     }
 
     var hasActiveSearch: Bool {
@@ -260,6 +315,7 @@ class DictionaryViewModel: ObservableObject {
         selectedEntry = nil
         isCreatingNew = true
         isEditing = true
+        lockedCorrectionReplacement = nil
         editType = type
         editOriginal = ""
         editReplacement = ""
@@ -267,10 +323,18 @@ class DictionaryViewModel: ObservableObject {
         resetTermBoostingEditor()
     }
 
+    func startCreatingCorrectionAlias(replacement: String) {
+        guard !replacement.isEmpty else { return }
+        startCreating(type: .correction)
+        lockedCorrectionReplacement = replacement
+        editReplacement = replacement
+    }
+
     func startEditing(_ entry: DictionaryEntry) {
         selectedEntry = entry
         isCreatingNew = false
         isEditing = true
+        lockedCorrectionReplacement = nil
         editType = entry.type
         editOriginal = entry.original
         editReplacement = entry.replacement ?? ""
@@ -291,6 +355,7 @@ class DictionaryViewModel: ObservableObject {
         editOriginal = ""
         editReplacement = ""
         editCaseSensitive = false
+        lockedCorrectionReplacement = nil
         resetTermBoostingEditor()
     }
 
@@ -300,7 +365,9 @@ class DictionaryViewModel: ObservableObject {
             return
         }
 
-        let replacement = editType == .correction ? editReplacement : nil
+        let replacement = editType == .correction
+            ? (lockedCorrectionReplacement ?? editReplacement)
+            : nil
         let ctcMinSimilarity = editType == .term ? editCtcMinSimilarity : nil
 
         if isCreatingNew {
@@ -460,6 +527,41 @@ class DictionaryViewModel: ObservableObject {
             termBoostingLabel: termBoostingLabel(for: entry.ctcMinSimilarity),
             formattedCtcMinSimilarity: formattedCtcMinSimilarity(entry.ctcMinSimilarity)
         )
+    }
+
+    private func groupedListRows(from rows: [DictionaryEntryRow]) -> [DictionaryListRow] {
+        var listRows: [DictionaryListRow] = []
+        var groupIndexes: [String: Int] = [:]
+
+        for row in rows {
+            guard row.type == .correction,
+                  let replacement = row.replacement,
+                  !replacement.isEmpty else {
+                listRows.append(.entry(row))
+                continue
+            }
+
+            if let groupIndex = groupIndexes[replacement],
+               case .correctionGroup(let existingGroup) = listRows[groupIndex] {
+                listRows[groupIndex] = .correctionGroup(DictionaryCorrectionGroupRow(
+                    replacement: replacement,
+                    aliases: existingGroup.aliases + [row]
+                ))
+            } else {
+                groupIndexes[replacement] = listRows.count
+                listRows.append(.correctionGroup(DictionaryCorrectionGroupRow(
+                    replacement: replacement,
+                    aliases: [row]
+                )))
+            }
+        }
+
+        return listRows
+    }
+
+    private func rowMatchesSearch(_ row: DictionaryEntryRow, query: String) -> Bool {
+        row.original.localizedCaseInsensitiveContains(query) ||
+            (row.replacement?.localizedCaseInsensitiveContains(query) ?? false)
     }
 
     private func entry(withID id: UUID) -> DictionaryEntry? {
