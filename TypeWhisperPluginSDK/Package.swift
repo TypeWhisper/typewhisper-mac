@@ -10,9 +10,10 @@ let package = Package(
         .library(name: "TypeWhisperPluginSDKTesting", targets: ["TypeWhisperPluginSDKTesting"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/FluidInference/FluidAudio.git", branch: "main"),
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", revision: "2ea0727541135c34189194084531337a3518e1bf"),
         .package(url: "https://github.com/Blaizzy/mlx-audio-swift.git", revision: "2685c640d4079641a01ef3489cacb684c34109fd"),
         .package(url: "https://github.com/huggingface/swift-huggingface.git", exact: "0.9.0"),
+        .package(url: "https://github.com/huggingface/swift-jinja.git", exact: "2.3.1"),
         .package(url: "https://github.com/ml-explore/mlx-swift.git", exact: "0.31.3"),
         .package(url: "https://github.com/microsoft/onnxruntime-swift-package-manager.git", from: "1.24.2"),
     ],
