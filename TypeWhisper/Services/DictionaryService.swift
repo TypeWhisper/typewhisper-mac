@@ -32,6 +32,12 @@ struct LearnedDictionaryCorrection: Identifiable, Equatable, Sendable {
     let replacement: String
 }
 
+struct DictionaryCorrectionLearningResult: Equatable, Sendable {
+    let learnedCorrections: [LearnedDictionaryCorrection]
+    let duplicateCount: Int
+    let failed: Bool
+}
+
 @MainActor
 final class DictionaryService: ObservableObject {
     private var modelContainer: ModelContainer?
@@ -752,7 +758,17 @@ final class DictionaryService: ObservableObject {
     /// Batch add corrections learned from user edits. Existing corrections are never overwritten.
     @discardableResult
     func learnCorrections(_ suggestions: [CorrectionSuggestion]) -> [LearnedDictionaryCorrection] {
-        guard let context = modelContext, !suggestions.isEmpty else { return [] }
+        learnCorrectionsWithResult(suggestions).learnedCorrections
+    }
+
+    /// Typed variant used by automatic learning to distinguish duplicates from storage failures.
+    func learnCorrectionsWithResult(_ suggestions: [CorrectionSuggestion]) -> DictionaryCorrectionLearningResult {
+        guard !suggestions.isEmpty else {
+            return DictionaryCorrectionLearningResult(learnedCorrections: [], duplicateCount: 0, failed: false)
+        }
+        guard let context = modelContext else {
+            return DictionaryCorrectionLearningResult(learnedCorrections: [], duplicateCount: 0, failed: true)
+        }
 
         var existingOriginals = Set(
             entries
@@ -761,6 +777,7 @@ final class DictionaryService: ObservableObject {
         )
         let now = Date()
         var learned: [LearnedDictionaryCorrection] = []
+        var duplicateCount = 0
 
         for suggestion in suggestions {
             let original = suggestion.original.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -768,8 +785,11 @@ final class DictionaryService: ObservableObject {
             let originalKey = original.lowercased()
 
             guard !original.isEmpty,
-                  originalKey != replacement.lowercased(),
-                  !existingOriginals.contains(originalKey) else {
+                  originalKey != replacement.lowercased() else {
+                continue
+            }
+            guard !existingOriginals.contains(originalKey) else {
+                duplicateCount += 1
                 continue
             }
 
@@ -791,15 +811,30 @@ final class DictionaryService: ObservableObject {
             ))
         }
 
-        guard !learned.isEmpty else { return [] }
+        guard !learned.isEmpty else {
+            return DictionaryCorrectionLearningResult(
+                learnedCorrections: [],
+                duplicateCount: duplicateCount,
+                failed: false
+            )
+        }
 
         do {
             try context.save()
             loadEntries()
-            return learned
+            return DictionaryCorrectionLearningResult(
+                learnedCorrections: learned,
+                duplicateCount: duplicateCount,
+                failed: false
+            )
         } catch {
+            context.rollback()
             logger.error("Failed to learn corrections: \(error.localizedDescription)")
-            return []
+            return DictionaryCorrectionLearningResult(
+                learnedCorrections: [],
+                duplicateCount: duplicateCount,
+                failed: true
+            )
         }
     }
 

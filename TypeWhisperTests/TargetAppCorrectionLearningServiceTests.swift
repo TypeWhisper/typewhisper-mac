@@ -46,9 +46,11 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
         commitEmitter.emit(.returnKey)
         let learned = await task.value
 
-        XCTAssertEqual(learned.count, 1)
-        XCTAssertEqual(learned.first?.original, "teh")
-        XCTAssertEqual(learned.first?.replacement, "the")
+        XCTAssertEqual(learned.snapshot.outcome, .learned)
+        XCTAssertEqual(learned.snapshot.commitSignal, .returnKey)
+        XCTAssertEqual(learned.learnedCorrections.count, 1)
+        XCTAssertEqual(learned.learnedCorrections.first?.original, "teh")
+        XCTAssertEqual(learned.learnedCorrections.first?.replacement, "the")
         XCTAssertEqual(dictionaryService.correctionsCount, 1)
     }
 
@@ -94,7 +96,8 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
         commitEmitter.emit(.returnKey)
         let learned = await task.value
 
-        XCTAssertTrue(learned.isEmpty)
+        XCTAssertEqual(learned.snapshot.outcome, .ambiguousEdit)
+        XCTAssertTrue(learned.learnedCorrections.isEmpty)
         XCTAssertEqual(dictionaryService.correctionsCount, 0)
     }
 
@@ -140,7 +143,8 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
         commitEmitter.emit(.returnKey)
         let learned = await task.value
 
-        XCTAssertTrue(learned.isEmpty)
+        XCTAssertEqual(learned.snapshot.outcome, .ambiguousEdit)
+        XCTAssertTrue(learned.learnedCorrections.isEmpty)
         XCTAssertEqual(dictionaryService.correctionsCount, 0)
     }
 
@@ -178,7 +182,8 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
 
         let learned = await service.trackInsertion(insertedText: "teh", baseline: baseline)
 
-        XCTAssertTrue(learned.isEmpty)
+        XCTAssertEqual(learned.snapshot.outcome, .noCommitBeforeTimeout)
+        XCTAssertTrue(learned.learnedCorrections.isEmpty)
         XCTAssertEqual(dictionaryService.correctionsCount, 0)
     }
 
@@ -222,8 +227,10 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
 
         let learned = await service.trackInsertion(insertedText: "teh", baseline: baseline)
 
-        XCTAssertEqual(learned.first?.original, "teh")
-        XCTAssertEqual(learned.first?.replacement, "the")
+        XCTAssertEqual(learned.snapshot.outcome, .learned)
+        XCTAssertEqual(learned.snapshot.commitSignal, .focusChanged)
+        XCTAssertEqual(learned.learnedCorrections.first?.original, "teh")
+        XCTAssertEqual(learned.learnedCorrections.first?.replacement, "the")
         XCTAssertEqual(dictionaryService.correctionsCount, 1)
     }
 
@@ -262,7 +269,8 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
 
         let learned = await service.trackInsertion(insertedText: "teh", baseline: baseline)
 
-        XCTAssertTrue(learned.isEmpty)
+        XCTAssertEqual(learned.snapshot.outcome, .noCommitBeforeTimeout)
+        XCTAssertTrue(learned.learnedCorrections.isEmpty)
         XCTAssertEqual(dictionaryService.correctionsCount, 0)
     }
 
@@ -305,7 +313,8 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
 
         let learned = await service.trackInsertion(insertedText: "teh", baseline: baseline)
 
-        XCTAssertTrue(learned.isEmpty)
+        XCTAssertEqual(learned.snapshot.outcome, .noCommitBeforeTimeout)
+        XCTAssertTrue(learned.learnedCorrections.isEmpty)
         XCTAssertEqual(dictionaryService.correctionsCount, 0)
     }
 
@@ -337,7 +346,9 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
         )
 
         let changedFocusLearned = await changedFocusService.trackInsertion(insertedText: "teh", baseline: baseline)
-        XCTAssertTrue(changedFocusLearned.isEmpty)
+        XCTAssertEqual(changedFocusLearned.snapshot.outcome, .unsupportedTextObservation)
+        XCTAssertEqual(changedFocusLearned.snapshot.commitSignal, .focusChanged)
+        XCTAssertTrue(changedFocusLearned.learnedCorrections.isEmpty)
 
         let missingStateInsertionService = TextInsertionService()
         missingStateInsertionService.focusedTextElementOverride = { baselineElement }
@@ -352,7 +363,8 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
         )
 
         let missingStateLearned = await missingStateService.trackInsertion(insertedText: "teh", baseline: baseline)
-        XCTAssertTrue(missingStateLearned.isEmpty)
+        XCTAssertEqual(missingStateLearned.snapshot.outcome, .noCommitBeforeTimeout)
+        XCTAssertTrue(missingStateLearned.learnedCorrections.isEmpty)
     }
 
     func testClearsStaleSuggestionsWhenEditIsUndoneBeforeCommit() async throws {
@@ -398,7 +410,8 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
 
         let learned = await service.trackInsertion(insertedText: "teh", baseline: baseline)
 
-        XCTAssertTrue(learned.isEmpty)
+        XCTAssertEqual(learned.snapshot.outcome, .noEdit)
+        XCTAssertTrue(learned.learnedCorrections.isEmpty)
         XCTAssertEqual(dictionaryService.correctionsCount, 0)
     }
 
@@ -470,7 +483,8 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
         )
 
         let duplicateLearned = await duplicateService.trackInsertion(insertedText: "teh", baseline: baseline)
-        XCTAssertTrue(duplicateLearned.isEmpty)
+        XCTAssertEqual(duplicateLearned.snapshot.outcome, .duplicateCorrection)
+        XCTAssertTrue(duplicateLearned.learnedCorrections.isEmpty)
         XCTAssertEqual(dictionaryService.correctionsCount, 1)
     }
 
@@ -507,13 +521,232 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
         task.cancel()
 
         let learned = await task.value
-        XCTAssertTrue(learned.isEmpty)
+        XCTAssertEqual(learned.snapshot.outcome, .cancelled)
+        XCTAssertTrue(learned.learnedCorrections.isEmpty)
         XCTAssertEqual(dictionaryService.correctionsCount, 0)
+    }
+
+    func testLearnsSafeCandidateWhenTextObservationDisappearsAtCommit() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let element = AXUIElementCreateSystemWide()
+        let textInsertionService = TextInsertionService()
+        textInsertionService.focusedTextElementOverride = { element }
+        var captureCount = 0
+        textInsertionService.focusedTextStateOverride = { _ in
+            captureCount += 1
+            guard captureCount == 1 else { return nil }
+            let value = "Please use the word"
+            return (value: value, selectedText: nil, selectedRange: NSRange(location: value.count, length: 0))
+        }
+
+        let commitEmitter = CommitEmitterBox()
+        var sleepCount = 0
+        let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
+        let service = TargetAppCorrectionLearningService(
+            textInsertionService: textInsertionService,
+            textDiffService: TextDiffService(),
+            dictionaryService: dictionaryService,
+            pollSchedule: [.milliseconds(0), .milliseconds(0)],
+            sleep: { _ in
+                sleepCount += 1
+                if sleepCount == 2 {
+                    commitEmitter.emit(.tabKey)
+                }
+            },
+            makeCommitObserver: commitObserver(capturing: commitEmitter)
+        )
+        let baseline = TextInsertionService.FocusedTextObservation(
+            element: element,
+            value: "Please use teh word",
+            selectedText: nil,
+            selectedRange: NSRange(location: 19, length: 0)
+        )
+
+        let result = await service.trackInsertion(insertedText: "teh", baseline: baseline)
+
+        XCTAssertEqual(result.snapshot.outcome, .learned)
+        XCTAssertEqual(result.snapshot.commitSignal, .tabKey)
+        XCTAssertEqual(result.learnedCorrections.first?.replacement, "the")
+    }
+
+    func testLearnsForKeypadEnterTabAndActiveApplicationCommitSignals() async throws {
+        let rootDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(rootDirectory) }
+
+        for signal in [
+            TargetAppCorrectionCommitSignal.keypadEnterKey,
+            .tabKey,
+            .activeApplicationChanged
+        ] {
+            let element = AXUIElementCreateSystemWide()
+            let textInsertionService = TextInsertionService()
+            textInsertionService.focusedTextElementOverride = { element }
+            textInsertionService.focusedTextStateOverride = { _ in
+                let value = "Please use the word"
+                return (value: value, selectedText: nil, selectedRange: NSRange(location: value.count, length: 0))
+            }
+
+            let commitEmitter = CommitEmitterBox()
+            let dictionaryService = DictionaryService(
+                appSupportDirectory: rootDirectory.appendingPathComponent(signal.rawValue)
+            )
+            let service = TargetAppCorrectionLearningService(
+                textInsertionService: textInsertionService,
+                textDiffService: TextDiffService(),
+                dictionaryService: dictionaryService,
+                pollSchedule: [.milliseconds(0)],
+                sleep: { _ in commitEmitter.emit(signal) },
+                makeCommitObserver: commitObserver(capturing: commitEmitter)
+            )
+            let baseline = TextInsertionService.FocusedTextObservation(
+                element: element,
+                value: "Please use teh word",
+                selectedText: nil,
+                selectedRange: NSRange(location: 19, length: 0)
+            )
+
+            let result = await service.trackInsertion(insertedText: "teh", baseline: baseline)
+
+            XCTAssertEqual(result.snapshot.outcome, .learned, "Unexpected outcome for \(signal)")
+            XCTAssertEqual(result.snapshot.commitSignal, signal)
+            XCTAssertEqual(result.learnedCorrections.count, 1)
+        }
+    }
+
+    func testReportsFailedWhenDictionaryStorageFails() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let element = AXUIElementCreateSystemWide()
+        let textInsertionService = TextInsertionService()
+        textInsertionService.focusedTextElementOverride = { element }
+        textInsertionService.focusedTextStateOverride = { _ in
+            let value = "Please use the word"
+            return (value: value, selectedText: nil, selectedRange: NSRange(location: value.count, length: 0))
+        }
+        let commitEmitter = CommitEmitterBox()
+        let service = TargetAppCorrectionLearningService(
+            textInsertionService: textInsertionService,
+            textDiffService: TextDiffService(),
+            dictionaryService: DictionaryService(appSupportDirectory: appSupportDirectory),
+            pollSchedule: [.milliseconds(0)],
+            sleep: { _ in commitEmitter.emit(.returnKey) },
+            makeCommitObserver: commitObserver(capturing: commitEmitter),
+            learnCorrections: { _ in
+                DictionaryCorrectionLearningResult(
+                    learnedCorrections: [],
+                    duplicateCount: 0,
+                    failed: true
+                )
+            }
+        )
+        let baseline = TextInsertionService.FocusedTextObservation(
+            element: element,
+            value: "Please use teh word",
+            selectedText: nil,
+            selectedRange: NSRange(location: 19, length: 0)
+        )
+
+        let result = await service.trackInsertion(insertedText: "teh", baseline: baseline)
+
+        XCTAssertEqual(result.snapshot.outcome, .failed)
+        XCTAssertTrue(result.learnedCorrections.isEmpty)
+    }
+
+    func testLatestAttemptPersistsWithoutTextContent() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let suiteName = "TargetAppCorrectionLearningServiceTests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            return XCTFail("Could not create isolated defaults")
+        }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let timestamp = Date(timeIntervalSince1970: 1_750_000_000)
+
+        let service = TargetAppCorrectionLearningService(
+            textInsertionService: TextInsertionService(),
+            textDiffService: TextDiffService(),
+            dictionaryService: DictionaryService(appSupportDirectory: appSupportDirectory),
+            pollSchedule: [],
+            makeCommitObserver: noopCommitObserver,
+            defaults: defaults,
+            persistLatestAttempt: true,
+            now: { timestamp }
+        )
+        let baseline = TextInsertionService.FocusedTextObservation(
+            element: AXUIElementCreateSystemWide(),
+            value: "private baseline phrase",
+            selectedText: nil,
+            selectedRange: NSRange(location: 23, length: 0)
+        )
+
+        let result = await service.trackInsertion(insertedText: "private insertion", baseline: baseline)
+        let storedData = try XCTUnwrap(defaults.data(
+            forKey: UserDefaultsKeys.targetAppCorrectionLearningLatestAttempt
+        ))
+        let storedJSON = try XCTUnwrap(String(data: storedData, encoding: .utf8))
+
+        XCTAssertEqual(result.snapshot.outcome, .noCommitBeforeTimeout)
+        XCTAssertFalse(storedJSON.contains("private"))
+        XCTAssertFalse(storedJSON.contains("bundle"))
+
+        let reloadedService = TargetAppCorrectionLearningService(
+            textInsertionService: TextInsertionService(),
+            textDiffService: TextDiffService(),
+            dictionaryService: DictionaryService(appSupportDirectory: appSupportDirectory),
+            pollSchedule: [],
+            makeCommitObserver: noopCommitObserver,
+            defaults: defaults
+        )
+        XCTAssertEqual(reloadedService.latestAttempt, result.snapshot)
+
+        let diagnosticData = try JSONEncoder().encode(DiagnosticCorrectionLearningInfo(
+            enabled: true,
+            lastAttempt: result.snapshot
+        ))
+        let diagnosticJSON = try XCTUnwrap(String(data: diagnosticData, encoding: .utf8))
+        XCTAssertFalse(diagnosticJSON.contains("private"))
+        XCTAssertFalse(diagnosticJSON.contains("bundle"))
+    }
+
+    func testCancelledOlderAttemptDoesNotOverwriteNewerOutcome() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let element = AXUIElementCreateSystemWide()
+        let baseline = TextInsertionService.FocusedTextObservation(
+            element: element,
+            value: "teh",
+            selectedText: nil,
+            selectedRange: NSRange(location: 3, length: 0)
+        )
+        let service = TargetAppCorrectionLearningService(
+            textInsertionService: TextInsertionService(),
+            textDiffService: TextDiffService(),
+            dictionaryService: DictionaryService(appSupportDirectory: appSupportDirectory),
+            pollSchedule: [.seconds(60)],
+            makeCommitObserver: noopCommitObserver
+        )
+
+        let olderTask = Task { @MainActor in
+            await service.trackInsertion(insertedText: "teh", baseline: baseline)
+        }
+        await Task.yield()
+
+        let newerResult = await service.trackInsertion(insertedText: "", baseline: baseline)
+        olderTask.cancel()
+        let olderResult = await olderTask.value
+
+        XCTAssertEqual(newerResult.snapshot.outcome, .unsupportedTextObservation)
+        XCTAssertEqual(olderResult.snapshot.outcome, .cancelled)
+        XCTAssertEqual(service.latestAttempt, newerResult.snapshot)
     }
 
     func testCommitObserverMapsReturnEnterAndTabKeys() {
         XCTAssertEqual(TargetAppCorrectionCommitObserver.commitSignal(forKeyCode: 0x24), .returnKey)
-        XCTAssertEqual(TargetAppCorrectionCommitObserver.commitSignal(forKeyCode: 0x4C), .returnKey)
+        XCTAssertEqual(TargetAppCorrectionCommitObserver.commitSignal(forKeyCode: 0x4C), .keypadEnterKey)
         XCTAssertEqual(TargetAppCorrectionCommitObserver.commitSignal(forKeyCode: 0x30), .tabKey)
         XCTAssertNil(TargetAppCorrectionCommitObserver.commitSignal(forKeyCode: 0x31))
     }

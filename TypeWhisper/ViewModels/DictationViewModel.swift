@@ -2240,14 +2240,14 @@ final class DictationViewModel: ObservableObject {
 
         targetAppCorrectionLearningTask = Task { @MainActor [weak self, baseline, insertedText] in
             guard let self else { return }
-            let learned = await self.targetAppCorrectionLearningService.trackInsertion(
+            let result = await self.targetAppCorrectionLearningService.trackInsertion(
                 insertedText: insertedText,
                 baseline: baseline
             )
             guard !Task.isCancelled else { return }
             self.targetAppCorrectionLearningTask = nil
-            guard !learned.isEmpty else { return }
-            self.showLearnedCorrectionsFeedback(learned)
+            guard !result.learnedCorrections.isEmpty else { return }
+            self.showLearnedCorrectionsFeedback(result.learnedCorrections)
         }
     }
 

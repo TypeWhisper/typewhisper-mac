@@ -4,6 +4,7 @@ import SwiftUI
 struct PremiumSettingsView: View {
     @ObservedObject private var license: LicenseService
     @ObservedObject private var syncController: CloudFolderSyncController
+    @ObservedObject private var correctionLearningService: TargetAppCorrectionLearningService
     @AppStorage(UserDefaultsKeys.targetAppCorrectionLearningEnabled) private var targetAppCorrectionLearningEnabled = false
 
     private let settingsNavigation: SettingsNavigationCoordinator
@@ -11,10 +12,12 @@ struct PremiumSettingsView: View {
     init(
         licenseService: LicenseService = LicenseService.shared,
         syncController: CloudFolderSyncController = ServiceContainer.shared.cloudFolderSyncController,
+        correctionLearningService: TargetAppCorrectionLearningService = ServiceContainer.shared.targetAppCorrectionLearningService,
         settingsNavigation: SettingsNavigationCoordinator = .shared
     ) {
         self.license = licenseService
         self.syncController = syncController
+        self.correctionLearningService = correctionLearningService
         self.settingsNavigation = settingsNavigation
     }
 
@@ -348,6 +351,50 @@ struct PremiumSettingsView: View {
             )
             .toggleStyle(.switch)
 
+            if let attempt = correctionLearningService.latestAttempt {
+                Divider()
+
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: correctionLearningOutcomeIcon(attempt.outcome))
+                        .foregroundStyle(correctionLearningOutcomeColor(attempt.outcome))
+                        .frame(width: 18)
+                        .accessibilityHidden(true)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(correctionLearningOutcomeText(attempt.outcome))
+                            .font(.callout.weight(.medium))
+
+                        HStack(spacing: 4) {
+                            Text(localizedAppText("Last attempt", de: "Letzter Versuch"))
+                            Text(attempt.timestamp, style: .relative)
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                        if attempt.learnedCorrectionCount > 0 {
+                            Text(String.localizedStringWithFormat(
+                                localizedAppText("%d corrections learned", de: "%d Korrekturen gelernt"),
+                                attempt.learnedCorrectionCount
+                            ))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Spacer(minLength: 8)
+
+                    if let commitSignal = attempt.commitSignal {
+                        Text(correctionLearningCommitSignalText(commitSignal))
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Capsule().fill(Color.secondary.opacity(0.12)))
+                    }
+                }
+                .accessibilityElement(children: .combine)
+            }
+
             VStack(alignment: .leading, spacing: 7) {
                 Text(String(localized: "Correction examples"))
                     .font(.caption.weight(.semibold))
@@ -356,6 +403,68 @@ struct PremiumSettingsView: View {
                 correctionExampleRow(PremiumCorrectionExample(before: "teh", after: "the"))
                 correctionExampleRow(PremiumCorrectionExample(before: "recieve", after: "receive"))
             }
+        }
+    }
+
+    private func correctionLearningOutcomeText(_ outcome: TargetAppCorrectionLearningOutcome) -> String {
+        switch outcome {
+        case .learned:
+            localizedAppText("Correction learned", de: "Korrektur gelernt")
+        case .unsupportedTextObservation:
+            localizedAppText("Text could not be observed", de: "Text konnte nicht beobachtet werden")
+        case .noEdit:
+            localizedAppText("No edit detected", de: "Keine Bearbeitung erkannt")
+        case .ambiguousEdit:
+            localizedAppText("Ambiguous edit skipped", de: "Mehrdeutige Bearbeitung übersprungen")
+        case .noCommitBeforeTimeout:
+            localizedAppText("No completion signal detected", de: "Kein Abschlusssignal erkannt")
+        case .duplicateCorrection:
+            localizedAppText("Correction already exists", de: "Korrektur ist bereits vorhanden")
+        case .cancelled:
+            localizedAppText("Learning attempt cancelled", de: "Lernversuch abgebrochen")
+        case .failed:
+            localizedAppText("Correction could not be saved", de: "Korrektur konnte nicht gespeichert werden")
+        }
+    }
+
+    private func correctionLearningOutcomeIcon(_ outcome: TargetAppCorrectionLearningOutcome) -> String {
+        switch outcome {
+        case .learned:
+            "checkmark.circle.fill"
+        case .failed:
+            "exclamationmark.triangle.fill"
+        case .unsupportedTextObservation, .ambiguousEdit, .noCommitBeforeTimeout:
+            "info.circle.fill"
+        case .noEdit, .duplicateCorrection, .cancelled:
+            "minus.circle.fill"
+        }
+    }
+
+    private func correctionLearningOutcomeColor(_ outcome: TargetAppCorrectionLearningOutcome) -> Color {
+        switch outcome {
+        case .learned:
+            .green
+        case .failed:
+            .red
+        case .unsupportedTextObservation, .ambiguousEdit, .noCommitBeforeTimeout:
+            .yellow
+        case .noEdit, .duplicateCorrection, .cancelled:
+            .secondary
+        }
+    }
+
+    private func correctionLearningCommitSignalText(_ signal: TargetAppCorrectionCommitSignal) -> String {
+        switch signal {
+        case .returnKey:
+            localizedAppText("Return", de: "Return")
+        case .keypadEnterKey:
+            localizedAppText("Enter", de: "Enter")
+        case .tabKey:
+            localizedAppText("Tab", de: "Tab")
+        case .focusChanged:
+            localizedAppText("Focus changed", de: "Fokuswechsel")
+        case .activeApplicationChanged:
+            localizedAppText("App changed", de: "App-Wechsel")
         }
     }
 
