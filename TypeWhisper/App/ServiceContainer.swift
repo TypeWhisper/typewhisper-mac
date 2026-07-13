@@ -21,6 +21,7 @@ final class ServiceContainer: ObservableObject {
     let audioDuckingService: AudioDuckingService
     let mediaPlaybackService: MediaPlaybackService
     let dictionaryService: DictionaryService
+    let dictionaryTrainingService: DictionaryTrainingService
     let targetAppCorrectionLearningService: TargetAppCorrectionLearningService
     let snippetService: SnippetService
     let userDataSyncStore: TypeWhisperUserDataSyncStore
@@ -153,6 +154,12 @@ final class ServiceContainer: ObservableObject {
         )
         dictationRecoveryViewModel = recoveryViewModel
         settingsViewModel = SettingsViewModel(modelManager: modelManagerService)
+        dictionaryTrainingService = DictionaryTrainingService(
+            audioRecordingService: audioRecordingService,
+            modelManager: modelManagerService,
+            settingsViewModel: settingsViewModel,
+            dictionaryService: dictionaryService
+        )
         dictationViewModel = DictationViewModel(
             audioRecordingService: audioRecordingService,
             textInsertionService: textInsertionService,

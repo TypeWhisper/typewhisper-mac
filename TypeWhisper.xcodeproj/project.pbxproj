@@ -181,6 +181,8 @@
 		AA00000000000000000077 /* DictionaryEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000077 /* DictionaryEntry.swift */; };
 		AA00000000000000000078 /* TermPack.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000078 /* TermPack.swift */; };
 		AA00000000000000000079 /* DictionaryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000079 /* DictionaryService.swift */; };
+		A87000000000000000000001 /* DictionaryTrainingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B87000000000000000000001 /* DictionaryTrainingService.swift */; };
+		A87000000000000000000002 /* DictionaryTrainingServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B87000000000000000000002 /* DictionaryTrainingServiceTests.swift */; };
 		AA00000000000000000080 /* Snippet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000080 /* Snippet.swift */; };
 		AA00000000000000000081 /* SnippetService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000081 /* SnippetService.swift */; };
 		C1F000000000000000000011 /* UserDataSyncIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000002 /* UserDataSyncIdentity.swift */; };
@@ -638,6 +640,8 @@
 		BB00000000000000000077 /* DictionaryEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryEntry.swift; sourceTree = "<group>"; };
 		BB00000000000000000078 /* TermPack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TermPack.swift; sourceTree = "<group>"; };
 		BB00000000000000000079 /* DictionaryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryService.swift; sourceTree = "<group>"; };
+		B87000000000000000000001 /* DictionaryTrainingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryTrainingService.swift; sourceTree = "<group>"; };
+		B87000000000000000000002 /* DictionaryTrainingServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictionaryTrainingServiceTests.swift; sourceTree = "<group>"; };
 		BB7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TargetAppCorrectionLearningServiceTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000080 /* Snippet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Snippet.swift; sourceTree = "<group>"; };
 		BB00000000000000000081 /* SnippetService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnippetService.swift; sourceTree = "<group>"; };
@@ -1518,6 +1522,7 @@
 				BB00000000000000000074 /* AudioDuckingService.swift */,
 				BB00000000000000000273 /* MediaPlaybackService.swift */,
 				BB00000000000000000079 /* DictionaryService.swift */,
+				B87000000000000000000001 /* DictionaryTrainingService.swift */,
 				BB00000000000000000271 /* DictionaryExporter.swift */,
 				BB00000000000000000081 /* SnippetService.swift */,
 				C1F000000000000000000001 /* Sync */,
@@ -2292,6 +2297,7 @@
 					5A6500000000000000000001 /* ModelManagerLiveSessionModelOverrideTests.swift */,
 					AA8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift */,
 				D63A42880A0BA4C84F36E873 /* DictionaryServiceTests.swift */,
+				B87000000000000000000002 /* DictionaryTrainingServiceTests.swift */,
 				BB7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift */,
 				A8D4F2B6E1C3097B5F8A4E62 /* DictionaryExporterTests.swift */,
 				8E39448D561C47B16EEF4C6B /* HTTPRequestParserTests.swift */,
@@ -3805,6 +3811,7 @@
 					5A6500000000000000000002 /* ModelManagerLiveSessionModelOverrideTests.swift in Sources */,
 					BB8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift in Sources */,
 				B4CC04DF94001FF7220789BC /* DictionaryServiceTests.swift in Sources */,
+				A87000000000000000000002 /* DictionaryTrainingServiceTests.swift in Sources */,
 				AA7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift in Sources */,
 				C7A3E9F1D5B2084A6E9C3D71 /* DictionaryExporterTests.swift in Sources */,
 				F635B3F08018D57E0CB709BF /* HTTPRequestParserTests.swift in Sources */,
@@ -3947,6 +3954,7 @@
 				AA00000000000000000077 /* DictionaryEntry.swift in Sources */,
 				AA00000000000000000078 /* TermPack.swift in Sources */,
 				AA00000000000000000079 /* DictionaryService.swift in Sources */,
+				A87000000000000000000001 /* DictionaryTrainingService.swift in Sources */,
 				AA00000000000000000080 /* Snippet.swift in Sources */,
 				AA00000000000000000081 /* SnippetService.swift in Sources */,
 				C1F000000000000000000011 /* UserDataSyncIdentity.swift in Sources */,
