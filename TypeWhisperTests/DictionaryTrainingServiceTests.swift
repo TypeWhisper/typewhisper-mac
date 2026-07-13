@@ -199,8 +199,8 @@ final class DictionaryTrainingServiceTests: XCTestCase {
 
         shouldFail = false
         service.retrySample(id: second.id)
-        await service.startRecording(sampleID: second.id)
         service.updateSentence(id: second.id, sentence: "Today I want to say TypeWhisper clearly.")
+        await service.startRecording(sampleID: second.id)
         await service.stopRecordingAndTranscribe(sampleID: second.id)
         XCTAssertEqual(service.samples[1].state, .completed)
         XCTAssertEqual(service.samples[0].state, .completed)
