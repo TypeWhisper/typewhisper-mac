@@ -12,7 +12,7 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
     private static let maxConditioningPromptChars = 500
     private static let modelRepo = "argmaxinc/whisperkit-coreml"
     private static let modelEndpoint = "https://huggingface.co"
-    private static let defaultModelLoadTimeoutDuration: Duration = .seconds(600)
+    private static let defaultSlowModelLoadWarningDuration: Duration = .seconds(600)
 
     fileprivate var host: HostServices?
     fileprivate var whisperKit: WhisperKit?
@@ -23,7 +23,7 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
     fileprivate var modelState: WhisperModelState = .notLoaded
     fileprivate var downloadProgress: Double = 0
     private var modelLoadGeneration = 0
-    fileprivate var modelLoadTimeoutDuration = WhisperKitPlugin.defaultModelLoadTimeoutDuration
+    fileprivate var slowModelLoadWarningDuration = WhisperKitPlugin.defaultSlowModelLoadWarningDuration
     #if DEBUG
     private(set) var restoreLoadedModelInvocationCountForTesting = 0
     #endif
@@ -104,10 +104,10 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         loadingModelId = nil
     }
 
-    private func startModelLoadTimeout(generation: Int, modelName: String) {
-        let timeout = modelLoadTimeoutDuration
+    private func startSlowModelLoadWarning(generation: Int) {
+        let warningDelay = slowModelLoadWarningDuration
         Task { [weak self] in
-            try? await Task.sleep(for: timeout)
+            try? await Task.sleep(for: warningDelay)
             guard let self,
                   self.isCurrentModelLoad(generation),
                   self.loadedModelId == nil else {
@@ -116,16 +116,7 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
 
             switch self.modelState {
             case .loading:
-                self.invalidateModelLoad()
-                self.releaseWhisperKitResources()
-                self.whisperKit = nil
-                self.loadedModelId = nil
-                self.loadingModelId = nil
-                self.downloadProgress = 0
-                self.modelState = .error(
-                    "Model load is taking too long while macOS compiles \(modelName) for the Neural Engine. Try again, or remove and re-download the model."
-                )
-                self.host?.setUserDefault(nil, forKey: "loadedModel")
+                self.modelState = .loading(phase: "slow")
                 self.host?.notifyCapabilitiesChanged()
             default:
                 break
@@ -521,7 +512,7 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
             // Load
             modelState = .loading(phase: "compiling")
             downloadProgress = 0.80
-            startModelLoadTimeout(generation: loadGeneration, modelName: modelDef.displayName)
+            startSlowModelLoadWarning(generation: loadGeneration)
 
             let config = WhisperKitConfig(
                 downloadBase: downloadBase,
@@ -634,15 +625,15 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         modelState = .loading(phase: phase)
     }
 
-    func setModelLoadTimeoutForTesting(_ timeout: Duration) {
-        modelLoadTimeoutDuration = timeout
+    func setSlowModelLoadWarningDurationForTesting(_ duration: Duration) {
+        slowModelLoadWarningDuration = duration
     }
 
-    func startModelLoadTimeoutForTesting(modelName: String) {
+    func startSlowModelLoadWarningForTesting() {
         let generation = beginModelLoad()
         loadingModelId = selectedModelId
         modelState = .loading(phase: "compiling")
-        startModelLoadTimeout(generation: generation, modelName: modelName)
+        startSlowModelLoadWarning(generation: generation)
     }
 
     func restoreTargetModelIdForTesting(allowDownloads: Bool = true) -> String? {
@@ -881,6 +872,8 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
             switch phase {
             case "compiling", "prewarming":
                 message = "Optimizing model"
+            case "slow":
+                message = "Model optimization is taking longer than expected"
             case "loading":
                 message = "Loading model"
             default:
@@ -1377,6 +1370,8 @@ private struct WhisperKitSettingsView: View {
         switch phase {
         case "compiling", "prewarming":
             String(localized: "Optimizing for Neural Engine...", bundle: bundle)
+        case "slow":
+            String(localized: "Still optimizing for Neural Engine...", bundle: bundle)
         case "loading":
             String(localized: "Loading model...", bundle: bundle)
         default:
