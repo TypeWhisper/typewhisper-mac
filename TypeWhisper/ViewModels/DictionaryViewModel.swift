@@ -76,6 +76,7 @@ class DictionaryViewModel: ObservableObject {
     }
 
     @Published var filterTab: FilterTab = .all
+    @Published var searchQuery = ""
 
     // Editor state
     @Published var isEditing = false
@@ -103,22 +104,37 @@ class DictionaryViewModel: ObservableObject {
     private var selectedEntry: DictionaryEntry?
 
     var filteredEntries: [DictionaryEntry] {
+        let entriesForSelectedFilter: [DictionaryEntry]
         switch filterTab {
         case .all:
-            return entries
+            entriesForSelectedFilter = entries
         case .terms:
-            return entries.filter { $0.type == .term }
+            entriesForSelectedFilter = entries.filter { $0.type == .term }
         case .corrections:
-            return entries.filter { $0.type == .correction }
+            entriesForSelectedFilter = entries.filter { $0.type == .correction }
         case .autoLearned:
-            return entries.filter { $0.type == .correction && $0.source == .autoLearned }
+            entriesForSelectedFilter = entries.filter {
+                $0.type == .correction && $0.source == .autoLearned
+            }
         case .termPacks:
             return []
+        }
+
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return entriesForSelectedFilter }
+
+        return entriesForSelectedFilter.filter { entry in
+            entry.original.localizedCaseInsensitiveContains(query) ||
+                (entry.replacement?.localizedCaseInsensitiveContains(query) ?? false)
         }
     }
 
     var filteredEntryRows: [DictionaryEntryRow] {
         filteredEntries.map(row)
+    }
+
+    var hasActiveSearch: Bool {
+        !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var termsCount: Int { dictionaryService.termsCount }

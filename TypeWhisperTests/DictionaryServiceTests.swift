@@ -554,6 +554,18 @@ final class DictionaryServiceTests: XCTestCase {
         XCTAssertEqual(correctionRows.first { $0.original == "empty-replacement" }?.replacementDisplayText, "\"\"")
 
         let correctionIDs = correctionRows.map(\.id)
+        let searchedOriginalID = try XCTUnwrap(
+            correctionRows.first { $0.original == "Wrong-042" }?.id
+        )
+        viewModel.searchQuery = "WRONG-042"
+        XCTAssertEqual(viewModel.filteredEntryRows.map(\.id), [searchedOriginalID])
+
+        viewModel.searchQuery = "correct-042"
+        XCTAssertEqual(viewModel.filteredEntryRows.map(\.id), [searchedOriginalID])
+
+        viewModel.searchQuery = ""
+        XCTAssertEqual(viewModel.filteredEntryRows.map(\.id), correctionIDs)
+
         viewModel.filterTab = .all
         let allCorrectionIDs = viewModel.filteredEntryRows
             .filter { $0.type == .correction }
@@ -566,6 +578,56 @@ final class DictionaryServiceTests: XCTestCase {
         let autoLearnedRows = autoLearnedViewModel.filteredEntryRows
         XCTAssertEqual(autoLearnedRows.map(\.original), ["autolearned"])
         XCTAssertTrue(autoLearnedRows.allSatisfy { $0.source == .autoLearned })
+    }
+
+    @MainActor
+    func testDictionarySearchMatchesOriginalAndReplacementAndComposesWithFilters() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .term, original: "TypeWhisper")
+        service.addEntry(type: .term, original: "Podcast")
+        service.addEntry(type: .correction, original: "teh", replacement: "the")
+        service.learnCorrection(original: "langauge", replacement: "language")
+
+        let entriesBeforeSearch = service.entries.map {
+            ($0.id, $0.type, $0.original, $0.replacement, $0.source)
+        }
+        let viewModel = DictionaryViewModel(dictionaryService: service)
+
+        viewModel.searchQuery = "TYPEWHISPER"
+        XCTAssertEqual(viewModel.filteredEntryRows.map(\.original), ["TypeWhisper"])
+
+        viewModel.filterTab = .corrections
+        viewModel.searchQuery = "THE"
+        XCTAssertEqual(viewModel.filteredEntryRows.map(\.original), ["teh"])
+
+        viewModel.filterTab = .autoLearned
+        XCTAssertTrue(viewModel.filteredEntryRows.isEmpty)
+        viewModel.searchQuery = "LANGUAGE"
+        XCTAssertEqual(viewModel.filteredEntryRows.map(\.original), ["langauge"])
+
+        viewModel.filterTab = .terms
+        XCTAssertTrue(viewModel.filteredEntryRows.isEmpty)
+        viewModel.searchQuery = "   "
+        XCTAssertEqual(viewModel.filteredEntryRows.map(\.original), ["Podcast", "TypeWhisper"])
+        XCTAssertFalse(viewModel.hasActiveSearch)
+
+        viewModel.searchQuery = "podcast"
+        XCTAssertTrue(viewModel.hasActiveSearch)
+        viewModel.filterTab = .termPacks
+        XCTAssertEqual(viewModel.searchQuery, "podcast")
+        XCTAssertTrue(viewModel.filteredEntryRows.isEmpty)
+
+        viewModel.filterTab = .all
+        viewModel.searchQuery = ""
+        XCTAssertEqual(viewModel.filteredEntryRows.count, entriesBeforeSearch.count)
+        XCTAssertEqual(service.entries.map(\.id), entriesBeforeSearch.map { $0.0 })
+        XCTAssertEqual(service.entries.map(\.type), entriesBeforeSearch.map { $0.1 })
+        XCTAssertEqual(service.entries.map(\.original), entriesBeforeSearch.map { $0.2 })
+        XCTAssertEqual(service.entries.map(\.replacement), entriesBeforeSearch.map { $0.3 })
+        XCTAssertEqual(service.entries.map(\.source), entriesBeforeSearch.map { $0.4 })
     }
 
     @MainActor

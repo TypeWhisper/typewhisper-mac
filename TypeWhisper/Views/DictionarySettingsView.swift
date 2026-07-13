@@ -25,6 +25,7 @@ struct DictionarySettingsView: View {
                 if viewModel.filterTab == .termPacks {
                     termPacksView
                 } else {
+                    dictionarySearchField
                     dictionaryEntriesView
                 }
             }
@@ -103,6 +104,32 @@ struct DictionarySettingsView: View {
         .padding(.bottom, 4)
     }
 
+    private var dictionarySearchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+
+            TextField(String(localized: "Search..."), text: $viewModel.searchQuery)
+                .textFieldStyle(.plain)
+
+            if !viewModel.searchQuery.isEmpty {
+                Button {
+                    viewModel.searchQuery = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(String(localized: "Clear search"))
+            }
+        }
+        .padding(8)
+        .background(.bar)
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .padding(.horizontal, 2)
+        .padding(.bottom, 6)
+    }
+
     private var dictionaryEntriesView: some View {
         ScrollView {
             LazyVStack(spacing: 8) {
@@ -111,15 +138,7 @@ struct DictionarySettingsView: View {
                 }
 
                 if viewModel.filteredEntryRows.isEmpty {
-                    VStack(spacing: 8) {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
-                            .font(.system(size: 32))
-                            .foregroundStyle(.secondary)
-                        Text(String(localized: "No entries for this filter"))
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 48)
+                    dictionaryEntriesEmptyState
                 } else {
                     ForEach(viewModel.filteredEntryRows) { row in
                         DictionaryCardView(
@@ -133,6 +152,31 @@ struct DictionarySettingsView: View {
             }
             .padding(.horizontal, 2)
         }
+    }
+
+    private var dictionaryEntriesEmptyState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: viewModel.hasActiveSearch
+                ? "magnifyingglass"
+                : "line.3.horizontal.decrease.circle")
+                .font(.system(size: 32))
+                .foregroundStyle(.secondary)
+
+            if viewModel.hasActiveSearch {
+                Text(localizedAppText("No search results", de: "Keine Suchergebnisse"))
+                    .font(.headline)
+                Text(localizedAppText(
+                    "Try a different search term or filter.",
+                    de: "Versuche einen anderen Suchbegriff oder Filter."
+                ))
+                .font(.caption)
+            } else {
+                Text(String(localized: "No entries for this filter"))
+            }
+        }
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 48)
     }
 
     private var emptyState: some View {
