@@ -36,6 +36,7 @@ struct HistoryView: View {
                 text: $viewModel.searchQuery,
                 placeholder: String(localized: "Search...")
             )
+            .frame(maxWidth: .infinity)
             .frame(height: 32)
             .padding(.horizontal, 8)
             .padding(.vertical, 6)

@@ -109,6 +109,7 @@ struct DictionarySettingsView: View {
             text: $viewModel.searchQuery,
             placeholder: String(localized: "Search...")
         )
+        .frame(maxWidth: .infinity)
         .frame(height: 32)
         .padding(.horizontal, 2)
         .padding(.vertical, 6)
