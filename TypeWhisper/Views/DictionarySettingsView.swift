@@ -605,7 +605,11 @@ private struct DictionaryTrainingSheet: View {
                 axis: .vertical
             )
             .textFieldStyle(.roundedBorder)
-            .disabled(sample.state == .recording || sample.state == .transcribing)
+            .disabled(
+                sample.state == .preparing ||
+                    sample.state == .recording ||
+                    sample.state == .transcribing
+            )
 
             if let transcript = sample.transcript {
                 VStack(alignment: .leading, spacing: 3) {
@@ -697,6 +701,10 @@ private struct DictionaryTrainingSheet: View {
                 set: { service.setCandidateSelected(id: candidate.id, selected: $0) }
             ))
             .labelsHidden()
+            .accessibilityLabel(localizedAppText(
+                "Include \(candidate.original) as a correction",
+                de: "\(candidate.original) als Korrektur einschließen"
+            ))
             .disabled(candidate.disposition != .available)
 
             TextField(
@@ -824,6 +832,11 @@ private struct DictionaryTrainingSheet: View {
         case .pending:
             Label(localizedAppText("Ready", de: "Bereit"), systemImage: "circle")
                 .foregroundStyle(.secondary)
+        case .preparing:
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text(localizedAppText("Preparing", de: "Vorbereitung"))
+            }
         case .recording:
             Label(localizedAppText("Recording", de: "Aufnahme"), systemImage: "record.circle.fill")
                 .foregroundStyle(.red)

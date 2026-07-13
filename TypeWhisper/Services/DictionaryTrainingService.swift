@@ -18,6 +18,7 @@ enum DictionaryTrainingStage: Equatable, Sendable {
 
 enum DictionaryTrainingSampleState: Equatable, Sendable {
     case pending
+    case preparing
     case recording
     case transcribing
     case completed
@@ -172,7 +173,7 @@ final class DictionaryTrainingService: ObservableObject {
 
     var activeSampleID: UUID? {
         samples.first {
-            $0.state == .recording || $0.state == .transcribing
+            $0.state == .preparing || $0.state == .recording || $0.state == .transcribing
         }?.id
     }
 
@@ -242,6 +243,7 @@ final class DictionaryTrainingService: ObservableObject {
 
     func updateSentence(id: UUID, sentence: String) {
         guard let index = samples.firstIndex(where: { $0.id == id }),
+              samples[index].state != .preparing,
               samples[index].state != .recording,
               samples[index].state != .transcribing else {
             return
@@ -266,6 +268,7 @@ final class DictionaryTrainingService: ObservableObject {
             ))
             return
         }
+        samples[index].state = .preparing
         guard await dependencies.requestMicrophonePermission() else {
             guard requestedSessionID == sessionID else { return }
             samples[index].state = .failed(localizedAppText(
@@ -335,7 +338,11 @@ final class DictionaryTrainingService: ObservableObject {
             samples[index].evaluation = evaluation
             samples[index].state = .completed
         } catch is CancellationError {
-            return
+            guard requestedSessionID == sessionID, !isCancelled else { return }
+            samples[index].state = .failed(localizedAppText(
+                "Transcription was cancelled.",
+                de: "Die Transkription wurde abgebrochen."
+            ))
         } catch {
             guard requestedSessionID == sessionID, !isCancelled else { return }
             samples[index].state = .failed(error.localizedDescription)
@@ -344,6 +351,7 @@ final class DictionaryTrainingService: ObservableObject {
 
     func retrySample(id: UUID) {
         guard let index = samples.firstIndex(where: { $0.id == id }),
+              samples[index].state != .preparing,
               samples[index].state != .recording,
               samples[index].state != .transcribing else {
             return

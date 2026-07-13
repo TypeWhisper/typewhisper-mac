@@ -207,6 +207,78 @@ final class DictionaryTrainingServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testPreparingSampleRejectsDuplicateRecordingTaskAndEditing() async {
+        let snapshot = makeSnapshot()
+        var permissionContinuation: CheckedContinuation<Bool, Never>?
+        var permissionRequestCount = 0
+        var startCount = 0
+        let service = DictionaryTrainingService(dependencies: DictionaryTrainingDependencies(
+            engineSnapshot: { snapshot },
+            canTranscribe: { true },
+            requestMicrophonePermission: {
+                permissionRequestCount += 1
+                return await withCheckedContinuation { continuation in
+                    permissionContinuation = continuation
+                }
+            },
+            startRecording: { startCount += 1 },
+            stopRecording: { [0.1] },
+            discardActiveRecording: {},
+            transcribe: { _ in "unused" },
+            dictionaryEntries: { [] },
+            commit: { [self] _, _ in self.emptyCommitResult() }
+        ))
+
+        service.canonicalWord = "TypeWhisper"
+        service.beginTraining(localeIdentifier: "en_US")
+        let sample = service.samples[0]
+        let firstRecording = Task { @MainActor in
+            await service.startRecording(sampleID: sample.id)
+        }
+        await Task.yield()
+
+        XCTAssertEqual(service.samples[0].state, .preparing)
+        XCTAssertEqual(service.activeSampleID, sample.id)
+        service.updateSentence(id: sample.id, sentence: "Please write TypeWhisper today.")
+        XCTAssertEqual(service.samples[0].sentence, sample.sentence)
+
+        await service.startRecording(sampleID: sample.id)
+        XCTAssertEqual(permissionRequestCount, 1)
+
+        permissionContinuation?.resume(returning: true)
+        await firstRecording.value
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(service.samples[0].state, .recording)
+    }
+
+    @MainActor
+    func testDependencyCancellationMarksCurrentSampleFailed() async {
+        let snapshot = makeSnapshot()
+        let service = DictionaryTrainingService(dependencies: DictionaryTrainingDependencies(
+            engineSnapshot: { snapshot },
+            canTranscribe: { true },
+            requestMicrophonePermission: { true },
+            startRecording: {},
+            stopRecording: { [0.1] },
+            discardActiveRecording: {},
+            transcribe: { _ in throw CancellationError() },
+            dictionaryEntries: { [] },
+            commit: { [self] _, _ in self.emptyCommitResult() }
+        ))
+
+        service.canonicalWord = "TypeWhisper"
+        service.beginTraining(localeIdentifier: "en_US")
+        let sampleID = service.samples[0].id
+        await service.startRecording(sampleID: sampleID)
+        await service.stopRecordingAndTranscribe(sampleID: sampleID)
+
+        guard case .failed = service.samples[0].state else {
+            return XCTFail("Expected cancelled transcription to fail the sample")
+        }
+        XCTAssertNil(service.activeSampleID)
+    }
+
+    @MainActor
     func testCancelDuringRecordingDiscardsAudioWithoutDictionaryMutation() async {
         let snapshot = makeSnapshot()
         var stopCount = 0
