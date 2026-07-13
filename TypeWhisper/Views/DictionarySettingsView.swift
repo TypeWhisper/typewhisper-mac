@@ -105,29 +105,13 @@ struct DictionarySettingsView: View {
     }
 
     private var dictionarySearchField: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-
-            TextField(String(localized: "Search..."), text: $viewModel.searchQuery)
-                .textFieldStyle(.plain)
-
-            if !viewModel.searchQuery.isEmpty {
-                Button {
-                    viewModel.searchQuery = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(String(localized: "Clear search"))
-            }
-        }
-        .padding(8)
-        .background(.bar)
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        NativeSearchField(
+            text: $viewModel.searchQuery,
+            placeholder: String(localized: "Search...")
+        )
+        .frame(height: 32)
         .padding(.horizontal, 2)
-        .padding(.bottom, 6)
+        .padding(.vertical, 6)
     }
 
     private var dictionaryEntriesView: some View {
