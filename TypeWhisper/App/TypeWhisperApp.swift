@@ -693,11 +693,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         AppConstants.effectiveUpdateChannel.sparkleChannels
     }
 
-    nonisolated func updater(_ updater: SPUUpdater, feedURLRequest originalRequest: URLRequest) -> URLRequest {
-        var request = originalRequest
-        request.cachePolicy = .reloadIgnoringLocalCacheData
-        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
-        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
-        return request
+    nonisolated func feedParameters(for updater: SPUUpdater, sendingSystemProfile: Bool) -> [[String : String]] {
+        return [[
+            "key": "nocache",
+            "value": String(Int(Date().timeIntervalSince1970)),
+            "displayKey": "",
+            "displayValue": ""
+        ]]
     }
 }
