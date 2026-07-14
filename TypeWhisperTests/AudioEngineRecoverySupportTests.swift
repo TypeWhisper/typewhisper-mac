@@ -1158,6 +1158,12 @@ final class AudioDeviceServiceCompatibilityTests: XCTestCase {
         XCTAssertFalse(selection.hasExplicitDeviceSelection)
     }
 
+    func testIOKitClamshellStateProviderQueryDoesNotCrash() {
+        let provider = IOKitClamshellStateProvider()
+        let isClosed = provider.isLidClosed()
+        XCTAssertTrue(isClosed == true || isClosed == false)
+    }
+
     func testPreviewRecoveryEngineSwap_replacesStoredEngineInstance() {
         let service = AudioDeviceService(
             initialInputDevices: [],

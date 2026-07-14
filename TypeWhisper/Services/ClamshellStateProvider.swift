@@ -21,29 +21,32 @@ protocol ClamshellStateProviding: AnyObject, Sendable {
 // MARK: - IOKit Implementation
 
 /// Production implementation that reads the clamshell state from IOKit's
-/// `AppleClamshellState` service in the IORegistry.
+/// `IOPMrootDomain` service in the IORegistry.
 final class IOKitClamshellStateProvider: ClamshellStateProviding, @unchecked Sendable {
     func isLidClosed() -> Bool {
-        let serviceName = "AppleClamshellState"
         let service = IOServiceGetMatchingService(
             kIOMainPortDefault,
-            IOServiceMatching(serviceName)
+            IOServiceMatching("IOPMrootDomain")
         )
         guard service != IO_OBJECT_NULL else {
-            // Service not found — this is a desktop Mac without a lid.
             return false
         }
         defer { IOObjectRelease(service) }
 
         guard let property = IORegistryEntryCreateCFProperty(
             service,
-            "AppleClamshellClosed" as CFString,
+            "AppleClamshellState" as CFString,
             kCFAllocatorDefault,
             0
         )?.takeRetainedValue() else {
             return false
         }
 
-        return (property as? Bool) ?? false
+        if let boolVal = property as? Bool {
+            return boolVal
+        } else if let numVal = property as? NSNumber {
+            return numVal.boolValue
+        }
+        return false
     }
 }
