@@ -22,6 +22,7 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
     fileprivate var _filenameTemplate: String = "{{DATE}} {{TIME}} {{APP}}"
     fileprivate var _dailyNoteEnabled: Bool = false
     fileprivate var _dailyNoteFormat: String = "{{DATE}}"
+    fileprivate var _dailyNoteAppendTemplate: String = "## {{TIME}}\n\n{{TEXT}}"
     fileprivate var _frontmatterEnabled: Bool = true
     fileprivate var _frontmatterTags: [String] = ["typewhisper"]
     fileprivate var _autoExportEnabled: Bool = false
@@ -56,6 +57,7 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
         _filenameTemplate = host?.userDefault(forKey: "filenameTemplate") as? String ?? "{{DATE}} {{TIME}} {{APP}}"
         _dailyNoteEnabled = host?.userDefault(forKey: "dailyNoteEnabled") as? Bool ?? false
         _dailyNoteFormat = host?.userDefault(forKey: "dailyNoteFormat") as? String ?? "{{DATE}}"
+        _dailyNoteAppendTemplate = host?.userDefault(forKey: "dailyNoteAppendTemplate") as? String ?? DailyNoteAppendPreset.timestamp.template
         _frontmatterEnabled = host?.userDefault(forKey: "frontmatterEnabled") as? Bool ?? true
         _frontmatterTags = host?.userDefault(forKey: "frontmatterTags") as? [String] ?? ["typewhisper"]
         _autoExportEnabled = host?.userDefault(forKey: "autoExportEnabled") as? Bool ?? false
@@ -121,18 +123,26 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
 
     // MARK: - File Writing
 
-    private func resolveTemplate(_ template: String, appName: String?, language: String?) -> String {
+    private func resolveTemplate(_ template: String, appName: String?, language: String?, timeFormat: String = "HH-mm-ss") -> String {
         let now = Date()
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
         let timeFormatter = DateFormatter()
-        timeFormatter.dateFormat = "HH-mm-ss"
+        timeFormatter.dateFormat = timeFormat
 
         var result = template
         result = result.replacingOccurrences(of: "{{DATE}}", with: dateFormatter.string(from: now))
         result = result.replacingOccurrences(of: "{{TIME}}", with: timeFormatter.string(from: now))
         result = result.replacingOccurrences(of: "{{APP}}", with: appName ?? "Unknown")
         result = result.replacingOccurrences(of: "{{LANG}}", with: language ?? "unknown")
+        return result
+    }
+
+    private func resolveDailyNoteAppendTemplate(_ template: String, text: String, appName: String?, url: String?, language: String?) -> String {
+        var result = resolveTemplate(template, appName: appName, language: language, timeFormat: "HH:mm")
+        result = result.replacingOccurrences(of: "{{TEXT}}", with: text)
+        result = result.replacingOccurrences(of: "{{URL}}", with: url ?? "")
+        result = result.replacingOccurrences(of: "{{LANGUAGE}}", with: language ?? "unknown")
         return result
     }
 
@@ -210,15 +220,27 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
         let filePath = (folderPath as NSString).appendingPathComponent("\(filename).md")
 
         let fm = FileManager.default
-        let timeFormatter = DateFormatter()
-        timeFormatter.dateFormat = "HH:mm"
-        let timeString = timeFormatter.string(from: Date())
+        let appendContent = resolveDailyNoteAppendTemplate(
+            _dailyNoteAppendTemplate,
+            text: text,
+            appName: appName,
+            url: url,
+            language: language
+        )
 
         if fm.fileExists(atPath: filePath) {
             // Append to existing daily note
             let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: filePath))
             handle.seekToEndOfFile()
-            let separator = "\n\n---\n\n## \(timeString)\n\n\(text)"
+            let separator: String
+            if _dailyNoteAppendTemplate == DailyNoteAppendPreset.timestamp.template {
+                // Preserve the legacy timestamp-section layout for existing daily notes.
+                separator = "\n\n---\n\n\(appendContent)"
+            } else if _dailyNoteAppendTemplate == DailyNoteAppendPreset.bullet.template {
+                separator = "\n\(appendContent)"
+            } else {
+                separator = "\n\n\(appendContent)"
+            }
             if let data = separator.data(using: .utf8) {
                 handle.write(data)
             }
@@ -236,7 +258,7 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
                 )
                 content += "\n\n"
             }
-            content += "## \(timeString)\n\n\(text)"
+            content += appendContent
             try content.write(toFile: filePath, atomically: true, encoding: .utf8)
         }
 
@@ -324,6 +346,7 @@ private struct ObsidianSettingsView: View {
     @State private var filenameTemplate: String = "{{DATE}} {{TIME}} {{APP}}"
     @State private var dailyNoteEnabled: Bool = false
     @State private var dailyNoteFormat: String = "{{DATE}}"
+    @State private var dailyNoteAppendTemplate: String = DailyNoteAppendPreset.timestamp.template
     @State private var frontmatterEnabled: Bool = true
     @State private var tagsInput: String = "typewhisper"
     @State private var autoExportEnabled: Bool = false
@@ -444,6 +467,34 @@ private struct ObsidianSettingsView: View {
                                     plugin.saveSetting(newValue, forKey: "dailyNoteFormat")
                                 }
                         }
+
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text("Append format:", bundle: bundle)
+                                    .frame(width: 100, alignment: .trailing)
+                                Picker("Append format:", selection: appendFormatPreset) {
+                                    Text("Timestamp section", bundle: bundle).tag(DailyNoteAppendPreset.timestamp.template)
+                                    Text("Plain append", bundle: bundle).tag(DailyNoteAppendPreset.plain.template)
+                                    Text("Bullet list", bundle: bundle).tag(DailyNoteAppendPreset.bullet.template)
+                                    Text("Custom", bundle: bundle).tag(dailyNoteAppendTemplate)
+                                }
+                                .labelsHidden()
+                            }
+
+                            TextEditor(text: $dailyNoteAppendTemplate)
+                                .font(.system(.body, design: .monospaced))
+                                .frame(height: 84)
+                                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.25)))
+                                .onChange(of: dailyNoteAppendTemplate) { _, newValue in
+                                    plugin._dailyNoteAppendTemplate = newValue
+                                    plugin.saveSetting(newValue, forKey: "dailyNoteAppendTemplate")
+                                }
+
+                            Text("Placeholders: {{TEXT}}, {{TIME}}, {{DATE}}, {{APP}}, {{LANGUAGE}}, {{URL}}", bundle: bundle)
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                                .padding(.leading, 108)
+                        }
                     }
                 }
 
@@ -539,6 +590,7 @@ private struct ObsidianSettingsView: View {
             filenameTemplate = plugin._filenameTemplate
             dailyNoteEnabled = plugin._dailyNoteEnabled
             dailyNoteFormat = plugin._dailyNoteFormat
+            dailyNoteAppendTemplate = plugin._dailyNoteAppendTemplate
             frontmatterEnabled = plugin._frontmatterEnabled
             tagsInput = plugin._frontmatterTags.joined(separator: ", ")
             autoExportEnabled = plugin._autoExportEnabled
@@ -561,6 +613,13 @@ private struct ObsidianSettingsView: View {
             .replacingOccurrences(of: "{{LANG}}", with: "en")
     }
 
+    private var appendFormatPreset: Binding<String> {
+        Binding(
+            get: { dailyNoteAppendTemplate },
+            set: { dailyNoteAppendTemplate = $0 }
+        )
+    }
+
     private func selectVaultFolder() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
@@ -572,6 +631,23 @@ private struct ObsidianSettingsView: View {
             plugin._vaultPath = url.path
             plugin.saveSetting(url.path, forKey: "vaultPath")
             plugin.host?.notifyCapabilitiesChanged()
+        }
+    }
+}
+
+private enum DailyNoteAppendPreset {
+    case timestamp
+    case plain
+    case bullet
+
+    var template: String {
+        switch self {
+        case .timestamp:
+            "## {{TIME}}\n\n{{TEXT}}"
+        case .plain:
+            "{{TEXT}}"
+        case .bullet:
+            "- {{TEXT}}"
         }
     }
 }
