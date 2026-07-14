@@ -77,12 +77,12 @@ struct ExampleWebhookConfig: Codable, Identifiable {
     var headers: [String: String]
     var secretHeaderNames: [String]
     var isEnabled: Bool
-    var profileFilter: [String]  // Empty = all rules
+    var workflowFilter: [String]  // Empty = all transcriptions
 
     init(name: String = "", url: String = "", httpMethod: String = "POST",
          headers: [String: String] = ["Content-Type": "application/json"],
          secretHeaderNames: [String] = [],
-         isEnabled: Bool = true, profileFilter: [String] = []) {
+         isEnabled: Bool = true, workflowFilter: [String] = []) {
         self.id = UUID()
         self.name = name
         self.url = url
@@ -90,7 +90,7 @@ struct ExampleWebhookConfig: Codable, Identifiable {
         self.headers = headers
         self.secretHeaderNames = secretHeaderNames
         self.isEnabled = isEnabled
-        self.profileFilter = profileFilter
+        self.workflowFilter = workflowFilter
     }
 
     var isUnmodifiedDefaultDraft: Bool {
@@ -100,7 +100,7 @@ struct ExampleWebhookConfig: Codable, Identifiable {
             && headers == ["Content-Type": "application/json"]
             && secretHeaderNames.isEmpty
             && isEnabled
-            && profileFilter.isEmpty
+            && workflowFilter.isEmpty
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -111,7 +111,7 @@ struct ExampleWebhookConfig: Codable, Identifiable {
         case headers
         case secretHeaderNames
         case isEnabled
-        case profileFilter
+        case workflowFilter = "profileFilter"
     }
 
     init(from decoder: Decoder) throws {
@@ -123,7 +123,7 @@ struct ExampleWebhookConfig: Codable, Identifiable {
         headers = try container.decode([String: String].self, forKey: .headers)
         secretHeaderNames = try container.decodeIfPresent([String].self, forKey: .secretHeaderNames) ?? []
         isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
-        profileFilter = try container.decode([String].self, forKey: .profileFilter)
+        workflowFilter = try container.decode([String].self, forKey: .workflowFilter)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -135,7 +135,7 @@ struct ExampleWebhookConfig: Codable, Identifiable {
         try container.encode(headers, forKey: .headers)
         try container.encode(secretHeaderNames, forKey: .secretHeaderNames)
         try container.encode(isEnabled, forKey: .isEnabled)
-        try container.encode(profileFilter, forKey: .profileFilter)
+        try container.encode(workflowFilter, forKey: .workflowFilter)
     }
 }
 
@@ -368,10 +368,11 @@ final class ExampleWebhookService: ObservableObject, @unchecked Sendable {
 
     func sendWebhooks(for payload: TranscriptionCompletedPayload) async {
         for webhook in webhooks where webhook.isEnabled {
-            // Rule filter: empty = all, otherwise match by name
-            if !webhook.profileFilter.isEmpty {
+            // The event still exposes the legacy ruleName compatibility field.
+            // An empty workflow filter means every completed transcription.
+            if !webhook.workflowFilter.isEmpty {
                 guard let ruleName = payload.ruleName,
-                      webhook.profileFilter.contains(ruleName) else {
+                      webhook.workflowFilter.contains(ruleName) else {
                     continue
                 }
             }
@@ -447,6 +448,42 @@ struct ExampleWebhookEditorPresentation {
     }
 }
 
+enum ExampleWebhookWorkflowScope: String, CaseIterable, Equatable {
+    case allTranscriptions
+    case selectedWorkflows
+}
+
+struct ExampleWebhookEditorState {
+    var webhook: ExampleWebhookConfig
+    var workflowScope: ExampleWebhookWorkflowScope
+
+    init(webhook: ExampleWebhookConfig) {
+        self.webhook = webhook
+        self.workflowScope = webhook.workflowFilter.isEmpty ? .allTranscriptions : .selectedWorkflows
+    }
+
+    var canSave: Bool {
+        guard !webhook.url.isEmpty else { return false }
+        return workflowScope == .allTranscriptions || !webhook.workflowFilter.isEmpty
+    }
+
+    mutating func setWorkflow(_ name: String, isSelected: Bool) {
+        if isSelected {
+            guard !webhook.workflowFilter.contains(name) else { return }
+            webhook.workflowFilter.append(name)
+        } else {
+            webhook.workflowFilter.removeAll { $0 == name }
+        }
+    }
+
+    var webhookForSaving: ExampleWebhookConfig {
+        guard workflowScope == .allTranscriptions else { return webhook }
+        var updated = webhook
+        updated.workflowFilter = []
+        return updated
+    }
+}
+
 struct ExampleWebhookSettingsView: View {
     @ObservedObject var service: ExampleWebhookService
     @Environment(\.dismiss) private var dismiss
@@ -460,7 +497,7 @@ struct ExampleWebhookSettingsView: View {
             if let editingWebhook = editorPresentation.editingWebhook {
                 ExampleWebhookEditView(
                     webhook: editingWebhook,
-                    availableProfiles: service.host.availableRuleNames,
+                    availableWorkflows: service.host.availableRuleNames,
                     onSave: { updated in
                         service.saveWebhook(updated)
                         editorPresentation.dismissEditor()
@@ -472,6 +509,8 @@ struct ExampleWebhookSettingsView: View {
                 webhookOverview
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .containerRelativeFrame(.vertical, alignment: .top)
         .frame(minHeight: 400)
     }
 
@@ -560,11 +599,9 @@ private struct WebhookRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                if !webhook.profileFilter.isEmpty {
-                    Text("Rules: \(webhook.profileFilter.joined(separator: ", "))")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
+                Text(workflowScopeDescription)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
 
             Spacer()
@@ -594,6 +631,16 @@ private struct WebhookRow: View {
             .buttonStyle(.borderless)
         }
         .padding(.vertical, 4)
+    }
+
+    private var workflowScopeDescription: String {
+        guard !webhook.workflowFilter.isEmpty else {
+            return String(localized: "All transcriptions", bundle: bundle)
+        }
+        return String(
+            format: String(localized: "Workflows: %@", bundle: bundle),
+            webhook.workflowFilter.joined(separator: ", ")
+        )
     }
 }
 
@@ -634,18 +681,30 @@ private struct DeliveryLogRow: View {
 // MARK: - Edit View
 
 private struct ExampleWebhookEditView: View {
-    @State var webhook: ExampleWebhookConfig
-    let availableProfiles: [String]
+    @State private var editorState: ExampleWebhookEditorState
+    let availableWorkflows: [String]
     let onSave: (ExampleWebhookConfig) -> Void
     let onCancel: () -> Void
 
     private let bundle = Bundle(for: ExampleWebhookService.self)
 
+    init(
+        webhook: ExampleWebhookConfig,
+        availableWorkflows: [String],
+        onSave: @escaping (ExampleWebhookConfig) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        _editorState = State(initialValue: ExampleWebhookEditorState(webhook: webhook))
+        self.availableWorkflows = availableWorkflows
+        self.onSave = onSave
+        self.onCancel = onCancel
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Text(webhook.name.isEmpty && webhook.url.isEmpty
+                Text(editorState.webhook.name.isEmpty && editorState.webhook.url.isEmpty
                      ? String(localized: "Add Webhook", bundle: bundle)
                      : String(localized: "Edit Webhook", bundle: bundle))
                     .font(.headline)
@@ -655,45 +714,66 @@ private struct ExampleWebhookEditView: View {
 
             Divider()
 
-            Form {
-                Section(String(localized: "General", bundle: bundle)) {
-                    TextField(String(localized: "Name", bundle: bundle), text: $webhook.name)
-                    TextField(String(localized: "URL", bundle: bundle), text: $webhook.url)
-                        .textContentType(.URL)
-                    Picker(String(localized: "Method", bundle: bundle), selection: $webhook.httpMethod) {
-                        Text("POST", bundle: bundle).tag("POST")
-                        Text("PUT", bundle: bundle).tag("PUT")
-                    }
-                }
-
-                Section("Rules") {
-                    if availableProfiles.isEmpty {
-                        Text("No rules configured.")
-                            .foregroundStyle(.secondary)
-                            .font(.caption)
-                    } else {
-                        ForEach(availableProfiles, id: \.self) { name in
-                            Toggle(name, isOn: Binding(
-                                get: { webhook.profileFilter.contains(name) },
-                                set: { selected in
-                                    if selected {
-                                        webhook.profileFilter.append(name)
-                                    } else {
-                                        webhook.profileFilter.removeAll { $0 == name }
-                                    }
-                                }
-                            ))
+            ScrollView(.vertical) {
+                Form {
+                    Section(String(localized: "General", bundle: bundle)) {
+                        TextField(
+                            String(localized: "Name", bundle: bundle),
+                            text: $editorState.webhook.name
+                        )
+                        TextField(
+                            String(localized: "URL", bundle: bundle),
+                            text: $editorState.webhook.url
+                        )
+                            .textContentType(.URL)
+                        Picker(
+                            String(localized: "Method", bundle: bundle),
+                            selection: $editorState.webhook.httpMethod
+                        ) {
+                            Text("POST", bundle: bundle).tag("POST")
+                            Text("PUT", bundle: bundle).tag("PUT")
                         }
                     }
 
-                    Text(webhook.profileFilter.isEmpty
-                         ? String(localized: "Active for all transcriptions.", bundle: bundle)
-                         : "Only active for selected rules.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Section(String(localized: "Workflows", bundle: bundle)) {
+                        Picker(
+                            String(localized: "Send webhook for", bundle: bundle),
+                            selection: $editorState.workflowScope
+                        ) {
+                            Text("All transcriptions", bundle: bundle)
+                                .tag(ExampleWebhookWorkflowScope.allTranscriptions)
+                            Text("Selected workflows", bundle: bundle)
+                                .tag(ExampleWebhookWorkflowScope.selectedWorkflows)
+                        }
+                        .pickerStyle(.radioGroup)
+
+                        if editorState.workflowScope == .selectedWorkflows {
+                            if availableWorkflows.isEmpty {
+                                Text("No workflows configured.", bundle: bundle)
+                                    .foregroundStyle(.secondary)
+                                    .font(.caption)
+                            } else {
+                                ForEach(availableWorkflows, id: \.self) { name in
+                                    Toggle(name, isOn: Binding(
+                                        get: { editorState.webhook.workflowFilter.contains(name) },
+                                        set: { selected in
+                                            editorState.setWorkflow(name, isSelected: selected)
+                                        }
+                                    ))
+                                }
+                            }
+                        }
+
+                        Text(workflowScopeHelpText)
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                    }
                 }
+                .formStyle(.grouped)
+                .fixedSize(horizontal: false, vertical: true)
             }
-            .formStyle(.grouped)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .layoutPriority(1)
 
             Divider()
 
@@ -703,13 +783,27 @@ private struct ExampleWebhookEditView: View {
                     .keyboardShortcut(.cancelAction)
                 Spacer()
                 Button(String(localized: "Save", bundle: bundle)) {
-                    onSave(webhook)
+                    onSave(editorState.webhookForSaving)
                 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(webhook.url.isEmpty)
+                .disabled(!editorState.canSave)
             }
             .padding()
         }
-        .frame(width: 480, height: 420)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var workflowScopeHelpText: String {
+        switch editorState.workflowScope {
+        case .allTranscriptions:
+            return String(
+                localized: "The webhook is sent after every transcription, including transcriptions without a workflow.",
+                bundle: bundle
+            )
+        case .selectedWorkflows where editorState.webhook.workflowFilter.isEmpty:
+            return String(localized: "Select at least one workflow.", bundle: bundle)
+        case .selectedWorkflows:
+            return String(localized: "The webhook is sent only for the selected workflows.", bundle: bundle)
+        }
     }
 }
